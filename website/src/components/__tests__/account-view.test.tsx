@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 
 // React 19 requires the act environment flag for async act() to work.
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
@@ -38,7 +38,7 @@ function badRequest(status: number) {
   return { ok: false, status, json: async () => ({}) };
 }
 
-function stubMe(subscription?: Record<string, unknown>): void {
+function stubMe(subscription?: Record<string, unknown> | null): void {
   mockFetch(() =>
     okJson({
       tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
@@ -125,6 +125,24 @@ describe('AccountView — not signed in', () => {
   });
 });
 
+// ── Not configured state ──────────────────────────────────────────────
+
+describe('AccountView — not configured', () => {
+  it('shows not-configured notice when API URL is absent', async () => {
+    const env = import.meta.env as Record<string, unknown>;
+    env.PUBLIC_LICENSE_API_URL = '';
+    window.__OZ_CONFIG__ = undefined;
+    sessionStorage.setItem('oz_session', 'tok-test');
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'The license API is not configured on this deployment.');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
 // ── 401 session expiry ───────────────────────────────────────────────
 
 describe('AccountView — 401 session expiry', () => {
@@ -186,7 +204,7 @@ describe('AccountView — subscription display', () => {
 
   it('shows subscribe section when no subscription exists', async () => {
     sessionStorage.setItem('oz_session', 'tok-no-sub');
-    stubMe();
+    stubMe(null);
     const { container, root } = await renderAccount('en');
     try {
       assertText(container, "You don't have an active subscription yet");
@@ -220,6 +238,71 @@ describe('AccountView — license display', () => {
     const { container, root } = await renderAccount('en');
     try {
       assertText(container, 'Verified');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Region selector ───────────────────────────────────────────────────
+
+describe('AccountView — region selector', () => {
+  it('defaults to Global', async () => {
+    sessionStorage.setItem('oz_session', 'tok-region');
+    stubMe();
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Region');
+      assertText(container, 'Global');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('reads saved region from localStorage', async () => {
+    localStorage.setItem('oz_region', 'id');
+    sessionStorage.setItem('oz_session', 'tok-region-id');
+    stubMe();
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Indonesia');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('persists region change to localStorage', async () => {
+    sessionStorage.setItem('oz_session', 'tok-region-change');
+    stubMe();
+    const { container, root } = await renderAccount('en');
+    try {
+      // Open the region dropdown.
+      const regionBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Global',
+      );
+      expect(regionBtn).not.toBeNull();
+      act(() => {
+        regionBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      // Click Indonesia option.
+      const idOption = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Indonesia',
+      );
+      expect(idOption).not.toBeNull();
+      act(() => {
+        idOption!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      expect(localStorage.getItem('oz_region')).toBe('id');
+      assertText(container, 'Region updated.');
     } finally {
       act(() => root.unmount());
       container.remove();
@@ -322,3 +405,56 @@ describe('AccountView — error state', () => {
     }
   });
 });
+
+// ── Quick actions & License Copy ──────────────────────────────────────
+
+describe('AccountView — Quick actions & License Copy', () => {
+  it('renders copy key button and quick action links when signed in', async () => {
+    sessionStorage.setItem('oz_session', 'tok-123');
+    stubMe();
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Copy key');
+      assertText(container, 'Download app');
+      assertText(container, 'Activation guide');
+      assertText(container, 'Contact support');
+
+      const downloadLink = container.querySelector('a[href="/en/download"]');
+      expect(downloadLink).not.toBeNull();
+      const activationLink = container.querySelector('a[href="/en/docs/activation"]');
+      expect(activationLink).not.toBeNull();
+      const supportLink = container.querySelector('a[href="/en/support"]');
+      expect(supportLink).not.toBeNull();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Devices & Billing Invoices ───────────────────────────────────────
+
+describe('AccountView — Devices & Invoices', () => {
+  it('renders registered terminals section and billing invoices section', async () => {
+    sessionStorage.setItem('oz_session', 'tok-enterprise');
+    stubMe({
+      tierKey: 'enterprise',
+      status: 'active',
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Registered Terminals');
+      assertText(container, 'Unlimited terminals');
+      assertText(container, 'Billing & Receipts');
+      assertText(container, 'Access Billing Portal & Receipts');
+
+      const mailtoInvoice = container.querySelector('a[href^="mailto:sales@ozpos.my.id"]');
+      expect(mailtoInvoice).not.toBeNull();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+

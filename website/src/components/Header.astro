@@ -3,15 +3,17 @@ import { getRelativeLocaleUrl } from 'astro:i18n';
 import { t } from '../i18n';
 import LocaleSwitcher from './LocaleSwitcher.astro';
 import ThemeToggle from './ThemeToggle.astro';
+import SearchTrigger from './SearchTrigger';
 
 const locale = Astro.currentLocale ?? 'en';
+const isDocs = Astro.url.pathname.includes('/docs');
 const nav = [
   { href: getRelativeLocaleUrl(locale, '/'), label: t(locale, 'nav.home') },
   { href: getRelativeLocaleUrl(locale, 'features'), label: t(locale, 'nav.features') },
   { href: getRelativeLocaleUrl(locale, 'pricing'), label: t(locale, 'nav.pricing') },
   { href: getRelativeLocaleUrl(locale, 'download'), label: t(locale, 'nav.download') },
-  { href: getRelativeLocaleUrl(locale, 'docs'), label: t(locale, 'nav.docs') },
   { href: getRelativeLocaleUrl(locale, 'support'), label: t(locale, 'nav.support') },
+  { href: getRelativeLocaleUrl(locale, 'docs'), label: t(locale, 'nav.docs') },
 ];
 const home = getRelativeLocaleUrl(locale, '/');
 const login = getRelativeLocaleUrl(locale, 'login');
@@ -25,17 +27,23 @@ const login = getRelativeLocaleUrl(locale, 'login');
     <nav class="hidden items-center gap-6 md:flex" aria-label={t(locale, 'nav.mainNav')}>
       {
         nav.map((item) => (
-          <a href={item.href} class="text-sm text-muted transition hover:text-ink">
+          <a href={item.href} class="nav-link relative text-sm text-muted transition-colors duration-200 hover:text-ink">
             {item.label}
+            <span class="nav-underline absolute -bottom-1 left-0 h-0.5 w-0 bg-primary rounded-full transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)]"></span>
           </a>
         ))
       }
     </nav>
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-2.5">
+      {isDocs && <SearchTrigger client:load locale={locale} />}
       <ThemeToggle />
       <LocaleSwitcher />
       <a
         href={login}
+        data-auth-nav
+        data-locale={locale}
+        data-login-text={t(locale, 'nav.login')}
+        data-account-text={t(locale, 'nav.account')}
         class="hidden rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary sm:inline-block opacity-90 hover:opacity-100"
       >
         {t(locale, 'nav.login')}
@@ -66,6 +74,10 @@ const login = getRelativeLocaleUrl(locale, 'login');
           }
           <a
             href={login}
+            data-auth-nav
+            data-locale={locale}
+            data-login-text={t(locale, 'nav.login')}
+            data-account-text={t(locale, 'nav.account')}
             class="mt-1 block rounded-md bg-primary px-3 py-2 text-center text-sm font-semibold text-white transition opacity-90 hover:opacity-100"
           >
             {t(locale, 'nav.login')}
@@ -75,3 +87,34 @@ const login = getRelativeLocaleUrl(locale, 'login');
     </div>
   </div>
 </header>
+
+<script>
+  function updateAuthNav() {
+    const isAuth = Boolean(sessionStorage.getItem('oz_session'));
+    const loginLinks = document.querySelectorAll<HTMLAnchorElement>('[data-auth-nav]');
+    loginLinks.forEach((link) => {
+      const loc = link.getAttribute('data-locale') || 'en';
+      if (isAuth) {
+        link.href = `/${loc}/account`;
+        link.textContent = link.getAttribute('data-account-text') || 'Account';
+      } else {
+        link.href = `/${loc}/login`;
+        link.textContent = link.getAttribute('data-login-text') || 'Sign in';
+      }
+    });
+  }
+
+  // Update on initial load, after SPA page swap, and on storage change
+  updateAuthNav();
+  document.addEventListener('astro:page-load', updateAuthNav);
+  document.addEventListener('astro:after-swap', updateAuthNav);
+  window.addEventListener('storage', updateAuthNav);
+
+  document.addEventListener('click', (e) => {
+    const link = (e.target as HTMLElement)?.closest('details.group a');
+    if (link) {
+      const details = link.closest('details');
+      if (details) details.removeAttribute('open');
+    }
+  });
+</script>

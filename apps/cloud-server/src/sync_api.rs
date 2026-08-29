@@ -16,6 +16,7 @@ use axum::{
     routing::{get, post},
 };
 use rusqlite::Connection;
+use sha2::Digest;
 use tokio::sync::Mutex;
 
 use oz_api::auth::{ApiTokenClaims, auth_middleware};
@@ -386,18 +387,40 @@ async fn pull_handler(
     Ok(axum::Json(PullResponse { items, next_cursor }))
 }
 
-/// Build a JSON response from pre-serialized bytes.
+/// Compute a strong ETag quote-wrapped hex string from bytes.
+fn compute_etag(bytes: &[u8]) -> String {
+    format!("\"{}\"", hex::encode(sha2::Sha256::digest(bytes)))
+}
+
+/// Build a JSON response from pre-serialized bytes with ETag and Cache-Control headers.
 ///
 /// Serves the snapshot cache hit path without a
 /// `serde_json::from_slice` → `axum::Json` re-serialize round trip
-/// (SOTA finding C): the cache stores `Vec<u8>` precisely to avoid
-/// JSON work on hits, so the hit path now returns the bytes as-is.
-fn json_bytes_response(bytes: Vec<u8>) -> axum::response::Response {
-    (
-        [(axum::http::header::CONTENT_TYPE, "application/json")],
-        bytes,
-    )
-        .into_response()
+/// (SOTA finding C). If `If-None-Match` matches the computed ETag, returns
+/// `304 Not Modified` with zero body transmission.
+fn json_snapshot_response(bytes: Vec<u8>, if_none_match: Option<&str>) -> axum::response::Response {
+    let etag = compute_etag(&bytes);
+    let mut headers = axum::http::HeaderMap::new();
+    if let Ok(val) = axum::http::HeaderValue::from_str(&etag) {
+        headers.insert(axum::http::header::ETAG, val);
+    }
+    headers.insert(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("public, max-age=60"),
+    );
+
+    if let Some(inm) = if_none_match {
+        let inm_clean = inm.trim();
+        if inm_clean == etag || inm_clean == "*" {
+            return (axum::http::StatusCode::NOT_MODIFIED, headers).into_response();
+        }
+    }
+
+    headers.insert(
+        axum::http::header::CONTENT_TYPE,
+        axum::http::HeaderValue::from_static("application/json"),
+    );
+    (axum::http::StatusCode::OK, headers, bytes).into_response()
 }
 
 /// `GET /api/sync/snapshot` — return reference data baseline for a tenant (P-3).
@@ -405,20 +428,24 @@ fn json_bytes_response(bytes: Vec<u8>) -> axum::response::Response {
 /// Called by clients whose sync anchor has expired. Returns all products,
 /// tax rates, and users for the requesting tenant (scoped by `tenant_id`
 /// from JWT claims). Responses are cached in-memory per-tenant with a
-/// 15-min TTL; cache hits serve the stored bytes directly with zero JSON
-/// processing.
+/// 15-min TTL and include an `ETag`. If `If-None-Match` matches, returns
+/// `304 Not Modified` to save bandwidth and CPU.
 ///
 /// Both `POST /api/v1/tax-rates` and `POST /api/v1/users` now stamp
 /// `tenant_id` from JWT claims (same pattern as `create_product` in
 /// `oz-api/src/routes/products.rs`). New tax rates and users are
 /// correctly scoped per-tenant for snapshot isolation.
-#[tracing::instrument(skip(state), fields(tenant_id = claims.tenant_id.as_deref().unwrap_or("default")))]
+#[tracing::instrument(skip(state, headers), fields(tenant_id = claims.tenant_id.as_deref().unwrap_or("default")))]
 async fn snapshot_handler(
     State(state): State<SyncState>,
+    headers: axum::http::HeaderMap,
     Extension(claims): Extension<ApiTokenClaims>,
 ) -> Result<axum::response::Response, (axum::http::StatusCode, axum::Json<serde_json::Value>)> {
     let start = std::time::Instant::now();
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
+    let if_none_match = headers
+        .get(axum::http::header::IF_NONE_MATCH)
+        .and_then(|v| v.to_str().ok());
 
     // Helper: build an error JSON response with a non-2xx status (SYNC-09).
     // A failed snapshot must never look like a valid empty snapshot — the
@@ -442,7 +469,7 @@ async fn snapshot_handler(
         {
             // Cache hit: serve the stored bytes directly. No JSON
             // deserialize → re-serialize (SOTA finding C).
-            return Ok(json_bytes_response(cached_bytes.clone()));
+            return Ok(json_snapshot_response(cached_bytes.clone(), if_none_match));
         }
     }
 
@@ -487,7 +514,7 @@ async fn snapshot_handler(
     );
 
     metrics::SYNC_PULL_DURATION_MS.observe(start.elapsed().as_secs_f64() * 1000.0);
-    Ok(json_bytes_response(bytes))
+    Ok(json_snapshot_response(bytes, if_none_match))
 }
 
 /// `GET /api/sync/status` — return server health, version, and pending queue depth.

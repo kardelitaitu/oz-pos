@@ -45,16 +45,16 @@ export const pricing: PricingTier[] = [
     description: 'Paket awal untuk toko tunggal yang siap berkembang.',
     cta: 'Pilih Plus',
     prices: {
-      monthly: { price: 'Rp 49.000', period: '/bulan', priceId: 'pri_placeholder_plus_monthly_usd' },
-      yearly: { price: 'Rp 500.000', period: '/tahun', priceId: 'pri_placeholder_plus_yearly_usd' },
+      monthly: { price: 'Rp 49.000', period: '/m', priceId: 'pri_placeholder_plus_monthly_usd' },
+      yearly: { price: 'Rp 500.000', period: '/y', priceId: 'pri_placeholder_plus_yearly_usd' },
     },
     bundle: {
       id: 'restaurant_starter',
       label: 'Paket Restaurant Starter',
       note: 'Hemat 10% dari harga eceran',
       prices: {
-        monthly: { price: 'Rp 75.000', period: '/bulan', priceId: 'pri_placeholder_plus_bundle_monthly_usd' },
-        yearly: { price: 'Rp 750.000', period: '/tahun', priceId: 'pri_placeholder_plus_bundle_yearly_usd' },
+        monthly: { price: 'Rp 75.000', period: '/m', priceId: 'pri_placeholder_plus_bundle_monthly_usd' },
+        yearly: { price: 'Rp 750.000', period: '/y', priceId: 'pri_placeholder_plus_bundle_yearly_usd' },
       },
     },
     features: [
@@ -76,13 +76,13 @@ export const pricing: PricingTier[] = [
     highlight: true,
     prices: {
       monthly: {
-        price: 'Rp 99.000', period: '/bulan',
+        price: 'Rp 99.000', period: '/m',
         priceId: 'pri_placeholder_pro_monthly_usd',
         // C4.1: A/B variant — Rp 79.000 vs Rp 99.000 (controlled by ?ab=pro_price)
         variantPriceId: 'pri_pro_monthly_usd_variant_799',
         variantPrice: 'Rp 79.000',
       },
-      yearly: { price: 'Rp 1.000.000', period: '/tahun', priceId: 'pri_placeholder_pro_yearly_usd' },
+      yearly: { price: 'Rp 1.000.000', period: '/y', priceId: 'pri_placeholder_pro_yearly_usd' },
     },
     features: [
       { label: '2 toko', included: true },
@@ -98,17 +98,17 @@ export const pricing: PricingTier[] = [
     tierKey: 'premium',
     name: 'Premium',
     currency: 'IDR',
-    description: 'Untuk jaringan multi-toko — loyalitas dan otomatisasi.',
+    description: 'Untuk jaringan multi-toko — whitelabel, loyalitas, dan otomatisasi.',
     cta: 'Pilih Premium',
     prices: {
-      monthly: { price: 'Rp 399.000', period: '/bulan', priceId: 'pri_placeholder_premium_monthly_usd' },
-      yearly: { price: 'Rp 3.999.000', period: '/tahun', priceId: 'pri_placeholder_premium_yearly_usd' },
+      monthly: { price: 'Rp 399.000', period: '/m', priceId: 'pri_placeholder_premium_monthly_usd' },
+      yearly: { price: 'Rp 3.999.000', period: '/y', priceId: 'pri_placeholder_premium_yearly_usd' },
     },
     features: [
       { label: '5 toko', included: true },
       { label: 'Register tanpa batas', included: true },
+      { label: 'Branding whitelabel', included: true },
       { label: 'Program loyalitas', included: true },
-      { label: 'Email laporan terjadwal', included: true },
       { label: 'Skrip Lua', included: true },
       { label: 'Dukungan prioritas (1 jam)', included: true },
     ],
@@ -118,7 +118,7 @@ export const pricing: PricingTier[] = [
     tierKey: 'enterprise',
     name: 'Enterprise',
     currency: 'IDR',
-    description: 'White-label, perangkat keras khusus, dan account manager khusus.',
+    description: 'Perangkat keras khusus, SLA kustom, dan account manager khusus.',
     cta: 'Hubungi kami',
     prices: {
       monthly: { price: 'Kustom', period: '' },
@@ -149,6 +149,8 @@ export const featureRows: FeatureRow[] = [
   { label: 'Sinkron cloud', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
   { label: 'Dasbor Penjualan Harian', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
   { label: 'Laporan & analitik', values: { free: false, plus: false, pro: true, premium: true, enterprise: true } },
+  { label: 'Log audit lengkap', values: { free: false, plus: false, pro: false, premium: true, enterprise: true } },
+  { label: 'Branding whitelabel', values: { free: false, plus: false, pro: false, premium: true, enterprise: true } },
   { label: 'Email laporan terjadwal', values: { free: false, plus: false, pro: false, premium: true, enterprise: true } },
   { label: 'Program loyalitas', values: { free: false, plus: false, pro: false, premium: true, enterprise: true } },
   { label: 'Skrip Lua', values: { free: false, plus: false, pro: false, premium: true, enterprise: true } },

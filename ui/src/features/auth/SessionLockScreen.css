@@ -20,11 +20,11 @@
   justify-content: center;
   cursor: default;
 
-  /* Same subtle accent-tinted gradient as the login screen */
+  /* Clean corporate background — matches login screen */
   background:
     radial-gradient(
       ellipse 80% 60% at 50% 30%,
-      var(--color-accent-dim),
+      color-mix(in srgb, var(--color-accent) 6%, transparent),
       transparent 70%
     ),
     var(--color-bg);
@@ -53,10 +53,11 @@
   width: min(90vw, 26.25rem);
   min-height: 33.75rem;
 
-  background: var(--color-bg-elevated);
+  /* Corporate elevated card — matches login */
+  background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-3xl);
-  box-shadow: var(--shadow-xl);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-md);
   overflow: hidden;
 }
 

@@ -444,6 +444,251 @@ pub struct ReceivePoLineDto {
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
+/// Session-scoped variant of `list_suppliers`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn list_suppliers_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<SupplierDto>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let suppliers = store.list_suppliers()?;
+    drop(db);
+    Ok(suppliers.into_iter().map(SupplierDto::from).collect())
+}
+
+/// Session-scoped variant of `get_supplier`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn get_supplier_scoped(
+    session_token: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<SupplierDto>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let supplier = store.get_supplier(&id)?;
+    drop(db);
+    Ok(supplier.map(SupplierDto::from))
+}
+
+/// Session-scoped variant of `create_supplier`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn create_supplier_scoped(
+    session_token: String,
+    args: CreateSupplierArgs,
+    state: State<'_, AppState>,
+) -> Result<SupplierDto, AppError> {
+    validate_not_empty("name", &args.name).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("code", &args.code).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let supplier = store.create_supplier(
+        args.code.trim(),
+        args.name.trim(),
+        args.contact_person.as_deref().unwrap_or_default(),
+        args.phone.as_deref().unwrap_or_default(),
+        args.email.as_deref().unwrap_or_default(),
+        args.address.as_deref().unwrap_or_default(),
+        args.tax_id.as_deref().unwrap_or_default(),
+        args.payment_terms.as_deref().unwrap_or_default(),
+        args.notes.as_deref().unwrap_or_default(),
+    )?;
+    drop(db);
+    Ok(SupplierDto::from(supplier))
+}
+
+/// Session-scoped variant of `update_supplier`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn update_supplier_scoped(
+    session_token: String,
+    args: UpdateSupplierArgs,
+    state: State<'_, AppState>,
+) -> Result<SupplierDto, AppError> {
+    validate_not_empty("name", &args.name).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("code", &args.code).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let supplier = store.update_supplier(
+        &args.id,
+        args.code.trim(),
+        args.name.trim(),
+        args.contact_person.as_deref().unwrap_or_default(),
+        args.phone.as_deref().unwrap_or_default(),
+        args.email.as_deref().unwrap_or_default(),
+        args.address.as_deref().unwrap_or_default(),
+        args.tax_id.as_deref().unwrap_or_default(),
+        args.payment_terms.as_deref().unwrap_or_default(),
+        args.notes.as_deref().unwrap_or_default(),
+        args.status.as_deref().unwrap_or("active"),
+    )?;
+    drop(db);
+    Ok(SupplierDto::from(supplier))
+}
+
+/// Session-scoped variant of `list_purchase_orders`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn list_purchase_orders_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<PurchaseOrderDto>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let pos = store.list_purchase_orders()?;
+    drop(db);
+    Ok(pos.into_iter().map(PurchaseOrderDto::from).collect())
+}
+
+/// Session-scoped variant of `get_purchase_order`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn get_purchase_order_scoped(
+    session_token: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<PurchaseOrderDto>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let po = store.get_purchase_order(&id)?;
+    drop(db);
+    Ok(po.map(PurchaseOrderDto::from))
+}
+
+/// Session-scoped variant of `create_purchase_order`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn create_purchase_order_scoped(
+    session_token: String,
+    args: CreatePurchaseOrderArgs,
+    state: State<'_, AppState>,
+) -> Result<PurchaseOrderDto, AppError> {
+    validate_not_empty("po_number", &args.po_number)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let lines: Vec<CreatePoLineInput> = args
+        .lines
+        .into_iter()
+        .map(|l| CreatePoLineInput {
+            sku: l.sku,
+            product_name: l.product_name,
+            qty: l.qty,
+            unit_cost_minor: l.unit_cost_minor,
+        })
+        .collect();
+    let po = store.create_purchase_order(
+        args.po_number.trim(),
+        &args.supplier_id,
+        args.expected_date.as_deref().unwrap_or_default(),
+        args.notes.as_deref().unwrap_or_default(),
+        None,
+        &lines,
+    )?;
+    drop(db);
+    Ok(PurchaseOrderDto::from(po))
+}
+
+/// Session-scoped variant of `update_po_status`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn update_po_status_scoped(
+    session_token: String,
+    args: UpdatePoStatusArgs,
+    state: State<'_, AppState>,
+) -> Result<PurchaseOrderDto, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let po = store.update_po_status(&args.id, &args.status)?;
+    drop(db);
+    Ok(PurchaseOrderDto::from(po))
+}
+
+/// Session-scoped variant of `receive_purchase_order`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn receive_purchase_order_scoped(
+    session_token: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<PurchaseOrderDto, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let po = store.receive_purchase_order(&id)?;
+    drop(db);
+    Ok(PurchaseOrderDto::from(po))
+}
+
+/// Session-scoped variant of `receive_purchase_order_with_lines`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn receive_purchase_order_with_lines_scoped(
+    session_token: String,
+    id: String,
+    lines: Vec<ReceivePoLineDto>,
+    state: State<'_, AppState>,
+) -> Result<PurchaseOrderDto, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let input: Vec<ReceivePoLineInput> = lines
+        .into_iter()
+        .map(|l| ReceivePoLineInput {
+            line_id: l.line_id,
+            received_qty: l.received_qty,
+            damaged_qty: l.damaged_qty,
+        })
+        .collect();
+    let po = store.receive_purchase_order_with_lines(&id, &input)?;
+    drop(db);
+    Ok(PurchaseOrderDto::from(po))
+}
+
 #[cfg(test)]
 #[path = "purchasing_tests.rs"]
 mod tests;

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getTerminalProfile, listTerminals, type TerminalProfileDto } from '@/api/terminals';
+import { getTerminalProfileScoped, listTerminalsScoped, type TerminalProfileDto } from '@/api/terminals';
 import { plainErrorMessage } from '@/utils/app-error';
 
 /** Return type of the `useTerminalProfile` hook. */
@@ -23,7 +23,7 @@ export interface UseTerminalProfileResult {
  * If the profile's `profileType` is `'kds_kiosk'`, the front-end should
  * force the KDS route and hide all navigation.
  */
-export function useTerminalProfile(): UseTerminalProfileResult {
+export function useTerminalProfile(sessionToken?: string): UseTerminalProfileResult {
   const [profile, setProfile] = useState<TerminalProfileDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +36,7 @@ export function useTerminalProfile(): UseTerminalProfileResult {
         // First, try to get the current terminal ID from env or match by device.
         // We list terminals and pick the first one (this is a simplification —
         // in production, the terminal ID is passed as a Tauri env var).
-        const terminals = await listTerminals();
+        const terminals = sessionToken ? await listTerminalsScoped(sessionToken) : [];
         if (cancelled) return;
 
         if (terminals.length === 0) {
@@ -52,7 +52,7 @@ export function useTerminalProfile(): UseTerminalProfileResult {
           setLoading(false);
           return;
         }
-        const terminalProfile = await getTerminalProfile(activeTerminal.id);
+        const terminalProfile = sessionToken ? await getTerminalProfileScoped(sessionToken, activeTerminal.id) : null;
 
         if (!cancelled) {
           setProfile(terminalProfile);
@@ -74,7 +74,7 @@ export function useTerminalProfile(): UseTerminalProfileResult {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [sessionToken]);
 
   const isKdsKiosk = profile?.profileType === 'kds_kiosk';
 

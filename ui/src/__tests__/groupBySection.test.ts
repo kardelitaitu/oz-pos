@@ -2,14 +2,14 @@
  * Tests for `groupBySection` in `AppLayout.tsx` — sidebar nav grouping.
  *
  * The function orders groups by the canonical SECTION_ORDER, falls back
- * to 'management' for items without a section, and never emits empty
+ * to 'settings' for items without a section, and never emits empty
  * groups.
  */
 
 import { describe, expect, it } from 'vitest';
 import { groupBySection } from '@/frontend/shell/AppLayout';
 
-type Section = 'operations' | 'sales' | 'products' | 'finance' | 'customers' | 'reports' | 'inventory' | 'management' | 'settings' | 'dev';
+type Section = 'operations' | 'sales' | 'products' | 'finance' | 'customers' | 'reports' | 'inventory' | 'tools' | 'settings' | 'dev';
 
 const item = (route: string, section?: Section): { route: string; section?: Section } =>
   section === undefined ? { route } : { route, section };
@@ -40,22 +40,22 @@ describe('groupBySection', () => {
     expect(grouped.map((g) => g.section)).toEqual(['operations', 'settings', 'dev']);
   });
 
-  it('falls back to the management section for items without one', () => {
+  it('falls back to the settings section for items without one', () => {
     const grouped = groupBySection([item('no-section')]);
     expect(grouped).toHaveLength(1);
-    expect(grouped[0]!.section).toBe('management');
+    expect(grouped[0]!.section).toBe('settings');
     expect(grouped[0]!.items.map((i) => i.route)).toEqual(['no-section']);
   });
 
-  it('coalesces unsectioned items with explicit management items', () => {
+  it('coalesces unsectioned items with explicit settings items', () => {
     const grouped = groupBySection([
-      item('explicit', 'management'),
+      item('explicit', 'settings'),
       item('implicit'),
       item('other', 'sales'),
     ]);
     expect(grouped).toHaveLength(2);
-    const mgmt = grouped.find((g) => g.section === 'management')!;
-    expect(mgmt.items.map((i) => i.route)).toEqual(['explicit', 'implicit']);
+    const settingsGroup = grouped.find((g) => g.section === 'settings')!;
+    expect(settingsGroup.items.map((i) => i.route)).toEqual(['explicit', 'implicit']);
   });
 
   it('never emits a group for a section with no items', () => {

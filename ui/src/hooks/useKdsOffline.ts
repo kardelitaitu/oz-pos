@@ -23,7 +23,7 @@
 //! instead of being silently swallowed — a KDS that cannot persist has no
 //! durable recovery record, and the operator should know.
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { KdsOrder, KdsStatus } from '@/api/kds';
 
 // ── Constants ───────────────────────────────────────────────────────
@@ -235,6 +235,19 @@ export function useKdsOffline(storeId?: string): UseKdsOfflineReturn {
   // OFF-08: persistence failures are observable, not silently swallowed.
   const [storageUnavailable, setStorageUnavailable] = useState(false);
 
+  // PERF-KDS-01: `wrapFetch` MUST keep a stable identity across cache
+  // updates. It previously closed over `cachedOrders`/`initialLoading`
+  // directly, so every successful fetch produced a new `wrapFetch`, which
+  // produced a new `fetchOrders` in KdsScreen, which re-ran the effect that
+  // fetches and subscribes — an unbounded fetch/subscribe loop that
+  // exhausted the WebView2 PostMessage queue on Windows
+  // (0x80070718 "Not enough quota"). These refs mirror the state for the
+  // callbacks; the state itself still drives rendering.
+  const cachedOrdersRef = useRef(cachedOrders);
+  cachedOrdersRef.current = cachedOrders;
+  const initialLoadingRef = useRef(initialLoading);
+  initialLoadingRef.current = initialLoading;
+
   // Expose pending queue length as a derived value.
   const pendingQueueLength = pendingActions.length;
   const deadLetterLength = deadLetterActions.length;
@@ -314,23 +327,27 @@ export function useKdsOffline(storeId?: string): UseKdsOfflineReturn {
         // Backend is reachable — update cache, mark online.
         setOnline(true);
         updateCache(orders);
-        if (initialLoading) setInitialLoading(false);
+        if (initialLoadingRef.current) setInitialLoading(false);
 
         return { orders, fromCache: false };
       } catch {
         // Backend unreachable — fall back to cache.
         setOnline(false);
-        if (initialLoading) setInitialLoading(false);
+        if (initialLoadingRef.current) setInitialLoading(false);
 
-        if (cachedOrders) {
-          return { orders: cachedOrders, fromCache: true };
+        const cached = cachedOrdersRef.current;
+        if (cached) {
+          return { orders: cached, fromCache: true };
         }
 
         // No cache available either — return empty array.
         return { orders: [], fromCache: true };
       }
     },
-    [cachedOrders, initialLoading, updateCache],
+    // PERF-KDS-01: deliberately depends only on `updateCache` (stable per
+    // store scope). Reading cache/loading through refs keeps the identity
+    // stable so KdsScreen's fetch effect does not re-subscribe per fetch.
+    [updateCache],
   );
 
   // ── wrapUpdate ─────────────────────────────────────────────────────

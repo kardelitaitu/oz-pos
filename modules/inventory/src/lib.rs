@@ -5,7 +5,6 @@ findings: Transitional module implementing Module trait. No unsafe code. Re-expo
   Category, Inventory, Sku from oz-core. 8 unit tests pass.
 next: Migrate DB CRUD + commands into this module | perf: N/A.
 */
-#![warn(missing_docs)]
 
 //! Inventory Module — product catalog and stock management.
 //!

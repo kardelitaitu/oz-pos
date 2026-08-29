@@ -141,6 +141,15 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 ```
 
+Every member manifest also inherits the workspace lint set — put this above
+`[dependencies]`:
+
+```toml
+# Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
+[lints]
+workspace = true
+```
+
 ```rust
 // crates/oz-<name>/src/lib.rs
 
@@ -150,17 +159,20 @@ thiserror = { workspace = true }
 //! and any non-obvious invariants.>
 
 #![deny(unsafe_code)]   // unless the crate genuinely needs unsafe
-#![warn(missing_docs)]  // public items must be documented
 
 pub mod error;
 
 pub use error::<Crate>Error;
 ```
 
-Then add the new crate to the workspace `members` in the root `Cargo.toml`.
+The root `members` list globs `crates/*`, `modules/*`, and `platform/*`, so a
+new crate in one of those directories becomes a workspace member with no root
+manifest edit. `apps/` entries are listed explicitly because not every `apps/`
+subdirectory is a Cargo crate.
 
 **Rules:**
-- `#![warn(missing_docs)]` is on by default. Public items without `///` produce warnings; fix them, don't suppress.
+- `missing_docs = "warn"` comes from the root `[workspace.lints]` and applies through `[lints] workspace = true`; do not add a per-crate `#![warn(missing_docs)]`. Public items without `///` produce warnings; fix them, don't suppress.
+- Cargo rejects a manifest that has both `[lints] workspace = true` and a local `[lints.rust]` override, so a crate-level need for a different lint level must use an inner attribute in `lib.rs` (as `#![deny(unsafe_code)]` does).
 - `#![deny(unsafe_code)]` unless the crate is `oz-hal` (drivers may need `unsafe` for FFI). Even then, wrap `unsafe` blocks with `// SAFETY:` comments.
 - Each crate has a `README.md` with a one-paragraph summary, public API overview, and example.
 - The crate's `mod.rs` re-exports the public surface so users can `use oz_<name>::Type;`.

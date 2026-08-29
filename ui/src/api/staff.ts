@@ -283,6 +283,8 @@ export interface CreateSessionArgs {
   instance_id: string;
   type_key: string;
   terminal_id: string;
+  /** HMAC-signed picker ticket from staff_login / bootstrap_owner. */
+  picker_ticket: string;
 }
 
 /** Session context DTO returned alongside the opaque token. */
@@ -310,6 +312,27 @@ export interface CreateSessionResult {
  */
 export const createSession = (args: CreateSessionArgs): Promise<CreateSessionResult> =>
   loggedInvoke<CreateSessionResult>('create_session', { args });
+
+/** Result of refreshing a picker ticket. */
+export interface RefreshPickerTicketResult {
+  /** Fresh picker ticket valid for another 5 minutes. */
+  picker_ticket: string;
+}
+
+/**
+ * Mint a fresh picker ticket for a caller who already holds a valid session token.
+ *
+ * Used when the UI returns to the workspace picker (e.g. Back button from KDS)
+ * and the original picker ticket from login has expired (>5 min).
+ * The backend verifies the session token and re-mints a fresh ticket bound
+ * to the same user.
+ */
+export const refreshPickerTicket = (
+  sessionToken: string,
+): Promise<RefreshPickerTicketResult> =>
+  loggedInvoke<RefreshPickerTicketResult>('refresh_picker_ticket', {
+    sessionToken,
+  });
 
 /**
  * Destroy an active session token (logout or store switch).

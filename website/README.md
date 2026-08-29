@@ -8,7 +8,7 @@ dashboard. Static build — deployed to Cloudflare Workers static assets.
 ```bash
 npm install        # first time
 npm run dev        # http://localhost:4321
-npm run check      # astro check + i18n audit gate (precheck runs scripts/audit-i18n.mjs)
+npm run check      # astro check + i18n audit gate (precheck runs website/scripts/audit-i18n.mjs)
 npm run build      # i18n audit gate + build to dist/
 ```
 

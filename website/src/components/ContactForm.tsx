@@ -11,7 +11,7 @@ import { t } from '../i18n';
  * When the endpoint is unset the form degrades to a mailto: link with the
  * entered fields pre-filled, so the UI stays fully usable.
  */
-const API = import.meta.env.PUBLIC_CONTACT_ENDPOINT as string | undefined;
+const API = '/api/contact';
 const SUPPORT_EMAIL = 'support@ozpos.my.id';
 
 interface Props {
@@ -40,20 +40,17 @@ export default function ContactForm({ locale }: Props) {
     }
     setStatus('sending');
 
-    if (!API) {
-      // No endpoint configured — open the user's mail client instead.
-      const subject = encodeURIComponent(`[OZ-POS Support] ${name}`);
-      const body = encodeURIComponent(`${message}\n\n— ${name} <${email}>`);
-      window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
-      setStatus('idle');
-      return;
-    }
+
 
     try {
       const res = await fetch(API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, message }),
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          message: message.trim(),
+        }),
       });
       if (!res.ok) throw new Error('contact failed');
       setName('');
@@ -135,11 +132,23 @@ export default function ContactForm({ locale }: Props) {
           onChange={(e) => setWebsite(e.target.value)}
         />
       </label>
-      {status === 'error' && <p className="mt-3 text-sm text-link" role="alert">{t(locale, 'support.formError')}</p>}
+      {status === 'error' && (
+        <div className="mt-3 text-sm text-link" role="alert">
+          <p>{t(locale, 'support.formError')}</p>
+          <p className="mt-1 text-xs text-muted">
+            <a
+              href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`Support: ${name || 'Inquiry'}`)}&body=${encodeURIComponent(message)}`}
+              className="text-link underline"
+            >
+              {SUPPORT_EMAIL}
+            </a>
+          </p>
+        </div>
+      )}
       <button
         type="submit"
         disabled={status === 'sending'}
-        className="mt-5 w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60 sm:w-auto"
+        className="mt-5 w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60 sm:w-auto"
       >
         {status === 'sending' ? t(locale, 'support.sending') : t(locale, 'support.submit')}
       </button>

@@ -492,6 +492,26 @@ fn get_setting_after_multiple_keys_only_returns_requested() {
 }
 
 #[test]
+fn get_setting_redacts_secret_keys() {
+    let conn = fresh_conn();
+    run_set_setting(&conn, "sync_api_key", "secret-key", "t").unwrap();
+    run_set_setting(&conn, "pg_sync.password", "db-pass", "t").unwrap();
+    run_set_setting(&conn, "lan_server.psk", "psk-val", "t").unwrap();
+    run_set_setting(&conn, "smtp_config", "smtp-secret", "t").unwrap();
+    run_set_setting(&conn, "license.api_key", "lic-key", "t").unwrap();
+    assert_eq!(run_get_setting(&conn, "sync_api_key").unwrap(), None);
+    assert_eq!(run_get_setting(&conn, "pg_sync.password").unwrap(), None);
+    assert_eq!(run_get_setting(&conn, "lan_server.psk").unwrap(), None);
+    assert_eq!(run_get_setting(&conn, "smtp_config").unwrap(), None);
+    assert_eq!(run_get_setting(&conn, "license.api_key").unwrap(), None);
+    run_set_setting(&conn, "store.name", "My Store", "t").unwrap();
+    assert_eq!(
+        run_get_setting(&conn, "store.name").unwrap(),
+        Some("My Store".into())
+    );
+}
+
+#[test]
 fn sync_auth_token_cross_screen_roundtrip() {
     // C-3 fix verification: the sync.auth_token key written by
     // one screen (SettingsPage) must be readable by another

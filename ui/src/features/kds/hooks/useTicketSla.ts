@@ -31,6 +31,37 @@ const RED_URGENT = 900;
 /** Tick interval in milliseconds (every second). */
 const TICK_MS = 1000;
 
+// ── Shared 1 Hz ticker ────────────────────────────────────────────────
+//
+// PERF-KDS-01: every ticket card runs this hook, and each one used to own
+// its own `setInterval`. A 30-ticket board therefore woke 30 independent
+// timers per second, each re-rendering one card — on WebView2 that render
+// storm helped saturate the PostMessage queue. One process-wide interval now
+// fans out to every subscriber, so the cost is O(1) timers instead of O(n).
+
+type Ticker = () => void;
+
+const tickerSubscribers = new Set<Ticker>();
+let tickerHandle: ReturnType<typeof setInterval> | null = null;
+
+/** Subscribe to the shared 1 Hz tick. Returns an unsubscribe function. */
+function subscribeToTicker(fn: Ticker): () => void {
+  tickerSubscribers.add(fn);
+  if (tickerHandle === null) {
+    tickerHandle = setInterval(() => {
+      // Copy first: a subscriber may unsubscribe during the fan-out.
+      for (const sub of [...tickerSubscribers]) sub();
+    }, TICK_MS);
+  }
+  return () => {
+    tickerSubscribers.delete(fn);
+    if (tickerSubscribers.size === 0 && tickerHandle !== null) {
+      clearInterval(tickerHandle);
+      tickerHandle = null;
+    }
+  };
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────
 
 /** Compute the SLA level from elapsed seconds (P3-1 progressive thresholds). */
@@ -65,8 +96,9 @@ function formatElapsed(seconds: number): string {
  * The `urgent` flag indicates the ticket has exceeded the 15-minute
  * threshold and needs urgent visual escalation (red background + badge).
  *
- * Updates every second via `setInterval`. Automatically cleans up
- * the interval on unmount or when `createdAt` changes.
+ * Updates every second via a single process-wide ticker shared by every
+ * ticket card. Automatically unsubscribes on unmount or when `createdAt`
+ * changes; the underlying interval is cleared once the last card unmounts.
  */
 export function useTicketSla(createdAt: string): TicketSlaResult {
   // Store the parsed epoch in a ref so we don't re-parse on every tick.
@@ -90,9 +122,20 @@ export function useTicketSla(createdAt: string): TicketSlaResult {
     // Recompute immediately if createdAt changes.
     setResult(compute());
 
-    const tick = () => setResult(compute());
-    const interval = setInterval(tick, TICK_MS);
-    return () => clearInterval(interval);
+    // PERF-KDS-01: only re-render when a displayed field actually changes.
+    // At 1 Hz the elapsed second always moves, but the object identity is
+    // what React diffs — returning `prev` for an unchanged second keeps a
+    // paused/settled board quiet.
+    return subscribeToTicker(() => {
+      setResult((prev) => {
+        const next = compute();
+        return next.elapsedSeconds === prev.elapsedSeconds &&
+          next.level === prev.level &&
+          next.urgent === prev.urgent
+          ? prev
+          : next;
+      });
+    });
      
   }, [createdAt]);
 

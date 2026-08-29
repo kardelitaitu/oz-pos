@@ -4,6 +4,7 @@ import { pricingFor } from '../content/pricing';
 import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
 import { clearSession, getSessionEmail, isPaddleConfigured, isPlaceholderPriceId, openPaddleCheckout } from './paddle';
 import { openMidtransCheckout } from './midtrans';
+import { type Region, getRegion, setRegion } from '../lib/region';
 import PasswordField from './PasswordField';
 import PasswordStrength from './PasswordStrength';
 import { licenseApiUrl } from '../lib/runtime-config';
@@ -35,7 +36,6 @@ import { licenseApiUrl } from '../lib/runtime-config';
  * The signup vertical is **not** carried — trial segmentation is a
  * desktop-activation concern, not a billing one.
  */
-const API = licenseApiUrl();
 
 interface MeResponse {
   tenant?: {
@@ -87,6 +87,8 @@ function statusLabel(locale: string, status: string | undefined): string {
 }
 
 export default function AccountView({ locale }: Props) {
+  // Read API at component level so window.__OZ_CONFIG__ is available after hydration
+  const API = licenseApiUrl();
   const [state, setState] = useState<'loading' | 'anon' | 'error' | 'ready'>('loading');
   const [me, setMe] = useState<MeResponse | null>(null);
   const [subscribing, setSubscribing] = useState<string | null>(null);
@@ -123,6 +125,11 @@ export default function AccountView({ locale }: Props) {
   const [pwConfirm, setPwConfirm] = useState('');
   const [pwMsg, setPwMsg] = useState<'idle' | 'saved' | 'error'>('idle');
   const [pwSaving, setPwSaving] = useState(false);
+  // Region state
+  const [region, setRegionState] = useState<Region>(() => getRegion());
+  const [regionMsg, setRegionMsg] = useState(false);
+  const [regionOpen, setRegionOpen] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(false);
 
   useEffect(() => {
     if (!API) {
@@ -248,7 +255,7 @@ export default function AccountView({ locale }: Props) {
         <p className="text-muted">{t(locale, 'account.notSignedIn')}</p>
         <a
           href={`/${locale}/login`}
-          className="mt-4 inline-block rounded-md bg-accent px-5 py-2.5 text-sm font-semibold text-black transition hover:opacity-90"
+          className="mt-4 inline-block rounded-md bg-accent px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
         >
           {t(locale, 'account.signIn')}
         </a>
@@ -301,42 +308,204 @@ export default function AccountView({ locale }: Props) {
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       {tenant && (
-        <section className="rounded-xl border border-ink/10 bg-surface/40 p-6" aria-label={t(locale, 'account.license')}>
-          <h2 className="text-lg font-semibold">{t(locale, 'account.license')}</h2>
-          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-muted">{t(locale, 'account.licenseKey')}</dt>
-              <dd className="font-mono">{license?.key ?? '—'}</dd>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-xl border border-ink/10 bg-surface/50 p-5 backdrop-blur-sm shadow-sm">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-full bg-accent/15 text-accent font-bold flex items-center justify-center text-lg shadow-inner">
+              {tenant.email.charAt(0).toUpperCase()}
             </div>
             <div>
-              <dt className="text-muted">{t(locale, 'account.tier')}</dt>
-              <dd className="capitalize">{license?.tierKey ?? '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">{t(locale, 'account.status')}</dt>
-              <dd className="capitalize">{statusLabel(locale, license?.status ?? tenant.status)}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">{t(locale, 'account.expires')}</dt>
-              <dd>{license?.expiresAt ?? '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">{t(locale, 'account.emailVerified')}</dt>
-              <dd>
+              <p className="font-semibold text-ink text-base">{tenant.email}</p>
+              <div className="flex items-center gap-2 mt-0.5 text-xs text-muted">
+                <span className="capitalize">{tenant.status}</span>
+                <span>•</span>
                 {tenant.emailVerified ? (
-                  <span className="inline-flex items-center gap-1.5 text-link">
-                    <span aria-hidden="true">✓</span>
-                    {t(locale, 'account.verified')}
+                  <span className="text-green-500 font-medium inline-flex items-center gap-1">
+                    <span aria-hidden="true">✓</span> {t(locale, 'account.verified')}
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 text-muted">
-                    <span aria-hidden="true">○</span>
-                    {t(locale, 'account.notVerified')}
+                  <span className="text-muted inline-flex items-center gap-1">
+                    <span aria-hidden="true">○</span> {t(locale, 'account.notVerified')}
                   </span>
+                )}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              const token = sessionStorage.getItem('oz_session');
+              if (API && token) {
+                try {
+                  await fetch(`${API}/api/v1/web/logout`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` },
+                  });
+                } catch {
+                  // Ignore network errors — logout is idempotent server-side.
+                }
+              }
+              clearSession();
+              window.location.href = `/${locale}`;
+            }}
+            className="self-start sm:self-auto rounded-lg border border-ink/15 bg-surface px-3 py-1.5 text-xs font-medium text-muted transition hover:text-ink hover:bg-ink/5"
+          >
+            {t(locale, 'account.logout')}
+          </button>
+        </div>
+      )}
+
+      {tenant && (
+        <section className="rounded-xl border border-ink/10 bg-surface/40 p-6 shadow-sm" aria-label={t(locale, 'account.license')}>
+          <h2 className="text-lg font-semibold">{t(locale, 'account.license')}</h2>
+          <dl className="mt-4 grid gap-3.5 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-muted">{t(locale, 'account.licenseKey')}</dt>
+              <dd className="mt-1 flex items-center gap-2">
+                <span className="font-mono bg-ink/5 px-2.5 py-1 rounded text-xs select-all border border-ink/10">
+                  {license?.key ?? '—'}
+                </span>
+                {license?.key && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(license.key);
+                      setCopiedKey(true);
+                      setTimeout(() => setCopiedKey(false), 2500);
+                    }}
+                    className="inline-flex items-center gap-1 rounded border border-ink/15 bg-surface px-2 py-1 text-xs font-medium text-ink transition hover:bg-ink/5"
+                    aria-label={t(locale, 'account.copyKey')}
+                  >
+                    {copiedKey ? (
+                      <span className="text-green-500 font-semibold">{t(locale, 'account.copied')}</span>
+                    ) : (
+                      <span>{t(locale, 'account.copyKey')}</span>
+                    )}
+                  </button>
                 )}
               </dd>
             </div>
+            <div>
+              <dt className="text-muted">{t(locale, 'account.tier')}</dt>
+              <dd className="mt-1 font-medium capitalize">{license?.tierKey ?? '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-muted">{t(locale, 'account.status')}</dt>
+              <dd className="mt-1 capitalize">
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                  (license?.status ?? tenant.status) === 'active'
+                    ? 'bg-green-500/15 text-green-600 dark:text-green-400'
+                    : 'bg-ink/10 text-muted'
+                }`}>
+                  {statusLabel(locale, license?.status ?? tenant.status)}
+                </span>
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted">{t(locale, 'account.expires')}</dt>
+              <dd className="mt-1">{license?.expiresAt ?? '—'}</dd>
+            </div>
           </dl>
+        </section>
+      )}
+
+      {/* Quick Action Navigation Grid */}
+      {tenant && (
+        <section className="rounded-xl border border-ink/10 bg-surface/40 p-6 shadow-sm" aria-label={t(locale, 'account.quickActions')}>
+          <h2 className="text-lg font-semibold">{t(locale, 'account.quickActions')}</h2>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <a
+              href={`/${locale}/download`}
+              className="flex flex-col items-center justify-center gap-2 rounded-lg border border-ink/10 bg-surface p-4 text-center transition hover:border-accent hover:shadow-sm"
+            >
+              <svg className="w-5 h-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <span className="text-sm font-semibold text-ink">{t(locale, 'account.downloadApp')}</span>
+            </a>
+            <a
+              href={`/${locale}/docs/activation`}
+              className="flex flex-col items-center justify-center gap-2 rounded-lg border border-ink/10 bg-surface p-4 text-center transition hover:border-accent hover:shadow-sm"
+            >
+              <svg className="w-5 h-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+              <span className="text-sm font-semibold text-ink">{t(locale, 'account.activationGuide')}</span>
+            </a>
+            <a
+              href={`/${locale}/support`}
+              className="flex flex-col items-center justify-center gap-2 rounded-lg border border-ink/10 bg-surface p-4 text-center transition hover:border-accent hover:shadow-sm"
+            >
+              <svg className="w-5 h-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+              </svg>
+              <span className="text-sm font-semibold text-ink">{t(locale, 'account.contactSupport')}</span>
+            </a>
+          </div>
+        </section>
+      )}
+
+      {/* Device / Terminal Management */}
+      {tenant && (
+        <section className="rounded-xl border border-ink/10 bg-surface/40 p-6 shadow-sm" aria-label={t(locale, 'account.devices')}>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">{t(locale, 'account.devices')}</h2>
+            <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-semibold text-link">
+              {license?.tierKey === 'pro' || license?.tierKey === 'enterprise' || license?.tierKey === 'premium'
+                ? t(locale, 'account.terminalUnlimited')
+                : t(locale, 'account.terminalCount')}
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-muted">{t(locale, 'account.devicesHint')}</p>
+          <div className="mt-4 rounded-lg border border-ink/10 bg-surface p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-ink/5 flex items-center justify-center text-muted">
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                  <line x1="8" y1="21" x2="16" y2="21" />
+                  <line x1="12" y1="17" x2="12" y2="21" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-ink">{t(locale, 'account.terminalSlots')}</p>
+                <p className="text-xs text-muted">{t(locale, 'account.unbindHint')}</p>
+              </div>
+            </div>
+            <a
+              href={`/${locale}/docs/activation`}
+              className="rounded-md border border-ink/15 bg-surface px-2.5 py-1 text-xs font-medium text-ink transition hover:bg-ink/5"
+            >
+              {t(locale, 'account.activationGuide')}
+            </a>
+          </div>
+        </section>
+      )}
+
+      {/* Billing & Tax Invoices */}
+      {tenant && (
+        <section className="rounded-xl border border-ink/10 bg-surface/40 p-6 shadow-sm" aria-label={t(locale, 'account.billingInvoices')}>
+          <h2 className="text-lg font-semibold">{t(locale, 'account.billingInvoices')}</h2>
+          <p className="mt-1 text-sm text-muted">{t(locale, 'account.billingInvoicesHint')}</p>
+          <div className="mt-4 rounded-lg border border-ink/10 bg-surface p-4 space-y-2">
+            <p className="text-xs text-muted leading-relaxed">{t(locale, 'account.invoiceNote')}</p>
+            <div className="pt-2 flex items-center gap-3">
+              <a
+                href={`mailto:sales@ozpos.my.id?subject=${encodeURIComponent('Invoice Request - ' + tenant.email)}`}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-link hover:underline"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <polyline points="10 9 9 9 8 9" />
+                </svg>
+                {t(locale, 'account.viewReceipts')}
+              </a>
+            </div>
+          </div>
         </section>
       )}
 
@@ -373,11 +542,68 @@ export default function AccountView({ locale }: Props) {
             <button
               type="submit"
               disabled={pwSaving || !isStrongPassword(pw) || !passwordsMatch(pw, pwConfirm)}
-              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
             >
               {pwSaving ? '…' : t(locale, 'account.passwordSave')}
             </button>
           </form>
+        </section>
+      )}
+
+      {/* Region selector */}
+      {tenant && (
+        <section className="rounded-xl border border-ink/10 bg-surface/40 p-6" aria-label={t(locale, 'account.region')}>
+          <h2 className="text-lg font-semibold">{t(locale, 'account.region')}</h2>
+          <p className="mt-1 text-sm text-muted">{t(locale, 'account.regionHint')}</p>
+          <div className="relative mt-3">
+            <button
+              type="button"
+              onClick={() => setRegionOpen(!regionOpen)}
+              onBlur={() => setTimeout(() => setRegionOpen(false), 150)}
+              className="w-full rounded-md border border-ink/10 bg-surface px-3 py-2 text-sm text-left outline-none transition focus:border-accent flex items-center justify-between"
+            >
+              <span>{t(locale, region === 'id' ? 'signup.regionIndonesia' : 'signup.regionGlobal')}</span>
+              <svg
+                className={`w-4 h-4 text-muted transition-transform duration-200 ${regionOpen ? 'rotate-180' : ''}`}
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="4 6 8 10 12 6" />
+              </svg>
+            </button>
+            {regionOpen && (
+              <div className="absolute z-50 mt-1 w-full rounded-md border border-ink/10 bg-surface shadow-lg overflow-hidden">
+                {([
+                  { value: 'global' as Region, label: t(locale, 'signup.regionGlobal') },
+                  { value: 'id' as Region, label: t(locale, 'signup.regionIndonesia') },
+                ]).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      setRegionState(opt.value);
+                      setRegion(opt.value);
+                      setRegionOpen(false);
+                      setRegionMsg(true);
+                      setTimeout(() => setRegionMsg(false), 3000);
+                    }}
+                    className={`w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors duration-150 ${
+                      region === opt.value ? 'text-link font-medium' : 'text-ink hover:bg-ink/5'
+                    }`}
+                  >
+                    <span>{opt.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {regionMsg && (
+            <p className="mt-2 text-sm text-link" role="status">{t(locale, 'account.regionSaved')}</p>
+          )}
         </section>
       )}
 
@@ -437,7 +663,7 @@ export default function AccountView({ locale }: Props) {
                 type="button"
                 onClick={() => void subscribe(bundleYearly?.priceId ?? '', 'plus', plusBundle.id)}
                 disabled={subscribing !== null}
-                className="mt-3 block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+                className="mt-3 block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
               >
                 {subscribing === 'plus' ? '…' : t(locale, 'account.bundleUpgrade')}
               </button>
@@ -463,7 +689,7 @@ export default function AccountView({ locale }: Props) {
                     type="button"
                     onClick={() => void subscribe(plan.priceId, plan.tierKey)}
                     disabled={subscribing !== null}
-                    className="mt-3 block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+                    className="mt-3 block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
                   >
                     {subscribing === plan.tierKey ? '…' : t(locale, 'account.subscribe')}
                   </button>

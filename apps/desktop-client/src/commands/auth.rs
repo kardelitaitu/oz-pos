@@ -236,7 +236,7 @@ pub async fn staff_login(
 /// Arguments for `create_session`.
 #[derive(Debug, Deserialize)]
 pub struct CreateSessionArgs {
-    /// The authenticated user ID.
+    /// The authenticated user ID (must match the picker ticket).
     pub user_id: String,
     /// The user's active role ID.
     pub role_id: String,
@@ -248,6 +248,9 @@ pub struct CreateSessionArgs {
     pub type_key: String,
     /// The terminal/device ID.
     pub terminal_id: String,
+    /// HMAC-signed picker ticket from `staff_login`/`bootstrap_owner`.
+    /// Used to authenticate the caller's identity before minting a session.
+    pub picker_ticket: String,
 }
 
 /// Result of `create_session` — returns the opaque session token.
@@ -293,11 +296,42 @@ pub async fn create_session(
     args: CreateSessionArgs,
     state: State<'_, AppState>,
 ) -> Result<CreateSessionResult, AppError> {
-    // Validate required fields BEFORE any side effects.
+    // H-3: Validate required fields BEFORE any side effects.
     if args.store_id.is_empty() || args.instance_id.is_empty() || args.user_id.is_empty() {
         return Err(AppError::Invalid(
             "store_id, instance_id, and user_id must not be empty".into(),
         ));
+    }
+
+    // H-3: Verify the picker ticket to authenticate the caller's identity.
+    // The ticket was minted by staff_login/bootstrap_owner and bound to the
+    // authenticated user. We derive user_id from the ticket instead of
+    // trusting the caller-supplied value.
+    let now_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let verified_user_id = picker_ticket::verify_picker_ticket(
+        &state.picker_ticket_secret,
+        &args.picker_ticket,
+        now_ts,
+    )
+    .ok_or_else(|| {
+        tracing::warn!(
+            user_id = %args.user_id,
+            "session creation denied — invalid or expired picker ticket"
+        );
+        AppError::Invalid("Invalid or expired picker ticket".into())
+    })?;
+
+    // Ensure the caller-supplied user_id matches the ticket-bound identity.
+    if verified_user_id != args.user_id {
+        tracing::warn!(
+            user_id = %args.user_id,
+            ticket_user_id = %verified_user_id,
+            "session creation denied — user_id mismatch with picker ticket"
+        );
+        return Err(AppError::Invalid("Invalid or expired picker ticket".into()));
     }
 
     // Server-side authorization: verify the user has a valid role assignment
@@ -324,12 +358,6 @@ pub async fn create_session(
     }
 
     let token = uuid::Uuid::now_v7().to_string();
-
-    // Snapshot the current time once for both expiry and creation timestamp.
-    let now_ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64;
 
     // Compute session expiry from the cached TTL setting.
     // 0 or negative means no expiry (development mode).
@@ -461,6 +489,60 @@ pub async fn destroy_session(
     Ok(())
 }
 
+/// Result of `session_keepalive` — the refreshed expiry timestamp.
+#[derive(Debug, Serialize)]
+pub struct SessionKeepaliveResult {
+    /// Refreshed unix expiry (seconds). `None` when sessions have no
+    /// TTL (development mode) — the frontend can stop pinging then.
+    pub expires_at: Option<i64>,
+}
+
+/// Refresh the current session's TTL so long-lived screens (analytics,
+/// reports, dashboards) keep the session alive during active use.
+///
+/// ADR #7: extends `expires_at` to `now + session.ttl_seconds` for a
+/// still-valid session, identical to the expiry `create_session` assigns.
+/// Returns `AppError::InvalidSession` when the token is unknown or
+/// already expired (matching `resolve_session`), so the frontend hears
+/// about a dead session through the same typed error as any command.
+/// Sessions without an expiry (development mode) are a no-op and return
+/// `expires_at: None`.
+#[tauri::command]
+pub async fn session_keepalive(
+    state: State<'_, AppState>,
+    session_token: String,
+) -> Result<SessionKeepaliveResult, AppError> {
+    let mut store = state
+        .session_store
+        .write()
+        .map_err(|e| AppError::Internal(format!("session store lock poisoned: {e}")))?;
+
+    let expired = match store.get(&session_token) {
+        Some(ctx) => ctx.is_expired(),
+        None => return Err(AppError::InvalidSession),
+    };
+    if expired {
+        store.remove(&session_token);
+        return Err(AppError::InvalidSession);
+    }
+
+    let now_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let expires_at = if state.session_ttl_seconds > 0 {
+        Some(now_ts + state.session_ttl_seconds)
+    } else {
+        None
+    };
+    if let Some(entry) = store.get_mut(&session_token) {
+        entry.expires_at = expires_at;
+    }
+
+    tracing::debug!(ttl_seconds = %state.session_ttl_seconds, "session keepalive");
+    Ok(SessionKeepaliveResult { expires_at })
+}
+
 /// Verify the current session user's PIN.
 ///
 /// Used by destructive operations (topology Apply, void, etc.) to
@@ -483,8 +565,58 @@ pub async fn verify_pin(
     Ok(valid)
 }
 
+/// Result of `refresh_picker_ticket` — a fresh HMAC-signed ticket.
+#[derive(Debug, Serialize)]
+pub struct RefreshPickerTicketResult {
+    /// Fresh picker ticket valid for another 5 minutes.
+    pub picker_ticket: String,
+}
+
+/// Mint a fresh picker ticket for a caller who already holds a valid session token.
+///
+/// Used when the UI returns to the workspace picker (e.g. Back button from KDS)
+/// and needs to re-call `create_session` without going through `staff_login`
+/// again. The picker ticket has a short TTL (5 minutes) so if the user was
+/// browsing the workspace picker for longer than that, the original ticket
+/// from login has expired.
+///
+/// Security: re-minting is safe because it requires a valid, non-expired
+/// session token — proving the caller has already authenticated. The new
+/// ticket is bound to the session's `user_id`, so identity is preserved.
+#[tauri::command]
+pub async fn refresh_picker_ticket(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<RefreshPickerTicketResult, AppError> {
+    // Verify the existing session token — this proves the caller is already
+    // authenticated (STAFF-01 / ADR #4).
+    let session = state.resolve_session(&session_token)?;
+
+    let now_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+
+    let picker_ticket = picker_ticket::sign_picker_ticket(
+        &state.picker_ticket_secret,
+        &session.user_id,
+        now_ts + picker_ticket::PICKER_TICKET_TTL_SECS,
+    );
+
+    tracing::debug!(
+        user_id = %session.user_id,
+        "picker ticket refreshed via session token"
+    );
+
+    Ok(RefreshPickerTicketResult { picker_ticket })
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 #[path = "auth_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "security_scoped_integration_tests.rs"]
+mod security_integration_tests;

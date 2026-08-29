@@ -405,3 +405,224 @@ fn run_list_remote_failures(
 #[cfg(test)]
 #[path = "offline_tests.rs"]
 mod tests;
+
+// ── Scoped variants (ADR #7) ────────────────────────────────────────
+
+/// Enqueue a transaction for later sync (scoped).
+#[tauri::command]
+pub async fn enqueue_offline_scoped(
+    args: EnqueueOfflineArgs,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<OfflineQueueItemDto, AppError> {
+    validate_not_empty("action", &args.action).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("payload", &args.payload).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let tenant_id = args.tenant_id.as_deref().unwrap_or("default");
+    let priority = args
+        .priority
+        .as_deref()
+        .map(SyncPriority::from_str_lenient)
+        .unwrap_or(SyncPriority::Normal);
+
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let item = store.enqueue_offline_scoped(&args.action, &args.payload, tenant_id, priority)?;
+    drop(db);
+
+    tracing::info!(id = %item.id, action = %item.action, tenant_id, "offline transaction enqueued (scoped)");
+    Ok(item.into())
+}
+
+/// List all pending (unsynced) offline queue items (scoped).
+#[tauri::command]
+pub async fn list_pending_offline_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<OfflineQueueItemDto>, AppError> {
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    run_list_pending_offline(&db)
+}
+
+/// List all offline queue items (scoped).
+#[tauri::command]
+pub async fn list_all_offline_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<OfflineQueueItemDto>, AppError> {
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let items = store.list_all_offline()?;
+    let dtos: Vec<OfflineQueueItemDto> = items.into_iter().map(OfflineQueueItemDto::from).collect();
+    Ok(dtos)
+}
+
+/// Get a summary of the offline queue status (scoped).
+#[tauri::command]
+pub async fn offline_queue_status_summary_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<OfflineQueueSummaryDto, AppError> {
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let summary = store.offline_queue_status_summary()?;
+    drop(db);
+    Ok(OfflineQueueSummaryDto {
+        pending_count: summary.pending_count,
+        synced_count: summary.synced_count,
+        failed_count: summary.failed_count,
+        conflict_count: summary.conflict_count,
+        last_synced_at: summary.last_synced_at,
+        oldest_pending_at: summary.oldest_pending_at,
+    })
+}
+
+/// Get the count of pending offline items (scoped).
+#[tauri::command]
+pub async fn pending_offline_count_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<i64, AppError> {
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let count = store.pending_offline_count()?;
+    drop(db);
+    Ok(count)
+}
+
+/// Attempt to sync all pending offline items (scoped).
+#[tauri::command]
+pub async fn retry_offline_sync_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<SyncResult, AppError> {
+    let (pending_items, config_opt) = {
+        let (_session, conn) = state.resolve_scope(&session_token)?;
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+        let pending = store.list_pending_offline()?;
+        let config = SyncConfig::from_settings(&store)?;
+        (pending, config)
+    };
+
+    let total_count = pending_items.len() as i64;
+    let config = match config_opt {
+        Some(c) => c,
+        None => {
+            return Err(AppError::Invalid(
+                "Sync is not configured or disabled — items remain pending".into(),
+            ));
+        }
+    };
+
+    if pending_items.is_empty() {
+        return Ok(SyncResult {
+            synced_count: 0,
+            failed_count: 0,
+            total_count: 0,
+            plan_required: false,
+        });
+    }
+
+    let mut pending_items = pending_items;
+    pending_items.sort_by_key(|i| i.priority);
+
+    let outcomes = sync_client::send_items_to_server(&config, &pending_items).await;
+
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let attempt = match outcomes {
+        Ok(outcomes) => sync_client::apply_sync_outcomes(&store, &pending_items, &outcomes)?,
+        Err(sync_client::SyncHttpError::PlanRequired) => SyncAttemptResult {
+            synced: 0,
+            failed: 0,
+            error: Some("cloud sync requires a paid plan".into()),
+            plan_required: true,
+        },
+        Err(e) => sync_client::mark_all_failed(&store, &pending_items, &e.to_string())?,
+    };
+    drop(db);
+
+    Ok(SyncResult {
+        synced_count: attempt.synced as i64,
+        failed_count: attempt.failed as i64,
+        total_count,
+        plan_required: attempt.plan_required,
+    })
+}
+
+/// Delete a processed offline queue item (scoped).
+#[tauri::command]
+pub async fn delete_offline_item_scoped(
+    id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    store.delete_offline_item(&id)?;
+    drop(db);
+
+    tracing::info!(id, "offline queue item deleted (scoped)");
+    Ok(())
+}
+
+/// Requeue a dead-lettered remote item (scoped).
+#[tauri::command]
+pub async fn requeue_remote_failure_scoped(
+    args: RequeueRemoteFailureArgs,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("itemId", &args.item_id).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    run_requeue_remote_failure(&db, &args.item_id)?;
+    drop(db);
+
+    tracing::info!(item_id = %args.item_id, "dead-lettered remote item requeued (scoped)");
+    Ok(())
+}
+
+/// List retained remote-application failures (scoped).
+#[tauri::command]
+pub async fn list_remote_failures_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<RemoteSyncFailureDto>, AppError> {
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let failures = run_list_remote_failures(&db)?;
+    drop(db);
+    Ok(failures)
+}

@@ -487,6 +487,72 @@ pub async fn get_shift_report(
     Ok(ShiftReportDto::from(report))
 }
 
+// ── Scoped variants (ADR #7) ────────────────────────────────────
+
+/// Scoped variant of `get_shift` (ADR #7).
+#[tauri::command]
+pub async fn get_shift_scoped(
+    id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Option<ShiftDto>, AppError> {
+    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let shift = store.get_shift(&id)?;
+    drop(db);
+
+    Ok(shift.map(ShiftDto::from))
+}
+
+/// Scoped variant of `create_cash_payout` (ADR #7).
+#[tauri::command]
+pub async fn create_cash_payout_scoped(
+    args: CreateCashPayoutArgs,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<CashPayoutDto, AppError> {
+    validate_not_empty("shift_id", &args.shift_id).map_err(|e| AppError::Invalid(e.to_string()))?;
+    if args.amount_minor <= 0 {
+        return Err(AppError::Invalid("amount_minor must be > 0".into()));
+    }
+
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let payout = store.create_cash_payout(&args.shift_id, args.amount_minor, &args.reason)?;
+    drop(db);
+
+    tracing::info!(id = %payout.id, shift_id = %args.shift_id, amount = %args.amount_minor, "cash payout recorded");
+    Ok(CashPayoutDto::from(payout))
+}
+
+/// Scoped variant of `get_shift_report` (ADR #7).
+#[tauri::command]
+pub async fn get_shift_report_scoped(
+    shift_id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<ShiftReportDto, AppError> {
+    validate_not_empty("shift_id", &shift_id).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let report = store.get_shift_report(&shift_id)?;
+    drop(db);
+
+    Ok(ShiftReportDto::from(report))
+}
+
 #[cfg(test)]
 #[path = "shifts_tests.rs"]
 mod tests;

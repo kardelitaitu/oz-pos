@@ -1834,13 +1834,113 @@ VALUES ('01926b3a-0000-7000-8000-000000000002',
         'System-managed pseudo-location for in-flight stock between source and destination during a transfer.')
 ON CONFLICT DO NOTHING;
 
+-- PLANNED (stubs): media assets (images) + EDC terminal registry.
+-- Hand-ported from migration 20260824_media_edc.sql so the PG surface
+-- stays in parity with the SQLite registry.
+
+CREATE TABLE IF NOT EXISTS media_assets (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL DEFAULT 'default',
+    owner_type  TEXT NOT NULL,
+    owner_id    TEXT NOT NULL,
+    file_path   TEXT NOT NULL,
+    mime_type   TEXT NOT NULL,
+    content_hash TEXT,
+    width       BIGINT,
+    height      BIGINT,
+    size_bytes  BIGINT NOT NULL DEFAULT 0,
+    original_name TEXT,
+    created_at  TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    updated_at  TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_assets_owner
+    ON media_assets(tenant_id, owner_type, owner_id);
+
+CREATE INDEX IF NOT EXISTS idx_media_assets_content_hash
+    ON media_assets(tenant_id, content_hash);
+
+CREATE TABLE IF NOT EXISTS media_thumbnails (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL DEFAULT 'default',
+    asset_id    TEXT NOT NULL,
+    preset      TEXT NOT NULL,
+    file_path   TEXT NOT NULL,
+    width       BIGINT NOT NULL,
+    height      BIGINT NOT NULL,
+    size_bytes  BIGINT NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    FOREIGN KEY (asset_id) REFERENCES media_assets(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_thumbnails_asset
+    ON media_thumbnails(tenant_id, asset_id);
+
+CREATE TABLE IF NOT EXISTS edc_terminals (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL DEFAULT 'default',
+    name            TEXT NOT NULL,
+    connection_type TEXT NOT NULL
+                    CHECK (connection_type IN ('wired', 'wireless')),
+    transport       TEXT NOT NULL,
+    address         TEXT NOT NULL,
+    vendor          TEXT,
+    model           TEXT,
+    is_active       BIGINT NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    updated_at      TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_edc_terminals_tenant
+    ON edc_terminals(tenant_id, is_active);
+
+-- PLANNED (stubs): payment gateway config + settlements ledger.
+-- Hand-ported from migration 20260825_payment_infra.sql for PG parity.
+
+CREATE TABLE IF NOT EXISTS payment_gateways (
+    id           TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL DEFAULT 'default',
+    name         TEXT NOT NULL,
+    is_active    BIGINT NOT NULL DEFAULT 1,
+    config_json  TEXT NOT NULL DEFAULT '{}',
+    created_at   TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    updated_at   TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    UNIQUE (tenant_id, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_gateways_tenant
+    ON payment_gateways(tenant_id, is_active);
+
+CREATE TABLE IF NOT EXISTS payment_settlements (
+    id           TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL DEFAULT 'default',
+    gateway      TEXT NOT NULL,
+    batch_id     TEXT NOT NULL,
+    settled_at   TEXT,
+    expected_minor BIGINT NOT NULL DEFAULT 0,
+    actual_minor   BIGINT NOT NULL DEFAULT 0,
+    currency     TEXT NOT NULL DEFAULT 'USD',
+    status       TEXT NOT NULL DEFAULT 'pending'
+                 CHECK (status IN ('pending', 'matched', 'discrepancy', 'reconciled')),
+    created_at   TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    updated_at   TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_settlements_tenant
+    ON payment_settlements(tenant_id, gateway, status);
+
+CREATE INDEX IF NOT EXISTS idx_payment_settlements_batch
+    ON payment_settlements(tenant_id, batch_id);
+
 -- ── Row-Level Security: tenant isolation (PG-only) ─────────────────────
 -- See the appendix source in scripts/generate-pg-migration.py.
 DO $$
 DECLARE
     t text;
 BEGIN
-    FOREACH t IN ARRAY ARRAY['bundle_items','offline_queue','product_activity',
+    FOREACH t IN ARRAY ARRAY['bundle_items','edc_terminals','media_assets',
+                            'media_thumbnails','offline_queue','payment_gateways',
+                            'payment_settlements','product_activity',
                             'product_bundles','product_taxes','product_variants',
                             'products','sales','sent_reports','stripe_customers',
                             'sync_terminals','tax_rates','tenant_plans',

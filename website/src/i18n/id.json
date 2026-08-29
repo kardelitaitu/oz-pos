@@ -10,6 +10,7 @@
     "docs": "Dokumentasi",
     "support": "Dukungan",
     "login": "Masuk",
+    "account": "Akun",
     "menu": "Menu",
     "theme": "Ganti tema",
     "language": "Bahasa",
@@ -97,38 +98,99 @@
     }
   },
   "hero": {
-    "title": "Platform POS Offline-First",
-    "subtitle": "Tetap jualan saat gangguan koneksi. OZ-POS berjalan penuh di perangkat Anda dan sinkron ke cloud begitu koneksi kembali.",
+    "title": "Fitur Kelas Enterprise, Tanpa Biaya Enterprise",
+    "subtitle": "Sistem POS kelas korporasi yang dapat diakses siapa saja. Tetap jualan saat internet mati dengan inti offline-first ultra-ringan, tanpa biaya per-fitur tersembunyi.",
     "ctaPrimary": "Unduh Gratis",
     "ctaSecondary": "Lihat Harga"
   },
   "features": {
-    "title": "Dibangun untuk dunia nyata",
-    "subtitle": "Kasir yang tidak berhenti saat internet mati.",
+    "title": "Fitur Kelas Enterprise, Tanpa Biaya Enterprise",
+    "subtitle": "Sembilan kapabilitas inti yang dirancang untuk efisiensi maksimal, keandalan tanpa henti, dan pertumbuhan bisnis Anda.",
     "items": [
       {
-        "title": "Offline-first",
-        "description": "Penjualan, shift, dan stok tetap berjalan tanpa koneksi sama sekali — tidak ada yang hilang."
+        "title": "Offline-First",
+        "description": "Penjualan, kasir, dan stok tetap bekerja 100% tanpa koneksi internet. Transaksi dan data Anda tidak pernah hilang."
       },
       {
-        "title": "Sinkron cloud",
-        "description": "Perubahan tergabung ke cloud begitu kembali online, lintas toko dan register."
+        "title": "No Hardware Barrier",
+        "description": "Dibangun dengan stack teknologi state-of-the-art (Rust & SQLite tertanam) yang sangat ringan dan efisien. Berjalan mulus pada PC, tablet, maupun hardware kasir spesifikasi paling rendah."
       },
       {
-        "title": "Pembayaran QRIS",
-        "description": "Terima QRIS secara native, tanpa perangkat tambahan."
+        "title": "Multi-Store & Multi-Terminal",
+        "description": "Kelola banyak cabang toko, register kasir, dan gudang dalam satu topologi terpadu dengan sinkronisasi instan."
       },
       {
-        "title": "Multi-toko",
-        "description": "Gudang, register, dan cabang dalam satu topologi yang bisa diedit secara visual."
+        "title": "Advanced Reports & Analytics",
+        "description": "Wawasan mendalam seputar tren penjualan, produk terlaris, analisis jam sibuk (rush-hour), dan margin laba bersih."
       },
       {
-        "title": "Skrip Lua",
-        "description": "Otomatiskan harga, diskon, dan alur dengan permukaan skrip yang kecil."
+        "title": "E-Wallets & Native QRIS",
+        "description": "Terima pembayaran QRIS langsung di layar dan berbagai dompet digital tanpa perlu sewa perangkat EDC tambahan."
       },
       {
-        "title": "Shift & rekonsiliasi",
-        "description": "Shift kasir ditutup rapi, dengan riwayat audit lengkap untuk setiap perubahan."
+        "title": "Debit & Credit Card",
+        "description": "Integrasi mulus dengan terminal EDC dan payment gateway modern untuk kartu chip, contactless, dan gesek."
+      },
+      {
+        "title": "Whitelabel",
+        "description": "Kustomisasi penuh untuk logo bisnis, header struk belanja, dan format cetak kasir Anda mulai dari paket Premium, tanpa perlu kontrak Enterprise khusus."
+      },
+      {
+        "title": "Lua Scripting",
+        "description": "Mesin skrip Lua tertanam untuk fleksibilitas tanpa batas: logika diskon bertingkat, promo happy hour, BOGO, dan aturan pajak kustom."
+      },
+      {
+        "title": "Full Audit Logging & Shift",
+        "description": "Catatan riwayat lengkap dan anti-manipulasi untuk setiap pembukaan laci kas, void, pembatalan, dan pergantian shift kasir."
+      }
+    ],
+    "comparisonTitle": "OZ-POS vs POS Cloud Konvensional",
+    "comparisonSubtitle": "Lihat mengapa arsitektur offline-first dan paket all-inclusive membuat OZ-POS unggul jauh.",
+    "comparisonOzPos": "OZ-POS",
+    "comparisonOthers": "POS Cloud Konvensional",
+    "comparisonHeaderFeature": "Fitur & Kapabilitas",
+    "comparisonRows": [
+      {
+        "feature": "Keandalan Saat Internet Mati",
+        "ozPos": "100% Berjalan Penuh (Local SQLite di tiap perangkat)",
+        "others": "Macet / Transaksi gagal saat offline",
+        "highlight": true
+      },
+      {
+        "feature": "Efisiensi Hardware",
+        "ozPos": "SOTA Rust engine — lancar di hardware termurah & hemat RAM",
+        "others": "Aplikasi web berat, butuh hardware mahal",
+        "highlight": false
+      },
+      {
+        "feature": "Kitchen Display System (KDS)",
+        "ozPos": "Sudah termasuk gratis di browser & tablet",
+        "others": "Biaya add-on mahal per-layar / bulan",
+        "highlight": true
+      },
+      {
+        "feature": "Multi-Toko & Gudang",
+        "ozPos": "Tersedia langsung di paket reguler",
+        "others": "Terkunci di paket Enterprise jutaan rupiah",
+        "highlight": false
+      },
+      {
+        "feature": "Kustomisasi Aturan Bisnis",
+        "ozPos": "Mesin Skrip Lua bebas atur promo kustom",
+        "others": "Kaku, harus menunggu vendor update",
+        "highlight": true
+      },
+      {
+        "feature": "Audit Trail & Fraud Prevention",
+        "ozPos": "Full audit logging tamper-evident untuk tiap aksi kasir",
+        "others": "Laporan dasar tanpa log aksi sensitif",
+        "highlight": false
+      },
+      {
+        "feature": "Struktur Biaya",
+        "ozPos": "Transparan & bayar sesuai skala, bukan mengunci fitur",
+        "others": "Banyak biaya tersembunyi per-fitur tambahan",
+        "highlight": false
       }
     ]
   },
@@ -158,15 +220,15 @@
       "label": "Periode penagihan",
       "monthly": "Bulanan",
       "yearly": "Tahunan",
-      "yearlyNote": "2 bulan gratis",
-      "billedYearly": "Ditagih tahunan · 2 bulan gratis"
+      "yearlyNote": "Hemat 17%",
+      "billedYearly": "Ditagih tahunan · Hemat 17%"
     }
   },
   "download": {
     "title": "Unduh OZ-POS",
-    "subtitle": "Versi 0.0.30 — gratis selamanya, tanpa pendaftaran.",
+    "subtitle": "Versi 0.0.31 — gratis selamanya, tanpa pendaftaran.",
     "version": "Versi saat ini",
-    "versionValue": "0.0.30",
+    "versionValue": "0.0.31",
     "platformsTitle": "Pilih platform Anda",
     "requirementsTitle": "Persyaratan sistem",
     "requirements": [
@@ -210,7 +272,7 @@
     "createAccount": "Buat akun",
     "resetTitle": "Atur ulang kata sandi",
     "sendResetCode": "Kirim kode reset",
-    "resetCodeSent": "Kami mengirim kode reset ke email Anda. Masukkan bersama kata sandi baru.",
+    "resetCodeSent": "Kami mengirim kode reset ke email Anda. Silakan periksa inbox atau folder spam.",
     "newPassword": "Kata sandi baru",
     "resetPassword": "Atur ulang kata sandi",
     "backToLogin": "Kembali ke masuk",
@@ -219,6 +281,7 @@
     "cooldown": "Anda baru saja mengatur ulang kata sandi. Reset baru diblokir hingga",
     "resendCode": "Kirim ulang kode",
     "resendCooldown": "Kirim ulang kode dalam",
+    "codeResent": "Kode verifikasi baru telah dikirim ke email Anda.",
     "errorRateLimit": "Terlalu banyak permintaan — silakan tunggu beberapa menit sebelum mencoba lagi.",
     "errorCors": "Permintaan diblokir oleh server. Silakan hubungi dukungan.",
     "errorSmtp": "Pengiriman email belum dikonfigurasi pada deployment ini. Silakan hubungi dukungan."
@@ -251,6 +314,9 @@
     "passwordSave": "Simpan kata sandi",
     "passwordSaved": "Kata sandi tersimpan. Gunakan untuk masuk lain kali.",
     "passwordError": "Tidak dapat menyimpan kata sandi. Silakan coba lagi.",
+    "region": "Wilayah",
+    "regionHint": "Menentukan metode pembayaran",
+    "regionSaved": "Wilayah diperbarui.",
     "checkingSubscription": "Memeriksa langganan Anda…",
     "subscriptionPending": "Pembayaran Anda berhasil, tetapi langganan belum terlihat — mungkin butuh satu menit. Muat ulang untuk memeriksa.",
     "statusActive": "Aktif",
@@ -261,7 +327,23 @@
     "renewHint": "Langganan Anda tidak lagi aktif.",
     "renewLink": "Perpanjang di halaman harga",
     "bundleUpgrade": "Tingkatkan ke paket",
-    "bundleUpgradeHint": "Menambahkan Layar Dapur (KDS) ke paket Plus Anda."
+    "bundleUpgradeHint": "Menambahkan Layar Dapur (KDS) ke paket Plus Anda.",
+    "copyKey": "Salin kunci",
+    "copied": "Disalin!",
+    "quickActions": "Aksi cepat",
+    "downloadApp": "Unduh aplikasi",
+    "activationGuide": "Panduan aktivasi",
+    "contactSupport": "Hubungi bantuan",
+    "devices": "Terminal Terdaftar",
+    "devicesHint": "Terminal yang diotorisasi dengan kunci lisensi ini. Kelola mesin kasir aktif.",
+    "terminalSlots": "Slot Terminal",
+    "terminalUnlimited": "Terminal tanpa batas",
+    "terminalCount": "Termasuk 1 terminal",
+    "unbindHint": "Untuk migrasi ke perangkat baru, masukkan kunci lisensi Anda ke aplikasi terminal OZ-POS yang baru.",
+    "billingInvoices": "Tagihan & Kuitansi",
+    "billingInvoicesHint": "Lihat kuitansi transaksi dan riwayat faktur pajak untuk akun Anda.",
+    "viewReceipts": "Akses Portal Tagihan & Kuitansi",
+    "invoiceNote": "Butuh faktur pajak perusahaan resmi? Hubungi sales@ozpos.my.id dengan detail NPWP perusahaan Anda."
   },
   "footer": {
     "rights": "Hak cipta dilindungi.",
@@ -285,6 +367,14 @@
   "docsSearch": {
     "placeholder": "Cari dokumentasi…",
     "noResults": "Tidak ada hasil"
+  },
+  "search": {
+    "placeholder": "Cari dokumentasi, panduan, dan fitur…",
+    "noResults": "Tidak ditemukan hasil yang cocok untuk",
+    "docsTitle": "Dokumentasi & Panduan",
+    "pagesTitle": "Halaman & Fitur",
+    "shortcutHint": "Tekan ESC untuk tutup, ↑↓ untuk memilih, ENTER untuk buka",
+    "quickSearch": "Pencarian Cepat"
   },
   "checkout": {
     "signInToSubscribe": "Masuk untuk berlangganan",
@@ -319,7 +409,11 @@
     "haveAccount": "Sudah punya akun?",
     "signInLink": "Masuk",
     "agreeBefore": "Dengan mendaftar, Anda menyetujui",
-    "agreeSeparator": "dan"
+    "agreeSeparator": "dan",
+    "region": "Wilayah",
+    "regionGlobal": "Global",
+    "regionIndonesia": "Indonesia",
+    "regionHint": "Menentukan harga dan metode pembayaran"
   },
   "vertical": {
     "positioning": "OZ-POS — kasir native QRIS dengan keandalan offline-first, harga untuk pasar Indonesia.",

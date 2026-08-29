@@ -30,6 +30,7 @@ oz_logging::init_json_with_file("logs", "oz-pos", 30);   // production
 ## Conventions
 
 - `init()` should be called once, early in `main`/`run`, before any `tracing` macro.
-- `#![warn(missing_docs)]`.
+- `missing_docs` is warned via `[lints] workspace = true`, inherited from the
+  root `[workspace.lints]`.
 
 > last audited 28-06-26 by docs-auditor

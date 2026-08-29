@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 
 // React 19 requires the act environment flag for async act() to work.
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
@@ -41,29 +41,41 @@ async function renderAuthForm(locale: string) {
   return { container, root };
 }
 
-function setNativeValue(el: HTMLInputElement, value: string): void {
-  const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-  nativeSetter.call(el, value);
-  el.dispatchEvent(new Event('input', { bubbles: true }));
+function setText(container: HTMLElement, testId: string, value: string): void {
+  const el = container.querySelector(`[data-testid="${testId}"]`) as HTMLInputElement | null;
+  if (!el) throw new Error(`[data-testid="${testId}"] not found`);
+  act(() => {
+    Object.defineProperty(el, 'value', { value, configurable: true, writable: true });
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 }
 
 function setEmail(container: HTMLElement, value: string): void {
   const el = container.querySelector('input[type="email"]') as HTMLInputElement | null;
   if (!el) throw new Error('email input not found');
-  act(() => { setNativeValue(el, value); });
+  act(() => {
+    Object.defineProperty(el, 'value', { value, configurable: true, writable: true });
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 }
 
 function setPassword(container: HTMLElement, value: string): void {
   const inputs = container.querySelectorAll('input[type="password"]');
   const el = inputs[0] as HTMLInputElement | undefined;
   if (!el) throw new Error('password input not found');
-  act(() => { setNativeValue(el, value); });
+  act(() => {
+    Object.defineProperty(el, 'value', { value, configurable: true, writable: true });
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 }
 
 function setCode(container: HTMLElement, value: string): void {
   const el = container.querySelector('input[inputmode="numeric"]') as HTMLInputElement | null;
   if (!el) throw new Error('code input not found');
-  act(() => { setNativeValue(el, value); });
+  act(() => {
+    Object.defineProperty(el, 'value', { value, configurable: true, writable: true });
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 }
 
 function clickSubmit(container: HTMLElement): void {
@@ -87,7 +99,9 @@ function assertText(container: HTMLElement, text: string): void {
   expect(container.textContent).toContain(text);
 }
 
-
+function assertNoText(container: HTMLElement, text: string): void {
+  expect(container.textContent).not.toContain(text);
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -474,4 +488,19 @@ describe('AuthForm — open redirect guard', () => {
   });
 });
 
+// ── Not-configured state ──────────────────────────────────────────────
 
+describe('AuthForm — not-configured state', () => {
+  it('shows not-configured notice when API URL is absent after mount', async () => {
+    const env = import.meta.env as Record<string, unknown>;
+    env.PUBLIC_LICENSE_API_URL = '';
+    window.__OZ_CONFIG__ = undefined;
+    const { container, root } = await renderAuthForm('en');
+    try {
+      assertText(container, 'The auth API is not configured on this deployment.');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});

@@ -48,6 +48,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={inputId}
           className="input-field"
+          autoComplete="off"
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy}
           {...rest}

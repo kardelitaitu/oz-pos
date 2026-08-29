@@ -169,4 +169,81 @@ kds-device-status-stale = Usang
 kds-device-status-aria = Perangkat KDS: { $connected } dari { $total } terhubung
 kds-device-list-aria = Daftar perangkat KDS
 
+# ── Hamburger settings panel ──
+kds-settings-theme = Tema
+kds-settings-theme-toggle-aria = Alihkan tema terang atau gelap
+kds-layout-order-id-caption = Tampilkan nomor pesanan di kartu
+kds-layout-table-number-caption = Tampilkan nomor meja di kartu
+kds-settings-sound-caption = Dering saat pesanan masuk
+kds-settings-auto-ack-caption = Pesanan baru muncul tanpa mengetuk Terima
+
+# ── Topbar tabs + back ──
+kds-back-aria = Kembali ke ruang kerja
+kds-tablist-aria = Lihat pesanan
+kds-tab-open = Terbuka
+kds-tab-completed = Selesai
+
+# ── Ticket card footer actions ──
+kds-advance-start = Mulai
+kds-advance-ready = Tandai Siap
+kds-advance-serve = Sajikan
+kds-toggle-card-aria = Buka/tutup detail pesanan { $number }
+
+# ── Topbar filter dropdown ──
+kds-filter-aria = Filter pesanan
+kds-filter-all = Semua pesanan
+kds-filter-prepared = Siap
+kds-filter-selected = { $count } dipilih
+
+# ── Screen footer status bar ──
+kds-footer-aria = Status terminal
+kds-footer-last-sync = Sinkron terakhir: { $time }
+kds-footer-never = tidak pernah
+kds-footer-seconds = { $count }d yang lalu
+kds-footer-minutes = { $count }m yang lalu
+kds-footer-hours = { $count }j yang lalu
+
+# ── Completed tab (bucket columns) ──
+kds-completed-aria = Pesanan selesai
+kds-completed-today = Hari Ini
+kds-completed-yesterday = Kemarin
+kds-completed-this-week = Minggu Ini
+kds-completed-older = Lebih Lama
+kds-completed-today-empty = Tidak ada pesanan
+kds-completed-yesterday-empty = Tidak ada pesanan
+kds-completed-this-week-empty = Tidak ada pesanan
+kds-completed-older-empty = Tidak ada pesanan
+kds-completed-status = Selesai
+kds-completed-reopen = Buka Lagi
+kds-completed-reopen-aria = Buka lagi pesanan { $number }
+
+# ── Shift ──
+kds-shift-start = Mulai Shift
+kds-shift-end = Akhiri Shift
+kds-shift-end-title = Akhiri Shift?
+kds-shift-end-msg = Apakah Anda yakin ingin mengakhiri shift dapur saat ini?
+
+# ── Confirm modal ──
+kds-confirm-cancel = Batal
+kds-confirm-ok = Konfirmasi
+
+# ── Display settings ──
+kds-settings-display-scale = Skala tampilan
+kds-settings-columns = Kolom
+
+# ── Card Colours ──
+kds-settings-card-colours = Warna Kartu
+kds-settings-color-dinein = Makan di tempat
+kds-settings-color-takeaway = Bawa pulang
+kds-settings-color-rush = Mendesak
+kds-settings-color-pending = Menunggu
+kds-settings-color-preparing = Memasak
+kds-settings-color-ready = Siap
+kds-settings-color-complete = Selesai
+kds-settings-reset-colours = Atur ulang warna
+
+# ── Card Animations ──
+kds-settings-card-animations = Animasi kartu
+kds-settings-card-animations-caption = Efek muncul dan susun ulang
+
 # ── Kiosk (remaining) ──

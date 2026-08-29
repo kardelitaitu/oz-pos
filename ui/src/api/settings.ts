@@ -88,6 +88,10 @@ export interface CreditSaleDto {
 export const getCreditSettings = (): Promise<CreditSettingsDto> =>
   loggedInvoke<CreditSettingsDto>('get_credit_settings');
 
+/** Get credit settings (scoped — ADR #7). */
+export const getCreditSettingsScoped = (sessionToken: string): Promise<CreditSettingsDto> =>
+  loggedInvoke<CreditSettingsDto>('get_credit_settings_scoped', { sessionToken });
+
 /** Update the credit / tab sale settings. */
 export const setCreditSettings = (args: CreditSettingsDto, userId: string): Promise<void> =>
   loggedInvoke<void>('set_credit_settings', { args, userId });
@@ -265,4 +269,39 @@ export const setSettingScoped = (
     return Promise.reject(new Error('No session token'));
   }
   return loggedInvoke<void>('set_setting_scoped', { sessionToken, key, value });
+};
+
+/**
+ * Read a single raw setting value using the scoped variant (ADR #7).
+ *
+ * Requires a valid `sessionToken` from `useWorkspace()`. When the token
+ * is null the call is rejected — callers should guard or catch accordingly.
+ */
+export const getSettingScoped = (
+  sessionToken: string | null,
+  key: string,
+): Promise<string | null> => {
+  if (!sessionToken) {
+    return Promise.reject(new Error('No session token'));
+  }
+  return loggedInvoke<string | null>('get_setting_scoped', {
+    sessionToken,
+    key,
+  });
+};
+
+/**
+ * Write multiple settings atomically using the scoped variant (ADR #7).
+ *
+ * Requires a valid `sessionToken` from `useWorkspace()`. When the token
+ * is null the call is rejected — callers should guard or catch accordingly.
+ */
+export const setSettingsScoped = (
+  sessionToken: string | null,
+  entries: Record<string, string>,
+): Promise<void> => {
+  if (!sessionToken) {
+    return Promise.reject(new Error('No session token'));
+  }
+  return loggedInvoke<void>('set_settings_scoped', { sessionToken, entries });
 };

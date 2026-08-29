@@ -38,6 +38,153 @@ pub struct BalanceResult {
 #[path = "gift_cards_tests.rs"]
 mod tests;
 
+// ── Scoped variants (ADR #7) ────────────────────────────────────────
+
+/// Issue a new gift card (scoped — requires valid session).
+#[tauri::command]
+pub async fn issue_gift_card_scoped(
+    input: IssueGiftCardInput,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<GiftCardWithTransactions, AppError> {
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let result = store.issue_gift_card(input)?;
+    drop(db);
+    Ok(result)
+}
+
+/// Get a gift card by its card number or internal ID (scoped).
+#[tauri::command]
+pub async fn get_gift_card_scoped(
+    card_number_or_id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Option<GiftCardWithTransactions>, AppError> {
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let result = store.get_gift_card_detail(&card_number_or_id)?;
+    drop(db);
+    Ok(result)
+}
+
+/// List all gift cards with optional filtering by status (scoped).
+#[tauri::command]
+pub async fn list_gift_cards_scoped(
+    filter: GiftCardFilter,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<GiftCardWithTransactions>, AppError> {
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let result = store.list_gift_cards(filter)?;
+    drop(db);
+    Ok(result)
+}
+
+/// Get the current balance of a gift card (scoped).
+#[tauri::command]
+pub async fn get_gift_card_balance_scoped(
+    card_number_or_id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Option<BalanceResult>, AppError> {
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let result = store.get_gift_card_balance(&card_number_or_id)?;
+    drop(db);
+    Ok(
+        result.map(|(balance_minor, currency, status)| BalanceResult {
+            balance_minor,
+            currency,
+            status,
+        }),
+    )
+}
+
+/// Redeem (spend) a gift card balance against a sale (scoped).
+#[tauri::command]
+pub async fn redeem_gift_card_scoped(
+    card_number_or_id: String,
+    amount_minor: i64,
+    sale_id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<RedeemGiftCardResult, AppError> {
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let result = store.redeem_gift_card(&card_number_or_id, amount_minor, &sale_id)?;
+    drop(db);
+    Ok(result)
+}
+
+/// Add value (top up) to an existing gift card (scoped).
+#[tauri::command]
+pub async fn top_up_gift_card_scoped(
+    card_number_or_id: String,
+    amount_minor: i64,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<GiftCardWithTransactions, AppError> {
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let result = store.top_up_gift_card(&card_number_or_id, amount_minor)?;
+    drop(db);
+    Ok(result)
+}
+
+/// Freeze a gift card (scoped).
+#[tauri::command]
+pub async fn freeze_gift_card_scoped(
+    card_number_or_id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<GiftCard, AppError> {
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let result = store.freeze_gift_card(&card_number_or_id)?;
+    drop(db);
+    Ok(result)
+}
+
+/// Unfreeze a previously frozen gift card (scoped).
+#[tauri::command]
+pub async fn unfreeze_gift_card_scoped(
+    card_number_or_id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<GiftCard, AppError> {
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let result = store.unfreeze_gift_card(&card_number_or_id)?;
+    drop(db);
+    Ok(result)
+}
+
 /// Issue a new gift card with an initial balance.
 ///
 /// Creates a new gift card with a unique card number and stores

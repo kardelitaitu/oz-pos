@@ -267,6 +267,17 @@ func main() {
 		se.Router.POST("/api/v1/web/reset-password", handleResetPassword(app))
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
+		// User dashboard (ADR #42 Phase 2) — session-authed read endpoints.
+		se.Router.GET("/api/v1/web/usage", handleWebUsage(app))
+		se.Router.GET("/api/v1/web/devices", handleWebDevices(app))
+		// Admin dashboard (ADR #42 Phase 3) — OZ_ADMIN_KEY gated.
+		se.Router.GET("/api/v1/admin/tenants", handleAdminListTenants(app))
+		se.Router.GET("/api/v1/admin/tenants/{id}", handleAdminGetTenant(app))
+		se.Router.POST("/api/v1/admin/tenants/{id}/activate", handleAdminActivate(app))
+		se.Router.POST("/api/v1/admin/tenants/{id}/renew", handleAdminRenew(app))
+		se.Router.POST("/api/v1/admin/tenants/{id}/revoke", handleAdminRevoke(app))
+		se.Router.POST("/api/v1/admin/tenants/{id}/tier-override", handleAdminTierOverride(app))
+		se.Router.GET("/api/v1/admin/health", handleAdminHealth(app))
 		// Midtrans Snap checkout (see midtrans_checkout.go) — session-authed
 		// web endpoint like /api/v1/web/*: the id-locale pricing button
 		// requests a snap token for a tier + period, which Snap.js opens.
@@ -295,6 +306,17 @@ func main() {
 			log.Printf("warning: failed to create trial_email_log collection: %v", err)
 		}
 		go startTrialEmailScheduler(app)
+
+		// ── Admin password rotation reminder (ADR #42 security) ────
+		// Emails the superuser when the admin password is older than 120
+		// days, repeating every 30 days until changed. The hook stamps
+		// password_changed_at on every detected hash change; the daily
+		// scheduler sends the reminder. Idempotent via last_reminder_at.
+		if err := ensurePasswordRotationStateCollection(app); err != nil {
+			log.Printf("warning: failed to create password_rotation_state collection: %v", err)
+		}
+		bindPasswordRotationHook(app)
+		go startPasswordRotationScheduler(app)
 
 		// ── Root → PocketBase admin UI redirect ───────────────────
 		// The bare domain (https://license.ozpos.my.id) 301-redirects to

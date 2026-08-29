@@ -18,7 +18,7 @@ use crate::state::AppState;
 /// All brand settings in one shot.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BrandSettingsDto {
-    /// Primary brand colour as a hex string (e.g. `"#10b981"`).
+    /// Primary brand colour as a hex string (e.g. `"#147EFB"`).
     pub primary_colour: String,
     /// Filesystem path to the store logo, if set.
     pub logo_path: Option<String>,
@@ -172,6 +172,54 @@ pub async fn pick_logo_file(app_handle: tauri::AppHandle) -> Result<Option<Strin
         });
     let file = rx.await.unwrap_or(None);
     Ok(file.map(|f| f.to_string()))
+}
+
+// ── Scoped variants (ADR #7) ────────────────────────────────────
+
+/// Scoped variant of `set_brand_primary_colour` (ADR #7).
+#[tauri::command]
+pub async fn set_brand_primary_colour_scoped(
+    colour: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let conn = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Settings::set_brand_primary_colour(&conn, &colour)?)
+}
+
+/// Scoped variant of `set_brand_store_name` (ADR #7).
+#[tauri::command]
+pub async fn set_brand_store_name_scoped(
+    name: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let conn = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Settings::set_brand_store_name(&conn, &name)?)
+}
+
+/// Set the brand logo path (scoped — two-phase db access).
+#[tauri::command]
+pub async fn set_brand_logo_path_scoped(
+    path: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state.resolve_scope(&session_token)?;
+    if let Some(ref app_handle) = state.app {
+        let validated = validate_logo_path(app_handle, &path)?;
+        let conn = state.db.lock().await;
+        Ok(Settings::set_brand_logo_path(&conn, &validated)?)
+    } else {
+        let conn = state.db.lock().await;
+        Ok(Settings::set_brand_logo_path(&conn, &path)?)
+    }
 }
 
 #[cfg(test)]

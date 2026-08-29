@@ -22,7 +22,7 @@
   --color-warning: #FD9426;
   --color-info: #5FC9F8;
   --color-alert: #FC3158;
-  --color-accent: #FECB2E;
+  --color-accent: #FECB2E; /* Yellow — decorative only, never for actions */
   /* Surfaces — light */
   --color-bg: #F4F5F7;
   --color-surface: #FFFFFF;
@@ -68,7 +68,7 @@
   --tooltip-bg: #1A1D23;
   /* Tailwind utility aliases — map old names to design language tokens
      so existing bg-accent, text-muted, border-ink/* classes keep working */
-  --color-accent: #147EFB;
+  --color-accent: #147EFB; /* Alias: accent tokens map to primary for backwards compat */
   --color-link: #147EFB;
 }
 

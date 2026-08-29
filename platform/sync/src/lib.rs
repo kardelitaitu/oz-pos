@@ -1,5 +1,3 @@
-#![warn(missing_docs)]
-
 //! OZ-POS Sync Engine
 //!
 //! Offline-first sync with eventual consistency. Provides:

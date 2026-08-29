@@ -20,13 +20,16 @@ const { mockListTerminals, mockRegisterTerminal, mockDeleteTerminal,
   }));
 
 vi.mock('@/api/terminals', () => ({
-  listTerminals: () => mockListTerminals(),
-  registerTerminal: (userId: string, args: unknown) => mockRegisterTerminal(userId, args),
-  updateTerminal: () => Promise.resolve({ id: 't-1' }),
-  deleteTerminal: (userId: string, id: string) => mockDeleteTerminal(userId, id),
-  listTerminalOverrides: (id: string) => mockListTerminalOverrides(id),
-  setTerminalOverride: () => Promise.resolve(),
-  deleteTerminalOverride: () => Promise.resolve(),
+  listTerminalsScoped: (_sessionToken: string) => mockListTerminals(),
+  registerTerminalScoped: (_sessionToken: string, args: unknown) => mockRegisterTerminal(_sessionToken, args),
+  updateTerminalScoped: () => Promise.resolve({ id: 't-1' }),
+  deleteTerminalScoped: (_sessionToken: string, id: string) => mockDeleteTerminal(_sessionToken, id),
+  listTerminalOverridesScoped: (_sessionToken: string, id: string) => mockListTerminalOverrides(id),
+  setTerminalOverrideScoped: () => Promise.resolve(),
+  deleteTerminalOverrideScoped: () => Promise.resolve(),
+  getDeviceBindingScoped: () => Promise.resolve({ bounded: false, boundStoreId: null, boundInstanceId: null, signatureValid: false }),
+  setDeviceBindingScoped: () => Promise.resolve(),
+  clearDeviceBindingScoped: () => Promise.resolve(),
 }));
 
 vi.mock('@/hooks/useFeatures', () => ({
@@ -204,7 +207,7 @@ describe('TerminalManagementScreen', () => {
     const confirmBtn = screen.getAllByText('Delete').slice(-1)[0]!.closest('button')!;
     await userEvent.click(confirmBtn);
 
-    await waitFor(() => expect(mockDeleteTerminal).toHaveBeenCalledWith('user-1', 't-1'));
+    await waitFor(() => expect(mockDeleteTerminal).toHaveBeenCalledWith('tok-1', 't-1'));
   });
 
   it('opens register modal when Register Terminal is clicked', async () => {

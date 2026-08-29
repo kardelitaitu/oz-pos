@@ -5,7 +5,6 @@ findings: Transitional module implementing Module trait. No unsafe code. Has Sal
   handler subscribed to event bus. 8 unit tests pass covering lifecycle and kernel registration.
 next: Migrate reporting logic into this module | perf: N/A.
 */
-#![warn(missing_docs)]
 
 //! Reporting Module — generates and exports sales, inventory, and financial reports.
 //!
@@ -67,6 +66,12 @@ impl Module for ReportingModule {
         "reporting"
     }
 
+    fn dependencies(&self) -> &'static [&'static str] {
+        // Mirrors `dependencies` in modules/reporting/manifest.json: report
+        // rows are derived from sales and inventory data.
+        &["inventory", "sales"]
+    }
+
     fn on_load(&mut self) -> ModuleResult {
         info!("reporting module: on_load — validating configuration");
         Ok(())
@@ -90,6 +95,31 @@ mod tests {
     use super::*;
     use platform_kernel::Kernel;
 
+    /// Minimal stand-in for a module `reporting` depends on.
+    ///
+    /// `ReportingModule::dependencies()` declares `inventory` and `sales`,
+    /// so any test that drives `load_all`/`start_all` must register both ids
+    /// or dependency resolution fails with `MissingDependency`.
+    #[derive(Debug)]
+    struct StubModule(&'static str);
+
+    impl Module for StubModule {
+        fn id(&self) -> &'static str {
+            self.0
+        }
+    }
+
+    fn kernel_with_deps() -> Kernel {
+        let mut kernel = Kernel::new();
+        kernel
+            .register(Box::new(StubModule("inventory")))
+            .expect("register inventory stub");
+        kernel
+            .register(Box::new(StubModule("sales")))
+            .expect("register sales stub");
+        kernel
+    }
+
     #[test]
     fn reporting_module_id() {
         let module = ReportingModule::new();
@@ -97,11 +127,39 @@ mod tests {
     }
 
     #[test]
-    fn reporting_module_lifecycle() {
+    fn reporting_module_declares_its_dependencies() {
+        assert_eq!(
+            ReportingModule::new().dependencies(),
+            &["inventory", "sales"][..]
+        );
+    }
+
+    #[test]
+    fn reporting_module_manifest_matches_declaration() {
+        let parsed: serde_json::Value = serde_json::from_str(include_str!("../manifest.json"))
+            .expect("manifest.json must be valid JSON");
+        let declared: Vec<&str> = parsed["dependencies"]
+            .as_array()
+            .expect("dependencies must be an array")
+            .iter()
+            .map(|v| v.as_str().expect("dependency must be a string"))
+            .collect();
+        assert_eq!(declared, ReportingModule::new().dependencies().to_vec());
+    }
+
+    #[test]
+    fn reporting_module_load_fails_without_dependencies() {
         let mut kernel = Kernel::new();
         kernel.register(Box::new(ReportingModule::new())).unwrap();
+        assert!(kernel.load_all().is_err());
+    }
+
+    #[test]
+    fn reporting_module_lifecycle() {
+        let mut kernel = kernel_with_deps();
+        kernel.register(Box::new(ReportingModule::new())).unwrap();
         assert!(kernel.is_registered("reporting"));
-        assert_eq!(kernel.module_count(), 1);
+        assert_eq!(kernel.module_count(), 3);
 
         kernel.load_all().unwrap();
         assert!(kernel.is_loaded());
@@ -142,7 +200,7 @@ mod tests {
 
     #[test]
     fn reporting_module_full_lifecycle_with_kernel() {
-        let mut kernel = Kernel::new();
+        let mut kernel = kernel_with_deps();
         kernel.register(Box::new(ReportingModule::new())).unwrap();
 
         // load → start → stop

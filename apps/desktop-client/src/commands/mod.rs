@@ -27,6 +27,8 @@ pub mod currencies;
 pub mod customers;
 /// Data export / import commands.
 pub mod data;
+/// EDC card-present payment terminal commands.
+pub mod edc;
 /// Email report commands.
 pub mod email;
 /// Exchange-rate commands.

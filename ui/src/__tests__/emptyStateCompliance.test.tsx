@@ -108,14 +108,13 @@ describe('empty-state compliance — filter-aware no-results (EMPTY-04)', () => 
     expect(screen.getByRole('status')).toBeInTheDocument();
   });
 
-  it('KDS Focus never shows "No orders yet" when a status filter empties a populated board', async () => {
+  it('KDS masonry never shows "No orders yet" when the board is populated', async () => {
     vi.doMock('@/features/kds/components/KdsTicketCard', () => ({
       KdsTicketCard: () => <div data-testid="ticket-card" />,
     }));
     const { renderWithFluentSync } = await import('@/__tests__/test-utils/render');
-    const { KdsLayoutFocus } = await import('@/features/kds/KdsLayoutFocus');
+    const { KdsLayoutMasonry } = await import('@/features/kds/KdsLayoutMasonry');
     const kdsFtl = (await import('@/locales/kds.ftl?raw')).default;
-    const userEvent = (await import('@testing-library/user-event')).default;
 
     const now = Date.now();
     const order = {
@@ -126,8 +125,9 @@ describe('empty-state compliance — filter-aware no-results (EMPTY-04)', () => 
       kitchen_zone: null, notes: '', table_number: null, priority: false,
     };
 
+    // Populated board → the empty-state copy must not appear.
     const { container } = renderWithFluentSync(
-      <KdsLayoutFocus
+      <KdsLayoutMasonry
         orders={[order]}
         onAdvance={() => {}}
         showOrderId
@@ -138,9 +138,6 @@ describe('empty-state compliance — filter-aware no-results (EMPTY-04)', () => 
       />,
       kdsFtl,
     );
-
-    await userEvent.click(screen.getByText('Preparing'));
-    expect(container.textContent).toContain('No orders in this status');
     expect(container.textContent).not.toContain('No orders yet');
     vi.doUnmock('@/features/kds/components/KdsTicketCard');
   });

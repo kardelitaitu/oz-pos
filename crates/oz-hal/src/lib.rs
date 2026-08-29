@@ -10,7 +10,6 @@ next: Add SAFETY comments when real FFI drivers are implemented | perf: Mock dri
 // RUST-06: no unsafe code exists today; deny at crate root so any future
 // unsafe addition requires an explicit, narrowly-scoped reviewable allow.
 #![deny(unsafe_code)]
-#![warn(missing_docs)]
 
 //! Hardware Abstraction Layer for OZ-POS.
 //!

@@ -5,7 +5,6 @@ findings: Transitional module implementing Module trait. No unsafe code. Re-expo
   oz-core. 8 unit tests pass covering lifecycle and kernel registration.
 next: Migrate terminal commands into this module | perf: N/A.
 */
-#![warn(missing_docs)]
 
 //! Terminal Module — registered POS device management.
 //!

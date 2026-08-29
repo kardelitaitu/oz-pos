@@ -6,6 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 description = "Plugin discovery, loading, and sandboxing for OZ-POS."
 
+# Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
+[lints]
+workspace = true
+
 [dependencies]
 chrono = { workspace = true }
 oz-core = { workspace = true }

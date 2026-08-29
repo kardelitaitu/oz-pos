@@ -1,3 +1,9 @@
+//! Criterion benchmarks for barcode-to-product lookup through `Store`.
+
+// `criterion_group!` expands to a public function it does not document, so
+// the workspace-wide `missing_docs` warning cannot be satisfied here.
+#![allow(missing_docs)]
+
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use oz_core::Money;
 use oz_core::db::Store;

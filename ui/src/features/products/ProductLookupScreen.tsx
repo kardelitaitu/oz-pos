@@ -4,10 +4,11 @@ import { useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { Localized } from '@/components/Localized';
 import { formatMoney, type Product } from '@/types/domain';
-import { lookupProductBySku } from '@/api/products';
+import { lookupProductBySkuScoped } from '@/api/products';
 import { lookupBundleBySku } from '@/api/bundles';
 import { expandBundleItems } from '@/features/sales/bundleExpansion';
 import { useProducts } from './useProducts';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import './ProductLookupScreen.css';
 
 // ── Props ──────────────────────────────────────────────────────────
@@ -84,6 +85,8 @@ function PackageIcon() {
 export default function ProductLookupScreen({ onAddProduct }: ProductLookupScreenProps) {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
   const { products, categories, loading, error, usingFallback, reload } = useProducts();
   const [searchQuery, setSearchQuery] = useState('');
   const [barcodeInput, setBarcodeInput] = useState('');
@@ -176,7 +179,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
           bundle.items,
           bundle.bundle.currency,
           bundle.bundle.bundle_price_minor,
-          lookupProductBySku,
+          (sku: string) => lookupProductBySkuScoped(sessionToken, sku),
         );
         for (const item of expanded) {
           // Add once per quantity — onAddProduct uses default qty=1.

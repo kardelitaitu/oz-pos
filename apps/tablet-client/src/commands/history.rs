@@ -263,6 +263,189 @@ pub async fn export_eod_report(state: State<'_, AppState>) -> Result<EodReport, 
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
+/// Session-scoped variant of `list_sales`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn list_sales_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<SaleListResponse, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let sub = TenantSubscription::load(&db, "default")?
+        .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?;
+    sub.verify_signature()?;
+    let days = sub.effective_tier().sales_history_days();
+    let (sales, capped) = store.list_sales_with_history_cap(days)?;
+    drop(db);
+    Ok(SaleListResponse {
+        sales: sales
+            .into_iter()
+            .map(|s| SaleListItem {
+                id: s.id,
+                total: s.total,
+                line_count: s.line_count,
+                status: format!("{:?}", s.status),
+                payment_method: s.payment_method,
+                user_id: s.user_id,
+                created_at: s.created_at,
+            })
+            .collect(),
+        sales_history_capped: capped,
+    })
+}
+
+/// Session-scoped variant of `get_sale`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn get_sale_scoped(
+    session_token: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<SaleDetail>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let sale = store.get_sale(&id)?;
+    drop(db);
+    Ok(sale.map(|s| SaleDetail {
+        id: s.id,
+        total: s.total,
+        line_count: s.line_count,
+        status: format!("{:?}", s.status),
+        payment_method: s.payment_method,
+        tendered_minor: s.tendered_minor,
+        user_id: s.user_id,
+        created_at: s.created_at,
+        lines: s.lines,
+    }))
+}
+
+/// Session-scoped variant of `export_daily_summary`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn export_daily_summary_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<DailySummaryRow>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let rows = store.export_daily_summary()?;
+    drop(db);
+    Ok(rows)
+}
+
+/// Session-scoped variant of `export_sales_by_hour`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn export_sales_by_hour_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<SalesByHourRow>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let rows = store.export_sales_by_hour()?;
+    drop(db);
+    Ok(rows)
+}
+
+/// Session-scoped variant of `export_eod_report`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn export_eod_report_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<EodReport, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+
+    let daily = store.export_daily_summary()?;
+    let hourly = store.export_sales_by_hour()?;
+
+    // Payment breakdown.
+    let mut stmt = db.prepare(
+        "SELECT payment_method, COUNT(*) AS cnt, SUM(total_minor) AS tot
+         FROM sales
+         WHERE date(created_at) = date('now') AND status = 'completed'
+         GROUP BY payment_method
+         ORDER BY tot DESC",
+    )?;
+    let payment_rows: Vec<PaymentBreakdown> = stmt
+        .query_map([], |row| {
+            Ok(PaymentBreakdown {
+                method: row
+                    .get::<_, Option<String>>("payment_method")?
+                    .unwrap_or_else(|| "Unknown".into()),
+                count: row.get("cnt")?,
+                total: row.get("tot")?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    drop(stmt);
+
+    // Void stats.
+    let mut void_stmt = db.prepare(
+        "SELECT COUNT(*) AS cnt, COALESCE(SUM(total_minor), 0) AS tot
+         FROM sales
+         WHERE date(created_at) = date('now') AND status = 'voided'",
+    )?;
+    let void_row: (i64, i64) = void_stmt.query_row([], |row| {
+        Ok((row.get::<_, i64>("cnt")?, row.get::<_, i64>("tot")?))
+    })?;
+    drop(void_stmt);
+
+    // Discount stats.
+    let mut discount_stmt = db.prepare(
+        "SELECT COUNT(*) AS cnt, COALESCE(SUM(total_minor), 0) AS tot
+         FROM sales
+         WHERE date(created_at) = date('now') AND status = 'completed' AND discount_percent > 0",
+    )?;
+    let discount_row: (i64, i64) = discount_stmt.query_row([], |row| {
+        Ok((row.get::<_, i64>("cnt")?, row.get::<_, i64>("tot")?))
+    })?;
+    drop(discount_stmt);
+
+    let total_sales = daily.len() as i64;
+    let total_revenue: i64 = daily.iter().map(|r| r.total_minor).sum();
+    let currency = daily
+        .first()
+        .map(|r| r.currency.clone())
+        .unwrap_or_else(|| "USD".into());
+
+    drop(db);
+
+    Ok(EodReport {
+        total_sales,
+        total_revenue,
+        currency,
+        payment_breakdown: payment_rows,
+        void_count: void_row.0,
+        void_total: void_row.1,
+        discount_count: discount_row.0,
+        discount_total: discount_row.1,
+        hourly_breakdown: hourly,
+    })
+}
+
 #[cfg(test)]
 #[path = "history_tests.rs"]
 mod tests;

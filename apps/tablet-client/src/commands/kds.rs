@@ -77,3 +77,99 @@ pub async fn get_kds_order(
     drop(db);
     Ok(order)
 }
+
+/// Session-scoped variant of `list_kds_orders`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn list_kds_orders_scoped(
+    session_token: String,
+    status: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<KdsOrder>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let orders = store.list_kds_orders(status.as_deref())?;
+    drop(db);
+    Ok(orders)
+}
+
+/// Session-scoped variant of `get_kds_queue`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn get_kds_queue_scoped(
+    session_token: String,
+    kds_zone: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<KdsOrder>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let orders = store.get_kds_queue(kds_zone.as_deref())?;
+    drop(db);
+    Ok(orders)
+}
+
+/// Session-scoped variant of `update_kds_status`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn update_kds_status_scoped(
+    session_token: String,
+    id: String,
+    status: String,
+    state: State<'_, AppState>,
+) -> Result<KdsOrder, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let order = store.update_kds_status(&id, &status)?;
+    drop(db);
+    Ok(order)
+}
+
+/// Session-scoped variant of `create_kds_order_from_sale`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn create_kds_order_from_sale_scoped(
+    session_token: String,
+    sale_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<KdsOrder>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let orders = store.complete_sale_to_kds(&sale_id, None)?;
+    drop(db);
+    Ok(orders)
+}
+
+/// Session-scoped variant of `get_kds_order`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn get_kds_order_scoped(
+    session_token: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<KdsOrder>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let order = store.get_kds_order(&id)?;
+    drop(db);
+    Ok(order)
+}

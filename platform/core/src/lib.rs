@@ -1,5 +1,3 @@
-#![warn(missing_docs)]
-
 //! Platform Core — shared infrastructure for OZ-POS.
 //!
 //! This crate provides reusable infrastructure services that are

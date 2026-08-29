@@ -189,3 +189,45 @@ export interface UsbDeviceInfo {
 /** Discover all connected USB hardware devices (scanners, printers, scales). */
 export const discoverHardware = (): Promise<UsbDeviceInfo[]> =>
   loggedInvoke<UsbDeviceInfo[]>('discover_hardware');
+
+// ── Scoped variants (ADR #7) ───────────────────────────────────────
+
+/** Open a cash drawer (scoped). */
+export const openCashDrawerScoped = (sessionToken: string, args: OpenCashDrawerArgs = {}): Promise<OpenCashDrawerResult> =>
+  loggedInvoke<OpenCashDrawerResult>('open_cash_drawer_scoped', { sessionToken, args });
+
+/** Print a raw text receipt (scoped). */
+export const printReceiptScoped = (sessionToken: string, args: PrintReceiptArgs): Promise<PrintReceiptResult> =>
+  loggedInvoke<PrintReceiptResult>('print_receipt_scoped', { sessionToken, args });
+
+/** List all registered barcode scanners (scoped). */
+export const listScannersScoped = (sessionToken: string): Promise<ScannerInfo[]> =>
+  loggedInvoke<ScannerInfo[]>('list_scanners_scoped', { sessionToken });
+
+/** Start a barcode scanner (scoped). */
+export const startScannerScoped = (sessionToken: string, scannerId: string): Promise<void> =>
+  loggedInvoke<void>('start_scanner_scoped', { sessionToken, scannerId });
+
+/** Stop the active barcode scanner (scoped). */
+export const stopScannerScoped = (sessionToken: string): Promise<void> =>
+  loggedInvoke<void>('stop_scanner_scoped', { sessionToken });
+
+/** List all registered customer displays (scoped). */
+export const listDisplaysScoped = (sessionToken: string): Promise<string[]> =>
+  loggedInvoke<string[]>('list_displays_scoped', { sessionToken });
+
+/** Show content on a customer-facing pole display (scoped). */
+export const displayShowScoped = (sessionToken: string, args: { displayId: string; line1: string; line2: string }): Promise<void> =>
+  loggedInvoke<void>('display_show_scoped', { sessionToken, args });
+
+/** Clear a customer-facing pole display (scoped). */
+export const displayClearScoped = (sessionToken: string, displayId: string): Promise<void> =>
+  loggedInvoke<void>('display_clear_scoped', { sessionToken, displayId });
+
+/** Discover all connected USB hardware devices (scoped). */
+export const discoverHardwareScoped = (sessionToken: string): Promise<UsbDeviceInfo[]> =>
+  loggedInvoke<UsbDeviceInfo[]>('discover_hardware_scoped', { sessionToken });
+
+/** Read the current weight from the registered scale (scoped). */
+export const readScaleWeightScoped = (sessionToken: string): Promise<WeightReading | null> =>
+  loggedInvoke<WeightReading | null>('read_scale_weight_scoped', { sessionToken });

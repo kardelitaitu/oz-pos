@@ -2,7 +2,7 @@
 
 - **Status:** IMPLEMENTED (ADR #22 unified workspace settings shipped in 0.0.19; re-audited 2026-08-08 by docs-auditor)
 - **Phase:** 1 of 11 (Workspace Settings Architecture — ADR #22)
-- **Parent:** `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md`
+- **Parent:** `docs/specs/2026-07-23-unified-2tier-workspace-settings-architecture.md`
 - **Severity:** CORE
 - **Dependencies:** Phase 0b (SettingsContext), Phase 0c (terminal_profile.json + hook)
 - **Owner:** TBD
@@ -105,7 +105,7 @@ export interface WorkspaceCardProps {
 
 ## References
 
-- `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md` §Pillar A, §Edge Case #4, #8, §Phase 1
+- `docs/specs/2026-07-23-unified-2tier-workspace-settings-architecture.md` §Pillar A, §Edge Case #4, #8, §Phase 1
 - `ui/src/features/settings/AppearanceSettings.tsx` (existing embedded card pattern)
 - `ui/src/components/Card.tsx` (Card component used by settings)
 - `ui/src/features/kds/KdsSettingsPanel.tsx` (existing KDS settings — source of truth for KDS fields)

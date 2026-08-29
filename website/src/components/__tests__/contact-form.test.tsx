@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -28,6 +28,9 @@ function getSubmitButton(container: HTMLElement): HTMLButtonElement {
   return container.querySelector('button[type="submit"]') as HTMLButtonElement;
 }
 
+function getInputByName(container: HTMLElement, name: string): HTMLInputElement {
+  return container.querySelector(`input[name="${name}"], textarea[name="${name}"], input[type="${name}"], input[type="${name}"]`) as HTMLInputElement;
+}
 
 function getInputByPlaceholder(container: HTMLElement, placeholder: string): HTMLInputElement {
   const inputs = container.querySelectorAll('input, textarea');
@@ -39,8 +42,6 @@ function getInputByPlaceholder(container: HTMLElement, placeholder: string): HTM
 
 beforeEach(() => {
   vi.clearAllMocks();
-  const env = import.meta.env as Record<string, unknown>;
-  env.PUBLIC_CONTACT_ENDPOINT = 'https://contact.test/api';
 });
 
 afterEach(() => {
@@ -102,7 +103,7 @@ describe('ContactForm', () => {
       });
 
       expect(container.textContent).toContain('Thanks! Your message is on its way');
-      expect(fetchMock).toHaveBeenCalledWith('https://contact.test/api', {
+      expect(fetchMock).toHaveBeenCalledWith('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -227,4 +228,42 @@ describe('ContactForm', () => {
       container.remove();
     }
   });
+
+  it('trims whitespace and lowercases email on submit', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const { container, root } = await renderContact('en');
+    try {
+      const nameInput = getInputByPlaceholder(container, 'Your name');
+      const emailInput = getInputByPlaceholder(container, 'you@example.com');
+      const messageInput = container.querySelector('textarea') as HTMLTextAreaElement;
+
+      await act(async () => {
+        setNativeValue(nameInput, '  Padded Name  ');
+        setNativeValue(emailInput, '  USER@EXAMPLE.COM  ');
+        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+        nativeSetter.call(messageInput, '   Padded message body.   ');
+        messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+
+      await act(async () => {
+        const form = container.querySelector('form') as HTMLFormElement;
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+
+      expect(fetchMock).toHaveBeenCalledWith('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Padded Name',
+          email: 'user@example.com',
+          message: 'Padded message body.',
+        }),
+      });
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
 });
+

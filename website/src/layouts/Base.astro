@@ -1,4 +1,5 @@
 ---
+import { ClientRouter } from 'astro:transitions';
 import { getAbsoluteLocaleUrl } from 'astro:i18n';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
@@ -24,6 +25,7 @@ const path = !rawPath || rawPath.replace(/^\/+/, '').startsWith('404') ? '/' : r
 <!doctype html>
 <html lang={locale}>
   <head>
+    <ClientRouter />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!-- Runtime backend URL: served by the Worker from [vars] so a backend
@@ -34,11 +36,15 @@ const path = !rawPath || rawPath.replace(/^\/+/, '').startsWith('404') ? '/' : r
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" />
-    <!-- Apply the stored theme before first paint (light is the default). -->
+<!-- Apply the stored theme before first paint and on SPA swaps. -->
     <script is:inline>
       (() => {
-        const t = localStorage.getItem('oz_theme');
-        document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light';
+        const applyTheme = () => {
+          const t = localStorage.getItem('oz_theme');
+          document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light';
+        };
+        applyTheme();
+        document.addEventListener('astro:after-swap', applyTheme);
       })();
     </script>
     <meta name="description" content={desc} />
@@ -60,13 +66,63 @@ const path = !rawPath || rawPath.replace(/^\/+/, '').startsWith('404') ? '/' : r
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "OZ-POS",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Windows, Linux, macOS, Android",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "description": desc
+    })} />
     <title>{title}</title>
   </head>
-  <body class="flex min-h-screen flex-col bg-primary text-ink antialiased">
+  <body class="flex min-h-screen flex-col bg text-ink antialiased">
     <Header />
     <main class="flex-1">
       <slot />
     </main>
     <Footer />
+    <script>
+      // Scroll-reveal: observe elements with [data-reveal] and add .revealed class
+      function initScrollReveal() {
+        const elements = document.querySelectorAll('[data-reveal]:not(.revealed)');
+        if (!elements.length) return;
+
+        const observer = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('revealed');
+                observer.unobserve(entry.target);
+              }
+            });
+          },
+          { threshold: 0.05, rootMargin: '0px 0px -20px 0px' }
+        );
+
+        elements.forEach((el) => {
+          // Check if element is already in viewport on load
+          const rect = el.getBoundingClientRect();
+          const isInView = rect.top < window.innerHeight + 20 && rect.bottom > -20;
+          if (isInView) {
+            // Small delay to ensure smooth animation on page load
+            setTimeout(() => el.classList.add('revealed'), 50);
+          } else {
+            observer.observe(el);
+          }
+        });
+      }
+
+      document.addEventListener('DOMContentLoaded', initScrollReveal);
+      document.addEventListener('astro:page-load', () => {
+        // Small delay to ensure DOM is ready after Astro navigation
+        setTimeout(initScrollReveal, 100);
+      });
+    </script>
   </body>
 </html>

@@ -516,6 +516,215 @@ pub async fn display_clear(display_id: String, state: State<'_, AppState>) -> Re
     Ok(())
 }
 
+// ── Scoped variants (ADR #7) ────────────────────────────────────
+
+/// Open cash drawer (scoped — requires valid session).
+#[tauri::command]
+pub async fn open_cash_drawer_scoped(
+    args: OpenCashDrawerArgs,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<OpenCashDrawerResult, AppError> {
+    state.resolve_scope(&session_token)?;
+    let id = args.device_id.as_deref().unwrap_or("default");
+    let drawer = state
+        .registry
+        .cash_drawer(id)
+        .await
+        .ok_or_else(|| AppError::Invalid(format!("no cash drawer registered as '{id}'")))?;
+    drawer.open().await?;
+    Ok(OpenCashDrawerResult { opened: true })
+}
+
+/// Print receipt (scoped — requires valid session).
+#[tauri::command]
+pub async fn print_receipt_scoped(
+    args: PrintReceiptArgs,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<PrintReceiptResult, AppError> {
+    state.resolve_scope(&session_token)?;
+    let printer = state
+        .registry
+        .printer("default")
+        .await
+        .ok_or_else(|| AppError::Invalid("no receipt printer registered".into()))?;
+    let status = printer.get_status().await?;
+    if status.has_fault() {
+        return Err(AppError::Invalid(
+            "Printer is not ready: check paper supply and cover".into(),
+        ));
+    }
+    if status.paper != oz_hal::PaperStatus::Ok {
+        tracing::warn!(paper = ?status.paper, "printer paper is low, continuing");
+    }
+    let lines: Vec<&str> = args.body.lines().collect();
+    let n = lines.len();
+    printer.print_receipt(&args.body).await?;
+    if let Some(ref app) = state.app {
+        let _ = app.emit("receipt:printed", serde_json::json!({ "lines": n }));
+    }
+    Ok(PrintReceiptResult { printed_lines: n })
+}
+
+/// List all registered barcode scanners (scoped).
+#[tauri::command]
+pub async fn list_scanners_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<ScannerInfo>, AppError> {
+    state.resolve_scope(&session_token)?;
+    let ids = state.registry.scanner_ids().await;
+    Ok(ids.into_iter().map(|id| ScannerInfo { id }).collect())
+}
+
+/// Start a barcode scanner (scoped).
+#[tauri::command]
+pub async fn start_scanner_scoped(
+    scanner_id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state.resolve_scope(&session_token)?;
+    {
+        let mut cancel = state.scanner_cancel.lock().await;
+        if let Some(sender) = cancel.take() {
+            let _ = sender.send(());
+        }
+    }
+    let driver: Arc<dyn BarcodeScanner> = state
+        .registry
+        .scanner(&scanner_id)
+        .await
+        .ok_or_else(|| AppError::Invalid(format!("no scanner registered as '{scanner_id}'")))?;
+    let app = state
+        .app
+        .clone()
+        .ok_or_else(|| AppError::Internal("AppHandle unavailable".into()))?;
+    let (tx, mut rx) = oneshot::channel::<()>();
+    tokio::spawn(async move {
+        let mut scanner = match driver.connect().await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!(scanner = %scanner_id, error = %e, "scanner connect failed");
+                let _ = app.emit(
+                    "barcode:error",
+                    serde_json::json!({ "error": e.to_string() }),
+                );
+                return;
+            }
+        };
+        tracing::info!(scanner = %scanner_id, "barcode scanner started");
+        loop {
+            tokio::select! {
+                _ = &mut rx => {
+                    tracing::info!(scanner = %scanner_id, "barcode scanner stopped");
+                    break;
+                }
+                result = scanner.poll(300) => {
+                    match result {
+                        Ok(Some(barcode)) => {
+                            let payload = serde_json::json!({
+                                "code": barcode.code,
+                                "symbology": format!("{:?}", barcode.symbology),
+                            });
+                            let _ = app.emit("barcode:scanned", payload);
+                        }
+                        Ok(None) => {}
+                        Err(e) => {
+                            tracing::warn!(scanner = %scanner_id, error = %e, "scanner poll error");
+                            let _ = app.emit("barcode:error", serde_json::json!({ "error": e.to_string() }));
+                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                        }
+                    }
+                }
+            }
+        }
+    });
+    state.scanner_cancel.lock().await.replace(tx);
+    Ok(())
+}
+
+/// Stop the active barcode scanner (scoped).
+#[tauri::command]
+pub async fn stop_scanner_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state.resolve_scope(&session_token)?;
+    let mut cancel = state.scanner_cancel.lock().await;
+    if let Some(sender) = cancel.take() {
+        let _ = sender.send(());
+    }
+    Ok(())
+}
+
+/// List all registered customer displays (scoped).
+#[tauri::command]
+pub async fn list_displays_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, AppError> {
+    state.resolve_scope(&session_token)?;
+    Ok(state.registry.display_ids().await)
+}
+
+/// Show content on a customer-facing pole display (scoped).
+#[tauri::command]
+pub async fn display_show_scoped(
+    args: DisplayShowArgs,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state.resolve_scope(&session_token)?;
+    let display = state
+        .registry
+        .display(&args.display_id)
+        .await
+        .ok_or_else(|| {
+            AppError::Invalid(format!("no display registered as '{}'", args.display_id))
+        })?;
+    let content = DisplayContent {
+        line1: args.line1,
+        line2: args.line2,
+    };
+    display.connect().await?;
+    display.show(&content).await?;
+    Ok(())
+}
+
+/// Discover all connected USB hardware devices (scoped).
+#[tauri::command]
+pub async fn discover_hardware_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<UsbDeviceInfo>, AppError> {
+    state.resolve_scope(&session_token)?;
+    match probe_all() {
+        Ok(devices) => Ok(devices),
+        Err(e) => Err(AppError::Internal(format!(
+            "hardware discovery failed: {e}"
+        ))),
+    }
+}
+
+/// Clear a customer-facing pole display (scoped).
+#[tauri::command]
+pub async fn display_clear_scoped(
+    display_id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state.resolve_scope(&session_token)?;
+    let display = state
+        .registry
+        .display(&display_id)
+        .await
+        .ok_or_else(|| AppError::Invalid(format!("no display registered as '{display_id}'")))?;
+    display.clear().await?;
+    Ok(())
+}
+
 #[cfg(test)]
 #[path = "hardware_tests.rs"]
 mod tests;

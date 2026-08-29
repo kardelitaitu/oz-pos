@@ -4,6 +4,7 @@ import type { CheckoutTier } from '../content/pricing/types';
 import { hasSession, isPaddleConfigured, isPlaceholderPriceId, openPaddleCheckout, getSessionEmail } from './paddle';
 import { openMidtransCheckout } from './midtrans';
 import { licenseApiUrl } from '../lib/runtime-config';
+import { getExplicitRegion } from '../lib/region';
 
 /**
  * Pricing-page checkout button (website-plan.md §7). Payment is
@@ -59,10 +60,21 @@ export default function CheckoutButton({ tier, locale }: Props) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const priceId = tier.priceId;
-  // Indonesian market: the id-locale pages bill through Midtrans Snap
-  // (fixed IDR, QRIS/VA/e-wallet — ADR #39 D1). Paddle stays for every
-  // other locale.
-  const useMidtrans = locale === 'id';
+  // Region-based payment routing: Indonesia region uses Midtrans Snap
+  // (fixed IDR, QRIS/VA/e-wallet — ADR #39 D1). Paddle stays for global.
+  // When region is unset, fall back to locale (id → Midtrans).
+  const [useMidtrans, setUseMidtrans] = useState(() => {
+    const r = getExplicitRegion();
+    return r === 'id' || (!r && locale === 'id');
+  });
+  useEffect(() => {
+    const check = () => {
+      const r = getExplicitRegion();
+      setUseMidtrans(r === 'id' || (!r && locale === 'id'));
+    };
+    window.addEventListener('storage', check);
+    return () => window.removeEventListener('storage', check);
+  }, [locale]);
 
   // No checkout path for this locale — degrade to the mailto fallback
   // instead of sending the user through login into a dead checkout.
@@ -125,7 +137,7 @@ export default function CheckoutButton({ tier, locale }: Props) {
         type="button"
         onClick={() => void handleClick()}
         disabled={loading}
-        className="block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+        className="block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
       >
         {loading ? '…' : mounted && hasSession() ? tier.cta : t(locale, 'checkout.signInToSubscribe')}
       </button>

@@ -6,6 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 description = "Hardware Abstraction Layer for OZ-POS: barcode, printer, NFC, payment terminal, cash drawer."
 
+# Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
+[lints]
+workspace = true
+
 [dependencies]
 oz-core = { workspace = true }
 async-trait = { workspace = true }

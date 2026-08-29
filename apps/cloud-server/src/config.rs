@@ -40,7 +40,7 @@ pub struct CloudServerConfig {
     pub require_tls: bool,
 
     /// Maximum number of connections in the PostgreSQL pool
-    /// (`OZ_DB_POOL_SIZE`, default: `20`). Ignored for SQLite.
+    /// (`OZ_DB_POOL_SIZE`, default: `8`). Ignored for SQLite.
     pub db_pool_size: usize,
 
     /// When `true` (default), startup applies the full schema (`PG_INIT`) to
@@ -144,7 +144,7 @@ impl CloudServerConfig {
         let database_url = std::env::var("DATABASE_URL").ok();
         let db_path = std::env::var("OZ_DB_PATH").unwrap_or_else(|_| "oz-pos.db".into());
         let require_tls = resolve_require_tls(env_bool("OZ_DB_REQUIRE_TLS"), production);
-        let db_pool_size = env_usize("OZ_DB_POOL_SIZE", 20);
+        let db_pool_size = env_usize("OZ_DB_POOL_SIZE", 8);
         // Schema application is on by default; only an explicit `0`/`false`/
         // `off` disables it (the opposite of `env_bool`, where unset means
         // false). `OZ_APPLY_SCHEMA=0` is the post-cutover deployment shape.

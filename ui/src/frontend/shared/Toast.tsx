@@ -1,9 +1,8 @@
-/* eslint-disable react-refresh/only-export-components */
-import {
-
+/* eslint-disable react-refresh/only-export-components */import {
   createContext,
   useContext,
   useCallback,
+  useState,
   type ReactNode,
 } from 'react';
 import { useLocalization } from '@fluent/react';
@@ -19,8 +18,14 @@ export interface Toast {
   id: string;
   type: ToastType;
   message: string;
+  /** Optional bold headline above the message. @default none */
+  title?: string;
   /** Auto-dismiss duration in ms. 0 = persistent. @default 4000 */
   duration?: number;
+  /** Expandable detail text (error codes, stack traces, diagnostics). Shown behind a toggle on error toasts. */
+  detail?: string;
+  /** Unix timestamp (ms) when the toast was created. Shown in the detail section. */
+  timestamp?: number;
 }
 
 interface ToastContextValue {
@@ -92,7 +97,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const addToast = useCallback(
     (t: Omit<Toast, 'id'> & { id?: string }) => {
       const id = t.id ?? generateId();
-      enqueue({ ...t, id });
+      enqueue({ ...t, id, timestamp: t.timestamp ?? Date.now() });
       return id;
     },
     [enqueue],
@@ -121,6 +126,62 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// ── Variant icon ─────────────────────────────────────────────────
+
+/**
+ * 16px stroke icon per toast variant, matching the Design Language
+ * alert icons (Feedback: "never colour alone — every tone carries its
+ * icon"). Coloured via `currentColor` from `.toast__icon` so the
+ * variant CSS owns the tint.
+ */
+function ToastIcon({ type }: { type: ToastType }) {
+  const common = {
+    width: 16,
+    height: 16,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  } as const;
+
+  switch (type) {
+    case 'success':
+      return (
+        <svg {...common}>
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+          <polyline points="22 4 12 14.01 9 11.01" />
+        </svg>
+      );
+    case 'error':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="10" />
+          <line x1="15" y1="9" x2="9" y2="15" />
+          <line x1="9" y1="9" x2="15" y2="15" />
+        </svg>
+      );
+    case 'warning':
+      return (
+        <svg {...common}>
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+          <line x1="12" y1="9" x2="12" y2="13" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+      );
+    case 'info':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="16" x2="12" y2="12" />
+          <line x1="12" y1="8" x2="12.01" y2="8" />
+        </svg>
+      );
+  }
+}
+
 // ── Individual Toast ────────────────────────────────────────────────
 
 function ToastItem({
@@ -133,7 +194,30 @@ function ToastItem({
   onDismiss: (id: string) => void;
 }) {
   const { l10n } = useLocalization();
-  const { id, type, message } = toast;
+  const { id, type, title, message, detail, timestamp } = toast;
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    const parts = [
+      `Toast: ${type.toUpperCase()}`,
+      `Time: ${timestamp ? new Date(timestamp).toISOString() : 'unknown'}`,
+      `Message: ${message}`,
+      title ? `Title: ${title}` : null,
+      detail ? `Detail: ${detail}` : null,
+    ].filter(Boolean);
+    try {
+      await navigator.clipboard.writeText(parts.join('\n'));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API may fail in restricted contexts
+    }
+  }, [type, timestamp, message, title, detail]);
+
+  const formattedTime = timestamp
+    ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : null;
 
   return (
     <div
@@ -143,27 +227,73 @@ function ToastItem({
       aria-busy={isExiting}
       data-toast-id={id}
     >
-      <span className="toast__message">{message}</span>
-      <button
-        type="button"
-        className="toast__dismiss"
-        onClick={() => onDismiss(id)}
-        disabled={isExiting}
-        aria-label={l10n.getString('toast-dismiss-aria')}
-      >
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          aria-hidden="true"
+      <div className="toast__icon" aria-hidden="true">
+        <ToastIcon type={type} />
+      </div>
+      <div className="toast__body">
+        {title !== undefined && title !== '' && (
+          <div className="toast__title">{title}</div>
+        )}
+        <div className="toast__message">{message}</div>
+        {detail && (
+          <>
+            <button
+              type="button"
+              className="toast__detail-toggle"
+              onClick={() => setDetailOpen((o) => !o)}
+              aria-expanded={detailOpen}
+            >
+              {detailOpen
+                ? l10n.getString('toast-hide-detail', null, 'Hide detail')
+                : l10n.getString('toast-show-detail', null, 'Show detail')}
+            </button>
+            {detailOpen && (
+              <pre className="toast__detail">
+                {detail}
+              </pre>
+            )}
+          </>
+        )}
+        {formattedTime && (
+          <div className="toast__timestamp">
+            {formattedTime}
+          </div>
+        )}
+      </div>
+      <div className="toast__actions">
+        {detail && (
+          <button
+            type="button"
+            className="toast__action-btn"
+            onClick={handleCopy}
+            aria-label={l10n.getString('toast-copy-aria', null, 'Copy error details')}
+          >
+            {copied
+              ? l10n.getString('toast-copied', null, 'Copied!')
+              : l10n.getString('toast-copy', null, 'Copy')}
+          </button>
+        )}
+        <button
+          type="button"
+          className="toast__dismiss"
+          onClick={() => onDismiss(id)}
+          disabled={isExiting}
+          aria-label={l10n.getString('toast-dismiss-aria')}
         >
-          <line x1="18" y1="6" x2="6" y2="18" />
-          <line x1="6" y1="6" x2="18" y2="18" />
-        </svg>
-      </button>
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden="true"
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }

@@ -924,3 +924,43 @@ async fn pg_integration_health_last_sync_query_is_indexed() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn request_id_middleware_generates_id_when_missing() {
+    let app = test_app();
+    let req = Request::builder()
+        .uri("/health")
+        .body(Body::empty())
+        .unwrap();
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let req_id = resp
+        .headers()
+        .get("x-request-id")
+        .expect("response must include x-request-id header")
+        .to_str()
+        .unwrap();
+    assert!(!req_id.is_empty());
+}
+
+#[tokio::test]
+async fn request_id_middleware_preserves_incoming_id() {
+    let app = test_app();
+    let custom_id = "custom-client-req-12345";
+    let req = Request::builder()
+        .uri("/health")
+        .header("x-request-id", custom_id)
+        .body(Body::empty())
+        .unwrap();
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let req_id = resp
+        .headers()
+        .get("x-request-id")
+        .expect("response must include x-request-id header")
+        .to_str()
+        .unwrap();
+    assert_eq!(req_id, custom_id);
+}

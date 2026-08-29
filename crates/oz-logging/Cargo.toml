@@ -6,6 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 description = "Structured logging facade for OZ-POS — context-tagged log records, file + stdout output, log rotation, syslog, Event Log."
 
+# Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
+[lints]
+workspace = true
+
 [dependencies]
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["json", "registry", "env-filter"] }

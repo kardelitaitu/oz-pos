@@ -3,13 +3,18 @@ import { render, screen, waitFor, fireEvent, createEvent } from '@testing-librar
 import LicenseActivationScreen from '../LicenseActivationScreen';
 import { activateLicense, getHardwareFingerprint, getMachineId } from '@/api/license';
 import { getVersion, getLocalIp, type VersionInfo } from '@/api/system';
-import { readText } from '@tauri-apps/plugin-clipboard-manager';
 
 // FAST_WAIT: 5ms polling for async assertions (10x faster than default 50ms).
 const FAST_WAIT = { interval: 5, timeout: 500 } as const;
 
 const mockAddToast = vi.fn();
 const mockOnActivated = vi.fn();
+const mockClipboardReadText = vi.fn();
+
+Object.defineProperty(navigator, 'clipboard', {
+  value: { readText: mockClipboardReadText },
+  writable: true,
+});
 
 vi.mock('@/frontend/shared/Toast', () => ({
   useToast: () => ({ addToast: mockAddToast })
@@ -67,9 +72,6 @@ vi.mock('@fluent/react', () => ({
   } })
 }));
 
-vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
-  readText: vi.fn()
-}));
 
 vi.mock('@/components/ConnectionStatus', () => ({
   default: ({ label, url }: { label: string; url: string }) => <div data-testid={`conn-status-${label}`}>{label}: {url}</div>
@@ -102,7 +104,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     vi.mocked(getMachineId).mockResolvedValue('test-machine-id');
     vi.mocked(getHardwareFingerprint).mockResolvedValue('hw_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
     vi.mocked(activateLicense).mockResolvedValue(true);
-    vi.mocked(readText).mockResolvedValue('clipboard-text');
+    mockClipboardReadText.mockResolvedValue('clipboard-text');
   });
 
   describe('1. Mounting & Lifecycle', () => {
@@ -125,7 +127,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     it('4. getVersion rejects gracefully without crashing the app', async () => {
       vi.mocked(getVersion).mockRejectedValue(new Error('Version Fail'));
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      await waitFor(() => expect(screen.getByText('Version 0.0.30')).toBeInTheDocument(), FAST_WAIT);
+      await waitFor(() => expect(screen.getByText('Version 0.0.31')).toBeInTheDocument(), FAST_WAIT);
     });
 
     it('5. Component unmounting during getVersion fetch prevents state updates', () => {
@@ -485,7 +487,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     });
 
     it('40. Pasting into the Email field updates ONLY the email field', async () => {
-      vi.mocked(readText).mockResolvedValue('test@paste.com');
+      mockClipboardReadText.mockResolvedValue('test@paste.com');
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       const emailInput = screen.getByLabelText(/Email Address/i);
       
@@ -497,7 +499,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     });
 
     it('41. Pasting into the Phone field updates ONLY the phone field', async () => {
-      vi.mocked(readText).mockResolvedValue('0899999');
+      mockClipboardReadText.mockResolvedValue('0899999');
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       const phoneInput = screen.getByLabelText(/Phone Number/i);
       
@@ -509,7 +511,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     });
 
     it('42. Pasting into the License Key field updates ONLY the key field, and forces to uppercase', async () => {
-      vi.mocked(readText).mockResolvedValue('oz-key-abc');
+      mockClipboardReadText.mockResolvedValue('oz-key-abc');
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       const keyInput = screen.getByLabelText(/License Key/i);
       
@@ -521,7 +523,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     });
 
     it('43. Clipboard returning empty text does nothing', async () => {
-      vi.mocked(readText).mockResolvedValue('');
+      mockClipboardReadText.mockResolvedValue('');
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       const emailInput = screen.getByLabelText(/Email Address/i);
       fireEvent.change(emailInput, { target: { value: 'existing@email.com' } });
@@ -534,7 +536,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     });
 
     it('44. Clipboard throwing an OS permission error is caught, fires an error toast', async () => {
-      vi.mocked(readText).mockRejectedValue(new Error('Permission denied'));
+      mockClipboardReadText.mockRejectedValue(new Error('Permission denied'));
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       const emailInput = screen.getByLabelText(/Email Address/i);
       
@@ -549,7 +551,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
 
     it('45. Component unmounting while readText() is awaiting does not cause errors', async () => {
       let resolveReadText: (value: string) => void = () => {};
-      vi.mocked(readText).mockReturnValue(new Promise<string>(resolve => { resolveReadText = resolve; }));
+      mockClipboardReadText.mockReturnValue(new Promise<string>(resolve => { resolveReadText = resolve; }));
       
       const { unmount } = render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       const emailInput = screen.getByLabelText(/Email Address/i);

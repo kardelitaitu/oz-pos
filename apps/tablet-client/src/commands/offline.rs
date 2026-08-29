@@ -364,6 +364,231 @@ fn run_list_remote_failures(
         .collect())
 }
 
+/// Session-scoped variant of `enqueue_offline`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn enqueue_offline_scoped(
+    session_token: String,
+    args: EnqueueOfflineArgs,
+    state: State<'_, AppState>,
+) -> Result<OfflineQueueItemDto, AppError> {
+    validate_not_empty("action", &args.action).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("payload", &args.payload).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    // OFF-09: preserve tenant isolation and priority tier at the command
+    // boundary. `enqueue_offline_scoped` records both in the row; a missing
+    // tenant falls back to the "default" single-store tenant and a missing
+    // priority to Normal (never escalated from a stale front-end).
+    let tenant_id = args.tenant_id.as_deref().unwrap_or("default");
+    let priority = args
+        .priority
+        .as_deref()
+        .map(SyncPriority::from_str_lenient)
+        .unwrap_or(SyncPriority::Normal);
+
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let item = store.enqueue_offline_scoped(&args.action, &args.payload, tenant_id, priority)?;
+    drop(db);
+
+    tracing::info!(id = %item.id, action = %item.action, tenant_id, "offline transaction enqueued");
+    Ok(item.into())
+}
+
+/// Session-scoped variant of `list_pending_offline`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn list_pending_offline_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<OfflineQueueItemDto>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    run_list_pending_offline(&db)
+}
+
+/// Session-scoped variant of `list_all_offline`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn list_all_offline_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<OfflineQueueItemDto>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let items = store.list_all_offline()?;
+    let dtos: Vec<OfflineQueueItemDto> = items.into_iter().map(OfflineQueueItemDto::from).collect();
+    Ok(dtos)
+}
+
+/// Session-scoped variant of `pending_offline_count`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn pending_offline_count_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<i64, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let count = store.pending_offline_count()?;
+    drop(db);
+    Ok(count)
+}
+
+/// Session-scoped variant of `retry_offline_sync`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn retry_offline_sync_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<SyncResult, AppError> {
+    // Phase 1: Read pending items and config from DB (brief lock).
+    let (pending_items, config_opt) = {
+        let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+        let db_guard = conn_arc
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let db = &*db_guard;
+        let store = Store::new(&db);
+        let pending = store.list_pending_offline()?;
+        let config = SyncConfig::from_settings(&store)?;
+        (pending, config)
+    };
+
+    let total_count = pending_items.len() as i64;
+    let config = match config_opt {
+        Some(c) => c,
+        None => {
+            // SYNC-04: never fabricate a successful retry when sync is
+            // unconfigured — surface the error so the UI catch handler
+            // shows the honest failure and the items stay pending.
+            return Err(AppError::Invalid(
+                "Sync is not configured or disabled — items remain pending".into(),
+            ));
+        }
+    };
+
+    if pending_items.is_empty() {
+        return Ok(SyncResult {
+            synced_count: 0,
+            failed_count: 0,
+            total_count: 0,
+            plan_required: false,
+        });
+    }
+
+    // OFF-09: critical-before-normal ordering. `list_pending_offline`
+    // returns created_at ASC, so re-order the batch so Critical items
+    // always transmit before Normal/Low.
+    let mut pending_items = pending_items;
+    pending_items.sort_by_key(|i| i.priority);
+
+    // Phase 2: Async HTTP push (no DB lock held).
+    let outcomes = sync_client::send_items_to_server(&config, &pending_items).await;
+
+    // Phase 3: Write outcomes back to DB (brief lock).
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let attempt = match outcomes {
+        Ok(outcomes) => sync_client::apply_sync_outcomes(&store, &pending_items, &outcomes)?,
+        // ADR sync-plan-gating: a free tenant is gated, not broken. Do NOT
+        // mark the items failed — they stay `pending` and sync automatically
+        // once the tenant upgrades.
+        Err(sync_client::SyncHttpError::PlanRequired) => SyncAttemptResult {
+            synced: 0,
+            failed: 0,
+            error: Some("cloud sync requires a paid plan".into()),
+            plan_required: true,
+        },
+        Err(e) => sync_client::mark_all_failed(&store, &pending_items, &e.to_string())?,
+    };
+    drop(db);
+
+    Ok(SyncResult {
+        synced_count: attempt.synced as i64,
+        failed_count: attempt.failed as i64,
+        total_count,
+        plan_required: attempt.plan_required,
+    })
+}
+
+/// Session-scoped variant of `delete_offline_item`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn delete_offline_item_scoped(
+    session_token: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    store.delete_offline_item(&id)?;
+    drop(db);
+
+    tracing::info!(id, "offline queue item deleted");
+    Ok(())
+}
+
+/// Session-scoped variant of `requeue_remote_failure`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn requeue_remote_failure_scoped(
+    session_token: String,
+    args: RequeueRemoteFailureArgs,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("itemId", &args.item_id).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    run_requeue_remote_failure(&db, &args.item_id)?;
+    drop(db);
+
+    tracing::info!(item_id = %args.item_id, "dead-lettered remote item requeued for sync retry");
+    Ok(())
+}
+
+/// Session-scoped variant of `list_remote_failures`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn list_remote_failures_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<RemoteSyncFailureDto>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let failures = run_list_remote_failures(&db)?;
+    drop(db);
+    Ok(failures)
+}
+
 #[cfg(test)]
 #[path = "offline_tests.rs"]
 mod tests;

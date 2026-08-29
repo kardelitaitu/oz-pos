@@ -166,3 +166,80 @@ kds-device-status-disconnected = Disconnected
 kds-device-status-stale = Stale
 kds-device-status-aria = KDS devices: { $connected } of { $total } connected
 kds-device-list-aria = KDS device list
+
+# ── Hamburger settings panel ──
+kds-settings-theme = Theme
+kds-settings-theme-toggle-aria = Toggle light or dark theme
+kds-layout-order-id-caption = Show order number on cards
+kds-layout-table-number-caption = Show table number on cards
+kds-settings-sound-caption = Chime when an order arrives
+kds-settings-auto-ack-caption = New orders appear without tapping Accept
+
+# ── Topbar tabs + back ──
+kds-back-aria = Back to workspaces
+kds-tablist-aria = View orders
+kds-tab-open = Open
+kds-tab-completed = Completed
+
+# ── Ticket card footer actions ──
+kds-advance-start = Start
+kds-advance-ready = Mark Ready
+kds-advance-serve = Serve
+kds-toggle-card-aria = Toggle order { $number } details
+
+# ── Topbar filter dropdown ──
+kds-filter-aria = Filter orders
+kds-filter-all = All orders
+kds-filter-prepared = Prepared
+kds-filter-selected = { $count } selected
+
+# ── Screen footer status bar ──
+kds-footer-aria = Terminal status
+kds-footer-last-sync = Last sync: { $time }
+kds-footer-never = never
+kds-footer-seconds = { $count }s ago
+kds-footer-minutes = { $count }m ago
+kds-footer-hours = { $count }h ago
+
+# ── Completed tab (bucket columns) ──
+kds-completed-aria = Completed orders
+kds-completed-today = Today
+kds-completed-yesterday = Yesterday
+kds-completed-this-week = This Week
+kds-completed-older = Older
+kds-completed-today-empty = No orders
+kds-completed-yesterday-empty = No orders
+kds-completed-this-week-empty = No orders
+kds-completed-older-empty = No orders
+kds-completed-status = Completed
+kds-completed-reopen = Reopen
+kds-completed-reopen-aria = Reopen order { $number }
+
+# ── Shift ──
+kds-shift-start = Start Shift
+kds-shift-end = End Shift
+kds-shift-end-title = End Shift?
+kds-shift-end-msg = Are you sure you want to end the current kitchen shift?
+
+# ── Confirm modal ──
+kds-confirm-cancel = Cancel
+kds-confirm-ok = Confirm
+
+# ── Display settings ──
+kds-settings-display-scale = Display scale
+kds-settings-columns = Columns
+
+# ── Card Colours ──
+kds-settings-card-colours = Card Colours
+kds-settings-color-dinein = Dine in
+kds-settings-color-takeaway = Takeaway
+kds-settings-color-rush = Rush
+kds-settings-color-pending = Pending
+kds-settings-color-preparing = Preparing
+kds-settings-color-ready = Ready
+kds-settings-color-complete = Complete
+kds-settings-reset-colours = Reset colours
+
+# ── Card Animations ──
+kds-settings-card-animations = Card animations
+kds-settings-card-animations-caption = Spawn and reorder effects

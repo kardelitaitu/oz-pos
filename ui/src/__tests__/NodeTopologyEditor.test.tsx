@@ -260,7 +260,7 @@ vi.mock('@/contexts/SettingsContext', () => ({
       },
       store: { name: 'Test Store', address: '', taxId: '', currency: 'IDR', branch: '' },
       sync: { serverUrl: null, hasApiKey: false, enabled: false },
-      brand: { colour: '#10b981', storeName: 'Test Store' },
+      brand: { colour: '#147EFB', storeName: 'Test Store' },
       preferences: { cardSize: 0, fontSize: 0, fontSmoothing: 'antialiased' },
       currencies: [],
       appVersion: '0.0.19',

@@ -87,7 +87,7 @@ vi.mock('@/contexts/HardwareAccelContext', () => ({
 vi.mock('@/contexts/BrandContext', () => ({
   useBrand: () => ({
     settings: {
-      primary_colour: '#10b981',
+      primary_colour: '#147EFB',
       logo_path: null,
       store_name: '',
     },
@@ -112,7 +112,7 @@ vi.mock('@/frontend/shared/Toast', () => ({
 }));
 
 vi.mock('@/api/data', () => ({
-  getBackupStatus: vi.fn().mockResolvedValue({ lastBackup: null, lastBackupSize: null, dbPath: '/path/to/db.sqlite3' }),
+  getBackupStatus: vi.fn().mockResolvedValue({ lastBackup: null, lastBackupSize: null }),
   createBackup: vi.fn().mockResolvedValue({ path: '/backups/backup.db', sizeBytes: 1000 }),
   exportData: vi.fn().mockResolvedValue({ path: '/path/to/export.ozpkg', sizeBytes: 500, types: ['products'] }),
   importPreview: vi.fn().mockResolvedValue({ storeName: 'Test Store', appVersion: '0.0.9', exportedAt: '2026-01-01', counts: {} }),
@@ -150,7 +150,7 @@ const { invokeMock, defaultImpl } = vi.hoisted(() => {
       case 'get_default_currency':
         return 'USD';
       case 'get_brand_settings_scoped':
-        return { primary_colour: '#10b981', logo_path: null, store_name: '' };
+        return { primary_colour: '#147EFB', logo_path: null, store_name: '' };
       case 'get_app_version':
       case 'version_scoped':
         return { name: 'oz-pos', version: '0.0.9', rustVersion: '1.80', target: 'x86_64' };
@@ -186,7 +186,7 @@ Element.prototype.scrollIntoView = vi.fn();
 describe('Settings Toggle Buttons Regression Suite', () => {
   beforeEach(() => {
     mockSetHwAccelEnabled.mockClear();
-    mockGetBrandSettings.mockResolvedValue({ primary_colour: '#10b981', logo_path: null, store_name: '' });
+    mockGetBrandSettings.mockResolvedValue({ primary_colour: '#147EFB', logo_path: null, store_name: '' });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (invokeMock as any).mockReset();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -38,7 +38,6 @@ findings: Migrated from rlua to mlua 0.9. Native memory limit (10 MiB) now enfor
 // `unsafe impl Send/Sync` for `LuaRuntime` below, each narrowly scoped
 // with `#[allow(unsafe_code)]` and a `// SAFETY:` rationale.
 #![deny(unsafe_code)]
-#![warn(missing_docs)]
 
 use std::path::Path;
 

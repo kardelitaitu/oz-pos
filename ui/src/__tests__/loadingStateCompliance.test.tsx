@@ -134,28 +134,6 @@ describe('loading-state compliance — error ≠ empty with Retry (LOAD-02/08)',
     vi.doUnmock('@/contexts/AuthContext');
   });
 
-  it('KdsHistoryPanel shows a localized error with Retry (never raw String(e))', async () => {
-    vi.doMock('@/api/kds', () => ({
-      listKdsOrdersScoped: (...a: unknown[]) => hoisted.listKdsOrdersScoped(...a),
-    }));
-    vi.doMock('@/contexts/WorkspaceContext', () => ({
-      useWorkspace: () => ({ sessionToken: 'tok' }),
-    }));
-    const { KdsHistoryPanel } = await import('@/features/kds/KdsHistoryPanel');
-    const { renderWithFluentSync } = await import('@/__tests__/test-utils/render');
-    const kdsFtl = (await import('@/locales/kds.ftl?raw')).default;
-
-    const { container } = renderWithFluentSync(<KdsHistoryPanel />, sharedFtl, kdsFtl);
-    await waitFor(() => {
-      expect(container.querySelector('[role="alert"]')).not.toBeNull();
-    });
-    expect(screen.getByRole('button', { name: /retry|coba lagi/i })).toBeInTheDocument();
-    // The raw error message must NOT leak into the DOM.
-    expect(container.textContent).not.toContain('Error: down');
-    vi.doUnmock('@/api/kds');
-    vi.doUnmock('@/contexts/WorkspaceContext');
-  });
-
   it('KdsProductPickerModal shows a localized error + Retry', async () => {
     vi.doMock('@/api/products', () => ({
       listProductsScoped: (...a: unknown[]) => hoisted.listProductsScoped(...a),

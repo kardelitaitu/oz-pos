@@ -28,8 +28,8 @@ export type SectionName =
   | 'finance'
   | 'customers'
   | 'reports'
-  | 'management'
   | 'inventory'
+  | 'tools'
   | 'settings'
   | 'dev';
 
@@ -41,8 +41,8 @@ export const SECTION_LABELS: Record<SectionName, string> = {
   finance: 'nav-section-finance',
   customers: 'nav-section-customers',
   reports: 'nav-section-reports',
-  management: 'nav-section-management',
   inventory: 'nav-section-inventory',
+  tools: 'nav-section-tools',
   settings: 'nav-section-settings',
   dev: 'nav-section-dev',
 };

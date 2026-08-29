@@ -10,7 +10,6 @@
 //! payment, and inventory tables stabilize.
 
 #![deny(unsafe_code)]
-#![warn(missing_docs)]
 
 pub mod daily_summary;
 pub mod error;

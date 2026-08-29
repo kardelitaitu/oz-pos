@@ -66,7 +66,7 @@ helper, which is documented and non-arithmetic.
 
 ## Plan (as executed)
 
-1. Add `crates/oz-core/migrations/071_exchange_rate_minor_units.sql` with
+1. Add `crates/oz-core/migrations/20260813_init.sql` with
    `ADD COLUMN rate_millionths INTEGER NOT NULL DEFAULT 0`, an
    `UPDATE … = CAST(ROUND(rate * 1000000) AS INTEGER)` backfill, and
    `ALTER TABLE exchange_rates DROP COLUMN rate`. Documented rollback path.
@@ -136,7 +136,7 @@ helper, which is documented and non-arithmetic.
 
 - `docs/specs/_active/2026-07-12-desktop-app-audit.md` §2 C-1 / §6 X-3 / §9 / §10 / §11
 - `crates/oz-core/src/exchange_rate.rs`
-- `crates/oz-core/migrations/071_exchange_rate_minor_units.sql`
+- `crates/oz-core/migrations/20260813_init.sql`
 - `crates/oz-core/src/db/settings.rs`
 - `crates/oz-core/tests/currency_integration.rs`
 - `apps/desktop-client/src/commands/exchange_rates.rs`

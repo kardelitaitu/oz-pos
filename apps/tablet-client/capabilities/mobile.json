@@ -1,13 +1,10 @@
 {
   "identifier": "mobile-capability",
-  "description": "Capabilities for the tablet / mobile app",
-  "windows": ["*"],
+  "description": "Capabilities for the tablet / mobile app (M-1: narrowed from wildcard)",
+  "windows": ["main"],
   "permissions": [
     "core:default",
     "core:event:default",
-    "core:event:allow-emit",
-    "core:event:allow-listen",
-    "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
     "opener:allow-open-url"
   ]

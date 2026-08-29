@@ -857,6 +857,66 @@
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Session-expired recovery banner — Design Language Alert anatomy:
+   icon + title + caption on a tinted surface, with a recovery action. */
+.analytics-session-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-3) var(--space-4) 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-danger) 10%, var(--color-bg-surface));
+  border: 1px solid color-mix(in srgb, var(--color-danger) 25%, transparent);
+}
+
+.analytics-session-banner-icon {
+  flex-shrink: 0;
+  color: var(--color-danger);
+}
+
+.analytics-session-banner-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.analytics-session-banner-title {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-primary);
+}
+
+.analytics-session-banner-message {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+}
+
+.analytics-session-banner-action {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-danger);
+  color: var(--color-danger-fg);
+  border: none;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--duration-150) var(--ease-out);
+}
+
+.analytics-session-banner-action:hover {
+  background: var(--color-danger-hover);
+}
+
+.analytics-session-banner-action:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
 /* Transient action toasts */
 .analytics-toasts {
   position: fixed;

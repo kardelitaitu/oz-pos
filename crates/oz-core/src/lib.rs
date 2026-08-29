@@ -18,10 +18,11 @@ next: none | perf: N/A
 //! - **Money is always `i64` minor units.** Never `f32`/`f64`.
 //! - **All public items have `///` docs.** Library consumers depend on them.
 //! - **`#![deny(unsafe_code)]`** is on; open a discussion before adding `unsafe`.
-//! - **`#![warn(missing_docs)]`** is on; new public items must be documented.
+//! - **`missing_docs` is warned** via `[lints] workspace = true` in
+//!   `Cargo.toml`, inherited from `[workspace.lints]`; new public items must
+//!   be documented.
 
 #![deny(unsafe_code)]
-#![warn(missing_docs)]
 
 /// Immutable audit log — cash management and data-modification events.
 pub mod audit;

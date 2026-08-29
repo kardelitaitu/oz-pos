@@ -12,7 +12,6 @@ findings: Transitional module implementing Module trait. No unsafe code. Re-expo
 next: Migrate auth/staff commands physically into this module and add IP-aware edge
 controls where a trusted network identity exists | perf: N/A.
 */
-#![warn(missing_docs)]
 
 //! Staff Module — user and role management.
 //!

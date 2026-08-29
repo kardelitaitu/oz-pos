@@ -3,16 +3,16 @@ import { Localized, useLocalization } from '@fluent/react';
 import { SettingsPopup, useToast, requiredLocalized, EmptyState } from '@/frontend/shared';
 import { NoTerminalsIcon } from '@/components/EmptyStateIllustrations';
 import {
-  listTerminals,
-  registerTerminal,
-  updateTerminal,
-  deleteTerminal,
-  listTerminalOverrides,
-  setTerminalOverride,
-  deleteTerminalOverride,
-  getDeviceBinding,
-  setDeviceBinding,
-  clearDeviceBinding,
+  listTerminalsScoped,
+  registerTerminalScoped,
+  updateTerminalScoped,
+  deleteTerminalScoped,
+  listTerminalOverridesScoped,
+  setTerminalOverrideScoped,
+  deleteTerminalOverrideScoped,
+  getDeviceBindingScoped,
+  setDeviceBindingScoped,
+  clearDeviceBindingScoped,
   type TerminalDto,
   type TerminalFeatureOverride,
   type DeviceBindingDto,
@@ -23,7 +23,6 @@ import {
   type WorkspaceDto,
 } from '@/api/workspaces';
 import { FEATURES } from '@/hooks/useFeatures';
-import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { LocaleContext } from '@/i18n/LocaleContext';
@@ -162,8 +161,8 @@ export default function TerminalManagementScreen() {
   const locale = useContext(LocaleContext)?.locale ?? 'en';
   const atTerminalLimit =
     caps !== null && caps.maxPosInstances !== null && caps.terminalCount >= caps.maxPosInstances;
-  const { session } = useAuth();
-  const { sessionToken } = useWorkspace();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken ?? '';
   const { addToast } = useToast();
   // Timestamps follow the active Fluent locale (not the browser default).
   const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
@@ -203,14 +202,14 @@ export default function TerminalManagementScreen() {
     setLoading(true);
     setError(null);
     try {
-      const data = await listTerminals();
+      const data = await listTerminalsScoped(sessionToken);
       setTerminals(data);
     } catch {
       setError(l10n.getString('terminal-error-load'));
     } finally {
       setLoading(false);
     }
-  }, [l10n]);
+  }, [l10n, sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -246,7 +245,7 @@ export default function TerminalManagementScreen() {
       setOverridesLoading(true);
       setOverridesError(null);
       try {
-        const data = await listTerminalOverrides(editingId);
+        const data = await listTerminalOverridesScoped(sessionToken, editingId);
         if (!cancelled) setOverrides(data);
       } catch {
         if (!cancelled) setOverridesError(l10n.getString('terminal-error-overrides-load'));
@@ -255,7 +254,7 @@ export default function TerminalManagementScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [editingId, l10n]);
+  }, [editingId, l10n, sessionToken]);
 
   // Load device binding + stores when the edit modal opens for a terminal.
   useEffect(() => {
@@ -273,7 +272,7 @@ export default function TerminalManagementScreen() {
       setBindingError(null);
       try {
         const [b, stores] = await Promise.all([
-          getDeviceBinding(editingId),
+          getDeviceBindingScoped(sessionToken, editingId),
           listStores(),
         ]);
         if (!cancelled) {
@@ -347,8 +346,8 @@ export default function TerminalManagementScreen() {
     setBindingSaving(true);
     setBindingError(null);
     try {
-      await setDeviceBinding(session?.user_id ?? '', editingId, selectedStoreId, selectedInstanceId);
-      const b = await getDeviceBinding(editingId);
+      await setDeviceBindingScoped(sessionToken, editingId, selectedStoreId, selectedInstanceId);
+      const b = await getDeviceBindingScoped(sessionToken, editingId);
       setBinding(b);
     } catch {
       setBindingError(l10n.getString('terminal-error-binding-save'));
@@ -362,7 +361,7 @@ export default function TerminalManagementScreen() {
     setBindingSaving(true);
     setBindingError(null);
     try {
-      await clearDeviceBinding(session?.user_id ?? '', editingId);
+      await clearDeviceBindingScoped(sessionToken, editingId);
       setBinding({ bounded: false, boundStoreId: null, boundInstanceId: null, signatureValid: false });
       setSelectedStoreId('');
       setSelectedInstanceId('');
@@ -393,8 +392,8 @@ export default function TerminalManagementScreen() {
   const handleToggleOverride = async (featureKey: string, currentEnabled: boolean) => {
     if (!editingId) return;
     try {
-      await setTerminalOverride(session?.user_id ?? '', editingId, featureKey, !currentEnabled);
-      const data = await listTerminalOverrides(editingId);
+      await setTerminalOverrideScoped(sessionToken, editingId, featureKey, !currentEnabled);
+      const data = await listTerminalOverridesScoped(sessionToken, editingId);
       setOverrides(data);
     } catch {
       setOverridesError(l10n.getString('terminal-error-override-update'));
@@ -405,7 +404,7 @@ export default function TerminalManagementScreen() {
     if (!editingId) return;
     try {
       const promises = overrides.map((o) =>
-        deleteTerminalOverride(session?.user_id ?? '', editingId, o.feature),
+        deleteTerminalOverrideScoped(sessionToken, editingId, o.feature),
       );
       await Promise.all(promises);
       setOverrides([]);
@@ -434,7 +433,7 @@ export default function TerminalManagementScreen() {
     setError(null);
     try {
       if (editingId) {
-        await updateTerminal(session?.user_id ?? '', {
+        await updateTerminalScoped(sessionToken, {
           id: editingId,
           name,
           deviceId,
@@ -442,7 +441,7 @@ export default function TerminalManagementScreen() {
           metadata: form.metadata || null,
         });
       } else {
-        await registerTerminal(session?.user_id ?? '', {
+        await registerTerminalScoped(sessionToken, {
           name,
           deviceId,
           terminalSecret: form.terminalSecret || null,
@@ -465,7 +464,7 @@ export default function TerminalManagementScreen() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await deleteTerminal(session?.user_id ?? '', deleteTarget.id);
+      await deleteTerminalScoped(sessionToken, deleteTarget.id);
       closeDelete();
       await load();
     } catch {

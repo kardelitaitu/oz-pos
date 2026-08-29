@@ -29,7 +29,7 @@ vi.mock('@/contexts/SettingsContext', () => ({
       receipt: { showCurrency: false, decimalSeparator: 'dot', showTax: true, footer: '', paperWidth: 'standard', showTableNumber: false, marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0 },
       store: { name: 'Test Store', address: '', taxId: '', currency: 'IDR', branch: '' },
       sync: { serverUrl: null, hasApiKey: false, enabled: false },
-      brand: { colour: '#10b981', storeName: 'Test Store' },
+      brand: { colour: '#147EFB', storeName: 'Test Store' },
       preferences: { cardSize: 0, fontSize: 0, fontSmoothing: 'antialiased' },
       currencies: [],
       appVersion: '0.0.19',

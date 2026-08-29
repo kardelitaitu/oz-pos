@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
@@ -159,36 +159,34 @@ describe('KdsScreen', () => {
     testKdsState.kdsZone = ''; // Reset zone state between tests
   });
 
-  it('renders the title', async () => {
-    renderScreen();
-    await waitFor(() => expect(screen.getByText('Kitchen Display')).toBeDefined());
-  });
-
-  it('shows three columns: Pending, Preparing, Ready', async () => {
+  it('renders the KDS region with aria-label', async () => {
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByText('Pending')).toBeDefined();
-      expect(screen.getByText('Preparing')).toBeDefined();
-      expect(screen.getByText('Ready')).toBeDefined();
+      expect(screen.getByRole('region', { name: /kitchen display/i })).toBeDefined();
     });
   });
 
-  it('shows order count in the header', async () => {
-    mockGetKdsQueue.mockResolvedValue([makeOrder(), makeOrder({ id: 'o-2' })]);
-    renderScreen();
-    await waitFor(() => expect(screen.getByText('Kitchen Display')).toBeDefined());
-    const countEl = document.querySelector('.kds-order-count');
-    expect(countEl).toBeDefined();
-    // Fluent renders "2 orders" with Bidi chars, match pattern
-    expect(countEl?.textContent).toMatch(/2/);
-  });
-
-  it('shows empty state in each column when no orders', async () => {
+  it('renders the masonry order view (single layout)', async () => {
     renderScreen();
     await waitFor(() => {
-      const empties = screen.getAllByText('No orders yet');
-      // Three columns, each with an empty message
-      expect(empties.length).toBe(3);
+      // The prototype single view: cards flow into columns (.kds-main).
+      expect(document.querySelector('.kds-main')).not.toBeNull();
+    });
+  });
+
+  it('shows order count in the Open tab', async () => {
+    mockGetKdsQueue.mockResolvedValue([makeOrder(), makeOrder({ id: 'o-2' })]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('kds-tab-open').textContent).toMatch(/2/);
+    });
+  });
+
+  it('shows an empty state when no orders', async () => {
+    renderScreen();
+    await waitFor(() => {
+      // Single masonry view → one empty state (not one per status column).
+      expect(screen.getAllByText('No orders yet').length).toBe(1);
     });
   });
 
@@ -237,8 +235,9 @@ describe('KdsScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('Burger x1, Fries x1')).toBeDefined());
 
-    const ticket = document.querySelector('.kds-ticket')!;
-    await userEvent.click(ticket);
+    const advanceBtn = document.querySelector('[data-testid="kds-order-card-101-status-advance"]') as HTMLButtonElement;
+    expect(advanceBtn).not.toBeNull();
+    await userEvent.click(advanceBtn);
 
     await waitFor(() =>
       expect(mockUpdateKdsStatus).toHaveBeenCalledWith('o-1', 'preparing'),
@@ -252,8 +251,9 @@ describe('KdsScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('Burger x1, Fries x1')).toBeDefined());
 
-    const ticket = document.querySelector('.kds-ticket')!;
-    await userEvent.click(ticket);
+    const advanceBtn = document.querySelector('[data-testid="kds-order-card-101-status-advance"]') as HTMLButtonElement;
+    expect(advanceBtn).not.toBeNull();
+    await userEvent.click(advanceBtn);
 
     await waitFor(() =>
       expect(mockUpdateKdsStatus).toHaveBeenCalledWith('o-1', 'ready'),
@@ -279,17 +279,17 @@ describe('KdsScreen', () => {
     expect(timeCell?.textContent).toMatch(/m/);
   });
 
-  it('shows column counts', async () => {
+  it('shows the Open tab count', async () => {
     mockGetKdsQueue.mockResolvedValue([
       makeOrder({ id: 'o-1', status: 'pending' }),
       makeOrder({ id: 'o-2', status: 'pending' }),
     ]);
     renderScreen();
     await waitFor(() => {
-      const counts = document.querySelectorAll('.kds-column-count');
-      expect(counts.length).toBe(3);
-      // Pending column should show count of 2
-      expect(counts[0]?.textContent).toBe('2');
+      // The Open tab shows the order count (prototype .kds-tab-count).
+      const tabCount = document.querySelector('.kds-tab-count');
+      expect(tabCount).not.toBeNull();
+      expect(tabCount?.textContent).toBe('2');
     });
   });
 
@@ -300,7 +300,7 @@ describe('KdsScreen', () => {
     );
   });
 
-  it('does not render cancelled orders in any column', async () => {
+  it('does not render cancelled orders in the masonry view', async () => {
     mockGetKdsQueue.mockResolvedValue([
       makeOrder({ id: 'o-1', status: 'cancelled', display_number: 999, items_summary: 'Cancel Item' }),
     ]);
@@ -309,7 +309,7 @@ describe('KdsScreen', () => {
       // Cancelled tickets are terminal history — the board is truly empty
       // (never surfaces on the kitchen board, history panel only).
       const empties = screen.getAllByText('No orders yet');
-      expect(empties.length).toBe(3);
+      expect(empties.length).toBe(1);
     });
     // Cancelled order should not be visible
     expect(screen.queryByText('#999')).toBeNull();
@@ -411,9 +411,9 @@ describe('KdsScreen', () => {
     ]);
     renderScreen();
     await waitFor(() => {
-      // The Mall order should be filtered out — all columns show empty state
+      // The Mall order should be filtered out — the masonry view is empty
       const empties = screen.getAllByText('No orders yet');
-      expect(empties.length).toBe(3);
+      expect(empties.length).toBe(1);
     });
     expect(screen.queryByText('Mall Order')).toBeNull();
   });
@@ -447,9 +447,8 @@ describe('KdsScreen', () => {
     });
     // Mall order should be filtered out
     expect(screen.queryByText('Mall Order')).toBeNull();
-    // Header count should show 2 orders
-    const countEl = document.querySelector('.kds-order-count');
-    expect(countEl?.textContent).toMatch(/2/);
+    // Open tab count should show 2 orders
+    expect(screen.getByTestId('kds-tab-open').textContent).toMatch(/2/);
   });
 
   // ── 2d: Keyboard shortcuts tests ─────────────────────────────────
@@ -707,32 +706,33 @@ describe('KdsScreen', () => {
     expect(true).toBe(true);
   });
 
-  // ── 2b: History view tests ─────────────────────────────────────
+  // ── 2b: Open / Completed tab navigation ───────────────────────
 
-  it('renders history toggle button', async () => {
+  it('renders the Open/Completed tab bar', async () => {
     mockGetKdsQueue.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
-      const toggle = document.querySelector('.kds-history-toggle');
-      expect(toggle).not.toBeNull();
+      const tabs = document.querySelector('.kds-tabs');
+      expect(tabs).not.toBeNull();
+      expect(document.querySelector('.kds-tab')).not.toBeNull();
     });
   });
 
-  it('shows history panel when toggle is clicked', async () => {
+  it('shows completed view when the Completed tab is clicked', async () => {
     mockGetKdsQueue.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
-      const toggle = document.querySelector('.kds-history-toggle');
-      expect(toggle).not.toBeNull();
+      const tab = document.querySelector('[data-testid="kds-tab-completed"]');
+      expect(tab).not.toBeNull();
     });
 
-    // Click the history toggle
-    const toggle = document.querySelector('.kds-history-toggle') as HTMLButtonElement;
-    await userEvent.click(toggle);
+    // Click the Completed tab
+    const tab = document.querySelector('[data-testid="kds-tab-completed"]') as HTMLButtonElement;
+    await userEvent.click(tab);
 
-    // History panel should render
+    // Completed view should render (prototype bucket columns)
     await waitFor(() => {
-      expect(document.querySelector('.kds-history')).not.toBeNull();
+      expect(document.querySelector('.kds-main.completed-view')).not.toBeNull();
     });
   });
 
@@ -747,8 +747,9 @@ describe('KdsScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('#42')).toBeDefined());
 
-    const ticket = document.querySelector('.kds-ticket')!;
-    await userEvent.click(ticket);
+    const advanceBtn = document.querySelector('[data-testid="kds-order-card-42-status-advance"]') as HTMLButtonElement;
+    expect(advanceBtn).not.toBeNull();
+    await userEvent.click(advanceBtn);
 
     await waitFor(() =>
       expect(mockUpdateKdsStatus).toHaveBeenCalledWith('o-1', 'ready'),
@@ -769,8 +770,9 @@ describe('KdsScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('#42')).toBeDefined());
 
-    const ticket = document.querySelector('.kds-ticket')!;
-    await userEvent.click(ticket);
+    const advanceBtn = document.querySelector('[data-testid="kds-order-card-42-status-advance"]') as HTMLButtonElement;
+    expect(advanceBtn).not.toBeNull();
+    await userEvent.click(advanceBtn);
 
     await waitFor(() =>
       expect(mockUpdateKdsStatus).toHaveBeenCalledWith('o-1', 'preparing'),
@@ -845,5 +847,270 @@ describe('KdsScreen', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     // The second tap must NOT re-merge the picked items onto the ticket.
     expect(mockUpdateKdsOrderItems).toHaveBeenCalledTimes(1);
+  });
+
+  // ── Topbar filter dropdown (All / Prepared) ────────────────────
+
+  it('renders the filter button and filters to prepared (ready) orders', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101, items_summary: 'Burger' }),
+      makeOrder({ id: 'o-2', status: 'ready', display_number: 102, items_summary: 'Fries' }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Burger')).toBeDefined());
+    expect(screen.getByText('Fries')).toBeDefined();
+
+    // Open the filter dropdown and pick "Prepared".
+    await userEvent.click(screen.getByTestId('kds-topbar-filter'));
+    await userEvent.click(screen.getByTestId('kds-filter-mode-prepared'));
+
+    // Only the ready order remains visible.
+    await waitFor(() => {
+      expect(screen.queryByText('Burger')).toBeNull();
+      expect(screen.getByText('Fries')).toBeDefined();
+    });
+
+    // Open tab count reflects filtered orders count (1 order)
+    expect(screen.getByTestId('kds-tab-open').textContent).toContain('1');
+  });
+
+  it('filter button shows "All orders" label in the default state', async () => {
+    mockGetKdsQueue.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      const filter = screen.getByTestId('kds-topbar-filter');
+      expect(filter.textContent).toMatch(/all/i);
+    });
+  });
+
+  it('supports multi-selecting zones without closing the panel and formats label', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', kitchen_zone: 'Grill', items_summary: 'Steak' }),
+      makeOrder({ id: 'o-2', kitchen_zone: 'Bar', items_summary: 'Beer' }),
+      makeOrder({ id: 'o-3', kitchen_zone: 'Bakery', items_summary: 'Bread' }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Steak')).toBeDefined());
+
+    // Open filter dropdown
+    await userEvent.click(screen.getByTestId('kds-topbar-filter'));
+    const panel = screen.getByRole('listbox', { name: /filter orders/i });
+    expect(panel).toBeDefined();
+
+    // Click Grill zone — panel stays open for multi-selection
+    await userEvent.click(screen.getByTestId('kds-filter-zone-Grill'));
+    expect(screen.getByRole('listbox', { name: /filter orders/i })).toBeDefined();
+    expect(screen.getByTestId('kds-topbar-filter').textContent).toContain('Grill');
+
+    // Click Bar zone — panel stays open and label updates to "2 selected"
+    await userEvent.click(screen.getByTestId('kds-filter-zone-Bar'));
+    expect(screen.getByRole('listbox', { name: /filter orders/i })).toBeDefined();
+    expect(screen.getByTestId('kds-topbar-filter').textContent).toMatch(/2.*selected/);
+
+    // Filtered orders show Steak and Beer, Bread is hidden
+    await waitFor(() => {
+      expect(screen.getByText('Steak')).toBeDefined();
+      expect(screen.getByText('Beer')).toBeDefined();
+      expect(screen.queryByText('Bread')).toBeNull();
+    });
+  });
+
+  it('navigates filtered orders with keyboard shortcuts 1-9 without selecting hidden orders', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101, items_summary: 'Burger' }),
+      makeOrder({ id: 'o-2', status: 'ready', display_number: 102, items_summary: 'Fries' }),
+      makeOrder({ id: 'o-3', status: 'ready', display_number: 103, items_summary: 'Shake' }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Burger')).toBeDefined());
+
+    // Filter to prepared (ready) -> o-2 and o-3
+    await userEvent.click(screen.getByTestId('kds-topbar-filter'));
+    await userEvent.click(screen.getByTestId('kds-filter-mode-prepared'));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Burger')).toBeNull();
+    });
+
+    // Press '1' -> should select o-2 (the 1st visible filtered order, Fries)
+    await userEvent.keyboard('1');
+    const friesCard = screen.getByText('Fries').closest('.kds-ticket');
+    expect(friesCard?.classList.contains('kds-ticket--selected')).toBe(true);
+
+    // Press '2' -> should select o-3 (the 2nd visible filtered order, Shake)
+    await userEvent.keyboard('2');
+    const shakeCard = screen.getByText('Shake').closest('.kds-ticket');
+    expect(shakeCard?.classList.contains('kds-ticket--selected')).toBe(true);
+  });
+
+  it('hides the filter dropdown when switching to the Completed tab', async () => {
+    mockGetKdsQueue.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('kds-topbar-filter')).toBeDefined();
+    });
+
+    // Switch to Completed tab
+    await userEvent.click(screen.getByTestId('kds-tab-completed'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('kds-topbar-filter')).toBeNull();
+    });
+
+    // Switch back to Open tab
+    await userEvent.click(screen.getByTestId('kds-tab-open'));
+    await waitFor(() => {
+      expect(screen.getByTestId('kds-topbar-filter')).toBeDefined();
+    });
+  });
+
+  it('closes the filter dropdown on Escape key and refocuses trigger button', async () => {
+    mockGetKdsQueue.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('kds-topbar-filter')).toBeDefined();
+    });
+
+    // Open dropdown
+    const filterBtn = screen.getByTestId('kds-topbar-filter');
+    await userEvent.click(filterBtn);
+    expect(screen.getByRole('listbox')).toBeDefined();
+
+    // Press Escape inside listbox panel
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(screen.queryByRole('listbox')).toBeNull();
+    });
+  });
+
+  // ── Shift button + confirm modal ───────────────────────────────
+
+  it('starts a shift directly and ends it via the confirm modal', async () => {
+    mockGetKdsQueue.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('kds-topbar-shift')).not.toBeNull();
+    });
+
+    // Start shift — direct, no confirmation.
+    await userEvent.click(screen.getByTestId('kds-topbar-shift'));
+    expect(screen.getByText('End Shift')).toBeTruthy();
+
+    // End shift — opens the confirm modal.
+    await userEvent.click(screen.getByTestId('kds-topbar-shift'));
+    await waitFor(() => {
+      expect(document.querySelector('.kds-modal')).not.toBeNull();
+    });
+
+    // Cancel keeps the shift active.
+    await userEvent.click(screen.getByTestId('kds-confirm-cancel'));
+    await waitFor(() => {
+      expect(document.querySelector('.kds-modal')).toBeNull();
+    });
+    expect(screen.getByText('End Shift')).toBeTruthy();
+
+    // Confirm ends the shift.
+    await userEvent.click(screen.getByTestId('kds-topbar-shift'));
+    await waitFor(() => {
+      expect(document.querySelector('.kds-modal')).not.toBeNull();
+    });
+    await userEvent.click(screen.getByTestId('kds-confirm-ok'));
+    await waitFor(() => {
+      expect(document.querySelector('.kds-modal')).toBeNull();
+    });
+    expect(screen.getByText('Start Shift')).toBeTruthy();
+  });
+
+  // ── Card colours pickers ───────────────────────────────────────
+
+  it('renders card colour pickers in the hamburger and updates a colour', async () => {
+    mockGetKdsQueue.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('kds-topbar-settings')).not.toBeNull();
+    });
+
+    // Open the hamburger panel.
+    await userEvent.click(screen.getByTestId('kds-topbar-settings'));
+    await waitFor(() => {
+      expect(document.querySelector('.kds-hamburger-panel')).not.toBeNull();
+    });
+
+    // Card Colours section with native + hex pickers for dinein.
+    const native = document.querySelector('[data-testid="kds-settings-colors-native-dinein"]') as HTMLInputElement;
+    expect(native).not.toBeNull();
+    const hex = document.querySelector('[data-testid="kds-settings-colors-hex-dinein"]') as HTMLInputElement;
+    expect(hex).not.toBeNull();
+
+    // Changing the native picker updates the hex field.
+    fireEvent.change(native, { target: { value: '#ff00aa' } });
+    expect(hex.value).toBe('#ff00aa');
+  });
+
+  // ── PERF-KDS-01: the realtime subscription / fetch loop ────────────
+  //
+  // The board used to re-create `fetchOrders` on every successful fetch
+  // (because `wrapFetch` closed over the cache it had just written, and the
+  // callback also depended on the pending-queue length). The subscribe effect
+  // depended on `fetchOrders`, so each fetch tore down and rebuilt the Tauri
+  // event listener and fired another fetch — an unbounded loop that exhausted
+  // the WebView2 PostMessage queue on Windows (0x80070718, "Not enough quota
+  // is available to process this command") and made opening KDS lag.
+
+  it('subscribes to kds:orders-changed exactly once per mount', async () => {
+    const { listen } = await import('@tauri-apps/api/event');
+    const listenMock = vi.mocked(listen);
+    listenMock.mockClear();
+
+    mockGetKdsQueue.mockResolvedValue([makeOrder()]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Burger x1, Fries x1')).toBeDefined());
+
+    const kdsSubscriptions = listenMock.mock.calls.filter(
+      ([event]) => event === 'kds:orders-changed',
+    );
+    expect(kdsSubscriptions).toHaveLength(1);
+  });
+
+  it('does not re-fetch the queue in a loop after the initial load', async () => {
+    // A fresh array per call is what the real IPC boundary returns — every
+    // `invoke` deserializes a new object graph. That identity change is what
+    // made the old `wrapFetch` (which closed over the cache it had just
+    // written) produce a new callback, re-run the subscribe effect, and fetch
+    // again. With `mockResolvedValue` the identity is stable and the loop
+    // stays hidden, so this test must build the payload per call.
+    mockGetKdsQueue.mockImplementation(() => Promise.resolve([makeOrder()]));
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Burger x1, Fries x1')).toBeDefined());
+
+    const afterFirstPaint = mockGetKdsQueue.mock.calls.length;
+    // Let every already-scheduled microtask/effect settle. The pre-fix board
+    // issued ~900 fetches per second here.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(mockGetKdsQueue.mock.calls.length).toBe(afterFirstPaint);
+  });
+
+  it('re-fetches when the realtime event fires', async () => {
+    const { listen } = await import('@tauri-apps/api/event');
+    const listenMock = vi.mocked(listen);
+    listenMock.mockClear();
+
+    mockGetKdsQueue.mockResolvedValue([makeOrder()]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Burger x1, Fries x1')).toBeDefined());
+
+    const subscription = listenMock.mock.calls.find(
+      ([event]) => event === 'kds:orders-changed',
+    );
+    expect(subscription).toBeDefined();
+    const handler = subscription![1] as (payload: unknown) => void;
+
+    const before = mockGetKdsQueue.mock.calls.length;
+    await act(async () => {
+      handler({ event: 'kds:orders-changed', id: 1, payload: null });
+    });
+
+    // Push still drives a refresh — the loop fix must not disable realtime.
+    expect(mockGetKdsQueue.mock.calls.length).toBeGreaterThan(before);
   });
 });

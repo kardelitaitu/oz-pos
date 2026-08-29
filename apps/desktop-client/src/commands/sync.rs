@@ -402,18 +402,14 @@ pub async fn pending_sync_count(state: State<'_, AppState>) -> Result<i64, AppEr
 /// saved value from settings is used.
 #[tauri::command]
 pub async fn request_sync_token(
-    url: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<sync_client::TokenResult, AppError> {
-    // Resolve the URL first (may briefly lock DB), then drop the lock
-    // before making the async HTTP call.
-    let resolved = match url.filter(|u| !u.is_empty()) {
-        Some(u) => Some(u),
-        None => {
-            let db = state.db.lock().await;
-            Settings::get_sync_server_url(&db)?.filter(|s| !s.is_empty())
-        }
-    };
+    // H-6: Always resolve URL from stored settings — never accept a
+    // caller-supplied URL. A free-form URL parameter enables SSRF
+    // probes and credential exfiltration (OZ_ADMIN_KEY leak).
+    let db = state.db.lock().await;
+    let resolved = Settings::get_sync_server_url(&db)?.filter(|s| !s.is_empty());
+    drop(db);
     match resolved {
         Some(u) => {
             Ok(sync_client::request_token(&u, sync_client::admin_key_from_env().as_deref()).await)
@@ -508,24 +504,19 @@ fn resolve_sync_probe_url(
 /// saved value from settings is used.
 #[tauri::command]
 pub async fn test_sync_connection(
-    url: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<sync_client::PingResult, AppError> {
-    // Resolve the URL first (may briefly lock DB), then drop the lock
-    // before making the async HTTP call.
-    let (saved, allow_local_fallback) =
-        if url.as_ref().is_some_and(|value| !value.trim().is_empty()) {
-            (None, true)
-        } else {
-            let db = state.db.lock().await;
-            let saved = Settings::get_sync_server_url(&db)?;
-            let allow_local_fallback = saved
-                .as_deref()
-                .map(|value| value.trim().is_empty())
-                .unwrap_or(true);
-            (saved, allow_local_fallback)
-        };
-    let resolved = resolve_sync_probe_url(url, saved, allow_local_fallback);
+    // H-6: Always resolve URL from stored settings — never accept a
+    // caller-supplied URL. A free-form URL parameter enables SSRF
+    // probes of internal networks.
+    let db = state.db.lock().await;
+    let saved = Settings::get_sync_server_url(&db)?;
+    let allow_local_fallback = saved
+        .as_deref()
+        .map(|value| value.trim().is_empty())
+        .unwrap_or(true);
+    drop(db);
+    let resolved = resolve_sync_probe_url(None, saved, allow_local_fallback);
     match resolved {
         Some(u) => Ok(sync_client::ping_server(&u).await),
         None => Ok(sync_client::PingResult {
@@ -672,6 +663,496 @@ pub async fn sync_pull(
             error: Some(e.to_string()),
         }),
     }
+}
+
+// ── Scoped variants (ADR #7) ────────────────────────────────────
+
+/// Update sync settings (scoped).
+#[tauri::command]
+pub async fn update_sync_settings_scoped(
+    args: UpdateSyncSettingsArgs,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    update_sync_settings_data(&db, &args)?;
+    drop(db);
+    Ok(())
+}
+
+/// Get PG sync settings (scoped).
+#[tauri::command]
+pub async fn get_pg_sync_settings_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<PgSyncSettingsDto, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    run_get_pg_sync_settings(&db)
+}
+
+/// Update PG sync settings (scoped).
+#[tauri::command]
+pub async fn update_pg_sync_settings_scoped(
+    args: UpdatePgSyncSettingsArgs,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    update_pg_sync_settings_data(&db, &args)?;
+    drop(db);
+    Ok(())
+}
+
+/// PG sync status (scoped).
+#[tauri::command]
+pub async fn pg_sync_status_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<PgDaemonStatus, AppError> {
+    state.resolve_scope(&session_token)?;
+    Ok(state.pg_sync_daemon.status().await)
+}
+
+/// PG sync start (scoped).
+#[tauri::command]
+pub async fn pg_sync_start_scoped(
+    app_handle: tauri::AppHandle,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state.resolve_scope(&session_token)?;
+    let db = state.db.clone();
+    let sink = settings_changed_sink(&app_handle);
+    state.pg_sync_daemon.start_with_sink(db, sink).await;
+    Ok(())
+}
+
+/// PG sync stop (scoped).
+#[tauri::command]
+pub async fn pg_sync_stop_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state.resolve_scope(&session_token)?;
+    state.pg_sync_daemon.stop().await;
+    Ok(())
+}
+
+/// Pending sync count (scoped).
+#[tauri::command]
+pub async fn pending_sync_count_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<i64, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    Ok(store.pending_offline_count()?)
+}
+
+/// Request a sync token (scoped).
+#[tauri::command]
+pub async fn request_sync_token_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<sync_client::TokenResult, AppError> {
+    let resolved = {
+        let session = state.resolve_session(&session_token)?;
+        let conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        Settings::get_sync_server_url(&db)?.filter(|s| !s.is_empty())
+    }; // conn + db dropped here — std::sync::MutexGuard is not Send
+    match resolved {
+        Some(u) => {
+            Ok(sync_client::request_token(&u, sync_client::admin_key_from_env().as_deref()).await)
+        }
+        None => Ok(sync_client::TokenResult {
+            ok: false,
+            token: None,
+            status: "No server URL configured".into(),
+            expires_at: None,
+        }),
+    }
+}
+
+/// Get sync plan (scoped).
+#[tauri::command]
+pub async fn get_sync_plan_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<sync_client::TenantPlanResult, AppError> {
+    let (url, api_key) = {
+        let session = state.resolve_session(&session_token)?;
+        let conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+        let config = SyncConfig::from_settings(&store)?;
+        match config {
+            Some(c) => (Some(c.server_url), c.api_key),
+            None => (None, None),
+        }
+    };
+    match (url, api_key) {
+        (Some(u), Some(key)) => Ok(sync_client::fetch_tenant_plan(&u, &key).await),
+        _ => Ok(sync_client::TenantPlanResult {
+            ok: false,
+            plan: None,
+            status: "Sync is not configured".into(),
+        }),
+    }
+}
+
+/// Test sync connection (scoped).
+#[tauri::command]
+pub async fn test_sync_connection_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<sync_client::PingResult, AppError> {
+    let (saved, allow_local_fallback) = {
+        let session = state.resolve_session(&session_token)?;
+        let conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let saved = Settings::get_sync_server_url(&db)?;
+        let allow_local_fallback = saved
+            .as_deref()
+            .map(|value| value.trim().is_empty())
+            .unwrap_or(true);
+        (saved, allow_local_fallback)
+    }; // conn + db dropped here
+    let resolved = resolve_sync_probe_url(None, saved, allow_local_fallback);
+    match resolved {
+        Some(u) => Ok(sync_client::ping_server(&u).await),
+        None => Ok(sync_client::PingResult {
+            ok: false,
+            status: "No server URL configured".into(),
+            latency_ms: None,
+        }),
+    }
+}
+
+/// Sync run (scoped — 3-phase with auth refresh).
+#[tauri::command]
+pub async fn sync_run_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<SyncAttemptResult, AppError> {
+    // Phase 1: Read pending items and config from DB (brief lock).
+    let (pending_items, config_opt) = {
+        let session = state.resolve_session(&session_token)?;
+        let conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+        let pending = store.list_pending_offline()?;
+        let config = SyncConfig::from_settings(&store)?;
+        (pending, config)
+    };
+
+    let config = match config_opt {
+        Some(c) => c,
+        None => {
+            return Ok(SyncAttemptResult {
+                synced: 0,
+                failed: 0,
+                error: Some("Sync is not configured or disabled".into()),
+                plan_required: false,
+            });
+        }
+    };
+
+    if pending_items.is_empty() {
+        return Ok(SyncAttemptResult {
+            synced: 0,
+            failed: 0,
+            error: None,
+            plan_required: false,
+        });
+    }
+
+    // Phase 2: Async HTTP push (no DB lock held).
+    let mut outcomes = sync_client::send_items_to_server(&config, &pending_items).await;
+
+    // ADR sync-auth-hardening P1: refresh token once on 401.
+    if matches!(outcomes, Err(sync_client::SyncHttpError::AuthExpired)) {
+        let client_credentials = {
+            let session = state.resolve_session(&session_token)?;
+            let conn = state
+                .db_manager
+                .open_store(&session.store_id)
+                .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+            let db = conn
+                .lock()
+                .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+            match (
+                Settings::get_sync_terminal_id(&db)?,
+                Settings::get_sync_terminal_secret(&db)?,
+            ) {
+                (Some(id), Some(secret)) => Some((id, secret)),
+                _ => None,
+            }
+        };
+        let fresh_key = sync_client::request_refresh_token(
+            &config.server_url,
+            client_credentials
+                .as_ref()
+                .map(|(id, secret)| (id.as_str(), secret.as_str())),
+        )
+        .await;
+        if let Some(fresh_key) = fresh_key {
+            {
+                let session = state.resolve_session(&session_token)?;
+                let conn = state
+                    .db_manager
+                    .open_store(&session.store_id)
+                    .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+                let db = conn
+                    .lock()
+                    .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+                sync_client::persist_refreshed_api_key(&db, &fresh_key)?;
+            }
+            let retry_config = {
+                let session = state.resolve_session(&session_token)?;
+                let conn = state
+                    .db_manager
+                    .open_store(&session.store_id)
+                    .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+                let db = conn
+                    .lock()
+                    .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+                let store = Store::new(&db);
+                SyncConfig::from_settings(&store)?
+            };
+            if let Some(cfg) = retry_config {
+                outcomes = sync_client::send_items_to_server(&cfg, &pending_items).await;
+            }
+        }
+    }
+
+    // Phase 3: Write outcomes back to DB (brief lock).
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    match outcomes {
+        Ok(outcomes) => Ok(sync_client::apply_sync_outcomes(
+            &store,
+            &pending_items,
+            &outcomes,
+        )?),
+        Err(sync_client::SyncHttpError::PlanRequired) => Ok(SyncAttemptResult {
+            synced: 0,
+            failed: 0,
+            error: Some("cloud sync requires a paid plan".into()),
+            plan_required: true,
+        }),
+        Err(e) => Ok(sync_client::mark_all_failed(
+            &store,
+            &pending_items,
+            &e.to_string(),
+        )?),
+    }
+}
+
+/// Sync pull (scoped — 4-phase with auth refresh + backup).
+#[tauri::command]
+pub async fn sync_pull_scoped(
+    args: SyncPullArgs,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<PullResult, AppError> {
+    validate_pull_consent(&args)?;
+
+    // Phase 1: Read config from DB (brief lock).
+    let config_opt = {
+        let session = state.resolve_session(&session_token)?;
+        let conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+        SyncConfig::from_settings(&store)?
+    };
+
+    let config = match config_opt {
+        Some(c) => c,
+        None => {
+            return Ok(PullResult {
+                products_pulled: 0,
+                tax_rates_pulled: 0,
+                users_pulled: 0,
+                error: Some("Sync is not configured or disabled".into()),
+            });
+        }
+    };
+
+    // Phase 2: Async HTTP fetch (no DB lock held).
+    let mut snapshot = sync_client::fetch_snapshot_from_server(&config).await;
+
+    // ADR sync-auth-hardening P1: refresh token once on 401.
+    if matches!(snapshot, Err(sync_client::SyncHttpError::AuthExpired)) {
+        let client_credentials = {
+            let session = state.resolve_session(&session_token)?;
+            let conn = state
+                .db_manager
+                .open_store(&session.store_id)
+                .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+            let db = conn
+                .lock()
+                .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+            match (
+                Settings::get_sync_terminal_id(&db)?,
+                Settings::get_sync_terminal_secret(&db)?,
+            ) {
+                (Some(id), Some(secret)) => Some((id, secret)),
+                _ => None,
+            }
+        };
+        let fresh_key = sync_client::request_refresh_token(
+            &config.server_url,
+            client_credentials
+                .as_ref()
+                .map(|(id, secret)| (id.as_str(), secret.as_str())),
+        )
+        .await;
+        if let Some(fresh_key) = fresh_key {
+            {
+                let session = state.resolve_session(&session_token)?;
+                let conn = state
+                    .db_manager
+                    .open_store(&session.store_id)
+                    .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+                let db = conn
+                    .lock()
+                    .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+                sync_client::persist_refreshed_api_key(&db, &fresh_key)?;
+            }
+            let retry_config = {
+                let session = state.resolve_session(&session_token)?;
+                let conn = state
+                    .db_manager
+                    .open_store(&session.store_id)
+                    .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+                let db = conn
+                    .lock()
+                    .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+                let store = Store::new(&db);
+                SyncConfig::from_settings(&store)?
+            };
+            if let Some(cfg) = retry_config {
+                snapshot = sync_client::fetch_snapshot_from_server(&cfg).await;
+            }
+        }
+    }
+
+    // Phase 3: Create a pre-pull backup (defence in depth — H-2).
+    {
+        let session = state.resolve_session(&session_token)?;
+        let conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+        let mut backup_path = state.db_path.clone();
+        let timestamp = chrono::Utc::now().format("%Y%m%d%H%M%S");
+        let ext = format!("sync-pull-{timestamp}.backup.db");
+        backup_path.set_extension(&ext);
+        store
+            .backup(&backup_path.display().to_string())
+            .map_err(|e| {
+                tracing::warn!(backup = %backup_path.display(), error = %e, "sync-pull backup failed");
+                AppError::Internal(format!("sync-pull backup failed: {e}"))
+            })?;
+        tracing::info!(backup = %backup_path.display(), "pre-pull backup created");
+    }
+
+    // Phase 4: Apply snapshot to DB (brief lock).
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    match snapshot {
+        Ok(s) => Ok(sync_client::apply_snapshot(&store, &s)?),
+        Err(e) => Ok(PullResult {
+            products_pulled: 0,
+            tax_rates_pulled: 0,
+            users_pulled: 0,
+            error: Some(e.to_string()),
+        }),
+    }
+}
+
+/// Settings changed sink (scoped — no-op for session-validated callers).
+#[tauri::command]
+pub async fn settings_changed_sink_scoped(
+    _key: String,
+    _value: Option<String>,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state.resolve_scope(&session_token)?;
+    Ok(())
 }
 
 #[cfg(test)]

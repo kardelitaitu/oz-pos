@@ -6,6 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 description = "OZ-POS Sales Module: POS pipeline, cart management, sales history, refunds."
 
+# Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
+[lints]
+workspace = true
+
 [dependencies]
 foundation = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

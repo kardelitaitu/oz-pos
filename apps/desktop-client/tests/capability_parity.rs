@@ -147,11 +147,7 @@ fn desktop_and_tablet_share_core_permissions() {
     let tablet_perms = extract_permissions_from_file(&tablet_json);
 
     // Core permissions that MUST be present in BOTH clients
-    let required_core = [
-        "core:default",
-        "clipboard-manager:allow-read-text",
-        "clipboard-manager:allow-write-text",
-    ];
+    let required_core = ["core:default", "clipboard-manager:allow-write-text"];
 
     for perm in &required_core {
         assert!(

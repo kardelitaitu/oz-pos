@@ -9,7 +9,7 @@ import { open, save } from '@tauri-apps/plugin-dialog';
 export interface BackupStatus {
   lastBackup: string | null;
   lastBackupSize: string | null;
-  dbPath: string;
+  // dbPath intentionally removed — M-7: never expose filesystem path in unauth'd DTO.
 }
 
 /** Result of a backup operation. */
@@ -89,13 +89,33 @@ export const createBackup = (): Promise<BackupResult> =>
   loggedInvoke<BackupResult>('create_backup');
 
 /** Export store data to an encrypted .ozpkg file. */
-export const exportData = (args: ExportDataArgs): Promise<ExportDataResult> =>
-  loggedInvoke<ExportDataResult>('export_data', { args });
+export const exportData = (
+  sessionToken: string,
+  args: ExportDataArgs,
+): Promise<ExportDataResult> =>
+  loggedInvoke<ExportDataResult>('export_data', {
+    sessionToken,
+    args,
+  });
 
 /** Preview an .ozpkg import file to see its contents before importing. */
-export const importPreview = (filePath: string, password: string): Promise<ImportPreviewResult> =>
-  loggedInvoke<ImportPreviewResult>('import_preview', { args: { file_path: filePath, password } });
+export const importPreview = (
+  sessionToken: string,
+  filePath: string,
+  password: string,
+): Promise<ImportPreviewResult> =>
+  loggedInvoke<ImportPreviewResult>('import_preview', {
+    sessionToken,
+    args: { file_path: filePath, password },
+  });
 
 /** Import data from an encrypted .ozpkg file. */
-export const importData = (filePath: string, password: string): Promise<ImportDataResult> =>
-  loggedInvoke<ImportDataResult>('import_data', { args: { file_path: filePath, password } });
+export const importData = (
+  sessionToken: string,
+  filePath: string,
+  password: string,
+): Promise<ImportDataResult> =>
+  loggedInvoke<ImportDataResult>('import_data', {
+    sessionToken,
+    args: { file_path: filePath, password },
+  });

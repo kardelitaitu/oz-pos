@@ -2,7 +2,7 @@
 
 - **Status:** IMPLEMENTED (ADR #22 unified workspace settings shipped in 0.0.19; re-audited 2026-08-08 by docs-auditor)
 - **Phase:** 0b of 11 (Workspace Settings Architecture — ADR #22)
-- **Parent:** `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md`
+- **Parent:** `docs/specs/2026-07-23-unified-2tier-workspace-settings-architecture.md`
 - **Severity:** PREREQUISITE (blocks Phases 1–5)
 - **Owner:** TBD
 - **Est. effort:** 2-3 days
@@ -80,7 +80,7 @@ Build a React context (`SettingsContext`) that acts as the single source of trut
 
 ## References
 
-- `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md` §Pillar C, §Pillar D, §Phase 0b
+- `docs/specs/2026-07-23-unified-2tier-workspace-settings-architecture.md` §Pillar C, §Pillar D, §Phase 0b
 - `ui/src/features/settings/SettingsPage.tsx`
 - `platform/kernel/src/event_bus.rs`
 - `ui/src/contexts/AuthContext.tsx` (existing context pattern to follow)

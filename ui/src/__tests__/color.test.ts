@@ -151,7 +151,7 @@ describe('deriveAccentPalette', () => {
 
   it('uses default accent when no arg provided', () => {
     const palette = deriveAccentPalette();
-    expect(palette.base).toBe('#10b981');
+    expect(palette.base).toBe('#147EFB');
   });
 
   it('hover is darker than base', () => {

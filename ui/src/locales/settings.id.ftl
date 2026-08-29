@@ -7,23 +7,11 @@ settings-nav-appearance = Tampilan
 settings-nav-receipt = Nota
 settings-nav-sync = Sinkronisasi Cloud
 settings-nav-about = Tentang
-settings-nav-features = Fitur
-settings-nav-data = Data
-settings-nav-staff = Staf
-settings-nav-terminals = Terminal
-settings-nav-stores = Toko
-settings-nav-audit = Log Audit
-settings-nav-offline = Antrean Offline
-settings-nav-shifts = Shift
-settings-nav-tax = Tarif Pajak
 settings-nav-license = Lisensi
-settings-nav-exchange = Nilai Tukar
-settings-nav-promotions = Promosi
 settings-nav-topology = Topologi
 settings-nav-email = Laporan Email
 settings-category-operations = Operasional
 settings-category-system = Sistem
-settings-category-management = Manajemen
 settings-sidebar-nav-aria = Navigasi pengaturan
 settings-sidebar-expand-aria = Buka bilah sisi pengaturan
 settings-sidebar-collapse-aria = Tutup bilah sisi pengaturan
@@ -797,7 +785,6 @@ workspace-type-selector-label = Tipe Workspace
 # ── Phase 3 workspace nav items ──
 settings-nav-store-pos = POS Toko
 settings-nav-restaurant-pos = POS Restoran
-settings-nav-kds = Tampilan Dapur
 settings-nav-inventory = Inventaris
 
 # ── Workspace Settings Modal (ADR #22 Phase 4) ──

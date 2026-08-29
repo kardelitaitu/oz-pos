@@ -4,7 +4,7 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'unstyled';
 export type ButtonSize = 'sm' | 'md' | 'lg';
-export type ButtonState = 'ready' | 'processing';
+export type ButtonState = 'ready' | 'processing' | 'success';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Visual variant. @default 'primary' */
@@ -15,6 +15,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
    * Visual state of the button.
    * - `ready`: idle, clickable (default)
    * - `processing`: shows a spinner and disables the button
+   * - `success`: shows a checkmark and disables the button (after-state)
    * @default 'ready'
    */
   state?: ButtonState;
@@ -66,12 +67,15 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     ref,
   ) => {
     const isProcessing = state === 'processing' || loading === true;
+    const isSuccess = state === 'success';
+    const isDisabled = disabled || isProcessing || isSuccess;
 
     const classNames = [
       unstyled ? 'btn--unstyled' : 'btn',
       !unstyled && `btn--${variant}`,
       !unstyled && `btn--${size}`,
       iconOnly && 'btn--icon-only',
+      isSuccess && 'btn--success-state',
       className ?? '',
     ]
       .filter((v): v is string => Boolean(v))
@@ -82,19 +86,23 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         type={type}
         className={classNames}
-        disabled={disabled || isProcessing}
-        aria-disabled={disabled || isProcessing || undefined}
+        disabled={isDisabled}
+        aria-disabled={isDisabled || undefined}
         aria-busy={isProcessing || undefined}
         {...rest}
       >
         {isProcessing ? (
           <span className="btn__spinner" aria-hidden="true" />
+        ) : isSuccess ? (
+          <svg className="btn__check" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
         ) : icon ? (
           <span className="btn__icon" aria-hidden="true">
             {icon}
           </span>
         ) : null}
-        {isProcessing ? <span className="sr-only">{children}</span> : children}
+        {isProcessing || isSuccess ? <span className="sr-only">{children}</span> : children}
       </button>
     );
   },

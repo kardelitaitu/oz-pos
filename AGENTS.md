@@ -1,6 +1,6 @@
 # Agents Configuration
 
-<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved A1: version lock and manifests all read 0.0.30 · verified accurate: 4 pre-commit gates; command dirs, ui/src/api rule, Money/i64 policy, .githooks gates -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved A1: version lock and manifests all read 0.0.31 · verified accurate: 4 pre-commit gates; command dirs, ui/src/api rule, Money/i64 policy, .githooks gates -->
 
 ## Global Rules
 
@@ -8,7 +8,8 @@
 - Never switch local branches unless explicitly asked by the user.
 - Never create new branches unless explicitly asked by the user.
 - Always use codebase-memory-mcp to quickly explore the area you looking for
-- Always read file using 100 lines of chunks
+- Always read file using small 500 lines of chunks
+- When calling search or file tools on Windows, ALWAYS use forward slashes (/) in path arguments (e.g., C:/My Script/project). Always handle paths with spaces by using workspace-relative paths or forward-slashed paths.
 
 ## Quick Setup
 
@@ -82,7 +83,7 @@ npm ci --no-audit --no-fund
 
 - Follow the POS software framework conventions.
 - Ensure all code follows the project's coding standards.
-- **Version is locked at the current release (`0.0.30`).** Never change the version number
+- **Version is locked at the current release (`0.0.31`).** Never change the version number
   (in `Cargo.toml`, `tauri.conf.json`, `package.json`, `CHANGELOG.md`,
   or anywhere else) unless the user explicitly asks you to bump it.
 

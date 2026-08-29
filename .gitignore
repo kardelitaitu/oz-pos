@@ -43,7 +43,11 @@
 *.jks
 *.p12
 secrets/
-# Freebuff desktop runtime state (local DBs)
+
+# AI agents
+/.commandcode/
+/.vscode/
+/.prime/
 /.freebuff/
 
 # Editor — shared settings may be committed, everything else is local.

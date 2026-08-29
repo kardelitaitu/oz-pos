@@ -899,8 +899,36 @@ pub async fn get_setting(
 }
 
 /// Business logic for `get_setting` (extracted for testing).
+///
+/// C-2: Secret keys are denied — never return plaintext credentials,
+/// API keys, passwords, or PSKs to the IPC surface.
 fn run_get_setting(conn: &rusqlite::Connection, key: &str) -> Result<Option<String>, AppError> {
+    if is_secret_key(key) {
+        return Ok(None);
+    }
     Ok(Settings::get(conn, key)?)
+}
+
+/// Keys or key prefixes that must never be returned via the raw
+/// `get_setting` IPC command. These contain credentials, API keys,
+/// passwords, or pre-shared keys (C-2: CWE-200 information disclosure).
+const SECRET_KEY_DENY_LIST: &[&str] = &[
+    "sync_api_key",
+    "sync.terminal_secret",
+    "pg_sync.password",
+    "rate_sync.api_key",
+    "lan_server.psk",
+    "smtp_config",
+    "license.api_key",
+    "license.payload",
+    "license.signature",
+    "license.tenant_id",
+];
+
+/// Returns `true` if the given settings key should be blocked from
+/// the raw `get_setting` IPC surface.
+fn is_secret_key(key: &str) -> bool {
+    SECRET_KEY_DENY_LIST.contains(&key)
 }
 /// **Deprecated — use `set_setting_scoped` (ADR #7).**
 ///
@@ -1171,6 +1199,50 @@ pub async fn set_settings_scoped(
     }
 
     Ok(())
+}
+
+// ── Scoped variants (ADR #7) ────────────────────────────────────
+
+/// Scoped variant of `get_credit_settings` (ADR #7).
+#[tauri::command]
+pub async fn get_credit_settings_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<CreditSettingsDto, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let conn = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(CreditSettingsDto {
+        enabled: Settings::is_credit_enabled(&conn)?,
+        reminder_interval_hours: Settings::get_credit_reminder_interval(&conn)?,
+        max_limit_minor: Settings::get_credit_max_limit(&conn)?,
+    })
+}
+
+/// Scoped variant of `get_setting` (ADR #7).
+#[tauri::command]
+pub async fn get_setting_scoped(
+    key: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let conn = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    run_get_setting(&conn, &key)
+}
+
+/// Get hardware settings (scoped — multi-phase with session validation).
+#[tauri::command]
+pub async fn get_hardware_settings_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<HardwareSettingsDto, AppError> {
+    // Validate session; hardware profiles use the global db.
+    state.resolve_scope(&session_token)?;
+    get_hardware_settings(state).await
 }
 
 #[cfg(test)]

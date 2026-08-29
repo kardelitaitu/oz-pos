@@ -111,14 +111,27 @@ textarea {
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: none;
-  border-color: var(--color-border-focus, #10b981);
-  box-shadow: 0 0 0 3px var(--color-accent-subtle, #d1fae5);
+  outline: 2px solid var(--color-border-focus, #147EFB);
+  outline-offset: -2px;
+  border-color: var(--color-border-focus, #147EFB);
+}
+
+/* Tauri webview autofill overlay — force input background on autofill */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:focus-visible,
+input:-webkit-autofill:active {
+  background: var(--color-bg-input, #ffffff) !important;
+  color: var(--color-fg, #1a1a1a) !important;
+  -webkit-text-fill-color: var(--color-fg, #1a1a1a) !important;
+  caret-color: var(--color-fg, #1a1a1a) !important;
+  transition: background-color 5000s ease-in-out 0s;
 }
 
 /* ── Focus ring (keyboard only) ────────────────── */
 :focus-visible {
-  outline: 2px solid var(--color-border-focus, #10b981);
+  outline: 2px solid var(--color-border-focus, #3b82f6);
   outline-offset: 2px;
 }
 
@@ -181,7 +194,7 @@ pre {
 
 /* ── Selection ─────────────────────────────────── */
 ::selection {
-  background: var(--color-accent, #10b981);
+  background: var(--color-accent, #147EFB);
   color: var(--color-fg-inverse, #ffffff);
 }
 

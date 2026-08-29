@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { t } from '../i18n';
 import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
+import { type Region, setRegion } from '../lib/region';
 import PasswordField from './PasswordField';
 import PasswordStrength from './PasswordStrength';
+import OtpInput from './OtpInput';
 import { licenseApiUrl } from '../lib/runtime-config';
 
 /**
@@ -21,7 +23,6 @@ import { licenseApiUrl } from '../lib/runtime-config';
  * user is sent to ?next= or the account dashboard. Degrades to a "not
  * configured" notice when PUBLIC_LICENSE_API_URL is unset.
  */
-const API = licenseApiUrl();
 
 interface Props {
   locale: string;
@@ -29,14 +30,38 @@ interface Props {
 
 type Step = 'form' | 'code';
 
+const INPUT_CLASS =
+  'w-full rounded-md border border-ink/10 bg-primary px-3 py-2 text-sm text-ink outline-none transition focus:border-accent';
+
+const regionOptions: { value: Region; labelKey: string }[] = [
+  { value: 'global', labelKey: 'signup.regionGlobal' },
+  { value: 'id', labelKey: 'signup.regionIndonesia' },
+];
+
 export default function SignupForm({ locale }: Props) {
+  // Read API at component level so window.__OZ_CONFIG__ is available after hydration
+  const API = licenseApiUrl();
   const [step, setStep] = useState<Step>('form');
   const [email, setEmail] = useState('');
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [region, setRegionState] = useState<Region>('global');
+  // Read from localStorage after hydration to avoid SSR/client mismatch
+  useEffect(() => {
+    const saved = localStorage.getItem('oz_region') as Region | null;
+    if (saved && saved !== region) setRegionState(saved);
+  }, []);
+  const [regionOpen, setRegionOpen] = useState(false);
+  const handleRegionChange = (r: Region) => {
+    setRegionState(r);
+    setRegion(r);
+    setRegionOpen(false);
+  };
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState(false);
   // Resend cooldown
   const [otpSentAt, setOtpSentAt] = useState<number | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -126,6 +151,8 @@ export default function SignupForm({ locale }: Props) {
       // Cache the verified email so checkout can prefill it without a
       // round-trip to /me (see paddle.getSessionEmail).
       sessionStorage.setItem('oz_email', email);
+      // Persist region for pricing and checkout routing.
+      localStorage.setItem('oz_region', region);
       redirectAfterAuth();
     } catch {
       setError(t(locale, 'login.errorVerify'));
@@ -134,32 +161,36 @@ export default function SignupForm({ locale }: Props) {
     }
   };
 
-  const inputClass =
-    'w-full rounded-md border border-ink/10 bg-primary px-3 py-2 text-sm text-ink outline-none transition focus:border-accent';
+  const inputClass = INPUT_CLASS;
 
   if (step === 'code') {
     return (
-      <div className="mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6">
+      <div className={`mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6 ${error ? 'animate-shake' : ''}`}>
         <p className="mb-4 text-sm text-muted">{t(locale, 'signup.codeSent')}</p>
         <form onSubmit={verify} className="space-y-4" aria-label={t(locale, 'signup.title')}>
-          <label className="block">
-            <span className="mb-1 block text-sm text-muted">{t(locale, 'login.code')}</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              required
-              autoComplete="one-time-code"
+          <div>
+            <span className="mb-2 block text-sm text-muted">{t(locale, 'login.code')}</span>
+            <OtpInput
               value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder={t(locale, 'login.codePlaceholder')}
-              className={inputClass}
+              onChange={(val) => {
+                setCode(val);
+                if (error) setError('');
+              }}
+              error={!!error}
+              disabled={loading}
+              idPrefix="signup-otp-digit"
             />
-          </label>
+          </div>
+          {resendSuccess && (
+            <p className="text-center text-xs font-medium text-green-500" role="status">
+              ✓ {t(locale, 'login.codeResent')}
+            </p>
+          )}
           {error && <p className="text-sm text-link" role="alert">{error}</p>}
           <button
             type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+            disabled={loading || code.length < 6}
+            className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
           >
             {loading ? '…' : t(locale, 'signup.verify')}
           </button>
@@ -189,11 +220,14 @@ export default function SignupForm({ locale }: Props) {
                       } else if (res.status === 503) {
                         setError(t(locale, 'login.errorSmtp'));
                       } else {
-                        setError(t(locale, 'login.errorSend'));
+                        const msg = body.error;
+                        setError(msg ? `${t(locale, 'login.errorSend')} (${msg})` : t(locale, 'login.errorSend'));
                       }
                       return;
                     }
                     setOtpSentAt(Date.now());
+                    setResendSuccess(true);
+                    setTimeout(() => setResendSuccess(false), 4000);
                   } catch {
                     setError(t(locale, 'login.errorSend'));
                   } finally {
@@ -221,19 +255,71 @@ export default function SignupForm({ locale }: Props) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6">
+    <div className={`mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6 ${error ? 'animate-shake' : ''}`}>
       <form onSubmit={register} className="space-y-4" aria-label={t(locale, 'signup.title')}>
+        <div className="relative">
+          <span className="mb-1 block text-sm text-muted">{t(locale, 'signup.region')}</span>
+          <button
+            type="button"
+            onClick={() => setRegionOpen(!regionOpen)}
+            onBlur={() => setTimeout(() => setRegionOpen(false), 150)}
+            className="w-full rounded-md border border-ink/10 bg-surface px-3 py-2 text-sm text-left outline-none transition focus:border-accent flex items-center justify-between"
+          >
+            <span>{t(locale, regionOptions.find((o) => o.value === region)?.labelKey ?? 'signup.regionGlobal')}</span>
+            <svg
+              className={`w-4 h-4 text-muted transition-transform duration-200 ${regionOpen ? 'rotate-180' : ''}`}
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="4 6 8 10 12 6" />
+            </svg>
+          </button>
+          {regionOpen && (
+            <div className="absolute z-50 mt-1 w-full rounded-md border border-ink/10 bg-surface shadow-lg overflow-hidden">
+              {regionOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => handleRegionChange(opt.value)}
+                  className={`w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors duration-150 ${
+                    region === opt.value ? 'text-link font-medium' : 'text-ink hover:bg-ink/5'
+                  }`}
+                >
+                  <span>{t(locale, opt.labelKey)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <span className="mt-1 block text-xs text-muted">{t(locale, 'signup.regionHint')}</span>
+        </div>
         <label className="block">
           <span className="mb-1 block text-sm text-muted">{t(locale, 'signup.email')}</span>
-          <input
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder={t(locale, 'signup.emailPlaceholder')}
-            className={inputClass}
-          />
+          <span className="relative block">
+            <input
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setEmailTouched(true);
+              }}
+              onBlur={() => setEmailTouched(true)}
+              placeholder={t(locale, 'signup.emailPlaceholder')}
+              className={`${inputClass} pr-10`}
+            />
+            {emailTouched && email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500" aria-label="Valid email">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3.5 8 6.5 11 12.5 5" />
+                </svg>
+              </span>
+            )}
+          </span>
         </label>
         <PasswordField
           locale={locale}
@@ -251,8 +337,8 @@ export default function SignupForm({ locale }: Props) {
         {error && <p className="text-sm text-link" role="alert">{error}</p>}
         <button
           type="submit"
-          disabled={loading || !isStrongPassword(password) || !passwordsMatch(password, confirm)}
-          className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+          disabled={loading || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !isStrongPassword(password) || !passwordsMatch(password, confirm)}
+          className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
         >
           {loading ? '…' : t(locale, 'signup.createAccount')}
         </button>

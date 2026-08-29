@@ -3,14 +3,14 @@ import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import {
-  listAllOffline,
-  pendingOfflineCount,
-  retryOfflineSync,
-  deleteOfflineItem,
-  getOfflineQueueStatusSummary,
-  getSyncPlan,
-  listRemoteFailures,
-  requeueRemoteFailure,
+  listAllOfflineScoped,
+  pendingOfflineCountScoped,
+  retryOfflineSyncScoped,
+  deleteOfflineItemScoped,
+  getOfflineQueueStatusSummaryScoped,
+  getSyncPlanScoped,
+  listRemoteFailuresScoped,
+  requeueRemoteFailureScoped,
   type OfflineQueueItemDto,
   type OfflineQueueSummaryDto,
   type RemoteSyncFailureDto,
@@ -21,6 +21,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { deriveAsyncPhase } from '@/utils/retry-state';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import './OfflineQueueScreen.css';
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -88,6 +89,8 @@ function formatRelativeTime(iso: string | null): { fluentKey: string; fluentArgs
 /** Offline queue screen — view pending, synced, and failed offline operations with retry and delete capabilities. */
 export default function OfflineQueueScreen() {
   const { l10n } = useLocalization();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
   // Dates follow the active Fluent locale (not the browser default).
   const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const [items, setItems] = useState<OfflineQueueItemDto[]>([]);
@@ -120,12 +123,12 @@ export default function OfflineQueueScreen() {
     setError(null);
     try {
       const [data, count, summary, remoteFailures] = await Promise.all([
-        listAllOffline(),
-        pendingOfflineCount(),
-        getOfflineQueueStatusSummary().catch(() => null),
+        listAllOfflineScoped(sessionToken),
+        pendingOfflineCountScoped(sessionToken),
+        getOfflineQueueStatusSummaryScoped(sessionToken).catch(() => null),
         // Tolerate a dead-letter read failure: the local queue must not
         // blank out because the quarantine listing is unavailable.
-        listRemoteFailures().catch(() => [] as RemoteSyncFailureDto[]),
+        listRemoteFailuresScoped(sessionToken).catch(() => [] as RemoteSyncFailureDto[]),
       ]);
       setItems(data);
       setPendingCount(count);
@@ -135,7 +138,7 @@ export default function OfflineQueueScreen() {
       }
       // Best-effort plan read — never fail the screen if the server is
       // unreachable or sync isn't configured.
-      getSyncPlan().then(setSyncPlan).catch(() => setSyncPlan(null));
+      getSyncPlanScoped(sessionToken).then(setSyncPlan).catch(() => setSyncPlan(null));
       setFailures(remoteFailures);
     } catch {
       setError(l10n.getString('offline-queue-error'));
@@ -164,8 +167,8 @@ export default function OfflineQueueScreen() {
     const poll = async () => {
       try {
         const [count, summary] = await Promise.all([
-          pendingOfflineCount(),
-          getOfflineQueueStatusSummary().catch(() => null),
+          pendingOfflineCountScoped(sessionToken),
+          getOfflineQueueStatusSummaryScoped(sessionToken).catch(() => null),
         ]);
         if (gen !== pollGenRef.current) return; // superseded or unmounted
         setPendingCount(count);
@@ -173,7 +176,7 @@ export default function OfflineQueueScreen() {
           setConflictCount(summary.conflictCount);
           setQueueSummary(summary);
         }
-        getSyncPlan().then(setSyncPlan).catch(() => setSyncPlan(null));
+        getSyncPlanScoped(sessionToken).then(setSyncPlan).catch(() => setSyncPlan(null));
         pollFailuresRef.current = 0;
         setPollStale(false);
         setLastPolledAt(new Date());
@@ -202,7 +205,7 @@ export default function OfflineQueueScreen() {
     setSyncing(true);
     setSyncResult(null);
     try {
-      const result = await retryOfflineSync();
+      const result = await retryOfflineSyncScoped(sessionToken);
       setSyncResult(result);
       await load();
     } catch {
@@ -217,7 +220,7 @@ export default function OfflineQueueScreen() {
   const handleRequeue = useCallback(async (itemId: string) => {
     setRequeueError(null);
     try {
-      await requeueRemoteFailure(itemId);
+      await requeueRemoteFailureScoped(sessionToken, itemId);
       await load();
     } catch {
       setRequeueError(l10n.getString('offline-queue-quarantine-requeue-error'));
@@ -229,7 +232,7 @@ export default function OfflineQueueScreen() {
   const handleDelete = useCallback(async (id: string) => {
     setDeleteError(null);
     try {
-      await deleteOfflineItem(id);
+      await deleteOfflineItemScoped(sessionToken, id);
       await load();
     } catch {
       setDeleteError(l10n.getString('offline-queue-delete-error'));

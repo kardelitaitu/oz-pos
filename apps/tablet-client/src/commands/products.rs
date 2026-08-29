@@ -55,6 +55,7 @@ pub async fn adjust_stock(
         let db = state.db.lock().await;
         let tid = state.terminal_id.lock().await.clone();
         let store = oz_core::db::Store::new(&db).with_terminal_id(tid);
+        #[allow(deprecated)]
         store.adjust_stock(&args.sku, args.delta)?
     };
 
@@ -662,6 +663,346 @@ pub async fn delete_product(
     let db = state.db.lock().await;
     let store = Store::new(&db);
     require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_DELETE)?;
+    store.delete_product(&args.sku)?;
+    Ok(())
+}
+
+/// Session-scoped variant of `adjust_stock`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn adjust_stock_scoped(
+    session_token: String,
+    args: AdjustStockArgs,
+    state: State<'_, AppState>,
+) -> Result<i64, AppError> {
+    validate_not_empty("sku", &args.sku).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("reason", &args.reason).map_err(|e| AppError::Invalid(e.to_string()))?;
+    if args.delta == 0 {
+        return Err(AppError::Invalid("delta must be non-zero".into()));
+    }
+
+    // Get terminal_id before acquiring the DB lock (await must not be
+    // inside a block that holds a std::sync::MutexGuard, which is !Send).
+    let tid = state.terminal_id.lock().await.clone();
+
+    // Scope the DB borrow so Store (which is !Send) is dropped before
+    // the next .await point when we lock the kernel for event publishing.
+    let new_qty = {
+        let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+        let db_guard = conn_arc
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let db = &*db_guard;
+        let store = oz_core::db::Store::new(&db).with_terminal_id(tid);
+        #[allow(deprecated)]
+        store.adjust_stock(&args.sku, args.delta)?
+    };
+
+    // Publish the StockAdjusted domain event so that subscribers
+    // (AuditLogHandler, etc.) fire their side effects.
+    {
+        let event = StockAdjusted {
+            sku: args.sku.clone(),
+            delta: args.delta,
+            new_qty,
+            reason: args.reason.clone(),
+        };
+
+        let kernel = state.kernel.lock().await;
+        let bus = kernel.event_bus();
+        if let Err(e) = bus.publish(&event) {
+            // Logged by the bus; do not fail the command.
+            tracing::warn!(sku = %args.sku, error = %e, "event bus publish failed");
+        }
+    }
+
+    tracing::info!(sku = %args.sku, delta = %args.delta, reason = %args.reason, new_qty, "stock adjusted");
+    Ok(new_qty)
+}
+
+/// Session-scoped variant of `list_products`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn list_products_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<ProductDto>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    run_list_products(&db)
+}
+
+/// Session-scoped variant of `list_warehouse_products`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn list_warehouse_products_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<ProductDto>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    run_list_warehouse_products(&db)
+}
+
+/// Session-scoped variant of `lookup_by_barcode`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn lookup_by_barcode_scoped(
+    session_token: String,
+    barcode: String,
+    state: State<'_, AppState>,
+) -> Result<Option<ProductDto>, AppError> {
+    validate_not_empty("barcode", &barcode).map_err(|e| AppError::Invalid(e.to_string()))?;
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let _store = Store::new(&db);
+    let result = run_lookup_by_barcode(&db, &barcode);
+    drop(db);
+    result
+}
+
+/// Session-scoped variant of `lookup_product_by_sku`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn lookup_product_by_sku_scoped(
+    session_token: String,
+    sku: String,
+    state: State<'_, AppState>,
+) -> Result<Option<ProductDto>, AppError> {
+    validate_not_empty("sku", &sku).map_err(|e| AppError::Invalid(e.to_string()))?;
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let _store = Store::new(&db);
+    let result = run_lookup_product_by_sku(&db, &sku);
+    drop(db);
+    result
+}
+
+/// Session-scoped variant of `create_product`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn create_product_scoped(
+    session_token: String,
+    args: CreateProductArgs,
+    state: State<'_, AppState>,
+) -> Result<CreateProductResult, AppError> {
+    // Scope the DB borrow so Store (which is !Send) is dropped before
+    // the next .await point when we lock the kernel for event publishing.
+    {
+        let (session, conn_arc) = state.resolve_scope(&session_token)?;
+        let db_guard = conn_arc
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let db = &*db_guard;
+        let store = Store::new(&db);
+
+        require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_CREATE)?;
+        // ADR #36 D7: setting a cost (HPP) requires the manager-only
+        // products:edit_cost permission — staff can create products without
+        // ever touching cost.
+        if args.cost_minor != 0 {
+            require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_EDIT_COST)?;
+        }
+
+        let currency: oz_core::Currency = args
+            .currency
+            .parse()
+            .map_err(|_| AppError::Invalid(format!("invalid currency '{}'", args.currency)))?;
+
+        let price = Money {
+            minor_units: args.price_minor,
+            currency,
+        };
+
+        store.create_product_with_attributes(
+            &args.sku,
+            &args.name,
+            price,
+            args.category_id.as_deref(),
+            args.barcode.as_deref(),
+            args.initial_stock,
+            Some(&args.product_type),
+            &oz_core::db::CreateProductAttributes {
+                cost_minor: args.cost_minor,
+                brand: args.brand.clone(),
+                rack_location: args.rack_location.clone(),
+                notes: args.notes.clone(),
+                unit: args.unit.clone(),
+                is_active: args.is_active,
+                default_supplier_id: args.default_supplier_id.clone(),
+            },
+        )?;
+
+        store.set_product_tax_rates(&args.sku, &args.tax_rate_ids)?;
+    } // db and store dropped here before .await
+
+    // Publish the ProductCreated domain event so that subscribers
+    // (AuditLogHandler, etc.) fire their side effects.
+    {
+        let event = ProductCreated {
+            sku: args.sku.clone(),
+            name: args.name.clone(),
+            price_minor: args.price_minor,
+            currency: args.currency.clone(),
+            category_id: args.category_id.clone(),
+            barcode: args
+                .barcode
+                .as_ref()
+                .and_then(|s| foundation::Barcode::new(s).ok()),
+            initial_stock: args.initial_stock,
+        };
+
+        let kernel = state.kernel.lock().await;
+        let bus = kernel.event_bus();
+        if let Err(e) = bus.publish(&event) {
+            // Logged by the bus; do not fail the command.
+            tracing::warn!(sku = %args.sku, error = %e, "event bus publish failed");
+        }
+    }
+
+    tracing::info!(sku = %args.sku, name = %args.name, "product created");
+    Ok(CreateProductResult { sku: args.sku })
+}
+
+/// Session-scoped variant of `update_product`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn update_product_scoped(
+    session_token: String,
+    args: UpdateProductArgs,
+    state: State<'_, AppState>,
+) -> Result<UpdateProductResult, AppError> {
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+
+    require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_UPDATE)?;
+    // ADR #36 D7: changing a product's cost (HPP) requires the manager-only
+    // products:edit_cost permission. A PATCH that does not touch cost
+    // (cost_minor absent) stays open to PRODUCTS_UPDATE holders.
+    if args.cost_minor.is_some() {
+        require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_EDIT_COST)?;
+    }
+
+    let currency: oz_core::Currency = args
+        .currency
+        .parse()
+        .map_err(|_| AppError::Invalid(format!("invalid currency '{}'", args.currency)))?;
+
+    let price = Money {
+        minor_units: args.price_minor,
+        currency,
+    };
+
+    store.update_product(
+        &args.sku,
+        &args.name,
+        price,
+        args.category_id.as_deref(),
+        args.barcode.as_deref(),
+        args.product_type.as_deref(),
+        None,
+    )?;
+
+    store.set_product_tax_rates(&args.sku, &args.tax_rate_ids)?;
+
+    store.update_product_attributes(&args.sku, &args.to_update_attributes())?;
+
+    Ok(UpdateProductResult { sku: args.sku })
+}
+
+/// Session-scoped variant of `get_product_track_serial`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn get_product_track_serial_scoped(
+    session_token: String,
+    sku: String,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let product = store.get_product(&sku)?;
+    drop(db);
+    Ok(product.map(|p| p.product.track_serial).unwrap_or(false))
+}
+
+/// Session-scoped variant of `get_product_track_serial_batch`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn get_product_track_serial_batch_scoped(
+    session_token: String,
+    skus: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<SerialTrackRow>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let rows = run_get_product_track_serial_batch(&store, &skus);
+    drop(db);
+    Ok(rows)
+}
+
+/// Session-scoped variant of `record_product_search`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn record_product_search_scoped(
+    session_token: String,
+    sku: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    match store.record_product_search(&sku) {
+        Ok(()) => {}
+        Err(e) => {
+            tracing::warn!(sku = %sku, error = %e, "product search signal not recorded");
+        }
+    }
+    drop(db);
+    Ok(())
+}
+
+/// Session-scoped variant of `delete_product`.
+#[allow(clippy::needless_borrow, dropping_references)]
+#[command]
+pub async fn delete_product_scoped(
+    session_token: String,
+    args: DeleteProductArgs,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_DELETE)?;
     store.delete_product(&args.sku)?;
     Ok(())
 }

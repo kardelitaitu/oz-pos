@@ -23,7 +23,7 @@ vi.mock('@/api/shifts', () => ({
 }));
 
 vi.mock('@/api/hardware', () => ({
-  printReceipt: (...args: unknown[]) => mockPrintReceipt(...args),
+  printReceiptScoped: (...args: unknown[]) => mockPrintReceipt(...args),
 }));
 
 // ── Helpers ───────────────────────────────────────────────────────────

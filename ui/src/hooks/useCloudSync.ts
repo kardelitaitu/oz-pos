@@ -279,7 +279,7 @@ export function useCloudSync(deps: UseCloudSyncDeps): UseCloudSyncReturn {
   const testConnection = useCallback(async (): Promise<void> => {
     setSyncing(true);
     try {
-      const result = await testSyncConnection(serverURL.trim() || undefined);
+      const result = await testSyncConnection();
       setStatus(result.ok ? 'online' : 'offline');
       addToast({
         message: result.ok
@@ -297,7 +297,7 @@ export function useCloudSync(deps: UseCloudSyncDeps): UseCloudSyncReturn {
     } finally {
       setSyncing(false);
     }
-  }, [serverURL, addToast, l10n]);
+  }, [addToast, l10n]);
 
   /**
    * Persist everything. Non-secret config is mirrored to localStorage

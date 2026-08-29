@@ -25,8 +25,8 @@ vi.mock('@tauri-apps/api/core', () => ({
 beforeEach(() => {
   invokeMock.mockClear();
   invokeMock.mockImplementation((cmd: string) => {
-    if (cmd === 'list_products') return Promise.resolve(SAMPLE_PRODUCTS);
-    if (cmd === 'adjust_stock') return Promise.resolve(25);
+    if (cmd === 'list_products_scoped') return Promise.resolve(SAMPLE_PRODUCTS);
+    if (cmd === 'adjust_stock_scoped') return Promise.resolve(25);
     return Promise.reject(new Error(`Unknown command: ${cmd}`));
   });
 });
@@ -125,7 +125,7 @@ describe('InventoryAdjustmentScreen', () => {
   // ── Durable product-load error (INV-08) ────────────────────────
 
   it('shows a persistent error with retry when products fail to load', async () => {
-    invokeMock.mockRejectedValue(new Error('list_products failed'));
+    invokeMock.mockRejectedValue(new Error('list_products_scoped failed'));
     renderWithFluentSync(<ToastProvider><InventoryAdjustmentScreen /></ToastProvider>, inventoryFtl);
 
     await waitFor(() => {
@@ -136,7 +136,7 @@ describe('InventoryAdjustmentScreen', () => {
   });
 
   it('recovers when Retry succeeds after a failed product load', async () => {
-    invokeMock.mockRejectedValueOnce(new Error('list_products failed'));
+    invokeMock.mockRejectedValueOnce(new Error('list_products_scoped failed'));
     renderWithFluentSync(<ToastProvider><InventoryAdjustmentScreen /></ToastProvider>, inventoryFtl);
 
     await waitFor(() => {

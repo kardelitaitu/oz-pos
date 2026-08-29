@@ -17,4 +17,4 @@
   #   Northflank URL change needs no rebuild.
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.paddle.com; style-src 'self' 'unsafe-inline' https://*.paddle.com; img-src 'self' data:; font-src 'self'; frame-src https://*.paddle.com; connect-src 'self' https://*.code.run https://*.paddle.com; object-src 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.paddle.com https://sandbox-cdn.paddle.com https://app.midtrans.com https://app.sandbox.midtrans.com; style-src 'self' 'unsafe-inline' https://*.paddle.com; img-src 'self' data: https://*.paddle.com; font-src 'self'; frame-src https://*.paddle.com https://app.midtrans.com https://app.sandbox.midtrans.com; connect-src 'self' https://*.code.run https://*.paddle.com https://*.ozpos.my.id https://app.midtrans.com https://app.sandbox.midtrans.com; object-src 'none'; base-uri 'self'; form-action 'self'

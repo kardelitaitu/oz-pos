@@ -210,6 +210,151 @@ pub async fn delete_store_profile(id: String, state: State<'_, AppState>) -> Res
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
+// ── Scoped variants (ADR #7) ────────────────────────────────────
+
+/// Scoped variant of `list_store_profiles` (ADR #7).
+#[tauri::command]
+pub async fn list_store_profiles_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<StoreProfileDto>, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let conn = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = oz_core::Store::new(&conn);
+    let profiles = store.list_store_profiles()?;
+    Ok(profiles.into_iter().map(StoreProfileDto::from).collect())
+}
+
+/// Scoped variant of `get_store_profile` (ADR #7).
+#[tauri::command]
+pub async fn get_store_profile_scoped(
+    id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Option<StoreProfileDto>, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let conn = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = oz_core::Store::new(&conn);
+    let profile = store.get_store_profile(&id)?;
+    Ok(profile.map(StoreProfileDto::from))
+}
+
+/// Scoped variant of `get_primary_store` (ADR #7).
+#[tauri::command]
+pub async fn get_primary_store_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Option<StoreProfileDto>, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let conn = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = oz_core::Store::new(&conn);
+    let profile = store.get_primary_store()?;
+    Ok(profile.map(StoreProfileDto::from))
+}
+
+/// Scoped variant of `create_store_profile` (ADR #7).
+#[tauri::command]
+pub async fn create_store_profile_scoped(
+    args: CreateStoreProfileArgs,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<StoreProfileDto, AppError> {
+    // Create the store's database file before inserting the profile.
+    // If DB creation fails, we still insert the profile — the DB can
+    // be created lazily by open_store() later.
+    let _ = state.db_manager.create_store_db(&args.id);
+
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let conn = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = oz_core::Store::new(&conn);
+
+    // C1.2: enforce the subscription tier's store-count limit before creating
+    // a new store — Free/Plus allow 1, Pro allows 2, Premium allows 10.
+    let sub = TenantSubscription::load(&conn, "default")?
+        .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?;
+    sub.verify_signature()?;
+    store.enforce_store_quota(&sub.effective_tier())?;
+
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+    let profile = StoreProfile {
+        id: args.id,
+        name: args.name,
+        address: args.address.unwrap_or_default(),
+        tax_id: args.tax_id.unwrap_or_default(),
+        currency: args.currency.unwrap_or_else(|| "USD".into()),
+        timezone: args.timezone.unwrap_or_else(|| "UTC".into()),
+        is_primary: false,
+        created_at: now.clone(),
+        updated_at: now,
+    };
+    let created = store.create_store_profile(&profile)?;
+    Ok(StoreProfileDto::from(created))
+}
+
+/// Scoped variant of `update_store_profile` (ADR #7).
+#[tauri::command]
+pub async fn update_store_profile_scoped(
+    args: UpdateStoreProfileArgs,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<StoreProfileDto, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let conn = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = oz_core::Store::new(&conn);
+    let updated = store.update_store_profile(
+        &args.id,
+        &args.name,
+        &args.address,
+        &args.tax_id,
+        &args.currency,
+        &args.timezone,
+    )?;
+    Ok(StoreProfileDto::from(updated))
+}
+
+/// Scoped variant of `set_primary_store` (ADR #7).
+#[tauri::command]
+pub async fn set_primary_store_scoped(
+    id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<StoreProfileDto, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let conn = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = oz_core::Store::new(&conn);
+    let profile = store.set_primary_store(&id)?;
+    Ok(StoreProfileDto::from(profile))
+}
+
+/// Scoped variant of `delete_store_profile` (ADR #7).
+#[tauri::command]
+pub async fn delete_store_profile_scoped(
+    id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let conn = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = oz_core::Store::new(&conn);
+    store.delete_store_profile(&id)?;
+    Ok(())
+}
+
 #[cfg(test)]
 #[path = "store_profiles_tests.rs"]
 mod tests;

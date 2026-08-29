@@ -4,8 +4,8 @@ import { useEffect, useState, useCallback, useRef, useMemo, lazy, Suspense } fro
 const SYNC_STATUS_POLL_MS = 30_000;
 import { Localized, useLocalization } from '@fluent/react';
 import {
-  setReceiptSettings,
-  setStoreSettings,
+  setReceiptSettingsScoped,
+  setStoreSettingsScoped,
   setUserPreferencesScoped,
   setSettingScoped,
   type ReceiptSettingsDto,
@@ -23,8 +23,8 @@ import {
   updateSyncSettings,
   syncRun,
   syncPull,
-  getOfflineQueueStatusSummary,
-  getSyncPlan,
+  getOfflineQueueStatusSummaryScoped,
+  getSyncPlanScoped,
   testSyncConnection,
   requestSyncToken,
   type SyncSettingsDto,
@@ -48,17 +48,7 @@ import { requiredLocalized } from '@/frontend/shared';
 import { useOptionalTheme, type Theme } from '@/frontend/shell/ThemeProvider';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useKeyboardAvoidance } from '@/hooks/useKeyboardAvoidance';
-import FeatureToggleScreen from './FeatureToggleScreen';
-import DataManagementScreen from './DataManagementScreen';
-import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
-import TerminalManagementScreen from '@/features/terminals/TerminalManagementScreen';
-import { MultiStoreDashboardScreen, TopologyScreen } from '@/features/stores';
-import AuditLogScreen from '@/features/audit/AuditLogScreen';
-import OfflineQueueScreen from '@/features/offline/OfflineQueueScreen';
-import ShiftManagementScreen from '@/features/shifts/ShiftManagementScreen';
-import TaxConfigurationScreen from '@/features/tax/TaxConfigurationScreen';
-import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
-import PromotionManagementScreen from '@/features/promotions/PromotionManagementScreen';
+import { TopologyScreen } from '@/features/stores';
 import LicenseSettings from './LicenseSettings';
 import EmailReportSettings from './EmailReportSettings';
 const GeneralSection = lazy(() => import('./sections/GeneralSection'));
@@ -81,9 +71,6 @@ const WorkspaceStorePosSettings = lazy(() =>
 );
 const WorkspaceRestaurantPosSettings = lazy(() =>
   import('./workspace-cards/WorkspaceRestaurantPosSettings').then((m) => ({ default: m.WorkspaceRestaurantPosSettings })),
-);
-const WorkspaceKdsSettings = lazy(() =>
-  import('./workspace-cards/WorkspaceKdsSettings').then((m) => ({ default: m.WorkspaceKdsSettings })),
 );
 const WorkspaceInventorySettings = lazy(() =>
   import('./workspace-cards/WorkspaceInventorySettings').then((m) => ({ default: m.WorkspaceInventorySettings })),
@@ -210,7 +197,7 @@ function SettingsPageContent() {
 
   const { refreshBrandSettings } = useBrand();
   const themeCtx = useOptionalTheme();
-  const theme: Theme = themeCtx?.theme ?? 'default';
+  const theme: Theme = themeCtx?.theme ?? 'dark';
   const toggleTheme = themeCtx?.toggleTheme ?? (() => {});
 
   const [receipt, setReceipt] = useState<ReceiptSettingsDto>({
@@ -268,7 +255,7 @@ function SettingsPageContent() {
   const [displayCardSize, setDisplayCardSize] = useState(0);
   const [displayFontSize, setDisplayFontSize] = useState(0);
   const [displayFontSmoothing, setDisplayFontSmoothing] = useState('antialiased');
-  const [brandColour, setBrandColour] = useState('#10b981');
+  const [brandColour, setBrandColour] = useState('#147EFB');
   const [brandStoreName, setBrandStoreName] = useState('');
 
   const cm = useContextMenu();
@@ -323,11 +310,19 @@ function SettingsPageContent() {
   }, []);
 
   // ── Read section from URL hash on mount (e.g. #/settings/topology) ──
+  // Only sections that still exist in the kept hub are accepted; stale
+  // deep-links to removed management tabs (staff, audit, etc.) are ignored
+  // so the hub opens on its default (general) section instead of an empty
+  // body — the "old settings on <tab>" problem.
+  const KEPT_SECTIONS = new Set([
+    'general', 'appearance', 'receipt', 'sync', 'email',
+    'about', 'license', 'topology', 'store-pos', 'restaurant-pos', 'inventory',
+  ]);
   useEffect(() => {
     const hash = window.location.hash.replace(/^#\//, '');
     if (hash.startsWith('settings/')) {
       const section = hash.slice('settings/'.length);
-      if (section) {
+      if (section && KEPT_SECTIONS.has(section)) {
         setActiveSection(section);
         // Clear the hash after consuming it so stale sections don't persist
         window.history.replaceState(null, '', window.location.pathname);
@@ -483,8 +478,8 @@ function SettingsPageContent() {
     const syncedStore = { ...store, currency: defaultCurrency };
 
     const results = await Promise.allSettled([
-      setReceiptSettings(receipt, session?.user_id ?? ''),
-      setStoreSettings(syncedStore, session?.user_id ?? ''),
+      setReceiptSettingsScoped(sessionToken ?? '', receipt),
+      setStoreSettingsScoped(sessionToken ?? '', syncedStore),
       setCtxCurrency(defaultCurrency),
       // Scoped write matches the scoped read in SettingsContext: the
       // unscoped variant writes the global DB while every consumer reads
@@ -585,23 +580,23 @@ function SettingsPageContent() {
   // is active, so the Cloud Sync panel can show detailed status.
   const refreshQueueSummary = useCallback(async () => {
     try {
-      const summary = await getOfflineQueueStatusSummary();
+      const summary = await getOfflineQueueStatusSummaryScoped(sessionToken ?? '');
       setQueueSummary(summary);
     } catch {
       setQueueSummary(null);
     }
-  }, []);
+  }, [sessionToken]);
 
   // Poll the summary + plan while the Cloud Sync section is open so the
   // status panel (counts + last-synced + plan) stays live without manual
   // refreshes.
   const refreshSyncPlan = useCallback(async () => {
     try {
-      setSyncPlan(await getSyncPlan());
+      setSyncPlan(await getSyncPlanScoped(sessionToken ?? ''));
     } catch {
       setSyncPlan(null);
     }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => {
     if (activeSection !== 'sync') {
@@ -805,39 +800,6 @@ function SettingsPageContent() {
       case 'license':
         return <LicenseSettings />;
 
-      case 'features':
-        return <FeatureToggleScreen />;
-
-      case 'data':
-        return <DataManagementScreen />;
-
-      case 'staff':
-        return <StaffManagementScreen />;
-
-      case 'terminals':
-        return <TerminalManagementScreen />;
-
-      case 'stores':
-        return <MultiStoreDashboardScreen />;
-
-      case 'audit':
-        return <AuditLogScreen />;
-
-      case 'offline':
-        return <OfflineQueueScreen />;
-
-      case 'shifts':
-        return <ShiftManagementScreen />;
-
-      case 'tax':
-        return <TaxConfigurationScreen />;
-
-      case 'exchange':
-        return <ExchangeRateScreen />;
-
-      case 'promotions':
-        return <PromotionManagementScreen />;
-
       case 'topology':
         return <TopologyScreen />;
 
@@ -852,13 +814,6 @@ function SettingsPageContent() {
         return (
           <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
             <WorkspaceRestaurantPosSettings variant="full-page" terminalId={terminalId} userId={userId} {...(sessionToken ? { sessionToken } : {})} />
-          </Suspense>
-        );
-
-      case 'kds':
-        return (
-          <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
-            <WorkspaceKdsSettings variant="full-page" userId={userId} />
           </Suspense>
         );
 

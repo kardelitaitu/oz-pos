@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OZ-POS Admin</title>
+<style>
+  :root { --accent:#147efb; --bg:#0b1220; --surface:#121a2c; --surface2:#1a2440; --text:#e6edf7; --muted:#93a4bd; --border:rgba(255,255,255,.09); --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+  .topbar { display:flex; align-items:center; justify-content:space-between; padding:.8rem 1.5rem; border-bottom:1px solid var(--border); background:var(--surface); position:sticky; top:0; z-index:10; }
+  .brand { display:flex; align-items:center; gap:.6rem; font-weight:700; font-size:1rem; }
+  .brand-dot { width:10px; height:10px; border-radius:50%; background:var(--accent); }
+  .logout { background:transparent; color:var(--muted); border:1px solid var(--border); border-radius:.5rem; padding:.3rem .7rem; font-size:.78rem; cursor:pointer; }
+  .logout:hover { color:var(--text); border-color:var(--muted); }
+  .wrap { max-width:1400px; margin:0 auto; padding:1.5rem; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:.9rem; padding:1.2rem 1.3rem; margin-top:1rem; }
+  .card h2 { font-size:1rem; margin:0 0 .8rem; }
+  .pill { display:inline-block; padding:.15rem .6rem; border-radius:9999px; font-size:.72rem; font-weight:600; }
+  .pill-ok { background:rgba(34,197,94,.15); color:#4ade80; }
+  .pill-warn { background:rgba(245,158,11,.15); color:#fbbf24; }
+  .pill-bad { background:rgba(239,68,68,.15); color:#f87171; }
+  .pill-muted { background:rgba(255,255,255,.08); color:var(--muted); }
+  .btn { background:var(--accent); color:#fff; border:none; border-radius:.5rem; padding:.4rem .8rem; font-size:.8rem; font-weight:600; cursor:pointer; }
+  .btn:hover { opacity:.88; }
+  .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--muted); }
+  .btn-sm { font-size:.75rem; padding:.25rem .5rem; }
+  .btn-ok { background:var(--ok); }
+  .btn-warn { background:var(--warn); }
+  .btn-bad { background:var(--bad); }
+  table { width:100%; border-collapse:collapse; font-size:.82rem; }
+  th, td { text-align:left; padding:.5rem .55rem; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; }
+  .empty { color:var(--muted); font-size:.83rem; padding:.8rem 0; }
+  .flash { position:fixed; bottom:1rem; right:1rem; background:var(--surface2); border:1px solid var(--border); border-radius:.6rem; padding:.6rem .9rem; font-size:.82rem; z-index:100; }
+  .skeleton { background:var(--surface); border:1px solid var(--border); border-radius:.9rem; padding:1rem; animation:pulse 1.4s infinite; }
+  @keyframes pulse { 50% { opacity:.55; } }
+  .tab-bar { display:flex; gap:.5rem; margin-bottom:1rem; }
+  .tab { padding:.4rem 1rem; border-radius:.5rem; font-size:.82rem; cursor:pointer; background:transparent; color:var(--muted); border:1px solid transparent; }
+  .tab-active { background:var(--surface2); color:var(--text); border-color:var(--border); }
+  .small { font-size:.78rem; color:var(--muted); }
+  .input { background:var(--surface2); border:1px solid var(--border); border-radius:.4rem; padding:.4rem .6rem; color:var(--text); font-size:.82rem; width:100%; box-sizing:border-box; }
+  .modal-back { position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:50; display:flex; align-items:center; justify-content:center; }
+  .modal { background:var(--surface); border:1px solid var(--border); border-radius:.9rem; padding:1.5rem; max-width:520px; width:90%; }
+  .modal h3 { margin:0 0 1rem; }
+  .modal-actions { display:flex; gap:.5rem; margin-top:1rem; justify-content:flex-end; }
+  .search { margin-bottom:.8rem; }
+  .search input { max-width:320px; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><span class="brand-dot"></span>OZ-POS Admin</div>
+    <button class="logout" id="logout-btn">Log out</button>
+  </div>
+
+  <div class="wrap">
+    <div class="tab-bar">
+      <button class="tab tab-active" data-tab="tenants">Tenants</button>
+      <button class="tab" data-tab="health">Health</button>
+    </div>
+    <div id="content"><div class="skeleton" style="height:8rem"></div></div>
+  </div>
+
+  <div id="modal-root"></div>
+
+  <script>
+    const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'https://license.ozpos.my.id';
+    let currentTab = 'tenants';
+
+    function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+
+    function statusPill(status) {
+      const map = { active:['pill-ok'], unused:['pill-muted'], grace_period:['pill-warn'], expired:['pill-bad'], revoked:['pill-bad'], paused:['pill-warn'] };
+      const cls = (map[status] || ['pill-muted'])[0];
+      return el('span', 'pill ' + cls, status || '—');
+    }
+
+    async function api(path, body) {
+      const token = (await (await fetch('/__oz/session')).json()).token;
+      const opts = { headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } };
+      if (body) { opts.method = 'POST'; opts.body = body; }
+      const res = await fetch(API + path, opts);
+      if (res.status === 401 || res.status === 403) {
+        return null;
+      }
+      if (!res.ok) throw new Error(path + ' (' + res.status + ')');
+      return res.json();
+    }
+
+    // ── Tab switching ──────────────────────────────────────────────
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('tab-active'));
+        tab.classList.add('tab-active');
+        currentTab = tab.dataset.tab;
+        if (currentTab === 'tenants') renderTenants();
+        if (currentTab === 'health') renderHealth();
+      });
+    });
+
+    // ── Tenants list ───────────────────────────────────────────────
+    let tenants = [];
+
+    async function renderTenants() {
+      const c = document.getElementById('content');
+      c.innerHTML = '<div class="card"><p class="empty">Loading tenants…</p></div>';
+      try {
+        const data = await api('/api/v1/admin/tenants');
+        if (!data) return;
+        tenants = data.tenants || [];
+      } catch {
+        c.innerHTML = '<div class="card"><p class="empty">Failed to load tenants.</p></div>';
+        return;
+      }
+      c.innerHTML = '';
+      const card = el('div', 'card');
+      card.appendChild(el('h2', null, `Tenants (${tenants.length})`));
+      const table = el('table');
+      const thead = el('thead');
+      const tr = el('tr');
+      ['Email', 'Status', 'License', 'Tier', 'Created'].forEach(h => tr.appendChild(el('th', null, h)));
+      tr.appendChild(el('th', null, ''));
+      thead.appendChild(tr); table.appendChild(thead);
+      const tbody = el('tbody');
+      tenants.forEach(t => {
+        const row = el('tr');
+        row.appendChild(el('td', null, t.email || '—'));
+        const td1 = el('td'); td1.appendChild(statusPill(t.status)); row.appendChild(td1);
+        row.appendChild(el('td', null, (t.license && t.license.key) || '—'));
+        row.appendChild(el('td', null, (t.subscription && t.subscription.tierKey) || '—'));
+        row.appendChild(el('td', null, t.created ? t.created.slice(0,10) : '—'));
+        const tdAction = el('td');
+        const btn = el('button', 'btn btn-sm btn-ghost', 'Details');
+        btn.addEventListener('click', () => showTenantDetail(t.id));
+        tdAction.appendChild(btn);
+        row.appendChild(tdAction);
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+      card.appendChild(table);
+      c.appendChild(card);
+    }
+
+    // ── Tenant detail ──────────────────────────────────────────────
+    async function showTenantDetail(id) {
+      const modal = document.getElementById('modal-root');
+      modal.innerHTML = '<div class="modal-back"><div class="modal"><h3>Loading…</h3></div></div>';
+      try {
+        const data = await api('/api/v1/admin/tenants/' + id);
+        if (!data) { modal.innerHTML = ''; return; }
+        const t = data.tenant || {};
+        const lic = data.license || {};
+        const sub = data.subscription || {};
+        const devices = data.devices || [];
+
+        const m = el('div', 'modal-back');
+        const box = el('div', 'modal');
+        box.appendChild(el('h3', null, 'Tenant: ' + (t.email || '')));
+        const kv = el('div');
+        kv.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.82rem';
+        kv.innerHTML = '<span class="muted">Status</span><span style="text-align:right">' + (t.status || '—') + '</span>' +
+          '<span class="muted">Email verified</span><span style="text-align:right">' + (t.emailVerified ? '✓' : '○') + '</span>' +
+          '<span class="muted">Created</span><span style="text-align:right">' + (t.created ? t.created.slice(0,10) : '—') + '</span>' +
+          '<span class="muted">License key</span><span style="text-align:right;font-family:monospace;font-size:.75rem">' + (lic.key || '—') + '</span>' +
+          '<span class="muted">Tier</span><span style="text-align:right">' + (sub.tierKey || lic.tierKey || '—') + '</span>' +
+          '<span class="muted">Subscription status</span><span style="text-align:right">' + (sub.status || '—') + '</span>' +
+          '<span class="muted">Expires</span><span style="text-align:right">' + (sub.expiresAt || '—') + '</span>' +
+          '<span class="muted">Devices</span><span style="text-align:right">' + devices.length + '</span>';
+        box.appendChild(kv);
+
+        // Actions
+        const actions = el('div', null);
+        actions.style.cssText = 'display:flex;gap:.4rem;margin-top:.8rem;flex-wrap:wrap';
+        if (t.status === 'active') {
+          const revoke = el('button', 'btn btn-sm btn-bad', 'Revoke');
+          revoke.addEventListener('click', () => doAction(id, 'revoke', 'Revoked'));
+          actions.appendChild(revoke);
+        }
+        if (t.status !== 'active') {
+          const activate = el('button', 'btn btn-sm btn-ok', 'Activate');
+          activate.addEventListener('click', () => doAction(id, 'activate', 'Activated'));
+          actions.appendChild(activate);
+        }
+        const renew = el('button', 'btn btn-sm', 'Renew +365d');
+        renew.addEventListener('click', () => doAction(id, 'renew', 'Renewed', '{"days":365}'));
+        actions.appendChild(renew);
+        const upgrade = el('button', 'btn btn-sm btn-warn', 'Upgrade');
+        upgrade.addEventListener('click', () => upgradePrompt(id, data));
+        actions.appendChild(upgrade);
+        box.appendChild(actions);
+
+        const close = el('button', 'btn btn-ghost', 'Close');
+        close.style.cssText = 'margin-top:.8rem;width:100%';
+        close.addEventListener('click', () => { modal.innerHTML = ''; });
+        box.appendChild(close);
+        m.appendChild(box);
+        modal.appendChild(m);
+        m.addEventListener('click', e => { if (e.target === m) { modal.innerHTML = ''; } });
+      } catch {
+        modal.innerHTML = '<div class="modal-back"><div class="modal"><p class="empty">Failed to load tenant detail.</p></div></div>';
+      }
+    }
+
+    async function doAction(id, action, label, body) {
+      const modal = document.getElementById('modal-root');
+      try {
+        await api('/api/v1/admin/tenants/' + id + '/' + action, body);
+        modal.innerHTML = '';
+        flash(label + ' successfully');
+        renderTenants();
+      } catch {
+        flash(label + ' failed');
+      }
+    }
+
+    function upgradePrompt(id, data) {
+      const modal = document.getElementById('modal-root');
+      const m = el('div', 'modal-back');
+      const box = el('div', 'modal');
+      box.appendChild(el('h3', null, 'Change tier'));
+      box.innerHTML += '<p class="small" style="margin-bottom:.6rem">Current tier: ' + ((data.subscription && data.subscription.tierKey) || 'none') + '</p>';
+      const select = el('select', 'input');
+      ['plus','pro','premium','enterprise'].forEach(t => {
+        const opt = el('option', null, t);
+        if (t === (data.subscription && data.subscription.tierKey)) opt.selected = true;
+        select.appendChild(opt);
+      });
+      box.appendChild(select);
+      const reason = el('input', 'input');
+      reason.placeholder = 'Reason for override (audit)';
+      reason.style.cssText = 'margin-top:.5rem;' + reason.style.cssText;
+      box.appendChild(reason);
+      const act = el('div', 'modal-actions');
+      const cancel = el('button', 'btn btn-ghost', 'Cancel');
+      cancel.addEventListener('click', () => { modal.innerHTML = ''; });
+      act.appendChild(cancel);
+      const save = el('button', 'btn', 'Save');
+      save.addEventListener('click', async () => {
+        await doAction(id, 'tier-override', 'Tier changed', JSON.stringify({tier_key: select.value, reason: reason.value || 'admin override'}));
+      });
+      act.appendChild(save);
+      box.appendChild(act);
+      m.appendChild(box);
+      modal.appendChild(m);
+      m.addEventListener('click', e => { if (e.target === m) { modal.innerHTML = ''; } });
+    }
+
+    // ── Health ──────────────────────────────────────────────────────
+    async function renderHealth() {
+      const c = document.getElementById('content');
+      c.innerHTML = '<div class="card"><p class="empty">Loading…</p></div>';
+      try {
+        const h = await api('/api/v1/admin/health');
+        if (!h) return;
+        c.innerHTML = '';
+        const card = el('div', 'card');
+        card.appendChild(el('h2', null, 'System Health'));
+        const kv = el('div');
+        kv.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.82rem';
+        const status = h.status === 'ok' ? '✓ OK' : '✗ Degraded';
+        kv.innerHTML = '<span class="muted">Status</span><span style="text-align:right">' + status + '</span>' +
+          '<span class="muted">Database</span><span style="text-align:right">' + (h.db_ok ? '✓ Connected' : '✗ Unreachable') + '</span>' +
+          '<span class="muted">SMTP</span><span style="text-align:right">' + (h.smtp_host ? '✓ Configured' : '— Not configured') + '</span>' +
+          '<span class="muted">Version</span><span style="text-align:right">' + (h.version || '—') + '</span>' +
+          '<span class="muted">Time</span><span style="text-align:right">' + (h.time || '—') + '</span>';
+        card.appendChild(kv);
+        c.appendChild(card);
+      } catch {
+        c.innerHTML = '<div class="card"><p class="empty">Failed to load health.</p></div>';
+      }
+    }
+
+    // ── Flash message ──────────────────────────────────────────────
+    function flash(msg) {
+      const f = el('div', 'flash', msg);
+      document.body.appendChild(f);
+      setTimeout(() => f.remove(), 3000);
+    }
+
+    // ── Boot ────────────────────────────────────────────────────────
+    document.getElementById('logout-btn').addEventListener('click', async () => {
+      try { const t = (await (await fetch('/__oz/session')).json()).token; await fetch(API + '/api/v1/web/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + t } }); } catch {}
+      window.location.href = '/';
+    });
+
+    renderTenants();
+  </script>
+</body>
+</html>

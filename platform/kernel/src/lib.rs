@@ -1,5 +1,3 @@
-#![warn(missing_docs)]
-
 //! Platform Kernel — module system lifecycle, dependency resolution, event bus.
 //!
 //! This crate provides the [`Kernel`] struct that manages the module

@@ -131,6 +131,9 @@ async fn run_prune_cycle(db: &Arc<Mutex<Connection>>) {
             if let Err(e) = conn.execute_batch("PRAGMA incremental_vacuum(50);") {
                 error!(error = %e, "prune: incremental_vacuum failed");
             }
+
+            // Yield briefly between batches to avoid monopolizing CPU thread.
+            std::thread::sleep(Duration::from_millis(50));
         }
 
         (stock_archived, queue_deleted)
@@ -271,6 +274,9 @@ async fn run_prune_cycle_pg(pool: &deadpool_postgres::Pool) {
 
         queue_deleted += deleted as usize;
         metrics::PRUNE_QUEUE_DELETED_TOTAL.inc_by(deleted as f64);
+
+        // Yield execution briefly between batches to prevent CPU starvation on low-core tiers (e.g. 0.2 vCPU).
+        tokio::time::sleep(Duration::from_millis(50)).await;
     }
 
     // Age out `sent_reports` claims. Single DELETE — the table is small.

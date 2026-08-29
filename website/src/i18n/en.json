@@ -10,6 +10,7 @@
     "docs": "Docs",
     "support": "Support",
     "login": "Sign in",
+    "account": "Account",
     "menu": "Menu",
     "theme": "Toggle theme",
     "language": "Language",
@@ -97,38 +98,99 @@
     }
   },
   "hero": {
-    "title": "The Offline-First POS Platform",
-    "subtitle": "Keep selling through outages. OZ-POS runs entirely on your device and syncs to the cloud when the connection returns.",
+    "title": "Enterprise-Grade POS, Without the Enterprise Price",
+    "subtitle": "Corporate-grade POS accessible to everyone. Keep selling through outages with a blazing-fast offline-first core, with zero hidden per-feature fees.",
     "ctaPrimary": "Download free",
     "ctaSecondary": "See Pricing"
   },
   "features": {
-    "title": "Built for the real world",
-    "subtitle": "Point of sale that doesn't stop when the internet does.",
+    "title": "Enterprise Features, Regular Subscription",
+    "subtitle": "Nine core capabilities engineered for maximum efficiency, uninterrupted uptime, and continuous business growth.",
     "items": [
       {
-        "title": "Offline-first",
-        "description": "Sales, shifts, and stock keep working with zero connectivity — nothing is lost."
+        "title": "Offline-First",
+        "description": "Sales, checkout, and inventory keep working 100% without internet. Never lose a sale or halt checkout during outages."
       },
       {
-        "title": "Cloud sync",
-        "description": "Changes merge to the cloud the moment you're back online, across stores and registers."
+        "title": "No Hardware Barrier",
+        "description": "Built on a state-of-the-art tech stack (lean Rust & embedded SQLite) for extreme efficiency. Runs blazing fast on budget tablets, laptops, and legacy POS hardware."
       },
       {
-        "title": "QRIS payments",
-        "description": "Accept Indonesian QR payments natively, no extra hardware."
+        "title": "Multi-Store & Multi-Terminal",
+        "description": "Manage multiple branch locations, cashier registers, and backroom warehouses in one unified topology with seamless sync."
       },
       {
-        "title": "Multi-store",
-        "description": "Warehouses, registers, and branches in one topology you can edit visually."
+        "title": "Advanced Reports & Analytics",
+        "description": "Deep insights into sales velocity, top-performing items, rush-hour peak times, and net profit margins across shifts."
       },
       {
-        "title": "Lua scripting",
-        "description": "Automate pricing, discounts, and flows with a small script surface."
+        "title": "E-Wallets & Native QRIS",
+        "description": "Accept dynamic QRIS and digital wallet payments directly on screen with instant verification and zero extra hardware fees."
       },
       {
-        "title": "Shift & reconciliation",
-        "description": "Cashier shifts close cleanly, with full audit history for every change."
+        "title": "Debit & Credit Card",
+        "description": "Seamless EDC and payment gateway integrations for chip, contactless tap, and swipe card transactions."
+      },
+      {
+        "title": "Whitelabel",
+        "description": "Full branding control over receipts, business logos, and print layouts available on Premium, without needing a custom Enterprise contract."
+      },
+      {
+        "title": "Lua Scripting",
+        "description": "Embedded Lua engine for limitless flexibility: tiered discounts, happy-hour promos, BOGO deals, and custom tax rules."
+      },
+      {
+        "title": "Full Audit Logging & Shift",
+        "description": "Tamper-evident audit trail for every cash drawer event, line void, manager override, and shift reconciliation."
+      }
+    ],
+    "comparisonTitle": "OZ-POS vs Conventional Cloud POS",
+    "comparisonSubtitle": "See why true offline-first architecture and transparent all-inclusive features set OZ-POS apart.",
+    "comparisonOzPos": "OZ-POS",
+    "comparisonOthers": "Conventional Cloud POS",
+    "comparisonHeaderFeature": "Features & Capabilities",
+    "comparisonRows": [
+      {
+        "feature": "Offline Outage Resilience",
+        "ozPos": "100% Full Functionality (Local SQLite on each device)",
+        "others": "Freezes / Failed transactions during outages",
+        "highlight": true
+      },
+      {
+        "feature": "Hardware Efficiency",
+        "ozPos": "SOTA Rust engine — smooth on budget hardware & lean RAM",
+        "others": "Heavy web app requiring expensive specs",
+        "highlight": false
+      },
+      {
+        "feature": "Kitchen Display System (KDS)",
+        "ozPos": "Included free on any browser or tablet",
+        "others": "Costly add-on per screen per month",
+        "highlight": true
+      },
+      {
+        "feature": "Multi-Store & Warehouses",
+        "ozPos": "Available directly on regular plans",
+        "others": "Locked behind expensive Enterprise contracts",
+        "highlight": false
+      },
+      {
+        "feature": "Business Rule Customization",
+        "ozPos": "Embedded Lua Scripting for custom promos",
+        "others": "Rigid, requires waiting for vendor updates",
+        "highlight": true
+      },
+      {
+        "feature": "Audit Trail & Fraud Prevention",
+        "ozPos": "Full tamper-evident audit logging on all actions",
+        "others": "Basic reports without sensitive action logs",
+        "highlight": false
+      },
+      {
+        "feature": "Pricing Model",
+        "ozPos": "Transparent & scale-based, no gated features",
+        "others": "Hidden fees per add-on feature & register",
+        "highlight": false
       }
     ]
   },
@@ -158,15 +220,15 @@
       "label": "Billing period",
       "monthly": "Monthly",
       "yearly": "Yearly",
-      "yearlyNote": "2 months free",
-      "billedYearly": "Billed yearly · 2 months free"
+      "yearlyNote": "17% off",
+      "billedYearly": "Billed yearly · 17% off"
     }
   },
   "download": {
     "title": "Download OZ-POS",
-    "subtitle": "Version 0.0.30 — free forever, no signup required.",
+    "subtitle": "Version 0.0.31 — free forever, no signup required.",
     "version": "Current version",
-    "versionValue": "0.0.30",
+    "versionValue": "0.0.31",
     "platformsTitle": "Choose your platform",
     "requirementsTitle": "System requirements",
     "requirements": [
@@ -210,7 +272,7 @@
     "createAccount": "Create an account",
     "resetTitle": "Reset password",
     "sendResetCode": "Send reset code",
-    "resetCodeSent": "We sent a reset code to your email. Enter it with your new password.",
+    "resetCodeSent": "We sent a reset code to your email. Please check your inbox or spam folder.",
     "newPassword": "New password",
     "resetPassword": "Reset password",
     "backToLogin": "Back to sign in",
@@ -219,6 +281,7 @@
     "cooldown": "You recently reset your password. New resets are blocked until",
     "resendCode": "Resend code",
     "resendCooldown": "Resend code in",
+    "codeResent": "A new verification code was sent to your email.",
     "errorRateLimit": "Too many requests — please wait a few minutes before trying again.",
     "errorCors": "Request blocked by the server. Please contact support.",
     "errorSmtp": "Email delivery is not configured on this deployment. Please contact support."
@@ -251,6 +314,9 @@
     "passwordSave": "Save password",
     "passwordSaved": "Password saved. Use it to sign in next time.",
     "passwordError": "Couldn't save the password. Please try again.",
+    "region": "Region",
+    "regionHint": "Affects payment method",
+    "regionSaved": "Region updated.",
     "checkingSubscription": "Checking your subscription…",
     "subscriptionPending": "Your purchase is confirmed, but the subscription isn't visible yet — it can take a minute. Reload to check.",
     "statusActive": "Active",
@@ -261,7 +327,23 @@
     "renewHint": "Your subscription is no longer active.",
     "renewLink": "Renew on the pricing page",
     "bundleUpgrade": "Upgrade to bundle",
-    "bundleUpgradeHint": "Adds the Kitchen Display (KDS) to your Plus plan."
+    "bundleUpgradeHint": "Adds the Kitchen Display (KDS) to your Plus plan.",
+    "copyKey": "Copy key",
+    "copied": "Copied!",
+    "quickActions": "Quick actions",
+    "downloadApp": "Download app",
+    "activationGuide": "Activation guide",
+    "contactSupport": "Contact support",
+    "devices": "Registered Terminals",
+    "devicesHint": "Terminals authorized with this license key. Manage active POS registers.",
+    "terminalSlots": "Terminal Slots",
+    "terminalUnlimited": "Unlimited terminals",
+    "terminalCount": "1 terminal included",
+    "unbindHint": "To migrate to new hardware, enter your license key into the new OZ-POS terminal app.",
+    "billingInvoices": "Billing & Receipts",
+    "billingInvoicesHint": "View transaction receipts and tax invoice history for your account.",
+    "viewReceipts": "Access Billing Portal & Receipts",
+    "invoiceNote": "Need a formal corporate tax invoice? Contact sales@ozpos.my.id with your company NPWP/VAT details."
   },
   "footer": {
     "rights": "All rights reserved.",
@@ -285,6 +367,14 @@
   "docsSearch": {
     "placeholder": "Search docs…",
     "noResults": "No results"
+  },
+  "search": {
+    "placeholder": "Search docs, guides, and features…",
+    "noResults": "No matching results found for",
+    "docsTitle": "Documentation & Guides",
+    "pagesTitle": "Pages & Features",
+    "shortcutHint": "Press ESC to close, ↑↓ to navigate, ENTER to select",
+    "quickSearch": "Quick Search"
   },
   "checkout": {
     "signInToSubscribe": "Sign in to subscribe",
@@ -319,7 +409,11 @@
     "haveAccount": "Already have an account?",
     "signInLink": "Sign in",
     "agreeBefore": "By signing up, you agree to the",
-    "agreeSeparator": "and"
+    "agreeSeparator": "and",
+    "region": "Region",
+    "regionGlobal": "Global",
+    "regionIndonesia": "Indonesia",
+    "regionHint": "Affects pricing and payment method"
   },
   "vertical": {
     "positioning": "OZ-POS is the QRIS-native POS with offline-first reliability — priced for the Indonesian market.",

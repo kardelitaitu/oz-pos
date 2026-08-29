@@ -27,7 +27,7 @@ vi.mock('@/contexts/AuthContext', () => ({
 vi.mock('@/api/branding', () => ({
   getBrandSettings: () =>
     Promise.resolve({
-      primary_colour: '#10b981',
+      primary_colour: '#147EFB',
       logo_path: null,
       store_name: 'OZ-POS',
     }),

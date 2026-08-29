@@ -6,6 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 description = "OZ-POS Inventory Module: product catalog, stock management, variants, categories."
 
+# Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
+[lints]
+workspace = true
+
 [dependencies]
 anyhow = { workspace = true }
 thiserror = { workspace = true }

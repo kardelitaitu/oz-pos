@@ -224,3 +224,33 @@ fn production_mode_fails_startup_without_admin_key() {
         },
     );
 }
+
+#[serial]
+#[test]
+fn db_pool_size_defaults_to_eight_when_unset() {
+    with_env(
+        &[("OZ_DB_POOL_SIZE", None), ("OZ_REDIRECT_ONLY", None)],
+        || {
+            let config = CloudServerConfig::from_env().expect("config should parse");
+            assert_eq!(
+                config.db_pool_size, 8,
+                "unset OZ_DB_POOL_SIZE must default to 8"
+            );
+        },
+    );
+}
+
+#[serial]
+#[test]
+fn db_pool_size_respects_custom_value() {
+    with_env(
+        &[("OZ_DB_POOL_SIZE", Some("16")), ("OZ_REDIRECT_ONLY", None)],
+        || {
+            let config = CloudServerConfig::from_env().expect("config should parse");
+            assert_eq!(
+                config.db_pool_size, 16,
+                "custom OZ_DB_POOL_SIZE should override default"
+            );
+        },
+    );
+}

@@ -81,6 +81,31 @@ vi.mock('@/api/products', () => ({
     };
     return Promise.resolve(products[sku] ?? null);
   }),
+  lookupProductBySkuScoped: vi.fn((_sessionToken: string, sku: string) => {
+    const products: Record<string, unknown> = {
+      'ITEM-001': {
+        sku: 'ITEM-001',
+        name: 'Item 1',
+        category: 'Test',
+        price: { minor_units: 400, currency: 'USD' },
+        barcode: null,
+        in_stock: true,
+        stock_qty: 100,
+        tax_rate_ids: [],
+      },
+      'ITEM-002': {
+        sku: 'ITEM-002',
+        name: 'Item 2',
+        category: 'Test',
+        price: { minor_units: 200, currency: 'USD' },
+        barcode: null,
+        in_stock: true,
+        stock_qty: 50,
+        tax_rate_ids: [],
+      },
+    };
+    return Promise.resolve(products[sku] ?? null);
+  }),
   listProducts: vi.fn(() => Promise.resolve([])),
   listCategories: vi.fn(() => Promise.resolve([])),
   createProduct: vi.fn(),
@@ -411,7 +436,7 @@ describe('PosScreen – bundle scanning toast', () => {
     // lookupByBarcode returns null (default), lookupBundleBySku succeeds.
     // But make lookupProductBySku reject — this is used as the lookupItem
     // callback inside expandBundleItems, so the bundle expansion will fail.
-    vi.mocked(productsApi.lookupProductBySku).mockRejectedValueOnce(
+    vi.mocked(productsApi.lookupProductBySkuScoped).mockRejectedValueOnce(
       new Error('SKU lookup timeout'),
     );
 
@@ -422,7 +447,7 @@ describe('PosScreen – bundle scanning toast', () => {
 
     // Wait for lookupProductBySku to be called (confirms expansion started).
     await waitFor(() => {
-      expect(vi.mocked(productsApi.lookupProductBySku)).toHaveBeenCalled();
+      expect(vi.mocked(productsApi.lookupProductBySkuScoped)).toHaveBeenCalled();
     }, FAST_WAIT);
 
     // No toast should appear — the catch block swallowed the error.
@@ -444,7 +469,7 @@ describe('PosScreen – bundle scanning toast', () => {
     // lookupByBarcode returns null (default), lookupBundleBySku succeeds.
     // But make lookupProductBySku reject with a ScannerError — this is
     // used as the lookupItem callback inside expandBundleItems.
-    vi.mocked(productsApi.lookupProductBySku).mockRejectedValueOnce(
+    vi.mocked(productsApi.lookupProductBySkuScoped).mockRejectedValueOnce(
       new ScannerError(
         'Scanner hardware failure — USB error',
         ScannerError.codes.HARDWARE_FAILURE,
@@ -458,7 +483,7 @@ describe('PosScreen – bundle scanning toast', () => {
 
     // Wait for lookupProductBySku to be called (confirms expansion started).
     await waitFor(() => {
-      expect(vi.mocked(productsApi.lookupProductBySku)).toHaveBeenCalled();
+      expect(vi.mocked(productsApi.lookupProductBySkuScoped)).toHaveBeenCalled();
     }, FAST_WAIT);
 
     // No toast should appear — the catch block swallowed the error.

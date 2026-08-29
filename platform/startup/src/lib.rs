@@ -1,4 +1,3 @@
-#![warn(missing_docs)]
 // Allow `cfg(feature = "metrics")` from the transitive dependency on
 // `oz-reporting` without requiring platform-startup to declare the feature.
 #![allow(unexpected_cfgs)]
@@ -65,6 +64,14 @@ pub fn init_module_system(
     db_path: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // ── Module system lifecycle ───────────────────────────────────────
+    //
+    // Registration order is not load order: each module declares its own
+    // dependencies via `Module::dependencies()`, and the kernel
+    // topologically sorts them before calling `on_load`/`on_start`. Every
+    // id a module declares must appear in this block, or `load_all` fails
+    // with `KernelError::MissingDependency`. The parity test in
+    // `startup_tests.rs` asserts that this block stays in sync with the
+    // `modules/*/manifest.json` set.
     {
         let mut k = kernel.blocking_lock();
         k.register(Box::new(modules_inventory::InventoryModule::new()))?;
@@ -76,6 +83,19 @@ pub fn init_module_system(
         k.register(Box::new(modules_reporting::ReportingModule::new()))?;
         k.register(Box::new(modules_terminal::TerminalModule::new()))?;
         k.register(Box::new(modules_currency::CurrencyModule::new()))?;
+        // Loyalty was previously defined but never registered, so its
+        // lifecycle hooks never ran even though the LoyaltyEarnHandler below
+        // was subscribed to `sale.completed`.
+        k.register(Box::new(modules_loyalty::LoyaltyModule::new()))?;
+        // ── Stub verticals ───────────────────────────────────────────
+        // These own their manifest, id, and dependency edges but no domain
+        // logic yet; their hooks only log. Registering them now means the
+        // dependency graph, load order, and shutdown order are exercised
+        // from the first commit rather than at migration time.
+        k.register(Box::new(modules_purchasing::PurchasingModule::new()))?;
+        k.register(Box::new(modules_promotions::PromotionsModule::new()))?;
+        k.register(Box::new(modules_giftcards::GiftCardsModule::new()))?;
+        k.register(Box::new(modules_kitchen::KitchenModule::new()))?;
         k.load_all()?;
         k.start_all()?;
         drop(k);
@@ -310,206 +330,5 @@ pub async fn init_rate_sync(db: rate_sync::DbConnection) -> rate_sync::RateSyncD
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use platform_kernel::Kernel;
-    use rusqlite::Connection;
-
-    /// Helper: create an in-memory SQLite database with migrations applied,
-    /// and write it to a temp file so we can pass a path.
-    fn create_temp_db() -> (tempfile::TempDir, std::path::PathBuf) {
-        let dir = tempfile::tempdir().unwrap();
-        let db_path = dir.path().join("test.db");
-        let mut conn = Connection::open(&db_path).unwrap();
-        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-        conn.pragma_update(None, "journal_mode", "WAL").unwrap();
-        oz_core::migrations::run(&mut conn).unwrap();
-        drop(conn);
-        (dir, db_path)
-    }
-
-    #[test]
-    fn init_module_system_registers_all_modules() {
-        let kernel = AsyncMutex::new(Kernel::new());
-        let (_dir, db_path) = create_temp_db();
-
-        init_module_system(&kernel, &db_path).unwrap();
-
-        let k = kernel.blocking_lock();
-        // Verify modules are registered
-        assert!(
-            k.is_registered("inventory"),
-            "inventory module should be registered"
-        );
-        assert!(k.is_registered("crm"), "crm module should be registered");
-        assert!(k.is_registered("tax"), "tax module should be registered");
-        assert!(
-            k.is_registered("settings"),
-            "settings module should be registered"
-        );
-        assert!(
-            k.is_registered("staff"),
-            "staff module should be registered"
-        );
-        assert!(
-            k.is_registered("sales"),
-            "sales module should be registered"
-        );
-        assert!(
-            k.is_registered("reporting"),
-            "reporting module should be registered"
-        );
-        assert!(
-            k.is_registered("terminal"),
-            "terminal module should be registered"
-        );
-        assert!(
-            k.is_registered("currency"),
-            "currency module should be registered"
-        );
-        assert_eq!(k.module_count(), 9);
-    }
-
-    #[test]
-    fn init_module_system_loads_and_starts_modules() {
-        let kernel = AsyncMutex::new(Kernel::new());
-        let (_dir, db_path) = create_temp_db();
-
-        init_module_system(&kernel, &db_path).unwrap();
-
-        let k = kernel.blocking_lock();
-        assert!(k.is_loaded(), "kernel should be loaded");
-        assert!(k.is_started(), "kernel should be started");
-    }
-
-    #[test]
-    fn init_module_system_wires_event_handlers() {
-        let kernel = AsyncMutex::new(Kernel::new());
-        let (_dir, db_path) = create_temp_db();
-
-        init_module_system(&kernel, &db_path).unwrap();
-
-        let k = kernel.blocking_lock();
-        let bus = k.event_bus();
-        // Verify event handlers are registered for key topics
-        assert!(
-            bus.has_handlers("sale.completed"),
-            "sale.completed should have handlers"
-        );
-        assert!(
-            bus.has_handlers("product.created"),
-            "product.created should have handlers"
-        );
-        assert!(
-            bus.has_handlers("stock.adjusted"),
-            "stock.adjusted should have handlers"
-        );
-        // 5 handlers on sale.completed, 2 on product.created, 2 on stock.adjusted
-        assert!(
-            bus.handler_count() >= 5,
-            "expected at least 5 handlers total"
-        );
-    }
-
-    #[test]
-    fn init_module_system_with_invalid_db_path_fails() {
-        let kernel = AsyncMutex::new(Kernel::new());
-
-        // Use a path in a nonexistent parent directory so
-        // rusqlite::Connection::open is guaranteed to fail on
-        // all platforms (SQLite can create new DB files but
-        // cannot create parent directories).
-        let dir = tempfile::tempdir().unwrap();
-        let bad_path = dir.path().join("nonexistent_subdir").join("db.sqlite");
-
-        let result = init_module_system(&kernel, &bad_path);
-        assert!(result.is_err(), "should fail with invalid path");
-    }
-
-    #[test]
-    fn init_module_system_twice_registers_duplicate_modules() {
-        let kernel = AsyncMutex::new(Kernel::new());
-        let (_dir, db_path) = create_temp_db();
-
-        init_module_system(&kernel, &db_path).unwrap();
-
-        // Calling init again should fail because modules are already registered
-        let result = init_module_system(&kernel, &db_path);
-        assert!(
-            result.is_err(),
-            "second init should fail due to duplicate modules"
-        );
-    }
-
-    #[test]
-    fn settings_updated_handler_is_registered() {
-        let kernel = AsyncMutex::new(Kernel::new());
-        let (_dir, db_path) = create_temp_db();
-
-        init_module_system(&kernel, &db_path).unwrap();
-
-        let k = kernel.blocking_lock();
-        let bus = k.event_bus();
-        assert!(
-            bus.has_handlers("settings.updated"),
-            "ADR #22: settings.updated topic must have at least one handler registered"
-        );
-    }
-
-    #[test]
-    fn event_bus_has_correct_handler_topics() {
-        let kernel = AsyncMutex::new(Kernel::new());
-        let (_dir, db_path) = create_temp_db();
-
-        init_module_system(&kernel, &db_path).unwrap();
-
-        let k = kernel.blocking_lock();
-        let bus = k.event_bus();
-        assert_eq!(bus.topic_count(), 4, "should have 4 event topics");
-    }
-
-    // ── init_pending_sale_reaper / open_reaper_connection ────────────
-
-    #[test]
-    fn open_reaper_connection_configures_wal_and_foreign_keys() {
-        let (_dir, db_path) = create_temp_db();
-
-        let conn = open_reaper_connection(&db_path).unwrap();
-        let wal: String = conn
-            .query_row("PRAGMA journal_mode", [], |r| r.get(0))
-            .unwrap();
-        assert_eq!(wal.to_lowercase(), "wal", "reaper connection must use WAL");
-
-        let fk: i64 = conn
-            .query_row("PRAGMA foreign_keys", [], |r| r.get(0))
-            .unwrap();
-        assert_eq!(fk, 1, "reaper connection must enforce foreign keys");
-    }
-
-    #[test]
-    fn open_reaper_connection_fails_on_unopenable_path() {
-        let dir = tempfile::tempdir().unwrap();
-        let bad_path = dir.path().join("nonexistent_subdir").join("db.sqlite");
-        assert!(
-            open_reaper_connection(&bad_path).is_err(),
-            "a path in a nonexistent parent must fail to open"
-        );
-    }
-
-    #[test]
-    fn open_reaper_connection_reuses_existing_db() {
-        // The reaper opens the same DB the app uses; a second connection
-        // must succeed on the existing file and see the migrated schema.
-        let (_dir, db_path) = create_temp_db();
-
-        let conn = open_reaper_connection(&db_path).unwrap();
-        let sales_table: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='sales'",
-                [],
-                |r| r.get(0),
-            )
-            .unwrap();
-        assert_eq!(sales_table, 1, "reaper connection must see the app schema");
-    }
-}
+#[path = "startup_tests.rs"]
+mod tests;

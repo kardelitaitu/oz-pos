@@ -5,7 +5,6 @@ findings: Transitional module implementing Module trait. No unsafe code. Re-expo
   FeatureRegistry, Feature from oz-core. 8 unit tests pass.
 next: Migrate settings commands into this module | perf: N/A.
 */
-#![warn(missing_docs)]
 
 //! Settings Module — store configuration and feature flag management.
 //!

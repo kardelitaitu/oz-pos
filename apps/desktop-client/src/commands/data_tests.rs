@@ -7,10 +7,9 @@ fn backup_status_debug() {
     let bs = BackupStatus {
         last_backup: Some("2025-01-01 12:00:00".into()),
         last_backup_size: Some("1.5 MB".into()),
-        db_path: "/data/oz-pos.db".into(),
     };
     let d = format!("{bs:?}");
-    assert!(d.contains("oz-pos.db"));
+    assert!(d.contains("2025-01-01"));
 }
 
 #[test]
@@ -18,10 +17,12 @@ fn backup_status_serialize() {
     let bs = BackupStatus {
         last_backup: None,
         last_backup_size: None,
-        db_path: "/tmp/test.db".into(),
     };
     let json = serde_json::to_value(&bs).unwrap();
-    assert_eq!(json["db_path"], "/tmp/test.db");
+    assert!(
+        !json.as_object().unwrap().contains_key("db_path"),
+        "db_path must not be exposed in the DTO (M-7)"
+    );
     assert!(json["last_backup"].is_null());
 }
 

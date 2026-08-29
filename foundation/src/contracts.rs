@@ -22,6 +22,20 @@ pub trait Module: Debug + Send + Sync {
     /// Stable identifier for this module (e.g. `"sales"`, `"inventory"`).
     fn id(&self) -> ModuleId;
 
+    /// Module IDs this module depends on, mirroring the `dependencies`
+    /// array in the module's `manifest.json`.
+    ///
+    /// The kernel topologically sorts registered modules by this list, so
+    /// a dependency's `on_load`/`on_start` always runs first and its
+    /// `on_stop` always runs last. Every declared id must belong to a
+    /// registered module or `load_all` fails with
+    /// `KernelError::MissingDependency`.
+    ///
+    /// Defaults to no dependencies, so a leaf module need not implement it.
+    fn dependencies(&self) -> &'static [ModuleId] {
+        &[]
+    }
+
     /// Called after the module is registered but before it is started.
     /// Use this to validate configuration and register event handlers.
     fn on_load(&mut self) -> ModuleResult {

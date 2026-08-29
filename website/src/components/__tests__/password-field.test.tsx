@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -122,6 +122,8 @@ describe('PasswordField', () => {
     const h = await renderField({ showConfirm: true, value: 'Abcdef1!', confirmValue: 'Abcdef1!' });
     try {
       expect(h.container.textContent).not.toContain("Passwords don't match");
+      const check = h.container.querySelector('[aria-label="Passwords match"]');
+      expect(check).not.toBeNull();
     } finally {
       act(() => h.root.unmount());
       h.container.remove();

@@ -1,39 +1,40 @@
 [workspace]
 resolver = "2"
+
+# ── Members ───────────────────────────────────────────────────────────
+#
+# `crates/`, `modules/`, and `platform/` are globbed so that a new
+# vertical becomes a workspace member the moment its directory exists.
+# Adding a module is then two edits (this file's [workspace.dependencies]
+# + the startup registration), not three — and `scripts/new-module.ps1`
+# / `scripts/new-module.sh` performs both for you.
+#
+# `apps/` is deliberately listed explicitly: `apps/unified` (Docker /
+# Caddy assets) and `apps/license-server` (Go) contain no Cargo.toml, and
+# a glob over `apps/*` makes `cargo metadata` fail outright with
+# "failed to load manifest for workspace member".
 members = [
-    "crates/oz-api",
-    "crates/oz-core",
-    "crates/oz-hal",
-    "crates/oz-lua",
-    "crates/oz-plugin",
-    "crates/oz-security",
-    "crates/oz-notification",
-    "crates/oz-payment",
-    "crates/oz-reporting",
-    "crates/oz-logging",
-    "crates/oz-cli",
+    "crates/*",
+    "modules/*",
+    "platform/*",
     "foundation",
-    "platform/core",
-    "platform/kernel",
-    "platform/startup",
-    "platform/sync",
-    "modules/sales",
-    "modules/inventory",
-    "modules/crm",
-    "modules/tax",
-    "modules/settings",
-    "modules/staff",
-    "modules/reporting",
-    "modules/terminal",
-    "modules/currency",
-    "modules/loyalty",
     "apps/cloud-server",
     "apps/desktop-client",
     "apps/tablet-client",
 ]
 
+# Standalone crates that pin their own dependency graph and must NOT
+# perturb the workspace lockfile. Each already carries an empty
+# `[workspace]` table; listing them here documents the intent and keeps
+# `cargo package`/path-dependency discovery from pulling them back in.
+exclude = [
+    "fuzz",
+    "fuzz/hfuzz",
+    "scripts/updater-compat-check",
+]
+
 [workspace.package]
-version = "0.0.30"
+version = "0.0.31"
 edition = "2024"
 rust-version = "1.88"   # axum/tower-http deps (time 0.3.47+) require ≥ 1.88
 license = "SEE LICENSE IN LICENSE"
@@ -46,6 +47,7 @@ readme = "README.md"
 # all crates import from here: oz-core = { workspace = true }
 oz-api = { path = "crates/oz-api" }
 oz-core = { path = "crates/oz-core" }
+oz-crypto = { path = "crates/oz-crypto" }
 oz-hal = { path = "crates/oz-hal" }
 oz-lua = { path = "crates/oz-lua" }
 oz-plugin = { path = "crates/oz-plugin" }
@@ -54,6 +56,7 @@ oz-notification = { path = "crates/oz-notification" }
 oz-payment = { path = "crates/oz-payment" }
 oz-reporting = { path = "crates/oz-reporting" }
 oz-logging = { path = "crates/oz-logging" }
+oz-media = { path = "crates/oz-media" }
 oz-cli = { path = "crates/oz-cli" }
 foundation = { path = "foundation" }
 platform-core = { path = "platform/core" }
@@ -68,6 +71,15 @@ modules-reporting = { path = "modules/reporting" }
 modules-terminal = { path = "modules/terminal" }
 modules-currency = { path = "modules/currency" }
 modules-loyalty = { path = "modules/loyalty" }
+# ── Planned verticals (stub modules) ──────────────────────────────────
+# Each already exists as a registered no-op Module implementing the
+# kernel lifecycle, owning its manifest.json + feature flag, with the
+# domain logic still living in oz-core / desktop-client. See
+# modules/README.md for the promotion path from stub to owning module.
+modules-purchasing = { path = "modules/purchasing" }
+modules-promotions = { path = "modules/promotions" }
+modules-giftcards = { path = "modules/giftcards" }
+modules-kitchen = { path = "modules/kitchen" }
 platform-startup = { path = "platform/startup" }
 platform-sync = { path = "platform/sync" }
 tauri = { version = "2", features = [] }
@@ -122,6 +134,33 @@ zip = "2"
 # Benchmarking
 criterion = { version = "0.5", features = ["html_reports"] }
 console-subscriber = "0.4"
+
+# ── Workspace lint policy ─────────────────────────────────────────────
+#
+# Every member opts in with `[lints] workspace = true`, so a new crate
+# inherits the house rule instead of re-declaring `#![warn(missing_docs)]`
+# in its lib.rs. AGENTS.md requires a doc comment on every public item;
+# this makes that requirement structural rather than per-crate boilerplate.
+#
+# `unsafe_code` deliberately stays OUT of this table, for two reasons.
+#
+# First, Cargo rejects a manifest that sets both `[lints] workspace = true`
+# and a local `[lints.rust]` override ("cannot override `workspace.lints`
+# in `lints`"), so a crate cannot relax a workspace lint from its manifest.
+#
+# Second, and decisively: `unsafe_code` is not uniformly deniable here.
+# `oz-logging` calls syslog/eventlog through FFI (`syslog.rs`,
+# `eventlog.rs`) and `oz-notification` uses `unsafe` in its tests, and
+# neither currently carries a crate-level opt-out — adding a workspace-wide
+# deny would break both builds, which is out of scope for a plumbing change.
+#
+# The crates that DO deny it keep the file-local `#![deny(unsafe_code)]`
+# inner attribute, which stays the reviewable place for an exception:
+# `oz-lua` narrows two `unsafe impl Send/Sync` with `#[allow(unsafe_code)]`
+# plus a `// SAFETY:` rationale, and `oz-security` scopes its Windows
+# CredRead/CredWrite FFI behind `#![allow(unsafe_code)]` in `windows.rs`.
+[workspace.lints.rust]
+missing_docs = "warn"
 
 
 [profile.release]

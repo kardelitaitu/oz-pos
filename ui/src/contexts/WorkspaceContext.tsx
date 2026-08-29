@@ -17,7 +17,7 @@ import {
   resolveBootStore,
   type WorkspaceDto,
 } from "@/api/workspaces";
-import { createSession, destroySession } from "@/api/staff";
+import { createSession, destroySession, refreshPickerTicket } from "@/api/staff";
 import { getDeviceId } from "@/api/system";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -173,7 +173,8 @@ const DEFAULT_STORE_ID = "default";
  * session token switching (ADR #6).
  */
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const { session, pickerTicket } = useAuth();
+  const { session, pickerTicket, updatePickerTicket } = useAuth();
+  const updatePickerTicketFn = updatePickerTicket ?? (() => {});
   // Standalone state — not derived from activeInstance, so it works
   // even before availableWorkspaces is loaded (no race condition).
   const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null);
@@ -326,9 +327,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
       isHotSwappingRef.current = true;
       try {
-        // Destroy the old token.
+        // Refresh the picker ticket using the old session before
+        // destroying it — the hot-swap user needs a fresh ticket
+        // bound to THEIR identity (not the previous user's).
+        let ticket = pickerTicket ?? "";
         const prev = sessionTokenRef.current;
         if (prev) {
+          try {
+            const refreshed = await refreshPickerTicket(prev);
+            ticket = refreshed.picker_ticket;
+            updatePickerTicketFn(ticket);
+          } catch {
+            // Refresh failed — use the existing ticket.
+          }
+
           await destroySession(prev).catch(() => {});
           setSessionToken(null);
         }
@@ -341,6 +353,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           instance_id: instance.instance_id,
           type_key: instance.type_key,
           terminal_id: await getDeviceId().catch(() => ""),
+          picker_ticket: ticket,
         });
 
         setSessionToken(result.session_token);
@@ -444,17 +457,38 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false;
 
-    // Destroy any previous token before creating a new one.
-    const prev = sessionTokenRef.current;
-    if (prev) {
-      destroySession(prev).catch(() => {});
-      setSessionToken(null);
-    }
-
-    // Resolve device ID for terminal binding (ADR #7), then create session.
+    // Resolve device ID for terminal binding (ADR #7), then refresh
+    // the picker ticket and create session.
     (async () => {
       const deviceId = await getDeviceId().catch(() => "");
       if (cancelled) return;
+
+      // ADR #6 re-entry: if a previous session exists (user pressed
+      // Back from KDS), refresh the picker ticket BEFORE destroying
+      // the old session. The ticket has a 5-minute TTL; if the user
+      // spent longer than that at the workspace picker, the original
+      // ticket from login is stale. The refresh re-mints a fresh
+      // ticket using the still-valid session token.
+      let ticket = pickerTicket ?? "";
+      const prevToken = sessionTokenRef.current;
+      if (prevToken) {
+        try {
+          const refreshed = await refreshPickerTicket(prevToken);
+          ticket = refreshed.picker_ticket;
+          updatePickerTicketFn(ticket);
+        } catch {
+          // Refresh failed (session expired?) — proceed with the
+          // original ticket; createSession will reject if it's stale.
+        }
+      }
+
+      if (cancelled) return;
+
+      // Destroy any previous token before creating a new one.
+      if (prevToken) {
+        destroySession(prevToken).catch(() => {});
+        setSessionToken(null);
+      }
 
       createSession({
         user_id: session.user_id,
@@ -463,6 +497,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         instance_id: activeInstance.instance_id,
         type_key: activeInstance.type_key,
         terminal_id: deviceId,
+        picker_ticket: ticket,
       })
         .then((result) => {
           if (!cancelled) {

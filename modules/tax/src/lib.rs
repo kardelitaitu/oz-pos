@@ -5,7 +5,6 @@ findings: Transitional module implementing Module trait. No unsafe code. Re-expo
   oz-core. 8 unit tests pass.
 next: Migrate tax commands into this module | perf: N/A.
 */
-#![warn(missing_docs)]
 
 //! Tax Module — tax rate configuration and management.
 //!

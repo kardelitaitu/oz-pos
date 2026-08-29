@@ -454,6 +454,233 @@ pub struct ReceivePoLineDto {
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
+// ── Scoped variants (ADR #7) ────────────────────────────────────
+
+/// Scoped variant of `list_suppliers` (ADR #7).
+#[tauri::command]
+pub async fn list_suppliers_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<SupplierDto>, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let suppliers = store.list_suppliers()?;
+    drop(db);
+    Ok(suppliers.into_iter().map(SupplierDto::from).collect())
+}
+
+/// Scoped variant of `get_supplier` (ADR #7).
+#[tauri::command]
+pub async fn get_supplier_scoped(
+    id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Option<SupplierDto>, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let supplier = store.get_supplier(&id)?;
+    drop(db);
+    Ok(supplier.map(SupplierDto::from))
+}
+
+/// Scoped variant of `create_supplier` (ADR #7).
+#[tauri::command]
+pub async fn create_supplier_scoped(
+    args: CreateSupplierArgs,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<SupplierDto, AppError> {
+    validate_not_empty("name", &args.name).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("code", &args.code).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let supplier = store.create_supplier(
+        args.code.trim(),
+        args.name.trim(),
+        args.contact_person.as_deref().unwrap_or_default(),
+        args.phone.as_deref().unwrap_or_default(),
+        args.email.as_deref().unwrap_or_default(),
+        args.address.as_deref().unwrap_or_default(),
+        args.tax_id.as_deref().unwrap_or_default(),
+        args.payment_terms.as_deref().unwrap_or_default(),
+        args.notes.as_deref().unwrap_or_default(),
+    )?;
+    drop(db);
+    Ok(SupplierDto::from(supplier))
+}
+
+/// Scoped variant of `update_supplier` (ADR #7).
+#[tauri::command]
+pub async fn update_supplier_scoped(
+    args: UpdateSupplierArgs,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<SupplierDto, AppError> {
+    validate_not_empty("name", &args.name).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("code", &args.code).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let supplier = store.update_supplier(
+        &args.id,
+        args.code.trim(),
+        args.name.trim(),
+        args.contact_person.as_deref().unwrap_or_default(),
+        args.phone.as_deref().unwrap_or_default(),
+        args.email.as_deref().unwrap_or_default(),
+        args.address.as_deref().unwrap_or_default(),
+        args.tax_id.as_deref().unwrap_or_default(),
+        args.payment_terms.as_deref().unwrap_or_default(),
+        args.notes.as_deref().unwrap_or_default(),
+        args.status.as_deref().unwrap_or("active"),
+    )?;
+    drop(db);
+    Ok(SupplierDto::from(supplier))
+}
+
+/// Scoped variant of `list_purchase_orders` (ADR #7).
+#[tauri::command]
+pub async fn list_purchase_orders_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<PurchaseOrderDto>, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let pos = store.list_purchase_orders()?;
+    drop(db);
+    Ok(pos.into_iter().map(PurchaseOrderDto::from).collect())
+}
+
+/// Scoped variant of `get_purchase_order` (ADR #7).
+#[tauri::command]
+pub async fn get_purchase_order_scoped(
+    id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Option<PurchaseOrderDto>, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let po = store.get_purchase_order(&id)?;
+    drop(db);
+    Ok(po.map(PurchaseOrderDto::from))
+}
+
+/// Scoped variant of `create_purchase_order` (ADR #7).
+#[tauri::command]
+pub async fn create_purchase_order_scoped(
+    args: CreatePurchaseOrderArgs,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<PurchaseOrderDto, AppError> {
+    validate_not_empty("po_number", &args.po_number)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let lines: Vec<CreatePoLineInput> = args
+        .lines
+        .into_iter()
+        .map(|l| CreatePoLineInput {
+            sku: l.sku,
+            product_name: l.product_name,
+            qty: l.qty,
+            unit_cost_minor: l.unit_cost_minor,
+        })
+        .collect();
+    let po = store.create_purchase_order(
+        args.po_number.trim(),
+        &args.supplier_id,
+        args.expected_date.as_deref().unwrap_or_default(),
+        args.notes.as_deref().unwrap_or_default(),
+        None,
+        &lines,
+    )?;
+    drop(db);
+    Ok(PurchaseOrderDto::from(po))
+}
+
+/// Scoped variant of `update_po_status` (ADR #7).
+#[tauri::command]
+pub async fn update_po_status_scoped(
+    args: UpdatePoStatusArgs,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<PurchaseOrderDto, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let po = store.update_po_status(&args.id, &args.status)?;
+    drop(db);
+    Ok(PurchaseOrderDto::from(po))
+}
+
+/// Scoped variant of `receive_purchase_order` (ADR #7).
+#[tauri::command]
+pub async fn receive_purchase_order_scoped(
+    id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<PurchaseOrderDto, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let po = store.receive_purchase_order(&id)?;
+    drop(db);
+    Ok(PurchaseOrderDto::from(po))
+}
+
+/// Scoped variant of `receive_purchase_order_with_lines` (ADR #7).
+#[tauri::command]
+pub async fn receive_purchase_order_with_lines_scoped(
+    id: String,
+    lines: Vec<ReceivePoLineDto>,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<PurchaseOrderDto, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let input: Vec<ReceivePoLineInput> = lines
+        .into_iter()
+        .map(|l| ReceivePoLineInput {
+            line_id: l.line_id,
+            received_qty: l.received_qty,
+            damaged_qty: l.damaged_qty,
+        })
+        .collect();
+    let po = store.receive_purchase_order_with_lines(&id, &input)?;
+    drop(db);
+    Ok(PurchaseOrderDto::from(po))
+}
+
 #[cfg(test)]
 #[path = "purchasing_tests.rs"]
 mod tests;

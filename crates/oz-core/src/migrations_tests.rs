@@ -358,10 +358,12 @@ fn seed_data_bootstraps_essential_rows() {
     );
 }
 
-/// Pin the consolidated schema surface: 94 tables, 129 indexes (123 in
+/// Pin the consolidated schema surface: 99 tables, 137 indexes (123 in
 /// init plus the two per-tenant unique indexes from
 /// `20260815_tenant_unique_indexes.sql` plus 4 multi-KDS indexes from
-/// `20260820_kds_devices.sql`), 4 triggers. (The generated
+/// `20260820_kds_devices.sql` plus 4 media/EDC indexes from
+/// `20260824_media_edc.sql` plus 3 payment indexes from
+/// `20260825_payment_infra.sql`), 4 triggers. (The generated
 /// `*.pg.sql` Postgres port is excluded — see
 /// [`pg_init_declares_same_table_surface_as_sqlite`].) A count assertion catches a table/index/trigger silently
 /// dropping out of `init.sql` — something a name-list check misses when a
@@ -371,13 +373,13 @@ fn init_sql_creates_complete_schema_surface() {
     let mut conn = fresh();
     run(&mut conn).unwrap();
 
-    // The runner adds `schema_migrations` on top of the 92 init tables.
+    // The runner adds `schema_migrations` on top of the 97 init tables.
     assert_eq!(
         row_count(
             &conn,
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'schema_migrations'",
         ),
-        94,
+        99,
         "table surface drifted"
     );
     assert_eq!(
@@ -385,7 +387,7 @@ fn init_sql_creates_complete_schema_surface() {
             &conn,
             "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'",
         ),
-        130,
+        137,
         "index surface drifted"
     );
     assert_eq!(
@@ -497,6 +499,8 @@ fn existing_db_with_legacy_rows_upgrades_idempotently() {
             "20260822_kds_counter_store.sql".to_string(),
             "20260822_sale_charges.sql".to_string(),
             "20260823_po_receive_state.sql".to_string(),
+            "20260824_media_edc.sql".to_string(),
+            "20260825_payment_infra.sql".to_string(),
         ]
     );
 
@@ -528,7 +532,7 @@ fn existing_db_with_legacy_rows_upgrades_idempotently() {
             &conn,
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'schema_migrations'"
         ),
-        94,
+        99,
         "table surface must be unchanged after upgrade"
     );
 }

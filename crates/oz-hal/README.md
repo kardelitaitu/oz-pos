@@ -1,6 +1,6 @@
 # oz-hal
 
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · fully verified against tree: all traits (barcode/printer/cash_drawer/customer_display/weight_scale), drivers (usb/bt/serial/tcp scanner+printer, drawer, serial_display, scale), mocks (MockBarcodeScanner/MockReceiptPrinter/MockCashDrawer in drivers/mock.rs), escpos consts (CUT_FULL/CUT_PARTIAL/ALIGN_CENTER/BOLD_ON/BOLD_OFF) + format_receipt, receipt format_sales_receipt/SalesReceipt/ReceiptConfig, and DriverRegistry methods (discover/register_tcp_printer/scanner) all present; unsafe confined to lib.rs with SAFETY comment per convention -->
+<!-- Audit stamp: 2026-08-30 · docs-auditor · status: ACCURATE (2 findings repaired) · F1: driver table "WeightScale" -> HidWeightScale (drivers/scale.rs struct name) · F2: added missing KdsChit driver entry (drivers/kds_chit.rs) · verified accurate: all traits (barcode/printer/cash_drawer/customer_display/weight_scale), drivers (usb/bt/serial/tcp scanner+printer, drawer, serial_display, scale), mocks (MockBarcodeScanner/MockReceiptPrinter/MockCashDrawer in drivers/mock.rs), escpos consts (CUT_FULL/CUT_PARTIAL/ALIGN_CENTER/BOLD_ON/BOLD_OFF) + format_receipt, receipt format_sales_receipt/SalesReceipt/ReceiptConfig, and DriverRegistry methods (discover/register_tcp_printer/scanner) all present; unsafe confined to lib.rs with SAFETY comment per convention -->
 
 Hardware Abstraction Layer — the seam between business logic and physical devices (USB, Bluetooth, serial, TCP).
 
@@ -12,7 +12,7 @@ Hardware Abstraction Layer — the seam between business logic and physical devi
 | `ReceiptPrinter` | `traits/printer.rs` | `print_receipt`, `print_raw`, `cut` |
 | `CashDrawer` | `traits/cash_drawer.rs` | `open`, `is_open` |
 | `CustomerDisplay` | `traits/customer_display.rs` | Pole/line display for customer-facing screen |
-| `WeightScale` | `drivers/scale.rs` | `WeightScale`, `WeightReading` — re-exported at crate root |
+| `WeightScale` | `traits/weight_scale.rs` | `WeightScale`, `WeightReading` — re-exported at crate root |
 
 Business code never imports a specific driver — only traits via `DriverRegistry`.
 
@@ -38,7 +38,8 @@ Business code never imports a specific driver — only traits via `DriverRegistr
 | `TcpReceiptPrinter` | `drivers/tcp_printer.rs` | Stub |
 | `CashDrawer` | `drivers/drawer.rs` | Cash drawer driver |
 | `SerialCustomerDisplay` | `drivers/serial_display.rs` | Stub |
-| `WeightScale` | `drivers/scale.rs` | Scale driver |
+| `HidWeightScale` | `drivers/scale.rs` | USB HID weight scale driver |
+| `KdsChit` | `drivers/kds_chit.rs` | KDS chit printer |
 | `MockBarcodeScanner` | `drivers/mock.rs` | Programmable mock |
 | `MockReceiptPrinter` | `drivers/mock.rs` | Programmable mock |
 | `MockCashDrawer` | `drivers/mock.rs` | Programmable mock |
@@ -81,4 +82,4 @@ scanner.push(Barcode::new("ABC123"));
 - No `unwrap()` in driver code — map errors to `HalError` at the trait boundary.
 - Wrap blocking I/O in `tokio::task::spawn_blocking`.
 
-> last audited 07-07-26 by docs-auditor
+> last audited 30-08-26 by docs-auditor

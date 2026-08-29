@@ -252,3 +252,14 @@ analytics-card-desc-voids = Items voided or removed from orders.
 analytics-upgrade-required = Analytics is a Pro feature
 analytics-upgrade-message = Unlock revenue, category, and hourly reports across all your stores. Upgrade to Pro to see your full analytics dashboard.
 analytics-upgrade-cta = Upgrade to Pro
+
+# Session expired banner — shown when an analytics command fails with
+# InvalidSession (session TTL passed or backend restarted).
+analytics-session-expired-title = Session expired
+analytics-session-expired-message = Your session has expired. Sign in again to continue viewing analytics.
+analytics-sign-in-again = Sign in again
+
+# No workspace selected prompt — shown when the dashboard has no active workspace.
+analytics-no-workspace-title = No workspace selected
+analytics-no-workspace-message = Select a workspace to view analytics
+analytics-select-workspace = Select workspace

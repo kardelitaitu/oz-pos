@@ -5,7 +5,6 @@ findings: Implements Module trait, exchange-rate domain model, repository, and e
   Re-exports Currency from foundation and ExchangeRateRow from models. No unsafe code.
 next: Migrate currency/exchange-rate callers from oz-core Store to CurrencyRepository.
 */
-#![warn(missing_docs)]
 
 //! Currency/Exchange Module — ISO-4217 currencies and exchange rates.
 //!

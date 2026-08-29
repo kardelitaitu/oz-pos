@@ -11,7 +11,7 @@ import { Card } from '@/components/Card';
 import { Skeleton } from '@/components/Skeleton';
 import { Localized } from '@/components/Localized';
 import { useLocalization } from '@fluent/react';
-import { printReceipt } from '@/api/hardware';
+import { printReceiptScoped } from '@/api/hardware';
 import { l10nErrorMessage } from '@/utils/app-error';
 import './EodReportScreen.css';
 
@@ -340,7 +340,7 @@ export default function EodReportScreen() {
       body += line('           *** END ***');
       body += line('');
 
-      await printReceipt({ body });
+      await printReceiptScoped(sessionToken, { body });
     } catch {
       // Printing error — silently handled.
     } finally {

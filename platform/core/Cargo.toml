@@ -6,7 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 description = "OZ-POS platform core: database migrations, connection pool, auth, RBAC, settings."
 
+# Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
+[lints]
+workspace = true
+
 [dependencies]
+oz-crypto = { workspace = true }
 chrono = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

@@ -322,14 +322,17 @@ impl Settings {
         Self::set(conn, keys::SYNC_SERVER_URL, url)
     }
 
-    /// Get the sync API key.
+    /// Get the sync API key (transparently decrypted).
     pub fn get_sync_api_key(conn: &Connection) -> Result<Option<String>, PlatformError> {
-        Self::get(conn, keys::SYNC_API_KEY)
+        let raw = Self::get(conn, keys::SYNC_API_KEY)?;
+        Ok(raw.map(|v| oz_crypto::decrypt_sync_api_key(&v).unwrap_or(v)))
     }
 
-    /// Set the sync API key.
+    /// Set the sync API key (transparently encrypted at rest).
     pub fn set_sync_api_key(conn: &Connection, key: &str) -> Result<(), PlatformError> {
-        Self::set(conn, keys::SYNC_API_KEY, key)
+        let encrypted = oz_crypto::encrypt_sync_api_key(key)
+            .map_err(|e| PlatformError::Internal(e.to_string()))?;
+        Self::set(conn, keys::SYNC_API_KEY, &encrypted)
     }
 
     /// Get the registered sync terminal identifier (ADR sync-auth-hardening
@@ -344,14 +347,20 @@ impl Settings {
     }
 
     /// Get the registered sync terminal device secret (ADR sync-auth-hardening
-    /// P3). `None` when the terminal has not been paired yet.
+    /// P3). Transparently decrypted. `None` when not paired yet.
     pub fn get_sync_terminal_secret(conn: &Connection) -> Result<Option<String>, PlatformError> {
-        Ok(Self::get(conn, keys::SYNC_TERMINAL_SECRET)?.filter(|s| !s.is_empty()))
+        let raw = Self::get(conn, keys::SYNC_TERMINAL_SECRET)?;
+        Ok(raw
+            .filter(|s| !s.is_empty())
+            .map(|v| oz_crypto::decrypt_sync_terminal_secret(&v).unwrap_or(v)))
     }
 
     /// Set the registered sync terminal device secret (ADR sync-auth-hardening P3).
+    /// Transparently encrypted at rest.
     pub fn set_sync_terminal_secret(conn: &Connection, secret: &str) -> Result<(), PlatformError> {
-        Self::set(conn, keys::SYNC_TERMINAL_SECRET, secret)
+        let encrypted = oz_crypto::encrypt_sync_terminal_secret(secret)
+            .map_err(|e| PlatformError::Internal(e.to_string()))?;
+        Self::set(conn, keys::SYNC_TERMINAL_SECRET, &encrypted)
     }
 
     /// Check if sync is enabled.
@@ -416,14 +425,17 @@ impl Settings {
         Self::set(conn, keys::PG_SYNC_USER, user)
     }
 
-    /// Get the PostgreSQL password.
+    /// Get the PostgreSQL password (transparently decrypted).
     pub fn get_pg_sync_password(conn: &Connection) -> Result<Option<String>, PlatformError> {
-        Self::get(conn, keys::PG_SYNC_PASSWORD)
+        let raw = Self::get(conn, keys::PG_SYNC_PASSWORD)?;
+        Ok(raw.map(|v| oz_crypto::decrypt_pg_sync_password(&v).unwrap_or(v)))
     }
 
-    /// Set the PostgreSQL password.
+    /// Set the PostgreSQL password (transparently encrypted at rest).
     pub fn set_pg_sync_password(conn: &Connection, password: &str) -> Result<(), PlatformError> {
-        Self::set(conn, keys::PG_SYNC_PASSWORD, password)
+        let encrypted = oz_crypto::encrypt_pg_sync_password(password)
+            .map_err(|e| PlatformError::Internal(e.to_string()))?;
+        Self::set(conn, keys::PG_SYNC_PASSWORD, &encrypted)
     }
 
     /// Get whether PG sync must connect over TLS.
@@ -475,9 +487,9 @@ impl Settings {
 
     // ── Brand / White-label ─────────────────────────────────────
 
-    /// Get the primary brand colour (hex). Defaults to `"#10b981"`.
+    /// Get the primary brand colour (hex). Defaults to `"#147EFB"`.
     pub fn get_brand_primary_colour(conn: &Connection) -> Result<String, PlatformError> {
-        Ok(Self::get(conn, keys::BRAND_PRIMARY_COLOUR)?.unwrap_or_else(|| "#10b981".into()))
+        Ok(Self::get(conn, keys::BRAND_PRIMARY_COLOUR)?.unwrap_or_else(|| "#147EFB".into()))
     }
 
     /// Set the primary brand colour.
@@ -521,14 +533,17 @@ impl Settings {
         )
     }
 
-    /// Get the exchange rate API key.
+    /// Get the exchange rate API key (transparently decrypted).
     pub fn get_rate_sync_api_key(conn: &Connection) -> Result<Option<String>, PlatformError> {
-        Self::get(conn, keys::RATE_SYNC_API_KEY)
+        let raw = Self::get(conn, keys::RATE_SYNC_API_KEY)?;
+        Ok(raw.map(|v| oz_crypto::decrypt_rate_api_key(&v).unwrap_or(v)))
     }
 
-    /// Set the exchange rate API key.
+    /// Set the exchange rate API key (transparently encrypted at rest).
     pub fn set_rate_sync_api_key(conn: &Connection, key: &str) -> Result<(), PlatformError> {
-        Self::set(conn, keys::RATE_SYNC_API_KEY, key)
+        let encrypted = oz_crypto::encrypt_rate_api_key(key)
+            .map_err(|e| PlatformError::Internal(e.to_string()))?;
+        Self::set(conn, keys::RATE_SYNC_API_KEY, &encrypted)
     }
 
     /// Get the exchange rate sync interval in minutes.
@@ -600,5 +615,20 @@ impl Settings {
         sep: &str,
     ) -> Result<(), PlatformError> {
         Self::set(conn, keys::CURRENCY_THOUSANDS_SEPARATOR, sep)
+    }
+
+    // ── LAN Server PSK (secret — encrypted at rest) ─────────────
+
+    /// Get the LAN server pre-shared key (transparently decrypted).
+    pub fn get_lan_server_psk(conn: &Connection) -> Result<Option<String>, PlatformError> {
+        let raw = Self::get(conn, keys::LAN_SERVER_PSK)?;
+        Ok(raw.map(|v| oz_crypto::decrypt_lan_psk(&v).unwrap_or(v)))
+    }
+
+    /// Set the LAN server pre-shared key (transparently encrypted at rest).
+    pub fn set_lan_server_psk(conn: &Connection, psk: &str) -> Result<(), PlatformError> {
+        let encrypted =
+            oz_crypto::encrypt_lan_psk(psk).map_err(|e| PlatformError::Internal(e.to_string()))?;
+        Self::set(conn, keys::LAN_SERVER_PSK, &encrypted)
     }
 }

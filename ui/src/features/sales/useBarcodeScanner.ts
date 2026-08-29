@@ -2,14 +2,19 @@ import { useEffect, useRef, useCallback } from 'react';
 import {
   startScanner,
   stopScanner,
+  startScannerScoped,
+  stopScannerScoped,
   onBarcodeScanned,
   onBarcodeError,
   listScanners,
+  listScannersScoped,
   type BarcodeScannedPayload,
 } from '@/api/hardware';
-import { lookupByBarcode } from '@/api/products';
+import { lookupByBarcode, lookupByBarcodeScoped } from '@/api/products';
 
 export interface UseBarcodeScannerOptions {
+  /** Session token for scoped API calls. */
+  sessionToken?: string;
   /** Scanner device id. Defaults to auto-select first available. */
   scannerId?: string;
   /** Called when a barcode is decoded and the product is found. */
@@ -27,6 +32,7 @@ export interface UseBarcodeScannerOptions {
  * Starts the scanner on mount and stops it on unmount.
  */
 export function useBarcodeScanner({
+  sessionToken,
   scannerId: preferredId,
   onProductFound,
   onProductNotFound,
@@ -50,29 +56,32 @@ export function useBarcodeScanner({
 
     (async () => {
       // Auto-detect scanner if no id was given.
-      const scannerId = preferredId ?? (await autoDetectScanner());
+      const scannerId = preferredId ?? (await autoDetectScanner(sessionToken));
 
       if (!scannerId || cancelled) return;
 
-      await startScanner(scannerId);
+      const start = sessionToken ? (id: string) => startScannerScoped(sessionToken, id) : startScanner;
+      await start(scannerId);
       startedRef.current = true;
     })();
 
     return () => {
       cancelled = true;
       if (startedRef.current) {
-        stopScanner().catch(() => {
+        const stop = sessionToken ? () => stopScannerScoped(sessionToken) : stopScanner;
+        stop().catch(() => {
           // Cleanup on unmount — scanner may already be stopped.
         });
         startedRef.current = false;
       }
     };
-  }, [preferredId]);
+  }, [preferredId, sessionToken]);
 
   const handleScan = useCallback(
     async (payload: BarcodeScannedPayload) => {
       try {
-        const product = await lookupByBarcode(payload.code);
+        const lookup = sessionToken ? (code: string) => lookupByBarcodeScoped(sessionToken, code) : lookupByBarcode;
+      const product = await lookup(payload.code);
         if (product) {
           onProductFoundRef.current(payload);
         } else {
@@ -103,9 +112,10 @@ export function useBarcodeScanner({
   }, [handleScan, handleError]);
 }
 
-async function autoDetectScanner(): Promise<string | null> {
+async function autoDetectScanner(sessionToken?: string): Promise<string | null> {
   try {
-    const scanners = await listScanners();
+    const fetchScanners = sessionToken ? () => listScannersScoped(sessionToken) : listScanners;
+    const scanners = await fetchScanners();
     return scanners[0]?.id ?? null;
   } catch {
     return null;

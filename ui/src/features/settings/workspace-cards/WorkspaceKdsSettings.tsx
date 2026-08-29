@@ -6,7 +6,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import { useSettings } from '@/contexts/SettingsContext';
-import { getSetting, setSettings } from '@/api/settings';
+import { getSettingScoped, setSettingsScoped } from '@/api/settings';
 import SettingsSelect from '../SettingsSelect';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
@@ -40,6 +40,7 @@ const DEFAULT_KDS: KdsDraftState = {
  * Consumes `useSettings()` for shared KDS configuration.
  */
 export function WorkspaceKdsSettings({
+  sessionToken,
   userId,
   variant = 'full-page',
   onSaved,
@@ -75,11 +76,11 @@ export function WorkspaceKdsSettings({
     // Load all 5 KDS settings from the backend, then set originals
     // to the loaded values so dirty tracking doesn't fire on mount.
     Promise.all([
-      getSetting('kds.sound_enabled'),
-      getSetting('kds.yellow_threshold_min'),
-      getSetting('kds.red_threshold_min'),
-      getSetting('kds.auto_acknowledge'),
-      getSetting('kds.density'),
+      getSettingScoped(sessionToken ?? null, 'kds.sound_enabled'),
+      getSettingScoped(sessionToken ?? null, 'kds.yellow_threshold_min'),
+      getSettingScoped(sessionToken ?? null, 'kds.red_threshold_min'),
+      getSettingScoped(sessionToken ?? null, 'kds.auto_acknowledge'),
+      getSettingScoped(sessionToken ?? null, 'kds.density'),
     ]).then(([sound, yellow, red, ack, density]) => {
       const loaded: KdsDraftState = {
         soundEnabled: sound !== 'false',
@@ -121,13 +122,13 @@ export function WorkspaceKdsSettings({
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      await setSettings({
+      await setSettingsScoped(sessionToken ?? null, {
         'kds.sound_enabled': String(draft.soundEnabled),
         'kds.yellow_threshold_min': String(draft.yellowThresholdMin),
         'kds.red_threshold_min': String(draft.redThresholdMin),
         'kds.auto_acknowledge': String(draft.autoAcknowledge),
         'kds.density': draft.density,
-      }, userId ?? 'default');
+      });
       originalsRef.current = { ...draft };
       setDirtyVersion((v) => v + 1);
 

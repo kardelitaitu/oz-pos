@@ -111,7 +111,7 @@ pub const REDIS_URL: &str = "redis.url";
 pub const REDIS_CACHE_TTL: &str = "redis.cache_ttl";
 
 // ── Brand / White-label settings ────────────────────────────
-/// Primary brand colour (hex). Default `"#10b981"`.
+/// Primary brand colour (hex). Default `"#147EFB"`.
 pub const BRAND_PRIMARY_COLOUR: &str = "brand.primary_colour";
 /// Filesystem path to the store logo image.
 pub const BRAND_LOGO_PATH: &str = "brand.logo_path";
@@ -147,3 +147,21 @@ pub const LAN_SERVER_BIND: &str = "lan_server.bind";
 /// Peers must send `{"op":"hello","psk":"<value>"}` as
 /// their first message or the connection is dropped.
 pub const LAN_SERVER_PSK: &str = "lan_server.psk";
+
+// ── Media (images) settings ───────────────────────────────
+/// Media storage backend: `"local"` (Tauri filesystem) or `"object"`
+/// (S3-compatible, cloud). Default `"local"`.
+pub const MEDIA_STORAGE_BACKEND: &str = "media.storage_backend";
+/// Root path for local media storage (relative or absolute).
+/// Default `"media"` under the app data dir.
+pub const MEDIA_ROOT_PATH: &str = "media.root_path";
+/// Max input file size for images, in bytes. Default `"20971520"` (20 MiB).
+pub const MEDIA_MAX_INPUT_BYTES: &str = "media.max_input_bytes";
+/// Max decodable pixels for images (decompression-bomb guard).
+/// Default `"40000000"` (40 MP).
+pub const MEDIA_MAX_PIXELS: &str = "media.max_pixels";
+
+// ── EDC terminals settings ────────────────────────────────
+/// Default EDC terminal ID used when the cashier flow picks a card
+/// terminal. Empty string = no default (user is prompted).
+pub const EDC_DEFAULT_TERMINAL: &str = "edc.default_terminal";

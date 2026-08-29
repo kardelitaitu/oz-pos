@@ -1,0 +1,21 @@
+[package]
+name = "modules-giftcards"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "OZ-POS Gift Cards Module (stub): issuance, balance tracking, redemption, and transaction history."
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+foundation = { workspace = true }
+rusqlite = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+platform-kernel = { workspace = true }
+serde_json = { workspace = true }

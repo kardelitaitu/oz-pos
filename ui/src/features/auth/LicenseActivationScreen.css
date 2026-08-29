@@ -174,15 +174,6 @@
   box-shadow: 0 0 0 0.25rem var(--color-accent-alpha);
 }
 
-.license-input:-webkit-autofill,
-.license-input:-webkit-autofill:hover, 
-.license-input:-webkit-autofill:focus-visible, 
-.license-input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 1000px var(--color-bg-input) inset !important;
-  -webkit-text-fill-color: var(--color-fg) !important;
-  transition: background-color 5000s ease-in-out 0s;
-}
-
 .license-input::placeholder {
   color: var(--color-fg-disabled);
 }

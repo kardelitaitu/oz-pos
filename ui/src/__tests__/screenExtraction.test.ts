@@ -160,10 +160,34 @@ const SCREENS: ScreenEntry[] = [
     name: 'KdsScreen',
     tsx: 'kds/KdsScreen.tsx',
     css: ['kds/KdsScreen.css'],
-    dynamicClassPrefixes: ['kds-column--', 'kds-ticket', 'kds-workspace', 'kds-history-card-status--'],
+    dynamicClassPrefixes: [
+      'kds-column--',
+      'kds-ticket',
+      'kds-workspace',
+      'kds-history-card-status--',
+      // `status status--${order.status}` in KdsTicketCard.
+      'status--',
+    ],
     externalClasses: ['kds-empty'],
-    // History panel shares the same stylesheet (LOAD-04/LOAD-08 styles).
-    additionalTsx: ['kds/KdsHistoryPanel.tsx'],
+    knownDynamicFragments: [
+      // Comparison values inside className ternaries, not CSS classes:
+      // `activeTab === 'completed'`, `themeCtx.theme === 'dark' | 'light'`.
+      'completed',
+      'dark',
+      'light',
+    ],
+    // These siblings render into the same stylesheet: the masonry board, the
+    // ticket card, the Completed tab, the hamburger panel, and the footer
+    // status bar. `KdsHistoryPanel.tsx` used to be listed here but was
+    // deleted in the Phase 6 cleanup (fece7524), which broke this suite at
+    // collection time — the whole file threw ENOENT before any test ran.
+    additionalTsx: [
+      'kds/KdsLayoutMasonry.tsx',
+      'kds/components/KdsTicketCard.tsx',
+      'kds/KdsCompletedView.tsx',
+      'kds/KdsHamburgerPanel.tsx',
+      'kds/KdsScreenFooter.tsx',
+    ],
   },
 
   // ── Loyalty ───────────────────────────────────────────

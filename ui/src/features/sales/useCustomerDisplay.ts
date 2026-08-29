@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   listDisplays,
+  listDisplaysScoped,
   displayShow,
+  displayShowScoped,
   displayClear,
+  displayClearScoped,
 } from '@/api/hardware';
 import { formatMoney } from '@/types/domain';
 import type { Money } from '@/types/domain';
@@ -21,10 +24,13 @@ import type { Money } from '@/types/domain';
  * ```
  */
 export function useCustomerDisplay({
+  sessionToken,
   lines,
   total,
   onPaymentComplete,
 }: {
+  /** Session token for scoped API calls. */
+  sessionToken?: string;
   lines: { qty: number }[];
   total: Money | null;
   onPaymentComplete?: () => void;
@@ -40,7 +46,8 @@ export function useCustomerDisplay({
 
     (async () => {
       try {
-        const ids = await listDisplays();
+        const fetchDisplays = sessionToken ? () => listDisplaysScoped(sessionToken) : listDisplays;
+        const ids = await fetchDisplays();
         if (!cancelled && ids.length > 0) {
           const id = ids[0]!;
           setDisplayId(id);
@@ -56,7 +63,7 @@ export function useCustomerDisplay({
       cancelled = true;
       enabledRef.current = false;
     };
-  }, []);
+  }, [sessionToken]);
 
   // ── Update display when cart state changes ──────────────────
   useEffect(() => {
@@ -67,7 +74,8 @@ export function useCustomerDisplay({
 
     if (itemCount === 0 || !total) {
       // Cart is empty — clear the display.
-      displayClear(dId).catch(() => {
+      const clearDisplay = sessionToken ? (id: string) => displayClearScoped(sessionToken, id) : displayClear;
+      clearDisplay(dId).catch(() => {
         // Display hardware may be disconnected — best-effort.
       });
       lastContentRef.current = '';
@@ -85,22 +93,24 @@ export function useCustomerDisplay({
     const content = `${line1}|${line2}`;
     if (content === lastContentRef.current) return; // skip redundant updates
 
-    displayShow({ displayId: dId, line1, line2 }).catch(() => {
+    const showOnDisplay = sessionToken ? (args: { displayId: string; line1: string; line2: string }) => displayShowScoped(sessionToken, args) : displayShow;
+    showOnDisplay({ displayId: dId, line1, line2 }).catch(() => {
       // Display hardware may be disconnected — best-effort.
     });
     lastContentRef.current = content;
-  }, [lines, total]);
+  }, [lines, total, sessionToken]);
 
   // ── On payment complete, clear the display ──────────────────
   const handlePaymentComplete = useCallback(() => {
     const dId = displayIdRef.current;
     if (!dId) return;
-    displayClear(dId).catch(() => {
+    const clearDisplay = sessionToken ? (id: string) => displayClearScoped(sessionToken, id) : displayClear;
+    clearDisplay(dId).catch(() => {
       // Display hardware may be disconnected — best-effort.
     });
     lastContentRef.current = '';
     onPaymentComplete?.();
-  }, [onPaymentComplete]);
+  }, [onPaymentComplete, sessionToken]);
 
   return { displayId, handlePaymentComplete };
 }

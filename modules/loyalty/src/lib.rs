@@ -5,7 +5,6 @@ findings: New module implementing Module trait. Re-exports loyalty types from oz
   No unsafe code. 8 unit tests verify lifecycle and kernel integration.
 next: Migrate loyalty commands and DB layer into this module | perf: N/A.
 */
-#![warn(missing_docs)]
 
 //! Loyalty Module — customer loyalty program and point management.
 //!
@@ -91,6 +90,12 @@ impl Module for LoyaltyModule {
         "loyalty"
     }
 
+    fn dependencies(&self) -> &'static [&'static str] {
+        // Mirrors `dependencies` in modules/loyalty/manifest.json: a loyalty
+        // account belongs to a CRM customer.
+        &["crm"]
+    }
+
     fn on_load(&mut self) -> ModuleResult {
         info!("loyalty module: on_load — validating configuration");
         // In future phases, this will:
@@ -121,6 +126,28 @@ mod tests {
     use super::*;
     use platform_kernel::Kernel;
 
+    /// Minimal stand-in for a module `loyalty` depends on.
+    ///
+    /// `LoyaltyModule::dependencies()` declares `crm`, so any test that
+    /// drives `load_all`/`start_all` must register that id or dependency
+    /// resolution fails with `MissingDependency`.
+    #[derive(Debug)]
+    struct StubModule(&'static str);
+
+    impl Module for StubModule {
+        fn id(&self) -> &'static str {
+            self.0
+        }
+    }
+
+    fn kernel_with_deps() -> Kernel {
+        let mut kernel = Kernel::new();
+        kernel
+            .register(Box::new(StubModule("crm")))
+            .expect("register crm stub");
+        kernel
+    }
+
     #[test]
     fn loyalty_module_id() {
         let module = LoyaltyModule::new();
@@ -128,11 +155,36 @@ mod tests {
     }
 
     #[test]
-    fn loyalty_module_lifecycle() {
+    fn loyalty_module_declares_crm_dependency() {
+        assert_eq!(LoyaltyModule::new().dependencies(), &["crm"]);
+    }
+
+    #[test]
+    fn loyalty_module_manifest_matches_declaration() {
+        let parsed: serde_json::Value = serde_json::from_str(include_str!("../manifest.json"))
+            .expect("manifest.json must be valid JSON");
+        let declared: Vec<&str> = parsed["dependencies"]
+            .as_array()
+            .expect("dependencies must be an array")
+            .iter()
+            .map(|v| v.as_str().expect("dependency must be a string"))
+            .collect();
+        assert_eq!(declared, LoyaltyModule::new().dependencies().to_vec());
+    }
+
+    #[test]
+    fn loyalty_module_load_fails_without_crm() {
         let mut kernel = Kernel::new();
         kernel.register(Box::new(LoyaltyModule::new())).unwrap();
+        assert!(kernel.load_all().is_err());
+    }
+
+    #[test]
+    fn loyalty_module_lifecycle() {
+        let mut kernel = kernel_with_deps();
+        kernel.register(Box::new(LoyaltyModule::new())).unwrap();
         assert!(kernel.is_registered("loyalty"));
-        assert_eq!(kernel.module_count(), 1);
+        assert_eq!(kernel.module_count(), 2);
 
         kernel.load_all().unwrap();
         assert!(kernel.is_loaded());
@@ -173,7 +225,7 @@ mod tests {
 
     #[test]
     fn loyalty_module_full_lifecycle_with_kernel() {
-        let mut kernel = Kernel::new();
+        let mut kernel = kernel_with_deps();
         kernel.register(Box::new(LoyaltyModule::new())).unwrap();
 
         kernel.load_all().unwrap();

@@ -1,0 +1,17 @@
+[package]
+name = "oz-crypto"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "AES-256-GCM encryption helpers for encrypting sensitive data at rest."
+
+[lints]
+workspace = true
+
+[dependencies]
+aes-gcm = { workspace = true }
+rand = { workspace = true }
+sha2 = { workspace = true }
+base64 = "0.22"
+thiserror = { workspace = true }

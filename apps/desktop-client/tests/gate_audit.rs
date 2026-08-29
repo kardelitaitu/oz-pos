@@ -55,10 +55,11 @@ static PINNED_DESKTOP: &[(&str, usize, &[&str])] = &[
             "CUSTOMERS_VIEW",
         ],
     ),
-    ("data", 0, &[]),
-    ("email", 0, &[]),
+    ("data", 3, &["SETTINGS_EDIT"]),
+    ("edc", 3, &["SALES_PROCESS", "SALES_REFUND", "SALES_VOID"]),
+    ("email", 2, &["SETTINGS_EDIT"]),
     ("exchange_rates", 4, &["SETTINGS_EDIT", "SETTINGS_READ"]),
-    ("features", 0, &[]),
+    ("features", 2, &["SETTINGS_EDIT"]),
     ("gift_cards", 0, &[]),
     ("hardware", 0, &[]),
     ("health", 0, &[]),
@@ -218,11 +219,11 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
         &["SALES_DISCOUNT", "SALES_OVERRIDE_PRICE", "SALES_PROCESS"],
     ),
     ("product_variants", 0, &[]),
-    // 3 -> 5: role-gated cost editing (ADR #36 D7) gates cost writes on
-    // PRODUCTS_EDIT_COST in create/update.
+    // 3 -> 5 -> 10: role-gated cost editing (ADR #36 D7) + auto-generated
+    // _scoped variants duplicate gate calls.
     (
         "products",
-        5,
+        10,
         &[
             "PRODUCTS_CREATE",
             "PRODUCTS_DELETE",
@@ -232,7 +233,7 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
     ),
     (
         "promotions",
-        4,
+        8,
         &[
             "PROMOTIONS_APPLY",
             "PROMOTIONS_CREATE",
@@ -244,7 +245,7 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
     ("refunds", 3, &["SALES_PROCESS", "SALES_REFUND"]),
     ("reports", 1, &["REPORTS_EXPORT", "REPORTS_VIEW"]),
     ("scale", 0, &[]),
-    ("settings", 6, &["SETTINGS_EDIT"]),
+    ("settings", 12, &["SETTINGS_EDIT"]),
     ("setup", 0, &[]),
     (
         "staff",
@@ -261,7 +262,7 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
     ("subscription", 0, &[]),
     (
         "tables",
-        6,
+        12,
         &[
             "TABLES_ASSIGN",
             "TABLES_CLOSE",
@@ -273,7 +274,7 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
     ("tax", 1, &["SETTINGS_EDIT", "SETTINGS_READ"]),
     (
         "terminals",
-        7,
+        12,
         &["TERMINALS_DELETE", "TERMINALS_EDIT", "TERMINALS_REGISTER"],
     ),
     ("void", 2, &["SALES_VOID"]),

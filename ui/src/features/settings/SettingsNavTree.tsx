@@ -67,129 +67,13 @@ const NAV_ITEMS: SettingsNavItem[] = [
       </svg>
     ),
   },
-  {
-    key: 'features',
-    label: 'Features',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M13 2 3 14h9l-1 8 10-12h-9z" />
-      </svg>
-    ),
-  },
 
-  {
-    key: 'data',
-    label: 'Data',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <ellipse cx="12" cy="5" rx="9" ry="3" />
-        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-      </svg>
-    ),
-  },
-  {
-    key: 'staff',
-    label: 'Staff',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-        <circle cx="9" cy="7" r="4" />
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-      </svg>
-    ),
-  },
-  {
-    key: 'terminals',
-    label: 'Terminals',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <rect x="2" y="3" width="20" height="14" rx="2" />
-        <line x1="8" y1="21" x2="16" y2="21" />
-        <line x1="12" y1="17" x2="12" y2="21" />
-        <path d="M7 7l3 3-3 3" />
-      </svg>
-    ),
-  },
-  {
-    key: 'stores',
-    label: 'Stores',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-        <polyline points="9 22 9 12 15 12 15 22" />
-      </svg>
-    ),
-  },
-  {
-    key: 'audit',
-    label: 'Audit Log',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-        <polyline points="14 2 14 8 20 8" />
-        <line x1="16" y1="13" x2="8" y2="13" />
-        <line x1="16" y1="17" x2="8" y2="17" />
-      </svg>
-    ),
-  },
-  {
-    key: 'offline',
-    label: 'Offline Queue',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-      </svg>
-    ),
-  },
-  {
-    key: 'shifts',
-    label: 'Shifts',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <circle cx="12" cy="12" r="10" />
-        <polyline points="12 6 12 12 16 14" />
-      </svg>
-    ),
-  },
-  {
-    key: 'tax',
-    label: 'Tax Rates',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <line x1="4" y1="6" x2="20" y2="6" />
-        <line x1="4" y1="12" x2="20" y2="12" />
-        <line x1="4" y1="18" x2="20" y2="18" />
-        <line x1="8" y1="6" x2="8" y2="18" />
-      </svg>
-    ),
-  },
   {
     key: 'license',
     label: 'License',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
-      </svg>
-    ),
-  },
-  {
-    key: 'exchange',
-    label: 'Exchange Rates',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-        <line x1="12" y1="1" x2="12" y2="23" />
-      </svg>
-    ),
-  },
-  {
-    key: 'promotions',
-    label: 'Promotions',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
       </svg>
     ),
   },
@@ -239,17 +123,6 @@ const NAV_ITEMS: SettingsNavItem[] = [
     ),
   },
   {
-    key: 'kds',
-    label: 'Kitchen Display',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <rect x="2" y="3" width="20" height="14" rx="2" />
-        <line x1="8" y1="21" x2="16" y2="21" />
-        <line x1="12" y1="17" x2="12" y2="21" />
-      </svg>
-    ),
-  },
-  {
     key: 'inventory',
     label: 'Inventory',
     icon: (
@@ -273,14 +146,12 @@ const CATEGORY_I18N_KEYS: Record<string, string> = {
   Business: 'settings-category-business',
   Operations: 'settings-category-operations',
   System: 'settings-category-system',
-  Management: 'settings-category-management',
 };
 
 const CATEGORIES: SettingsCategory[] = [
   { label: 'Business', keys: ['general', 'appearance'] },
-  { label: 'Operations', keys: ['receipt', 'sync', 'email', 'store-pos', 'restaurant-pos', 'kds', 'inventory'] },
-  { label: 'System', keys: ['about', 'license', 'features', 'data'] },
-  { label: 'Management', keys: ['staff', 'terminals', 'stores', 'topology', 'audit', 'offline', 'shifts', 'tax', 'exchange', 'promotions'] },
+  { label: 'Operations', keys: ['receipt', 'sync', 'email', 'store-pos', 'restaurant-pos', 'inventory'] },
+  { label: 'System', keys: ['about', 'license', 'topology'] },
 ];
 
 const NAV_L10N_KEYS: Record<string, string> = {
@@ -289,23 +160,11 @@ const NAV_L10N_KEYS: Record<string, string> = {
   receipt: 'settings-nav-receipt',
   sync: 'settings-nav-sync',
   about: 'settings-nav-about',
-  features: 'settings-nav-features',
-  data: 'settings-nav-data',
-  staff: 'settings-nav-staff',
-  terminals: 'settings-nav-terminals',
-  stores: 'settings-nav-stores',
-  audit: 'settings-nav-audit',
-  offline: 'settings-nav-offline',
-  shifts: 'settings-nav-shifts',
-  tax: 'settings-nav-tax',
   license: 'settings-nav-license',
-  exchange: 'settings-nav-exchange',
-  promotions: 'settings-nav-promotions',
   email: 'settings-nav-email',
   topology: 'settings-nav-topology',
   'store-pos': 'settings-nav-store-pos',
   'restaurant-pos': 'settings-nav-restaurant-pos',
-  kds: 'settings-nav-kds',
   inventory: 'settings-nav-inventory',
 };
 

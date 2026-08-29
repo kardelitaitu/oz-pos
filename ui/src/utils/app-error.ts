@@ -255,6 +255,35 @@ export function plainErrorMessage(
   return USER_ERROR_FALLBACKS[userErrorKey(typed)] ?? fallback;
 }
 
+// ── Diagnostic detail for toast copy-to-clipboard ─────────────────
+
+/**
+ * Extract a redacted diagnostic detail string from an error, suitable
+ * for the toast `detail` field (copy-to-clipboard for support tickets).
+ * Returns null when no useful detail can be extracted.
+ */
+export function errorDetail(err: unknown): string | null {
+  const parts: string[] = [];
+  const typed = parseAppError(err);
+  if (typed) {
+    parts.push(`Kind: ${typed.kind}`);
+    if ('subKind' in typed && typed.subKind) parts.push(`SubKind: ${typed.subKind}`);
+    if (typed.message) parts.push(`Server: ${redactDiagnostic(typed.message)}`);
+  } else if (err instanceof Error) {
+    parts.push(`Error: ${redactDiagnostic(err.message)}`);
+    if (err.stack) {
+      // Only include first 3 lines of stack (skip internal frames)
+      const stackLines = err.stack.split('\n').slice(0, 4).join('\n');
+      parts.push(`Stack: ${redactDiagnostic(stackLines)}`);
+    }
+  } else if (typeof err === 'string') {
+    parts.push(`Error: ${redactDiagnostic(err)}`);
+  } else if (err !== null && err !== undefined) {
+    parts.push(`Error: ${String(err)}`);
+  }
+  return parts.length > 0 ? parts.join('\n') : null;
+}
+
 // ── Redaction & normalization ──────────────────────────────────────
 
 /** Remove sensitive material from a diagnostic string (ERR-06). */
@@ -267,10 +296,10 @@ export function redactDiagnostic(input: string): string {
     .replace(/\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9]{8,}\b/g, 'REDACTED-KEY')
     // Emails
     .replace(/\b[\w.+-]+@[\w-]+\.[\w.]+\b/g, 'REDACTED-EMAIL')
-    // Absolute filesystem paths
-    .replace(/([A-Za-z]:[\\/][^\s"']+|\\[\\/][^\s"']+)/g, 'REDACTED-PATH')
-    // Raw sqlite/SQL detail
-    .replace(/\bsqlite\b[^;]{0,120}/gi, 'sqlite:REDACTED')
+    // Absolute filesystem paths (Windows drive letters, UNC, Unix absolute)
+    .replace(/([A-Za-z]:[\\/][^\s"']+|\\\\[\\/][^\s"']+|(?<!\w)\/[a-zA-Z][^\s"']*)/g, 'REDACTED-PATH')
+    // Raw sqlite/SQL detail — only match after semicolons or at start (actual SQL statements)
+    .replace(/(?:;\s*)\bsqlite\b[^;]{0,120}/gi, ';sqlite:REDACTED')
     // Hex blobs — with or without a 0x prefix (the prefix breaks the word
     // boundary the bare pattern relies on, so match both shapes).
     .replace(/\b0x[0-9a-f]{8,}\b/gi, 'REDACTED-HEX')

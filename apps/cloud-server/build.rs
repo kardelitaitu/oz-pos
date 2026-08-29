@@ -1,3 +1,6 @@
+//! Cloud-server build script — declares the `tokio_unstable` cfg and embeds
+//! the Windows application manifest.
+
 // ── OZ-POS Cloud Server — Windows application manifest (build script) ──
 //
 // Embeds `app.manifest` (a `<requestedExecutionLevel level="asInvoker"/>`

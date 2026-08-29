@@ -133,9 +133,11 @@ export function extractUsedClassNames(tsx: string): Set<string> {
 
     // Also fish out quoted class names inside the interpolations
     // e.g. `${revealed ? 'pos-cart-line-wrap--revealed' : ''}`
-    // Use [^']+ then split by whitespace to handle leading spaces
-    // like `' product-card--disabled'` or multi-class `'a b'`.
-    const quotedRe = /'([^']+)'/g;
+    // Use [^']* (not [^']+) so an empty `''` alternative matches and is
+    // consumed as a pair. With `+` the engine skipped `''`, resumed on its
+    // closing quote, and then paired quotes off-by-one for the rest of the
+    // template — swallowing every second real class name.
+    const quotedRe = /'([^']*)'/g;
     let qm: RegExpExecArray | null;
     while ((qm = quotedRe.exec(body)) !== null) {
       for (const token of qm[1]!.split(/\s+/)) {
@@ -154,7 +156,7 @@ export function extractUsedClassNames(tsx: string): Set<string> {
     // Skip template literals (already handled in step 2) and any
     // expressions containing `${}`, which would confuse the [^}]+ match.
     if (expr.includes('`') || expr.includes('$')) continue;
-    const quotedRe = /'([^']+)'/g;
+    const quotedRe = /'([^']*)'/g;
     let qm: RegExpExecArray | null;
     while ((qm = quotedRe.exec(expr)) !== null) {
       for (const token of qm[1]!.split(/\s+/)) {

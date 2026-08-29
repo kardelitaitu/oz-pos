@@ -416,7 +416,7 @@ Add the result of each grep to the next audit report under a "Closure" column. I
 | File | Change |
 |------|--------|
 | `crates/oz-core/src/exchange_rate.rs` | `ExchangeRateRow.rate: f64` → `rate_millionths: i64`; new `display_rate()` helper. |
-| `crates/oz-core/migrations/071_exchange_rate_minor_units.sql` | NEW: `ADD COLUMN rate_millionths INTEGER DEFAULT 0` → `UPDATE … = ROUND(rate * 1e6)` → `DROP COLUMN rate`. Documented rollback path. |
+| `crates/oz-core/migrations/20260813_init.sql` | NEW: `ADD COLUMN rate_millionths INTEGER DEFAULT 0` → `UPDATE … = ROUND(rate * 1e6)` → `DROP COLUMN rate`. Documented rollback path. |
 | `crates/oz-core/src/migrations.rs` | Registered migration `071` next to `070`. |
 | `crates/oz-core/src/db/settings.rs` | `list_exchange_rates` / `create_exchange_rate` / `upsert_exchange_rate` all consume `i64 millionths`; the `<= 0` validation guard added to `create_exchange_rate` (defence in depth — `upsert_exchange_rate` already had it). |
 | `crates/oz-core/tests/currency_integration.rs` | Full rewrite: 38 tests covering ordering, FK constraints, validation rejection, large/small rates, display_rate formatting, currency parsing, Money multi-currency, and roundtrips. |

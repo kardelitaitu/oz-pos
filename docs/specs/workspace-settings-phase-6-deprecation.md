@@ -2,7 +2,7 @@
 
 - **Status:** IMPLEMENTED (ADR #22 unified workspace settings shipped in 0.0.19; re-audited 2026-08-08 by docs-auditor) (gated — must wait one full release cycle after Phase 5)
 - **Phase:** 6 of 11 (Workspace Settings Architecture — ADR #22)
-- **Parent:** `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md`
+- **Parent:** `docs/specs/2026-07-23-unified-2tier-workspace-settings-architecture.md`
 - **Severity:** LOW (safe if feature-flag gated)
 - **Dependencies:** Phase 5 (workspace wiring) deployed and flagged on for one full release cycle with no reported regressions
 - **Owner:** TBD
@@ -71,7 +71,7 @@ Delete the obsolete `RetailOptionsScreen.tsx` component and clean up legacy CSS 
 
 ## References
 
-- `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md` §Phase 6, §Backward Compatibility & Rollback
+- `docs/specs/2026-07-23-unified-2tier-workspace-settings-architecture.md` §Phase 6, §Backward Compatibility & Rollback
 - `ui/src/features/retail/RetailOptionsScreen.tsx`
 - `ui/src/features/retail/RetailPosScreen.tsx`
 - `ui/src/features/retail/RetailPosScreen.css`

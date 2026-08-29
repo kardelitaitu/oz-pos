@@ -34,4 +34,4 @@ keyring.delete_secret("api-key")?;
 
 - `#![deny(unsafe_code)]` — platform modules may use FFI with `// SAFETY:`.
 
-> last audited 28-06-26 by docs-auditor
+> last audited 30-08-26 by docs-auditor

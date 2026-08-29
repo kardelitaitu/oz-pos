@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { readScaleWeight, type WeightReading } from '@/api/hardware';
+import { readScaleWeight, readScaleWeightScoped, type WeightReading } from '@/api/hardware';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
@@ -9,6 +9,8 @@ import './WeightScaleWidget.css';
 
 /** Props for the WeightScaleWidget — optional callback for when a stable weight is obtained, plus device identifiers. */
 export interface WeightScaleWidgetProps {
+  /** Session token for scoped API calls. */
+  sessionToken?: string;
   onWeightObtained?: (reading: WeightReading) => void;
   vendorId?: string;
   productId?: string;
@@ -24,6 +26,7 @@ export interface WeightScaleWidgetProps {
  * - A "Weigh" button to read the scale
  */
 export function WeightScaleWidget({
+  sessionToken,
   onWeightObtained,
   vendorId: _vendorId = '0x0000',
   productId: _productId = '0x0000',
@@ -46,7 +49,8 @@ export function WeightScaleWidget({
     setWeighing(true);
     setError(null);
     try {
-      const result = await readScaleWeight();
+      const readWeight = sessionToken ? () => readScaleWeightScoped(sessionToken) : readScaleWeight;
+      const result = await readWeight();
       if (!mountedRef.current) return;
       setReading(result);
       if (result) onWeightObtained?.(result);

@@ -397,6 +397,38 @@ async fn health_handler(
 /// `pg` is the optional Postgres pool for the sync data layer (Phase 1.2).
 /// When set, push/pull/status/snapshot/plan read and write Postgres; when
 /// `None`, the sync function keeps using the shared SQLite connection.
+/// Request correlation ID middleware.
+///
+/// Reads incoming `x-request-id` header or generates a new UUID v7 if missing.
+/// Attaches the ID to request headers and injects it into response headers
+/// for end-to-end request traceability across POS client and server logs.
+pub async fn request_id_middleware(
+    mut request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let req_id = request
+        .headers()
+        .get("x-request-id")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+
+    if let Ok(val) = axum::http::HeaderValue::from_str(&req_id) {
+        request.headers_mut().insert("x-request-id", val.clone());
+    }
+
+    let mut response = next.run(request).await;
+    if let Ok(val) = axum::http::HeaderValue::from_str(&req_id) {
+        response.headers_mut().insert("x-request-id", val);
+    }
+    response
+}
+
+/// Build the combined router: REST API + sync endpoints + rate limiting + correlation ID middleware.
+///
+/// `pg` is the optional Postgres pool for the sync data layer (Phase 1.2).
+/// When set, push/pull/status/snapshot/plan read and write Postgres; when
+/// `None`, the sync function keeps using the shared SQLite connection.
 pub fn build_router(
     state: CloudServerState,
     rate_limiter: RateLimiterState,
@@ -483,6 +515,7 @@ pub fn build_router(
         .layer(axum::middleware::from_fn(
             oz_api::security_headers_middleware,
         ))
+        .layer(axum::middleware::from_fn(request_id_middleware))
 } // ── Tests ─────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

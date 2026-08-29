@@ -1,17 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
-import { readScaleWeight, type WeightReading } from '@/api/hardware';
+import { readScaleWeight, readScaleWeightScoped, type WeightReading } from '@/api/hardware';
 import type { Sku } from '@/types/domain';
 
 interface ScaleIndicatorProps {
+  /** Session token for scoped API calls. */
+  sessionToken?: string;
   weighTarget: { sku: Sku; name: string } | null;
   onWeighAdd: (sku: Sku, weightGrams: number) => void;
   onClearWeighTarget: () => void;
 }
 
 /** Live scale weight indicator — polls the connected scale every 2 seconds and supports weigh-and-add for weighed products. */
-export default function ScaleIndicator({ weighTarget, onWeighAdd, onClearWeighTarget }: ScaleIndicatorProps) {
+export default function ScaleIndicator({ sessionToken, weighTarget, onWeighAdd, onClearWeighTarget }: ScaleIndicatorProps) {
   const { l10n } = useLocalization();
   const [reading, setReading] = useState<WeightReading | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +27,8 @@ export default function ScaleIndicator({ weighTarget, onWeighAdd, onClearWeighTa
     const poll = async () => {
       if (cancelled) return;
       try {
-        const r = await readScaleWeight();
+        const readWeight = sessionToken ? () => readScaleWeightScoped(sessionToken) : readScaleWeight;
+        const r = await readWeight();
         if (!cancelled) {
           setReading(r);
           setError(null);
@@ -37,7 +40,7 @@ export default function ScaleIndicator({ weighTarget, onWeighAdd, onClearWeighTa
     };
     poll();
     return () => { cancelled = true; if (timeoutId !== null) clearTimeout(timeoutId); };
-  }, []);
+  }, [sessionToken]);
 
   const formatWeight = (g: number): string => {
     if (g >= 1000) return `${(g / 1000).toFixed(2)} kg`;

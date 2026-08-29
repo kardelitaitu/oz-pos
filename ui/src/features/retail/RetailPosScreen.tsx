@@ -14,7 +14,7 @@ import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useSwipe } from '@/hooks/useSwipe';
 import PaymentModal from '@/features/sales/PaymentModal';
 import ItemModifierModal from '@/features/sales/components/ItemModifierModal';
-import { overrideLinePriceScoped, startSaleScoped, getProductTrackSerialBatch, lookupSaleByReceiptBarcodeScoped } from '@/api/sales';
+import { overrideLinePriceScoped, startSaleScoped, getProductTrackSerialBatchScoped, lookupSaleByReceiptBarcodeScoped } from '@/api/sales';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -26,7 +26,7 @@ import { usePagedList } from '@/hooks/usePagedList';
 import { listCustomers, type CustomerDto } from '@/api/customers';
 import { getActiveShiftScoped, openShiftScoped, closeShiftScoped, type ShiftDto } from '@/api/shifts';
 import { holdCartScoped, listHeldCartsScoped, getHeldCartScoped, deleteHeldCartScoped, type HeldCartRow, type SaleDetail } from '@/api/sales';
-import { getStoreSettingsScoped, listCreditSales, settleCreditScoped, type StoreSettingsDto, type CreditSaleDto } from '@/api/settings';
+import { getStoreSettingsScoped, listCreditSalesScoped, settleCreditScoped, type StoreSettingsDto, type CreditSaleDto } from '@/api/settings';
 import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
 import { recordMark } from '@/utils/perf-metrics';
 import { DEFAULT_LOW_STOCK_THRESHOLD, type CartId, type CartLine, type CourseId, type LineId, type ModifierSelection, type Money, type Product, type Sku } from '@/types/domain';
@@ -186,7 +186,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     for (const sku of missing) pendingTrackFetchRef.current.add(sku);
     // PERF-03: fetch every missing flag in ONE IPC round trip instead of
     // one get_product_track_serial call per SKU (N+1 elimination).
-    getProductTrackSerialBatch(missing as string[])
+    getProductTrackSerialBatchScoped(sessionToken, missing as string[])
       .then((rows) => {
         setTrackSerialMap((prev) => {
           const next = { ...prev };
@@ -1244,10 +1244,10 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   const loadCreditSales = useCallback(async () => {
     try {
-      const list = await listCreditSales();
+      const list = await listCreditSalesScoped(sessionToken);
       setCreditSales(list.filter((c) => !c.settledAt));
     } catch { /* ignore */ }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => {
     loadCreditSales();
@@ -1471,6 +1471,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
           </div>
         )}
         <RetailProductGrid
+          sessionToken={sessionToken}
           data={{
             productsLoading,
             categoriesLoading,

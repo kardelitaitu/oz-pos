@@ -79,7 +79,7 @@ export default function AppShell() {
   const { session } = useAuth();
   const { activeWorkspace, sessionToken, terminalId } = useWorkspace();
   const { goToWorkspacePicker } = useWorkspaceNav();
-  const { isKdsKiosk } = useTerminalProfile();
+  const { isKdsKiosk } = useTerminalProfile(sessionToken ?? undefined);
   const { addToast } = useToast();
   // Stable ref so the mount effect below can call addToast without
   // listing it as a dependency (which would cause the effect to re-run

@@ -6,6 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 description = "OZ-POS Tax Module: tax rate management, product/category tax assignments."
 
+# Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
+[lints]
+workspace = true
+
 [dependencies]
 anyhow = { workspace = true }
 thiserror = { workspace = true }

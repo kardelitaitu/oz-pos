@@ -235,7 +235,7 @@ describe('WorkspaceHome', () => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
       expect(screen.getByText('Store POS')).toBeInTheDocument();
-      expect(screen.getByText('Kitchen Display')).toBeInTheDocument();
+      expect(screen.getAllByText('Kitchen Display').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('Warehouse')).toBeInTheDocument();
       // Admin workspace is filtered out of the home card grid
     });
@@ -838,7 +838,7 @@ describe('WorkspaceHome', () => {
       await renderWithFluent(<WorkspaceHome />);
 
       await waitFor(() => {
-        expect(screen.getByText('Kitchen Display')).toBeInTheDocument();
+        expect(screen.getAllByText('Kitchen Display').length).toBeGreaterThanOrEqual(1);
       });
 
       // The KDS card (index 2) should be active

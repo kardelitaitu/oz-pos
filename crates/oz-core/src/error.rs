@@ -177,6 +177,12 @@ impl From<modules_currency::CurrencyError> for CoreError {
     }
 }
 
+impl From<oz_crypto::CryptoError> for CoreError {
+    fn from(e: oz_crypto::CryptoError) -> Self {
+        Self::Internal(e.to_string())
+    }
+}
+
 impl CoreError {
     /// Map a `CoreError` to its [`CoreErrorKind`] discriminator.
     pub fn kind(&self) -> CoreErrorKind {

@@ -1408,6 +1408,40 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'destroy_session': () => null,
 
+  'session_keepalive': () => ({ expires_at: Math.floor(Date.now() / 1000) + 86400 }),
+
+  // ── EDC card-present terminal ──────────────────────────────────────
+  'edc_terminal_status': () => ({ status: 'ready' }),
+  'edc_sale': (args) => {
+    const a = args as { args: { amountMinor: number; currency: string } };
+    const { amountMinor, currency } = a.args ?? a;
+    return {
+      success: true,
+      transactionId: `mock-edc-${Date.now()}`,
+      authCode: 'MOCKAUTH',
+      cardScheme: 'Visa',
+      cardLast4: '1111',
+      message: `approved ${amountMinor} ${currency}`,
+    };
+  },
+  'edc_refund': (args) => {
+    const a = args as { args: { transactionId: string; amountMinor: number; currency: string } };
+    const { transactionId, amountMinor, currency } = a.args ?? a;
+    return {
+      success: true,
+      transactionId,
+      authCode: 'MOCKREF',
+      cardScheme: null,
+      cardLast4: null,
+      message: `refund approved ${amountMinor} ${currency}`,
+    };
+  },
+  'edc_void': (args) => {
+    const a = args as { args: { transactionId: string } };
+    const { transactionId } = a.args ?? a;
+    return { success: true, transactionId, authCode: null, cardScheme: null, cardLast4: null, message: 'void approved' };
+  },
+
   // ═══════════════════════════════════════════════════════════════
   // BOOT / SETUP
   // ═══════════════════════════════════════════════════════════════
@@ -1777,13 +1811,13 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
 
   'get_brand_settings': () => ({
-    primary_colour: '#10b981',
+    primary_colour: '#147EFB',
     logo_path: null,
     store_name: 'OZ-POS Demo',
     colour_hover: null,
   }),
   'get_brand_settings_scoped': () => ({
-    primary_colour: '#10b981',
+    primary_colour: '#147EFB',
     logo_path: null,
     store_name: 'OZ-POS Demo',
     colour_hover: null,
@@ -2897,7 +2931,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // DATA MANAGEMENT
   // ═══════════════════════════════════════════════════════════════
 
-  'get_backup_status': () => ({ lastBackup: null, lastBackupSize: null, dbPath: '/data/oz-pos.db' }),
+  'get_backup_status': () => ({ lastBackup: null, lastBackupSize: null }),
   'create_backup': () => ({ path: '/backups/backup.db', sizeBytes: 1024 }),
   'export_data': () => ({ path: '/exports/data.ozpkg', sizeBytes: 512, types: ['products'] }),
   'import_preview': () => ({ storeName: 'Test Store', appVersion: '0.0.9', exportedAt: new Date().toISOString(), types: ['products'], productCount: 10, categoryCount: 2, saleCount: null, customerCount: null, userCount: null, settingCount: null }),

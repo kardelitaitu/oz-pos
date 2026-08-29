@@ -508,6 +508,25 @@ fn validate_customer_fields(
 
 // ── Tests ───────────────────────────────────────────────────────────
 
+// ── Scoped variants (ADR #7) ────────────────────────────────────
+
+/// Scoped variant of `get_customer` (ADR #7).
+#[tauri::command]
+pub async fn get_customer_scoped(
+    id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Option<CustomerDto>, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let customer = store.get_customer(&id)?;
+    drop(db);
+    Ok(customer.map(CustomerDto::from))
+}
+
 #[cfg(test)]
 #[path = "customers_tests.rs"]
 mod tests;

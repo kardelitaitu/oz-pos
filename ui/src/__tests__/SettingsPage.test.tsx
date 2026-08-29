@@ -102,7 +102,7 @@ const { invokeMock, defaultImpl, failCommands } = vi.hoisted(() => {
       return Promise.resolve({ name: 'oz-pos', version: '0.0.4', rustVersion: '1.80', target: 'x86_64' });
     }
     if (
-      cmd === 'set_receipt_settings' || cmd === 'set_store_settings' ||
+      cmd === 'set_receipt_settings_scoped' || cmd === 'set_store_settings_scoped' ||
       cmd === 'set_default_currency' || cmd === 'set_user_preferences' ||
       cmd === 'set_user_preferences_scoped' ||
       cmd === 'update_sync_settings' || cmd === 'set_brand_primary_colour' ||
@@ -328,15 +328,15 @@ describe('SettingsPage', () => {
 
   // ── Save resilience ──────────────────────────────────────────
 
-  it('calls set_receipt_settings and set_store_settings on save', async () => {
+  it('calls set_receipt_settings_scoped and set_store_settings_scoped on save', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /save settings/i })).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('set_receipt_settings', expect.any(Object));
-      expect(invokeMock).toHaveBeenCalledWith('set_store_settings', expect.any(Object));
+      expect(invokeMock).toHaveBeenCalledWith('set_receipt_settings_scoped', expect.any(Object));
+      expect(invokeMock).toHaveBeenCalledWith('set_store_settings_scoped', expect.any(Object));
     });
   });
 
@@ -352,8 +352,8 @@ describe('SettingsPage', () => {
   });
 
   it('shows full save-error toast when every save API call fails', async () => {
-    failCommands.add('set_receipt_settings');
-    failCommands.add('set_store_settings');
+    failCommands.add('set_receipt_settings_scoped');
+    failCommands.add('set_store_settings_scoped');
     failCommands.add('set_default_currency');
     failCommands.add('set_user_preferences_scoped');
     failCommands.add('update_sync_settings');
@@ -370,7 +370,7 @@ describe('SettingsPage', () => {
   });
 
   it('shows save-partial toast when some saves fail', async () => {
-    failCommands.add('set_receipt_settings');
+    failCommands.add('set_receipt_settings_scoped');
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /save settings/i })).toBeInTheDocument();
@@ -633,7 +633,7 @@ describe('SettingsPage', () => {
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith(
-        'set_store_settings',
+        'set_store_settings_scoped',
         expect.objectContaining({
           args: expect.objectContaining({
             name: 'Ctrl+S Store',
@@ -883,8 +883,8 @@ describe('SettingsPage', () => {
     expect(apiKeyInput).toHaveValue('sk-abc123');
 
     // Make every non-sync save command fail so only sync succeeds.
-    failCommands.add('set_receipt_settings');
-    failCommands.add('set_store_settings');
+    failCommands.add('set_receipt_settings_scoped');
+    failCommands.add('set_store_settings_scoped');
     failCommands.add('set_default_currency');
     failCommands.add('set_user_preferences_scoped');
     failCommands.add('set_brand_primary_colour');
@@ -1031,29 +1031,29 @@ describe('SettingsPage', () => {
     });
   });
 
-  it('renders Data Management section when navigating to Data tab', async () => {
+  it('renders Email Reports section when navigating to Email tab', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('treeitem', { name: /system/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('treeitem', { name: /system/i }));
-    fireEvent.click(screen.getByRole('treeitem', { name: /^data$/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /operations/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /email reports/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /data management/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 2, name: /email reports/i })).toBeInTheDocument();
     });
   });
 
-  it('renders Features section when navigating to Features tab', async () => {
+  it('renders About section when navigating to About tab', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('treeitem', { name: /system/i })).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole('treeitem', { name: /system/i }));
-    fireEvent.click(screen.getByRole('treeitem', { name: /^features$/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /about/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /feature toggles/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 2, name: /system.*license/i })).toBeInTheDocument();
     });
   });
 

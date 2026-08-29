@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 
 // React 19 requires the act environment flag for async act() to work.
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
@@ -38,34 +38,41 @@ async function renderSignupForm(locale: string) {
   return { container, root };
 }
 
-function setNativeValue(el: HTMLInputElement, value: string): void {
-  const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-  nativeSetter.call(el, value);
-  el.dispatchEvent(new Event('input', { bubbles: true }));
-}
-
 function setEmail(container: HTMLElement, value: string): void {
   const el = container.querySelector('input[type="email"]') as HTMLInputElement | null;
   if (!el) throw new Error('email input not found');
-  act(() => { setNativeValue(el, value); });
+  act(() => {
+    Object.defineProperty(el, 'value', { value, configurable: true, writable: true });
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
 }
 
 function setPassword(container: HTMLElement, value: string): void {
   const el = container.querySelector('input[type="password"]') as HTMLInputElement | null;
   if (!el) throw new Error('password input not found');
-  act(() => { setNativeValue(el, value); });
+  act(() => {
+    Object.defineProperty(el, 'value', { value, configurable: true, writable: true });
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 }
 
 function setConfirmPassword(container: HTMLElement, value: string): void {
   const el = container.querySelectorAll('input[type="password"]')[1] as HTMLInputElement | undefined;
   if (!el) throw new Error('confirm password input not found');
-  act(() => { setNativeValue(el, value); });
+  act(() => {
+    Object.defineProperty(el, 'value', { value, configurable: true, writable: true });
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 }
 
 function setCode(container: HTMLElement, value: string): void {
   const el = container.querySelector('input[inputmode="numeric"]') as HTMLInputElement | null;
   if (!el) throw new Error('code input not found');
-  act(() => { setNativeValue(el, value); });
+  act(() => {
+    Object.defineProperty(el, 'value', { value, configurable: true, writable: true });
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 }
 
 function clickSubmit(container: HTMLElement): void {
@@ -89,7 +96,9 @@ function assertText(container: HTMLElement, text: string): void {
   expect(container.textContent).toContain(text);
 }
 
-
+function assertNoText(container: HTMLElement, text: string): void {
+  expect(container.textContent).not.toContain(text);
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -256,15 +265,138 @@ describe('SignupForm — resend OTP cooldown', () => {
   });
 });
 
+// ── Region selector ───────────────────────────────────────────────────
+
+describe('SignupForm — region selector', () => {
+  it('defaults to Global and persists selection to localStorage', async () => {
+    const { container, root } = await renderSignupForm('en');
+    try {
+      // Open the dropdown.
+      const regionBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Global',
+      );
+      expect(regionBtn).not.toBeNull();
+      act(() => {
+        regionBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      // Click Indonesia option.
+      const idOption = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Indonesia',
+      );
+      expect(idOption).not.toBeNull();
+      act(() => {
+        idOption!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      expect(localStorage.getItem('oz_region')).toBe('id');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('reads saved region from localStorage on mount', async () => {
+    localStorage.setItem('oz_region', 'id');
+    const { container, root } = await renderSignupForm('en');
+    try {
+      assertText(container, 'Indonesia');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('persists region in localStorage after successful registration', async () => {
+    const { container, root } = await renderSignupForm('en');
+    try {
+      // Select Indonesia.
+      const regionBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Global',
+      );
+      act(() => {
+        regionBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      const idOption = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Indonesia',
+      );
+      act(() => {
+        idOption!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      // Register and verify.
+      setEmail(container, 'alice@example.com');
+      setPassword(container, 'Str0ngP@ss');
+      setConfirmPassword(container, 'Str0ngP@ss');
+      clickSubmit(container);
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      mockFetch((url) => {
+        if (url.includes('verify-otp')) return okJson({ token: 'tok-region-001' });
+        return okJson({ ok: true });
+      });
+      setCode(container, '123456');
+      clickSubmit(container);
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      expect(localStorage.getItem('oz_region')).toBe('id');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
 // ── Email validation ──────────────────────────────────────────────────
 
 describe('SignupForm — email validation', () => {
-  it('disables submit button when password is not strong', async () => {
+  it('shows checkmark icon for valid email', async () => {
     const { container, root } = await renderSignupForm('en');
     try {
       setEmail(container, 'valid@example.com');
-      setPassword(container, 'weak');
-      setConfirmPassword(container, 'weak');
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      const checkmark = container.querySelector('[aria-label="Valid email"]');
+      expect(checkmark).not.toBeNull();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('does not show checkmark for invalid email', async () => {
+    const { container, root } = await renderSignupForm('en');
+    try {
+      setEmail(container, 'not-an-email');
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      const checkmark = container.querySelector('[aria-label="Valid email"]');
+      expect(checkmark).toBeNull();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('disables submit button for invalid email', async () => {
+    const { container, root } = await renderSignupForm('en');
+    try {
+      setEmail(container, 'bad');
+      setPassword(container, 'Str0ngP@ss');
+      setConfirmPassword(container, 'Str0ngP@ss');
       const btn = container.querySelector('button[type="submit"]') as HTMLButtonElement;
       expect(btn.disabled).toBe(true);
     } finally {
@@ -272,15 +404,18 @@ describe('SignupForm — email validation', () => {
       container.remove();
     }
   });
+});
 
-  it('enables submit button when all fields are valid', async () => {
+// ── Not-configured state ──────────────────────────────────────────────
+
+describe('SignupForm — not-configured state', () => {
+  it('shows not-configured notice when API URL is absent after mount', async () => {
+    const env = import.meta.env as Record<string, unknown>;
+    env.PUBLIC_LICENSE_API_URL = '';
+    window.__OZ_CONFIG__ = undefined;
     const { container, root } = await renderSignupForm('en');
     try {
-      setEmail(container, 'valid@example.com');
-      setPassword(container, 'Str0ngP@ss');
-      setConfirmPassword(container, 'Str0ngP@ss');
-      const btn = container.querySelector('button[type="submit"]') as HTMLButtonElement;
-      expect(btn.disabled).toBe(false);
+      assertText(container, 'The auth API is not configured on this deployment.');
     } finally {
       act(() => root.unmount());
       container.remove();

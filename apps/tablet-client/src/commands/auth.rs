@@ -425,6 +425,60 @@ pub async fn destroy_session(
     Ok(())
 }
 
+/// Result of `session_keepalive` — the refreshed expiry timestamp.
+#[derive(Debug, Serialize)]
+pub struct SessionKeepaliveResult {
+    /// Refreshed unix expiry (seconds). `None` when sessions have no
+    /// TTL (development mode) — the frontend can stop pinging then.
+    pub expires_at: Option<i64>,
+}
+
+/// Refresh the current session's TTL so long-lived screens (analytics,
+/// reports, dashboards) keep the session alive during active use.
+///
+/// ADR #7: extends `expires_at` to `now + session.ttl_seconds` for a
+/// still-valid session, identical to the expiry `create_session` assigns.
+/// Returns `AppError::InvalidSession` when the token is unknown or
+/// already expired (matching `resolve_session`), so the frontend hears
+/// about a dead session through the same typed error as any command.
+/// Sessions without an expiry (development mode) are a no-op and return
+/// `expires_at: None`.
+#[command]
+pub async fn session_keepalive(
+    state: State<'_, AppState>,
+    session_token: String,
+) -> Result<SessionKeepaliveResult, AppError> {
+    let mut store = state
+        .session_store
+        .write()
+        .map_err(|e| AppError::Internal(format!("session store lock poisoned: {e}")))?;
+
+    let expired = match store.get(&session_token) {
+        Some(ctx) => ctx.is_expired(),
+        None => return Err(AppError::InvalidSession),
+    };
+    if expired {
+        store.remove(&session_token);
+        return Err(AppError::InvalidSession);
+    }
+
+    let now_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let expires_at = if state.session_ttl_seconds > 0 {
+        Some(now_ts + state.session_ttl_seconds)
+    } else {
+        None
+    };
+    if let Some(entry) = store.get_mut(&session_token) {
+        entry.expires_at = expires_at;
+    }
+
+    tracing::debug!(ttl_seconds = %state.session_ttl_seconds, "session keepalive");
+    Ok(SessionKeepaliveResult { expires_at })
+}
+
 #[cfg(test)]
 #[path = "auth_tests.rs"]
 mod tests;

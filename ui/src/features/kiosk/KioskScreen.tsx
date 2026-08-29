@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
-import { listProductsScoped, listCategories } from '@/api/products';
+import { listProductsScoped, listCategoriesScoped } from '@/api/products';
 import type { ProductDto, CategoryDto } from '@/api/products';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -49,7 +49,7 @@ export default function KioskScreen() {
     listProductsScoped(sessionToken)
       .then(setProducts)
       .catch(() => setLoadError(true));
-    listCategories()
+    listCategoriesScoped(sessionToken)
       .then(setCategories)
       .catch(() => setLoadError(true));
   }, [sessionToken]);

@@ -103,10 +103,10 @@ export interface SyncSectionProps {
   cmInput: React.HTMLAttributes<HTMLInputElement>;
   markDirty: () => void;
   refreshQueueSummary: () => Promise<void>;
-  testSyncConnection: (url?: string) => Promise<PingResult>;
+  testSyncConnection: () => Promise<PingResult>;
   syncRun: () => Promise<SyncAttemptResult>;
   syncPull: (args: { confirmDestructive: boolean }) => Promise<PullResult>;
-  requestSyncToken: (url?: string) => Promise<TokenResult>;
+  requestSyncToken: () => Promise<TokenResult>;
   l10n: ReactLocalization;
   addToast: (opts: { message: string; type: 'success' | 'error' | 'info' }) => void;
 }
@@ -232,7 +232,7 @@ export default function SyncSection({
                 onClick={async () => {
                   setRequesting(true);
                   try {
-                    const result = await requestSyncToken(syncServerUrl || undefined);
+                    const result = await requestSyncToken();
                     if (result.ok && result.token) {
                       setSyncApiKey(result.token);
                       setSyncApiKeyVisible(false);
@@ -388,7 +388,7 @@ export default function SyncSection({
                   setTesting(true);
                   setPingResult(null);
                   try {
-                    const result = await testSyncConnection(syncServerUrl || undefined);
+                    const result = await testSyncConnection();
                     setPingResult(result);
                     if (result.ok) {
                       addToast({ message: result.status, type: 'success' });

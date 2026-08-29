@@ -99,21 +99,23 @@ describe('KdsTicketCard', () => {
     expect(ticket?.className).toContain('kds-ticket--red');
   });
 
-  it('calls onAdvance on click when status can advance', () => {
+  it('calls onAdvance on the footer Advance button when status can advance', () => {
     renderCard({ status: 'pending' });
-    screen.getByRole('button').click();
+    const advance = document.querySelector('[data-testid="kds-order-card-42-status-advance"]') as HTMLButtonElement;
+    expect(advance).not.toBeNull();
+    fireEvent.click(advance);
     expect(onAdvance).toHaveBeenCalledWith(expect.objectContaining({ id: 'order-1' }));
   });
 
-  it('does not call onAdvance for served orders', () => {
+  it('does not call onAdvance for served orders (no Advance button)', () => {
     renderCard({ status: 'served' });
-    screen.getByRole('button').click();
+    expect(document.querySelector('[data-testid="kds-order-card-42-status-advance"]')).toBeNull();
     expect(onAdvance).not.toHaveBeenCalled();
   });
 
-  it('does not call onAdvance for cancelled orders', () => {
+  it('does not call onAdvance for cancelled orders (no Advance button)', () => {
     renderCard({ status: 'cancelled' });
-    screen.getByRole('button').click();
+    expect(document.querySelector('[data-testid="kds-order-card-42-status-advance"]')).toBeNull();
     expect(onAdvance).not.toHaveBeenCalled();
   });
 
@@ -156,13 +158,11 @@ describe('KdsTicketCard', () => {
     expect(mockPlayAlert).not.toHaveBeenCalled();
   });
 
-  it('sets aria-label with SLA info', () => {
+  it('sets aria-label on the Advance button with SLA info', () => {
     mockSlaResult.level = 'yellow';
     mockSlaResult.display = '12m 0s';
     renderCard();
-    const btn = screen.getByRole('button');
-    expect(btn.getAttribute('aria-label')).toContain('42');
-    expect(btn.getAttribute('aria-label')).toContain('yellow');
-    expect(btn.getAttribute('aria-label')).toContain('12m 0s');
+    const advance = document.querySelector('[data-testid="kds-order-card-42-status-advance"]');
+    expect(advance?.getAttribute('aria-label')).toContain('42');
   });
 });

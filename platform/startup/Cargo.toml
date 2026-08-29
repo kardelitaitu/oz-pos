@@ -6,6 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 description = "Shared application startup logic: module registration, event wiring, background sync daemon for desktop and tablet Tauri clients."
 
+# Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
+[lints]
+workspace = true
+
 [dependencies]
 anyhow = { workspace = true }
 foundation = { workspace = true }
@@ -19,6 +23,13 @@ modules-staff = { workspace = true }
 modules-reporting = { workspace = true }
 modules-terminal = { workspace = true }
 modules-currency = { workspace = true }
+modules-loyalty = { workspace = true }
+# Stub verticals: registered for lifecycle and dependency-graph coverage;
+# no domain logic yet. See modules/README.md.
+modules-purchasing = { workspace = true }
+modules-promotions = { workspace = true }
+modules-giftcards = { workspace = true }
+modules-kitchen = { workspace = true }
 platform-kernel = { workspace = true }
 chrono = { workspace = true }
 reqwest = { workspace = true }
@@ -39,3 +50,5 @@ whatsapp-notifications = ["dep:oz-notification"]
 [dev-dependencies]
 serial_test = "3"
 tempfile = "3"
+# startup_tests.rs reads modules/*/manifest.json to assert registration parity.
+serde_json = { workspace = true }

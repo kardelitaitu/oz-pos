@@ -67,6 +67,10 @@ export interface OfflineQueueSummaryDto {
 export const getOfflineQueueStatusSummary = (): Promise<OfflineQueueSummaryDto> =>
   loggedInvoke<OfflineQueueSummaryDto>('offline_queue_status_summary');
 
+/** Get offline queue status summary (scoped — ADR #7). */
+export const getOfflineQueueStatusSummaryScoped = (sessionToken: string): Promise<OfflineQueueSummaryDto> =>
+  loggedInvoke<OfflineQueueSummaryDto>('offline_queue_status_summary_scoped', { sessionToken });
+
 /** Enqueue an action to be performed when back online. */
 export const enqueueOffline = (args: EnqueueOfflineArgs): Promise<OfflineQueueItemDto> =>
   loggedInvoke<OfflineQueueItemDto>('enqueue_offline', { args });
@@ -79,9 +83,17 @@ export const listPendingOffline = (): Promise<OfflineQueueItemDto[]> =>
 export const listAllOffline = (): Promise<OfflineQueueItemDto[]> =>
   loggedInvoke<OfflineQueueItemDto[]>('list_all_offline');
 
+/** List all offline actions (scoped — ADR #7). */
+export const listAllOfflineScoped = (sessionToken: string): Promise<OfflineQueueItemDto[]> =>
+  loggedInvoke<OfflineQueueItemDto[]>('list_all_offline_scoped', { sessionToken });
+
 /** Get the count of pending offline actions. */
 export const pendingOfflineCount = (): Promise<number> =>
   loggedInvoke<number>('pending_offline_count');
+
+/** Get the count of pending offline actions (scoped — ADR #7). */
+export const pendingOfflineCountScoped = (sessionToken: string): Promise<number> =>
+  loggedInvoke<number>('pending_offline_count_scoped', { sessionToken });
 
 /**
  * Retry syncing all pending offline actions through the real cloud sync
@@ -90,9 +102,17 @@ export const pendingOfflineCount = (): Promise<number> =>
 export const retryOfflineSync = (): Promise<SyncResult> =>
   loggedInvoke<SyncResult>('retry_offline_sync');
 
+/** Retry syncing all pending offline actions (scoped — ADR #7). */
+export const retryOfflineSyncScoped = (sessionToken: string): Promise<SyncResult> =>
+  loggedInvoke<SyncResult>('retry_offline_sync_scoped', { sessionToken });
+
 /** Delete an offline queue item by its identifier. */
 export const deleteOfflineItem = (id: string): Promise<void> =>
   loggedInvoke('delete_offline_item', { args: { id } });
+
+/** Delete an offline queue item (scoped). */
+export const deleteOfflineItemScoped = (sessionToken: string, id: string): Promise<void> =>
+  loggedInvoke('delete_offline_item_scoped', { sessionToken, args: { id } });
 
 // ── Remote Dead-Letter (quarantined pulls) ────────────────────────
 
@@ -128,6 +148,10 @@ export interface RemoteSyncFailureDto {
 export const listRemoteFailures = (): Promise<RemoteSyncFailureDto[]> =>
   loggedInvoke<RemoteSyncFailureDto[]>('list_remote_failures');
 
+/** List remote failures (scoped — ADR #7). */
+export const listRemoteFailuresScoped = (sessionToken: string): Promise<RemoteSyncFailureDto[]> =>
+  loggedInvoke<RemoteSyncFailureDto[]>('list_remote_failures_scoped', { sessionToken });
+
 /**
  * Requeue a dead-lettered remote item so the next sync cycle retries it.
  *
@@ -138,6 +162,10 @@ export const listRemoteFailures = (): Promise<RemoteSyncFailureDto[]> =>
  */
 export const requeueRemoteFailure = (itemId: string): Promise<void> =>
   loggedInvoke('requeue_remote_failure', { args: { itemId } });
+
+/** Requeue a dead-lettered remote item (scoped). */
+export const requeueRemoteFailureScoped = (sessionToken: string, itemId: string): Promise<void> =>
+  loggedInvoke('requeue_remote_failure_scoped', { sessionToken, args: { itemId } });
 
 // ── Cloud Sync Settings ──────────────────────────────────────────
 
@@ -280,6 +308,10 @@ export interface SyncPlanResult {
 export const getSyncPlan = (): Promise<SyncPlanResult> =>
   loggedInvoke<SyncPlanResult>('get_sync_plan');
 
+/** Get sync plan (scoped — ADR #7). */
+export const getSyncPlanScoped = (sessionToken: string): Promise<SyncPlanResult> =>
+  loggedInvoke<SyncPlanResult>('get_sync_plan_scoped', { sessionToken });
+
 // ── Connection Test ──────────────────────────────────────────────
 
 /** Result of pinging the cloud server's health endpoint. */
@@ -289,11 +321,9 @@ export interface PingResult {
   latencyMs: number | null;
 }
 
-/** Test connectivity to the configured cloud server.
- *  Pass the in-progress URL from the text field so users can
- *  test before saving. Falls back to saved settings if empty. */
-export const testSyncConnection = (url?: string): Promise<PingResult> =>
-  loggedInvoke<PingResult>('test_sync_connection', { url: url || null });
+/** Test connectivity to the configured cloud server (H-6: URL always resolved from saved settings). */
+export const testSyncConnection = (): Promise<PingResult> =>
+  loggedInvoke<PingResult>('test_sync_connection');
 
 // ── Token Request ────────────────────────────────────────────────
 
@@ -305,8 +335,6 @@ export interface TokenResult {
   expiresAt: string | null;
 }
 
-/** Request a new JWT token from the cloud server's
- *  POST /api/v1/tokens endpoint. Pass the in-progress URL
- *  so users can request a token before saving. */
-export const requestSyncToken = (url?: string): Promise<TokenResult> =>
-  loggedInvoke<TokenResult>('request_sync_token', { url: url || null });
+/** Request a new JWT token from the cloud server (H-6: URL always resolved from saved settings). */
+export const requestSyncToken = (): Promise<TokenResult> =>
+  loggedInvoke<TokenResult>('request_sync_token');

@@ -11,7 +11,7 @@ export function registerTerminalsFeature() {
     label: 'Terminals',
     requiredRole: 'manager',
     i18nKey: 'nav-terminals',
-    section: 'management',
+    section: 'tools',
     icon: icon('M2 3h20v14H2z', <line x1="8" y1="21" x2="16" y2="21" />, <line x1="12" y1="17" x2="12" y2="21" />, <path d="M7 7l3 3-3 3" />),
   });
 }

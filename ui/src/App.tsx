@@ -2,6 +2,7 @@ import { lazy } from 'react';
 import AppShell from '@/frontend/shell/AppShell';
 import { registerAllFeatures } from '@/features';
 import { AppProviders } from '@/contexts/AppProviders';
+import { useDisableAutofill } from '@/hooks/useDisableAutofill';
 
 // ── Register all feature pages & nav items ──────────────────────────
 registerAllFeatures();
@@ -21,9 +22,15 @@ const DevToolbar = DEV_TOOLBAR_ENABLED
  * Root app component. Wraps the app shell with consolidated AppProviders.
  * DevToolbar renders only in development mode (see DEV_TOOLBAR_ENABLED).
  */
+function AutofillBlocker() {
+  useDisableAutofill();
+  return null;
+}
+
 export default function App() {
   return (
     <AppProviders>
+      <AutofillBlocker />
       <AppShell />
       {DEV_TOOLBAR_ENABLED && DevToolbar && <DevToolbar />}
     </AppProviders>

@@ -10,6 +10,10 @@ description = "Command-line tools for OZ-POS — migrations, backup, export, smo
 name = "oz"
 path = "src/main.rs"
 
+# Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
+[lints]
+workspace = true
+
 [dependencies]
 foundation = { workspace = true }
 oz-core = { workspace = true }

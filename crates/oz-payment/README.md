@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (2 noted findings, doc-staleness) · F1: "35 unit tests pass" -> actual 122 #[test]/#[tokio::test] in crates/oz-payment/src · F2: "Next: real adapters (Stripe, Square, EMV terminal)" -> Stripe, Square, AND QRIS adapters already exist (drivers/stripe.rs, square.rs, qris.rs); EMV terminal not present · verified accurate: PaymentProcessor trait in processor.rs:37 with authorize/capture/refund/void/sale lifecycle; MockPaymentProcessor in drivers/mock.rs -->
+<!-- Audit stamp: 2026-08-30 · docs-auditor · status: ACCURATE (2 findings repaired) · F1: "35 unit tests pass" -> 136 in src/ (incl. drivers/) · F2: "Next: real adapters (Stripe, Square, EMV terminal)" -> Stripe, Square, QRIS, Paddle already exist; EMV terminal not present · verified accurate: PaymentProcessor trait in processor.rs:37 with authorize/capture/refund/void/sale lifecycle + receipt/device_info; MockPaymentProcessor in drivers/mock.rs -->
 
 # oz-payment
 
@@ -11,8 +11,10 @@ Payment processor abstraction for OZ-POS.
 default implementation (authorize + capture in one call).
 
 ✅ `MockPaymentProcessor` — programmable test double with call
-counters, one-shot decline/timeout simulation. 35 unit tests pass.
+counters, one-shot decline/timeout simulation. 136 unit tests pass.
 
-Next: real adapters (Stripe, Square, EMV terminal).
+Real adapters: Stripe (`drivers/stripe.rs`), Square (`drivers/square.rs`),
+QRIS (`drivers/qris.rs`), Paddle (`drivers/paddle.rs`). EMV terminal
+adapter not yet implemented.
 
-> last audited 30-06-26 by docs-auditor
+> last audited 30-08-26 by docs-auditor

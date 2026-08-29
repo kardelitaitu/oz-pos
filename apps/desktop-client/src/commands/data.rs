@@ -9,6 +9,7 @@ use oz_core::Settings;
 use oz_core::db::Store;
 use oz_core::ozpkg::{export_ozpkg, import_ozpkg};
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -21,8 +22,8 @@ pub struct BackupStatus {
     pub last_backup: Option<String>,
     /// Last Backup Size.
     pub last_backup_size: Option<String>,
-    /// Db Path.
-    pub db_path: String,
+    // Db Path intentionally omitted — leaks the filesystem path to
+    // any IPC caller (M-7: never expose db_path in unauth'd DTOs).
 }
 
 #[derive(Debug, Serialize)]
@@ -125,7 +126,6 @@ pub struct ImportDataResult {
 #[tauri::command]
 /// Get backup status.
 pub async fn get_backup_status(state: State<'_, AppState>) -> Result<BackupStatus, AppError> {
-    let db_path = state.db_path.display().to_string();
     let backup_path = default_backup_path(&state);
     let (last_backup, last_backup_size) = match std::fs::metadata(&backup_path) {
         Ok(meta) => {
@@ -141,7 +141,6 @@ pub async fn get_backup_status(state: State<'_, AppState>) -> Result<BackupStatu
     Ok(BackupStatus {
         last_backup,
         last_backup_size,
-        db_path,
     })
 }
 
@@ -162,9 +161,14 @@ pub async fn create_backup(state: State<'_, AppState>) -> Result<BackupResult, A
 #[tauri::command]
 /// Export data.
 pub async fn export_data(
+    session_token: String,
     args: ExportDataArgs,
     state: State<'_, AppState>,
 ) -> Result<ExportDataResult, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SETTINGS_EDIT).await?;
+    // C-1: Contain output path — reject path traversal.
+    validate_contained_path(&args.output_path)?;
     use oz_core::ozpkg::OzpkgPayload;
 
     let conn = state.db.lock().await;
@@ -307,7 +311,15 @@ pub async fn export_data(
 
 #[tauri::command]
 /// Import preview.
-pub async fn import_preview(args: ImportPreviewArgs) -> Result<ImportPreviewResult, AppError> {
+pub async fn import_preview(
+    session_token: String,
+    args: ImportPreviewArgs,
+    state: State<'_, AppState>,
+) -> Result<ImportPreviewResult, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SETTINGS_EDIT).await?;
+    // C-1: Contain input path — reject path traversal.
+    validate_contained_path(&args.file_path)?;
     let data = std::fs::read(&args.file_path)
         .map_err(|e| AppError::Internal(format!("reading file: {e}")))?;
     let (header, payload) = import_ozpkg(&data, &args.password)?;
@@ -329,9 +341,14 @@ pub async fn import_preview(args: ImportPreviewArgs) -> Result<ImportPreviewResu
 #[tauri::command]
 /// Import data.
 pub async fn import_data(
+    session_token: String,
     args: ImportDataArgs,
     state: State<'_, AppState>,
 ) -> Result<ImportDataResult, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SETTINGS_EDIT).await?;
+    // C-1: Contain input path — reject path traversal.
+    validate_contained_path(&args.file_path)?;
     let data = std::fs::read(&args.file_path)
         .map_err(|e| AppError::Internal(format!("reading file: {e}")))?;
     let (_header, payload) = import_ozpkg(&data, &args.password)?;
@@ -519,6 +536,20 @@ pub async fn import_data(
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
+
+/// C-1: Reject path traversal — ensure the path does not contain `..`
+/// segments that could escape the intended directory boundary.
+fn validate_contained_path(path: &str) -> Result<(), AppError> {
+    let p = std::path::Path::new(path);
+    for component in p.components() {
+        if matches!(component, std::path::Component::ParentDir) {
+            return Err(AppError::Internal(format!(
+                "path traversal rejected: '..' not allowed in '{path}'"
+            )));
+        }
+    }
+    Ok(())
+}
 
 fn default_backup_path(state: &AppState) -> String {
     let mut path = state.db_path.clone();

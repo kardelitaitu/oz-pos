@@ -26,7 +26,7 @@ import {
 } from '@/api/currency';
 import { getBrandSettingsScoped } from '@/api/branding';
 import { getVersionScoped, getDeviceId, type VersionInfo } from '@/api/system';
-import { listTerminals } from '@/api/terminals';
+import { listTerminalsScoped } from '@/api/terminals';
 import { useWorkspace } from './WorkspaceContext';
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -106,7 +106,7 @@ const DEFAULT_SETTINGS: SettingsState = {
     hasApiKey: false,
     enabled: false,
   },
-  brand: { colour: '#10b981', storeName: '' },
+  brand: { colour: '#147EFB', storeName: '' },
   preferences: { cardSize: 0, fontSize: 0, fontSmoothing: 'antialiased' },
   currencies: [],
   appVersion: '',
@@ -237,7 +237,7 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
         const deviceId = terminalId || (await getDeviceId().catch(() => ''));
         if (deviceId) ids.add(deviceId);
         try {
-          const terminals = await listTerminals();
+          const terminals = sessionToken ? await listTerminalsScoped(sessionToken) : [];
           const match = terminals.find((t) => t.deviceId === deviceId);
           if (match) {
             ids.add(match.id);
@@ -257,7 +257,7 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
     return () => {
       cancelled = true;
     };
-  }, [terminalId]);
+  }, [terminalId, sessionToken]);
 
   // ── Full load (all APIs) ────────────────────────────────────
 

@@ -98,7 +98,7 @@ export const pricing: PricingTier[] = [
     tierKey: 'premium',
     name: 'Premium',
     currency: 'USD',
-    description: 'For multi-store chains — loyalty and automation.',
+    description: 'For multi-store chains — whitelabel, loyalty, and automation.',
     cta: 'Choose Premium',
     prices: {
       monthly: { price: '$39.99', period: '/month', priceId: 'pri_placeholder_premium_monthly_usd' },
@@ -107,8 +107,8 @@ export const pricing: PricingTier[] = [
     features: [
       { label: '5 stores', included: true },
       { label: 'Unlimited registers', included: true },
+      { label: 'Whitelabel branding', included: true },
       { label: 'Loyalty program', included: true },
-      { label: 'Scheduled report emails', included: true },
       { label: 'Lua scripting', included: true },
       { label: 'Priority support (1h)', included: true },
     ],
@@ -118,7 +118,7 @@ export const pricing: PricingTier[] = [
     tierKey: 'enterprise',
     name: 'Enterprise',
     currency: 'USD',
-    description: 'White-label, custom hardware, and a dedicated account manager.',
+    description: 'Custom hardware, custom SLA, and a dedicated account manager.',
     cta: 'Contact us',
     prices: {
       monthly: { price: 'Custom', period: '' },
@@ -149,6 +149,8 @@ export const featureRows: FeatureRow[] = [
   { label: 'Cloud sync', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
   { label: 'Daily Sales Dashboard', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
   { label: 'Reports & analytics', values: { free: false, plus: false, pro: true, premium: true, enterprise: true } },
+  { label: 'Full audit logging', values: { free: false, plus: false, pro: false, premium: true, enterprise: true } },
+  { label: 'Whitelabel branding', values: { free: false, plus: false, pro: false, premium: true, enterprise: true } },
   { label: 'Scheduled report emails', values: { free: false, plus: false, pro: false, premium: true, enterprise: true } },
   { label: 'Loyalty program', values: { free: false, plus: false, pro: false, premium: true, enterprise: true } },
   { label: 'Lua scripting', values: { free: false, plus: false, pro: false, premium: true, enterprise: true } },

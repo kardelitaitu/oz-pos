@@ -67,7 +67,7 @@ vi.mock('@/components/Spinner', () => ({
 
 // ── Default API responses ────────────────────────────────────────
 
-const defaultBackupStatus = { lastBackup: null, lastBackupSize: null, dbPath: '/path/to/db.sqlite3' };
+const defaultBackupStatus = { lastBackup: null, lastBackupSize: null };
 const defaultImportPreviewResult = {
   storeName: 'Test Store', appVersion: '0.0.4',
   createdAt: new Date('2026-01-15').toISOString(),

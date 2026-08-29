@@ -18,14 +18,14 @@ const mockRequeueRemoteFailure = vi.fn();
 const mockGetSyncPlan = vi.fn();
 
 vi.mock('@/api/offline', () => ({
-  listAllOffline: (...args: unknown[]) => mockListAllOffline(...args),
-  pendingOfflineCount: (...args: unknown[]) => mockPendingOfflineCount(...args),
-  retryOfflineSync: (...args: unknown[]) => mockRetryOfflineSync(...args),
-  deleteOfflineItem: (...args: unknown[]) => mockDeleteOfflineItem(...args),
-  getOfflineQueueStatusSummary: (...args: unknown[]) => mockOfflineQueueStatusSummary(...args),
-  getSyncPlan: (...args: unknown[]) => mockGetSyncPlan(...args),
-  listRemoteFailures: (...args: unknown[]) => mockListRemoteFailures(...args),
-  requeueRemoteFailure: (...args: unknown[]) => mockRequeueRemoteFailure(...args),
+  listAllOfflineScoped: (...args: unknown[]) => mockListAllOffline(...args),
+  pendingOfflineCountScoped: (...args: unknown[]) => mockPendingOfflineCount(...args),
+  retryOfflineSyncScoped: (...args: unknown[]) => mockRetryOfflineSync(...args),
+  deleteOfflineItemScoped: (...args: unknown[]) => mockDeleteOfflineItem(...args),
+  getOfflineQueueStatusSummaryScoped: (...args: unknown[]) => mockOfflineQueueStatusSummary(...args),
+  getSyncPlanScoped: (...args: unknown[]) => mockGetSyncPlan(...args),
+  listRemoteFailuresScoped: (...args: unknown[]) => mockListRemoteFailures(...args),
+  requeueRemoteFailureScoped: (...args: unknown[]) => mockRequeueRemoteFailure(...args),
 }));
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ describe('OfflineQueueScreen', () => {
     await user.click(screen.getByText('Requeue'));
 
     await waitFor(() => {
-      expect(mockRequeueRemoteFailure).toHaveBeenCalledWith('remote-sale-1');
+      expect(mockRequeueRemoteFailure).toHaveBeenCalledWith(expect.any(String), 'remote-sale-1');
       // Reloaded after requeue → the quarantined row is gone.
       expect(screen.getByText('No quarantined items.')).toBeTruthy();
     });
@@ -271,7 +271,7 @@ describe('OfflineQueueScreen', () => {
     await user.click(screen.getByText('Delete'));
 
     await waitFor(() => {
-      expect(mockDeleteOfflineItem).toHaveBeenCalledWith('oq-1');
+      expect(mockDeleteOfflineItem).toHaveBeenCalledWith(expect.any(String), 'oq-1');
     });
   });
 

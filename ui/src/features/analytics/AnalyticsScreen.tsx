@@ -10,6 +10,8 @@ import { createPortal } from 'react-dom';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
+import { useSessionKeepalive } from '@/hooks/useSessionKeepalive';
+import { useInvalidSession } from '@/hooks/useInvalidSession';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import TierLockedFeature from '@/components/TierLockedFeature';
@@ -308,8 +310,11 @@ export default function AnalyticsScreen() {
   const fmt = (minor: number) =>
     new Intl.NumberFormat(numLocale, { style: 'currency', currency, maximumFractionDigits: exp }).format(minor / 10 ** exp);
   const { goToWorkspacePicker } = useWorkspaceNav();
-  const { sessionToken: rawToken, availableWorkspaces, activeInstance } = useWorkspace();
-  const sessionToken = rawToken || '';
+  const { sessionToken, availableWorkspaces, activeInstance } = useWorkspace();
+  // Keep the session alive while this dashboard is open (ping every 10 min).
+  useSessionKeepalive(sessionToken || '');
+  // Detect InvalidSession from any IPC command and show a recovery banner.
+  const showSessionBanner = useInvalidSession();
 
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>(() => {
     // Reopen on the last-chosen view across sessions; fall back to the
@@ -826,7 +831,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const heatmapGranularity = heatmapGranularityForRange(granularity, heatmapRange.from, heatmapRange.to);
   const heatmapQuery = useAnalyticsQuery(
     cardQueryKey('heatmap', workspaceView, heatmapGranularity, heatmapRange.from, heatmapRange.to),
-    () => loadHeatmapRows({ workspace: workspaceView, granularity: heatmapGranularity, from: heatmapRange.from, to: heatmapRange.to, sessionToken }),
+    () => loadHeatmapRows({ workspace: workspaceView, granularity: heatmapGranularity, from: heatmapRange.from, to: heatmapRange.to, sessionToken: sessionToken ?? '' }),
     true,
     CARD_PAYLOAD_VALIDATORS['heatmap'],
   );
@@ -1345,6 +1350,49 @@ const [paletteOpen, setPaletteOpen] = useState(false);
           the main area's scroll position (no gap, no own spacing) */}
       <div className="analytics-scroll-progress" style={{ width: `${scrollProgress * 100}%` }} aria-hidden="true" />
 
+      {/* Session-expired recovery banner — replaces the wall of per-card
+          "session has expired" errors with one actionable notice. */}
+      {showSessionBanner && (
+        <div
+          className="analytics-session-banner"
+          role="alert"
+          data-testid="analytics-session-banner"
+        >
+          <svg
+            className="analytics-session-banner-icon"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <div className="analytics-session-banner-body">
+            <div className="analytics-session-banner-title">
+              <Localized id="analytics-session-expired-title"><span>Session expired</span></Localized>
+            </div>
+            <div className="analytics-session-banner-message">
+              <Localized id="analytics-session-expired-message"><span>Your session has expired. Sign in again.</span></Localized>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="analytics-session-banner-action"
+            onClick={goToWorkspacePicker}
+            aria-label={l10n.getString('analytics-sign-in-again')}
+          >
+            <Localized id="analytics-sign-in-again"><span>Sign in again</span></Localized>
+          </button>
+        </div>
+      )}
+
       {/* ══════════════════════════════════════════════════════════
           AREA 3 — Main content: smart analytics card grid
           ══════════════════════════════════════════════════════════ */}
@@ -1353,8 +1401,42 @@ const [paletteOpen, setPaletteOpen] = useState(false);
         ref={mainRef}
         onScroll={handleMainScroll}
       >
+        {/* No workspace selected — show actionable prompt */}
+        {!sessionToken && (
+          <div className="analytics-no-workspace" role="status">
+            <svg
+              className="analytics-no-workspace-icon"
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <polyline points="9 22 9 12 15 12 15 22" />
+            </svg>
+            <h2 className="analytics-no-workspace-title">
+              <Localized id="analytics-no-workspace-title"><span>No workspace selected</span></Localized>
+            </h2>
+            <p className="analytics-no-workspace-message">
+              <Localized id="analytics-no-workspace-message"><span>Select a workspace to view analytics</span></Localized>
+            </p>
+            <button
+              type="button"
+              className="analytics-no-workspace-action"
+              onClick={goToWorkspacePicker}
+            >
+              <Localized id="analytics-select-workspace"><span>Select workspace</span></Localized>
+            </button>
+          </div>
+        )}
+
         {/* View status — card count + workspace + time view */}
-        <div className="analytics-status">
+        {sessionToken && (<div className="analytics-status">
           <span className="analytics-status-item">
             <Localized id="analytics-status-cards" vars={{ count: String(displayedCards.length) }}>
               <span>{displayedCards.length} cards</span>
@@ -1490,6 +1572,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
             )}
           </div>
         </div>
+        )}
 
         <div className="analytics-grid" style={{ zoom: zoomLevel }}>
           {orderedCards.map((card) => {
@@ -1737,7 +1820,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                       workspaceView={workspaceView}
                       from={cardWindow.from}
                       to={cardWindow.to}
-                      sessionToken={sessionToken}
+                      sessionToken={sessionToken ?? ''}
                       title={l10n.getString(card.titleKey)}
                       expanded={isExpanded}
                       compare={compare}

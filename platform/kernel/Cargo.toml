@@ -6,6 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 description = "OZ-POS module system kernel: lifecycle management, dependency resolution, manifest parsing."
 
+# Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
+[lints]
+workspace = true
+
 [dependencies]
 anyhow = { workspace = true }
 foundation = { workspace = true }

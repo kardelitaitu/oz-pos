@@ -1,3 +1,5 @@
+//! OZ-POS CLI build script — embeds the Windows application manifest.
+
 // ── OZ-POS CLI — Windows application manifest (build script) ───────
 //
 // Embeds `app.manifest` (a `<requestedExecutionLevel level="asInvoker"/>`
