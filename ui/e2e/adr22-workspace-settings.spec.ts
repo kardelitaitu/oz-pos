@@ -84,7 +84,7 @@ test.describe('ADR #22 — Topology canvas', () => {
   test('topology nav item exists and navigates to topology screen', async ({ page }) => {
     // Hard assertion: topology nav item must exist.
     // The System category is collapsed by default. Expand it (Topology lives here).
-    await expect(managementHeader).toBeVisible({ timeout: 5_000 });
+    await expect(systemHeader).toBeVisible({ timeout: 5_000 });
     const isExpanded = await systemHeader
       .getAttribute('aria-expanded')
       .then((v) => v === 'true')
