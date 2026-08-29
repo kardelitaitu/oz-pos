@@ -87,11 +87,11 @@ test.describe('Admin Settings Screens', () => {
     await clickSidebarNav(page, 'License', 'System');
 
     // License section heading must be visible (post-load, not skeleton).
-    const licenseHeading = page.locator('.settings-section-title').filter({ hasText: 'License' });
+    const licenseHeading = page.locator('.settings-section-header-title, .settings-section-title').filter({ hasText: 'License' });
     await expect(licenseHeading.first()).toBeVisible({ timeout: SCREEN_TIMEOUT });
 
     // License status/type should render (mock returns valid Pro license).
-    await expect(page.locator('.settings-section-title').first()).toBeVisible();
+    await expect(page.locator('.settings-section-header-title, .settings-section-title').first()).toBeVisible();
   });
 
   // ── About (System category) ───────────────────────────────
@@ -100,7 +100,7 @@ test.describe('Admin Settings Screens', () => {
     await clickSidebarNav(page, 'About', 'System');
 
     // About section heading must be visible ("System & License Ownership").
-    const aboutHeading = page.locator('.settings-section-title').filter({ hasText: 'System' });
+    const aboutHeading = page.locator('.settings-section-header-title, .settings-section-title').filter({ hasText: 'System' });
     await expect(aboutHeading.first()).toBeVisible({ timeout: SCREEN_TIMEOUT });
   });
 
@@ -109,9 +109,9 @@ test.describe('Admin Settings Screens', () => {
   test('General section renders store settings', async ({ page }) => {
     await clickSidebarNav(page, 'General', 'Business');
 
-    // General section must render with store name input.
-    const storeInput = page.locator('.settings-section-title').filter({ hasText: 'General' });
-    await expect(storeInput.first()).toBeVisible({ timeout: SCREEN_TIMEOUT });
+    // General section must render with a heading.
+    const heading = page.locator('.settings-section-header-title, .settings-section-title').filter({ hasText: 'General' });
+    await expect(heading.first()).toBeVisible({ timeout: SCREEN_TIMEOUT });
   });
 
   // ── Appearance (Business category) ────────────────────────
@@ -120,7 +120,7 @@ test.describe('Admin Settings Screens', () => {
     await clickSidebarNav(page, 'Appearance', 'Business');
 
     // Appearance section must render.
-    const appearanceHeading = page.locator('.settings-section-title').filter({ hasText: 'Appearance' });
+    const appearanceHeading = page.locator('.settings-section-header-title, .settings-section-title').filter({ hasText: 'Appearance' });
     await expect(appearanceHeading.first()).toBeVisible({ timeout: SCREEN_TIMEOUT });
   });
 
@@ -130,7 +130,7 @@ test.describe('Admin Settings Screens', () => {
     await clickSidebarNav(page, 'Receipt', 'Operations');
 
     // Receipt section heading must be visible.
-    const receiptHeading = page.locator('.settings-section-title').filter({ hasText: 'Receipt' });
+    const receiptHeading = page.locator('.settings-section-header-title, .settings-section-title').filter({ hasText: 'Receipt' });
     await expect(receiptHeading.first()).toBeVisible({ timeout: SCREEN_TIMEOUT });
   });
 });
