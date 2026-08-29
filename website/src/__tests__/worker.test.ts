@@ -131,7 +131,9 @@ describe('Cloudflare Worker — worker.ts', () => {
     const res = await worker.fetch(req, mockEnv);
 
     expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toBe('https://ozpos.my.id/admin/login');
+    // Logout redirects to the admin subdomain itself (login page served via
+    // the Worker proxy), not the marketing host.
+    expect(res.headers.get('Location')).toBe('https://admin.ozpos.my.id/');
     const setCookie = res.headers.get('Set-Cookie');
     expect(setCookie).toContain('oz_session=;');
     expect(setCookie).toContain('Max-Age=0');

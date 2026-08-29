@@ -207,8 +207,13 @@ export default {
       // the Worker must expire it here (Max-Age=0). The SPA's Log out
       // button navigates to this endpoint.
       if (url.pathname === LOGOUT_PATH) {
+        // Redirect to the admin subdomain itself (not the marketing host),
+        // so the login page is served through the Worker with the /api/v1/
+        // proxy — the login.js uses relative API (API='') which requires
+        // the proxy to be on the same host. The marketing host (ozpos.my.id)
+        // does NOT have the proxy.
         const loginUrl = hostname === 'admin.ozpos.my.id'
-          ? `https://${MARKETING_HOST}/admin/login`
+          ? `https://admin.ozpos.my.id/`
           : `https://${MARKETING_HOST}/en/login`;
         return new Response(null, {
           status: 302,
