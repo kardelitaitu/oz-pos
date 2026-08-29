@@ -5,21 +5,42 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OZ-POS Admin</title>
 <link rel="stylesheet" href="/admin/admin.css" />
+<script src="/admin/theme.js"></script>
 </head>
 <body>
-  <div class="topbar">
-    <div class="brand"><span class="brand-dot"></span>OZ-POS Admin</div>
-    <button class="logout" id="logout-btn">Log out</button>
-  </div>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand"><span class="brand-dot"></span>OZ-POS Admin</div>
 
-  <div class="wrap">
-    <div class="tab-bar">
-      <button class="tab tab-active" data-tab="dashboard">Dashboard</button>
-      <button class="tab" data-tab="tenants">Tenants</button>
-      <button class="tab" data-tab="health">Health</button>
+      <nav class="nav" aria-label="Admin sections">
+        <button class="nav-btn nav-active" data-tab="dashboard" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+          <span>Dashboard</span>
+        </button>
+        <button class="nav-btn" data-tab="tenants" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>Tenants</span>
+        </button>
+        <button class="nav-btn" data-tab="health" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          <span>Health</span>
+        </button>
+      </nav>
+
+      <div class="topbar-actions">
+        <button class="btn btn-ghost btn-sm theme-toggle" id="theme-toggle" type="button" aria-label="Toggle light/dark theme" title="Toggle theme">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+        <a class="btn btn-ghost btn-sm db-link" href="https://license.ozpos.my.id/_/" target="_blank" rel="noopener noreferrer">DB</a>
+        <button class="btn btn-ghost btn-sm" id="logout-btn" type="button">Log out</button>
+      </div>
     </div>
+  </header>
+
+  <main class="wrap">
     <div id="content"><div class="skeleton" style="height:10rem"></div></div>
-  </div>
+  </main>
 
   <div id="modal-root"></div>
 

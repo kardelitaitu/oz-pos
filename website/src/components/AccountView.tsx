@@ -316,7 +316,7 @@ export default function AccountView({ locale }: Props) {
             <div>
               <p className="font-semibold text-ink text-base">{tenant.email}</p>
               <div className="flex items-center gap-2 mt-0.5 text-xs text-muted">
-                <span className="capitalize">{tenant.status}</span>
+                <span className="capitalize">{statusLabel(locale, tenant.status)}</span>
                 <span>•</span>
                 {tenant.emailVerified ? (
                   <span className="text-success font-medium inline-flex items-center gap-1">
@@ -492,7 +492,7 @@ export default function AccountView({ locale }: Props) {
             <p className="text-xs text-muted leading-relaxed">{t(locale, 'account.invoiceNote')}</p>
             <div className="pt-2 flex items-center gap-3">
               <a
-                href={`mailto:sales@ozpos.my.id?subject=${encodeURIComponent('Invoice Request - ' + tenant.email)}`}
+                href={`mailto:sales@ozpos.my.id?subject=${encodeURIComponent(t(locale, 'account.invoiceSubject').replace('{email}', tenant.email))}`}
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-link hover:underline"
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -510,7 +510,7 @@ export default function AccountView({ locale }: Props) {
       )}
 
       {tenant && (
-        <section className="rounded-xl border border-ink/10 bg-surface/40 p-6" aria-label={t(locale, 'account.password')}>
+        <section className="rounded-xl border border-ink/10 bg-surface/40 p-6 shadow-sm" aria-label={t(locale, 'account.password')}>
           <h2 className="text-lg font-semibold">{t(locale, 'account.password')}</h2>
           <p className="mt-1 text-sm text-muted">{t(locale, 'account.passwordHelp')}</p>
           <form onSubmit={savePassword} className="mt-4 space-y-3">
@@ -552,7 +552,7 @@ export default function AccountView({ locale }: Props) {
 
       {/* Region selector */}
       {tenant && (
-        <section className="rounded-xl border border-ink/10 bg-surface/40 p-6" aria-label={t(locale, 'account.region')}>
+        <section className="rounded-xl border border-ink/10 bg-surface/40 p-6 shadow-sm" aria-label={t(locale, 'account.region')}>
           <h2 className="text-lg font-semibold">{t(locale, 'account.region')}</h2>
           <p className="mt-1 text-sm text-muted">{t(locale, 'account.regionHint')}</p>
           <div className="relative mt-3">
@@ -609,7 +609,7 @@ export default function AccountView({ locale }: Props) {
 
       {subscription ? (
         <section
-          className="rounded-xl border border-ink/10 bg-surface/40 p-6"
+          className="rounded-xl border border-ink/10 bg-surface/40 p-6 shadow-sm"
           aria-label={t(locale, 'account.subscription')}
         >
           <h2 className="text-lg font-semibold">{t(locale, 'account.subscription')}</h2>
@@ -671,7 +671,7 @@ export default function AccountView({ locale }: Props) {
           )}
         </section>
       ) : (
-        <section className="rounded-xl border border-accent/40 bg-surface/40 p-6" aria-label={t(locale, 'account.subscribe')}>
+        <section className="rounded-xl border border-accent/40 bg-surface/40 p-6 shadow-sm" aria-label={t(locale, 'account.subscribe')}>
           <h2 className="text-lg font-semibold">{t(locale, 'account.subscribe')}</h2>
           <p className="mt-1 text-sm text-muted">{t(locale, 'account.noSubscription')}</p>
           {(useMidtrans ? Boolean(licenseApiUrl()) : isPaddleConfigured()) && subscribable.length > 0 ? (
