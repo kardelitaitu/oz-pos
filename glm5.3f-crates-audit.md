@@ -488,6 +488,19 @@ an explicit overflow rationale, and a documented batch junction query
 ADR-19 §5.3 faithfully (FIFO for full refunds, reverse for partial, with a
 `qty ≤ total_deducted` guard and a warn-audited legacy fallback).
 
+### Slice B5 part 5 — db/shifts.rs (479 lines), fully read
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-27 | 🟡 LOW | db/shifts.rs:58–78 + init.sql:1259–1263 | **Open-shift dedup is advisory-only.** `open_shift` does COUNT-then-INSERT with no partial unique index behind it (verified: `shifts` has only plain indexes; the sibling `inventory_shifts` has exactly the needed `idx_inv_shifts_active_per_user_location`). Two concurrent opens for one user could both insert an `open` shift. | Forward-only migration: `CREATE UNIQUE INDEX … ON shifts(user_id) WHERE status='open'`. |
+
+**Slice B5 part 5 positives:** `close_shift` runs every aggregation read
+and the final write inside one transaction; expected-cash correctly
+subtracts cash refunds (in-line documented fix of a false-shortage
+accounting bug) and includes safe-drop payouts; the shift report's gross
+profit matches the reporting layer's cost semantics; hour *labels* are UTC
+(inside COR-21's blast radius) but totals are unaffected.
+
 ---
 
 *This file is appended after each completed crate audit. Findings get IDs
