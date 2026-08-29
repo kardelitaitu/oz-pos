@@ -404,6 +404,10 @@ export default function AccountView({ locale }: Props) {
   // Paddle price id is still a placeholder (subscription-tiers.md — six real
   // prices not yet catalogued) are excluded so the button never opens a
   // dead checkout; free/enterprise have no price id at all.
+  // WIP: all Paddle price ids are currently pri_placeholder_* (see
+  // pricing/en.ts). For the id locale (Midtrans) the filter is bypassed,
+  // so subscribe buttons render. For other locales all plans are filtered
+  // out and the section shows "checkout unavailable".
   // The id market bills through Midtrans (fixed Rp from the server's
   // MIDTRANS_PRICE_TIERS map), so Paddle price ids don't gate it; other
   // locales need a real, non-placeholder Paddle price.
@@ -424,6 +428,8 @@ export default function AccountView({ locale }: Props) {
   // non-placeholder bundle price id plus the client token. Until the real
   // catalog lands the placeholder ids keep the card hidden, exactly like
   // the subscribe section hides placeholder plans.
+  // WIP: bundle checkout needs a real Paddle bundle price id (currently
+  // pri_placeholder_plus_bundle_*) — the card stays hidden until then.
   const plusBundle = (pricingFor(locale) ?? []).find((tier) => tier.tierKey === 'plus')?.bundle;
   const bundleYearly = plusBundle?.prices.yearly;
   const bundleCheckoutAvailable =
@@ -576,6 +582,7 @@ export default function AccountView({ locale }: Props) {
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">{t(locale, 'account.devices')}</h2>
             <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-semibold text-link">
+              {/* WIP: shows tier entitlement text, not wired to devices.length for live count */}
               {license?.tierKey === 'pro' || license?.tierKey === 'enterprise' || license?.tierKey === 'premium'
                 ? t(locale, 'account.terminalUnlimited')
                 : t(locale, 'account.terminalCount')}
@@ -584,6 +591,10 @@ export default function AccountView({ locale }: Props) {
           <p className="mt-1 text-sm text-muted">{t(locale, 'account.devicesHint')}</p>
           {devices && devices.length > 0 ? (
             <div className="mt-4 space-y-2">
+              {/* WIP: read-only list — no per-device unbind/revoke action wired
+                  (unbind happens on-device via the license key; the license
+                  server has no web endpoint for a tenant to revoke its own
+                  machine — admin-only /api/v1/admin/tenants/{id}/revoke). */}
               {devices.slice(0, 5).map((d) => (
                 <div key={d.machine_id} className="rounded-lg border border-ink/10 bg-surface p-3 flex items-center justify-between">
                   <div className="flex items-center gap-3 min-w-0">
