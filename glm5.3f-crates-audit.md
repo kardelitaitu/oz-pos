@@ -877,6 +877,20 @@ cashier/kitchen roles, Admin is never a wildcard and never holds
 staff-deletion by default, Staff is checkout-only (40+ negative
 assertions), Auditor is read-only.
 
+### Slice B — auth.rs (202) + permission_registry.rs (753), fully read
+
+**No new findings — both exemplary.** `auth.rs`: Argon2id with per-hash
+salts; malformed hashes *and* the sync snapshot placeholder fail closed to
+`Ok(false)` (test-pinned, cross-referenced with oz-core's
+`SNAPSHOT_PIN_HASH_PLACEHOLDER`, so an imported operator can never log in
+without a real credential). `permission_registry.rs`: the ADR #35 D3
+single-source-of-truth registry — sensitive keys (voids, refunds,
+settlement, role management, staff deletion, bulk export) are structurally
+ung&shy;r&shy;antable through family wildcards, the global `*` is reserved
+for the Owner seed, and duplicate keys are invariant-tested.
+
+---
+
 ---
 
 ---
