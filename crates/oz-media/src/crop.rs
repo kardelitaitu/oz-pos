@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-media slice A: crop deep read)
+crate: oz-media | status: SAFE | lint: CLEAN
+findings: exemplary — decode errors surfaced, zero-size source rejected, saturating/clamped crop math, solid-colour trim guard returns the original frame, Smart bias documented as heuristic fallback
+next: none | perf: N/A
+*/
 //! Auto image crop.
 //!
 //! Two behaviours are implemented:

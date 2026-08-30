@@ -102,6 +102,26 @@ hex decode surfaced). Mock unwraps are test-support locks only.
 
 ---
 
+## 29. crates/oz-media — image pipeline (crop, thumbnail, compress)
+
+Baseline: ~890 production lines. Slice A — all 7 files (crop.rs 180
+fully read; pipeline.rs 226: production 1–206 fully read; lib/compress/
+thumbnail/metrics/storage verified).
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| M-1 | 🟡 MED | crates/oz-media/src/pipeline.rs:106 | `MediaLimits.max_pixels` (40 MP) and `max_side` (8192) are declared as decompression-bomb guards but **never enforced** in `transform()` — only `max_input_bytes` is checked, so dimension-bomb images rely solely on the image crate's default allocation cap. | Header-only dimension probe (`image::image_dimensions`) before full decode, enforcing both caps. |
+| M-2 | ℹ️ INFO | crates/oz-media/src/pipeline.rs:123 | The pipeline decodes the same bytes 3+ times per run (crop decode, `original_dims` re-decode, per-thumbnail decode). | Single decode pass when perf matters. |
+
+`crop.rs` is exemplary (saturating/clamped math, solid-colour trim
+guard). Storage backends are honest stubs (NotImplemented); promotion
+must add storage-key sanitization.
+
+> **oz-media COMPLETE** — 7 production files, ~890 lines, one MED + one
+> INFO. Campaign proceeds to crates/oz-reporting.
+
+---
+
 ## 25. crates/oz-hal — hardware abstraction layer
 
 Baseline: ~3.2k production lines across 28 files. Slice A (registry.rs

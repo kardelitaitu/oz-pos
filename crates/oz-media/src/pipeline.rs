@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-media slice A: pipeline deep read)
+crate: oz-media | status: NEEDS-FIX | lint: CLEAN
+findings: M-1 MED — MediaLimits.max_pixels (40 MP) and max_side (8192) are declared and documented as decompression-bomb guards but are NEVER enforced in transform(); only max_input_bytes is checked before decode, so the bomb defense relies solely on the image crate default allocation cap and absurd-dimension images pass. Proposed: header-only dimension probe (image::image_dimensions) before full decode enforcing both caps. M-2 INFO — the pipeline decodes the same bytes 3+ times per run (auto_crop decode, original_dims re-decode of re-encoded bytes, per-thumbnail decode inside generate_thumbnail); batch into one decode pass when performance matters. Storage stub returns NotImplemented everywhere; promotion note: enforce key sanitization (no path separators/dotdot) when LocalStorage lands
+next: M-1 in fix-order phase | perf: M-2 double decode
+*/
 //! Media pipeline orchestrator.
 //!
 //! The pipeline composes the media stages in the canonical order:
