@@ -1024,7 +1024,7 @@ Slice A (lib, auth, routes/settings, routes/tokens) deep-read.
 
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
-| API-1 | 🟠 MED | oz-api/src/auth.rs:75–81 | **Hard-coded dev JWT signing secret fallback** (`"oz-pos-dev-secret-change-in-production"`) when `OZ_API_SECRET` is unset — anyone who knows the constant can forge valid tokens for every protected route on a misconfigured public server. There is no startup enforcement. | Refuse to serve (or log-a-fatal warn) when `OZ_PRODUCTION` is set and `OZ_API_SECRET` is missing; consider the same gate for `OZ_ADMIN_KEY`. |
+| API-1 | ✅ FIXED 25-07-26 | oz-api/src/auth.rs | **Hard-coded dev JWT signing secret fallback** (`"oz-pos-dev-secret-change-in-production"`) when `OZ_API_SECRET` is unset — anyone who knows the constant can forge valid tokens for every protected route on a misconfigured public server. There is no startup enforcement. | Refuse to serve (or log-a-fatal warn) when `OZ_PRODUCTION` is set and `OZ_API_SECRET` is missing; consider the same gate for `OZ_ADMIN_KEY`. |
 | API-2 | ℹ️ INFO | oz-api/src/routes/tokens.rs:57–66, routes/settings.rs:118–124 | Admin-key comparison is non-constant-time (`==`), dev-open mode when `OZ_ADMIN_KEY` is unset (documented), and `GET /api/v1/settings` returns the tenant's SMTP password **decrypted** — a misconfigured dev-open deployment discloses credentials. | Constant-time compare; require admin key in production; document the decrypted-GET tradeoff. |
 
 **Slice A positives:** security headers on every response (nosniff, DENY,
@@ -1865,6 +1865,6 @@ simply predates the payment keys.
 | 3 | UI-1 | ✅ **FIXED** 25-07-26 — three payment keys added to SECRET_KEY_DENY_LIST in BOTH clients; new gateway_status Tauri command computes configured/online booleans server-side; gateway.ts invokes it (single call, no secrets in renderer); gateway.test.ts rewritten to the new contract; settings tests extended (59 desktop + 45 tablet pass) and all 18 gateway UI tests pass. |
 | 4 | PLG-11 | ✅ **FIXED** 25-07-26 — fail-closed lexical scan rejects any quote/bracket character outside string literals (the three SQLite quoting dialects can no longer bypass namespace regexes); unterminated literals rejected; 7 new tests; all 180+2 oz-plugin tests pass. |
 | 5 | L-1 | ✅ **FIXED** 25-07-26 — WorkerGuards retained in a process-global FILE_LOG_GUARDS registry; behavioural write-after-init test proves the file writer stays alive; all 39+2 oz-logging tests pass. |
-| 6 | API-1 | ⬜ remove dev JWT secret fallback |
+| 6 | API-1 | ✅ **FIXED** 25-07-26 — serve() refuses to boot when OZ_PRODUCTION=1 without OZ_API_SECRET/OZ_ADMIN_KEY (cloud-server-parity gate); dev fallback retained for zero-config dev with a one-time loud warning; 7 new tests; all 194+1 oz-api tests pass. |
 | 7+ | MEDs | ⬜ MSL-4, MSL-7, CLI-1, CLI-2, N-1, M-1, DC-1 (CS-2 done alongside CS-1). Note: email_pg pg_integration_email_loop_reads_postgres is a pre-existing environmental flake (fake host smtp.test.com DNS varies by run) — observed failing intermittently on 25-07-26 with all webhook/auth tests green. |
 

@@ -1,8 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent (oz-api slice A: lib deep read)
+last audited 25-07-26 by RSA-Agent (oz-api slice A: lib deep read; API-1 FIXED 25-07-26)
 crate: oz-api | status: SAFE | lint: CLEAN
-findings: clean server scaffold — security headers on every response (nosniff/DENY/CSP, prod-only HSTS), CORS fail-closed parse with documented dev opt-in, RUST-07 startup Results; API-1 MED: auth::signing_secret falls back to a hard-coded dev constant when OZ_API_SECRET unset — known-constant JWT forgery on a misconfigured public server (no startup enforcement; propose refuse-to-serve with OZ_PRODUCTION); settings+plan routes sit in the public router but each handler admin-key-gates internally (verified)
-next: enforce secret presence in production mode (API-1) | perf: Arc<Mutex<Connection>> standard pattern
+findings: clean server scaffold — security headers on every response (nosniff/DENY/CSP, prod-only HSTS), CORS fail-closed parse with documented dev opt-in, RUST-07 startup Results; API-1 FIXED — serve() validates production secret requirements (validate_production_secrets) and refuses to boot when OZ_PRODUCTION=1 without OZ_API_SECRET/OZ_ADMIN_KEY, closing the known-constant JWT forgery path on misconfigured deployments; settings+plan routes sit in the public router but each handler admin-key-gates internally (verified)
+next: none | perf: N/A
 */
 
 //! OZ-POS OpenAPI REST server.
@@ -271,6 +271,32 @@ pub fn router(state: AppState) -> Router {
         .layer(TraceLayer::new_for_http())
 }
 
+/// Validate production-mode secret requirements (API-1 fix).
+///
+/// Returns `Err` when production mode is enabled but a required secret is
+/// missing, so a misconfigured public server refuses to serve instead of
+/// falling back to the hard-coded dev signing secret (known-constant JWT
+/// forgery) or running an open token mint (no admin key). Mirrors the
+/// cloud-server boot gate (`OZ_PRODUCTION=1 requires ...`).
+fn validate_production_secrets(
+    production: bool,
+    api_secret: Option<&str>,
+    admin_key: Option<&str>,
+) -> Result<(), String> {
+    if !production {
+        return Ok(());
+    }
+    if api_secret.map_or(true, |s| s.trim().is_empty()) {
+        return Err(
+            "OZ_PRODUCTION=1 requires OZ_API_SECRET to be set (no dev-secret fallback)".into(),
+        );
+    }
+    if admin_key.map_or(true, |k| k.trim().is_empty()) {
+        return Err("OZ_PRODUCTION=1 requires OZ_ADMIN_KEY to be set (no open token mint)".into());
+    }
+    Ok(())
+}
+
 /// Start the server, binding to the port from `OZ_API_PORT` (default 3099).
 ///
 /// Opens the SQLite database at `OZ_DB_PATH` (default `oz-pos.db`), runs
@@ -293,11 +319,19 @@ pub async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let admin_key = std::env::var("OZ_ADMIN_KEY")
         .ok()
         .filter(|key| !key.trim().is_empty());
+    let api_secret_env = std::env::var("OZ_API_SECRET").ok();
+    let production = std::env::var("OZ_PRODUCTION")
+        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "on" | "ON"))
+        .unwrap_or(false);
+    // API-1 fix: refuse to serve a misconfigured production deployment
+    // before any request can hit the dev-secret fallback.
+    validate_production_secrets(production, api_secret_env.as_deref(), admin_key.as_deref())
+        .map_err(|e| format!("startup rejected: {e}"))?;
     let state = AppState {
         db: Arc::new(Mutex::new(conn)),
         pg: None,
         admin_key,
-        api_secret: std::env::var("OZ_API_SECRET").ok().unwrap_or_default(),
+        api_secret: api_secret_env.unwrap_or_default(),
         db_path: db_path.clone(),
         port: std::env::var("OZ_API_PORT")
             .ok()

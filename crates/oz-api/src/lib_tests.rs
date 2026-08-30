@@ -1132,3 +1132,57 @@ async fn cors_preflight_disallowed_origin_gets_no_allow_header() {
         "preflight from a disallowed origin must not be authorized"
     );
 }
+
+// ── API-1: production secret gate ────────────────────────────────
+
+#[test]
+fn api1_production_requires_api_secret() {
+    let err = crate::validate_production_secrets(true, None, Some("admin-key")).unwrap_err();
+    assert!(err.contains("OZ_PRODUCTION=1 requires OZ_API_SECRET"));
+}
+
+#[test]
+fn api1_production_rejects_empty_api_secret() {
+    let err = crate::validate_production_secrets(true, Some("   "), Some("admin-key")).unwrap_err();
+    assert!(err.contains("OZ_PRODUCTION=1 requires OZ_API_SECRET"));
+}
+
+#[test]
+fn api1_production_requires_admin_key() {
+    let err = crate::validate_production_secrets(true, Some("secret"), None).unwrap_err();
+    assert!(err.contains("OZ_PRODUCTION=1 requires OZ_ADMIN_KEY"));
+}
+
+#[test]
+fn api1_production_rejects_both_missing() {
+    // The API-secret gate fires first; admin key is checked on the next
+    // boot attempt after the operator fixes the secret.
+    let err = crate::validate_production_secrets(true, None, None).unwrap_err();
+    assert!(err.contains("OZ_API_SECRET"));
+}
+
+#[test]
+fn api1_production_accepts_both_secrets() {
+    crate::validate_production_secrets(true, Some("secret"), Some("admin-key")).unwrap();
+}
+
+#[test]
+fn api1_dev_mode_allows_missing_secrets() {
+    // Dev mode (no OZ_PRODUCTION) keeps the zero-config startup.
+    crate::validate_production_secrets(false, None, None).unwrap();
+}
+
+#[test]
+fn api1_signing_secret_fallback_is_dev_constant() {
+    // The fallback constant itself is unchanged (dev zero-config startup);
+    // production refusal happens at serve() before any mint/validate.
+    // NOTE: signing_secret reads OZ_API_SECRET from the process env — tests
+    // cannot mutate it safely in parallel, so this asserts the pure
+    // fallback path via an empty provided value and empty env is NOT
+    // guaranteed. Instead assert the DEV constant through provided=None
+    // only when the env var is absent in the test environment.
+    if std::env::var("OZ_API_SECRET").is_err() {
+        let secret = crate::auth::signing_secret_for_tests();
+        assert_eq!(secret, "oz-pos-dev-secret-change-in-production");
+    }
+}

@@ -1,9 +1,9 @@
 //! JSON Web Token generation and validation for the OZ-POS OpenAPI.
 /*
-last audited 25-07-26 by RSA-Agent (oz-api slice A: auth deep read)
+last audited 25-07-26 by RSA-Agent (oz-api slice A: auth deep read; API-1 FIXED 25-07-26)
 crate: oz-api | status: SAFE | lint: CLEAN
-findings: API-1 MED (rooted here): signing_secret falls back to the hard-coded dev constant when OZ_API_SECRET unset — forgeable HS256 tokens for all protected routes on a misconfigured deployment; API-2 INFO: 60s JWT validation cache means an expired token passes up to 60s past exp (documented tradeoff, bounded cache); structured 401 taxonomy per P4 with WWW-Authenticate; exp validated, HS256-only validation default (no alg confusion)
-next: API-1 enforcement | perf: cache saves HMAC on hot paths
+findings: API-1 FIXED — serve() now refuses to boot when OZ_PRODUCTION=1 and OZ_API_SECRET (or OZ_ADMIN_KEY) is missing (validate_production_secrets, mirroring the cloud-server boot gate), so the hard-coded dev JWT signing secret is unreachable in production; the dev fallback itself remains for zero-config dev startup with a one-time loud eprintln warning (warn_dev_fallback_once); signing_secret_for_tests() exposes the resolved secret for tests. API-2 INFO unchanged — 60s JWT validation cache means an expired token passes up to 60s past exp (documented tradeoff, bounded cache); structured 401 taxonomy per P4 with WWW-Authenticate; exp validated, HS256-only validation default (no alg confusion)
+next: API-2 INFO — constant-time admin-key compare, decrypted-GET documentation | perf: N/A
 */
 //!
 //! Tokens are signed with HS256 and carry an `exp` (expiration) claim.
@@ -73,17 +73,57 @@ pub struct TokenResponse {
     pub token_id: String,
 }
 
+/// Hard-coded development fallback secret (API-1).
+///
+/// Only reachable when `OZ_API_SECRET` is unset/empty AND `OZ_PRODUCTION`
+/// is not enabled — `serve()` refuses to boot in production without a real
+/// secret, so a known-constant forgery path cannot exist on a production
+/// deployment.
+const DEV_FALLBACK_SECRET: &str = "oz-pos-dev-secret-change-in-production";
+
+/// Warn once when the dev fallback secret is in use (API-1).
+fn warn_dev_fallback_once() {
+    static DEV_FALLBACK_WARNED: std::sync::Once = std::sync::Once::new();
+    DEV_FALLBACK_WARNED.call_once(|| {
+        eprintln!(
+            "[oz-api] WARNING: OZ_API_SECRET is not set — using the hard-coded \
+             dev signing secret. Tokens are forgeable by anyone who knows the \
+             constant. Set OZ_API_SECRET (required when OZ_PRODUCTION=1)."
+        );
+    });
+}
+
 /// Load the signing secret from the environment.
 ///
 /// Falls back to a hard-coded dev secret if `OZ_API_SECRET` is unset,
-/// so the server starts in development without extra config. Production
-/// deployments MUST set `OZ_API_SECRET`.
+/// so the server starts in development without extra config. A loud
+/// one-time warning is printed when the fallback is used. Production
+/// deployments MUST set `OZ_API_SECRET` — `serve()` refuses to start
+/// when `OZ_PRODUCTION=1` and the secret is missing, so this fallback
+/// is unreachable in production.
 fn signing_secret(provided: Option<&str>) -> String {
-    provided
+    match provided
         .filter(|s| !s.is_empty())
         .map(|s| s.to_owned())
         .or_else(|| std::env::var("OZ_API_SECRET").ok())
-        .unwrap_or_else(|| "oz-pos-dev-secret-change-in-production".into())
+        .filter(|s| !s.is_empty())
+    {
+        Some(secret) => secret,
+        None => {
+            warn_dev_fallback_once();
+            DEV_FALLBACK_SECRET.to_owned()
+        }
+    }
+}
+
+/// Expose the resolved signing secret for tests/ops introspection.
+///
+/// `signing_secret` is private (implementation detail of mint/validate);
+/// this `#[doc(hidden)]` wrapper lets tests assert the dev-fallback
+/// constant without widening the real API surface.
+#[doc(hidden)]
+pub fn signing_secret_for_tests() -> String {
+    signing_secret(None)
 }
 
 /// Generate a new signed JWT with the given subject label, optionally
