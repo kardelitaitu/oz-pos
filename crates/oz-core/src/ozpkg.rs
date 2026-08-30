@@ -123,7 +123,9 @@ pub struct OzpkgPayload {
 ///
 /// # Errors
 ///
-/// Returns `CoreError::Internal` if encryption setup fails.
+/// Returns [`CoreError::Validation`] if `password` is empty or all
+/// whitespace, and `CoreError::Internal` if the header cannot fit or
+/// encryption setup fails.
 pub fn export_ozpkg(
     password: &str,
     store_name: &str,
@@ -132,6 +134,28 @@ pub fn export_ozpkg(
     features: HashMap<String, String>,
     payload: &OzpkgPayload,
 ) -> Result<Vec<u8>, CoreError> {
+    // B50: an empty password is not a weak key, it is NO key. The key is
+    // Argon2id(password, salt) and the salt is written into the plaintext
+    // header, so anyone holding the file can derive the same empty-password
+    // key without guessing anything. The desktop UI already refuses this
+    // (DataManagementScreen.tsx:280 requires >= 8 chars) but `oz-cli
+    // export-ozpkg --password ""` passes clap — the arg must be present,
+    // not non-empty — and reached here unchecked, as would any future
+    // caller. A crypto-critical precondition belongs at the choke point
+    // every caller must pass through, not in one React component.
+    //
+    // import_ozpkg deliberately keeps no such check: backups already
+    // written with an empty password must stay restorable.
+    if password.trim().is_empty() {
+        return Err(CoreError::Validation {
+            field: "password",
+            message: "an encryption password is required; an empty password would leave the \
+                      backup readable by anyone holding the file, because the Argon2id salt is \
+                      stored in the header in the clear"
+                .into(),
+        });
+    }
+
     // 1. Generate random salt and nonce.
     let mut salt = [0u8; SALT_LEN];
     let mut nonce_bytes = [0u8; NONCE_LEN];
@@ -313,3 +337,7 @@ pub fn import_ozpkg(data: &[u8], password: &str) -> Result<(OzpkgHeader, OzpkgPa
 #[cfg(test)]
 #[path = "ozpkg_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "ozpkg_password_tests.rs"]
+mod password_tests;

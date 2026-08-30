@@ -133,7 +133,24 @@ fn corrupted_data_fails() {
 }
 
 #[test]
-fn empty_password_allowed() {
+fn empty_password_is_refused_at_export() {
+    // CONTRACT REVERSAL, recorded rather than silent. This test was added
+    // as `empty_password_allowed` in 018972d5, asserting that
+    // export_ozpkg("") succeeded "(though not recommended)". B50 reversed
+    // that: the key is Argon2id(password, salt) and the salt ships in the
+    // PLAINTEXT header, so an empty password is not a weak key - anyone
+    // holding the file can derive it without guessing.
+    //
+    // Nothing is lost that the product ever offered: the desktop UI has
+    // required >= 8 characters all along (DataManagementScreen.tsx:280),
+    // and no doc or setting describes an empty password as a mode. What
+    // survived was the Rust API's accident, reachable via `oz-cli
+    // export-ozpkg --password ""`.
+    //
+    // The half of the old test that still matters - import must tolerate
+    // "" so backups written before this change stay restorable - is
+    // pinned in ozpkg_password_tests.rs, and the round-trip for a real
+    // (even one-character) password is pinned there too.
     let payload = OzpkgPayload {
         products: vec![],
         categories: vec![],
@@ -143,13 +160,10 @@ fn empty_password_allowed() {
         settings: None,
     };
 
-    let exported = export_ozpkg("", "Store", "0.0.1", vec![], HashMap::new(), &payload).unwrap();
-
-    let result = import_ozpkg(&exported, "");
-    assert!(
-        result.is_ok(),
-        "empty password should work (though not recommended)"
-    );
+    let err = export_ozpkg("", "Store", "0.0.1", vec![], HashMap::new(), &payload)
+        .err()
+        .expect("an empty password must not produce a backup");
+    assert!(err.to_string().contains("password"), "got: {err}");
 }
 
 #[test]
