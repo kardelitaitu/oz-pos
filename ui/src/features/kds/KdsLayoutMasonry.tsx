@@ -10,6 +10,14 @@ interface KdsLayoutMasonryProps extends KdsLayoutProps {
   filtered?: boolean;
 }
 
+// Column titles per index, wired to the translated status keys. The columns
+// are built round-robin with ci in 0..2 → Pending/Preparing/Ready, and the
+// same localized strings (kds-pending / kds-preparing / kds-ready) already
+// exist in both en + id bundles — so the header reuses them instead of the
+// old dynamic `kds-column-${ci}` ids, which matched no message and silently
+// fell back to the hardcoded English children (unlocalized in id).
+const COLUMN_TITLE_KEYS = ['kds-pending', 'kds-preparing', 'kds-ready'] as const;
+
 /**
  * KdsLayoutMasonry — the single KDS view (design-language prototype:
  * dev/kds-prototype.html).
@@ -68,7 +76,7 @@ export function KdsLayoutMasonry({
           {/* Column header with title and count — expected by E2E tests */}
           <div className="kds-column-header">
             <span className="kds-column-title">
-              <Localized id={`kds-column-${ci}`}>
+              <Localized id={COLUMN_TITLE_KEYS[ci] ?? 'kds-pending'}>
                 <span>{['Pending', 'Preparing', 'Ready'][ci]}</span>
               </Localized>
             </span>
