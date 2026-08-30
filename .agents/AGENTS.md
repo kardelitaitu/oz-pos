@@ -1,131 +1,139 @@
-<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: "Version is locked at 0.0.9" -> aligned with root AGENTS.md at 0.0.21 · verified accurate: 4 pre-commit gates; scripts lint-i18n.sh/verify-bundle-parity.py/dedupe-ftl.py/check.sh exist; onboarding-guide SKILL.md exists; crates/oz-hal/src/drivers/mock.rs exists; command dirs + ui/src/api + ui/src/__tests__ present -->
+# Agents Configuration & Rules
 
-# Agents Configuration
+<!-- Audit stamp: 2026-08-30 · Antigravity · status: ACCURATE · version lock: 0.0.33 · 4 pre-commit gates · conventional commits enforced -->
 
-## Global Rules
+## 🚨 Critical Agent Directives (MUST FOLLOW)
 
-- Maintain documentation integrity. Preserve all existing comments and docstrings unless explicitly modified.
-- **Never create new branches unless asked specifically by the user.** Always work directly on the currently active branch.
-- **Never switch local branches unless explicitly asked by the user.**
-- **Always commit changes using the format `<type>(<area>): <description>`** (e.g., `feat(sales): add gift card tender`, `fix(ui): resolve modal overflow`, `perf(ci): optimize path filters`).
+| Rule | Direct Instruction | Why / Context |
+|---|---|---|
+| **Branching** | **NEVER create new branches. NEVER switch branches.** | Always work directly on the currently active branch unless specifically requested by the user. |
+| **Commits** | **ALWAYS commit with format `<type>(<area>): <description>`.** | Must follow conventional commits. Make local commits after each logical task. |
+| **Pushing** | **NEVER run `git push` without an explicit direct order.** | Even after completing all checks, wait for the user to explicitly say "push". |
+| **Version Lock** | **Version is locked at `0.0.33`. NEVER modify version numbers.** | Do not bump version in `Cargo.toml`, `package.json`, `tauri.conf.json`, etc. |
+| **File Paths** | **ALWAYS use forward slashes (`/`) in path arguments on Windows.** | Avoid path escaping bugs (e.g., use `C:/My Script/oz-pos/`). |
+| **File Reading** | **ALWAYS read files in small chunks (≤ 500 lines).** | Preserves context window and prevents output truncation. |
+| **Discovery** | **ALWAYS use `codebase-memory-mcp` first for code exploration.** | Graph discovery saves context tokens and surfaces call chains faster. |
+| **Currency** | **ALWAYS use `Money` struct (`i64` minor units). NEVER use float.** | Monetary values must never use `f32`/`f64`. |
+| **DB Writes** | **ALWAYS use `rusqlite` transactions for database writes.** | Never write to SQLite outside an explicit transaction. |
 
-## Quick Setup
+---
+
+## 🛠️ Quick Setup & Pre-Commit Gates
 
 ```bash
 git config core.hooksPath .githooks   # enable pre-commit hook (cargo fmt + i18n lint + bundle-parity + FTL dedupe)
 ```
 
-The `.githooks/pre-commit` hook runs four gates before every commit (~1s total):
-
+The `.githooks/pre-commit` hook runs four gates automatically before every commit (~1s total):
 1. **`cargo fmt --all`** — auto-formats staged Rust files and re-stages them.
-2. **`i18n lint`** — runs `scripts/lint-i18n.sh` (catches `.id.ftl` byte-identical to its `.ftl` sibling + Fluent key duplicates + an informational bundle-parity surface).
-3. **`Bundle parity: staged files only`** — runs `scripts/verify-bundle-parity.py --staged-only …` on staged `.tsx` / `.ts` files in `ui/src/features/**`; fails-closed if any new `<Localized id>` references a key missing from one or both `.ftl` bundles.
-4. **`FTL dedupe dry-run`** — runs `scripts/dedupe-ftl.py --dry-run` so any duplicate Fluent key surfaces BEFORE push.
+2. **`i18n lint`** — runs `scripts/lint-i18n.sh` (validates Fluent `.id.ftl` vs `.ftl` bundles).
+3. **`Bundle parity: staged files only`** — runs `scripts/verify-bundle-parity.py --staged-only` on staged `ui/src/features/**` files; fails if an `<Localized id>` key is missing from `.ftl`.
+4. **`FTL dedupe dry-run`** — runs `scripts/dedupe-ftl.py --dry-run` to detect duplicate Fluent keys before push.
 
-Without this `core.hooksPath` set, all four gates are silently bypassed at commit time (CI catches them later, but only the i18n lint as an informational surface; the bundle-parity + FTL dedupe checks run only at CI time).
+> For full repository verification mirroring the entire CI matrix, see [`scripts/check.sh`](./scripts/check.sh).
 
-For comprehensive local validation that mirrors the entire CI matrix (not just the pre-commit subset), see [`scripts/check.sh`](./scripts/check.sh). For the full first-time setup walkthrough (4 gates explained, chmod, verify hint), see [`.agents/skills/onboarding-guide/SKILL.md#first-time-setup`](./.agents/skills/onboarding-guide/SKILL.md#first-time-setup).
+---
 
-## Running UI CLI Tools on Windows (tsc / eslint)
+## 💻 Running CLI Tools on Windows
 
-`tsc` and `eslint` are **project-local** — they live in `ui/node_modules/.bin/` and are
-NOT on the system PATH by default. On Windows PowerShell every command that calls
-these tools must prefix the PATH for that session, because each shell subprocess
-starts fresh.
+### 1. UI & Front-End CLI (TypeScript / ESLint / Vite)
 
-### Correct pattern (PowerShell)
+> ⚠️ **MANDATORY RULE:** `tsc` and `eslint` are **project-local** in `ui/node_modules/.bin/` and are NOT on the system PATH.
+> **Agents must ALWAYS run npm scripts from inside the `ui/` directory (`npm run <script>`).** Never invoke bare `tsc` or `eslint`.
 
-Prepend `ui\node_modules\.bin` to `$env:PATH` **in the same command** as the tool:
+| Task | Command (Run from `ui/`) | Description |
+|---|---|---|
+| **All UI Gates** | `npm run check:all` | Chained gate: lint → typecheck → test → i18n → E2E |
+| **Type Check** | `npm run typecheck` | Runs project TypeScript type-checking |
+| **Lint** | `npm run lint` | Runs ESLint (a11y + React rules) |
+| **Lint Auto-Fix** | `npm run lint:fix` | Runs ESLint with auto-fix |
+| **Unit Tests** | `npm run test` | Runs Vitest unit tests |
+| **Build Bundle** | `npm run build` | Validates bundle compilation |
+| **E2E Suite** | `npm run e2e` | Docker backend + Vite + Playwright + cleanup |
+| **E2E UI Only** | `npm run e2e:ui` | Runs Playwright UI spec subset |
 
-```powershell
-# Type-check the whole project (run from project root)
-$env:PATH = "$PWD\ui\node_modules\.bin;" + $env:PATH; tsc --noEmit
-
-# Lint a single file
-$env:PATH = "$PWD\ui\node_modules\.bin;" + $env:PATH; eslint ui/src/frontend/shell/AppShell.tsx
-```
-
-### Preferred alternative — use npm scripts
-
-`ui/package.json` already wraps the tools as npm scripts, and npm resolves
-`node_modules/.bin` automatically on every platform:
-
-| Task | Command (run from `ui/`) |
-|------|--------------------------|
-| Type-check | `npm run typecheck` |
-| Lint | `npm run lint` |
-| Lint + auto-fix | `npm run lint:fix` |
-| Build (type-check + bundle) | `npm run build` |
-| Tests | `npm run test` |
-
-```powershell
-# Example — always run from the ui/ directory
-cd ui
-npm run typecheck
-npm run lint
-```
-
-> **Rule:** Agents must use `npm run <script>` (not bare `tsc`/`eslint`) unless the
-> PATH prefix pattern above is applied first. Never assume `tsc` or `eslint` are
-> globally available on this machine.
-
-### If node_modules is missing
-
-Run `npm ci` inside `ui/` before any of the above (it uses the pinned install-script approvals in `ui/package.json`; see `ui/README.md#install-script-approvals`):
-
+*If `node_modules` is missing, install cleanly:*
 ```powershell
 cd ui
 npm ci --no-audit --no-fund
 ```
 
+### 2. Rust Backend CLI
+
+- **Active Development Iteration:**
+  - Quick compilation check: `cargo check -p <crate>`
+  - Run specific test: `cargo test -p <crate> <test_name>`
+  - 🛑 **Agents must NOT run `cargo clippy` or full workspace tests (`cargo test --workspace`) during routine iteration.**
+- **Pre-Push / Final Verification Only:**
+  - `cargo fmt --all`
+  - `cargo clippy --all-targets --all-features -- -D warnings` (must resolve all warnings)
+  - Full workspace tests prior to pushing
+
 ---
 
-## Project Specific Rules
+## 📐 Architecture & Coding Standards
 
-- Follow the POS software framework conventions.
-- Ensure all code follows the project's coding standards.
-- **Version is locked at `0.0.33`.** Never change the version number
-  (in `Cargo.toml`, `tauri.conf.json`, `package.json`, `CHANGELOG.md`,
-  or anywhere else) unless the user explicitly asks you to bump it.
+### 1. Rust Standards
+- Every public function, struct, enum, and trait must have a doc comment (`///`).
+- **Module Documentation:** Every production `.rs` file must start with a short module-level doc comment (`//!`, 5–15 lines max: purpose, key types, main functions, invariants).
+- Use `thiserror` for error types and `anyhow` for application-level error propagation.
+- **Monetary Values:** Store as integer minor units (`i64`) using `Money`. Never use `f32`/`f64`.
+- **Database Writes:** Must run inside a `rusqlite` transaction.
 
-### Rust Standards
-- **Development Iteration:** Use `cargo check` (or `cargo check -p <crate>`) for quick compilation validation and run specific target tests (e.g. `cargo test -p <crate> <test_name>`) during active development. **Agents must NOT run `cargo clippy` or full workspace tests (`cargo test --workspace`) during routine iteration unless specifically requested by the user or executing final pre-push verification.**
-- **Pre-Push Verification:** Run `cargo fmt --all`, `cargo clippy --all-targets --all-features -- -D warnings` (resolving all warnings), and full workspace tests prior to pushing code or completing final verification.
-- Every public function, struct, and trait must have a doc comment (`///`).
-- Prefer `thiserror` for error types and `anyhow` for application-level error propagation.
-- Store all monetary values as integer minor units (`i64`) using the `Money` struct; never use `f32`/`f64` for currency.
-- Use `rusqlite` with transactions for all database writes; never write outside a transaction.
+### 2. Test File Organization
+- Keep production `.rs` files under 1,000 lines (preferably < 600 lines).
+- **Never put unit tests inside production `.rs` files.**
+  - Place unit tests in a sibling file named `*_tests.rs` (e.g. `sales.rs` → `sales_tests.rs`).
+  - At the bottom of the production file, wire:
+    ```rust
+    #[cfg(test)]
+    #[path = "sales_tests.rs"]
+    mod tests;
+    ```
+  - Inside `sales_tests.rs`, start with `use super::*;`.
+  - Integration tests belong in the top-level `tests/` directory (outside `src/`).
 
-### Tauri / UI Standards
-- Tauri commands must be defined in `apps/desktop-client/src/commands/` or `apps/tablet-client/src/commands/` and registered in their respective `lib.rs`.
-- Front-end API calls go through `ui/src/api/` (per-domain files); do not call `invoke` directly in components.
-- All React components must have ARIA labels and pass `eslint-plugin-jsx-a11y` checks.
-- Use `@fluent/react` for all user-visible strings; no hardcoded English strings in JSX.
+### 3. Tauri & UI Standards
+- Tauri IPC commands live in `apps/desktop-client/src/commands/` or `apps/tablet-client/src/commands/` and are registered in their respective `lib.rs`.
+- Front-end API calls must route through `ui/src/api/` (per-domain files). **Never call `invoke(...)` directly inside React components.**
+- **Accessibility:** All React components must have ARIA labels and pass `eslint-plugin-jsx-a11y` checks.
+- **Localization:** All user-visible strings must use `@fluent/react`. No hardcoded English strings in JSX.
 
-### Testing Standards
-- Every new Rust module must include a `#[cfg(test)]` block with at least one unit test.
-- HAL drivers must have a mock implementation in `crates/oz-hal/src/drivers/mock.rs` for testing.
-- Front-end components must have a corresponding test in `ui/src/__tests__/`.
+### 4. Database & Hardware
+- **HAL Drivers:** Hardware drivers must have a mock implementation in `crates/oz-hal/src/drivers/mock.rs`.
+- **PostgreSQL Drift:** When modifying Postgres schemas, run `bash scripts/reset-dev-pg.sh` to re-synchronize the shared dev container schema (`oz-pg-test-15432`).
 
-### Git & Branch Policy
-- **Never create new branches unless asked specifically by the user.** Always work directly on the branch provided.
-- Branch naming (when explicitly requested by the user): `feat/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`, `test/<name>`, `refactor/<name>`.
-- **Commit Format Requirement:** Every commit message MUST strictly follow the conventional format:
-  ```
-  <type>(<area>): <description>
+---
 
-  [optional body explaining changes, rationale, or issue references]
-  ```
-  - **`type`** must be one of: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`, `perf`, `ci`, `audit`.
-  - **`area`** indicates the domain, crate, or component (e.g. `sales`, `admin`, `website`, `ci`, `core`, `desktop-client`, `ui`, `licensing`).
-  - **`description`** is an imperative, concise description of the modification.
-- **Always make a local commit after each major modification.** Whenever a logical task, feature step, or significant code change is completed and verified locally, commit it before moving on to the next task. The commit message must accurately and comprehensively explain what was changed across all committed files.
+## 🌿 Git & Commit Policy
+
+### 1. Branch Policy
+- **Never create new branches unless asked specifically by the user.** Always work directly on the currently active branch.
+- **Never switch local branches unless explicitly asked by the user.**
+- Branch naming convention (when explicitly requested): `feat/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`, `test/<name>`, `refactor/<name>`.
+
+### 2. Commit Format Requirement
+Every commit message **MUST** strictly follow the conventional format:
+```
+<type>(<area>): <description>
+
+[optional body explaining changes, rationale, or issue references]
+```
+
+- **`<type>`** must be one of:
+  - `feat`: New feature or capability
+  - `fix`: Bug fix
+  - `docs`: Documentation updates
+  - `chore`: Maintenance, dependencies, configs
+  - `test`: Adding or modifying tests
+  - `refactor`: Code refactoring without functional changes
+  - `perf`: Performance improvements
+  - `ci`: CI workflows, GitHub Actions, build scripts
+  - `audit`: Code audit stamps and remediations
+- **`<area>`**: Domain, crate, or component (e.g. `sales`, `admin`, `website`, `ci`, `core`, `desktop-client`, `ui`, `licensing`, `agents`).
+- **`<description>`**: Imperative, concise summary of the change (e.g. `add gift card tender`, `resolve modal overflow`).
+
+### 3. Commit Cadence & Push Rule
+- **Always make a local commit after each major modification.** Whenever a logical task or feature step is completed and verified locally, commit it before moving on to the next task.
 - **Never run `git push` without an explicit, direct order from the user.** Even after committing code or completing verification, always wait for the user to explicitly instruct you to push before executing any `git push` command.
-- All PRs must pass the CI pipeline (lint, test, build) before merging.
-
-- CI only triggers on the `main` branch (push + pull_request). Feature-branch
-  pushes do not run CI; open a PR targeting `main` to validate changes.
-- Never commit secrets, `.env` files, or SQLite database files.
-
-> [!NOTE]
-> This file serves as the central place to define agents, rules, and customisation for the POS framework.
+- Never commit secrets, `.env` files, or SQLite database files (`*.db`, `*.sqlite`).
