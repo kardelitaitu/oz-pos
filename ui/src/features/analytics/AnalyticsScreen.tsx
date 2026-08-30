@@ -16,12 +16,12 @@ import { useCurrency } from '@/contexts/CurrencyContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import TierLockedFeature from '@/components/TierLockedFeature';
 import { minorUnitExponent } from '@/types/domain';
-import { animDuration } from '@/utils/animation';
 import { l10nErrorMessage } from '@/utils/app-error';
 import { downloadCsv } from '@/utils/export-csv';
 import Tooltip from '@/frontend/shell/Tooltip';
 import { AnalyticsCardContent, ExportCsvButton } from './AnalyticsCardContent';
 import { analyticsDataCache, clearAnalyticsCache, cardQueryKey } from './analytics-cache';
+import { useToastManager } from './useToastManager';
 import {
   CARD_PAYLOAD_VALIDATORS,
   buildHeatmapCells,
@@ -315,6 +315,7 @@ export default function AnalyticsScreen() {
   useSessionKeepalive(sessionToken || '');
   // Detect InvalidSession from any IPC command and show a recovery banner.
   const showSessionBanner = useInvalidSession();
+  const { toasts, showToast } = useToastManager();
 
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>(() => {
     // Reopen on the last-chosen view across sessions; fall back to the
@@ -358,7 +359,6 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState('');
   const [paletteIndex, setPaletteIndex] = useState(0);
   const [scrollProgress, setScrollProgress] = useState(0);
-  const [toasts, setToasts] = useState<{ id: number; message: string; exiting?: boolean }[]>([]);
   const [menuCardId, setMenuCardId] = useState<string | null>(null);
   /** Viewport anchor for the portaled per-card options menu. */
   const [menuAnchor, setMenuAnchor] = useState<{ bottom: number; right: number } | null>(null);
@@ -368,8 +368,6 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const [compare, setCompare] = useState(false);
   const [, setMetricsTick] = useState(0);
   const paletteInputRef = useRef<HTMLInputElement | null>(null);
-  const toastId = useRef(0);
-  const toastTimersRef = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const [cardOrder, setCardOrder] = useState<string[]>([]);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
@@ -422,26 +420,6 @@ const [paletteOpen, setPaletteOpen] = useState(false);
     startRecalculating.current?.();
   }, [workspaceView, granularity, customFrom, customTo]);
 
-  // Transient toast feedback — auto-dismisses per toast. Dismissal runs a
-  // two-phase exit (fade out, then unmount) so a toast never snaps away.
-  const dismissToast = useCallback((id: number) => {
-    // Phase 1: mark exiting → the `--exiting` mirror keyframe runs.
-    setToasts((t) => t.map((x) => (x.id === id ? { ...x, exiting: true } : x)));
-    // Phase 2: unmount after the exit animation completes.
-    const timer = setTimeout(() => {
-      setToasts((t) => t.filter((x) => x.id !== id));
-      toastTimersRef.current.delete(id);
-    }, animDuration(250));
-    toastTimersRef.current.set(id, timer);
-  }, []);
-
-  const showToast = useCallback((message: string) => {
-    const id = ++toastId.current;
-    setToasts((t) => [...t.slice(-2), { id, message }]);
-    const timer = setTimeout(() => dismissToast(id), 2600);
-    toastTimersRef.current.set(id, timer);
-  }, [dismissToast]);
-
   const zoomIn = useCallback(() => setZoomLevel((z) => Math.min(ZOOM_MAX, +(z + ZOOM_STEP).toFixed(2))), []);
   const zoomOut = useCallback(() => setZoomLevel((z) => Math.max(ZOOM_MIN, +(z - ZOOM_STEP).toFixed(2))), []);
   const zoomReset = useCallback(() => {
@@ -455,16 +433,6 @@ const [paletteOpen, setPaletteOpen] = useState(false);
     const id = setInterval(() => setMetricsTick((t) => t + 1), 1000);
     return () => clearInterval(id);
   }, [showCacheMetrics]);
-
-  // Cancel any in-flight toast timers on unmount — never setState against
-  // an unmounted component.
-  useEffect(() => {
-    const timers = toastTimersRef.current;
-    return () => {
-      for (const t of timers.values()) clearTimeout(t);
-      timers.clear();
-    };
-  }, []);
 
   // Persist zoom across sessions
   useEffect(() => {
