@@ -138,6 +138,22 @@ describe('admin-utils i18n (H3)', () => {
   });
 });
 
+describe('admin-utils API auth helpers (H1)', () => {
+  it('isAuthDenied classifies 401/403', () => {
+    expect(utils.isAuthDenied(401)).toBe(true);
+    expect(utils.isAuthDenied(403)).toBe(true);
+    expect(utils.isAuthDenied(200)).toBe(false);
+    expect(utils.isAuthDenied(500)).toBe(false);
+    expect(utils.isAuthDenied(404)).toBe(false);
+  });
+
+  it('authDeniedError marks the error with authDenied + path', () => {
+    const err = utils.authDeniedError('/api/v1/admin/stats');
+    expect(err.message).toContain('/api/v1/admin/stats');
+    expect(err.authDenied).toBe(true);
+  });
+});
+
 describe('admin-utils tableCard', () => {
   it('builds a card with headers and rows', () => {
     const t = utils.tableCard('Tenants', ['Email', 'Tier'], [['a@b.com', 'pro'], ['c@d.com', 'plus']]);

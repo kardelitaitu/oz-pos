@@ -158,6 +158,26 @@
     return card;
   }
 
+  // ── API helper (H1) ─────────────────────────────────────────────
+  // Pure classification + error-builder for the admin API layer. The DOM
+  // side (rendering the access-denied screen) stays in admin.js; these are
+  // unit-testable without a fetch/document.
+
+  // Returns true when an HTTP status means "session not authorized" for the
+  // admin panel (401 unauth'd, 403 non-admin tenant).
+  function isAuthDenied(status) {
+    return status === 401 || status === 403;
+  }
+
+  // Build the thrown Error for an auth-denied response. Marking
+  // err.authDenied lets callers distinguish "fetch failed" from "auth was
+  // the problem" so they never overwrite the access-denied screen.
+  function authDeniedError(path) {
+    const err = new Error(path + ' (auth denied)');
+    err.authDenied = true;
+    return err;
+  }
+
   // ── i18n (H3) ───────────────────────────────────────────────────
   // Key-value string table. English is the default; a future locale just
   // swaps this object. t(key) returns the localized string (missing keys
@@ -235,7 +255,7 @@
     'health.version': 'Version',
     'health.time': 'Time',
     'auth.accessDenied': 'Access denied',
-    'auth.signInAgain': 'If you are the admin, please <a href="/__oz/logout" style="color:var(--accent)">sign in again</a>.</p>',
+    'auth.signInAgain': 'Your session is not authorized for the admin panel. If you are the admin, please <a href="/__oz/logout" style="color:var(--accent)">sign in again</a>.',
   };
 
   function t(key) {
@@ -254,5 +274,7 @@
     tableCard: tableCard,
     t: t,
     STRINGS: STRINGS,
+    isAuthDenied: isAuthDenied,
+    authDeniedError: authDeniedError,
   };
 }));
