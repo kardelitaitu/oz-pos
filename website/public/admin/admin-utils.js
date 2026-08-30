@@ -164,6 +164,26 @@
   // side (rendering the access-denied screen) stays in admin.js; these are
   // unit-testable without a fetch/document.
 
+  // tenantRow builds one <tr> for the tenants table (email, status pill,
+  // license key, tier, created date, Details button). Extracted from
+  // admin.js renderTenants so the row logic is unit-testable.
+  // INVARIANT: the parameter must NEVER be named `t` — it would shadow the
+  // i18n t() helper (the B1 bug: the i18n refactor left `t('tenant.details')`
+  // calling a tenant object, crashing the whole Tenants tab).
+  function tenantRow(tenant, onDetails) {
+    var row = el('tr');
+    row.appendChild(el('td', null, tenant.email || '—'));
+    var td1 = el('td'); td1.appendChild(statusPill(tenant.status)); row.appendChild(td1);
+    row.appendChild(el('td', null, (tenant.license && tenant.license.key) || '—'));
+    row.appendChild(el('td', null, (tenant.subscription && tenant.subscription.tierKey) || '—'));
+    row.appendChild(el('td', null, tenant.created ? tenant.created.slice(0, 10) : '—'));
+    var tdAction = el('td');
+    var btn = el('button', 'btn btn-sm btn-ghost', t('tenant.details'));
+    btn.addEventListener('click', function () { onDetails(tenant.id); });
+    tdAction.appendChild(btn); row.appendChild(tdAction);
+    return row;
+  }
+
   // Returns true when an HTTP status means "session not authorized" for the
   // admin panel (401 unauth'd, 403 non-admin tenant).
   function isAuthDenied(status) {
@@ -349,6 +369,7 @@
     svgDonut: svgDonut,
     kpiC: kpiC,
     tableCard: tableCard,
+    tenantRow: tenantRow,
     t: t,
     STRINGS: STRINGS,
     isAuthDenied: isAuthDenied,

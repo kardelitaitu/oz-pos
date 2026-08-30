@@ -178,3 +178,47 @@ describe('admin-utils tableCard', () => {
     expect(t.querySelector('table')).toBeNull();
   });
 });
+
+// ── Bug hunt 2026-08-30: the i18n refactor (#73) replaced literals with
+// t(...) inside callbacks whose parameter was ALSO named t — calling a
+// tenant object as a function threw TypeError and killed the whole
+// Tenants tab. These tests pin the extracted helpers against that class
+// of shadowing regression.
+
+describe('admin-utils tenantRow (B1: t() shadowing regression)', () => {
+  const tenant = {
+    id: 't1',
+    email: 'a@b.c',
+    status: 'active',
+    license: { key: 'OZ-KEY' },
+    subscription: { tierKey: 'pro' },
+    created: '2026-08-01T10:00:00Z',
+  };
+
+  it('renders all six cells without crashing', () => {
+    const row = utils.tenantRow(tenant, () => {});
+    const cells = row.querySelectorAll('td');
+    expect(cells.length).toBe(6);
+    expect(cells[0].textContent).toBe('a@b.c');
+    expect(cells[2].textContent).toBe('OZ-KEY');
+    expect(cells[3].textContent).toBe('pro');
+    expect(cells[4].textContent).toBe('2026-08-01');
+  });
+
+  it('labels the action button via i18n and wires the click to the tenant id', () => {
+    const clicks: string[] = [];
+    const row = utils.tenantRow(tenant, (id: string) => clicks.push(id));
+    const btn = row.querySelector('button')!;
+    expect(btn.textContent).toBe('Details');
+    btn.click();
+    expect(clicks).toEqual(['t1']);
+  });
+
+  it('falls back to em-dashes for missing optional fields', () => {
+    const row = utils.tenantRow({ id: 'x', status: 'active' }, () => {});
+    const cells = row.querySelectorAll('td');
+    expect(cells[0].textContent).toBe('—');
+    expect(cells[2].textContent).toBe('—');
+    expect(cells[4].textContent).toBe('—');
+  });
+});

@@ -255,17 +255,10 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       [t('th.email'),t('th.status'),t('th.license'),t('th.tier'),t('th.created'),''].forEach(h => tr.appendChild(el('th', null, h)));
       thead.appendChild(tr); table.appendChild(thead);
       const tbody = el('tbody');
-      tenants.forEach(t => {
-        const row = el('tr');
-        row.appendChild(el('td', null, t.email || '—'));
-        const td1 = el('td'); td1.appendChild(statusPill(t.status)); row.appendChild(td1);
-        row.appendChild(el('td', null, (t.license && t.license.key) || '—'));
-        row.appendChild(el('td', null, (t.subscription && t.subscription.tierKey) || '—'));
-        row.appendChild(el('td', null, t.created ? t.created.slice(0,10) : '—'));
-        const tdAction = el('td'); const btn = el('button', 'btn btn-sm btn-ghost', t('tenant.details'));
-        btn.addEventListener('click', () => showTenantDetail(t.id)); tdAction.appendChild(btn); row.appendChild(tdAction);
-        tbody.appendChild(row);
-      });
+      // B1 fix: the row builder moved to admin-utils.tenantRow — the old
+      // inline callback named its parameter `t`, shadowing the i18n t()
+      // helper, so t('tenant.details') threw and the table never rendered.
+      tenants.forEach(tenant => tbody.appendChild(tenantRow(tenant, showTenantDetail)));
       table.appendChild(tbody); card.appendChild(table); c.appendChild(card);
 
       // ── Pagination controls ─────────────────────────────────────
