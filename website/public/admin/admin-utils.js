@@ -158,6 +158,90 @@
     return card;
   }
 
+  // ── i18n (H3) ───────────────────────────────────────────────────
+  // Key-value string table. English is the default; a future locale just
+  // swaps this object. t(key) returns the localized string (missing keys
+  // fall back to the key itself so the UI never shows a blank label).
+  var STRINGS = {
+    'dashboard.title': 'Dashboard',
+    'kpi.totalUsers': 'Total Users',
+    'kpi.totalSubscribers': 'Total Subscribers',
+    'kpi.mrr': 'MRR',
+    'kpi.monthlyGrossIdr': 'Monthly Gross (IDR)',
+    'kpi.arpu': 'ARPU',
+    'kpi.activeTerminals': 'Active Terminals',
+    'kpi.trialToPaid': 'Trial → Paid',
+    'chart.revenueTrendIdr': 'Revenue Trend (IDR)',
+    'chart.subscriberGrowth': 'Subscriber Growth',
+    'chart.tierDistribution': 'Tier Distribution',
+    'chart.paymentProvider': 'Payment Provider',
+    'chart.signupsPerMonth': 'Signups per Month',
+    'chart.churnCanceled': 'Churn / Canceled',
+    'table.topSubscribers': 'Top Subscribers',
+    'table.recentSignups': 'Recent Signups',
+    'table.expiringSoon': 'Expiring Soon (within 30 days)',
+    'table.tenants': 'Tenants',
+    'table.noData': 'No data.',
+    'table.noTenantsMatch': 'No tenants match.',
+    'th.email': 'Email',
+    'th.tier': 'Tier',
+    'th.mrr': 'MRR',
+    'th.renewal': 'Renewal',
+    'th.provider': 'Provider',
+    'th.status': 'Status',
+    'th.daysLeft': 'Days Left',
+    'th.created': 'Created',
+    'th.expires': 'Expires',
+    'th.licenseKey': 'License key',
+    'th.license': 'License',
+    'th.devices': 'Devices',
+    'th.subscriptionStatus': 'Subscription status',
+    'th.emailVerified': 'Email verified',
+    'tenant.currentTier': 'Current tier: ',
+    'tenant.details': 'Details',
+    'tenant.title': 'Tenant: ',
+    'tenant.changeTier': 'Change tier',
+    'tenant.reasonOverride': 'Reason for override (audit)',
+    'tenant.renew365': 'Renew +365d',
+    'tenant.revoke': 'Revoke',
+    'tenant.revoked': 'Revoked',
+    'tenant.activate': 'Activate',
+    'tenant.activated': 'Activated',
+    'tenant.renewed': 'Renewed',
+    'tenant.tierChanged': 'Tier changed',
+    'tenant.upgrade': 'Upgrade',
+    'tenant.save': 'Save',
+    'tenant.cancel': 'Cancel',
+    'tenant.close': 'Close',
+    'toolbar.searchPlaceholder': 'Search by email…',
+    'toolbar.search': 'Search',
+    'toolbar.clear': 'Clear',
+    'toolbar.enter': 'Enter',
+    'toolbar.showing': 'Showing ',
+    'toolbar.of': ' of ',
+    'toolbar.page': 'Page ',
+    'toolbar.prev': '← Prev',
+    'toolbar.next': 'Next →',
+    'health.title': 'System Health',
+    'health.status': 'Status',
+    'health.ok': '✓ OK',
+    'health.degraded': '✗ Degraded',
+    'health.database': 'Database',
+    'health.connected': '✓ Connected',
+    'health.unreachable': '✗ Unreachable',
+    'health.smtp': 'SMTP',
+    'health.configured': '✓ Configured',
+    'health.notConfigured': '— Not configured',
+    'health.version': 'Version',
+    'health.time': 'Time',
+    'auth.accessDenied': 'Access denied',
+    'auth.signInAgain': 'If you are the admin, please <a href="/__oz/logout" style="color:var(--accent)">sign in again</a>.</p>',
+  };
+
+  function t(key) {
+    return STRINGS[key] !== undefined ? STRINGS[key] : key;
+  }
+
   return {
     el: el,
     escapeHtml: escapeHtml,
@@ -168,5 +252,7 @@
     svgDonut: svgDonut,
     kpiC: kpiC,
     tableCard: tableCard,
+    t: t,
+    STRINGS: STRINGS,
   };
 }));
