@@ -630,6 +630,21 @@ implements the strict ADR-19 §4 priority tree with split-brain detection in
 both resolver paths, and its chain resolver degrades fail-closed for
 display purposes.
 
+### Slice C3 — settings.rs (836 lines), fully read
+
+No new finding IDs — a clean typed delegation facade over
+`platform_core::settings::Settings` (raw KV + delta ledger per ADR #22 +
+feature-flag integration). The rounding-mode parse falls back to the
+documented TAX-05 default while the wire-string setter rejects garbage;
+`set_batch` is one transaction; `prune_stale_features` loops individual
+removes without a tx (RUST-08 advisory, INFO). **Note:** secrets (sync API
+key, terminal secret, PG password, Redis URL, exchange-rate key) are stored
+plaintext in the unencrypted `settings` table — the same local-POS threat
+model accepted for COR-17/COR-30, tracked as a single revisit item when
+multi-terminal/cloud sync hardening happens.
+
+---
+
 ---
 
 ---
