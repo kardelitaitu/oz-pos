@@ -706,6 +706,18 @@ and escapes every user-controlled HTML cell. All four HTTP clients in
 family); the service-account key and Snowflake password persist in the
 settings JSON (base64 ≠ encryption — COR-17/30 family).
 
+### Slice D3 — cache.rs (417) + kds.rs top-level (342), fully read
+
+No new finding IDs — both clean. `cache.rs`: the `Cache` trait with a
+`NoopCache` fallback and a feature-gated `RedisCache` where every Redis
+error degrades to a miss (fail-safe direction), the pub/sub listener runs
+with 5-second read timeouts, skips its own terminal's messages, and exits
+cleanly on shutdown. `kds.rs`: pure domain types plus
+`resolve_kds_targets` station routing with documented broadcast fallback
+and deduplication; pairing tokens arrive as SHA-256 hashes.
+
+---
+
 ---
 
 ---

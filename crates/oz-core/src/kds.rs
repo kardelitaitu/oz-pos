@@ -1,4 +1,10 @@
 //! Kitchen Display System (KDS) domain types.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice D3: kds domain deep read)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: clean pure domain types + resolve_kds_targets routing (station-based with broadcast fallback and dedup, documented semantics); pairing token arrives as SHA-256 hash; no logic risks
+next: none | perf: N/A
+*/
 //!
 //! Types for order tickets that route completed sales to the kitchen
 //! display system with status tracking and timestamps.
