@@ -1,9 +1,28 @@
 //! Caching layer for frequently-accessed POS data.
 /*
-last audited 25-07-26 by RSA-Agent (oz-core slice D3: cache deep read)
+last audited 31-08-26 by Antigravity (oz-core: pub/sub filtering, connect path, lock policy)
 crate: oz-core | status: SAFE | lint: CLEAN
-findings: clean — Cache trait + NoopCache + feature-gated RedisCache; every Redis error degrades to miss/noop (fail-safe direction); pub/sub listener uses 5s read timeouts, skips own-terminal messages, exits cleanly on shutdown signal; create_cache falls back to noop with a warn; no secrets in keys
-next: none | perf: single mutex-guarded connection
+findings: 3 fixed — B48 a subscriber whose terminal_id was unknown compared ""
+against "" and classified EVERY notification as its own write, ignoring all
+invalidations (rule extracted to inventory_invalidation_target, outside the
+cache-redis gate, so it is testable without a server); B49 RedisCache::connect
+used the untimed get_connection(), so an unreachable-but-non-refusing
+redis.url stalled terminal startup ~21s (Windows) before create_cache could
+fall back (now CONNECT_TIMEOUT, shared with the pub/sub path); a poisoned conn
+mutex silently turned every operation into a permanent no-op — including
+invalidate_* and publish_negative_stock_event — while is_healthy() is sampled
+once at startup and never polled (now reported by lock_or_report, which
+REFUSES a poisoned guard rather than recovering it).
+Still true: every Redis error degrades to miss/noop, the fail-safe direction;
+no secrets in keys; the listener exits cleanly on its shutdown signal.
+next: create_cache logs nothing when the feature is simply not compiled, so a
+startup cache_healthy=false cannot be told apart from a dead server; the
+pub/sub listener breaks permanently on its first non-timeout error with no
+reconnect, and the returned Sender cannot tell its owner it died; neither is
+reachable today — nothing calls start_inventory_pubsub or
+publish_inventory_change.
+perf: single mutex-guarded connection — one dead or slow connection serialises
+every caller; reconnect and backoff need a real server to test.
 */
 //!
 //! Provides a [`Cache`] trait, a [`NoopCache`] fallback, and an optional
