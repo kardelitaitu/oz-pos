@@ -481,7 +481,11 @@ describe('admin-utils mountModal (B11: ESC listener leak)', () => {
     try {
       const root = document.createElement('div');
       const close = utils.mountModal(root, document.createElement('div'));
-      expect(t.active()).toBe(1);
+      // B28 added a second keydown listener (the focus trap) — the
+      // invariant is "mount attaches, close detaches everything", not
+      // the exact count. (The old toBe(1) threw before close(), which
+      // leaked two listeners into the next test — the -2 cascade.)
+      expect(t.active()).toBeGreaterThanOrEqual(1);
       close();
       expect(root.children.length).toBe(0);
       expect(t.active()).toBe(0);
@@ -915,5 +919,66 @@ describe('admin-utils mountModal focus (B27: dialog announced but focus never en
     const close = utils.mountModal(d.root, box);
     d.trigger.remove(); // e.g. renderTenants replaced the table
     expect(() => close()).not.toThrow();
+  });
+
+  // B28: B27 moved focus INTO the dialog, but Tab still walked out of it
+  // into the background page behind the backdrop (WCAG 2.1.2 — no
+  // keyboard trap in, no escape out). mountModal must cycle Tab within
+  // the dialog's focusables while it is open.
+  it('Tab on the last focusable wraps to the first', () => {
+    const d = buildModalDom();
+    const box = document.createElement('div');
+    box.innerHTML = '<button id="a">A</button><button id="b">B</button>';
+    utils.mountModal(d.root, box);
+    const b = document.getElementById('b')!;
+    b.focus();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    expect(document.activeElement!.id).toBe('a');
+  });
+
+  it('Shift+Tab on the first focusable wraps to the last', () => {
+    const d = buildModalDom();
+    const box = document.createElement('div');
+    box.innerHTML = '<button id="a">A</button><button id="b">B</button>';
+    utils.mountModal(d.root, box);
+    const a = document.getElementById('a')!;
+    a.focus();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }));
+    expect(document.activeElement!.id).toBe('b');
+  });
+
+  it('Shift+Tab from the box itself (loading state) wraps to the last', () => {
+    const d = buildModalDom();
+    const box = document.createElement('div');
+    box.textContent = 'Loading…';
+    utils.mountModal(d.root, box);
+    // Content arrives later — focus is on the box; after buttons render,
+    // Shift+Tab from the box must land on the LAST focusable, not escape.
+    box.innerHTML = '<button id="a">A</button><button id="b">B</button>';
+    box.focus();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }));
+    expect(document.activeElement!.id).toBe('b');
+  });
+
+  it('Tab from a background element pulls focus back into the dialog', () => {
+    const d = buildModalDom();
+    const box = document.createElement('div');
+    box.innerHTML = '<button id="a">A</button>';
+    utils.mountModal(d.root, box);
+    d.trigger.focus(); // user clicked background content (or SR moved there)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    expect(box.contains(document.activeElement)).toBe(true);
+  });
+
+  it('the trap is gone after close (background Tab is natural again)', () => {
+    const d = buildModalDom();
+    const box = document.createElement('div');
+    box.innerHTML = '<button id="a">A</button>';
+    const close = utils.mountModal(d.root, box);
+    close();
+    d.trigger.focus();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    // Handler removed: focus must NOT be yanked into the (unmounted) box.
+    expect(document.activeElement).toBe(d.trigger);
   });
 });

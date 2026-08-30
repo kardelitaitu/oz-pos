@@ -432,6 +432,7 @@
       // stacked modal (upgrade over detail) may already have replaced it.
       if (m.parentNode === modalRoot) modalRoot.innerHTML = '';
       document.removeEventListener('keydown', escHandler);
+      document.removeEventListener('keydown', trapHandler); // B28: same lifecycle as esc — no leak
       // The opener may have been removed meanwhile (renderTenants
       // re-renders the table) — only restore into a live element.
       if (prevFocus && prevFocus.focus && document.contains(prevFocus)) {
@@ -439,8 +440,29 @@
       }
     }
     function escHandler(e) { if (e.key === 'Escape') close(); }
+    // B28 (WCAG 2.1.2): while the dialog is open, Tab must cycle inside
+    // it — the old code let the keyboard walk out into the background
+    // page behind the backdrop. Focusables are queried at event time so
+    // content that arrives later (tenant detail after its fetch) is
+    // included without re-wiring.
+    function trapHandler(e) {
+      if (e.key !== 'Tab') return;
+      var f = box.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      if (!f.length) return; // nothing to cycle through yet
+      var firstEl = f[0], lastEl = f[f.length - 1];
+      var active = document.activeElement;
+      if (e.shiftKey && (active === firstEl || active === box)) {
+        e.preventDefault(); lastEl.focus();
+      } else if (!e.shiftKey && active === lastEl) {
+        e.preventDefault(); firstEl.focus();
+      } else if (!box.contains(active)) {
+        e.preventDefault(); firstEl.focus();
+      }
+    }
     m.addEventListener('click', function (e) { if (e.target === m) close(); });
     document.addEventListener('keydown', escHandler);
+    document.addEventListener('keydown', trapHandler);
     modalRoot.appendChild(m);
     var first = box.querySelector(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
