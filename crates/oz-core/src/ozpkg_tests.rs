@@ -1,5 +1,7 @@
 use super::*;
 
+// ── Existing tests (preserved) ───────────────────────────────────────────────
+
 #[test]
 fn roundtrip_minimal() {
     let payload = OzpkgPayload {
@@ -189,7 +191,9 @@ fn header_metadata_preserved() {
 #[test]
 fn large_payload_roundtrip() {
     let products: Vec<serde_json::Value> = (0..100)
-        .map(|i| serde_json::json!({"sku": format!("SKU-{i:04}"), "name": format!("Product {i}"), "price": 100 + i}))
+        .map(|i| {
+            serde_json::json!({"sku": format!("SKU-{i:04}"), "name": format!("Product {i}"), "price": 100 + i})
+        })
         .collect();
 
     let payload = OzpkgPayload {
@@ -218,18 +222,6 @@ fn large_payload_roundtrip() {
     assert_eq!(imported.products[99]["sku"], "SKU-0099");
 }
 
-// ── Header budget (B46) ───────────────────────────────────────────────
-//
-// The header is written into a fixed HEADER_LEN block by padding with
-// spaces. Until the fix, an oversized header was silently TRUNCATED, so
-// export_ozpkg() returned Ok and produced a file whose header block was
-// invalid JSON — permanently unopenable. Export must fail loudly
-// instead.
-//
-// There is deliberately no byte-exact boundary test: created_at uses
-// to_rfc3339(), whose fractional-second digits vary in length, so a
-// test pinned to the exact limit would be flaky by construction.
-
 fn empty_payload() -> OzpkgPayload {
     OzpkgPayload {
         products: vec![],
@@ -243,11 +235,6 @@ fn empty_payload() -> OzpkgPayload {
 
 #[test]
 fn export_with_typical_enabled_flags_errors_instead_of_truncating() {
-    // Realistic production shape: an ordinary store name plus the set of
-    // enabled feature flags a mid-size store carries. to_settings_rows()
-    // emits EVERY enabled flag as "feature.<key>" -> "1" (~26 bytes
-    // each) and the registry holds ~39 flags, so this is not crafted
-    // input.
     let mut features = HashMap::new();
     for i in 0..16 {
         features.insert(format!("feature.pos.module_{i:02}"), "1".to_string());
@@ -288,9 +275,6 @@ fn export_with_oversized_store_name_errors_instead_of_truncating() {
 
 #[test]
 fn export_with_header_under_the_budget_still_roundtrips() {
-    // Guard against an over-eager check: a long-but-fitting header must
-    // still export and import cleanly. Sized with a wide margin (~450
-    // bytes) so the varying created_at length cannot straddle the limit.
     let name = "a".repeat(200);
     let exported = export_ozpkg(
         "password",
@@ -303,4 +287,676 @@ fn export_with_header_under_the_budget_still_roundtrips() {
     .expect("a header comfortably under HEADER_LEN must export");
     let (header, _) = import_ozpkg(&exported, "password").unwrap();
     assert_eq!(header.store_name, name);
+}
+
+fn find_and_replace(bytes: &mut [u8], from: &[u8], to: &[u8]) {
+    assert_eq!(from.len(), to.len(), "same-length keeps the JSON valid");
+    let pos = bytes
+        .windows(from.len())
+        .position(|w| w == from)
+        .unwrap_or_else(|| {
+            panic!(
+                "needle not found in header: {}",
+                String::from_utf8_lossy(from)
+            )
+        });
+    bytes[pos..pos + to.len()].copy_from_slice(to);
+}
+
+#[test]
+fn tampering_with_the_header_store_name_is_detected() {
+    let exported = export_ozpkg(
+        "password",
+        "Kopi Senja",
+        "0.0.33",
+        vec!["products".to_string()],
+        HashMap::new(),
+        &empty_payload(),
+    )
+    .unwrap();
+
+    let mut tampered = exported.clone();
+    find_and_replace(&mut tampered, b"Kopi Senja", b"Loka Datar");
+
+    import_ozpkg(&tampered, "password")
+        .expect_err("a rewritten header must not import as if it were authentic");
+}
+
+#[test]
+fn tampering_with_the_header_feature_flags_is_detected() {
+    let mut features = HashMap::new();
+    features.insert("feature.pos.finance".to_string(), "yes".to_string());
+    let exported = export_ozpkg(
+        "password",
+        "Kopi Senja",
+        "0.0.33",
+        vec!["products".to_string()],
+        features,
+        &empty_payload(),
+    )
+    .unwrap();
+
+    let mut tampered = exported.clone();
+    find_and_replace(
+        &mut tampered,
+        br#""feature.pos.finance":"yes""#,
+        br#""feature.pos.finance":"no!""#,
+    );
+
+    import_ozpkg(&tampered, "password")
+        .expect_err("flipping a feature flag in the plaintext header must be detected");
+}
+
+fn build_v1_archive(password: &str, store_name: &str, payload: &OzpkgPayload) -> Vec<u8> {
+    let salt = [7u8; SALT_LEN];
+    let nonce_bytes = [3u8; NONCE_LEN];
+
+    let mut key = [0u8; KEY_LEN];
+    Argon2::new(
+        argon2::Algorithm::Argon2id,
+        argon2::Version::V0x13,
+        argon2::Params::new(
+            ARGON_MEMORY,
+            ARGON_ITERATIONS,
+            ARGON_PARALLELISM,
+            Some(KEY_LEN),
+        )
+        .expect("valid argon2 params"),
+    )
+    .hash_password_into(password.as_bytes(), &salt, &mut key)
+    .expect("argon2 derive");
+
+    let payload_json = serde_json::to_vec(payload).expect("serialize payload");
+    let compressed = zstd::encode_all(std::io::Cursor::new(&payload_json), 3).expect("zstd");
+
+    let cipher = Aes256Gcm::new_from_slice(&key).expect("aes key");
+    let ciphertext = cipher
+        .encrypt(Nonce::from_slice(&nonce_bytes), compressed.as_ref())
+        .expect("v1 encrypt");
+
+    let header = OzpkgHeader {
+        version: 1,
+        store_name: store_name.to_owned(),
+        app_version: "0.0.33".to_owned(),
+        created_at: "2026-08-30T00:00:00Z".to_owned(),
+        data_types: vec!["products".to_string()],
+        salt: hex::encode(salt),
+        nonce: hex::encode(nonce_bytes),
+        features: HashMap::new(),
+    };
+    let header_json = serde_json::to_vec(&header).expect("serialize header");
+    assert!(header_json.len() <= HEADER_LEN);
+
+    let mut out = vec![b' '; HEADER_LEN];
+    out[..header_json.len()].copy_from_slice(&header_json);
+    out.extend_from_slice(&ciphertext);
+    out
+}
+
+#[test]
+fn a_v1_archive_written_before_the_header_binding_still_imports() {
+    let payload = OzpkgPayload {
+        products: vec![serde_json::json!({"sku": "LATTE"})],
+        categories: vec![],
+        sales: None,
+        customers: None,
+        users: None,
+        settings: None,
+    };
+    let archive = build_v1_archive("password", "Legacy Store", &payload);
+
+    let (header, imported) = import_ozpkg(&archive, "password")
+        .expect("a v1 backup must stay readable after the v2 format lands");
+    assert_eq!(header.version, 1);
+    assert_eq!(header.store_name, "Legacy Store");
+    assert_eq!(imported.products.len(), 1);
+
+    import_ozpkg(&archive, "not-the-password")
+        .expect_err("v1 compat must still reject a wrong password");
+}
+
+#[test]
+fn an_untampered_archive_still_imports_after_the_header_is_bound() {
+    let mut features = HashMap::new();
+    features.insert("feature.pos.finance".to_string(), "1".to_string());
+    let exported = export_ozpkg(
+        "password",
+        "Kopi Senja",
+        "0.0.33",
+        vec!["products".to_string()],
+        features.clone(),
+        &empty_payload(),
+    )
+    .unwrap();
+    let (header, _) = import_ozpkg(&exported, "password").unwrap();
+    assert_eq!(header.store_name, "Kopi Senja");
+    assert_eq!(header.features, features);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NEW TESTS: error paths, edge cases, and struct serde
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── import_ozpkg error paths ─────────────────────────────────────────────────
+
+#[test]
+fn import_too_short_data_fails() {
+    let result = import_ozpkg(&[0u8; 10], "password");
+    assert!(result.is_err());
+    let msg = result.unwrap_err().to_string();
+    assert!(
+        msg.contains("too short"),
+        "error should mention file too short: {msg}"
+    );
+}
+
+#[test]
+fn import_empty_data_fails() {
+    let result = import_ozpkg(&[], "password");
+    assert!(result.is_err());
+}
+
+#[test]
+fn import_exactly_header_len_with_invalid_json_fails() {
+    // 512 bytes of garbage — valid length but not valid JSON header
+    let mut data = vec![b'x'; HEADER_LEN];
+    data.extend_from_slice(&[0u8; 32]); // dummy ciphertext
+    let result = import_ozpkg(&data, "password");
+    assert!(result.is_err());
+    let msg = result.unwrap_err().to_string();
+    assert!(
+        msg.contains("invalid header"),
+        "error should mention invalid header: {msg}"
+    );
+}
+
+#[test]
+fn import_unsupported_version_fails() {
+    // Craft a header with version=99 by building a valid export and
+    // patching the version field in the JSON header.
+    let exported = export_ozpkg(
+        "password",
+        "Store",
+        "0.0.1",
+        vec![],
+        HashMap::new(),
+        &empty_payload(),
+    )
+    .unwrap();
+
+    let mut data = exported;
+    // Find "version":2 and replace with "version":99
+    find_and_replace(&mut data, b"\"version\":2", b"\"version\":99");
+
+    let result = import_ozpkg(&data, "password");
+    assert!(result.is_err());
+    let msg = result.unwrap_err().to_string();
+    assert!(
+        msg.contains("unsupported format version") || msg.contains("99"),
+        "error should mention unsupported version: {msg}"
+    );
+}
+
+#[test]
+fn import_invalid_salt_hex_fails() {
+    // Craft header with invalid hex in salt field
+    let mut features = HashMap::new();
+    let mut data = export_ozpkg(
+        "password",
+        "Store",
+        "0.0.1",
+        vec![],
+        features.clone(),
+        &empty_payload(),
+    )
+    .unwrap();
+
+    // Replace valid salt hex with invalid hex (contains 'zz')
+    let salt_bytes = hex::decode(
+        &String::from_utf8_lossy(&data[0..HEADER_LEN])
+            .split_once("\"salt\":\"")
+            .unwrap()
+            .1
+            .chars()
+            .take(32)
+            .collect::<String>(),
+    )
+    .unwrap();
+    assert_eq!(salt_bytes.len(), SALT_LEN);
+
+    // Find and replace the salt hex value with invalid hex
+    find_and_replace(&mut data, &salt_bytes[..8], b"zzzzzzzz");
+
+    let result = import_ozpkg(&data, "password");
+    assert!(result.is_err(), "invalid salt hex should fail");
+}
+
+#[test]
+fn import_invalid_nonce_hex_fails() {
+    // Similar to salt — corrupt the nonce hex
+    let exported = export_ozpkg(
+        "password",
+        "Store",
+        "0.0.1",
+        vec![],
+        HashMap::new(),
+        &empty_payload(),
+    )
+    .unwrap();
+
+    let mut data = exported;
+    // Replace first 8 bytes of nonce hex with non-hex chars
+    find_and_replace(&mut data, b"\"nonce\":", b"\"nonceZ\":");
+
+    let result = import_ozpkg(&data, "password");
+    assert!(result.is_err(), "invalid nonce should fail");
+}
+
+// ── Struct serde roundtrip ───────────────────────────────────────────────────
+
+#[test]
+fn ozpkg_header_serde_roundtrip() {
+    let header = OzpkgHeader {
+        version: 2,
+        store_name: "Test Store".to_string(),
+        app_version: "0.0.33".to_string(),
+        created_at: "2026-08-31T00:00:00Z".to_string(),
+        data_types: vec!["products".to_string(), "categories".to_string()],
+        salt: "a".repeat(32),
+        nonce: "b".repeat(24),
+        features: {
+            let mut m = HashMap::new();
+            m.insert("key".to_string(), "value".to_string());
+            m
+        },
+    };
+
+    let json = serde_json::to_string(&header).unwrap();
+    let parsed: OzpkgHeader = serde_json::from_str(&json).unwrap();
+
+    assert_eq!(parsed.version, 2);
+    assert_eq!(parsed.store_name, "Test Store");
+    assert_eq!(parsed.app_version, "0.0.33");
+    assert_eq!(parsed.created_at, "2026-08-31T00:00:00Z");
+    assert_eq!(parsed.data_types, vec!["products", "categories"]);
+    assert_eq!(parsed.salt, "a".repeat(32));
+    assert_eq!(parsed.nonce, "b".repeat(24));
+    assert_eq!(parsed.features.get("key").unwrap(), "value");
+}
+
+#[test]
+fn ozpkg_payload_serde_roundtrip_with_all_fields() {
+    let payload = OzpkgPayload {
+        products: vec![serde_json::json!({"sku": "A"})],
+        categories: vec![serde_json::json!({"id": "B"})],
+        sales: Some(vec![serde_json::json!({"id": "S1"})]),
+        customers: Some(vec![serde_json::json!({"id": "C1"})]),
+        users: Some(vec![serde_json::json!({"id": "U1"})]),
+        settings: Some(vec![serde_json::json!({"key": "k", "value": "v"})]),
+    };
+
+    let json = serde_json::to_string(&payload).unwrap();
+    let parsed: OzpkgPayload = serde_json::from_str(&json).unwrap();
+
+    assert_eq!(parsed.products.len(), 1);
+    assert_eq!(parsed.categories.len(), 1);
+    assert!(parsed.sales.is_some());
+    assert!(parsed.customers.is_some());
+    assert!(parsed.users.is_some());
+    assert!(parsed.settings.is_some());
+}
+
+#[test]
+fn ozpkg_payload_serde_skips_none_fields() {
+    let payload = OzpkgPayload {
+        products: vec![],
+        categories: vec![],
+        sales: None,
+        customers: None,
+        users: None,
+        settings: None,
+    };
+
+    let json = serde_json::to_string(&payload).unwrap();
+    assert!(!json.contains("sales"), "None sales should be skipped");
+    assert!(
+        !json.contains("customers"),
+        "None customers should be skipped"
+    );
+    assert!(!json.contains("users"), "None users should be skipped");
+    assert!(
+        !json.contains("settings"),
+        "None settings should be skipped"
+    );
+    // products and categories are always present (not Option)
+    assert!(json.contains("products"));
+    assert!(json.contains("categories"));
+}
+
+#[test]
+fn ozpkg_header_debug_and_clone() {
+    let header = OzpkgHeader {
+        version: 2,
+        store_name: "Store".to_string(),
+        app_version: "0.0.1".to_string(),
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        data_types: vec![],
+        salt: "a".repeat(32),
+        nonce: "b".repeat(24),
+        features: HashMap::new(),
+    };
+
+    let cloned = header.clone();
+    assert_eq!(cloned.store_name, "Store");
+
+    let debug = format!("{header:?}");
+    assert!(debug.contains("OzpkgHeader"));
+    assert!(debug.contains("Store"));
+}
+
+#[test]
+fn ozpkg_payload_debug_and_clone() {
+    let payload = empty_payload();
+    let cloned = payload.clone();
+    assert!(cloned.products.is_empty());
+
+    let debug = format!("{payload:?}");
+    assert!(debug.contains("OzpkgPayload"));
+}
+
+// ── Edge cases ───────────────────────────────────────────────────────────────
+
+#[test]
+fn unicode_store_name_roundtrip() {
+    let name = "Toko Kopi ☕ Senja";
+    let exported = export_ozpkg(
+        "password",
+        name,
+        "0.0.33",
+        vec![],
+        HashMap::new(),
+        &empty_payload(),
+    )
+    .unwrap();
+    let (header, _) = import_ozpkg(&exported, "password").unwrap();
+    assert_eq!(header.store_name, name);
+}
+
+#[test]
+fn unicode_password_roundtrip() {
+    let password = "pässwörd日本語🔑";
+    let exported = export_ozpkg(
+        password,
+        "Store",
+        "0.0.33",
+        vec![],
+        HashMap::new(),
+        &empty_payload(),
+    )
+    .unwrap();
+    let result = import_ozpkg(&exported, password);
+    assert!(result.is_ok(), "unicode password should work");
+}
+
+#[test]
+fn unicode_in_payload_roundtrip() {
+    let payload = OzpkgPayload {
+        products: vec![serde_json::json!({
+            "sku": "KOPI-01",
+            "name": "Kopi Susu Panas ☕",
+            "description": "いりこだし"
+        })],
+        categories: vec![serde_json::json!({
+            "id": "minuman",
+            "name": "Minuman"
+        })],
+        sales: None,
+        customers: Some(vec![serde_json::json!({
+            "id": "cust-1",
+            "name": "田中太郎"
+        })]),
+        users: None,
+        settings: None,
+    };
+
+    let exported = export_ozpkg(
+        "password",
+        "Store",
+        "0.0.33",
+        vec!["products".into()],
+        HashMap::new(),
+        &payload,
+    )
+    .unwrap();
+
+    let (_, imported) = import_ozpkg(&exported, "password").unwrap();
+    assert_eq!(imported.products[0]["name"], "Kopi Susu Panas ☕");
+    assert_eq!(imported.products[0]["description"], "いりこだし");
+    assert_eq!(imported.customers.as_ref().unwrap()[0]["name"], "田中太郎");
+}
+
+#[test]
+fn payload_with_all_optional_fields_some() {
+    let payload = OzpkgPayload {
+        products: vec![serde_json::json!({"sku": "A", "price": 100})],
+        categories: vec![serde_json::json!({"id": "cat-1"})],
+        sales: Some(vec![
+            serde_json::json!({"id": "s1", "total": 500}),
+            serde_json::json!({"id": "s2", "total": 300}),
+        ]),
+        customers: Some(vec![serde_json::json!({"id": "c1"})]),
+        users: Some(vec![serde_json::json!({"id": "u1", "role": "admin"})]),
+        settings: Some(vec![
+            serde_json::json!({"key": "store.name", "value": "My Store"}),
+            serde_json::json!({"key": "tax.rate", "value": "0.11"}),
+        ]),
+    };
+
+    let exported = export_ozpkg(
+        "password",
+        "Store",
+        "0.0.33",
+        vec![
+            "products".into(),
+            "sales".into(),
+            "customers".into(),
+            "users".into(),
+            "settings".into(),
+        ],
+        HashMap::new(),
+        &payload,
+    )
+    .unwrap();
+
+    let (_, imported) = import_ozpkg(&exported, "password").unwrap();
+    assert_eq!(imported.products.len(), 1);
+    assert_eq!(imported.categories.len(), 1);
+    assert_eq!(imported.sales.as_ref().unwrap().len(), 2);
+    assert_eq!(imported.customers.as_ref().unwrap().len(), 1);
+    assert_eq!(imported.users.as_ref().unwrap().len(), 1);
+    assert_eq!(imported.settings.as_ref().unwrap().len(), 2);
+}
+
+#[test]
+fn empty_data_types_roundtrip() {
+    let exported = export_ozpkg(
+        "password",
+        "Store",
+        "0.0.1",
+        vec![], // empty data_types
+        HashMap::new(),
+        &empty_payload(),
+    )
+    .unwrap();
+
+    let (header, _) = import_ozpkg(&exported, "password").unwrap();
+    assert!(header.data_types.is_empty());
+}
+
+#[test]
+fn many_data_types_roundtrip() {
+    let types: Vec<String> = (0..20).map(|i| format!("type_{i}")).collect();
+    let exported = export_ozpkg(
+        "password",
+        "Store",
+        "0.0.1",
+        types.clone(),
+        HashMap::new(),
+        &empty_payload(),
+    )
+    .unwrap();
+
+    let (header, _) = import_ozpkg(&exported, "password").unwrap();
+    assert_eq!(header.data_types, types);
+}
+
+#[test]
+fn many_feature_flags_roundtrip() {
+    let mut features = HashMap::new();
+    for i in 0..10 {
+        features.insert(format!("feature.flag_{i}"), format!("value_{i}"));
+    }
+
+    let exported = export_ozpkg(
+        "password",
+        "Store",
+        "0.0.1",
+        vec![],
+        features.clone(),
+        &empty_payload(),
+    )
+    .unwrap();
+
+    let (header, _) = import_ozpkg(&exported, "password").unwrap();
+    assert_eq!(header.features, features);
+}
+
+#[test]
+fn export_output_size_is_header_plus_ciphertext() {
+    let exported = export_ozpkg(
+        "password",
+        "Store",
+        "0.0.1",
+        vec![],
+        HashMap::new(),
+        &empty_payload(),
+    )
+    .unwrap();
+
+    // Output must be exactly HEADER_LEN + ciphertext_len
+    assert!(
+        exported.len() > HEADER_LEN,
+        "must have ciphertext after header"
+    );
+    // AES-GCM ciphertext = plaintext + 16-byte tag
+    let ciphertext_len = exported.len() - HEADER_LEN;
+    assert!(ciphertext_len >= 16, "ciphertext must include GCM tag");
+}
+
+#[test]
+fn header_json_fits_in_fixed_block() {
+    // The header JSON must always fit in HEADER_LEN bytes
+    let exported = export_ozpkg(
+        "password",
+        "Store",
+        "0.0.33",
+        vec!["products".into()],
+        HashMap::new(),
+        &empty_payload(),
+    )
+    .unwrap();
+
+    // First HEADER_LEN bytes should be valid JSON (after trimming spaces)
+    let header_bytes = &exported[..HEADER_LEN];
+    let trimmed_len = header_bytes
+        .iter()
+        .rposition(|&b| b != b' ')
+        .map(|pos| pos + 1)
+        .unwrap_or(0);
+
+    let result: Result<OzpkgHeader, _> = serde_json::from_slice(&header_bytes[..trimmed_len]);
+    assert!(result.is_ok(), "header block must be valid JSON");
+}
+
+#[test]
+fn salt_and_nonce_are_hex_encoded() {
+    let exported = export_ozpkg(
+        "password",
+        "Store",
+        "0.0.1",
+        vec![],
+        HashMap::new(),
+        &empty_payload(),
+    )
+    .unwrap();
+
+    let (header, _) = import_ozpkg(&exported, "password").unwrap();
+
+    // Salt should be 32 hex chars (16 bytes)
+    assert_eq!(header.salt.len(), SALT_LEN * 2);
+    assert!(hex::decode(&header.salt).is_ok(), "salt must be valid hex");
+
+    // Nonce should be 24 hex chars (12 bytes)
+    assert_eq!(header.nonce.len(), NONCE_LEN * 2);
+    assert!(
+        hex::decode(&header.nonce).is_ok(),
+        "nonce must be valid hex"
+    );
+}
+
+#[test]
+fn each_export_uses_unique_salt_and_nonce() {
+    let make_export = || {
+        export_ozpkg(
+            "password",
+            "Store",
+            "0.0.1",
+            vec![],
+            HashMap::new(),
+            &empty_payload(),
+        )
+        .unwrap()
+    };
+
+    let a = make_export();
+    let b = make_export();
+
+    let (header_a, _) = import_ozpkg(&a, "password").unwrap();
+    let (header_b, _) = import_ozpkg(&b, "password").unwrap();
+
+    assert_ne!(
+        header_a.salt, header_b.salt,
+        "each export must use unique salt"
+    );
+    assert_ne!(
+        header_a.nonce, header_b.nonce,
+        "each export must use unique nonce"
+    );
+}
+
+#[test]
+fn format_version_constant_is_v2() {
+    assert_eq!(FORMAT_VERSION, 2, "export must write format v2");
+}
+
+#[test]
+fn created_at_is_valid_iso8601() {
+    let exported = export_ozpkg(
+        "password",
+        "Store",
+        "0.0.1",
+        vec![],
+        HashMap::new(),
+        &empty_payload(),
+    )
+    .unwrap();
+
+    let (header, _) = import_ozpkg(&exported, "password").unwrap();
+
+    // Should parse as RFC 3339 / ISO 8601
+    assert!(
+        chrono::DateTime::parse_from_rfc3339(&header.created_at).is_ok(),
+        "created_at must be valid RFC 3339, got: {}",
+        header.created_at
+    );
 }

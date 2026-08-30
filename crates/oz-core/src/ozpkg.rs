@@ -4,9 +4,12 @@
 //!
 //! An `.ozpkg` file is a binary envelope:
 //!
-//! 1. **Plaintext JSON header** (256 bytes, space-padded) — contains
-//!    format version, feature flag metadata, data types included, and
-//!    the encryption parameters (salt, nonce). No sensitive data here.
+//! 1. **JSON header** (`HEADER_LEN` = 512 bytes, space-padded) — format
+//!    version, store name, app version, creation timestamp, feature-flag
+//!    metadata, data types, and the encryption parameters (salt, nonce).
+//!    No key material or row data lives here. Export FAILS if this
+//!    metadata does not fit the block rather than truncating it into an
+//!    archive that can never be opened (B46).
 //! 2. **Compressed + encrypted payload** — the actual data rows are
 //!    serialized to JSON, compressed with zstd, then encrypted with
 //!    AES-256-GCM using a key derived from the user's password via
@@ -15,13 +18,17 @@
 //! # Security properties
 //!
 //! - Password is never stored — only the Argon2id salt is in the header.
-//! - AES-256-GCM provides authenticated encryption (integrity + secrecy).
+//! - AES-256-GCM provides authenticated encryption (integrity +
+//!   secrecy). Since format v2 the header block is bound in as
+//!   additional authenticated data, so its fields cannot be rewritten
+//!   undetected (B47). v1 archives predate that and remain readable,
+//!   but their header is NOT authenticated.
 //! - zstd compression runs before encryption (optimal compression ratio).
 //! - Each export uses a fresh random salt and random nonce.
 
 use std::collections::HashMap;
 
-use aead::{Aead, KeyInit, OsRng};
+use aead::{Aead, KeyInit, OsRng, Payload};
 use aes_gcm::Aes256Gcm;
 use aes_gcm::Nonce;
 use argon2::Argon2;
@@ -33,7 +40,12 @@ use crate::CoreError;
 // ── Constants ──────────────────────────────────────────────────────────
 
 /// Current `.ozpkg` format version.
-const FORMAT_VERSION: u32 = 1;
+///
+/// v2 binds the plaintext header block into the AES-GCM tag as
+/// additional authenticated data (B47); v1 left it unauthenticated.
+/// Import still accepts v1 so backups taken before the fix stay
+/// readable — export only ever writes v2.
+const FORMAT_VERSION: u32 = 2;
 
 /// Length of the plaintext header in bytes (space-padded).
 const HEADER_LEN: usize = 512;
@@ -54,10 +66,13 @@ const KEY_LEN: usize = 32;
 
 // ── Header types ──────────────────────────────────────────────────────
 
-/// Plaintext metadata written at the start of every `.ozpkg` file.
+/// Metadata written at the start of every `.ozpkg` file. It stays
+/// plaintext (it carries no secrets) but from format v2 it is bound into
+/// the AES-GCM tag, so it is authenticated rather than merely readable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OzpkgHeader {
-    /// Format version (currently 1).
+    /// Format version: 1 = header unauthenticated, 2 = header bound as
+    /// additional authenticated data. Export writes 2; import reads both.
     pub version: u32,
     /// Store name (from settings).
     pub store_name: String,
@@ -147,15 +162,9 @@ pub fn export_ozpkg(
     let compressed = zstd::encode_all(std::io::Cursor::new(&payload_json), 3)
         .map_err(|e| CoreError::Internal(format!("zstd compress: {e}")))?;
 
-    // 5. Encrypt with AES-256-GCM.
-    let cipher = Aes256Gcm::new_from_slice(&key)
-        .map_err(|e| CoreError::Internal(format!("AES-GCM init: {e}")))?;
-    let nonce = Nonce::from_slice(&nonce_bytes);
-    let ciphertext = cipher
-        .encrypt(nonce, compressed.as_ref())
-        .map_err(|e| CoreError::Internal(format!("AES-GCM encrypt: {e}")))?;
-
-    // 6. Build the plaintext header.
+    // 5. Build the plaintext header BEFORE encrypting (B47): it is bound
+    //    into the AES-GCM tag as additional authenticated data, so the
+    //    metadata can no longer be rewritten undetected.
     let header = OzpkgHeader {
         version: FORMAT_VERSION,
         store_name: store_name.to_owned(),
@@ -188,6 +197,20 @@ pub fn export_ozpkg(
     let mut header_padded = vec![b' '; HEADER_LEN];
     header_padded[..header_json.len()].copy_from_slice(&header_json);
 
+    // 6. Encrypt with AES-256-GCM, authenticating the padded header block.
+    let cipher = Aes256Gcm::new_from_slice(&key)
+        .map_err(|e| CoreError::Internal(format!("AES-GCM init: {e}")))?;
+    let nonce = Nonce::from_slice(&nonce_bytes);
+    let ciphertext = cipher
+        .encrypt(
+            nonce,
+            Payload {
+                msg: compressed.as_ref(),
+                aad: &header_padded,
+            },
+        )
+        .map_err(|e| CoreError::Internal(format!("AES-GCM encrypt: {e}")))?;
+
     // 7. Concatenate header + ciphertext.
     let mut result = header_padded;
     result.extend_from_slice(&ciphertext);
@@ -219,12 +242,20 @@ pub fn import_ozpkg(data: &[u8], password: &str) -> Result<(OzpkgHeader, OzpkgPa
     let header: OzpkgHeader = serde_json::from_slice(&header_bytes[..trimmed_len])
         .map_err(|e| CoreError::Internal(format!("invalid header: {e}")))?;
 
-    if header.version != FORMAT_VERSION {
-        return Err(CoreError::Internal(format!(
-            "unsupported format version: {} (expected {FORMAT_VERSION})",
-            header.version
-        )));
-    }
+    // B47: v1 archives never authenticated the header block, so they are
+    // decrypted with empty AAD (GCM treats "no AAD" and a zero-length AAD
+    // identically) and still open — users already hold v1 backups from
+    // both the CLI and the desktop UI. v2 binds the padded header into
+    // the tag. Any other version is rejected.
+    let aad: &[u8] = match header.version {
+        1 => &[],
+        FORMAT_VERSION => &data[..HEADER_LEN],
+        other => {
+            return Err(CoreError::Internal(format!(
+                "unsupported format version: {other} (expected {FORMAT_VERSION})"
+            )));
+        }
+    };
 
     // 2. Decode salt and nonce.
     let salt = hex::decode(&header.salt)
@@ -256,9 +287,17 @@ pub fn import_ozpkg(data: &[u8], password: &str) -> Result<(OzpkgHeader, OzpkgPa
     let cipher = Aes256Gcm::new_from_slice(&key)
         .map_err(|e| CoreError::Internal(format!("AES-GCM init: {e}")))?;
     let nonce = Nonce::from_slice(&nonce_bytes);
-    let compressed = cipher.decrypt(nonce, &data[HEADER_LEN..]).map_err(|_| {
-        CoreError::Internal("decryption failed: wrong password or corrupt data".into())
-    })?;
+    let compressed = cipher
+        .decrypt(
+            nonce,
+            Payload {
+                msg: &data[HEADER_LEN..],
+                aad,
+            },
+        )
+        .map_err(|_| {
+            CoreError::Internal("decryption failed: wrong password or corrupt data".into())
+        })?;
 
     // 5. Decompress with zstd.
     let decompressed = zstd::decode_all(std::io::Cursor::new(&compressed))
