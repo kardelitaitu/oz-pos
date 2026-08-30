@@ -230,7 +230,7 @@ rm -f "$pairs_file"
 ```bash
 # Same two-pass batched validation as Check 9, applied to every `*.md` file
 # outside `.agents/skills/`. Catches a future wrong-format or invalid-dated
-# footer in CONTRIBUTING.md, AGENTS.md, docs/archived/QUICKSTART.md, or any crate/app/
+# footer in CONTRIBUTING.md, AGENTS.md, docs/guides/QUICKSTART.md, or any crate/app/
 # module/README.md — anywhere the convention is documented should also be
 # enforced. $AUDIT_RE, audit_date_of, and batch_validate_audit_dates are
 # defined at the top of detect.sh and shared with Check 9.
