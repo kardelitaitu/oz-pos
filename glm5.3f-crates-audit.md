@@ -2026,7 +2026,7 @@ No new findings in this batch. **Slice C next:** `paddle_webhook.go` (1195), `mi
 
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
-| LSE-7 | ℹ️ INFO | paddle_webhook.go:781, revenue_events consumers | Revenue capture stores `NativeAmount` as `float64` (cents/100). Reporting-only (never touches licensing), and the Rust `Money`/i64 rule formally binds crates — but if `revenue_events` ever feeds finance tooling, float rounding on IDR-scale values is a mild smell. | Optionally switch `revenue_events.native_amount` to i64 minor units end-to-end. |
+| LSE-7 | ℹ️ INFO ✅ FIXED 30-08-26 (`1eb75a5c`) — user-directed | paddle_webhook.go:781, revenue_events.go, midtrans_webhook.go:594 | Revenue capture stored `NativeAmount` as `float64` (cents/100), against the repo's Money/i64 policy spirit. | Fixed: `revenueEvent.NativeAmountMinor` is now i64 minor units end-to-end — USD cents (Paddle passes its already-integer totals straight through), whole rupiah (Midtrans `parseMidtransGrossAmountMinor`, decimal form rounded half-up). float64 survives only inside the FX conversion and the `amount_usd` display field, where it is inherent. Tests updated + extended (decimal-form and rounding cases). |
 
 **Slice D next:** `activate.go` (791), admin gates (`admin_dashboard.go` 338, `admin_stats.go` 394, `addon_admin.go` 206, `enterprise_admin.go` 185), licensing flows (`trial.go`, `renew.go`, `pause.go`, `resume.go`, `expiry.go`, `status.go`, `contact.go`, `smtp_mail.go`, `health.go`, `trial_emails.go` remainder), plus the build-artifact hygiene check (`license-server.exe`, `coverage.html/out` committed in tree).
 
