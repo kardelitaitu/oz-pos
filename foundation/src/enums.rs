@@ -1,4 +1,10 @@
 //! Shared enums for the OZ-POS domain model.
+/*
+last audited 25-07-26 by RSA-Agent (foundation slice E: enums deep read)
+crate: foundation | status: SAFE | lint: CLEAN
+findings: clean — SaleStatus with exhaustive transition matrix + kebab-case serde round-trip tests, from_stored_str returns None (fail-closed, no default), PaymentMethod::Other(String) catch-all; inline tests (COR-33 pattern)
+next: none | perf: N/A
+*/
 //!
 //! These types are used across multiple crates and services.
 

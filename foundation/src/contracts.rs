@@ -1,4 +1,10 @@
 //! Shared traits for the OZ-POS module system.
+/*
+last audited 25-07-26 by RSA-Agent (foundation slice E: contracts deep read)
+crate: foundation | status: SAFE | lint: CLEAN
+findings: clean module contracts — Module/Service/EventHandler/DomainEvent traits, anyhow-based ModuleResult, documented topological-sort dependency semantics; inline tests (COR-33 pattern)
+next: none | perf: N/A
+*/
 //!
 //! These traits define the lifecycle and inter-module communication
 //! contracts that all modules must implement.

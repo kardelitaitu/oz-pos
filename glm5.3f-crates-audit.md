@@ -844,6 +844,24 @@ length limits) with doctests. The lib-level old stamp was replaced; the
 crate re-verifies the original audit's claims (zero unsafe, no FFI/IO,
 doc-enforced). `dto/contracts/contact/enums` remain for slice E.
 
+### Slice E — contracts.rs (476), enums.rs (359), contact.rs (393),
+dto.rs (447) — **foundation COMPLETE**
+
+No new findings. `contracts.rs` defines the Module/Service/EventHandler
+contracts with documented topological dependency semantics;
+`enums.rs` carries an exhaustive sale-status transition matrix with
+fail-closed `from_stored_str` (returns `None`, never a default) and
+round-trip serde tests; `contact.rs`/`dto.rs` are validated newtypes and
+convention-documented DTOs whose only `unwrap()`s are inside test modules
+(line-range verified).
+
+> **foundation COMPLETE** — all 15 production files (~5.4k lines) read or
+> structurally verified and stamped. Zero new findings beyond the
+> chars-vs-bytes INFO note; the prior MONEY-AUDIT 1–3 fixes verified
+> intact. Campaign proceeds to platform/* (core, kernel, startup, sync).
+
+---
+
 ---
 
 ---
