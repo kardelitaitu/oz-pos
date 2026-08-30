@@ -33,7 +33,7 @@
 | 1 | crates/oz-crypto | 339 | ✅ DONE | 1 / 2 / 3 / 1 | `082e7f0f` |
 | 2 | crates/oz-security | 2,068 | ✅ DONE | 0 / 2 / 4 / 3 | (this commit) |
 | 3 | crates/oz-payment | 6,251 | ✅ DONE | 1 / 4 / 5 / 3 | (this commit) |
-| 4 | crates/oz-core (sliced by subsystem) | 80,216 | 🟡 slices A+B1–B4 done | 0 / 3 / 4 / 12 | 7284c2a0 |
+| 4 | crates/oz-core (sliced by subsystem) | 80,216 | ✅ COMPLETE — slices A–D, all 60+ production files read+stamped | 0 / 6 / 14 / 16 | 75334ffa |
 | 5 | crates/oz-api | 7,479 | ⬜ pending | — | — |
 | 6 | foundation | 6,326 | ⬜ pending | — | — |
 | 7 | platform/kernel | 3,385 | ⬜ pending | — | — |
@@ -715,6 +715,26 @@ with 5-second read timeouts, skips its own terminal's messages, and exits
 cleanly on shutdown. `kds.rs`: pure domain types plus
 `resolve_kds_targets` station routing with documented broadcast fallback
 and deduplication; pairing tokens arrive as SHA-256 hashes.
+
+### oz-core closeout — COR-5 TTL verification + campaign tally
+
+**COR-5 RESOLVED:** the production default session TTL is enforced at
+startup — `apps/desktop-client/src/state.rs:246-250` reads
+`session.ttl_seconds` with `unwrap_or(86400)` (**24 hours**), and
+`auth.rs:383/552` sets `expires_at = now + ttl` whenever ttl > 0. A
+never-expiring session now requires an *explicit* `session.ttl_seconds = 0`
+setting (documented behaviour), not a missing value — the "None means
+development mode" wording in `session.rs` is a doc nit: expiry is
+config-driven, not build-mode-driven.
+
+**oz-core final tally:** 36 tabled findings — **0 HIGH / 6 MED (COR-3,
+COR-7, COR-19, COR-21, COR-25, COR-35) / 14 LOW / 16 INFO** —
+plus the CRY-1 escalation (gift-card PIN plaintext) logged under oz-crypto.
+All 60+ production files in `crates/oz-core/src` are read and stamped
+(slices A, B, B1–B5+closeout+final, C1–C5, D1–D3). oz-core is COMPLETE;
+the campaign proceeds to the remaining 27 targets.
+
+---
 
 ---
 
