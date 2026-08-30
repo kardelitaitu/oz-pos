@@ -695,6 +695,10 @@ async fn daily_revenue_pg(
             cogs_minor,
             gross_profit_minor,
             gross_margin_percent,
+            // REP-04: refund attribution not yet wired in the email-path
+            // PG queries; default to 0 so net_revenue_minor == total_minor.
+            refund_minor: 0,
+            net_revenue_minor: total_minor,
         });
     }
     Ok(out)
@@ -753,6 +757,10 @@ async fn weekly_revenue_pg(
             cogs_minor,
             gross_profit_minor,
             gross_margin_percent,
+            // REP-04: refund attribution not yet wired in the email-path PG
+            // queries; default to 0 so net_revenue_minor == total_minor.
+            refund_minor: 0,
+            net_revenue_minor: total_minor,
         });
     }
     Ok(out)
@@ -811,6 +819,10 @@ async fn monthly_revenue_pg(
             cogs_minor,
             gross_profit_minor,
             gross_margin_percent,
+            // REP-04: refund attribution not yet wired in the email-path PG
+            // queries; default to 0 so net_revenue_minor == total_minor.
+            refund_minor: 0,
+            net_revenue_minor: total_minor,
         });
     }
     Ok(out)
@@ -838,18 +850,21 @@ async fn top_products_pg(
     let start = parse_date(start_date)?;
     let end = parse_date(end_date)?;
     let sql = format!(
+        // REP-06: include currency so rows are grouped per-product AND
+        // per-currency; minor units must never be summed across currencies.
         "SELECT p.id AS product_id, p.sku, p.name,
                 SUM(sl.qty)::bigint AS total_qty,
                 SUM(sl.line_minor)::bigint AS total_minor,
                 SUM(COALESCE(sl.cost_minor, p.cost_minor, 0) * sl.qty)::bigint AS cogs_minor,
-                (SUM(sl.line_minor) - SUM(COALESCE(sl.cost_minor, p.cost_minor, 0) * sl.qty))::bigint AS gross_profit_minor
+                (SUM(sl.line_minor) - SUM(COALESCE(sl.cost_minor, p.cost_minor, 0) * sl.qty))::bigint AS gross_profit_minor,
+                s.currency
          FROM sale_lines sl
          JOIN sales s ON sl.sale_id = s.id
          JOIN products p ON p.sku = sl.sku AND p.tenant_id = s.tenant_id
          WHERE s.status = 'completed'
            AND s.tenant_id = $4
            AND s.created_at::date BETWEEN $1 AND $2
-         GROUP BY p.id
+         GROUP BY p.id, p.sku, p.name, s.currency
          ORDER BY {order_clause}, p.sku
          LIMIT $3"
     );
@@ -876,6 +891,7 @@ async fn top_products_pg(
             } else {
                 0.0
             },
+            currency: row.get(7),
         });
     }
     Ok(out)
@@ -897,15 +913,17 @@ async fn hourly_heatmap_pg(
     let end = parse_date(end_date)?;
     let rows = tx
         .query(
+            // REP-06: group by currency so minor units are never mixed.
             "SELECT EXTRACT(DOW FROM created_at::timestamp)::bigint AS day_of_week,
                     EXTRACT(HOUR FROM created_at::timestamp)::bigint AS hour,
                     SUM(total_minor)::bigint AS total_minor,
-                    COUNT(*) AS sale_count
+                    COUNT(*) AS sale_count,
+                    currency
              FROM sales
              WHERE status = 'completed'
                AND tenant_id = $3
                AND created_at::date BETWEEN $1 AND $2
-             GROUP BY day_of_week, hour
+             GROUP BY day_of_week, hour, currency
              ORDER BY day_of_week, hour",
             &[&start, &end, &tenant],
         )
@@ -919,6 +937,7 @@ async fn hourly_heatmap_pg(
             hour: row.get(1),
             total_minor: row.get(2),
             sale_count: row.get(3),
+            currency: row.get(4),
         });
     }
     Ok(out)
@@ -940,9 +959,11 @@ async fn category_breakdown_pg(
     let end = parse_date(end_date)?;
     let rows = tx
         .query(
+            // REP-06: group by currency so per-currency percentage is correct.
             "SELECT p.category_id, COALESCE(c.name, 'Uncategorised') AS category_name,
                     SUM(sl.line_minor)::bigint AS total_minor,
-                    COUNT(DISTINCT s.id) AS sale_count
+                    COUNT(DISTINCT s.id) AS sale_count,
+                    s.currency
              FROM sale_lines sl
              JOIN sales s ON sl.sale_id = s.id
              JOIN products p ON p.sku = sl.sku AND p.tenant_id = s.tenant_id
@@ -950,7 +971,7 @@ async fn category_breakdown_pg(
              WHERE s.status = 'completed'
                AND s.tenant_id = $3
                AND s.created_at::date BETWEEN $1 AND $2
-             GROUP BY p.category_id, c.name
+             GROUP BY p.category_id, c.name, s.currency
              ORDER BY total_minor DESC",
             &[&start, &end, &tenant],
         )
@@ -965,12 +986,20 @@ async fn category_breakdown_pg(
             total_minor: row.get(2),
             sale_count: row.get(3),
             percentage: 0.0,
+            currency: row.get(4),
         });
     }
 
-    let grand_total: f64 = out.iter().map(|r| r.total_minor as f64).sum();
-    if grand_total > 0.0 {
-        for row in &mut out {
+    // Percentage is normalised within each currency bucket.
+    // Group by currency and compute grand total per currency.
+    let mut currency_totals: std::collections::HashMap<String, f64> =
+        std::collections::HashMap::new();
+    for row in &out {
+        *currency_totals.entry(row.currency.clone()).or_insert(0.0) += row.total_minor as f64;
+    }
+    for row in &mut out {
+        let grand_total = currency_totals.get(&row.currency).copied().unwrap_or(0.0);
+        if grand_total > 0.0 {
             row.percentage = (row.total_minor as f64 / grand_total) * 100.0;
         }
     }
