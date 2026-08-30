@@ -1077,6 +1077,23 @@ pull (next cycle, with the no-duplication rationale documented); ADR #11
 redirects update the local URL on all three paths; anchor expiry triggers
 snapshot recovery; every phase's join-panic lands in daemon status.
 
+### Slice F — pg_transport.rs (1,105: production 1–562 fully read; tests
+564+)
+
+**No new findings — exemplary.** Every query is tenant-scoped twice (a
+`SET LOCAL oz.tenant_id` GUC inside the transaction *plus* a `WHERE
+tenant_id` clause — safe under FORCEd RLS); all SQL is static and fully
+parameterized; a commit failure now surfaces as `Err` (the stamp
+documents the prior swallowed-commit bug that reported items `Accepted`
+locally while the remote never received them); tenant-mismatched items
+are rejected; TLS uses rustls with native roots and `SslMode::Require`;
+the composite `(created_at, id)` cursor derives from the last *kept* row
+(RUST-07); the anchor-expiry `MIN` probe runs inside the tenant
+transaction; and the users snapshot query excludes `pin_hash` (SYNC-06
+PG parity).
+
+---
+
 ---
 
 ---

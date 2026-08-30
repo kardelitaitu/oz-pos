@@ -1,5 +1,11 @@
 //! PostgreSQL Transport — writes offline queue items directly to a remote
 //! PostgreSQL database via `tokio-postgres`.
+/*
+last audited 25-07-26 by RSA-Agent (platform-sync slice F: pg_transport deep read)
+crate: platform-sync | status: SAFE | lint: CLEAN
+findings: exemplary — every query tenant-scoped via SET LOCAL oz.tenant_id GUC inside a transaction plus WHERE tenant_id (FORCEd-RLS safe); fully parameterized static SQL; commit failure surfaces as Err (documented fix: a swallowed commit previously reported Accepted locally while the remote never received the items); tenant mismatch rejected per item; TLS via rustls native roots with sslmode Require; redacted Debug; composite (created_at,id) cursor with cursor-from-kept-row truncation (RUST-07); anchor-expiry MIN query tenant-scoped inside the tx; users snapshot query excludes pin_hash (SYNC-06 PG parity); synced_at decoded as Option avoiding first-row panic
+next: none | perf: deadpool pool max 5 with bounded timeouts
+*/
 //!
 //! This transport bypasses the HTTP sync server and writes directly to a
 //! cloud PostgreSQL database (AWS RDS, Azure Database for PostgreSQL, etc.).
