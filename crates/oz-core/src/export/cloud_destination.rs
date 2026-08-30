@@ -1,9 +1,9 @@
 //! Cloud warehouse export destinations for the analytics bundle.
 /*
-last audited 25-07-26 by RSA-Agent (oz-core slice D2: cloud_destination deep read; COR-35 FIXED 25-07-26)
+last audited 31-08-26 by TDD-Agent (round H follow-up to slice D2; identifiers validated, COR-35 was half the class)
 crate: oz-core | status: SAFE | lint: CLEAN
-findings: COR-35 FIXED — Snowflake INSERT now uses SQL API bind variables (question-mark placeholders plus a 1-based TEXT bindings map) instead of string-concatenated quote-escaped literals; values are transported out-of-band and never parsed as SQL text, eliminating the backslash-escape injection class; sql_escape helper and its test removed. Remaining (unchanged): GCP path exemplary (JWT RS256 service-account auth, token exchange, bearer insertAll); HTTP clients use Client::new() with NO timeout (COR-31 family); service-account key + Snowflake password persisted in settings JSON (base64 != encryption, COR-17/30 family)
-next: add HTTP timeouts (COR-31); encrypt stored warehouse credentials (COR-17/30) | perf: 50-row batched inserts
+findings: COR-35 FIXED 25-07-26 for VALUES only — bind variables take row values out of the SQL text, but database/schema/table were still interpolated into the INSERT verbatim, and project_id/dataset/table into the insertAll URL path. Both closed now: snowflake_insert_statement and bigquery_insert_url are pure, tested, and reject anything outside the identifier grammar. The stamp's "eliminating the backslash-escape injection class" read as the class being shut, which is why the other half sat open for a month. Still open, unchanged: HTTP clients use Client::new() with NO timeout (COR-31 family); service-account key + Snowflake password persisted in settings JSON (base64 != encryption, COR-17/30 family).
+next: add HTTP timeouts (COR-31); encrypt stored warehouse credentials (COR-17/30); wire save/get_cloud_export_config to a caller — neither has one today, which is the only reason the above are latent | perf: 50-row batched inserts
 */
 //!
 //! Defines export targets (BigQuery, Snowflake) and their respective
@@ -207,10 +207,7 @@ impl CloudExporter {
 
         // Call BigQuery's tabledata.insertAll REST API.
         // This is a streaming insert — suitable for real-time analytics.
-        let url = format!(
-            "https://bigquery.googleapis.com/bigquery/v2/projects/{}/datasets/{}/tables/{}/insertAll",
-            config.project_id, config.dataset, config.table
-        );
+        let url = bigquery_insert_url(&config.project_id, &config.dataset, &config.table)?;
 
         let client = reqwest::Client::new();
 
@@ -311,36 +308,14 @@ impl CloudExporter {
 
         // Step 2: Build INSERT statements in batches (50 rows per batch).
         let batch_size = 50;
-        let columns = [
-            "exported_at",
-            "tenant_id",
-            "store_name",
-            "report_type",
-            "report_data",
-        ];
 
         for chunk in ndjson.chunks(batch_size) {
-            // COR-35 fix: build the statement with bind variables ("?" placeholders
-            // plus a "bindings" map) instead of string-concatenated, quote-escaped
-            // literals. Snowflake treats "\" as an escape inside string literals,
-            // so a user-controlled value ending in a backslash (product/store
-            // names) previously escaped the closing quote and broke out of the
-            // literal — SQL injection into the customer's warehouse. Bind values
-            // are transported out-of-band and never parsed as SQL text.
-            let row_placeholder = "(?, ?, ?, ?, PARSE_JSON(?))";
-            let mut sql = format!(
-                "INSERT INTO {}.{}.{} ({}) VALUES ",
-                config.database,
-                config.schema,
-                config.table,
-                columns.join(", ")
-            );
-            sql.push_str(
-                &std::iter::repeat_n(row_placeholder, chunk.len())
-                    .collect::<Vec<_>>()
-                    .join(", "),
-            );
-            sql.push(';');
+            let sql = snowflake_insert_statement(
+                &config.database,
+                &config.schema,
+                &config.table,
+                chunk.len(),
+            )?;
 
             // Bindings are 1-based string keys in request order; each value is a
             // RAW (unescaped) string — the driver applies the escaping.
@@ -424,6 +399,137 @@ impl CloudExporter {
             ),
         })
     }
+}
+
+/// Columns the Snowflake exporter writes, in bind order.
+const SNOWFLAKE_COLUMNS: [&str; 5] = [
+    "exported_at",
+    "tenant_id",
+    "store_name",
+    "report_type",
+    "report_data",
+];
+
+/// Is `s` a Snowflake identifier we are willing to write into SQL text?
+///
+/// Deliberately the strict unquoted form — `[A-Za-z_][A-Za-z0-9_$]*`, at
+/// most 255 chars — rather than double-quoting the value. Quoting would
+/// accept more names but silently changes Snowflake's semantics
+/// (quoted identifiers are case-sensitive, so `"MYTABLE"` stops matching
+/// a table created as `MYTABLE`), and it still needs to reject an
+/// embedded `"`. Rejecting is the honest option: identifiers cannot be
+/// bound, so they are the one part of the statement that must be
+/// validated rather than transported.
+fn is_safe_sql_identifier(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 255
+        && s.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+}
+
+/// Is `s` a GCP project ID? Separate rule because project IDs legitimately
+/// contain hyphens (`my-project-123`), which Snowflake and BigQuery
+/// identifiers must not — applying the SQL rule here rejected real configs.
+/// A hyphen cannot break out of a URL path segment, so it is safe to allow;
+/// `.`, `/`, `?`, `#`, whitespace and quotes stay rejected.
+fn is_safe_gcp_project_id(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 63
+        && s.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// Build the BigQuery `tabledata.insertAll` URL.
+///
+/// Extracted so the identifiers can be checked without an HTTP server.
+/// The host is a literal, so a hostile value cannot redirect the request
+/// or carry the bearer token elsewhere — but `?`, `#`, `/` or a space in
+/// a project/dataset/table field would silently retarget or truncate the
+/// API call, sending rows somewhere other than the configured table.
+fn bigquery_insert_url(
+    project_id: &str,
+    dataset: &str,
+    table: &str,
+) -> Result<String, crate::error::CoreError> {
+    if !is_safe_gcp_project_id(project_id) {
+        return Err(crate::error::CoreError::Validation {
+            field: "project_id",
+            message: format!(
+                "{project_id:?} is not a valid GCP project id; it is interpolated into the \
+                 insertAll URL path, so it must start with a letter or underscore and contain \
+                 only letters, digits, '_' and '-'"
+            ),
+        });
+    }
+    for (field, value) in [("dataset", dataset), ("table", table)] {
+        if !is_safe_sql_identifier(value) {
+            return Err(crate::error::CoreError::Validation {
+                field,
+                message: format!(
+                    "{value:?} is not a valid BigQuery identifier; it is interpolated into the \
+                     insertAll URL path, so it must start with a letter or underscore and \
+                     contain only letters, digits, '_' and '$"
+                ),
+            });
+        }
+    }
+    Ok(format!(
+        "https://bigquery.googleapis.com/bigquery/v2/projects/{project_id}/datasets/{dataset}/tables/{table}/insertAll"
+    ))
+}
+
+/// Build the batched `INSERT` for `row_count` rows.
+///
+/// Split out of the HTTP shell in `send_to_snowflake` so the statement
+/// text — the artifact COR-35 changed, and the only part that reaches the
+/// customer's warehouse as SQL — can be asserted without a server.
+fn snowflake_insert_statement(
+    database: &str,
+    schema: &str,
+    table: &str,
+    row_count: usize,
+) -> Result<String, crate::error::CoreError> {
+    // COR-35 closed the VALUES half of the injection class; this closes
+    // the other half. Bind variables take values out of the SQL text but
+    // do nothing for identifiers, which are still interpolated below
+    // straight from the persisted `cloud_export_config` setting.
+    for (field, value) in [("database", database), ("schema", schema), ("table", table)] {
+        if !is_safe_sql_identifier(value) {
+            return Err(crate::error::CoreError::Validation {
+                field,
+                message: format!(
+                    "{value:?} is not a valid Snowflake identifier; it would be written into \
+                     the statement as SQL text, so it must start with a letter or underscore \
+                     and contain only letters, digits, '_' and '$ (max 255 chars)"
+                ),
+            });
+        }
+    }
+
+    // COR-35 fix: build the statement with bind variables ("?" placeholders
+    // plus a "bindings" map) instead of string-concatenated, quote-escaped
+    // literals. Snowflake treats "\" as an escape inside string literals,
+    // so a user-controlled value ending in a backslash (product/store
+    // names) previously escaped the closing quote and broke out of the
+    // literal — SQL injection into the customer's warehouse. Bind values
+    // are transported out-of-band and never parsed as SQL text.
+    let row_placeholder = "(?, ?, ?, ?, PARSE_JSON(?))";
+    let mut sql = format!(
+        "INSERT INTO {}.{}.{} ({}) VALUES ",
+        database,
+        schema,
+        table,
+        SNOWFLAKE_COLUMNS.join(", ")
+    );
+    sql.push_str(
+        &std::iter::repeat_n(row_placeholder, row_count)
+            .collect::<Vec<_>>()
+            .join(", "),
+    );
+    sql.push(';');
+    Ok(sql)
 }
 
 /// Convert an AnalyticsBundle to NDJSON rows, one per report type.
@@ -625,3 +731,7 @@ fn sign_rsa256(message: &str, private_key_pem: &str) -> Result<Vec<u8>, String> 
 #[cfg(test)]
 #[path = "cloud_destination_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "cloud_destination_sql_tests.rs"]
+mod sql_tests;
