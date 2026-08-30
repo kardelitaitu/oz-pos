@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useCallback, memo, type ReactNode } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback, type ReactNode } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -70,10 +70,8 @@ import { useTopologyEditorDrag } from './nodeTopologyEditorDragState';
 import { useTopologyEditorConnection } from './nodeTopologyEditorConnectionState';
 import { useTopologyEditorHover } from './nodeTopologyEditorHoverState';
 import {
-  normalizeTopologyGraph,
   normalizeWireDirection,
   topologyIssueKey,
-  validateTopologyGraph,
   type TopologyValidationError,
 } from './topologyContract';
 import {
@@ -88,6 +86,38 @@ import {
   sanitizeCopiedNode,
 } from './topologyCard';
 import './NodeTopologyEditor.css';
+
+// ── Extracted modules (Phase 1 split) ────────────────────────────────
+// Pure helpers and presentational sub-components moved out of this 6800-line
+// file. Re-exported here so every existing importer (tests, sibling
+// topology modules) keeps its `from './NodeTopologyEditor'` path working.
+import {
+  normalizeVisualPort,
+  elbowPoints,
+  polylineD,
+  canvasStateEqual,
+  computeAlignmentGuides,
+  diagramOverflowsCanvas,
+  isTopologyRevisionConflict,
+  validateEditorGraph,
+} from './topologyEditorHelpers';
+import { AlignGlyph, ALIGN_ACTIONS, type AlignMode } from './topologyAlignGlyph';
+import { CanvasCursorReadout } from './topologyCanvasCursorReadout';
+
+// Re-export the moved pure helpers so tests (nodeTopologyEditorHelpers,
+// canvasStateEqual) and runtime importers (topologyWarehouseCard) resolve
+// them from this module exactly as before the split.
+export {
+  normalizeVisualPort,
+  elbowPoints,
+  polylineD,
+  canvasStateEqual,
+  computeAlignmentGuides,
+  diagramOverflowsCanvas,
+  isTopologyRevisionConflict,
+  prefersReducedMotion,
+  validateEditorGraph,
+} from './topologyEditorHelpers';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -107,14 +137,6 @@ export type WireDirection = 'one-way' | 'reverse' | 'two-way';
 const WIRE_DIRECTION_CYCLE: WireDirection[] = ['one-way', 'reverse', 'two-way'];
 export type PortName = 'top' | 'right' | 'bottom' | 'left';
 
-/** Convert legacy vertical anchors to the UX's canonical left/right sides.
- *  Exported for unit tests. */
-export function normalizeVisualPort(port: string | null | undefined, fallback: PortName): PortName {
-  if (port === 'top' || port === 'bottom') return fallback;
-  if (port === 'left' || port === 'right') return port;
-  return fallback;
-}
-
 /** Restore-boundary integrity guard for Undo/Redo: drop any wire whose
  *  endpoint nodes are missing from the SAME entry before it lands on the
  *  canvas. Every history entry today is a full pre-mutation snapshot (or
@@ -127,83 +149,8 @@ export function normalizeVisualPort(port: string | null | undefined, fallback: P
  *  the only sane resolution; the canvas invariant stays "every wire's
  *  endpoints exist". */
 
-/** Alignment / distribution modes for the multi-select toolbar. */
-type AlignMode = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom' | 'dist-h' | 'dist-v';
-
-const ALIGN_ACTIONS: { mode: AlignMode; ariaId: string }[] = [
-  { mode: 'left', ariaId: 'topology-align-left' },
-  { mode: 'hcenter', ariaId: 'topology-align-hcenter' },
-  { mode: 'right', ariaId: 'topology-align-right' },
-  { mode: 'top', ariaId: 'topology-align-top' },
-  { mode: 'vcenter', ariaId: 'topology-align-vcenter' },
-  { mode: 'bottom', ariaId: 'topology-align-bottom' },
-  { mode: 'dist-h', ariaId: 'topology-distribute-h' },
-  { mode: 'dist-v', ariaId: 'topology-distribute-v' },
-];
-
 /** Node types offered by the right-click canvas context menu. */
 const CONTEXT_ADD_TYPES: NodeType[] = ['store', 'workspace', 'warehouse', 'hardware'];
-
-/** Orthogonal elbow routing: from the source port, run horizontally to the
- *  midpoint, drop/rise to the target row, then run into the target port.
- *  When the target sits BEHIND the source (reverse flows), detour right
- *  past the source before dropping, so the elbow never folds back through
- *  the source card. Returns the polyline vertices in canvas coords.
- *  Exported for unit tests. */
-export function elbowPoints(x1: number, y1: number, x2: number, y2: number): Array<[number, number]> {
-  if (x2 < x1) {
-    const detour = x1 + 48;
-    return [[x1, y1], [detour, y1], [detour, y2], [x2, y2]];
-  }
-  const mx = (x1 + x2) / 2;
-  return [[x1, y1], [mx, y1], [mx, y2], [x2, y2]];
-}
-
-/** SVG path for a polyline of H/V segments. Exported for unit tests. */
-export function polylineD(pts: Array<[number, number]>): string {
-  if (pts.length === 0) return '';
-  return `M ${pts[0]![0]} ${pts[0]![1]} ${pts.slice(1).map(([px, py]) => `L ${px} ${py}`).join(' ')}`;
-}
-
-/** Point at parameter t (0..1) along an axis-aligned polyline — drives the
- *  simulation pulse so it rides the elbow instead of a phantom curve. */
-/** Compact alignment glyphs — three bars whose arrangement encodes the
- *  mode (edges, centers, or even spacing), matching the standard diagram-
- *  tool icon language. */
-function AlignGlyph({ mode }: { mode: AlignMode }) {
-  let bars: JSX.Element[];
-  switch (mode) {
-    case 'left':
-      bars = [0, 4, 8].map((y) => <rect key={y} x={0} y={y} width={16 - y} height={3} rx={1} fill="currentColor" />);
-      break;
-    case 'hcenter':
-      bars = [0, 4, 8].map((y) => <rect key={y} x={y / 2} y={y} width={16 - y} height={3} rx={1} fill="currentColor" />);
-      break;
-    case 'right':
-      bars = [0, 4, 8].map((y) => <rect key={y} x={y} y={y} width={16 - y} height={3} rx={1} fill="currentColor" />);
-      break;
-    case 'top':
-      bars = [0, 4, 8].map((x) => <rect key={x} x={x} y={0} width={3} height={16 - x} rx={1} fill="currentColor" />);
-      break;
-    case 'vcenter':
-      bars = [0, 4, 8].map((x) => <rect key={x} x={x} y={x / 2} width={3} height={16 - x} rx={1} fill="currentColor" />);
-      break;
-    case 'bottom':
-      bars = [0, 4, 8].map((x) => <rect key={x} x={x} y={x} width={3} height={16 - x} rx={1} fill="currentColor" />);
-      break;
-    case 'dist-h':
-      bars = [0, 6.5, 13].map((x) => <rect key={x} x={x} y={6.5} width={3} height={3} rx={1} fill="currentColor" />);
-      break;
-    case 'dist-v':
-      bars = [0, 6.5, 13].map((y) => <rect key={y} x={6.5} y={y} width={3} height={3} rx={1} fill="currentColor" />);
-      break;
-  }
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      {bars}
-    </svg>
-  );
-}
 
 export type SemanticRelationshipType =
   | 'location'
@@ -400,159 +347,6 @@ const PRESET_RESTAURANT: { nodes: TopologyNodeData[]; wires: TopologyWireData[] 
   ],
 };
 
-/**
- * Exact dirty check: true when two canvas states differ in their PERSISTED
- * fields. Transient fields are excluded — telemetryBadge/telemetryStatus
- * (never edited), and metadata.persisted (an internal sync bookkeeping flag
- * flipped by the save-triggered instance reload, not user content).
- *
- * The persisted-field set is TRIPLE-COUPLED: it lives here, in the load
- * effect's backend mapping, and in the onSave serialization. Adding a new
- * persisted field must touch all three, or the dirty check silently weakens.
- *
- * Zero-allocation field-by-field comparison (replaced the original
- * projected-array + JSON.stringify approach to eliminate ~80 KB of
- * temporary objects per call during drag — the primary OOM vector).
- */
-/** Exported for zero-allocation regression tests. */
-export function canvasStateEqual(
-  aNodes: TopologyNodeData[],
-  aWires: TopologyWireData[],
-  bNodes: TopologyNodeData[],
-  bWires: TopologyWireData[],
-): boolean {
-  if (aNodes.length !== bNodes.length || aWires.length !== bWires.length) return false;
-  for (let i = 0; i < aNodes.length; i++) {
-    const a = aNodes[i]!;
-    const b = bNodes[i]!;
-    if (a.id !== b.id || a.type !== b.type || a.name !== b.name
-      || (a.subtitle ?? '') !== (b.subtitle ?? '')
-      || a.x !== b.x || a.y !== b.y) return false;
-    if ((a.tierRequirement ?? null) !== (b.tierRequirement ?? null)) return false;
-    // metadata is typed with an index signature — bracket access required.
-    const am = a.metadata;
-    const bm = b.metadata;
-    if ((am?.['typeKey'] ?? null) !== (bm?.['typeKey'] ?? null)) return false;
-    if ((am?.['purposeKey'] ?? null) !== (bm?.['purposeKey'] ?? null)) return false;
-    if ((am?.['enabled'] ?? null) !== (bm?.['enabled'] ?? null)) return false;
-    if ((am?.['capacity'] ?? null) !== (bm?.['capacity'] ?? null)) return false;
-    if ((am?.['lowStockThreshold'] ?? null) !== (bm?.['lowStockThreshold'] ?? null)) return false;
-    if ((am?.['stock'] ?? null) !== (bm?.['stock'] ?? null)) return false;
-  }
-  for (let i = 0; i < aWires.length; i++) {
-    const a = aWires[i]!;
-    const b = bWires[i]!;
-    if (a.id !== b.id || a.fromNodeId !== b.fromNodeId || a.toNodeId !== b.toNodeId
-      || a.direction !== b.direction) return false;
-    if ((a.fromPort ?? null) !== (b.fromPort ?? null)) return false;
-    if ((a.toPort ?? null) !== (b.toPort ?? null)) return false;
-    if ((a.label ?? null) !== (b.label ?? null)) return false;
-    const ab = a.bends;
-    const bb = b.bends;
-    const aLen = ab?.length ?? 0;
-    const bLen = bb?.length ?? 0;
-    if (aLen !== bLen) return false;
-    if (aLen > 0 && ab && bb) {
-      for (let j = 0; j < aLen; j++) {
-        if (ab[j]!.x !== bb[j]!.x || ab[j]!.y !== bb[j]!.y) return false;
-      }
-    }
-  }
-  return true;
-}
-
-/** Canvas px the dragged node's edge/center may drift from a stationary
- *  node's before the alignment guide snaps it (Figma-style). */
-const ALIGN_THRESHOLD = 6;
-
-interface AlignmentResult {
-  /** Guide line coordinate (canvas units) for a vertical (x) / horizontal
-   *  (y) guide — present only while that axis is actively aligned. */
-  x?: number;
-  y?: number;
-  /** Delta applied to every dragged node so the primary lands exactly on
-   *  the aligned axis (keeps the group rigid). Zero when not aligned. */
-  dx: number;
-  dy: number;
-  /** Whether each axis is under an active alignment — the aligned axis
-   *  skips grid snapping (guides beat the grid). */
-  alignedX: boolean;
-  alignedY: boolean;
-}
-
-/** Figma-style COLLECTIVE alignment snap: match ANY edge/center of ANY
- *  dragged node against ANY edge/center of every STATIONARY node (all 9
- *  combos per node pair — left↔left, right↔left, centerX↔centerX, …).
- *  Within the threshold, the closest match across ALL dragged members wins
- *  per axis — so a group can snap on a non-grabbed member's edge, exactly
- *  like Figma. The resulting delta shifts the whole group rigidly. The
- *  dragged set is excluded from the reference pool so a group never aligns
- *  to itself. Exported for unit tests. */
-export function computeAlignmentGuides(
-  targets: Map<string, { x: number; y: number }>,
-  draggedIds: Set<string>,
-  nodes: TopologyNodeData[],
-): AlignmentResult {
-  let bestX: { target: number; dist: number } | null = null;
-  let bestY: { target: number; dist: number } | null = null;
-  for (const other of nodes) {
-    if (draggedIds.has(other.id)) continue;
-    const rAxesX = [other.x, other.x + NODE_WIDTH / 2, other.x + NODE_WIDTH];
-    const rAxesY = [other.y, other.y + NODE_HEIGHT / 2, other.y + NODE_HEIGHT];
-    for (const target of targets.values()) {
-      const pAxesX = [target.x, target.x + NODE_WIDTH / 2, target.x + NODE_WIDTH];
-      const pAxesY = [target.y, target.y + NODE_HEIGHT / 2, target.y + NODE_HEIGHT];
-      for (const pAxis of pAxesX) {
-        for (const rAxis of rAxesX) {
-          const dx = pAxis - rAxis;
-          if (Math.abs(dx) <= ALIGN_THRESHOLD && (!bestX || Math.abs(dx) < bestX.dist)) {
-            bestX = { target: rAxis, dist: dx };
-          }
-        }
-      }
-      for (const pAxis of pAxesY) {
-        for (const rAxis of rAxesY) {
-          const dy = pAxis - rAxis;
-          if (Math.abs(dy) <= ALIGN_THRESHOLD && (!bestY || Math.abs(dy) < bestY.dist)) {
-            bestY = { target: rAxis, dist: dy };
-          }
-        }
-      }
-    }
-  }
-  return {
-    ...(bestX ? { x: bestX.target } : {}),
-    ...(bestY ? { y: bestY.target } : {}),
-    dx: bestX?.dist ?? 0,
-    dy: bestY?.dist ?? 0,
-    alignedX: bestX !== null,
-    alignedY: bestY !== null,
-  };
-}
-
-/** True when the diagram's bounding box (plus zoomToFit's breathing room)
- *  exceeds the MEASURED canvas viewport — the trigger for the one-shot
- *  load auto-fit. A zero/negative measured size (jsdom, pre-layout) returns
- *  false so the identity view is never yanked by a phantom constraint.
- *  Exported for unit tests. */
-export function diagramOverflowsCanvas(canvas: HTMLElement, nodes: TopologyNodeData[]): boolean {
-  const viewW = canvas.clientWidth;
-  const viewH = canvas.clientHeight;
-  if (viewW <= 0 || viewH <= 0 || nodes.length === 0) return false;
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const n of nodes) {
-    minX = Math.min(minX, n.x);
-    minY = Math.min(minY, n.y);
-    maxX = Math.max(maxX, n.x + NODE_WIDTH);
-    maxY = Math.max(maxY, n.y + NODE_HEIGHT);
-  }
-  const pad = 60;
-  return maxX - minX + pad * 2 > viewW || maxY - minY + pad * 2 > viewH;
-}
-
 /** Port offset from node origin (left, top) for each port name.
  *  Left/right wire endpoints sit on the card edge, exactly at the center
  *  of the visible connector circles. The hit areas may overhang, but the
@@ -588,118 +382,11 @@ const snap = (v: number) => Math.round(v / GRID_SIZE) * GRID_SIZE;
 const issueKey = topologyIssueKey;
 const graphIssueKey = (messageId: string) => `graph:${messageId}`;
 
-/** True when the thrown error is the backend's topology-revision-conflict
- *  (round 133). A stale base revision can never retry successfully, so the
- *  editor treats it differently from a generic save failure: it reloads the
- *  authoritative topology instead of keeping a canvas that can never apply.
- *  The backend serializes TopologyValidation as
- *  { kind: 'topologyValidation', code: 'topology-revision-conflict', ... }.
- *  Exported for unit tests. */
-export function isTopologyRevisionConflict(err: unknown): boolean {
-  const typed = parseAppError(err);
-  return typed !== null
-    && (typed as { kind?: string }).kind === 'topologyValidation'
-    && (typed as { code?: string }).code === 'topology-revision-conflict';
-}
-
-/** True when the OS requests reduced motion (WCAG 2.3.3). The simulation
- *  pulse is JS-driven on a 30ms interval — CSS @media gates cannot stop
- *  the state churn — so the interval and the pulse position consult this
- *  directly. jsdom has no matchMedia: the safe default is false (animate),
- *  and the reduced-motion tests stub matchMedia to pin the gated path.
- *  Exported for unit tests. */
-export function prefersReducedMotion(): boolean {
-  return typeof window !== 'undefined'
-    && typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
 /** Milliseconds the selection-announcement waits after the LAST selection
  *  change before speaking. Long enough to absorb a marquee drag that
  *  flicks 1→2→3 (one announcement, on the final set), short enough that a
  *  click or keyboard select still feels immediate. */
 const SELECTION_ANNOUNCE_SETTLE_MS = 120;
-
-/** HUD cursor-position readout, isolated in its own memo component with
- *  its own document mousemove listener and rAF throttle. The readout is
- *  display-only, so a burst of moves coalesces into at most ONE state
- *  update per frame — and that update is LOCAL to this span, so pointer
- *  movement over a large diagram never re-renders the editor (which used
- *  to re-render every node card and wire path up to 60×/sec). pan/zoom
- *  come in as props so the conversion to canvas coords stays current. */
-const CanvasCursorReadout = memo(function CanvasCursorReadout({ pan, zoom }: { pan: { x: number; y: number }; zoom: number }) {
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const pendingRef = useRef<{ x: number; y: number } | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const elRef = useRef<HTMLSpanElement>(null);
-  // Mount-once listener: pan/zoom are read via refs inside the handler so a
-  // pan/zoom change never re-arms (and cancels a pending) rAF. Re-arming on
-  // every pan would ALSO cancel an in-flight frame — leaving the readout
-  // stuck until the next move re-schedules.
-  const panRef = useRef(pan);
-  panRef.current = pan;
-  const zoomRef = useRef(zoom);
-  zoomRef.current = zoom;
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      // The readout lives inside the canvas container; its rect is the
-      // viewport origin for the pan/zoom conversion.
-      const rect = elRef.current?.closest('.node-canvas-container')?.getBoundingClientRect();
-      if (!rect) return;
-      pendingRef.current = {
-        x: Math.round((e.clientX - rect.left - panRef.current.x) / zoomRef.current),
-        y: Math.round((e.clientY - rect.top - panRef.current.y) / zoomRef.current),
-      };
-      if (rafRef.current === null) {
-        rafRef.current = requestAnimationFrame(() => {
-          rafRef.current = null;
-          setPos(pendingRef.current);
-        });
-      }
-    };
-    document.addEventListener('mousemove', onMove);
-    return () => {
-      document.removeEventListener('mousemove', onMove);
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
-
-  return (
-    <span ref={elRef} className="canvas-hud-item canvas-hud-cursor">
-      {pos ? `${pos.x}, ${pos.y}` : '—'}
-    </span>
-  );
-});
-
-/** An ambiguous wire drop in flight: the source socket and the target
- *  socket admit MULTIPLE relationships (ADR #34), so the editor asks the
- *  user which one the wire means before drawing anything. */
-/** Validate the editor's RAW canvas under the Apply gate. Legacy/demo
- *  canvases (no canonical branch identity) keep their non-blocking path
- *  unless the real topology screen opts into strict validation
- *  (allowLegacyApply=false). Shared by the live badge surface AND the
- *  Apply handler so the two can never drift apart. Exported for unit tests. */
-export function validateEditorGraph(
-  nodes: TopologyNodeData[],
-  wires: TopologyWireData[],
-  allowLegacyApply: boolean,
-  tier: string,
-): TopologyValidationError[] {
-  const semanticGraph = normalizeTopologyGraph(nodes, wires);
-  const hasCanonicalBranchIdentity = semanticGraph.nodes.some(
-    (node) => node.kind === 'branch-location' && node.storeProfileId !== undefined,
-  );
-  // validateTopologyGraph owns the multi-warehouse tier cap (round 87) —
-  // it pushes warehouse-tier-limit below Pro and the pure contract stays
-  // strict by default. The creation paths still refuse a second warehouse
-  // on the way in (tool-card/duplicate, wouldExceedWarehouseCap); this
-  // gate catches the remaining routes (downgrade, loaded legacy, paste)
-  // so Apply can never persist 2+ warehouses on a non-Pro install.
-  return hasCanonicalBranchIdentity || !allowLegacyApply
-    ? validateTopologyGraph(semanticGraph, tier)
-    : [];
-}
 
 /** Branch Location profile fields — fetched lazily from the backend. */
 function BranchLocationFields({ nodeId, l10n, beginInspectorEdit }: {
