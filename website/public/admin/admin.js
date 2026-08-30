@@ -57,9 +57,9 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         if (loadError && loadError.authDenied) { return; }
         c.innerHTML =
           '<div class="card" style="text-align:center;padding:2rem">' +
-          '<h2 style="margin:0 0 .5rem;color:var(--bad)">Stats unavailable</h2>' +
-          '<p class="empty">The dashboard API did not respond. Try again.</p>' +
-          '<button class="btn" id="retry-stats">Retry</button>' +
+          '<h2 style="margin:0 0 .5rem;color:var(--bad)">' + t('common.statsUnavailable') + '</h2>' +
+          '<p class="empty">' + t('common.statsApiNoResponse') + '</p>' +
+          '<button class="btn" id="retry-stats">' + t('common.retry') + '</button>' +
           '</div>';
         const retry = document.getElementById('retry-stats');
         if (retry) { retry.addEventListener('click', renderDashboard); }
@@ -85,7 +85,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       fx.appendChild(fxDot);
       fx.appendChild(document.createTextNode(`1 USD = ${fxRate.toLocaleString()} IDR`));
       if (fxUpdatedAt) { fx.appendChild(el('span', 'small', ` (${fxUpdatedAt.slice(11,16)} UTC)`)); }
-      if (!fxLive) fx.appendChild(el('span', 'small', ' stale'));
+      if (!fxLive) fx.appendChild(el('span', 'small', t('common.stale')));
       top.appendChild(fx);
       c.appendChild(top);
 
@@ -101,12 +101,12 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       };
       const kpiGrid = el('div', 'kpi-grid');
       kpiGrid.appendChild(kpiC(t('kpi.totalUsers'), String(m.kpis.totalUsers), `active: ${m.kpis.activeUsers}`, ICONS.users, 'kpi-icon-blue'));
-      kpiGrid.appendChild(kpiC(t('kpi.totalSubscribers'), String(m.kpis.totalSubscribers), 'non-free (plus/pro/premium/enterprise)', ICONS.subscribers, 'kpi-icon-green'));
+      kpiGrid.appendChild(kpiC(t('kpi.totalSubscribers'), String(m.kpis.totalSubscribers), t('toolbar.nonFree'), ICONS.subscribers, 'kpi-icon-green'));
       kpiGrid.appendChild(kpiC(t('kpi.mrr'), fmtUsd(m.kpis.mrrUsd), '', ICONS.mrr, 'kpi-icon-orange'));
       kpiGrid.appendChild(kpiC(t('kpi.monthlyGrossIdr'), fmtIdr(mrrIdr), `≈ $${m.kpis.mrrUsd} × ${fxRate.toLocaleString()}`, ICONS.trend, 'kpi-icon-cyan'));
-      kpiGrid.appendChild(kpiC(t('kpi.arpu'), fmtUsd(m.kpis.arpuUsd), 'per subscriber', ICONS.arpu, 'kpi-icon-pink'));
+      kpiGrid.appendChild(kpiC(t('kpi.arpu'), fmtUsd(m.kpis.arpuUsd), t('toolbar.perSubscriber'), ICONS.arpu, 'kpi-icon-pink'));
       kpiGrid.appendChild(kpiC(t('kpi.activeTerminals'), String(m.kpis.activeDevices), '', ICONS.devices, 'kpi-icon-blue'));
-      kpiGrid.appendChild(kpiC(t('kpi.trialToPaid'), m.kpis.trialToPaidRate + '%', 'conversion rate', ICONS.conversion, 'kpi-icon-green'));
+      kpiGrid.appendChild(kpiC(t('kpi.trialToPaid'), m.kpis.trialToPaidRate + '%', t('toolbar.conversionRate'), ICONS.conversion, 'kpi-icon-green'));
       c.appendChild(kpiGrid);
 
       // --- Charts row ---
@@ -219,13 +219,13 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
 
     async function renderTenants() {
       const c = document.getElementById('content');
-      c.innerHTML = '<div class="card"><p class="empty">Loading tenants…</p></div>';
+      c.innerHTML = '<div class="card"><p class="empty">' + t('common.loadingTenants') + '</p></div>';
       let data;
       try {
         const qs = '?page=' + tenantsPage + '&perPage=' + tenantsPerPage +
           (tenantsSearch ? '&search=' + encodeURIComponent(tenantsSearch) : '');
         data = await api('/api/v1/admin/tenants' + qs);
-      } catch (err) { if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">Failed to load tenants.</p></div>'; return; }
+      } catch (err) { if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">' + t('common.failedToLoadTenants') + '</p></div>'; return; }
       tenants = data.tenants || [];
       tenantsTotal = data.total || 0;
 
@@ -289,7 +289,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
     // ── Tenant detail (from ADR #42 Phase 3) ────────────────────────
     async function showTenantDetail(id) {
       const modal = document.getElementById('modal-root');
-      modal.innerHTML = '<div class="modal-back"><div class="modal"><h3>Loading…</h3></div></div>';
+      modal.innerHTML = '<div class="modal-back"><div class="modal"><h3>' + t('common.loading') + '</h3></div></div>';
       try {
         const data = await api('/api/v1/admin/tenants/' + id);
         const t = data.tenant || {}, lic = data.license || {}, sub = data.subscription || {}, devices = data.devices || [];
@@ -324,13 +324,13 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         m.addEventListener('click', e => { if (e.target === m) { modal.innerHTML = ''; } });
       } catch (err) {
         if (err && err.authDenied) { modal.innerHTML = ''; return; }
-        modal.innerHTML = '<div class="modal-back"><div class="modal"><p class="empty">Failed to load tenant detail.</p></div></div>';
+        modal.innerHTML = '<div class="modal-back"><div class="modal"><p class="empty">' + t('common.failedToLoadTenantDetail') + '</p></div></div>';
       }
     }
 
     async function doAction(id, action, label, body) {
       const modal = document.getElementById('modal-root');
-      try { await api('/api/v1/admin/tenants/' + id + '/' + action, body); modal.innerHTML = ''; flash(label + ' successfully'); renderTenants(); } catch { flash(label + ' failed'); }
+      try { await api('/api/v1/admin/tenants/' + id + '/' + action, body); modal.innerHTML = ''; flash(label + t('common.successfully')); renderTenants(); } catch { flash(label + t('common.failed')); }
     }
 
     function upgradePrompt(id, data) {
@@ -350,7 +350,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
 
     // ── Health tab ──────────────────────────────────────────────────
     async function renderHealth() {
-      const c = document.getElementById('content'); c.innerHTML = '<div class="card"><p class="empty">Loading…</p></div>';
+      const c = document.getElementById('content'); c.innerHTML = '<div class="card"><p class="empty">' + t('common.loading') + '</p></div>';
       try { const h = await api('/api/v1/admin/health');
         c.innerHTML = ''; const card = el('div', 'card'); card.appendChild(el('h2', null, t('health.title')));
         const kv = el('div'); kv.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.82rem';
@@ -361,7 +361,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
           '<span class="muted">'+t('health.version')+'</span><span style="text-align:right">'+escapeHtml(h.version||'—')+'</span>' +
           '<span class="muted">'+t('health.time')+'</span><span style="text-align:right">'+escapeHtml(h.time||'—')+'</span>';
         card.appendChild(kv); c.appendChild(card);
-      } catch (err) { if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">Failed to load health.</p></div>'; }
+      } catch (err) { if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">' + t('common.failedToLoadHealth') + '</p></div>'; }
     }
 
     // ── Flash ───────────────────────────────────────────────────────
