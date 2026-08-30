@@ -2002,3 +2002,14 @@ The portal backend behind `dashboard.`/`admin.ozpos.my.id` and the Cloudflare Wo
 | LSE-6 | 🟡 LOW ✅ FIXED 30-08-26 | main.go (trial_registrations/trial_claims creators) | Latent: the creators passed `CollectionId: "tenants"` — a **name** — while the embedded schema stores real ids (`64d11bd2cc57a18`); PB relation validation requires an existing target, so the creator paths would fail if ever exercised. Unreachable in practice only because `ensureCollections` imports the schema (which pre-creates both collections) before these migrations run. | Fixed in passing: creators resolve the tenants collection dynamically (`FindCollectionByNameOrId` → `.Id`). Covered by the fresh-create regression tests. |
 
 **Test evidence:** `go build` + `go vet` clean; full `go test ./...` green twice (123 s each), including the new LSE-5 repair/fresh-create/idempotency tests.
+
+### Slice B (cont.) — web_dashboard.go (194), helpers.go (127), ratelimit.go (768) + shared primitives — 30-08-26
+
+**Slice B complete** (main.go + web_dashboard.go + helpers.go + ratelimit.go = 2,002 lines, all fully read).
+
+- **web_dashboard.go — clean.** `resolveWebSession` is the shared guard (origin → Bearer → session store → tenant, with stale-session deletion on missing tenant); the revoke endpoint has a real ownership check and is idempotent. Trivial doc drift noted: the file header lists `PATCH /api/v1/web/settings`, which has no handler and no route (recorded here; not fixed to avoid touching the parallel session's active area).
+- **helpers.go — clean.** CSPRNG key generation fails fast rather than falling back to a predictable key; `extractAPIKey` is Bearer-only (the legacy body-credential fallback was removed with a documented rationale — single credential channel); `redactRequestBody` masks string `api_key` values in logs.
+- **ratelimit.go — exemplary.** Per-IP token bucket + per-key failure tracker, both with SQLite write-through persistence (restart-survival, H2) and **monotonic MIN/MAX UPSERT guards** closing the concurrent-writer regression bypass; escalating per-key cooldowns (15 s → 10 min) with env override that never weakens the default implicitly; sharded per-key/per-tenant mutex pools (fixed memory, documented collision tradeoffs) closing the unbounded-mutex DoS and the renewal TOCTOU; `init()` wires all sweep loops.
+- Shared primitives re-verified in `web_otp.go`'s tail: `extractBearerToken` (strict Bearer prefix), `normalizeEmail`, `isValidEmail` (strict parse-equality — blocks header injection), `is6DigitCode`, `formatDateField` (RFC3339 normalization documented).
+
+No new findings in this batch. **Slice C next:** `paddle_webhook.go` (1195), `midtrans_webhook.go` (585), `midtrans_checkout.go` (239) — signature verification is the priority; then Slice D admin gates.
