@@ -84,9 +84,6 @@ function setAuthMode(mode) {
   }
 }
 
-// Make setAuthMode available globally
-window.setAuthMode = setAuthMode;
-
 function startOtpCooldown(seconds = 60) {
   let sec = seconds;
   const cd = document.getElementById('otp-cooldown');
