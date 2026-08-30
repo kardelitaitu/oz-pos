@@ -76,14 +76,14 @@ function renderUsage(usage) {
   const g = el('div', 'stat-grid');
   // Subscription (tier) | Max Stores | Max Terminal | Max KDS
   const tier = usage.tier_key || (usage.subscription_count > 0 ? 'active' : 'free');
-  g.appendChild(stat('Subscription', tier === 'free' ? 'Free' : tier, 'current plan', ICONS.card, 'stat--primary'));
+  g.appendChild(stat(t('dash.subscription'), tier === 'free' ? t('dash.free') : tier, t('dash.currentPlan'), ICONS.card, 'stat--primary'));
   const maxStores = usage.max_stores ?? 0;
   const maxTerm = usage.max_pos_instances ?? 0;
   const maxKds = usage.max_kds ?? 0;
   const dev = usage.device_count ?? 0;
-  g.appendChild(stat('Max Stores', fmtUsedMax(0, maxStores), 'stores', ICONS.stores, 'stat--warning'));
-  g.appendChild(stat('Max Terminal', fmtUsedMax(dev, maxTerm), 'registers', ICONS.pos, 'stat--info'));
-  g.appendChild(stat('Max KDS', fmtUsedMax(0, maxKds), 'screens', ICONS.devices, 'stat--success'));
+  g.appendChild(stat(t('dash.maxStores'), fmtUsedMax(0, maxStores), t('dash.stores'), ICONS.stores, 'stat--warning'));
+  g.appendChild(stat(t('dash.maxTerminal'), fmtUsedMax(dev, maxTerm), t('dash.registers'), ICONS.pos, 'stat--info'));
+  g.appendChild(stat(t('dash.maxKds'), fmtUsedMax(0, maxKds), t('dash.screens'), ICONS.devices, 'stat--success'));
   c.insertBefore(g, c.firstChild);
 }
 
@@ -103,19 +103,19 @@ function renderMe(me) {
   // Page header
   const title = document.getElementById('page-title');
   const subtitle = document.getElementById('page-sub');
-  if (title) title.textContent = tenant.email ? tenant.email : 'Dashboard';
-  if (subtitle) subtitle.textContent = 'Your account at a glance';
+  if (title) title.textContent = tenant.email ? tenant.email : t('dash.dashboard');
+  if (subtitle) subtitle.textContent = t('dash.yourAccount');
 
   // Account card
   const profile = el('div', 'card');
-  profile.appendChild(el('h2', null, 'Account'));
+  profile.appendChild(el('h2', null, t('dash.account')));
   const kv = el('dl', 'kv');
-  kv.appendChild(el('dt', null, 'Email')); kv.appendChild(el('dd', null, tenant.email || '—'));
-  kv.appendChild(el('dt', null, 'Status'));
+  kv.appendChild(el('dt', null, t('dash.email'))); kv.appendChild(el('dd', null, tenant.email || '—'));
+  kv.appendChild(el('dt', null, t('dash.status')));
   const dd = el('dd'); dd.appendChild(statusPill(tenant.status)); kv.appendChild(dd);
-  kv.appendChild(el('dt', null, 'Email verified'));
+  kv.appendChild(el('dt', null, t('dash.emailVerified')));
   const ddV = el('dd');
-  const verified = el('span', 'pill ' + (tenant.emailVerified ? 'pill-ok' : 'pill-warn'), tenant.emailVerified ? '✓ Verified' : '○ Unverified');
+  const verified = el('span', 'pill ' + (tenant.emailVerified ? 'pill-ok' : 'pill-warn'), tenant.emailVerified ? t('dash.verified') : t('dash.unverified'));
   ddV.appendChild(verified); kv.appendChild(ddV);
   profile.appendChild(kv);
   c.appendChild(profile);
@@ -123,45 +123,45 @@ function renderMe(me) {
   // License card
   if (lic) {
     const card = el('div', 'card');
-    card.appendChild(el('h2', null, 'License'));
+    card.appendChild(el('h2', null, t('dash.license')));
     const kv2 = el('dl', 'kv');
-    kv2.appendChild(el('dt', null, 'Key'));
+    kv2.appendChild(el('dt', null, t('dash.key')));
     const ddKey = el('dd');
     const keyRow = el('div'); keyRow.style.cssText = 'display:flex;align-items:center;gap:.5rem;flex-wrap:wrap';
     const keySpan = el('span', 'copykey', lic.key || '—');
     keyRow.appendChild(keySpan);
-    const copyBtn = el('button', 'btn btn--ghost btn--sm', 'Copy');
+    const copyBtn = el('button', 'btn btn--ghost btn--sm', t('dash.copy'));
     copyBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(lic.key || '').then(() => { copyBtn.textContent = '✓ Copied'; setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500); });
+      navigator.clipboard.writeText(lic.key || '').then(() => { copyBtn.textContent = t('dash.copied'); setTimeout(() => { copyBtn.textContent = t('dash.copy'); }, 1500); });
     });
     keyRow.appendChild(copyBtn);
     ddKey.appendChild(keyRow);
     kv2.appendChild(ddKey);
-    kv2.appendChild(el('dt', null, 'Tier'));
+    kv2.appendChild(el('dt', null, t('dash.tier')));
     const ddTier = el('dd'); ddTier.appendChild(statusPill(lic.tierKey || '—')); kv2.appendChild(ddTier);
-    kv2.appendChild(el('dt', null, 'Status'));
+    kv2.appendChild(el('dt', null, t('dash.status')));
     const ddStatus = el('dd'); ddStatus.appendChild(statusPill(lic.status)); kv2.appendChild(ddStatus);
-    kv2.appendChild(el('dt', null, 'Expires')); kv2.appendChild(el('dd', null, lic.expiresAt || '—'));
+    kv2.appendChild(el('dt', null, t('dash.expires'))); kv2.appendChild(el('dd', null, lic.expiresAt || '—'));
     card.appendChild(kv2);
     c.appendChild(card);
   }
 
   // Subscription card
   const subCard = el('div', 'card');
-  subCard.appendChild(el('h2', null, 'Subscription'));
+  subCard.appendChild(el('h2', null, t('dash.subscription')));
   if (sub) {
     const kv3 = el('dl', 'kv');
-    kv3.appendChild(el('dt', null, 'Tier'));
+    kv3.appendChild(el('dt', null, t('dash.tier')));
     const ddT = el('dd'); ddT.appendChild(statusPill(sub.tierKey || '—')); kv3.appendChild(ddT);
-    kv3.appendChild(el('dt', null, 'Status'));
+    kv3.appendChild(el('dt', null, t('dash.status')));
     const ddS = el('dd'); ddS.appendChild(statusPill(sub.status)); kv3.appendChild(ddS);
-    kv3.appendChild(el('dt', null, 'Starts')); kv3.appendChild(el('dd', null, sub.startsAt || '—'));
-    kv3.appendChild(el('dt', null, 'Expires')); kv3.appendChild(el('dd', null, sub.expiresAt || '—'));
-    if (sub.graceUntil) { kv3.appendChild(el('dt', null, 'Grace until')); kv3.appendChild(el('dd', null, sub.graceUntil)); }
+    kv3.appendChild(el('dt', null, t('dash.starts'))); kv3.appendChild(el('dd', null, sub.startsAt || '—'));
+    kv3.appendChild(el('dt', null, t('dash.expires'))); kv3.appendChild(el('dd', null, sub.expiresAt || '—'));
+    if (sub.graceUntil) { kv3.appendChild(el('dt', null, t('dash.graceUntil'))); kv3.appendChild(el('dd', null, sub.graceUntil)); }
     subCard.appendChild(kv3);
   } else {
-    subCard.appendChild(el('p', 'empty', 'No active subscription.'));
-    const a = el('a'); a.href = '/pricing'; a.className = 'btn'; a.textContent = 'View pricing'; a.style.textDecoration = 'none';
+    subCard.appendChild(el('p', 'empty', t('dash.noActiveSubscription')));
+    const a = el('a'); a.href = '/pricing'; a.className = 'btn'; a.textContent = t('dash.viewPricing'); a.style.textDecoration = 'none';
     subCard.appendChild(a);
   }
   c.appendChild(subCard);
@@ -170,14 +170,14 @@ function renderMe(me) {
 function renderDevices(devices) {
   const c = document.getElementById('content');
   const card = el('div', 'card table-card');
-  card.appendChild(el('h2', null, 'Devices'));
+  card.appendChild(el('h2', null, t('dash.devices')));
   if (!devices || devices.length === 0) {
-    card.appendChild(el('p', 'empty', 'No registered devices yet. Activate the app on a terminal to register it.'));
+    card.appendChild(el('p', 'empty', t('dash.noDevices')));
   } else {
     const table = el('table');
     const thead = el('thead');
     const tr = el('tr');
-    ['Machine', 'Registered', 'Status'].forEach(h => tr.appendChild(el('th', null, h)));
+    [t('dash.machine'), t('dash.registered'), t('dash.status')].forEach(h => tr.appendChild(el('th', null, h)));
     thead.appendChild(tr); table.appendChild(thead);
     const tbody = el('tbody');
     devices.forEach(d => {
@@ -222,6 +222,6 @@ function renderDevices(devices) {
     renderMe(me);
     renderDevices(dev && dev.devices);
   } catch (err) {
-    document.getElementById('content').innerHTML = '<div class="card"><p class="empty">Could not load the dashboard: ' + (err && err.message || 'unknown error') + '</p></div>';
+    document.getElementById('content').innerHTML = '<div class="card"><p class="empty">' + t('dash.couldNotLoad') + (err && err.message || 'unknown error') + '</p></div>';
   }
 })();
