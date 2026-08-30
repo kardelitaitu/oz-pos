@@ -145,6 +145,7 @@ static ENV_LOCK: std::sync::LazyLock<tokio::sync::Mutex<()>> =
     std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
 
 #[serial(pg_rls_cutover)]
+#[serial]
 #[tokio::test]
 async fn from_env_defaults_to_sqlite() {
     let _guard = ENV_LOCK.lock().await;
@@ -162,6 +163,7 @@ async fn from_env_defaults_to_sqlite() {
 }
 
 #[serial(pg_rls_cutover)]
+#[serial]
 #[tokio::test]
 async fn from_env_detects_postgres_url() {
     let _guard = ENV_LOCK.lock().await;

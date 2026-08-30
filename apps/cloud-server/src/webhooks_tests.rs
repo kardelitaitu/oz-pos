@@ -73,8 +73,16 @@ fn seed_payment(conn: &rusqlite::Connection, gateway_ref: &str, sale_id: &str) {
 }
 
 /// Build a valid Stripe signature for the given payload and secret.
+///
+/// Uses the CURRENT unix timestamp: the verifier enforces a ±5 minute
+/// freshness window (CS-2 fix), so a fixed historical timestamp would be
+/// rejected as stale.
 fn stripe_signature(payload: &[u8], secret: &str) -> String {
-    let timestamp = "1719000000";
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        .to_string();
     let mut signed_bytes = Vec::with_capacity(timestamp.len() + 1 + payload.len());
     signed_bytes.extend_from_slice(timestamp.as_bytes());
     signed_bytes.push(b'.');

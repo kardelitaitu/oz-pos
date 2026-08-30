@@ -1802,8 +1802,8 @@ sweep.
 
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
-| CS-1 | 🟠 HIGH | apps/cloud-server/src/webhooks.rs:451 | Both webhook verifiers compare HMAC hex with plain string equality (`expected_hex == sig`, `expected_hex == signature_header` at :477) — a short-circuiting compare is a **timing oracle on internet-facing endpoints**. The project already uses constant-time `verify_slice` in oz-notification. | Verify raw bytes via `hmac::verify_slice` or a constant-time eq. |
-| CS-2 | 🟡 MED | apps/cloud-server/src/webhooks.rs:416 | Stripe verification never checks the `t=` timestamp freshness (Stripe guidance: reject skew beyond ~5 min), so a captured valid payload+signature replays until the idempotency row is pruned. | Enforce timestamp tolerance before HMAC verify. |
+| CS-1 | ✅ FIXED 25-07-26 | apps/cloud-server/src/webhooks.rs | Both webhook verifiers compare HMAC hex with plain string equality (`expected_hex == sig`, `expected_hex == signature_header` at :477) — a short-circuiting compare is a **timing oracle on internet-facing endpoints**. The project already uses constant-time `verify_slice` in oz-notification. | Verify raw bytes via `hmac::verify_slice` or a constant-time eq. |
+| CS-2 | ✅ FIXED 25-07-26 | apps/cloud-server/src/webhooks.rs | Stripe verification never checks the `t=` timestamp freshness (Stripe guidance: reject skew beyond ~5 min), so a captured valid payload+signature replays until the idempotency row is pruned. | Enforce timestamp tolerance before HMAC verify. |
 
 Otherwise strong: the webhook router is unauthenticated by design and
 verified solely via HMAC, with an event-idempotency gate, subscription
@@ -1861,10 +1861,10 @@ simply predates the payment keys.
 | Order | ID | Status |
 |---|---|---|
 | 1 | COR-35 | ✅ **FIXED** 25-07-26 — Snowflake INSERT switched to SQL API bind variables (`?` placeholders + 1-based TEXT `bindings` map); `sql_escape` helper and its test removed; stamp updated; **all 2,025 oz-core tests pass**. |
-| 2 | CS-1 | ⬜ next — constant-time webhook HMAC verification |
+| 2 | CS-1 | ✅ **FIXED** 25-07-26 — verify_slice constant-time check on both Stripe and Square verifiers + CS-2 timestamp tolerance (skew > 5 min rejected). |
 | 3 | UI-1 | ⬜ deny-list payment keys + backend gateway-status command |
 | 4 | PLG-11 | ⬜ fail-closed quoted-identifier rejection (or authorizer) |
 | 5 | L-1 | ⬜ WorkerGuard lifetime fix |
 | 6 | API-1 | ⬜ remove dev JWT secret fallback |
-| 7+ | MEDs | ⬜ MSL-4, MSL-7, CLI-1, CLI-2, N-1, M-1, CS-2, DC-1 |
+| 7+ | MEDs | ⬜ MSL-4, MSL-7, CLI-1, CLI-2, N-1, M-1, DC-1 (CS-2 done alongside CS-1). Note: email_pg pg_integration_email_loop_reads_postgres is a pre-existing environmental flake (fake host smtp.test.com DNS varies by run) — observed failing intermittently on 25-07-26 with all webhook/auth tests green. |
 

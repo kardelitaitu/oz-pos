@@ -1,8 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent (cloud-server slice A: webhooks deep read)
-crate: cloud-server | status: NEEDS-FIX | lint: CLEAN
-findings: CS-1 HIGH — both webhook verifiers compare HMAC hex with plain string equality (expected_hex == sig at 451, expected_hex == signature_header at 477): short-circuiting compare is a timing oracle on INTERNET-FACING endpoints (Stripe/Square); the project already uses constant-time hmac verify_slice in oz-notification; proposed: verify_slice on raw bytes or a subtle-style constant-time eq. CS-2 MED — Stripe verification never checks the t= timestamp freshness (Stripe guidance: reject skew beyond ~5 minutes), so a captured valid payload+signature replays until the idempotency row is pruned (prune.rs exists); proposed: enforce timestamp tolerance before HMAC verify. Otherwise strong: unauthenticated router verified solely via HMAC, event idempotency gate, subscription lifecycle routing, 5xx metric middleware
-next: CS-1/CS-2 in fix-order phase | perf: N/A
+last audited 25-07-26 by RSA-Agent (cloud-server slice A: webhooks deep read; CS-1 + CS-2 FIXED 25-07-26)
+crate: cloud-server | status: SAFE | lint: CLEAN
+findings: CS-1 FIXED — both webhook verifiers now decode the provided hex and verify in constant time via hmac verify_slice against the raw bytes (was: hex string equality, a timing oracle on internet-facing endpoints). CS-2 FIXED — Stripe verification now rejects timestamps with skew beyond 5 minutes, closing the replay window once idempotency rows are pruned. Remaining (unchanged): unauthenticated router verified solely via HMAC (by design), event idempotency gate, subscription lifecycle routing, 5xx metric middleware
+next: none | perf: N/A
 */
 //! Webhook receiver — accepts payment events from Stripe and Square,
 //! verifies their signatures, and routes them:
@@ -438,6 +438,21 @@ fn verify_stripe_signature(payload: &[u8], signature_header: &str, secret: &str)
         _ => return false,
     };
 
+    // CS-2 fix: reject stale timestamps (Stripe guidance: ±5 minutes) so a
+    // captured valid payload+signature cannot be replayed indefinitely once
+    // its idempotency row has been pruned.
+    let ts_unix: i64 = match ts.parse() {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    let now_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    if (now_unix - ts_unix).abs() > 300 {
+        return false;
+    }
+
     // Build the signed payload: timestamp + "." + raw body
     let mut signed_bytes = Vec::with_capacity(ts.len() + 1 + payload.len());
     signed_bytes.extend_from_slice(ts.as_bytes());
@@ -451,10 +466,15 @@ fn verify_stripe_signature(payload: &[u8], signature_header: &str, secret: &str)
     };
     mac.update(&signed_bytes);
 
-    // Verify against the provided signature (hex-encoded)
-    let expected = mac.finalize().into_bytes();
-    let expected_hex = hex::encode(expected);
-    expected_hex == sig
+    // CS-1 fix: verify in constant time against the RAW bytes via
+    // `verify_slice` instead of comparing hex strings with `==` (a
+    // short-circuiting compare is a timing oracle on internet-facing
+    // endpoints). Hex decoding also validates the signature format.
+    let provided = match hex::decode(sig) {
+        Ok(bytes) => bytes,
+        Err(_) => return false,
+    };
+    mac.verify_slice(&provided).is_ok()
 }
 
 /// Verify a Square webhook signature.
@@ -478,9 +498,13 @@ fn verify_square_signature(
     };
     mac.update(signed_payload.as_bytes());
 
-    let expected = mac.finalize().into_bytes();
-    let expected_hex = hex::encode(expected);
-    expected_hex == signature_header
+    // CS-1 fix: constant-time verification against the raw bytes (see the
+    // Stripe verifier above for rationale).
+    let provided = match hex::decode(signature_header) {
+        Ok(bytes) => bytes,
+        Err(_) => return false,
+    };
+    mac.verify_slice(&provided).is_ok()
 }
 
 /// `POST /api/webhooks/stripe` — receive Stripe payment events.
