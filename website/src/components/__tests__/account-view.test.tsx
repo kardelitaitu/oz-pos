@@ -1573,4 +1573,227 @@ describe('AccountView — Indonesian locale', () => {
   });
 });
 
+// ── Email verification badge ───────────────────────────────────────────
+
+describe('AccountView — email verification', () => {
+  it('shows the unverified badge when the account email is not verified', async () => {
+    // The tenant card must render the ○ Not verified badge (not the green
+    // ✓ Verified one) when /me reports emailVerified=false.
+    sessionStorage.setItem('oz_session', 'tok-unverified');
+    mockFetch(() => okJson({
+      tenant: { email: 'new@example.com', emailVerified: false, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Not verified');
+      assertNoText(container, 'Verified');
+      // The ✓ verified marker must not render either.
+      expect(container.textContent).not.toContain('✓');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows the verified badge when the account email is verified', async () => {
+    sessionStorage.setItem('oz_session', 'tok-verified-badge');
+    stubMe();
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Verified');
+      assertNoText(container, 'Not verified');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Billing invoice mailto ─────────────────────────────────────────────
+
+describe('AccountView — billing invoice mailto', () => {
+  it('builds the invoice mailto link with the tenant email encoded in the subject', async () => {
+    sessionStorage.setItem('oz_session', 'tok-invoice-mailto');
+    stubMe();
+    const { container, root } = await renderAccount('en');
+    try {
+      const mailto = container.querySelector<HTMLAnchorElement>('a[href^="mailto:sales@ozpos.my.id"]');
+      expect(mailto).not.toBeNull();
+      // Subject is "Invoice Request - {email}" with the email URL-encoded.
+      const href = mailto!.getAttribute('href') ?? '';
+      expect(href).toContain(`subject=${encodeURIComponent('Invoice Request - test@example.com')}`);
+      // The anchor label stays localized.
+      expect(mailto!.textContent).toContain('Access Billing Portal & Receipts');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('keeps the mailto link label localized in Indonesian', async () => {
+    sessionStorage.setItem('oz_session', 'tok-invoice-mailto-id');
+    stubMe();
+    const { container, root } = await renderAccount('id');
+    try {
+      const mailto = container.querySelector<HTMLAnchorElement>('a[href^="mailto:sales@ozpos.my.id"]');
+      expect(mailto).not.toBeNull();
+      expect(mailto!.textContent).toContain('Akses Portal Tagihan & Kuitansi');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Post-checkout poll timeout ─────────────────────────────────────────
+
+describe('AccountView — post-checkout poll timeout', () => {
+  it('shows the pending state when the webhook never provisions after all polls', async () => {
+    // Regression: after a completed checkout, pollAfterCheckout polls /me
+    // 8×2500ms. If the webhook never provisions (no subscription appears),
+    // the component must land on refreshState='pending' — the "subscription
+    // pending" status line — instead of spinning forever or going silent.
+    vi.useFakeTimers();
+    try {
+      sessionStorage.setItem('oz_session', 'tok-poll-timeout');
+      // Route through Midtrans (id region) so we can capture the onClosed
+      // callback, exactly like the 'checking' test above.
+      let onClosed: ((completed: boolean) => void) | undefined;
+      midtrans.openMidtransCheckout.mockImplementation(async (_tier: string, _period: string, cb?: (c: boolean) => void) => {
+        onClosed = cb;
+      });
+      mockFetch((url) => {
+        if (url.includes('/devices')) return okJson({ devices: [] });
+        // /me always returns no subscription — the webhook never provisions.
+        return okJson({
+          tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+          license: { key: 'OZ-TEST-0001', tierKey: 'free', status: 'active', expiresAt: '2027-01-01' },
+          subscription: null,
+        });
+      });
+
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      const { default: AccountView } = await import('../AccountView');
+      act(() => {
+        root.render(<AccountView locale="id" />);
+      });
+      // Let the initial /me + /devices fetches settle under fake timers.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(50);
+      });
+      try {
+        const subscribeBtn = Array.from(container.querySelectorAll('button')).find(
+          (b) => b.textContent?.trim() === 'Berlangganan',
+        );
+        expect(subscribeBtn).not.toBeNull();
+        act(() => {
+          subscribeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(20);
+        });
+        expect(onClosed).toBeTypeOf('function');
+
+        // Checkout completes → pollAfterCheckout starts (8 × 2500ms).
+        act(() => {
+          onClosed!(true);
+        });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(21_000);
+        });
+
+        // The pending message must be visible — polling exhausted without a
+        // subscription.
+        assertText(container, 'Pembayaran Anda berhasil, tetapi langganan belum terlihat');
+        // And the transient checking state is gone.
+        assertNoText(container, 'Memeriksa langganan Anda');
+      } finally {
+        act(() => root.unmount());
+        container.remove();
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('leaves the idle state when polling finds the subscription early', async () => {
+    // The happy path: the webhook provisions after the first poll, so the
+    // checking status is cleared and no pending message ever appears.
+    vi.useFakeTimers();
+    try {
+      sessionStorage.setItem('oz_session', 'tok-poll-found');
+      let onClosed: ((completed: boolean) => void) | undefined;
+      midtrans.openMidtransCheckout.mockImplementation(async (_tier: string, _period: string, cb?: (c: boolean) => void) => {
+        onClosed = cb;
+      });
+      let meCalls = 0;
+      mockFetch((url) => {
+        if (url.includes('/devices')) return okJson({ devices: [] });
+        meCalls++;
+        // First call = initial load (no subscription). Subsequent polls
+        // return an active subscription (webhook provisioned).
+        if (meCalls === 1) {
+          return okJson({
+            tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+            license: { key: 'OZ-TEST-0001', tierKey: 'free', status: 'active', expiresAt: '2027-01-01' },
+            subscription: null,
+          });
+        }
+        return okJson({
+          tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+          license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+          subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: '2027-01-01' },
+        });
+      });
+
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      const { default: AccountView } = await import('../AccountView');
+      act(() => {
+        root.render(<AccountView locale="id" />);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(50);
+      });
+      try {
+        const subscribeBtn = Array.from(container.querySelectorAll('button')).find(
+          (b) => b.textContent?.trim() === 'Berlangganan',
+        );
+        expect(subscribeBtn).not.toBeNull();
+        act(() => {
+          subscribeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(20);
+        });
+
+        // Complete the checkout and let the first poll (2500ms) run.
+        act(() => {
+          onClosed!(true);
+        });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(2500);
+        });
+
+        // Subscription found → refreshState back to idle: no checking, no
+        // pending status text remains.
+        assertNoText(container, 'Memeriksa langganan Anda');
+        assertNoText(container, 'Pembayaran Anda berhasil');
+        // The subscription section shows the provisioned tier.
+        assertText(container, 'pro');
+      } finally {
+        act(() => root.unmount());
+        container.remove();
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 
