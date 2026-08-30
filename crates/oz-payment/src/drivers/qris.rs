@@ -3,6 +3,7 @@ last audited 25-07-26 by RSA-Agent
 crate: oz-payment | status: SAFE | lint: CLEAN
 findings: PAY-1 HIGH parse_amount unwrap_or(0) zeroes Midtrans "14500.00"-format amounts (authorize/capture/refund/receipt); PAY-2 fresh order_id per call defeats Midtrans idempotency on retry; PAY-3 refund ignores partial amount; PAY-6 sale() returns SCAN_QR protocol string in message, success = QR-issued not settled (60s poll vs 300s QR validity); PAY-7 Default constructs empty-key processor; PAY-8 expire mapped to InvalidCard
 next: fix amount parsing (PAY-1), honor idempotency (PAY-2), partial refund (PAY-3) | perf: poll loop sleeps between attempts, early-exits on settled status
+fixed 2026-07-25 (glm-5.3 review P1 pass): PAY-1 parse_amount now returns Result — decimal "14500.00" forms parse 1:1 into exp-0 IDR minor units (inverse of to_amount_string), non-zero fractions and malformed input are InvalidResponse instead of silent zeros (refund refund_amount included); PAY-2 order_id_for() reuses PaymentRequest.idempotency_key (charset-filtered, Midtrans 50-char cap) with fresh fallback when absent
 */
 //! QRIS payment processor — implements [`PaymentProcessor`] using the
 //! Midtrans REST API for Indonesian QRIS (Quick Response Code Indonesian
@@ -244,12 +245,42 @@ impl QrisPaymentProcessor {
     }
 
     /// Generate a unique order ID for a QRIS transaction.
+    ///
+    /// The suffix is drawn from the random tail of a UUIDv7 (not its
+    /// timestamp head) so two keyless charges in the same millisecond can
+    /// never mint the same order_id and silently attach to one QR code.
     fn generate_order_id() -> String {
+        let uuid_hex = uuid::Uuid::now_v7().simple().to_string();
         format!(
             "QRIS-{}-{}",
             chrono::Utc::now().timestamp(),
-            uuid::Uuid::now_v7().to_string().get(..8).unwrap_or("0000")
+            uuid_hex
+                .get(uuid_hex.len() - 12..)
+                .unwrap_or("000000000000")
         )
+    }
+
+    /// Derive the Midtrans `order_id` for a charge request.
+    ///
+    /// PAY-2: reuse [`PaymentRequest::idempotency_key`] when the caller
+    /// supplies one, so a retried charge resolves to the same Midtrans
+    /// transaction instead of minting a duplicate QR code. Falls back to a
+    /// freshly generated order ID (the documented [`PaymentRequest`]
+    /// contract) when no usable key is present.
+    fn order_id_for(request: &PaymentRequest) -> String {
+        let key = request
+            .idempotency_key
+            .as_deref()
+            .unwrap_or_default()
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+            .take(44) // "QRIS-" + 44 = 49 <= Midtrans's 50-char cap
+            .collect::<String>();
+        if key.is_empty() {
+            Self::generate_order_id()
+        } else {
+            format!("QRIS-{key}")
+        }
     }
 
     /// Convert a `Money` value to Midtrans' amount format (IDR, no decimals).
@@ -257,9 +288,35 @@ impl QrisPaymentProcessor {
         amount.minor_units.to_string()
     }
 
-    /// Parse an amount string from Midtrans into minor units.
-    fn parse_amount(s: &str) -> i64 {
-        s.parse().unwrap_or(0)
+    /// Parse a Midtrans `gross_amount` string into minor units.
+    ///
+    /// Midtrans sends amounts as decimal strings padded to two fractional
+    /// digits (e.g. `"14500.00"`). IDR has a 0 ISO-4217 exponent (the minor
+    /// unit IS the Rupiah — see `foundation::money`), and
+    /// [`Self::to_amount_string`] sends minor units raw, so the major part
+    /// maps 1:1 to minor units. PAY-1: the previous
+    /// `s.parse().unwrap_or(0)` silently zeroed every decimal-form amount,
+    /// corrupting authorize/capture/refund/receipt accounting — malformed
+    /// input and non-zero fractions (not representable in IDR) are now hard
+    /// [`PaymentError::InvalidResponse`]s instead of silent zeros.
+    fn parse_amount(s: &str) -> Result<i64, PaymentError> {
+        let bad = || PaymentError::InvalidResponse(format!("unparseable gross_amount: {s:?}"));
+        let (major_str, frac_str) = match s.trim().split_once('.') {
+            Some((m, f)) => (m, f),
+            None => (s.trim(), ""),
+        };
+        // A non-zero fraction is sub-Rupiah and unrepresentable in an
+        // exp-0 currency — dropping it would understate the amount.
+        let frac_ok = match frac_str.parse::<i64>() {
+            Ok(f) => f == 0,
+            Err(_) => frac_str.is_empty(),
+        };
+        if frac_str.len() > 2 || !frac_ok {
+            return Err(PaymentError::InvalidResponse(format!(
+                "sub-minor gross_amount not representable in IDR: {s:?}"
+            )));
+        }
+        major_str.parse::<i64>().map_err(|_| bad())
     }
 
     /// Perform a JSON POST to the Midtrans API and return (status, body).
@@ -420,11 +477,11 @@ impl PaymentProcessor for QrisPaymentProcessor {
     /// The returned [`PaymentResult`] contains the `transaction_id` and
     /// a message with the QR code URL/content that the POS should display.
     async fn authorize(&self, request: &PaymentRequest) -> Result<PaymentResult, PaymentError> {
-        let order_id = Self::generate_order_id();
+        let order_id = Self::order_id_for(request);
         let charge = self.charge_qris(request, &order_id).await?;
 
         let amount = Money {
-            minor_units: Self::parse_amount(&charge.gross_amount),
+            minor_units: Self::parse_amount(&charge.gross_amount)?,
             currency: Currency(*b"IDR"),
         };
 
@@ -448,7 +505,7 @@ impl PaymentProcessor for QrisPaymentProcessor {
         let tx = self.poll_status(transaction_id).await?;
 
         let amount = Money {
-            minor_units: Self::parse_amount(&tx.gross_amount),
+            minor_units: Self::parse_amount(&tx.gross_amount)?,
             currency: Currency(*b"IDR"),
         };
 
@@ -463,7 +520,7 @@ impl PaymentProcessor for QrisPaymentProcessor {
 
     /// Execute a complete QRIS sale: charge + poll for settlement.
     async fn sale(&self, request: &PaymentRequest) -> Result<PaymentResult, PaymentError> {
-        let order_id = Self::generate_order_id();
+        let order_id = Self::order_id_for(request);
         let charge = self.charge_qris(request, &order_id).await?;
 
         if charge.status_code != "201" && charge.status_code != "200" {
@@ -476,7 +533,7 @@ impl PaymentProcessor for QrisPaymentProcessor {
         // Return the QR info immediately so the UI can display it.
         // The UI should then call capture() with the order_id to poll.
         let amount = Money {
-            minor_units: Self::parse_amount(&charge.gross_amount),
+            minor_units: Self::parse_amount(&charge.gross_amount)?,
             currency: Currency(*b"IDR"),
         };
 
@@ -536,7 +593,7 @@ impl PaymentProcessor for QrisPaymentProcessor {
             transaction_id: Some(refund.transaction_id),
             auth_code: None,
             amount_charged: Money {
-                minor_units: refund.refund_amount.parse().unwrap_or(0),
+                minor_units: Self::parse_amount(&refund.refund_amount)?,
                 currency: Currency(*b"IDR"),
             },
             message: Some(refund.status_message),
@@ -597,7 +654,7 @@ impl PaymentProcessor for QrisPaymentProcessor {
         })?;
 
         let amount = Money {
-            minor_units: Self::parse_amount(&tx.gross_amount),
+            minor_units: Self::parse_amount(&tx.gross_amount)?,
             currency: Currency(*b"IDR"),
         };
 

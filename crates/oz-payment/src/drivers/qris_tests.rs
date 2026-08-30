@@ -78,9 +78,73 @@ fn qris_to_amount_string() {
 
 #[test]
 fn qris_parse_amount() {
-    assert_eq!(QrisPaymentProcessor::parse_amount("75000"), 75000);
-    assert_eq!(QrisPaymentProcessor::parse_amount("0"), 0);
-    assert_eq!(QrisPaymentProcessor::parse_amount("abc"), 0);
+    // PAY-1: Midtrans decimal-form amounts must parse, never zero out.
+    // IDR is exp-0 (minor unit == Rupiah) and to_amount_string sends minor
+    // units raw, so the major part maps 1:1 to minor units.
+    assert_eq!(QrisPaymentProcessor::parse_amount("75000").unwrap(), 75000);
+    assert_eq!(QrisPaymentProcessor::parse_amount("0").unwrap(), 0);
+    assert_eq!(
+        QrisPaymentProcessor::parse_amount("14500.00").unwrap(),
+        14500
+    );
+    assert_eq!(
+        QrisPaymentProcessor::parse_amount(" 25000.00 ").unwrap(),
+        25000
+    );
+    assert_eq!(QrisPaymentProcessor::parse_amount("-50.00").unwrap(), -50);
+}
+
+#[test]
+fn qris_parse_amount_rejects_malformed_and_sub_minor() {
+    // Malformed input is a hard error — the old unwrap_or(0) silently
+    // zeroed these and corrupted charge/capture/refund accounting.
+    assert!(QrisPaymentProcessor::parse_amount("abc").is_err());
+    assert!(QrisPaymentProcessor::parse_amount("").is_err());
+    assert!(QrisPaymentProcessor::parse_amount("1.2.3").is_err());
+    // Non-zero fractions are sub-Rupiah and unrepresentable in exp-0 IDR.
+    assert!(QrisPaymentProcessor::parse_amount("14500.50").is_err());
+    assert!(QrisPaymentProcessor::parse_amount("0.01").is_err());
+    assert!(QrisPaymentProcessor::parse_amount("1.999").is_err());
+}
+
+#[test]
+fn qris_order_id_uses_idempotency_key() {
+    // PAY-2: a retried charge with the same idempotency key must resolve to
+    // the same Midtrans order_id instead of minting a duplicate QR code.
+    let req = |key: Option<&str>| PaymentRequest {
+        amount: Money {
+            minor_units: 50000,
+            currency: Currency(*b"IDR"),
+        },
+        reference: None,
+        description: None,
+        idempotency_key: key.map(str::to_string),
+    };
+    let first =
+        QrisPaymentProcessor::order_id_for(&req(Some("018f3c2e-7b1a-7000-8000-000000000001")));
+    let retry =
+        QrisPaymentProcessor::order_id_for(&req(Some("018f3c2e-7b1a-7000-8000-000000000001")));
+    assert_eq!(first, retry, "same key must derive the same order_id");
+    assert!(first.starts_with("QRIS-"));
+    assert!(
+        first.len() <= 50,
+        "Midtrans caps order_id at 50 chars: {first}"
+    );
+
+    // Keys are sanitized to Midtrans's charset (alphanumerics, '-', '_').
+    let dirty = QrisPaymentProcessor::order_id_for(&req(Some("key/with spaces!@#")));
+    assert!(!dirty.contains(' '));
+    assert!(!dirty.contains('/'));
+
+    // A key that sanitizes to nothing falls back to a fresh order id.
+    let junk = QrisPaymentProcessor::order_id_for(&req(Some("!!!")));
+    assert!(junk.starts_with("QRIS-"));
+    assert!(junk != "QRIS-");
+
+    // No key: documented fallback is a freshly generated order id.
+    let none_a = QrisPaymentProcessor::order_id_for(&req(None));
+    let none_b = QrisPaymentProcessor::order_id_for(&req(None));
+    assert_ne!(none_a, none_b, "fallback order ids must be unique");
 }
 
 #[test]
