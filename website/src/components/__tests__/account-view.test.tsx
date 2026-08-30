@@ -14,7 +14,7 @@ import { createRoot, type Root } from 'react-dom/client';
 
 const paddle = vi.hoisted(() => ({
   openPaddleCheckout: vi.fn(),
-  getSessionEmail: vi.fn(async () => 'test@example.com'),
+  getSessionEmail: vi.fn(async () => 'test@example.com' as string | null),
   clearSession: vi.fn(() => {
     sessionStorage.removeItem('oz_session');
     sessionStorage.removeItem('oz_email');
@@ -1248,18 +1248,24 @@ describe('AccountView — formatted dates edge cases', () => {
 // ── Renewal countdown badge ───────────────────────────────────────────
 
 describe('AccountView — renewal countdown', () => {
+  // Build an expiry exactly N UTC calendar days ahead of today's UTC date.
+  // daysUntil() compares UTC calendar dates (date-only), so the fixture must
+  // land the expiry on the intended UTC day — constructing at LOCAL midnight
+  // was off by one on any timezone east of UTC (e.g. UTC+7).
+  function utcDaysFromNow(days: number): string {
+    const now = new Date();
+    const base = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    return new Date(base + days * 86_400_000).toISOString();
+  }
+
   it('shows renews badge for active subscription with expiry', async () => {
     sessionStorage.setItem('oz_session', 'tok-renew-badge');
-    // Build expiry at local midnight +10 days so the calendar-day countdown
-    // is deterministic regardless of the test machine's timezone.
-    const future = new Date();
-    future.setDate(future.getDate() + 10);
-    future.setHours(0, 0, 0, 0);
     const expectedDays = 10;
+    const future = utcDaysFromNow(expectedDays);
     mockFetch(() => okJson({
       tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
-      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: future.toISOString() },
-      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: future.toISOString() },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: future },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: future },
     }));
     const { container, root } = await renderAccount('en');
     try {
@@ -1273,14 +1279,12 @@ describe('AccountView — renewal countdown', () => {
 
   it('shows renews badge with danger color when < 7 days', async () => {
     sessionStorage.setItem('oz_session', 'tok-renew-urgent');
-    const soon = new Date();
-    soon.setDate(soon.getDate() + 3);
-    soon.setHours(0, 0, 0, 0);
     const expectedDays = 3;
+    const soon = utcDaysFromNow(expectedDays);
     mockFetch(() => okJson({
       tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
-      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: soon.toISOString() },
-      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: soon.toISOString() },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: soon },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: soon },
     }));
     const { container, root } = await renderAccount('en');
     try {
@@ -1359,17 +1363,14 @@ describe('AccountView — renewal countdown', () => {
 
   it('shows a muted (non-urgent) renew badge when 30+ days remain', async () => {
     // renderRenewBadge: d < 30 → warning; d >= 30 → muted. The muted branch
-    // was untested. Build an expiry 45 days out (local midnight so the
-    // calendar-day count is deterministic) and assert the badge exists and
-    // carries the muted class — not the warning class.
+    // was untested. Build an expiry 45 days ahead (UTC) and assert the badge
+    // exists and carries the muted class — not the warning class.
     sessionStorage.setItem('oz_session', 'tok-renew-muted');
-    const far = new Date();
-    far.setDate(far.getDate() + 45);
-    far.setHours(0, 0, 0, 0);
+    const far = utcDaysFromNow(45);
     mockFetch(() => okJson({
       tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
       license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
-      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: far.toISOString() },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: far },
     }));
     const { container, root } = await renderAccount('en');
     try {
@@ -1388,12 +1389,11 @@ describe('AccountView — renewal countdown', () => {
   it('shows a danger renew badge when the subscription expires today', async () => {
     // d === 0 (expires today) is < 7 → danger. This boundary was untested.
     sessionStorage.setItem('oz_session', 'tok-renew-today');
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = utcDaysFromNow(0);
     mockFetch(() => okJson({
       tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
       license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
-      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: today.toISOString() },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: today },
     }));
     const { container, root } = await renderAccount('en');
     try {
