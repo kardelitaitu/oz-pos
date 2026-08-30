@@ -122,6 +122,20 @@ func handleTrial(app core.App) func(e *core.RequestEvent) error {
 			appVersion = "unknown"
 		}
 
+		// ── Rate limit: shared persisted per-IP token bucket (5/hr) ──
+		// Fingerprints are client-derived, so without a limiter this
+		// endpoint allowed unlimited unauthenticated writes: unique
+		// fingerprints each insert a trial_registrations row, and a
+		// supplied email also upserts a tenants row. Sharing the same
+		// bucket as /activate (which mints the actual trial subscription
+		// and re-checks the lock) bounds both. Applied after body
+		// validation, mirroring activate.go's ordering.
+		if !ipRateLimiter.allow(e.RealIP()) {
+			return e.JSON(http.StatusTooManyRequests, map[string]any{
+				"error": "rate limit exceeded, try again later",
+			})
+		}
+
 		// ── The gate: one trial per physical device, permanently. ──
 		if existing, err := app.FindFirstRecordByData("trial_registrations", "hardware_fingerprint", fp); err == nil {
 			return e.JSON(http.StatusForbidden, map[string]any{
