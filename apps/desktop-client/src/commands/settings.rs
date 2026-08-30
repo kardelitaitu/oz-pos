@@ -14,7 +14,7 @@ use oz_core::{Settings, Store, UserPreferences};
 
 use platform_core::terminal_profile::TerminalProfile;
 
-use crate::commands::authz::require_permission_for_user;
+use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -71,6 +71,9 @@ pub async fn get_receipt_settings_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<ReceiptSettingsDto, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SETTINGS_READ).await?;
     let session = state.resolve_session(&session_token)?;
     let conn = state
         .db_manager
@@ -195,6 +198,9 @@ pub async fn get_store_settings_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<StoreSettingsDto, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SETTINGS_READ).await?;
     let session = state.resolve_session(&session_token)?;
     let conn = state
         .db_manager
@@ -378,6 +384,9 @@ pub async fn list_credit_sales_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<CreditSaleDto>, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SALES_VIEW).await?;
     let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
@@ -1209,6 +1218,9 @@ pub async fn get_credit_settings_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<CreditSettingsDto, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SETTINGS_READ).await?;
     let (_session, _conn) = state.resolve_scope(&session_token)?;
     let conn = _conn
         .lock()
@@ -1227,6 +1239,9 @@ pub async fn get_setting_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Option<String>, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SETTINGS_READ).await?;
     let (_session, _conn) = state.resolve_scope(&session_token)?;
     let conn = _conn
         .lock()
@@ -1240,6 +1255,9 @@ pub async fn get_hardware_settings_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<HardwareSettingsDto, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SETTINGS_READ).await?;
     // Validate session; hardware profiles use the global db.
     state.resolve_scope(&session_token)?;
     get_hardware_settings(state).await

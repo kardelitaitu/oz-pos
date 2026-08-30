@@ -11,8 +11,10 @@ use oz_core::{Money, ProductVariant, Store};
 
 use foundation::validate_not_empty;
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
+use oz_core::permissions;
 
 // ── DTOs ──────────────────────────────────────────────────────────────
 
@@ -294,7 +296,11 @@ pub async fn list_product_variants_scoped(
 ) -> Result<Vec<ProductVariantDto>, AppError> {
     validate_not_empty("parent_sku", &parent_sku).map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+
+    // F-017: enforce per-domain permission on this scoped command.
+
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_READ).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -315,7 +321,11 @@ pub async fn get_product_variant_scoped(
 ) -> Result<Option<ProductVariantDto>, AppError> {
     validate_not_empty("sku", &sku).map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+
+    // F-017: enforce per-domain permission on this scoped command.
+
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_READ).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -335,7 +345,11 @@ pub async fn delete_product_variant_scoped(
 ) -> Result<(), AppError> {
     validate_not_empty("sku", &sku).map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+
+    // F-017: enforce per-domain permission on this scoped command.
+
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_DELETE).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -385,7 +399,11 @@ pub async fn create_product_variant_scoped(
         variant = variant.with_sort_order(order);
     }
 
-    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+
+    // F-017: enforce per-domain permission on this scoped command.
+
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_CREATE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -406,7 +424,11 @@ pub async fn update_product_variant_scoped(
 ) -> Result<UpdateProductVariantResult, AppError> {
     validate_not_empty("sku", &args.sku).map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+
+    // F-017: enforce per-domain permission on this scoped command.
+
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_UPDATE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;

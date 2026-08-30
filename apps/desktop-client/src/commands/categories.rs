@@ -10,7 +10,7 @@ use tauri::State;
 use oz_core::Store;
 use oz_core::permissions;
 
-use crate::commands::authz::require_permission_for_user;
+use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -42,6 +42,9 @@ pub async fn list_categories_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<CategoryDto>, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_READ).await?;
     let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()

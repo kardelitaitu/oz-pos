@@ -11,8 +11,10 @@ use oz_core::Money;
 use oz_core::db::{DailySummaryRow, SalesByHourRow, Store};
 use oz_core::subscription::TenantSubscription;
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
+use oz_core::permissions;
 
 // ── Sale list / detail ───────────────────────────────────────────────
 
@@ -88,6 +90,9 @@ pub async fn list_sales_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<SaleListResponse, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SALES_VIEW).await?;
     // C1.2: the tier's history window lives on the tenant subscription in the
     // global identity DB; the sales themselves come from the store DB.
     let days = {
@@ -177,6 +182,9 @@ pub async fn get_sale_scoped(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<SaleDetail>, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SALES_VIEW).await?;
     let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
@@ -229,6 +237,9 @@ pub async fn export_daily_summary_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<DailySummaryRow>, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::REPORTS_EXPORT).await?;
     let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
@@ -261,6 +272,9 @@ pub async fn export_sales_by_hour_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<SalesByHourRow>, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::REPORTS_EXPORT).await?;
     let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
@@ -325,6 +339,9 @@ pub async fn export_eod_report_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<EodReport, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::REPORTS_EXPORT).await?;
     let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()

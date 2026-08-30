@@ -481,7 +481,7 @@ async fn owner_can_list_terminal_profiles() {
 // ── Staff permission tests ────────────────────────────────────────
 
 #[tokio::test]
-async fn staff_can_list_terminals() {
+async fn staff_denied_list_terminals() {
     let conn = oz_core::migrations::fresh_db();
     seed_owner(&conn);
     seed_staff(&conn);
@@ -492,8 +492,9 @@ async fn staff_can_list_terminals() {
         .unwrap();
 
     let result = list_terminals_scoped("tok".into(), app.state()).await;
-    assert!(result.is_ok(), "staff should list terminals");
-    assert!(result.unwrap().is_empty());
+    // F-017: terminal state requires terminals:read — staff is denied
+    // (Manager/Admin presets grant the key; checkout-only staff does not).
+    assert!(matches!(result, Err(AppError::PermissionDenied(_))));
 }
 
 #[tokio::test]

@@ -293,6 +293,9 @@ async fn refresh_picker_ticket_end_to_end() {
 #[tokio::test]
 async fn get_setting_scoped_redacts_sync_api_key() {
     let conn = migrations::fresh_db();
+    // F-017: get_setting_scoped now requires settings:read — seed the owner
+    // user/role so the gate passes and the redaction itself is exercised.
+    seed_owner_user(&conn);
     conn.execute(
         "INSERT INTO settings (key, value, updated_at) VALUES ('sync_api_key', 'sk-live-abc123', '2026-07-31T00:00:00.000Z')",
         [],

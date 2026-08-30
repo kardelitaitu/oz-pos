@@ -12,6 +12,7 @@ use oz_core::ozpkg::{export_ozpkg, import_ozpkg};
 use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
+use oz_core::permissions;
 
 // ── DTOs ──────────────────────────────────────────────────────────
 
@@ -576,7 +577,9 @@ pub async fn get_backup_status_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<BackupStatus, AppError> {
-    let _session = state.resolve_session(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::DATA_EXPORT).await?;
     get_backup_status(state).await
 }
 
@@ -586,7 +589,9 @@ pub async fn create_backup_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<BackupResult, AppError> {
-    let _session = state.resolve_session(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::DATA_EXPORT).await?;
     create_backup(state).await
 }
 

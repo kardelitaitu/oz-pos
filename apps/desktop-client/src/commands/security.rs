@@ -5,10 +5,12 @@
 //! front-end so users can rotate encryption keys and monitor key age
 //! from the Settings page.
 
+use oz_core::permissions;
 use oz_security::{Keyring, RotationInfo};
 use serde::Serialize;
 use tauri::State;
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -130,7 +132,9 @@ pub async fn get_key_rotation_info_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<KeyRotationStatus, AppError> {
-    let _session = state.resolve_session(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
+    // F-017: key age/state is crypto-compliance data — explicit permission.
+    require_permission_for_session(&state, &session, permissions::SECURITY_MANAGE).await?;
     get_key_rotation_info().await
 }
 
@@ -140,7 +144,10 @@ pub async fn rotate_encryption_key_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<RotationInfo, AppError> {
-    let _session = state.resolve_session(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
+    // F-017: rotating the at-rest key invalidates every archived key —
+    // crypto administration — sensitive key, explicit permission.
+    require_permission_for_session(&state, &session, permissions::SECURITY_MANAGE).await?;
     rotate_encryption_key().await
 }
 

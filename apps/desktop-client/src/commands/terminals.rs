@@ -19,6 +19,7 @@ use foundation::validate_not_empty;
 use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
 use crate::error::AppError;
 use crate::state::AppState;
+use oz_core::permissions;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -179,6 +180,9 @@ pub async fn list_terminals_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<TerminalDto>, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::TERMINALS_READ).await?;
     let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
@@ -220,6 +224,9 @@ pub async fn get_terminal_scoped(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<TerminalDto>, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::TERMINALS_READ).await?;
     validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let conn = state.resolve_store(&session_token)?;
@@ -256,6 +263,9 @@ pub async fn ping_terminal_scoped(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::TERMINALS_READ).await?;
     validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let conn = state.resolve_store(&session_token)?;
@@ -296,6 +306,9 @@ pub async fn list_terminal_overrides_scoped(
     terminal_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<TerminalFeatureOverride>, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::TERMINALS_READ).await?;
     validate_not_empty("terminal_id", &terminal_id)
         .map_err(|e| AppError::Invalid(e.to_string()))?;
 
@@ -330,6 +343,9 @@ pub async fn list_terminal_profiles_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<TerminalProfileDto>, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::TERMINALS_READ).await?;
     let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
@@ -366,6 +382,9 @@ pub async fn get_terminal_profile_scoped(
     terminal_id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<TerminalProfileDto>, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::TERMINALS_READ).await?;
     validate_not_empty("terminal_id", &terminal_id)
         .map_err(|e| AppError::Invalid(e.to_string()))?;
 
@@ -406,6 +425,9 @@ pub async fn get_device_binding_scoped(
     terminal_id: String,
     state: State<'_, AppState>,
 ) -> Result<DeviceBindingDto, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::TERMINALS_READ).await?;
     validate_not_empty("terminal_id", &terminal_id)
         .map_err(|e| AppError::Invalid(e.to_string()))?;
 

@@ -94,6 +94,9 @@ pub async fn adjust_stock_scoped(
     args: AdjustStockArgs,
     state: State<'_, AppState>,
 ) -> Result<i64, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::INVENTORY_ADJUST).await?;
     validate_not_empty("sku", &args.sku).map_err(|e| AppError::Invalid(e.to_string()))?;
     validate_not_empty("reason", &args.reason).map_err(|e| AppError::Invalid(e.to_string()))?;
     if args.delta == 0 {
@@ -236,7 +239,9 @@ pub async fn list_products_scoped(
     state: State<'_, AppState>,
     session_token: String,
 ) -> Result<Vec<ProductDto>, AppError> {
-    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_READ).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -261,7 +266,11 @@ pub async fn list_warehouse_products_at_location(
     session_token: String,
     location_id: String,
 ) -> Result<Vec<ProductDto>, AppError> {
-    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+
+    // F-017: enforce per-domain permission on this scoped command.
+
+    require_permission_for_session(&state, &session, permissions::INVENTORY_ADJUST).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -978,6 +987,9 @@ pub async fn get_product_track_serial_scoped(
     sku: String,
     state: State<'_, AppState>,
 ) -> Result<bool, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_READ).await?;
     let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
@@ -1021,6 +1033,9 @@ pub async fn get_product_track_serial_batch_scoped(
     skus: Vec<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<SerialTrackRow>, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_READ).await?;
     let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()

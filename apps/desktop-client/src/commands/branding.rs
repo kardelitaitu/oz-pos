@@ -12,8 +12,10 @@ use tauri_plugin_dialog::DialogExt;
 
 use oz_core::Settings;
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
+use oz_core::permissions;
 
 /// All brand settings in one shot.
 #[derive(Debug, Serialize, Deserialize)]
@@ -43,6 +45,9 @@ pub async fn get_brand_settings_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<BrandSettingsDto, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SETTINGS_READ).await?;
     let session = state.resolve_session(&session_token)?;
     let conn = state
         .db_manager
@@ -183,6 +188,9 @@ pub async fn set_brand_primary_colour_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SETTINGS_EDIT).await?;
     let (_session, _conn) = state.resolve_scope(&session_token)?;
     let conn = _conn
         .lock()
@@ -197,6 +205,9 @@ pub async fn set_brand_store_name_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SETTINGS_EDIT).await?;
     let (_session, _conn) = state.resolve_scope(&session_token)?;
     let conn = _conn
         .lock()
@@ -211,6 +222,9 @@ pub async fn set_brand_logo_path_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SETTINGS_EDIT).await?;
     state.resolve_scope(&session_token)?;
     if let Some(ref app_handle) = state.app {
         let validated = validate_logo_path(app_handle, &path)?;
@@ -229,6 +243,9 @@ pub async fn pick_logo_file_scoped(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Option<String>, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SETTINGS_EDIT).await?;
     let _session = state.resolve_session(&session_token)?;
     pick_logo_file(app_handle).await
 }

@@ -1044,6 +1044,8 @@ pub mod permissions {
     pub const TERMINALS_EDIT: &str = "terminals:edit";
     /// Delete / unregister a terminal.
     pub const TERMINALS_DELETE: &str = "terminals:delete";
+    /// View terminal, profile, override, and device-binding state.
+    pub const TERMINALS_READ: &str = "terminals:read";
 
     // ── Categories ────────────────────────────────────────────────
     /// Legacy seed key (create/update/delete) kept byte-identical —
@@ -1053,6 +1055,32 @@ pub mod permissions {
     // ── Plugins ───────────────────────────────────────────────────
     /// Manage plugins (install, enable, disable, remove).
     pub const PLUGINS_MANAGE: &str = "plugins:manage";
+
+    // ── Purchasing ───────────────────────────────────────────────
+    /// View suppliers and purchase orders.
+    pub const PURCHASING_VIEW: &str = "purchasing:view";
+    /// Create/update suppliers and purchase orders, and receive deliveries.
+    pub const PURCHASING_MANAGE: &str = "purchasing:manage";
+
+    // ── Gift cards ───────────────────────────────────────────────
+    /// Issue a new gift card or top up stored value (money creation).
+    pub const GIFTCARDS_ISSUE: &str = "giftcards:issue";
+    /// Redeem gift card stored value as payment.
+    pub const GIFTCARDS_REDEEM: &str = "giftcards:redeem";
+    /// Freeze, unfreeze, and inspect gift cards.
+    pub const GIFTCARDS_MANAGE: &str = "giftcards:manage";
+
+    // ── Sync ─────────────────────────────────────────────────────
+    /// Configure, trigger, and manage data synchronization.
+    pub const SYNC_MANAGE: &str = "sync:manage";
+
+    // ── Security ─────────────────────────────────────────────────
+    /// Rotate at-rest encryption keys and inspect key state.
+    pub const SECURITY_MANAGE: &str = "security:manage";
+
+    // ── Data ─────────────────────────────────────────────────────
+    /// Create a full data backup (bulk export of all records).
+    pub const DATA_EXPORT: &str = "data:export";
 }
 
 /// The complete inventory of enforced permission constants, in one place.
@@ -1136,6 +1164,15 @@ pub const ALL_ENFORCED: &[&str] = &[
     permissions::TERMINALS_DELETE,
     permissions::CATEGORIES_MANAGE,
     permissions::PLUGINS_MANAGE,
+    permissions::TERMINALS_READ,
+    permissions::PURCHASING_VIEW,
+    permissions::PURCHASING_MANAGE,
+    permissions::GIFTCARDS_ISSUE,
+    permissions::GIFTCARDS_REDEEM,
+    permissions::GIFTCARDS_MANAGE,
+    permissions::SYNC_MANAGE,
+    permissions::SECURITY_MANAGE,
+    permissions::DATA_EXPORT,
 ];
 
 // ── Tests ───────────────────────────────────────────────────────────

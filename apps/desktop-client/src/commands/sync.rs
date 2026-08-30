@@ -19,8 +19,10 @@ use oz_core::sync_client::{self, PullResult, SyncAttemptResult, SyncConfig};
 use platform_sync::daemon::SettingsChangedSink;
 use platform_sync::pg_daemon::PgDaemonStatus;
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
+use oz_core::permissions;
 
 /// Get the current sync configuration settings.
 #[derive(Debug, Serialize)]
@@ -674,7 +676,9 @@ pub async fn update_sync_settings_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -711,7 +715,9 @@ pub async fn update_pg_sync_settings_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -741,6 +747,9 @@ pub async fn pg_sync_start_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
+    // F-017: starting/stopping the sync daemon is administrative.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     state.resolve_scope(&session_token)?;
     let db = state.db.clone();
     let sink = settings_changed_sink(&app_handle);
@@ -754,6 +763,9 @@ pub async fn pg_sync_stop_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
+    // F-017: starting/stopping the sync daemon is administrative.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     state.resolve_scope(&session_token)?;
     state.pg_sync_daemon.stop().await;
     Ok(())
@@ -765,7 +777,9 @@ pub async fn pending_sync_count_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<i64, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -783,8 +797,10 @@ pub async fn request_sync_token_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<sync_client::TokenResult, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     let resolved = {
-        let session = state.resolve_session(&session_token)?;
         let conn = state
             .db_manager
             .open_store(&session.store_id)
@@ -813,8 +829,10 @@ pub async fn get_sync_plan_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<sync_client::TenantPlanResult, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     let (url, api_key) = {
-        let session = state.resolve_session(&session_token)?;
         let conn = state
             .db_manager
             .open_store(&session.store_id)
@@ -845,8 +863,10 @@ pub async fn test_sync_connection_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<sync_client::PingResult, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     let (saved, allow_local_fallback) = {
-        let session = state.resolve_session(&session_token)?;
         let conn = state
             .db_manager
             .open_store(&session.store_id)
@@ -878,9 +898,11 @@ pub async fn sync_run_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<SyncAttemptResult, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     // Phase 1: Read pending items and config from DB (brief lock).
     let (pending_items, config_opt) = {
-        let session = state.resolve_session(&session_token)?;
         let conn = state
             .db_manager
             .open_store(&session.store_id)
@@ -1011,11 +1033,13 @@ pub async fn sync_pull_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<PullResult, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     validate_pull_consent(&args)?;
 
     // Phase 1: Read config from DB (brief lock).
     let config_opt = {
-        let session = state.resolve_session(&session_token)?;
         let conn = state
             .db_manager
             .open_store(&session.store_id)

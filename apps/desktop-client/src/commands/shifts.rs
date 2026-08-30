@@ -304,6 +304,9 @@ pub async fn list_shifts_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<ShiftDto>, AppError> {
+    // F-017: cross-shift visibility is manager-tier data.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SHIFTS_VIEW_ANY).await?;
     let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
@@ -498,7 +501,11 @@ pub async fn get_shift_scoped(
 ) -> Result<Option<ShiftDto>, AppError> {
     validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+
+    // F-017: enforce per-domain permission on this scoped command.
+
+    require_permission_for_session(&state, &session, permissions::SHIFTS_VIEW_ANY).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -521,7 +528,11 @@ pub async fn create_cash_payout_scoped(
         return Err(AppError::Invalid("amount_minor must be > 0".into()));
     }
 
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+
+    // F-017: enforce per-domain permission on this scoped command.
+
+    require_permission_for_session(&state, &session, permissions::PAYMENTS_CASH).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -542,7 +553,11 @@ pub async fn get_shift_report_scoped(
 ) -> Result<ShiftReportDto, AppError> {
     validate_not_empty("shift_id", &shift_id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+
+    // F-017: enforce per-domain permission on this scoped command.
+
+    require_permission_for_session(&state, &session, permissions::SHIFTS_VIEW_ANY).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;

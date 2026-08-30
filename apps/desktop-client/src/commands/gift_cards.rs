@@ -16,7 +16,9 @@ use oz_core::db::Store;
 use oz_core::gift_card::{
     GiftCard, GiftCardFilter, GiftCardWithTransactions, IssueGiftCardInput, RedeemGiftCardResult,
 };
+use oz_core::permissions;
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -47,7 +49,9 @@ pub async fn issue_gift_card_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<GiftCardWithTransactions, AppError> {
-    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    // F-017: issuing/topping up creates stored money — sensitive key.
+    require_permission_for_session(&state, &session, permissions::GIFTCARDS_ISSUE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -64,7 +68,9 @@ pub async fn get_gift_card_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Option<GiftCardWithTransactions>, AppError> {
-    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    // F-017: card details are stored-value data — explicit permission.
+    require_permission_for_session(&state, &session, permissions::GIFTCARDS_MANAGE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -81,7 +87,9 @@ pub async fn list_gift_cards_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<GiftCardWithTransactions>, AppError> {
-    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    // F-017: the card list exposes stored-value data — explicit permission.
+    require_permission_for_session(&state, &session, permissions::GIFTCARDS_MANAGE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -98,7 +106,9 @@ pub async fn get_gift_card_balance_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Option<BalanceResult>, AppError> {
-    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    // F-017: balance is stored-value data — explicit permission.
+    require_permission_for_session(&state, &session, permissions::GIFTCARDS_MANAGE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -123,7 +133,9 @@ pub async fn redeem_gift_card_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<RedeemGiftCardResult, AppError> {
-    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    // F-017: redeeming spends stored value — explicit permission.
+    require_permission_for_session(&state, &session, permissions::GIFTCARDS_REDEEM).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -141,7 +153,9 @@ pub async fn top_up_gift_card_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<GiftCardWithTransactions, AppError> {
-    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    // F-017: issuing/topping up creates stored money — sensitive key.
+    require_permission_for_session(&state, &session, permissions::GIFTCARDS_ISSUE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -158,7 +172,9 @@ pub async fn freeze_gift_card_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<GiftCard, AppError> {
-    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    // F-017: freeze/unfreeze manage card availability — explicit permission.
+    require_permission_for_session(&state, &session, permissions::GIFTCARDS_MANAGE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -175,7 +191,9 @@ pub async fn unfreeze_gift_card_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<GiftCard, AppError> {
-    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    // F-017: freeze/unfreeze manage card availability — explicit permission.
+    require_permission_for_session(&state, &session, permissions::GIFTCARDS_MANAGE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;

@@ -488,6 +488,12 @@ pub const REGISTRY: &[PermissionEntry] = &[
         sensitive: false,
         description: "Delete / unregister a terminal.",
     },
+    PermissionEntry {
+        key: "terminals:read",
+        family: "terminals",
+        sensitive: false,
+        description: "View terminal, profile, override, and device-binding state.",
+    },
     // ── categories ───────────────────────────────────────────────
     PermissionEntry {
         key: "categories:manage",
@@ -501,6 +507,59 @@ pub const REGISTRY: &[PermissionEntry] = &[
         family: "plugins",
         sensitive: false,
         description: "Manage plugins (install, enable, disable, remove).",
+    },
+    // ── purchasing ───────────────────────────────────────────────
+    PermissionEntry {
+        key: "purchasing:view",
+        family: "purchasing",
+        sensitive: false,
+        description: "View suppliers and purchase orders.",
+    },
+    PermissionEntry {
+        key: "purchasing:manage",
+        family: "purchasing",
+        sensitive: false,
+        description: "Create/update suppliers and purchase orders, and receive deliveries.",
+    },
+    // ── giftcards ────────────────────────────────────────────────
+    PermissionEntry {
+        key: "giftcards:issue",
+        family: "giftcards",
+        sensitive: true,
+        description: "Issue a new gift card or top up stored value (creates money).",
+    },
+    PermissionEntry {
+        key: "giftcards:redeem",
+        family: "giftcards",
+        sensitive: false,
+        description: "Redeem gift card stored value as payment.",
+    },
+    PermissionEntry {
+        key: "giftcards:manage",
+        family: "giftcards",
+        sensitive: false,
+        description: "Freeze, unfreeze, and inspect gift cards.",
+    },
+    // ── sync ─────────────────────────────────────────────────────
+    PermissionEntry {
+        key: "sync:manage",
+        family: "sync",
+        sensitive: false,
+        description: "Configure, trigger, and manage data synchronization.",
+    },
+    // ── security ─────────────────────────────────────────────────
+    PermissionEntry {
+        key: "security:manage",
+        family: "security",
+        sensitive: true,
+        description: "Rotate at-rest encryption keys and inspect key state.",
+    },
+    // ── data ─────────────────────────────────────────────────────
+    PermissionEntry {
+        key: "data:export",
+        family: "data",
+        sensitive: true,
+        description: "Create a full data backup (bulk export of all records).",
     },
 ];
 
@@ -589,6 +648,11 @@ mod tests {
                 | permissions::STAFF_EDIT_NOTES
                 | permissions::REPORTS_EXPORT
                 | permissions::AUDIT_EXPORT
+                // Review F-017 additions: money creation and crypto/bulk
+                // export join the explicit sensitive set.
+                | permissions::GIFTCARDS_ISSUE
+                | permissions::SECURITY_MANAGE
+                | permissions::DATA_EXPORT
         )
     }
 

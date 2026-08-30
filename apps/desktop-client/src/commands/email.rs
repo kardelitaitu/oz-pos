@@ -8,6 +8,7 @@ use tauri::State;
 use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
+use oz_core::permissions;
 
 /// Send a test report email using the currently configured SMTP
 /// settings and report schedule.
@@ -148,6 +149,9 @@ pub async fn get_report_schedule_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<oz_core::export::ReportScheduleConfig, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::REPORTS_SCHEDULE).await?;
     let _session = state.resolve_session(&session_token)?;
     get_report_schedule(state).await
 }

@@ -8,8 +8,10 @@ use oz_core::subscription::TenantSubscription;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
+use oz_core::permissions;
 
 // ── DTOs ───────────────────────────────────────────────────────────
 
@@ -218,7 +220,9 @@ pub async fn list_store_profiles_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<StoreProfileDto>, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::SETTINGS_READ).await?;
     let conn = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -234,7 +238,9 @@ pub async fn get_store_profile_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Option<StoreProfileDto>, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::SETTINGS_READ).await?;
     let conn = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -249,7 +255,9 @@ pub async fn get_primary_store_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Option<StoreProfileDto>, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::SETTINGS_READ).await?;
     let conn = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -270,7 +278,11 @@ pub async fn create_store_profile_scoped(
     // be created lazily by open_store() later.
     let _ = state.db_manager.create_store_db(&args.id);
 
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+
+    // F-017: enforce per-domain permission on this scoped command.
+
+    require_permission_for_session(&state, &session, permissions::SETTINGS_EDIT).await?;
     let conn = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -307,7 +319,9 @@ pub async fn update_store_profile_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<StoreProfileDto, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::SETTINGS_EDIT).await?;
     let conn = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -330,7 +344,9 @@ pub async fn set_primary_store_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<StoreProfileDto, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::SETTINGS_EDIT).await?;
     let conn = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -346,7 +362,9 @@ pub async fn delete_store_profile_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::SETTINGS_EDIT).await?;
     let conn = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;

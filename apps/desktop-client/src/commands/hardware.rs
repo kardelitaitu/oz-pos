@@ -13,8 +13,10 @@ use oz_hal::drivers::receipt;
 use oz_hal::transport::usb::{UsbDeviceInfo, probe_all};
 use oz_hal::{BarcodeScanner, DisplayContent};
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
+use oz_core::permissions;
 
 // ── Cash drawer ─────────────────────────────────────────
 
@@ -525,6 +527,9 @@ pub async fn open_cash_drawer_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<OpenCashDrawerResult, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::PAYMENTS_CASH).await?;
     state.resolve_scope(&session_token)?;
     let id = args.device_id.as_deref().unwrap_or("default");
     let drawer = state

@@ -4,8 +4,10 @@ use tauri::State;
 use oz_core::Store;
 use oz_core::product_bundle::{BundleItem, BundleWithItems, ProductBundle};
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
+use oz_core::permissions;
 
 /// Arguments for creating a bundle.
 #[derive(Debug, Deserialize)]
@@ -138,7 +140,9 @@ pub async fn list_bundles_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<BundleWithItems>, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_READ).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -153,7 +157,9 @@ pub async fn get_bundle_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Option<BundleWithItems>, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_READ).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -168,7 +174,9 @@ pub async fn update_bundle_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<BundleWithItems, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_UPDATE).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -187,7 +195,9 @@ pub async fn delete_bundle_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_DELETE).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -203,7 +213,9 @@ pub async fn lookup_bundle_by_sku_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Option<BundleWithItems>, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_READ).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -218,7 +230,9 @@ pub async fn create_bundle_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<BundleWithItems, AppError> {
-    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_CREATE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;

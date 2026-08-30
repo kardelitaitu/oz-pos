@@ -287,7 +287,9 @@ pub async fn recover_workspace_instances_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<u32, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::WORKSPACES_SWITCH).await?;
 
     // Load subscription from the GLOBAL database.
     let sub = {
@@ -328,7 +330,9 @@ pub async fn suspend_surplus_workspace_instances_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<u32, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::WORKSPACES_SWITCH).await?;
 
     // Load subscription from the GLOBAL database.
     let sub = {

@@ -11,8 +11,10 @@ use oz_core::{OfflineQueueItem, RemoteSyncFailure, Store, SyncPriority};
 
 use foundation::validate_not_empty;
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
+use oz_core::permissions;
 
 // ── DTOs ──────────────────────────────────────────────────────────────
 
@@ -456,7 +458,9 @@ pub async fn list_all_offline_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<OfflineQueueItemDto>, AppError> {
-    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -511,8 +515,10 @@ pub async fn retry_offline_sync_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<SyncResult, AppError> {
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     let (pending_items, config_opt) = {
-        let (_session, conn) = state.resolve_scope(&session_token)?;
         let db = conn
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -580,7 +586,9 @@ pub async fn delete_offline_item_scoped(
 ) -> Result<(), AppError> {
     validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -601,7 +609,9 @@ pub async fn requeue_remote_failure_scoped(
 ) -> Result<(), AppError> {
     validate_not_empty("itemId", &args.item_id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
