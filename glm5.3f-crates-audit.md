@@ -162,6 +162,27 @@ openlog/syslog) is minimally scoped with SAFETY comments.
 
 ---
 
+## 32. crates/oz-cli — operator CLI (migrate, seed, backup, ozpkg)
+
+Baseline: ~2.0k production lines. Slice A — commands.rs (1,220 fully
+read).
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| CLI-1 | 🟡 MED | crates/oz-cli/src/commands.rs:1128 | `run_import_ozpkg` calls `store.create_sale(&sale)` **inside** an `unchecked_transaction` — oz-core Store writes are tx-wrapped (F-022), so the nested transaction attempt should fail ("cannot start a transaction within a transaction") and roll back sale imports. | Raw-sale upsert via `tx` like the other types, or a tx-aware Store method. |
+| CLI-2 | 🟡 MED | crates/oz-cli/src/commands.rs:175 | `init-db` seeds the admin user with `pin_hash = "hashed_pin_placeholder"` — never verifies under argon2, so first-run admin is locked out unless a bootstrap flow sets a real hash. | Seed a real hash of a documented default PIN or force PIN setup on first launch. |
+| CLI-3 | 🟡 LOW | crates/oz-cli/src/commands.rs:622 | `user create` accepts a raw `--pin-hash` from argv with no PHC-format check. | Validate the argon2 PHC string format. |
+| CLI-4 | ℹ️ INFO | crates/oz-cli/src/commands.rs:826 | `restore` copies a backup over the live DB file while WAL/SHM sidecars may exist — torn-restore risk. | Checkpoint/remove sidecars or restore via the backup API. |
+| CLI-5 | ℹ️ INFO | crates/oz-cli/src/commands.rs | 1,220 production lines — over the project's 1,000-line limit. | Split per command family. |
+
+Otherwise clean: parameterized SQL, single-transaction import for the
+other types, recoverable currency UTF-8 handling (RUST-07), Argon2id +
+AES-256-GCM export, dry-run support.
+
+> Slice B (seed_demo.rs, cli.rs, error/lib/main) next.
+
+---
+
 ## 25. crates/oz-hal — hardware abstraction layer
 
 Baseline: ~3.2k production lines across 28 files. Slice A (registry.rs
