@@ -20,13 +20,13 @@ describe('login.html status announcements (B33: WCAG 4.1.3)', () => {
   it('error container is announced assertively', () => {
     const el = loginHtml.getElementById('error-msg');
     expect(el).not.toBeNull();
-    expect(el.getAttribute('role')).toBe('alert');
+    expect(el?.getAttribute('role')).toBe('alert');
   });
 
   it('success container is announced politely', () => {
     const el = loginHtml.getElementById('success-msg');
     expect(el).not.toBeNull();
-    expect(el.getAttribute('role')).toBe('status');
+    expect(el?.getAttribute('role')).toBe('status');
   });
 
   it('mode tabs control their panels and panels name their tabs', () => {
@@ -82,5 +82,35 @@ describe('admin-utils flashMessage (B34: toasts were silent to screen readers)',
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('admin nav aria-current (B38: active section invisible to AT)', () => {
+  const indexHtml = new DOMParser().parseFromString(
+    readFileSync('public/admin/index.html', 'utf8'), 'text/html');
+
+  it('initial markup marks the dashboard tab as current', () => {
+    const dash = indexHtml.querySelector('[data-tab="dashboard"]');
+    expect(dash?.getAttribute('aria-current')).toBe('page');
+  });
+
+  it('setNavActive moves class AND aria-current together', () => {
+    expect(typeof utils.setNavActive).toBe('function');
+    document.body.innerHTML =
+      '<button class="nav-btn nav-active" data-tab="dashboard" aria-current="page">D</button>' +
+      '<button class="nav-btn" data-tab="tenants">T</button>';
+    const btns = document.querySelectorAll<HTMLButtonElement>('.nav-btn');
+    utils.setNavActive(btns, btns[1]);
+    expect(btns[0].classList.contains('nav-active')).toBe(false);
+    expect(btns[0].hasAttribute('aria-current')).toBe(false);
+    expect(btns[1].classList.contains('nav-active')).toBe(true);
+    expect(btns[1].getAttribute('aria-current')).toBe('page');
+  });
+
+  it('tolerates a null active button (defensive)', () => {
+    document.body.innerHTML = '<button class="nav-btn nav-active" aria-current="page">D</button>';
+    const btns = document.querySelectorAll<HTMLButtonElement>('.nav-btn');
+    expect(() => utils.setNavActive(btns, null)).not.toThrow();
+    expect(btns[0].hasAttribute('aria-current')).toBe(false);
   });
 });
