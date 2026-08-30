@@ -5,17 +5,19 @@ import { join } from 'node:path';
 import vm from 'node:vm';
 
 /**
- * Tests for the static admin dashboard script (public/admin/admin.js).
- * admin.js is a plain <script> (no module exports), so we load it into a
- * jsdom sandbox with a minimal DOM skeleton and exercise the pure helpers
- * (escapeHtml, statusPill, fmtIdr/fmtUsd, kpiC, tableCard, svgChart,
- * svgDonut) directly. These helpers had zero test coverage despite being
- * the entire rendering surface of the admin panel.
+ * Tests for the static admin dashboard scripts (public/admin/admin-utils.js
+ * + admin.js). The pure helpers (escapeHtml, statusPill, fmtIdr/fmtUsd,
+ * kpiC, tableCard, svgChart, svgDonut) live in admin-utils.js (loaded first,
+ * defines window globals + window.AdminUtils); admin.js consumes them. We
+ * load both into a jsdom sandbox in the real script order and exercise the
+ * helpers directly. These had zero test coverage despite being the entire
+ * rendering surface of the admin panel.
  */
 
+const ADMIN_UTILS_JS = readFileSync(join(process.cwd(), 'public/admin/admin-utils.js'), 'utf8');
 const ADMIN_JS = readFileSync(join(process.cwd(), 'public/admin/admin.js'), 'utf8');
 
-/** Build a fresh DOM skeleton + evaluate admin.js in it, returning the helpers. */
+/** Build a fresh DOM skeleton + evaluate both admin scripts, returning the helpers. */
 function bootAdmin() {
   document.body.innerHTML = `
     <div id="content"></div>
@@ -29,11 +31,11 @@ function bootAdmin() {
   globalThis.fetch = vi.fn(async () => new Response('{}', { status: 200 }));
   window.__OZ_CONFIG__ = { licenseApiUrl: 'https://license.test' };
 
-  // Strip the boot-time renderDashboard() call so the pure helpers load
-  // without triggering dashboard-render or API calls.
-  const src = ADMIN_JS.replace(/\n\s*renderDashboard\(\);?\s*$/, '');
-  // Run in a fresh context per boot so top-level const/let (API, …) do not
-  // collide across boots. Copy the jsdom globals the script reads.
+  // Strip the boot-time renderDashboard() call so admin.js loads without
+  // triggering dashboard-render or API calls.
+  const adminSrc = ADMIN_JS.replace(/\n\s*renderDashboard\(\);?\s*$/, '');
+  // Run in a fresh context per boot so top-level const/let do not collide
+  // across boots. Copy the jsdom globals the scripts read.
   const sandbox = vm.createContext({
     window,
     document,
@@ -42,9 +44,11 @@ function bootAdmin() {
     clearTimeout,
     console,
   });
+  // Load in the real order: admin-utils.js (defines the helpers as globals
+  // via its UMD browser branch) then admin.js (consumes them).
+  vm.runInContext(ADMIN_UTILS_JS, sandbox, { filename: 'admin-utils.js' });
+  vm.runInContext(adminSrc, sandbox, { filename: 'admin.js' });
   const out: Record<string, unknown> = {};
-  vm.runInContext(src, sandbox, { filename: 'admin.js' });
-  // Function declarations land on the sandbox global.
   for (const name of ['escapeHtml', 'statusPill', 'fmtIdr', 'fmtUsd', 'kpiC', 'tableCard', 'svgChart', 'svgDonut']) {
     out[name] = (sandbox as any)[name];
   }
