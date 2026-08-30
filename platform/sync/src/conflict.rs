@@ -884,4 +884,246 @@ mod tests {
         assert_eq!(winner_payload["local"]["delta"], -5);
         assert_eq!(winner_payload["remote"]["delta"], -2);
     }
+
+    // ── NEW TESTS: gaps identified in TDD analysis ───────────────────
+
+    // ── setting.* and preference.* dispatch ──────────────────────────
+
+    #[test]
+    fn dispatch_uses_version_lww_for_setting_prefix() {
+        let local = make_item_with_version(
+            "2025-06-01T10:00:00.000Z",
+            "setting.update",
+            5,
+            r#""store_name":"OZ Main""#,
+        );
+        let remote = make_item_with_version(
+            "2025-06-01T12:00:00.000Z",
+            "setting.update",
+            3,
+            r#""store_name":"OZ Stale""#,
+        );
+        let resolved = resolve_conflict(&local, &remote);
+        assert_eq!(
+            resolved.winner.id, local.id,
+            "setting.* should use version LWW (v5 > v3)"
+        );
+    }
+
+    #[test]
+    fn dispatch_uses_version_lww_for_preference_prefix() {
+        let local = make_item_with_version("2025-06-01T10:00:00.000Z", "preference.update", 2, "");
+        let remote = make_item_with_version("2025-06-01T12:00:00.000Z", "preference.update", 4, "");
+        let resolved = resolve_conflict(&local, &remote);
+        assert_eq!(
+            resolved.winner.id, remote.id,
+            "preference.* should use version LWW (v4 > v2)"
+        );
+    }
+
+    #[test]
+    fn dispatch_uses_version_lww_for_user_prefix() {
+        let local = make_item_with_version("2025-06-01T10:00:00.000Z", "user.create", 1, "");
+        let remote = make_item_with_version("2025-06-01T12:00:00.000Z", "user.create", 3, "");
+        let resolved = resolve_conflict(&local, &remote);
+        assert_eq!(
+            resolved.winner.id, remote.id,
+            "user.* should use version LWW (v3 > v1)"
+        );
+    }
+
+    #[test]
+    fn dispatch_uses_version_lww_for_staff_prefix() {
+        let local = make_item_with_version("2025-06-01T10:00:00.000Z", "staff.update", 7, "");
+        let remote = make_item_with_version("2025-06-01T12:00:00.000Z", "staff.update", 2, "");
+        let resolved = resolve_conflict(&local, &remote);
+        assert_eq!(
+            resolved.winner.id, local.id,
+            "staff.* should use version LWW (v7 > v2)"
+        );
+    }
+
+    // ── Negative and zero version numbers ────────────────────────────
+
+    #[test]
+    fn version_lww_negative_version() {
+        let local = make_item_with_version("2025-06-01T10:00:00.000Z", "product.update", -1, "");
+        let remote = make_item_with_version("2025-06-01T12:00:00.000Z", "product.update", 0, "");
+        let resolved = resolve_version_lww(&local, &remote);
+        assert_eq!(
+            resolved.winner.id, remote.id,
+            "version 0 > -1, remote should win"
+        );
+    }
+
+    #[test]
+    fn version_lww_zero_vs_zero_remote_wins() {
+        let local = make_item_with_version("2025-06-01T12:00:00.000Z", "product.update", 0, "");
+        let remote = make_item_with_version("2025-06-01T10:00:00.000Z", "product.update", 0, "");
+        let resolved = resolve_version_lww(&local, &remote);
+        assert_eq!(
+            resolved.winner.id, remote.id,
+            "version 0 == 0 tie → remote wins"
+        );
+    }
+
+    // ── CRDT merge edge cases ────────────────────────────────────────
+
+    #[test]
+    fn stock_crdt_mixed_valid_invalid_payloads() {
+        let local = make_stock_item("2025-06-01T10:00:00.000Z", "stock.adjusted", 10, "COFFEE");
+        let mut remote =
+            make_stock_item("2025-06-01T12:00:00.000Z", "stock.adjusted", -3, "COFFEE");
+        remote.payload = "not-json".into();
+        let resolved = resolve_stock_crdt(&local, &remote);
+
+        let winner_payload: Value = serde_json::from_str(&resolved.winner.payload).unwrap();
+        // Local is valid JSON, remote is invalid → null.
+        assert_eq!(winner_payload["local"]["delta"], 10);
+        assert_eq!(winner_payload["remote"], Value::Null);
+        assert_eq!(winner_payload["merge_type"], "crdt_delta");
+    }
+
+    #[test]
+    fn stock_crdt_preserves_retry_count_max() {
+        let mut local = make_stock_item("2025-06-01T10:00:00.000Z", "stock.adjusted", 5, "TEA");
+        local.retry_count = 3;
+        let mut remote = make_stock_item("2025-06-01T12:00:00.000Z", "stock.adjusted", 2, "TEA");
+        remote.retry_count = 7;
+        let resolved = resolve_stock_crdt(&local, &remote);
+        assert_eq!(
+            resolved.winner.retry_count, 7,
+            "winner should have max retry_count"
+        );
+    }
+
+    #[test]
+    fn stock_crdt_preserves_last_error_from_either() {
+        let mut local = make_stock_item("2025-06-01T10:00:00.000Z", "stock.adjusted", 5, "MILK");
+        local.last_error = Some("local error".into());
+        let remote = make_stock_item("2025-06-01T12:00:00.000Z", "stock.adjusted", 2, "MILK");
+        // remote has no last_error → local's is preserved.
+        let resolved = resolve_stock_crdt(&local, &remote);
+        assert_eq!(
+            resolved.winner.last_error.as_deref(),
+            Some("local error"),
+            "winner should preserve local last_error when remote has none"
+        );
+    }
+
+    #[test]
+    fn stock_crdt_prefers_local_last_error_when_both_present() {
+        let mut local = make_stock_item("2025-06-01T10:00:00.000Z", "stock.adjusted", 5, "MILK");
+        local.last_error = Some("local error".into());
+        let mut remote = make_stock_item("2025-06-01T12:00:00.000Z", "stock.adjusted", 2, "MILK");
+        remote.last_error = Some("remote error".into());
+        let resolved = resolve_stock_crdt(&local, &remote);
+        assert_eq!(
+            resolved.winner.last_error.as_deref(),
+            Some("local error"),
+            "winner should prefer local last_error when both present"
+        );
+    }
+
+    #[test]
+    fn stock_crdt_preserves_tenant_id() {
+        let local = make_stock_item("2025-06-01T10:00:00.000Z", "stock.adjusted", 5, "SUGAR");
+        let remote = make_stock_item("2025-06-01T12:00:00.000Z", "stock.adjusted", 2, "SUGAR");
+        let resolved = resolve_stock_crdt(&local, &remote);
+        assert_eq!(
+            resolved.winner.tenant_id, "default",
+            "winner should preserve tenant_id"
+        );
+    }
+
+    // ── Sale LWW with missing/empty status ───────────────────────────
+
+    #[test]
+    fn sale_lww_missing_status_falls_back_to_version() {
+        let local = make_item_with_version("2025-06-01T10:00:00.000Z", "complete_sale", 5, "");
+        let remote = make_item_with_version("2025-06-01T12:00:00.000Z", "complete_sale", 3, "");
+        let resolved = resolve_sale_lww(&local, &remote);
+        // Both have no status → rank 0 for both → falls back to version LWW.
+        assert_eq!(
+            resolved.winner.id, local.id,
+            "missing status on both → version LWW (v5 > v3)"
+        );
+    }
+
+    #[test]
+    fn sale_lww_empty_status_ranked_zero() {
+        let mut local = make_sale_item("2025-06-01T12:00:00.000Z", "complete_sale", "completed", 1);
+        // Override payload to have empty status string.
+        local.payload = r#"{"status":""}"#.into();
+        let remote = make_sale_item("2025-06-01T10:00:00.000Z", "complete_sale", "active", 1);
+        let resolved = resolve_sale_lww(&local, &remote);
+        assert_eq!(
+            resolved.winner.id, remote.id,
+            "empty status (rank 0) loses to active (rank 1)"
+        );
+    }
+
+    // ── Sale status rank ordering completeness ────────────────────────
+
+    #[test]
+    fn sale_status_rank_refunded_over_voided() {
+        let local = make_sale_item("2025-06-01T12:00:00.000Z", "refund_sale", "refunded", 1);
+        let remote = make_sale_item("2025-06-01T10:00:00.000Z", "void_sale", "voided", 1);
+        let resolved = resolve_sale_lww(&local, &remote);
+        assert_eq!(
+            resolved.winner.id, local.id,
+            "refunded (rank 4) > voided (rank 3)"
+        );
+    }
+
+    #[test]
+    fn sale_status_rank_completed_over_pending() {
+        let local = make_sale_item("2025-06-01T12:00:00.000Z", "complete_sale", "pending", 1);
+        let remote = make_sale_item("2025-06-01T10:00:00.000Z", "complete_sale", "completed", 1);
+        let resolved = resolve_sale_lww(&local, &remote);
+        assert_eq!(
+            resolved.winner.id, remote.id,
+            "completed (rank 2) > pending (rank 1)"
+        );
+    }
+
+    #[test]
+    fn sale_status_rank_pending_over_active() {
+        let local = make_sale_item("2025-06-01T10:00:00.000Z", "sale.update", "active", 1);
+        let remote = make_sale_item("2025-06-01T12:00:00.000Z", "sale.update", "pending", 1);
+        let resolved = resolve_sale_lww(&local, &remote);
+        assert_eq!(
+            resolved.winner.id, remote.id,
+            "pending (rank 1) > active (rank 0)"
+        );
+    }
+
+    // ── CRDT merge action preservation ────────────────────────────────
+
+    #[test]
+    fn stock_crdt_preserves_action() {
+        let local = make_stock_item("2025-06-01T10:00:00.000Z", "stock.movement", 5, "WHEAT");
+        let remote = make_stock_item("2025-06-01T12:00:00.000Z", "stock.movement", -1, "WHEAT");
+        let resolved = resolve_stock_crdt(&local, &remote);
+        assert_eq!(resolved.winner.action, "stock.movement");
+    }
+
+    // ── Version LWW with very large versions ─────────────────────────
+
+    #[test]
+    fn version_lww_large_version_numbers() {
+        let local =
+            make_item_with_version("2025-06-01T10:00:00.000Z", "product.update", i64::MAX, "");
+        let remote = make_item_with_version(
+            "2025-06-01T12:00:00.000Z",
+            "product.update",
+            i64::MAX - 1,
+            "",
+        );
+        let resolved = resolve_version_lww(&local, &remote);
+        assert_eq!(
+            resolved.winner.id, local.id,
+            "i64::MAX > i64::MAX - 1, local should win"
+        );
+    }
 }
