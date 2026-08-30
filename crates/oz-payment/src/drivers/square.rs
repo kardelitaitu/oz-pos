@@ -1,8 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent
+last audited 31-08-26 by TDD-Agent (round M; PAY-2 closed for charges, still open for refunds)
 crate: oz-payment | status: SAFE | lint: CLEAN
-findings: PAY-2 fresh Uuid::now_v7() idempotency per call defeats Square retry protection (request.idempotency_key ignored); PAY-3 refund(None) sends zero-amount USD (Square requires amount_money; trait contract None = full amount); PAY-5 Square auto_capture=true default means authorize already captures — default sale() authorize->complete would fail against real API (tests pass via canned wiremock responses); currency hard-error on unknown codes good (PA-02)
-next: honor idempotency_key, resolve full amount on refund(None), set auto_capture=false. COR-31 HELD DELIBERATELY — no HTTP timeout here (Client::builder without .timeout, no request-level timeout), and adding one before PAY-2 is fixed would create a double-charge path: this driver sends a FRESH Uuid::now_v7() per call, so Square's own duplicate protection cannot fire and a post-timeout retry is a second charge. Honor request.idempotency_key first, then bound the client. | perf: N/A
+findings: PAY-2 FIXED for authorize — idempotency_key_for() now honors PaymentRequest.idempotency_key verbatim and falls back to a fresh Uuid::now_v7() only when it is absent or blank. Blank must not be sent as-is: Some("") would put every caller who leaves the field empty into ONE shared idempotency key, and Square would then reject every charge after the first as a duplicate. Verbatim (no charset sanitizing, no length clamp) because a clamp maps two distinct caller keys onto one, and a collision here silently drops a legitimate charge — a loud API rejection is the better failure. authorize is the only CreatePaymentRequest site, and sale() delegates through it, so all charges are covered. PAY-2 STILL OPEN for refunds: refund(transaction_id, amount) takes no PaymentRequest, so there is no caller key to honor and that site mints a fresh UUID per call — a retried refund is a second refund. That is a PaymentProcessor trait-shape gap, not something this driver can close alone. capture sends no idempotency_key at all; lower risk, since capturing an already-captured payment errors rather than double-charging. PAY-3 refund(None) sends zero-amount USD (Square requires amount_money; trait contract None = full amount); PAY-5 Square auto_capture=true default means authorize already captures — default sale() authorize->complete would fail against real API (tests pass via canned wiremock responses); currency hard-error on unknown codes good (PA-02)
+next: give refund an idempotency key (trait change, touches every driver), resolve full amount on refund(None), set auto_capture=false. COR-31 STILL HELD DELIBERATELY, and now for a sharper reason than before: charges are idempotent only when the CALLER supplies a key, and refunds are not idempotent at all, so a client timeout on this driver would still turn a slow response into a double refund. Bound the client after refund gets a key. | perf: N/A
 */
 //! Square payment processor — implements [`PaymentProcessor`] using the
 //! Square REST API directly via `reqwest`.
@@ -313,10 +313,26 @@ impl SquarePaymentProcessor {
 
     /// Derive the Square `idempotency_key` for a charge request.
     ///
-    /// Extracted verbatim from the inline expression in `authorize` so the
-    /// policy is testable; behavior is unchanged by this commit.
-    fn idempotency_key_for(_request: &PaymentRequest) -> String {
-        Uuid::now_v7().to_string()
+    /// PAY-2: honor [`PaymentRequest::idempotency_key`] so that a retried
+    /// charge resolves to the same Square payment instead of being taken
+    /// twice. This used to mint a fresh `Uuid::now_v7()` on every call, which
+    /// meant Square's own duplicate protection could never fire — the caller
+    /// had supplied a key and the driver threw it away.
+    ///
+    /// The value is passed through verbatim. Square's key is free-form, so
+    /// there is no charset to sanitize into (unlike Midtrans), and clamping
+    /// the length would map two distinct caller keys onto one — a collision
+    /// on this path silently drops a legitimate charge as a "duplicate",
+    /// which is worse than a loud API rejection.
+    fn idempotency_key_for(request: &PaymentRequest) -> String {
+        match request.idempotency_key.as_deref() {
+            // Blank counts as absent, not as a key. `Some("")` sent verbatim
+            // would park every caller who leaves the field empty in one
+            // shared idempotency key, and Square would reject every charge
+            // after the first as a duplicate.
+            Some(key) if !key.trim().is_empty() => key.to_owned(),
+            _ => Uuid::now_v7().to_string(),
+        }
     }
 
     /// Extract success status and amount from payment data.

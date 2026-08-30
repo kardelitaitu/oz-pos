@@ -170,3 +170,83 @@ fn square_to_square_amount() {
     let amount = Money::from_major(10, usd).unwrap();
     assert_eq!(SquarePaymentProcessor::to_square_amount(&amount), 1000);
 }
+
+// ── PAY-2: idempotency key derivation ─────────────────────────
+
+fn charge_request(key: Option<&str>) -> PaymentRequest {
+    PaymentRequest {
+        amount: Money::from_major(25, "USD".parse().unwrap()).unwrap(),
+        reference: Some("order-42".into()),
+        description: None,
+        idempotency_key: key.map(str::to_string),
+    }
+}
+
+#[test]
+fn a_retried_charge_must_derive_the_same_idempotency_key() {
+    // The PAY-2 property, stated once: two authorize() calls carrying the
+    // same caller key must send the same key, or Square cannot recognise the
+    // second as a retry and both are charged.
+    let first = SquarePaymentProcessor::idempotency_key_for(&charge_request(Some("order-42-v1")));
+    let retry = SquarePaymentProcessor::idempotency_key_for(&charge_request(Some("order-42-v1")));
+    assert_eq!(
+        first, retry,
+        "same caller key must derive the same idempotency_key, got {first} and {retry}"
+    );
+}
+
+#[test]
+fn the_caller_key_is_used_verbatim() {
+    // Square's idempotency_key is free-form, so unlike Midtrans there is no
+    // charset to sanitize into. Passing the value through unchanged keeps
+    // `order-42-v1` and `order-42-v2` distinct; any rewriting here risks two
+    // different caller keys landing on one, which drops a payment silently.
+    let key = "018f3c2e-7b1a-7000-8000-00000000abcd";
+    assert_eq!(
+        SquarePaymentProcessor::idempotency_key_for(&charge_request(Some(key))),
+        key
+    );
+}
+
+#[test]
+fn a_long_caller_key_is_not_truncated() {
+    // Tempting to clamp to a "safe" length, and wrong: truncation maps two
+    // distinct keys onto one, and a collision on the money path means a
+    // legitimate charge is silently treated as a duplicate and dropped. If
+    // the key is too long for Square, the API should say so loudly.
+    let long = "k".repeat(200);
+    let derived = SquarePaymentProcessor::idempotency_key_for(&charge_request(Some(&long)));
+    assert_eq!(
+        derived.len(),
+        200,
+        "the key must be passed through, not clamped: got {} chars",
+        derived.len()
+    );
+}
+
+#[test]
+fn a_missing_key_still_produces_a_unique_one_per_call() {
+    // Guard, not a fix: PaymentRequest documents idempotency_key as
+    // optional, and the previous behavior of minting per call is correct for
+    // callers that do not supply one. The fix must not make keyless calls
+    // collide.
+    let first = SquarePaymentProcessor::idempotency_key_for(&charge_request(None));
+    let second = SquarePaymentProcessor::idempotency_key_for(&charge_request(None));
+    assert_ne!(first, second, "keyless calls must not share a key");
+    assert!(!first.is_empty());
+}
+
+#[test]
+fn a_blank_key_is_treated_as_no_key_at_all() {
+    // The sharp edge of "honor the caller key": Some("") is a key. Sent
+    // verbatim, every caller that leaves the field blank would share one
+    // idempotency key, and after the first charge Square would reject each
+    // subsequent one as a duplicate. Blank and whitespace-only are absent.
+    let blank = SquarePaymentProcessor::idempotency_key_for(&charge_request(Some("")));
+    let spaces = SquarePaymentProcessor::idempotency_key_for(&charge_request(Some("   ")));
+    assert!(!blank.is_empty(), "a blank key must not be sent as-is");
+    assert_ne!(
+        blank, spaces,
+        "both blank forms must fall back to fresh keys, not share one"
+    );
+}
