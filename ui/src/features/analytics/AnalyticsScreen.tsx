@@ -16,18 +16,17 @@ import { useCurrency } from '@/contexts/CurrencyContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import TierLockedFeature from '@/components/TierLockedFeature';
 import { minorUnitExponent } from '@/types/domain';
-import { l10nErrorMessage } from '@/utils/app-error';
 import { downloadCsv } from '@/utils/export-csv';
-import Tooltip from '@/frontend/shell/Tooltip';
 import { AnalyticsCardContent, ExportCsvButton } from './AnalyticsCardContent';
 import { analyticsDataCache, clearAnalyticsCache, cardQueryKey } from './analytics-cache';
 import { useToastManager } from './useToastManager';
 import { useCardLayout } from './useCardLayout';
 import { useCommandPalette } from './useCommandPalette';
+import { AnalyticsHeatmap } from './AnalyticsHeatmap';
 import {
   CARD_PAYLOAD_VALIDATORS,
+  DAY_LABEL_KEYS,
   buildHeatmapCells,
-  heatLow,
   heatPeak,
   heatmapGranularityForRange,
   loadHeatmapRows,
@@ -43,6 +42,11 @@ import './AnalyticsScreen.css';
 
 export type WorkspaceView = 'retail' | 'restaurant';
 export type Granularity = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
+
+// Re-export the calendar helper so the analytics test suite can import it
+// from the screen module (the heatmap card owns its own copy of the helper
+// via analytics-data; this keeps the existing test import working).
+export { monthCalendarGrid } from './analytics-data';
 
 // `daily` was removed from the selector: every card mapped it to `weekly`,
 // so the two buttons rendered identical data. A short custom range still
@@ -140,32 +144,6 @@ export const daysInCurrentMonth = (): number => {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 }
-
-/**
- * Calendar layout for the month containing `from` (an ISO `YYYY-MM-DD`
- * date). `leading` counts the empty cells before day 1 (Monday-first),
- * `days` the day cells, and `trailing` the empty cells after the last day
- * so the grid always completes whole weeks (leading + days + trailing ≡ 0
- * mod 7). Derived from the queried range's month — never "now" — so a
- * custom range inside a past or future month renders that month's calendar.
- */
-export const monthCalendarGrid = (from: string): { leading: number; days: number; trailing: number } => {
-  const [year, month] = from.split('-').map(Number); // month is 1-based
-  // Day 0 of month index `month` (one past the 1-based month) rolls back to
-  // that month's last day, yielding its day count.
-  const days = new Date(year!, month!, 0).getDate();
-  const leading = (new Date(year!, month! - 1, 1).getDay() + 6) % 7; // 0 = Monday
-  const trailing = (7 - ((leading + days) % 7)) % 7;
-  return { leading, days, trailing };
-}
-
-// Fluent keys for the heatmap's Monday-first day-of-week abbreviations,
-// reused from reports.ftl (which already localizes them) so the analytics
-// grid and the reports heatmap share one set of day labels.
-const DAY_LABEL_KEYS = ['day-monday', 'day-tuesday', 'day-wednesday', 'day-thursday', 'day-friday', 'day-saturday', 'day-sunday'];
-
-/** Month-name key suffixes (0-based month index → `analytics-month-*`). */
-const MONTH_LABEL_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
 /**
  * Download the heatmap's underlying revenue rows as CSV, shaped by the
@@ -701,8 +679,7 @@ export default function AnalyticsScreen() {
   const heatCells = heatmapData
     ? buildHeatmapCells(heatmapGranularity, heatmapData)
     : new Map<string, HeatCell>();
-  const heatPeakCell = heatmapData ? heatPeak(heatCells) : null;
-  const peakKey = heatPeakCell?.key ?? null;
+  const peakKey = heatmapData ? heatPeak(heatCells)?.key ?? null : null;
   // Yearly columns are range-derived and shared by the grid and the peak label.
   const heatmapColumns = heatmapGranularity === 'yearly'
     ? yearlyHeatmapColumns(heatmapRange.from, heatmapRange.to)
@@ -719,177 +696,6 @@ export default function AnalyticsScreen() {
         : heatmapData.hourly.length === 0
     : false;
 
-  // Localized month header for a yearly column (abbrev, or MM/YY when the
-  // range spans calendar years) — shared by the grid and the busiest label.
-  const yearlyMonthLabel = (ym: string): string => {
-    const month = Number(ym.slice(5));
-    return multiYear
-      ? `${ym.slice(5)}/${ym.slice(2, 4)}`
-      : l10n.getString(`analytics-month-${MONTH_LABEL_KEYS[month - 1]!}`);
-  };
-
-  /** Localized label for a peak cell key at the card's effective granularity. */
-  const heatPeakLabel = (g: Granularity, key: string): string => {
-    if (g === 'weekly') {
-      const [dayIdx, hour] = key.split(':');
-      const dayKey = DAY_LABEL_KEYS[Number(dayIdx)];
-      const day = dayKey ? l10n.getString(dayKey) : '';
-      return l10n.getString('analytics-heatmap-hour-tooltip', { day, hour: String(Number(hour)).padStart(2, '0') });
-    }
-    if (g === 'monthly') {
-      return l10n.getString('analytics-heatmap-day-tooltip', { day: key });
-    }
-    // yearly: `${YYYY-MM}:${weekIdx}` → "{month} week {n}"
-    const [ym, week] = key.split(':');
-    return l10n.getString('analytics-heatmap-week-tooltip', { month: yearlyMonthLabel(ym ?? ''), week: String(Number(week) + 1) });
-  };
-
-  // The heatmap's takeaway, matching the other cards' Peak/Low insight lines.
-  const peakInsight = heatPeakCell
-    ? l10n.getString('analytics-heat-busiest', {
-        label: heatPeakLabel(heatmapGranularity, heatPeakCell.key),
-        sales: fmt(heatPeakCell.cell.minor),
-      })
-    : null;
-  const heatLowCell = heatmapData ? heatLow(heatCells) : null;
-  // The quietest slot only reads as a takeaway when it differs from the
-  // busiest — a single active cell would otherwise repeat the same label.
-  const lowInsight = heatLowCell && peakKey && peakKey !== heatLowCell.key
-    ? l10n.getString('analytics-heat-quietest', {
-        label: heatPeakLabel(heatmapGranularity, heatLowCell.key),
-        sales: fmt(heatLowCell.cell.minor),
-      })
-    : null;
-
-  // Tooltip for a cell: the slot label alone when it has no activity, or the
-  // label plus its formatted revenue and order count once it has sales.
-  const heatCellTooltip = (label: string, cell?: HeatCell): string => {
-    if (!cell) return label;
-    return l10n.getString('analytics-heat-cell-tooltip', {
-      label,
-      sales: fmt(cell.minor),
-      orders: l10n.getString('analytics-heat-cell-orders', { count: cell.orders }),
-    });
-  };
-
-  const heatCell = (key: string, label: string, opts?: { reactKey?: string; showLabel?: string }) => {
-    const cell = heatCells.get(key);
-    const isPeak = peakKey !== null && key === peakKey;
-    const tooltip = heatCellTooltip(label, cell);
-    return (
-      <Tooltip
-        key={opts?.reactKey ?? key}
-        content={tooltip}
-        position="top"
-        portal
-        showDelay={0}
-      >
-        <div
-          className={`analytics-heat-cell${isPeak ? ' analytics-heat-cell--peak' : ''}`}
-          data-intensity={cell?.level ?? 0}
-          role={cell ? 'img' : undefined}
-          aria-label={cell ? tooltip : undefined}
-        >
-          <div className="analytics-heat-block" />
-          {opts?.showLabel !== undefined && <span className="analytics-heat-label">{opts.showLabel}</span>}
-        </div>
-      </Tooltip>
-    );
-  };
-
-  const renderHeatmap = () => {
-    const dayLabels = DAY_LABEL_KEYS.map((k) => l10n.getString(k));
-    if (heatmapGranularity === 'weekly') {
-      const rows: JSX.Element[] = [
-        <div key="header" className="analytics-weekly-row">
-          <span className="analytics-heat-label analytics-weekly-day" />
-          {Array.from({ length: 24 }, (_, h) => (
-            <span key={h} className="analytics-heat-label analytics-weekly-hour">
-              {String(h).padStart(2, '0')}
-            </span>
-          ))}
-        </div>,
-      ];
-      dayLabels.forEach((day, di) => {
-        rows.push(
-          <div key={day} className="analytics-weekly-row">
-            <span className="analytics-heat-label analytics-weekly-day">{day}</span>
-            {Array.from({ length: 24 }, (_, h) =>
-              heatCell(
-                `${di}:${h}`,
-                l10n.getString('analytics-heatmap-hour-tooltip', { day, hour: String(h).padStart(2, '0') }),
-                { reactKey: `${day}-${h}` },
-              ),
-            )}
-          </div>,
-        );
-      });
-      return (
-        <div className="analytics-heatmap analytics-heatmap--weekly">
-          {rows}
-        </div>
-      );
-    }
-    if (heatmapGranularity === 'monthly') {
-      const { leading, days, trailing } = monthCalendarGrid(heatmapRange.from);
-      const cells: JSX.Element[] = [];
-      for (let i = 0; i < leading; i++) {
-        cells.push(<div key={`lead-${i}`} className="analytics-heat-cell analytics-heat-cell--empty" />);
-      }
-      for (let d = 1; d <= days; d++) {
-        cells.push(
-          heatCell(
-            String(d),
-            l10n.getString('analytics-heatmap-day-tooltip', { day: String(d) }),
-            { showLabel: String(d) },
-          ),
-        );
-      }
-      for (let i = 0; i < trailing; i++) {
-        cells.push(<div key={`trail-${i}`} className="analytics-heat-cell analytics-heat-cell--empty" />);
-      }
-      return (
-        <div className="analytics-heatmap analytics-heatmap--monthly">
-          <div className="analytics-monthly-header">
-            {dayLabels.map((d) => (
-              <span key={d} className="analytics-heat-label">{d}</span>
-            ))}
-          </div>
-          <div className="analytics-monthly-grid">{cells}</div>
-        </div>
-      );
-    }
-    if (heatmapGranularity === 'yearly') {
-      return (
-        <div className="analytics-heatmap analytics-heatmap--yearly">
-          {heatmapColumns.map((col) => {
-            const label = yearlyMonthLabel(col.key);
-            return (
-              <div className="analytics-heat-column" key={col.key}>
-                <span className="analytics-heat-label">{label}</span>
-                {Array.from({ length: col.cells }, (_, week) =>
-                  heatCell(
-                    `${col.key}:${week}`,
-                    l10n.getString('analytics-heatmap-week-tooltip', { month: label, week: String(week + 1) }),
-                  ),
-                )}
-              </div>
-            );
-          })}
-        </div>
-      );
-    }
-    // Defensive weekday strip for `daily`/`custom` buckets. Unreachable
-    // today — custom remaps to weekly and daily is no longer selectable —
-    // but it mirrors `buildHeatmapIntensities`'s flat weekday fallback.
-    return (
-      <div className="analytics-heatmap">
-        {dayLabels.map((label, i) =>
-          heatCell(String(i), label, { showLabel: label }),
-        )}
-      </div>
-    );
-  };
 
   // C2.2: Analytics tab lock (Plus→Pro trigger) — render a locked screen
   // with a blurred sample chart + upgrade CTA instead of the live cards.
@@ -1638,43 +1444,19 @@ export default function AnalyticsScreen() {
                   style={isExpanded ? { transform: `scale(${expandScale})` } : undefined}
                 >
                   {card.key === 'heatmap' ? (
-                    heatmapQuery.status === 'loading' ? (
-                      <div className="analytics-card-skeleton analytics-heat-skeleton">
-                        {Array.from({ length: 28 }, (_, i) => (
-                          <div key={i} className="skeleton-bar skeleton-heat-block" />
-                        ))}
-                      </div>
-                    ) : heatmapQuery.status === 'error' ? (
-                      <div className="analytics-card-error" role="alert">
-                        <span className="analytics-card-error-icon" aria-hidden="true">⚠</span>
-                        <span className="analytics-card-error-text">
-                          {l10nErrorMessage(heatmapQuery.error, l10n, 'analytics-card-error-load')}
-                        </span>
-                      </div>
-                    ) : heatmapEmpty ? (
-                      <div className="analytics-card-empty" role="status">
-                        {l10n.getString('analytics-empty-heatmap')}
-                      </div>
-                    ) : (
-                      <>
-                        {renderHeatmap()}
-                        {peakInsight && <p className="analytics-card-insight">{peakInsight}</p>}
-                        {lowInsight && <p className="analytics-card-insight">{lowInsight}</p>}
-                        <div
-                          className="analytics-heat-scale"
-                          role="group"
-                          aria-label={l10n.getString('analytics-heat-scale-aria')}
-                        >
-                          <span className="analytics-heat-scale-label">{l10n.getString('analytics-heat-scale-low')}</span>
-                          {[0, 1, 2, 3, 4].map((i) => (
-                            <span key={i} className="analytics-heat-cell analytics-heat-scale-swatch" data-intensity={i} aria-hidden="true">
-                              <div className="analytics-heat-block" />
-                            </span>
-                          ))}
-                          <span className="analytics-heat-scale-label">{l10n.getString('analytics-heat-scale-high')}</span>
-                        </div>
-                      </>
-                    )
+                    <AnalyticsHeatmap
+                      granularity={heatmapGranularity}
+                      range={heatmapRange}
+                      cells={heatCells}
+                      peakKey={peakKey}
+                      columns={heatmapColumns}
+                      multiYear={multiYear}
+                      empty={heatmapEmpty}
+                      status={heatmapQuery.status}
+                      error={heatmapQuery.error}
+                      data={heatmapData}
+                      fmt={fmt}
+                    />
                   ) : (
                     <AnalyticsCardContent
                       cardKey={card.key}

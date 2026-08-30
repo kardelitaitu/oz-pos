@@ -897,4 +897,34 @@ export type {
   VoidedSummaryRow,
   WeeklyRevenueRow,
 };
+
+// ── Heatmap label keys + calendar layout (shared by the heatmap card) ──
+
+/**
+ * Fluent keys for the heatmap's Monday-first day-of-week abbreviations,
+ * reused from reports.ftl (which already localizes them) so the analytics
+ * grid and the reports heatmap share one set of day labels.
+ */
+export const DAY_LABEL_KEYS = ['day-monday', 'day-tuesday', 'day-wednesday', 'day-thursday', 'day-friday', 'day-saturday', 'day-sunday'];
+
+/** Month-name key suffixes (0-based month index → `analytics-month-*`). */
+export const MONTH_LABEL_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+/**
+ * Calendar layout for the month containing `from` (an ISO `YYYY-MM-DD`
+ * date). `leading` counts the empty cells before day 1 (Monday-first),
+ * `days` the day cells, and `trailing` the empty cells after the last day
+ * so the grid always completes whole weeks (leading + days + trailing ≡ 0
+ * mod 7). Derived from the queried range's month — never "now" — so a
+ * custom range inside a past or future month renders that month's calendar.
+ */
+export function monthCalendarGrid(from: string): { leading: number; days: number; trailing: number } {
+  const [year, month] = from.split('-').map(Number); // month is 1-based
+  // Day 0 of month index `month` (one past the 1-based month) rolls back to
+  // that month's last day, yielding its day count.
+  const days = new Date(year!, month!, 0).getDate();
+  const leading = (new Date(year!, month! - 1, 1).getDay() + 6) % 7; // 0 = Monday
+  const trailing = (7 - ((leading + days) % 7)) % 7;
+  return { leading, days, trailing };
+}
 export type { StaffAnalyticsRow };
