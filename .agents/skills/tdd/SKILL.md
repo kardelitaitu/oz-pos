@@ -95,7 +95,10 @@ bash scripts/test-tdd.sh -p crates/oz-core   # the crate you changed — [profil
 bash scripts/test-changed.sh                 # only crates touched vs origin/main
 bash scripts/test-ui-changed.sh              # only UI tests affected by changed files
 cargo fmt --all -- --check                   # formatting gate
+bash scripts/wtree-guard.sh check            # nothing changed under you since you verified
 ```
+
+`-p` takes a crate **directory** (`crates/oz-core`), not a package name. The script resolves cargo across PowerShell / Git Bash / WSL PATHs; if it cannot find one, set `CARGO=/path/to/cargo` rather than editing the script.
 
 Static checks on the changed area:
 - Rust: cargo clippy -p <crate> -- -D warnings
@@ -143,8 +146,16 @@ This repo is often edited by several agents and the user concurrently. TDD cycle
 
 - **Never stop or kill a running process.** Do not `taskkill`, `kill`, or terminate any `.exe` (dev servers, `esbuild.exe`, `node.exe`, Tauri, Vite, etc.) — another agent or the user may still need it. If a script fails because a process is busy, leave it running and note the conflict instead.
 - **Inspect existing listeners before choosing a port.** If you need a dev server or test runner, check what is already running first and reuse it.
-- **Own your files and hunks.** Stage and commit only what you changed — avoid broad `git add -A`; never discard or overwrite another agent's uncommitted work.
-- **Assume the tree moves under you.** Re-check `git status` and the current branch before any consequential git operation.
+- **Own your files and hunks.** Stage and commit only what you changed — avoid broad `git add -A`; never discard or overwrite another agent's uncommitted work. Note that `git commit -- <path>` commits the **working-tree version of that path**, not "your hunks": if someone else has in-flight edits to the same file they land in your commit. Re-run the tests for that path immediately before committing, not minutes before.
+- **Track the drift window with `scripts/wtree-guard.sh`.** Claim the files you are working on, stamp them once your tests pass, and check again right before you commit:
+  ```bash
+  bash scripts/wtree-guard.sh own crates/oz-core/src/cache.rs   # claim
+  bash scripts/wtree-guard.sh verify                            # after tests pass
+  bash scripts/wtree-guard.sh check                             # immediately before commit; exit 1 on drift
+  ```
+  It reports `OK` / `DRIFT` / `REVERTED` / `DELETED` per file and tells you when HEAD moved under you. It is opt-in, not a hook: the claim file is per-repository, so enforcing it in `pre-commit` would let one agent's claim block another agent's commit.
+- **Assume the tree moves under you.** Re-check `git status` and the current branch before any consequential git operation. Another agent's `git stash` or `git checkout --` can silently replace an in-flight file — the symptom is not an error, it is tests behaving impossibly. If `wtree-guard check` says `REVERTED`, look for a stash entry and restore **without popping** (`git checkout 'stash@{N}' -- <path>`), leaving other agents' stashes intact.
+- **After restoring a file, touch its mtime.** PowerShell's `Copy-Item` preserves the *source* file's timestamp, so a restored file can look older than the build artifact compiled from the wrong version — and cargo will silently re-run the **stale binary**, making a working fix appear broken. Use `(Get-Item <path>).LastWriteTime = Get-Date` after any restore, and hold test scope constant when comparing two states of the tree.
 
 ---
 
@@ -171,6 +182,7 @@ bash scripts/test-tdd.sh --watch
 ```
 
 If the fast loop is broken (script missing, nextest not installed, profile absent, etc.):
+- `test-tdd.sh` names the missing piece itself (cargo, cargo-nextest, cargo-watch) and falls back to `cargo test` when nextest is absent — read its message before working around it.
 - Fall back to cargo test -p <package> or cargo nextest run -p <package>.
 - For UI: cd ui && npm run test -- <file> or npm run test:watch.
 - Note the breakage in the Journal so it can be fixed later.
@@ -180,6 +192,7 @@ If the fast loop is broken (script missing, nextest not installed, profile absen
 | Script | What it does |
 |---|---|
 | `scripts/test-tdd.sh` | Fast loop for one crate (`--watch`, `-p <crate-dir>`, `--vanilla`) |
+| `scripts/wtree-guard.sh` | Detect concurrent drift in files you claimed (`own`, `verify`, `check`, `status`, `release`) |
 | `scripts/test-changed.sh` | Runs tests only for crates whose files changed vs `origin/main` (`--all`, `--check`, `--vanilla`) |
 | `scripts/test-ui-changed.sh` | `vitest --changed` — only UI tests affected by changed files (`--all`, `--check`) |
 | `scripts/check.sh` | Full local pre-push gate mirroring CI |
@@ -219,7 +232,10 @@ npm run check:all            # lint → typecheck → test → i18n → E2E (Doc
 6. **Forgetting the regression test in a bugfix PR.** Without it, the bug WILL come back. Phase 3's Red test is the regression test — keep it.
 7. **Journaling "what" instead of "why".** The diff already shows what. Record the decision, the tradeoff, and what you deliberately did NOT do.
 8. **Killing processes or grabbing ports another agent needs.** This tree runs concurrently — never terminate a running `.exe` or take over a busy port. Inspect existing listeners first and reuse what's running.
-9. **Pushing.** `git push` is never part of this skill's workflow — not on user request, not when "everything is green". Commit locally, report, stop. The human pushes.
+9. **Committing a file you verified "a few minutes ago".** `git commit -- <path>` commits the working-tree version of that path, so another agent's in-flight edits ride along — a shared `*_tests.rs` is the usual casualty, and it turns HEAD red without any error from git. Run `wtree-guard check` (or at minimum re-run that path's tests) *immediately* before committing, and fix forward rather than amending a commit someone may already be based on.
+10. **Believing a stale binary.** PowerShell's `Copy-Item` preserves the *source* file's mtime, so a restored file can appear older than the artifact built from the wrong content — cargo then re-runs the stale binary and a working fix looks broken. Touch `LastWriteTime` after any restore. Related: when comparing two states of the tree, hold scope constant — an isolated test run and a full-package run are different experiments (package tests share process state).
+11. **Declaring code untestable because it needs infrastructure.** A rule buried in a spawned thread or behind a feature flag is usually a pure decision wrapped in I/O — extract the decision, put it *outside* the cfg gate, and it becomes testable in the default build. Check what CI actually compiles (`nextest --workspace --all-features`) before assuming a path never runs.
+12. **Pushing.** `git push` is never part of this skill's workflow — not on user request, not when "everything is green". Commit locally, report, stop. The human pushes.
 
 ---
 

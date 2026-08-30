@@ -7579,3 +7579,67 @@ export/email_sender_tests.rs, so the crate does not compile and round D
 fine - this is uncommitted WIP.
 
 **Commits:** cfec0986 (B48).
+
+## 2026-08-31 — shared-worktree tooling: the fast loop and the drift window
+
+Round C left three process problems that cost more time than the bugs did.
+All three are now fixed rather than merely recorded.
+
+**1. scripts/test-tdd.sh was dead on arrival (aad69c6f).** The documented
+fast loop died with line 71: exec: cargo: not found. The cause was not a
+missing toolchain: this workspace is driven from PowerShell (cargo 1.96.0
+on PATH), Git Bash (where .githooks/pre-commit runs) and WSL bash, and
+ash -c here is WSL bash, where command -v cargo finds nothing. The
+dangerous case is a wrong hit, not a miss - ash -lc under WSL does find
+a cargo, a native-Linux 1.95.0, while target/ was built by Windows 1.96.0.
+Silently using it rebuilds the whole workspace for another platform and
+discards every cached artifact. Resolution is now ordered and explicit
+(PATH -> Windows rustup shims under /c or /mnt/<drive> -> $HOME/.cargo/bin)
+with CARGO= as an override and a loud warning on mount/toolchain mismatch.
+.githooks/pre-commit had already solved the same problem for rustup and
+says so in a comment; the two are now cross-referenced. Three smaller
+failures fixed in passing: --watch failed obscurely because cargo-watch is
+not installed; a missing nextest silently broke the default path (now
+falls back to cargo test with the install hint); and -p takes a crate
+DIRECTORY while the help text said -p oz-core, so a package name produced
+a raw cargo manifest error.
+
+**2. scripts/wtree-guard.sh (7ba53e0f).** Two incidents this week were the
+same shape: drift between "I verified this file" and "I committed this
+file". A concurrent git stash replaced an in-flight ozpkg.rs (recovered
+from stash@{0} without popping, but the snapshot predated my last edit, so
+encrypt bound the new AAD and decrypt did not - tamper tests passed while
+every honest round-trip failed). cache.rs was reverted a second time with
+no stash entry at all. Mirror image: my pathspec commit d4bbe3ee swept in
+10 of another agent's in-flight tests and left HEAD red, and my fix to that
+collision then landed in THEIR commit 018972d5. git commit -- <path>
+commits the working-tree version of a path, not your hunks.
+
+The guard snapshots blob hashes (own / verify / check) and distinguishes
+REVERTED (content equals HEAD - your edits are gone) from DRIFT (changed
+after your stamp) from DELETED, and prints the recovery recipe including
+the mtime touch. Deliberately NOT wired into pre-commit: the claim file is
+per-repository, not per-agent, so enforcing it would let my claim block
+another agent from committing a file they never touched. Opt-in, and the
+skill says when to run it.
+
+**3. The mtime trap is now written down where it will be read.** PowerShell
+Copy-Item preserves the SOURCE timestamp, so a restored file can look older
+than the artifact built from the wrong content and cargo re-runs a stale
+binary - a working fix appears broken. Documented in the skill's
+"Working alongside other agents" and as pitfall 10, together with the
+related discipline: hold scope constant in an A/B (an isolated test run and
+a full-package run are different experiments; package tests share process
+state, which is how I nearly blamed my own mutex for another agent's
+failing test).
+
+**Blocked, unresolved:** round D (user_preferences: mixed insert+update in
+one batch, duplicate key within one batch) is written but unverified. The
+crate has not compiled cleanly for several cycles because another agent is
+mid-refactor across db/ (reports.rs gained net_revenue_minor/refund_minor
+without updating export/email_sender_tests.rs, then sync_auth.rs lost
+format_expiry/PingResult, then workspaces_instances.rs:497 unclosed
+delimiter). HEAD itself is fine each time - these are uncommitted working
+tree states. Not committing unverified tests.
+
+**Commits:** aad69c6f (test-tdd.sh), 7ba53e0f (wtree-guard.sh).
