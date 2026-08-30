@@ -50,7 +50,7 @@ jobs:
     name: Validate (tag ↔ version)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Validate tag vs app versions + changelog heading
         run: node scripts/check-release-version.mjs "${{ github.ref_name }}"
       - name: Self-test version gate
@@ -61,7 +61,7 @@ jobs:
       # feeds generate-latest-json.mjs output through it (plus tamper +
       # real-tauri-cli fixture cross-checks). Fails fast, before any build.
       - name: Install Rust toolchain (compat harness)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
       - name: Updater client compatibility check
         run: node scripts/check-updater-compat.mjs
 
@@ -111,16 +111,16 @@ jobs:
           - target: docker-license
             os: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: mozilla/sccache-action@v0.0.10
+      - uses: mozilla/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696 # v0.0.10
 
       - name: Install cargo-nextest
         if: matrix.target != 'docker-cloud' && matrix.target != 'docker-license'
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2
         with:
           tool: cargo-nextest
       # Release-time safety net: run the workspace test suite on the release
@@ -218,7 +218,7 @@ jobs:
       # would block on 76 LOW + 62 MEDIUM too).
       - name: Scan cloud Docker image (blocking)
         if: matrix.target == 'docker-cloud'
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: oz-pos-cloud:${{ github.ref_name }}
           format: sarif
@@ -230,7 +230,7 @@ jobs:
 
       - name: Scan license Docker image (blocking)
         if: matrix.target == 'docker-license'
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: oz-pos-license:${{ github.ref_name }}
           format: sarif
@@ -277,7 +277,7 @@ jobs:
       - name: Upload unsigned installers (SignPath candidate)
         if: matrix.target == 'desktop-windows'
         id: upload-unsigned
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-unsigned
           path: ${{ matrix.upload_path }}
@@ -293,7 +293,7 @@ jobs:
         # timeout, bad token) must degrade to the unsigned fallback upload
         # below, never abort the job and strand the Windows installer.
         continue-on-error: true
-        uses: signpath/github-action-submit-signing-request@v2
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -305,7 +305,7 @@ jobs:
 
       - name: Upload signed installers
         if: matrix.target == 'desktop-windows' && steps.signpath.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ matrix.target }}
           path: signed-installers/
@@ -316,7 +316,7 @@ jobs:
         # Non-Windows targets never run the SignPath step, so outcome is
         # 'skipped' != 'success' and they always land here.
         if: matrix.tauri && !(matrix.target == 'desktop-windows' && steps.signpath.outcome == 'success')
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ matrix.target }}
           path: ${{ matrix.upload_path }}
@@ -325,7 +325,7 @@ jobs:
 
       - name: Upload Docker artifact
         if: matrix.target == 'docker-cloud'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: docker-cloud
           path: oz-pos-cloud.tar
@@ -333,7 +333,7 @@ jobs:
 
       - name: Upload license Docker artifact
         if: matrix.target == 'docker-license'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: docker-license
           path: oz-pos-license.tar
@@ -351,8 +351,8 @@ jobs:
       attestations: write
     environment: release
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
 
@@ -364,7 +364,7 @@ jobs:
           node scripts/verify-updater-signature.mjs --self-test
 
       - name: Download all build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: artifacts/
 
@@ -461,7 +461,7 @@ jobs:
 
       # RELEASE-09: create as DRAFT; published only after the inventory gate.
       - name: Create draft GitHub Release with assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           name: Release ${{ github.ref_name }}
           generate_release_notes: true
@@ -473,7 +473,7 @@ jobs:
       # Covers every published asset class (AppImage/deb installers, NSIS/MSI,
       # DMG, docker tars, and both updater manifests).
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: |
             release-assets/*.AppImage
