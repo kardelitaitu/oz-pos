@@ -937,6 +937,24 @@ with WAL/FK pragmas; `error.rs`/`lib.rs` are taxonomy/re-exports.
 
 ---
 
+## 8. platform/kernel — module system (event bus, manifest, lifecycle)
+
+Baseline: ~2.1k production lines. Slice A (event_bus.rs 835: production
+1–327 fully read; 328+ inline tests).
+
+**No new findings — exemplary.** The synchronous topic bus prevents
+reentrant deadlocks by snapshotting the handler list under a short-lived
+read lock and dispatching after release (Bug #2 documented); handler
+panics are isolated via `catch_unwind` with structured logs (the
+publisher never dies); handler errors are logged-not-propagated per the
+documented fire-and-forget contract; module-scoped unsubscribe removes
+handlers atomically across topics; RwLock poisoning is recovered via
+`into_inner` as a documented design choice.
+
+---
+
+---
+
 ---
 
 ---
