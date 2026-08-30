@@ -8089,3 +8089,18 @@ a foreign commit already carried the payload BEFORE retrying.
 **Commits:** code inside 01d3932e (foreign message), docs alongside
 this entry. Open: void-path reversal (voids of completed sales bypass
 create_refund), cloud email parity, category pie visual semantics.
+
+## 2026-08-31 — Follow-up: void_sale compare-and-set (found proving LOY-03's void-path note)
+
+The LOY-03 registry note asked whether completed sales could be voided
+(and thus keep points without a refund). Proved unreachable: the
+transition table only allows Active→Voided. But the sweep caught a real
+race in `void_sale`: the Active pre-check reads OUTSIDE the transaction
+and the UPDATE carried no status predicate — a concurrent finalize
+completing the sale in between would be silently overwritten
+completed→voided (paid, points awarded, invisible to reports). Now a
+compare-and-set (`AND status = 'active'`) with explicit rollback on
+conflict — same idiom as finalize_sale's `changed == 1` guard. Existing
+void tests (4) cover the pre-check; the race window itself is not
+unit-injectable, the guard makes the write self-validating. Sales suite
+135/135. Registry: void-path note replaced with the proof + fix.

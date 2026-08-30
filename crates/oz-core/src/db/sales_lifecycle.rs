@@ -626,11 +626,18 @@ impl Store<'_> {
         let tx = self.conn.unchecked_transaction()?;
 
         // 1. Update status to Voided with optimistic concurrency (ADR #6).
+        // The status predicate makes this a compare-and-set: the
+        // pre-check above reads OUTSIDE this transaction, so a
+        // concurrent finalize could complete the sale in between —
+        // without the guard that completed (paid, points-awarded) sale
+        // would be silently overwritten to voided.
         let rows = tx.execute(
-            "UPDATE sales SET status = 'voided', updated_at = ?1, version = version + 1 WHERE id = ?2",
+            "UPDATE sales SET status = 'voided', updated_at = ?1, version = version + 1
+             WHERE id = ?2 AND status = 'active'",
             rusqlite::params![now, sale_id],
         )?;
         if rows == 0 {
+            tx.rollback()?;
             return Err(CoreError::Conflict {
                 entity: "sale",
                 field: "version",
