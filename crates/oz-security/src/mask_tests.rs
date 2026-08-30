@@ -301,3 +301,84 @@ fn mask_cvv_extreme_inputs() {
     assert_eq!(mask_cvv("\u{1F60A}9!"), "***");
     assert_eq!(mask_cvv("123456789012345"), "***");
 }
+
+// ── mask_token: bearer credentials in logs ───────────────────
+
+/// Session tokens are bearer credentials: whoever holds one acts as that
+/// session without knowing the PIN. The point of `mask_token` is that a log
+/// line can name a session without handing over the ability to *be* it, so
+/// the front of the value — where a UUID v7 carries its timestamp — must
+/// never appear.
+#[test]
+fn mask_token_keeps_only_a_stable_tail() {
+    let token = "018f3b2c-7de7-7a91-9c4d-2f1b8a6e5d44";
+    let masked = mask_token(token);
+    assert_eq!(masked, "...8a6e5d44");
+    assert!(!masked.contains("018f3b2c"), "front half leaked: {masked}");
+    assert!(!masked.contains(token), "full token leaked: {masked}");
+}
+
+#[test]
+fn mask_token_never_emits_a_value_it_could_be_recovered_from() {
+    // Short tokens are the case a naive implementation gets wrong: showing
+    // 8 of 10 characters leaks 80% of the entropy and returns a string
+    // LONGER than the secret. Anything at or below twice the tail is fully
+    // masked, so the output is always strictly smaller than a real token.
+    for (token, shows_tail) in [
+        ("018f3b2c-7de7-7a91-9c4d-2f1b8a6e5d44", true),
+        ("018f3b2c7de77a919c4d2f1b8a6e5d44", true),
+        ("sk_live_9f2b1c0d4e5a6b7c8d9e", true),
+        ("0123456789", false),
+        ("abcd1234ef01", false),
+        ("a", false),
+        ("", false),
+    ] {
+        let masked = mask_token(token);
+        if shows_tail {
+            assert!(masked.starts_with("..."), "got {masked:?} for {token:?}");
+            assert!(
+                !masked.contains(token),
+                "{token:?} leaked through as {masked:?}"
+            );
+            assert!(
+                masked.len() < token.len(),
+                "masking must shrink the value, got {masked:?} for {token:?}"
+            );
+        } else {
+            assert_eq!(masked, "***", "{token:?} is too short to show a tail");
+        }
+    }
+}
+
+/// Eight characters, not four: with the 256 sessions the desktop store
+/// allows, a 16-bit suffix collides between two sessions about half the
+/// time, which makes the log misleading rather than merely lossy. The
+/// failure is invisible — it looks like a real event about the wrong
+/// session — so the size is pinned, not left as a round-number preference.
+#[test]
+fn mask_token_tail_is_eight_characters() {
+    let masked = mask_token("018f3b2c-7de7-7a91-9c4d-2f1b8a6e5d44");
+    assert_eq!(masked.chars().count(), 11, "expected '...' + 8 chars");
+    assert_eq!(masked.chars().count() - "...".chars().count(), 8);
+}
+
+#[test]
+fn mask_token_handles_multibyte_without_panicking() {
+    // The SEC-8 hazard that byte-slicing mask_name has: a byte-based tail
+    // would split one of these and panic at the char boundary.
+    let token = "🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉tailhere";
+    let masked = mask_token(token);
+    assert!(masked.starts_with("..."), "got {masked:?}");
+    assert_eq!(masked.chars().count(), 11);
+}
+
+#[test]
+fn mask_token_is_deterministic_so_logs_can_correlate() {
+    let token = "018f3b2c-7de7-7a91-9c4d-2f1b8a6e5d44";
+    assert_eq!(mask_token(token), mask_token(token));
+    assert_ne!(
+        mask_token(token),
+        mask_token("018f3b2c-7de7-7a91-9c4d-2f1b8a6e0000"),
+        "two different sessions must not collapse onto one label"
+    );
+}
