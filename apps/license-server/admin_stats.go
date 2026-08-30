@@ -43,14 +43,43 @@ type fxCacheEntry struct {
 	rate      float64
 	updatedAt time.Time
 	live      bool
+	ttl       time.Duration // success → fxCacheTTL; failure → fxRetryTTL
 }
 
 var (
 	fxCache   *fxCacheEntry
 	fxCacheMu sync.Mutex
+	// fxFetcher is the test seam: returns a live USD→IDR rate or
+	// (0, false) on any upstream failure. getFxRate owns caching/fallback.
+	fxFetcher = fetchFxRateLive
+	// fxRetryTTL is the negative-cache window after a failed fetch.
+	fxRetryTTL = 1 * time.Minute
 )
 
 const fxCacheTTL = 1 * time.Hour
+
+// fetchFxRateLive performs the actual upstream call (no caching).
+func fetchFxRateLive() (float64, bool) {
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get("https://open.er-api.com/v6/latest/USD")
+	if err != nil {
+		log.Printf("admin-stats: FX rate fetch failed: %v — using fallback", err)
+		return 0, false
+	}
+	defer resp.Body.Close()
+	var body struct {
+		Rates map[string]float64 `json:"rates"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		log.Printf("admin-stats: FX rate decode failed: %v — using fallback", err)
+		return 0, false
+	}
+	if body.Rates == nil || body.Rates["IDR"] == 0 {
+		log.Printf("admin-stats: FX rate response missing IDR — using fallback")
+		return 0, false
+	}
+	return body.Rates["IDR"], true
+}
 
 // getFxRate returns the USD→IDR rate. On first call or after TTL expiry it
 // fetches from open.er-api.com; fallback is 16000.
@@ -59,36 +88,19 @@ func getFxRate() (rate float64, updatedAt time.Time, live bool) {
 	defer fxCacheMu.Unlock()
 
 	now := time.Now()
-	if fxCache != nil && now.Sub(fxCache.updatedAt) < fxCacheTTL {
+	if fxCache != nil && now.Sub(fxCache.updatedAt) < fxCache.ttl {
 		return fxCache.rate, fxCache.updatedAt, fxCache.live
 	}
 
-	// Fetch fresh rate.
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get("https://open.er-api.com/v6/latest/USD")
-	if err != nil {
-		log.Printf("admin-stats: FX rate fetch failed: %v — using fallback", err)
+	rate, live = fxFetcher()
+	ttl := fxCacheTTL
+	if !live {
 		rate = 16000
-		live = false
-	} else {
-		defer resp.Body.Close()
-		var body struct {
-			Rates map[string]float64 `json:"rates"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-			log.Printf("admin-stats: FX rate decode failed: %v — using fallback", err)
-			rate = 16000
-			live = false
-		} else if body.Rates == nil || body.Rates["IDR"] == 0 {
-			rate = 16000
-			live = false
-		} else {
-			rate = body.Rates["IDR"]
-			live = true
-		}
+		// B25: negative-cache for fxRetryTTL only — one upstream blip
+		// must not pin the fallback (wrong IDR conversions) for an hour.
+		ttl = fxRetryTTL
 	}
-
-	fxCache = &fxCacheEntry{rate: rate, updatedAt: now, live: live}
+	fxCache = &fxCacheEntry{rate: rate, updatedAt: now, live: live, ttl: ttl}
 	return rate, now, live
 }
 
@@ -226,6 +238,9 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 		cumulative := 0
 		for _, key := range bucketKeys {
 			rev := revenueByMonth[key]
+			// NOTE (bug hunt r6): amount_usd already contains FX-converted
+			// IDR-native events (revenue_events.go writes both currencies
+			// of every payment) — do NOT add idr/fx here, that double-counts.
 			if real, ok := realByMonth[key]; ok && (real.usd > 0 || real.idr > 0) {
 				rev = real.usd
 			}
