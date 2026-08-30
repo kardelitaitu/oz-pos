@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tools/types"
 )
 
 // trialEmailMilestone defines a day-offset and the email template to send.
@@ -345,17 +344,22 @@ func buildTrialEmail(from, to, subject, body string) []byte {
 // ensureTrialEmailLogCollection creates the trial_email_log collection
 // if it doesn't exist (idempotent migration for existing deployments).
 func ensureTrialEmailLogCollection(app core.App) error {
-	_, err := app.FindCollectionByNameOrId("trial_email_log")
+	existing, err := app.FindCollectionByNameOrId("trial_email_log")
 	if err == nil {
-		return nil // already exists
+		// LSE-5 repair: legacy migrations created this collection with
+		// empty-string create/update/delete rules, which PocketBase treats
+		// as PUBLIC guest writes (nil is superuser-only). Anonymous row
+		// tampering would break the email idempotency log.
+		return ensureSuperuserOnlyRules(app, existing)
 	}
 
 	collection := core.NewBaseCollection("trial_email_log")
-	collection.ListRule = types.Pointer("@request.auth.id != ''")
-	collection.ViewRule = types.Pointer("@request.auth.id != ''")
-	collection.CreateRule = types.Pointer("") // server-only
-	collection.UpdateRule = types.Pointer("") // server-only
-	collection.DeleteRule = types.Pointer("") // server-only
+	// Superuser-only (LSE-5): nil rules; "" would be PUBLIC guest access.
+	collection.ListRule = nil
+	collection.ViewRule = nil
+	collection.CreateRule = nil
+	collection.UpdateRule = nil
+	collection.DeleteRule = nil
 
 	collection.Fields.Add(&core.TextField{
 		Name:     "subscription",
