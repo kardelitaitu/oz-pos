@@ -839,7 +839,12 @@ fn monthly_revenue_multiple_months() {
 }
 
 #[test]
-fn top_products_product_deleted_after_sale() {
+fn top_products_keeps_deleted_product_sales_under_their_sku() {
+    // REP-05: the INNER JOIN to products silently DROPPED sales of
+    // deleted products from top_products, so the report's totals no
+    // longer reconciled with actual revenue (money vanished from the
+    // report without a trace). Deleted products now surface under
+    // their stored sku.
     let conn = fresh();
     let s = store(&conn);
     seed_completed_sale(&conn, "DELETED", 2, 500);
@@ -848,13 +853,81 @@ fn top_products_product_deleted_after_sale() {
     conn.execute("DELETE FROM products WHERE sku = 'DELETED'", [])
         .unwrap();
 
-    // top_products JOINs with products, so the deleted product won't appear.
     let rows = s
         .top_products("2000-01-01", "2099-12-31", 10, "revenue")
         .unwrap();
+    assert_eq!(rows.len(), 1, "the sale must still be reported");
+    assert_eq!(rows[0].sku, "DELETED");
+    assert_eq!(
+        rows[0].name, "DELETED",
+        "name falls back to the stored sku when the product row is gone"
+    );
+    assert_eq!(rows[0].total_minor, 1000);
+}
+
+#[test]
+fn category_breakdown_buckets_deleted_product_sales_as_uncategorised() {
+    // REP-05: sales of deleted products vanished from the category
+    // breakdown entirely (INNER JOIN products), inflating every
+    // remaining category's percentage — the pie claimed 100% of
+    // revenue while a quarter of it was missing.
+    let conn = fresh();
+    let s = store(&conn);
+    s.create_category("cat-keep", "Drinks", "#00f", "").unwrap();
+    s.create_product(
+        "GONE",
+        "Gone",
+        price(1000),
+        Some("cat-keep"),
+        None,
+        100,
+        None,
+    )
+    .unwrap();
+    s.create_product(
+        "HERE",
+        "Here",
+        price(3000),
+        Some("cat-keep"),
+        None,
+        100,
+        None,
+    )
+    .unwrap();
+    for sku in ["GONE", "HERE"] {
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(
+            Sku::new(sku),
+            1,
+            price(if sku == "GONE" { 1000 } else { 3000 }),
+        ))
+        .unwrap();
+        let mut sale = Sale::from_cart(&cart).unwrap();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        sale.created_at = now.clone();
+        sale.updated_at = now;
+        s.create_sale(&sale).unwrap();
+        s.update_sale_status(&sale.id, SaleStatus::Active).unwrap();
+        s.update_sale_status(&sale.id, SaleStatus::Completed)
+            .unwrap();
+    }
+    conn.execute("DELETE FROM products WHERE sku = 'GONE'", [])
+        .unwrap();
+
+    let rows = s.category_breakdown("2000-01-01", "2099-12-31").unwrap();
+    let total: i64 = rows.iter().map(|r| r.total_minor).sum();
+    assert_eq!(total, 4000, "no revenue may vanish from the breakdown");
+    let drinks = rows.iter().find(|r| r.category_name == "Drinks").unwrap();
+    let uncat = rows
+        .iter()
+        .find(|r| r.category_name == "Uncategorised")
+        .expect("deleted product's revenue must land in the uncategorised bucket");
+    assert_eq!(drinks.total_minor, 3000);
+    assert_eq!(uncat.total_minor, 1000);
     assert!(
-        rows.is_empty(),
-        "deleted products should not appear in top products"
+        (drinks.percentage - 75.0).abs() < 0.01,
+        "percentage must normalize against the FULL revenue, got {}",
+        drinks.percentage
     );
 }
 

@@ -555,7 +555,9 @@ impl Store<'_> {
             "total_minor DESC"
         };
         let mut stmt = self.conn.prepare(&format!(
-            "SELECT p.id AS product_id, p.sku, p.name,
+            "SELECT COALESCE(p.id, sl.sku) AS product_id,
+                    sl.sku AS sku,
+                    COALESCE(p.name, sl.sku) AS name,
                     sl.currency AS currency,
                     SUM(sl.qty) AS total_qty,
                     SUM(sl.line_minor) AS total_minor,
@@ -563,10 +565,10 @@ impl Store<'_> {
                     (SUM(sl.line_minor) - SUM(COALESCE(sl.cost_minor, p.cost_minor, 0) * sl.qty)) AS gross_profit_minor
              FROM sale_lines sl
              JOIN sales s ON sl.sale_id = s.id
-             JOIN products p ON sl.sku = p.sku
+             LEFT JOIN products p ON sl.sku = p.sku
              WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
-             GROUP BY p.id, sl.currency
-             ORDER BY {order_clause}, p.sku
+             GROUP BY sl.sku, sl.currency
+             ORDER BY {order_clause}, sl.sku
              LIMIT ?3"
         ))?;
         let rows = stmt.query_map(params![start_date, end_date, limit], |row| {
@@ -787,7 +789,7 @@ impl Store<'_> {
                     COUNT(DISTINCT s.id) AS sale_count
              FROM sale_lines sl
              JOIN sales s ON sl.sale_id = s.id
-             JOIN products p ON sl.sku = p.sku
+             LEFT JOIN products p ON sl.sku = p.sku
              LEFT JOIN categories c ON p.category_id = c.id
              WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
              GROUP BY p.category_id, sl.currency
