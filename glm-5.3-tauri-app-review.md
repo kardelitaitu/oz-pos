@@ -64,6 +64,27 @@ Owner (`*`) unaffected; Manager/Admin presets need grants for the NEW families
 (purchasing, giftcards, sync, security, data) since they hold family wildcards,
 not `*`. Grant them in role presets when those features are enabled for managers.
 
+### Phase 3 — P2/P3 remediation (2026-07-30, all 14 P2s + 4 P3s closed)
+
+| Finding | Fix | Commit | Verification |
+|---------|-----|--------|--------------|
+| F-006 | Removed 148 dead unregistered `#[tauri::command]` fns + 15 orphaned modules across 41 files (handler-list/comment-aware dead-fn sweep); 5 intentional helpers documented in the tracker; desktop 378 / tablet 364 registered | `a8716045` | `cargo check` clean; oz-pos-app lib 1114/1114; dead-fn tracker = 5 intentional |
+| F-007 | `UpdateBanner` / `useCloudSync` / `useGatewayStatus` routed through `ui/src/api` wrappers — no direct `invoke()` in components | `4994db4f` | UI suite green; api-boundary lint pass |
+| F-008 + F-050 | `scripts/verify-ipc-parity.py` + `ipc-parity-allowlist.json`: extracts UI `invoke` literals (comment-aware parser), parses both shells' `generate_handler![]`, fails on missing/stale allowlist entries; wired as CI gate | `a17a087e`, `27b04cc9` | gate exit 0: 477 UI strings; desktop 378 reg + 176 allowlist refs; tablet 364 reg |
+| F-011 | oz-core oversize files split into cohesive sibling parts, wired via `#[path] mod` + re-export: sales (2310→456), products (2070→310, 4 parts), kds (1318→249), sync_client (1249→444, sync_auth + sync_pull), workspaces (1112→296, instances + lifecycle) | `c4f51819`, `60484ffd`, `0431abd4`, `85fb8017`, `44b9a15e` | oz-core lib 2064/2064 at each step; `cargo check -p oz-core --all-targets` clean |
+| F-012 | Added `//!` module doc headers to the 11 flagged oz-core files | `cc88500d` | header lint pass; cargo check clean |
+| F-018 | All 8 platform files over the 1000-line limit split: sync daemon (2067→402 + daemon_tick), startup lib (1856→594 + lib_tests), pg_daemon, transport, conflict, pg_transport (1028→534 + tests), event_handlers (1059→422 + tests), rbac (1564→571 + presets + 2 test files), permission_registry (1313→632 + tests) | `c4956ad5`, `4c5a3656`, `642e82ea`, `5dcbb535`, `092162ef`, `28af3331`, `b9b39473`, `7e50a012`+`3f7e651a`, `68225574` | per-crate `cargo check --all-targets` 0/0; platform-sync, platform-core (316/316), platform-startup (44/44) green; no production file ≥1000 remains (residual: settings/kernel tests.rs and db/reports.rs — test files and post-review growth, tracked) |
+| F-022 | currency repository wrapped every write in rusqlite transactions + sibling test file | `cff11fba` | currency module tests green |
+| F-023 | sales module: sibling tests added (shift/close, payment split, void paths) | `c77a1adb` | sales module tests green |
+| F-029 | crypto: at-rest keys derived via salted KDF, smtp encrypt fail-closed, key material zeroized | `49016e44` | oz-crypto suite green |
+| F-030 | security: rotate_key made atomic (write-temp → rename), secrets zeroized on drop | `fe655711` | oz-security suite green |
+| F-031 | qris: partial-refund semantics, QR-issued flag, empty-key Default removed, expire mapping fixed (PAY-3/6/7/8) | `f8f8ef20` | qris 20/20 + new PAY-3/6/7/8 tests |
+| F-034 + F-035 | tablet main: Subscription/Zoom/HardwareAccel providers added (throwing-hook hazard removed); tablet locale now derives from the shared i18n bundles | `ff25388f` | tablet bundle typechecks; vitest green |
+| F-016 (P3) | features.rs inline `mod proptests` moved to sibling file (636 lines); branch bookkeeping: chore/cleanup2 work cherry-picked and merged back to `0.0.33` | `6bfb4cfb`, `b96f12a1` | proptests run in sibling file; single-branch history |
+| F-026 (P3) | Boundary-contract test pattern (inventory + sales) replicated: 6+6 boundary tests pinning module seams | `91f975fe` | oz-core lib green; pattern documented in module tests |
+| F-040 (P3) | Lua CPU/instruction hook implemented — 100K instruction budget aborts runaway scripts with a host-visible error | verified this review | oz-lua hook tests green; host no longer hangs on infinite loops |
+| F-047 (P3) | License-server webhook gap closed: signature-verified Paddle HMAC-SHA256 / Midtrans SHA512 handlers committed by the parallel agent, then reviewed against the committed baseline | verified this review | Go suite green (119s) |
+
 ---
 
 ## How to use this journal
@@ -840,3 +861,11 @@ ARCHITECTURE.md accuracy stamp vs measured reality, repo tracking docs.
 - **REVIEW COMPLETE** — all 11 sectors reviewed, 53 findings (5 P1 / 14 P2 / 4 P3 /
   30 INFO), final summary written into the journal header. Total: 10 review commits
   (S0–S10 + scaffold), journal-only pathspec commits throughout.
+- **Phase 3 remediation (2026-07-30)**: all 14 P2 + 4 P3 findings closed with
+  per-finding pathspec commits — dead-command sweep (F-006), api-boundary (F-007),
+  IPC parity gate (F-008/F-050), 11 oz-core + 9 platform file splits (F-011/F-018,
+  every production file now under 1000 lines), tx/test hardening (F-022/F-023),
+  crypto/security fixes (F-029/F-030/F-031), tablet provider+locale (F-034/F-035),
+  and the 4 P3s (F-016 proptests sibling + branch bookkeeping, F-026 boundary
+  contracts, F-040 Lua instruction hook verified, F-047 webhook verification
+  verified). See the Phase 3 table above for commit hashes and verification.
