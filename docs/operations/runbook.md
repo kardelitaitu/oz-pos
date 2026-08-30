@@ -547,6 +547,36 @@ curl -sS -X POST "https://api.northflank.com/v1/projects/$PROJECT/services/$SERV
 — Build configuration → branch restrictions → `main` — Northflank then
 auto-builds + auto-deploys on every push itself. Same outcome, but
 invisible in GitHub Actions; `deploy.yml` is the preferred, auditable path.
+
+### 8.6 Logging & Debugging
+
+The unified image runs three processes under supervisord (caddy, license,
+sync); all write to the container's stdout/stderr, which Northflank
+captures and surfaces in **Dashboard → service → Logs**.
+
+**Recommended log format:** set `OZ_LOG_FORMAT=json` in the service env
+(§8 table) so the Rust cloud-server emits structured, queryable log lines
+instead of plain text. The Go license server (PocketBase) logs plain text
+regardless — the JSON toggle only affects the sync function.
+
+**Common debugging flows:**
+
+| Goal | How |
+|------|-----|
+| Tail live logs | Northflank dashboard → service → **Logs** (stream). |
+| Increase Rust log verbosity | temporarily add `RUST_LOG=debug` (or `=trace`) to the service env and redeploy; remove afterwards. |
+| Find a crash / restart reason | check the Logs tab around the restart timestamp; supervisord restarts a crashed process automatically (`autorestart=true`), so the crash line precedes the restart marker. |
+| Inspect process state | `exec` into the service from the Northflank dashboard: `ps aux`, `supervisorctl status`, `wget -qO- http://localhost:3099/health`. |
+
+**Structured querying tip:** with `OZ_LOG_FORMAT=json`, the Logs viewer's
+filter box can match `"level":"error"` or `"component":"sync"` — far easier
+than scanning plain-text lines. When diagnosing a specific endpoint, add
+the request path to the filter (e.g. `/api/v1/tokens`).
+
+> ⚠️ Crash logs are retained only as long as Northflank's log retention
+> policy — for long-term diagnostics export the log stream before a
+> container is replaced.
+
 ---
 ---
 
