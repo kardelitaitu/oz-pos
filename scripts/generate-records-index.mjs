@@ -112,6 +112,11 @@ function readRecord(filePath) {
 // ── ADR number mapping (filename → registry #) ─────────────────────────────
 // Kept here because several ADRs predate the `adrNN` filename convention and
 // carry their number only in the title. Update when a new numbered ADR lands.
+// NOTE (2026-08-31, docs-auditor): #16 was never assigned (historically
+// skipped — do not reuse); #30 belongs to Domain Module Extraction, #34 to
+// Business Logic Topology Builder. React-only (#43) and Typed Connection
+// Gating (#44) were renumbered out of the duplicate slots. Filenames kept
+// for cross-reference stability; the title + this map are authoritative.
 const ADR_NUMBERS = {
   '2026-01-15-module-system-design.md': 1,
   '2026-02-01-event-bus-design.md': 2,
@@ -128,6 +133,7 @@ const ADR_NUMBERS = {
   '2026-07-16-desktop-app-updater.md': 13,
   '2026-07-16-release-automation.md': 14,
   '2026-07-18-shadow-banding-css-dither.md': 15,
+  // #16 unassigned (historical skip)
   '2026-07-18-kds-multi-layout-system.md': 17,
   '2026-07-18-multi-location-inventory.md': 18,
   '2026-07-19-sale-deduction-multi-location.md': 19,
@@ -136,12 +142,12 @@ const ADR_NUMBERS = {
   '2026-07-20-node-based-store-topology-builder.md': 22,
   '2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md': 23,
   '2026-07-24-domain-module-extraction.md': 30,
-  '2026-07-24-react-only-decision.md': 30,
+  '2026-07-24-react-only-decision.md': 43,
   '2026-07-24-decentralized-ui-module-registration.md': 31,
   '2026-07-25-db-extraction-and-platform-split.md': 32,
   '2026-08-03-panic-policy.md': 33,
   '2026-08-07-business-logic-topology-builder.md': 34,
-  '2026-08-08-adr34-typed-connection-gating.md': 34,
+  '2026-08-08-adr34-typed-connection-gating.md': 44,
   '2026-08-11-adr35-rbac-role-assignments-user-profile.md': 35,
   '2026-08-11-adr36-retail-product-attributes.md': 36,
   '2026-08-11-adr37-product-popularity-index.md': 37,

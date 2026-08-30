@@ -1,4 +1,4 @@
-# ADR #34: Typed Connection Gating & Live Validation (Implementation)
+# ADR #44: Typed Connection Gating & Live Validation (Implementation)
 
 **Status:** Implemented (2026-08-08)  \
 **Date:** 2026-08-08  \

@@ -1,4 +1,4 @@
-# ADR 30 – React‑only UI decision
+# ADR #43 – React‑only UI decision
 
 **Date:** 2026‑07‑24
 

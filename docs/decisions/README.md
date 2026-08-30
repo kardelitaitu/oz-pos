@@ -37,12 +37,12 @@ implementation-status walkthrough.
 | 22 | [Visual Node-Based Store & Workspace Topology Builder](./2026-07-20-node-based-store-topology-builder.md) | — |
 | 23 | [Free Trial Lifecycle & License Activation Workflow](./2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md) | — |
 | 30 | [Domain Module Extraction & oz-core Decomposition](./2026-07-24-domain-module-extraction.md) | — |
-| 30 | [React-only UI Decision](./2026-07-24-react-only-decision.md) | — |
+| 43 | [React-only UI Decision](./2026-07-24-react-only-decision.md) | — |
 | 31 | [Decentralized UI Feature Module Registration](./2026-07-24-decentralized-ui-module-registration.md) | — |
 | 32 | [DB Layer Extraction (R2) & Platform File Split (R5)](./2026-07-25-db-extraction-and-platform-split.md) | — |
 | 33 | [Panic Policy & Production unwrap/expect Enforcement](./2026-08-03-panic-policy.md) | — |
 | 34 | [Topology Editor as the Business Logic Builder](./2026-08-07-business-logic-topology-builder.md) | — |
-| 34 | [Typed Connection Gating & Live Validation (Implementation)](./2026-08-08-adr34-typed-connection-gating.md) | Implemented (2026-08-08) |
+| 44 | [Typed Connection Gating & Live Validation (Implementation)](./2026-08-08-adr34-typed-connection-gating.md) | Implemented (2026-08-08) |
 | 35 | [RBAC — Role Assignments with Branch/Workspace Scopes and User Profile Data](./2026-08-11-adr35-rbac-role-assignments-user-profile.md) | Accepted (ratified 2026-08-11) |
 | 36 | [Retail POS Product Attributes — Cost, Brand, Rack, Notes + Configurable Columns](./2026-08-11-adr36-retail-product-attributes.md) | Implemented (2026-08-12) |
 | 37 | [Product Popularity Index — Weighted Activity Score for Retail Sorting](./2026-08-11-adr37-product-popularity-index.md) | Implemented (2026-08-12) |
