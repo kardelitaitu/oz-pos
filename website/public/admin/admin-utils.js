@@ -470,6 +470,19 @@
     return close;
   }
 
+  // flashMessage appends a transient toast to container and removes it
+  // after ttlMs (default 3000). B34 (WCAG 4.1.3): the inline flash() in
+  // admin.js appended a bare div — screen readers never announced it, so
+  // "Renewed ✓" / "Revoke failed" happened invisibly to AT users.
+  // role=alert on the appended node makes assistive tech announce it.
+  function flashMessage(container, msg, ttlMs) {
+    var f = el('div', 'flash', msg);
+    f.setAttribute('role', 'alert');
+    container.appendChild(f);
+    setTimeout(function () { f.remove(); }, ttlMs || 3000);
+    return f;
+  }
+
   // startCountdown drives a plain text node with a per-second countdown
   // (the OTP resend cooldown). B18: the original kept its timer in a
   // login.js module global and setAuthMode hid the element without
@@ -845,6 +858,7 @@
     busyWrap: busyWrap,
     fetchFxRate: fetchFxRate,
     mountModal: mountModal,
+    flashMessage: flashMessage,
     fetchWithTimeout: fetchWithTimeout,
     exchangeUrlFrom: exchangeUrlFrom,
     isLockoutActive: isLockoutActive,

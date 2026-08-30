@@ -363,7 +363,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
     }
 
     // ── Flash ───────────────────────────────────────────────────────
-    function flash(msg) { const f = el('div', 'flash', msg); document.body.appendChild(f); setTimeout(() => f.remove(), 3000); }
+    function flash(msg) { flashMessage(document.body, msg); } // B34: announced via role=alert (admin-utils)
 
     // ── Boot ────────────────────────────────────────────────────────
     document.getElementById('logout-btn').addEventListener('click', () => {
