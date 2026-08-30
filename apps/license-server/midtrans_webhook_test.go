@@ -225,6 +225,9 @@ func TestMidtransWebhook_DuplicateReplay(t *testing.T) {
 // subscription_id) refreshes the SAME license key instead of minting a
 // second one, and extends the expiry.
 func TestMidtransWebhook_RenewalRefreshesSameKey(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping midtrans webhook integration test in short mode")
+	}
 	resetMidtransDedup()
 	resetRateLimiters()
 	setMidtransEnv(t)
@@ -507,6 +510,9 @@ func TestMidtransPriceTiers_BundleSegment(t *testing.T) {
 // custom_field4) refreshes the SAME key and keeps kds via the stored
 // bundle_id — a bundle the customer is still paying for survives renewals.
 func TestMidtransWebhook_BundleMintAndRenew(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping midtrans webhook integration test in short mode")
+	}
 	resetMidtransDedup()
 	resetRateLimiters()
 	setMidtransEnv(t)
@@ -603,6 +609,9 @@ func TestMidtransWebhook_BundleTamperRejected(t *testing.T) {
 // a later settled charge on the same subscription refreshes the SAME key and
 // extends expiry (midtransProvision's findMidtransKey idempotency).
 func TestMidtransPlus_SnapToRenew_EndToEnd(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping midtrans webhook integration test in short mode")
+	}
 	resetMidtransDedup()
 	resetRateLimiters()
 	setMidtransEnv(t)

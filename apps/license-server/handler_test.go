@@ -1312,10 +1312,17 @@ func TestRenewHandler_PlusTier(t *testing.T) {
 // and a downgrade (Enterprise→Pro) silently over-provisioned them at
 // Enterprise limits until the next renewal carried the correct values.
 func TestRenewHandler_TierChange_UsesNewKeyLimits(t *testing.T) {
+	// Reuse ONE app across both subtests — they use distinct tenant IDs,
+	// so there is no state collision. Saves ~1 app creation (~0.3s).
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+
 	t.Run("ProToEnterprise_Upgrade", func(t *testing.T) {
-		resetRateLimiters()
-		app, se := setupDirectApp(t)
-		defer app.Cleanup()
+		resetLimiterBuckets()
 
 		// Tenant starts on Pro (max_stores=5, max_pos=3, 2 types).
 		seedTenant(t, app, "rnwupgradetn001", "rnwupgradetn001-key", "active")
@@ -1332,10 +1339,6 @@ func TestRenewHandler_TierChange_UsesNewKeyLimits(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer rnwupgradetn001-key")
 		rec := httptest.NewRecorder()
-		mux, err := se.Router.BuildMux()
-		if err != nil {
-			t.Fatalf("BuildMux failed: %v", err)
-		}
 		mux.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusOK {
@@ -1365,9 +1368,7 @@ func TestRenewHandler_TierChange_UsesNewKeyLimits(t *testing.T) {
 	})
 
 	t.Run("EnterpriseToPro_Downgrade", func(t *testing.T) {
-		resetRateLimiters()
-		app, se := setupDirectApp(t)
-		defer app.Cleanup()
+		resetLimiterBuckets()
 
 		// Tenant starts on Enterprise (max_stores=20, max_pos=10, 3 types).
 		seedTenant(t, app, "rnwdowngrade001", "rnwdowngrade001-key", "active")
@@ -1385,10 +1386,6 @@ func TestRenewHandler_TierChange_UsesNewKeyLimits(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer rnwdowngrade001-key")
 		rec := httptest.NewRecorder()
-		mux, err := se.Router.BuildMux()
-		if err != nil {
-			t.Fatalf("BuildMux failed: %v", err)
-		}
 		mux.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusOK {
@@ -1717,30 +1714,38 @@ func TestTrialVerticalSegmentation(t *testing.T) {
 		{"enterprise_referral_mints_pro_30d", "enterprise_referral", "pro", 30},
 	}
 
+	// Reuse ONE app across all subtests (avoids 4 app creations, ~1s).
+	// Each case uses a unique key + email + machine_id, and
+	// resetLimiterBuckets() clears only the in-memory limiter state between
+	// cases without detaching the shared app's SQLite handle.
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+
 	for i, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resetRateLimiters()
-			app, se := setupDirectApp(t)
-			defer app.Cleanup()
+			resetLimiterBuckets()
 
 			key := fmt.Sprintf("OZ-TRIAL-%04d", i)
 			// The key record's own tier is the DEFAULT for blank verticals;
 			// a vertical re-segments the minted license regardless of it.
 			seedTrialKey(t, app, key, "plus", "unused", "2099-12-31 23:59:59.000Z")
 
+			// Unique machine per case so the shared app doesn't trip the
+			// hardware-fingerprint trial lock (SPEC-2026-TRIAL-LOCK).
+			machineID := fmt.Sprintf("trialmachin%04d", i)
 			body := strings.NewReader(fmt.Sprintf(`{
 				"key": %q,
 				"email": "trialseg%04d@example.com",
-				"machine_id": "trialmachin0001",
+				"machine_id": %q,
 				"trial_vertical": %q
-			}`, key, i, tc.vertical))
+			}`, key, i, machineID, tc.vertical))
 			req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
-			mux, err := se.Router.BuildMux()
-			if err != nil {
-				t.Fatalf("BuildMux failed: %v", err)
-			}
 			mux.ServeHTTP(rec, req)
 
 			if rec.Code != http.StatusOK {
@@ -2328,14 +2333,14 @@ func TestActivateHandler_EmailCaseInsensitive(t *testing.T) {
 // minutes) when the env is unset.
 func TestKeyFailureTracker_CooldownEnvOverride(t *testing.T) {
 	// 1) Override path: short cooldown via env var.
-	t.Setenv("LICENSE_KEY_COOLDOWN", "200ms")
+	t.Setenv("LICENSE_KEY_COOLDOWN", "30ms")
 	kf := &keyFailureTracker{
 		failures:    make(map[string]*keyFailures),
 		maxAttempts: 3,
 		cooldown:    parseCooldown(),
 	}
-	if kf.cooldown != 200*time.Millisecond {
-		t.Fatalf("expected cooldown=200ms after env override, got %v", kf.cooldown)
+	if kf.cooldown != 30*time.Millisecond {
+		t.Fatalf("expected cooldown=30ms after env override, got %v", kf.cooldown)
 	}
 
 	kf.recordFailure("OZ-COOL-OVR-001")
@@ -2347,7 +2352,7 @@ func TestKeyFailureTracker_CooldownEnvOverride(t *testing.T) {
 	}
 
 	// Wait past the short cooldown and confirm the lock releases.
-	time.Sleep(250 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
 	if blocked, _ := kf.isBlocked("OZ-COOL-OVR-001"); blocked {
 		t.Error("expected key to be unblocked after 200ms cooldown expired")
