@@ -13,14 +13,14 @@
 
 ## CRM (`01-crm-module.md` — PARTIALLY REMEDIATED)
 
-**Status:** CRM-01 resolved (session-scoped customer-management path); **CRM-02–CRM-11 remain open**.
+**Status:** CRM-01–CRM-05 all closed/verified-fixed as of 2026-08-31; **CRM-06–CRM-11 unverified** (original report deleted).
 
-Key open items:
-- **CRM-02** — Customer listing does not enforce the view permission
-- **CRM-03** — Load failures are silently rendered as an empty customer database
-- **CRM-04** — Delete is immediate and delete failures are invisible
-- **CRM-05** — "Purchase history" is documented but not exposed as customer history
-- CRM-06–CRM-11 — remaining findings (see deleted report / git history `audit/01-crm-module.md`)
+Key items:
+- ~~**CRM-02** — Customer listing does not enforce the view permission~~ — **VERIFIED FIXED 2026-08-31** (with one residual closed same day): `list_customers_scoped`/`search_customers_scoped` enforce `customers:view` on both clients (denial-tested). **Residual found and fixed (`7967cc2d`):** the tablet still registered the legacy unguarded `get_customer` (no session, no permission, global db — cross-store read by id); replaced with `get_customer_scoped` (gated, store-scoped, denial-tested on both clients), and the dead legacy UI wrappers were removed so no caller can reach an unregistered command.
+- ~~**CRM-03** — Load failures are silently rendered as an empty customer database~~ — **VERIFIED FIXED 2026-08-31**: `loadError` state; the error view replaces the empty state when the list fails to load (`CustomerManagementScreen.tsx:465`).
+- ~~**CRM-04** — Delete is immediate and delete failures are invisible~~ — **VERIFIED FIXED 2026-08-31**: `ConfirmDialog` gates deletion (CUST-02) and a localized toast surfaces delete failures (CUST-04), both tested.
+- ~~**CRM-05** — "Purchase history" documented but not exposed~~ — **VERIFIED FIXED 2026-08-31**: `get_customer_history_scoped` + in-screen history view with load-failure retry (CUST-05 tested).
+- CRM-06–CRM-11 — remaining findings unverified (see deleted report / git history `audit/01-crm-module.md`)
 
 ---
 

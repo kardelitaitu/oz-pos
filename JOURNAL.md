@@ -8104,3 +8104,24 @@ conflict — same idiom as finalize_sale's `changed == 1` guard. Existing
 void tests (4) cover the pre-check; the race window itself is not
 unit-injectable, the guard makes the write self-validating. Sales suite
 135/135. Registry: void-path note replaced with the proof + fix.
+
+## 2026-08-31 — Sweep: CRM cluster verification + tablet get_customer residual
+
+**Findings:** CRM-02/03/04/05 all stale in the registry — scoped
+permission-gated reads with denial tests, load-error state replacing the
+empty view, ConfirmDialog + failure toast on delete, history view with
+retry. BUT the CRM-02 sweep caught a REAL residual: the tablet still
+registered the legacy unguarded `get_customer` (no session, no
+permission, GLOBAL db) while the desktop had moved on — any tablet
+session could read any customer by id across stores. Fixed with a
+ported `get_customer_scoped` (customers:view + store scope) +
+registration swap + denial tests on both clients; the desktop's scoped
+variant turned out to have NO test ever — now pinned. UI: dead legacy
+wrappers removed (they invoked commands registered nowhere), retail
+customers mock aligned with the module.
+
+**Verification:** customers suites 47/47 both clients; UI 120/120 across
+four suites; typecheck clean for owned files (foreign analytics WIP
+carries its own errors — untouched).
+
+**Commit:** 7967cc2d + registry rewrite in this entry's commit.
