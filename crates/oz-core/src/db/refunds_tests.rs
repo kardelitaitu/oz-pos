@@ -758,3 +758,151 @@ fn refund_partial_exact_qty_treated_as_full_forward_fifo() {
     assert_eq!(get_stock_at(&conn, "CHO-001", "loc-store"), 2);
     assert_eq!(get_stock_at(&conn, "CHO-001", "loc-wh-a"), 3);
 }
+
+// ── LOY-03 wiring: create_refund reverses loyalty in-tx ────────
+
+#[test]
+fn create_refund_reverses_loyalty_proportionally() {
+    let conn = fresh();
+    seed_completed_sale(&conn); // total 700 USD
+    conn.execute(
+        "INSERT INTO customers (id, name, notes, created_at, updated_at)
+         VALUES ('cust-ref', 'Bob', '', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE sales SET customer_id = 'cust-ref' WHERE id = 'ref-sale-1'",
+        [],
+    )
+    .unwrap();
+    let s = store(&conn);
+    // Bronze: 700 earns 70 points.
+    s.earn_points("cust-ref", "ref-sale-1", 700).unwrap();
+
+    let line = RefundLine::new("ref-sl-1", "COFFEE", 1, price(350), price(350));
+    let refund = Refund::new(
+        "ref-sale-1",
+        price(350),
+        "one of two cups",
+        "",
+        "user-1",
+        vec![line],
+    );
+    s.create_refund(&refund).unwrap();
+
+    // 350/700 of 70 points = 35 reversed.
+    let reversed: i64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(points), 0) FROM loyalty_transactions WHERE sale_id = 'ref-sale-1' AND txn_type = 'refund_reversal'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(reversed, -35);
+    let points: i64 = conn
+        .query_row(
+            "SELECT points FROM loyalty_accounts WHERE customer_id = 'cust-ref'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(points, 35);
+}
+
+#[test]
+fn create_refund_without_loyalty_still_succeeds() {
+    let conn = fresh();
+    seed_completed_sale(&conn);
+    let s = store(&conn);
+    let line = RefundLine::new("ref-sl-1", "COFFEE", 2, price(350), price(700));
+    let refund = Refund::new(
+        "ref-sale-1",
+        price(700),
+        "changed mind",
+        "",
+        "user-1",
+        vec![line],
+    );
+    // No earn txn on this sale: reversal is a no-op, refund unaffected.
+    s.create_refund(&refund).unwrap();
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM loyalty_transactions", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[test]
+fn create_refund_reduces_customer_lifetime_spend() {
+    let conn = fresh();
+    seed_completed_sale(&conn); // total 700 USD
+    conn.execute(
+        "INSERT INTO customers (id, name, notes, total_spent_minor, created_at, updated_at)
+         VALUES ('cust-ref', 'Bob', '', 700, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE sales SET customer_id = 'cust-ref' WHERE id = 'ref-sale-1'",
+        [],
+    )
+    .unwrap();
+    let s = store(&conn);
+    let line = RefundLine::new("ref-sl-1", "COFFEE", 1, price(350), price(350));
+    let refund = Refund::new(
+        "ref-sale-1",
+        price(350),
+        "half back",
+        "",
+        "user-1",
+        vec![line],
+    );
+    s.create_refund(&refund).unwrap();
+    let spent: i64 = conn
+        .query_row(
+            "SELECT total_spent_minor FROM customers WHERE id = 'cust-ref'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(spent, 350, "lifetime spend drops by the refunded amount");
+}
+
+#[test]
+fn create_refund_spend_reversal_floors_at_zero() {
+    let conn = fresh();
+    seed_completed_sale(&conn); // total 700 USD
+    // Legacy customer whose spend was never accrued (projection gap).
+    conn.execute(
+        "INSERT INTO customers (id, name, notes, total_spent_minor, created_at, updated_at)
+         VALUES ('cust-ref', 'Bob', '', 0, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE sales SET customer_id = 'cust-ref' WHERE id = 'ref-sale-1'",
+        [],
+    )
+    .unwrap();
+    let s = store(&conn);
+    let line = RefundLine::new("ref-sl-1", "COFFEE", 2, price(350), price(700));
+    let refund = Refund::new(
+        "ref-sale-1",
+        price(700),
+        "full refund",
+        "",
+        "user-1",
+        vec![line],
+    );
+    s.create_refund(&refund).unwrap();
+    let spent: i64 = conn
+        .query_row(
+            "SELECT total_spent_minor FROM customers WHERE id = 'cust-ref'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(spent, 0, "spend floors at zero, never negative");
+}

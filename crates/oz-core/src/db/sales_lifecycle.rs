@@ -26,7 +26,7 @@ use crate::SaleStatus;
 /// points formula is currency-naive (`total_minor * points_per_unit /
 /// 100`), so charging in a low-exponent currency would otherwise
 /// multiply the reward by the exchange rate.
-fn award_loyalty_on_completion(conn: &rusqlite::Connection, sale_id: &str) {
+fn apply_customer_stats_on_completion(conn: &rusqlite::Connection, sale_id: &str) {
     let sale_row = conn.query_row(
         "SELECT customer_id, base_total_minor, total_minor FROM sales WHERE id = ?1",
         rusqlite::params![sale_id],
@@ -48,6 +48,22 @@ fn award_loyalty_on_completion(conn: &rusqlite::Connection, sale_id: &str) {
         }
     };
     let earn_total = base_total_minor.unwrap_or(total_minor);
+    // CRM-06: accrue lifetime spend in the SAME base-currency amount the
+    // award uses. Statement-level atomic increment (no read-modify-write
+    // race); SQLite raises on i64 overflow, which is logged non-fatal
+    // below. The old owner of this projection — the event-bus
+    // CrmHistoryHandler — was never registered, so the column had zero
+    // production writers.
+    if let Err(e) = conn.execute(
+        "UPDATE customers SET total_spent_minor = total_spent_minor + ?1, updated_at = ?2 WHERE id = ?3",
+        rusqlite::params![
+            earn_total,
+            chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            customer_id
+        ],
+    ) {
+        tracing::warn!(error = %e, sale_id, "customer spend accrual failed (non-fatal)");
+    }
     match crate::db::loyalty::earn_points_with_conn(conn, &customer_id, sale_id, earn_total) {
         Ok(Some(t)) => {
             tracing::debug!(
@@ -80,7 +96,7 @@ impl Store<'_> {
         // `changed == 1` guarantees exactly one award per sale even if the
         // caller retries finalize.
         if changed == 1 {
-            award_loyalty_on_completion(&tx, sale_id);
+            apply_customer_stats_on_completion(&tx, sale_id);
         }
         tx.commit()?;
         Ok(())
@@ -104,7 +120,7 @@ impl Store<'_> {
         )?;
         // LOY-06: same atomic award inside the caller's transaction.
         if changed == 1 {
-            award_loyalty_on_completion(tx, sale_id);
+            apply_customer_stats_on_completion(tx, sale_id);
         }
         Ok(())
     }
@@ -425,7 +441,7 @@ impl Store<'_> {
 
         // LOY-06: this is a completion path too — award points atomically,
         // exactly as finalize_sale does for the main two-step flow.
-        award_loyalty_on_completion(&tx, &sale.id);
+        apply_customer_stats_on_completion(&tx, &sale.id);
 
         for line in &sale.lines {
             insert_sale_line(&tx, line)?;

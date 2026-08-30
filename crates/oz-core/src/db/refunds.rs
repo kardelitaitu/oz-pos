@@ -49,10 +49,15 @@ impl Store<'_> {
         // this check the same sale could be refunded unlimited times and
         // stock credited each time. Reject when the cumulative refunded
         // amount plus this refund would exceed the sale's total.
-        let (sale_total, sale_currency): (i64, String) = match tx.query_row(
-            "SELECT total_minor, currency FROM sales WHERE id = ?1",
+        let (sale_total, sale_currency, sale_customer_id, sale_base_total): (
+            i64,
+            String,
+            Option<String>,
+            Option<i64>,
+        ) = match tx.query_row(
+            "SELECT total_minor, currency, customer_id, base_total_minor FROM sales WHERE id = ?1",
             params![refund.sale_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         ) {
             Ok(pair) => pair,
             Err(rusqlite::Error::QueryReturnedNoRows) => {
@@ -149,6 +154,52 @@ impl Store<'_> {
             }
             Some(locations) => {
                 self.credit_refund_from_deduction_locations(&tx, refund, locations)?;
+            }
+        }
+
+        // ── 2b. LOY-03: reverse the loyalty award proportionally ───
+        // Same transaction as the refund rows; a loyalty bug must not
+        // block the refund itself (same non-fatal policy as the award
+        // hook in finalize_sale), so failures are logged, not raised.
+        if let Err(e) = crate::db::loyalty::reverse_loyalty_on_refund(
+            &tx,
+            &refund.sale_id,
+            &refund.id,
+            refund.total.minor_units,
+            sale_total,
+        ) {
+            tracing::warn!(
+                "loyalty refund reversal failed for sale {} (refund {}): {e}",
+                refund.sale_id,
+                refund.id
+            );
+        }
+
+        // ── 2c. CRM-06: reverse lifetime spend (base currency) ────
+        // The completion hook accrues spend in base currency; the refund
+        // converts its amount at the rate recorded on the sale
+        // (refund_base = refund_total × base_total / total, integer
+        // round-half-up — no floats on money). Floors at zero: legacy
+        // customers accrued nothing during the projection-gap window.
+        if let Some(customer_id) = sale_customer_id.as_deref() {
+            let refund_base = match (sale_base_total, sale_total) {
+                (Some(base), t) if t > 0 && base != t => {
+                    let num = i128::from(refund.total.minor_units) * i128::from(base);
+                    let den = i128::from(t);
+                    ((num * 2 + den) / (den * 2)) as i64
+                }
+                _ => refund.total.minor_units,
+            };
+            if let Err(e) = tx.execute(
+                "UPDATE customers SET total_spent_minor = MAX(total_spent_minor - ?1, 0),
+                 updated_at = ?2 WHERE id = ?3",
+                params![refund_base, refund.created_at, customer_id],
+            ) {
+                tracing::warn!(
+                    "customer spend reversal failed for sale {} (refund {}): {e}",
+                    refund.sale_id,
+                    refund.id
+                );
             }
         }
 

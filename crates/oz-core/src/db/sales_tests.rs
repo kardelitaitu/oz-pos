@@ -3354,3 +3354,83 @@ fn list_sales_by_user_filters_correctly() {
     let unknown = s.list_sales_by_user("nobody").unwrap();
     assert!(unknown.is_empty());
 }
+
+// ── CRM-06: lifetime spend projection maintained at completion ─
+//
+// The event-bus CrmHistoryHandler that owned this projection was never
+// registered (modules/crm on_load: "future phases"), so
+// customers.total_spent_minor had ZERO production writers while the
+// customer DTO, CSV export and CustomReportScreen all read it — every
+// customer showed $0.00 lifetime spend. Now updated atomically inside
+// the completion transition (base currency, statement-level atomic
+// increment, replay-safe via the changed==1 gate).
+
+fn seed_customer_for_spend(conn: &Connection, id: &str) {
+    conn.execute(
+        "INSERT INTO customers (id, name, notes, created_at, updated_at)
+         VALUES (?1, 'Spend Tester', '', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        params![id],
+    )
+    .unwrap();
+}
+
+fn spend_of(conn: &Connection, id: &str) -> i64 {
+    conn.query_row(
+        "SELECT total_spent_minor FROM customers WHERE id = ?1",
+        params![id],
+        |r| r.get(0),
+    )
+    .unwrap()
+}
+
+#[test]
+fn finalize_sale_adds_base_currency_total_to_customer_spend() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_customer_for_spend(&conn, "cust-spend");
+    // Multi-currency sale: charged 1,650,000 IDR, base 10,000 USD minor.
+    conn.execute(
+        "INSERT INTO sales (id, customer_id, total_minor, currency, base_total_minor, base_currency, line_count, status, created_at, updated_at)
+         VALUES ('sp-1', 'cust-spend', 1650000, 'IDR', 10000, 'USD', 0, 'pending', '2026-07-10T09:00:00Z', '2026-07-10T09:00:00Z')",
+        [],
+    )
+    .unwrap();
+    s.finalize_sale("sp-1").unwrap();
+    assert_eq!(
+        spend_of(&conn, "cust-spend"),
+        10000,
+        "spend accrues in BASE currency, not the charged currency"
+    );
+}
+
+#[test]
+fn finalize_replay_does_not_double_count_spend() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_customer_for_spend(&conn, "cust-spend");
+    conn.execute(
+        "INSERT INTO sales (id, customer_id, total_minor, currency, line_count, status, created_at, updated_at)
+         VALUES ('sp-2', 'cust-spend', 5000, 'USD', 0, 'pending', '2026-07-10T09:00:00Z', '2026-07-10T09:00:00Z')",
+        [],
+    )
+    .unwrap();
+    s.finalize_sale("sp-2").unwrap();
+    // Replay: the pending→completed CAS matches zero rows, so no accrual.
+    s.finalize_sale("sp-2").unwrap();
+    assert_eq!(spend_of(&conn, "cust-spend"), 5000);
+}
+
+#[test]
+fn finalize_sale_without_customer_leaves_spend_untouched() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_customer_for_spend(&conn, "cust-spend");
+    conn.execute(
+        "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at)
+         VALUES ('sp-3', 5000, 'USD', 0, 'pending', '2026-07-10T09:00:00Z', '2026-07-10T09:00:00Z')",
+        [],
+    )
+    .unwrap();
+    s.finalize_sale("sp-3").unwrap();
+    assert_eq!(spend_of(&conn, "cust-spend"), 0);
+}

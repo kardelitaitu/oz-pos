@@ -45,7 +45,6 @@ next: Migrate DB CRUD + Tauri commands into this module | perf: N/A — no hot p
 //! ```
 
 pub mod error;
-pub mod handlers;
 pub mod models;
 pub mod repository;
 pub mod service;

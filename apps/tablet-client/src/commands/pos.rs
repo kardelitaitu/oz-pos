@@ -749,8 +749,10 @@ pub async fn complete_sale(
     tracing::info!(%sale_id, ?total, line_count, "sale completed and persisted");
 
     // Publish the SaleCompleted domain event so that subscribers
-    // (InventoryStockHandler, CrmHistoryHandler, AuditLogHandler, etc.)
-    // fire their side effects.
+    // (InventoryStockHandler, AuditLogHandler, etc.) fire their side
+    // effects. Customer spend/loyalty projections are NOT event-driven:
+    // they are written atomically inside the completion transaction
+    // (CRM-06/LOY-06) — the old CrmHistoryHandler was never registered.
     {
         let line_items: Vec<SaleCompletedLine> = sale
             .lines
