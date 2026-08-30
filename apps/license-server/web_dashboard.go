@@ -77,9 +77,15 @@ func handleWebUsage(app core.App) func(e *core.RequestEvent) error {
 		// Pull entitlement limits from the latest subscription.
 		maxStores := int64(0)
 		maxPos := int64(0)
+		maxKDS := int64(0)
+		tierKey := ""
 		if len(subs) > 0 {
 			maxStores = int64(subs[0].GetInt("max_stores"))
 			maxPos = int64(subs[0].GetInt("max_pos_instances"))
+			tierKey = subs[0].GetString("tier_key")
+			// KDS is a workspace type entitlement: Free/Plus = 0, Pro = 2,
+			// Premium/Enterprise = unlimited (subscription-tiers.md).
+			maxKDS = maxKDSForTier(tierKey)
 		}
 
 		return e.JSON(http.StatusOK, map[string]any{
@@ -87,7 +93,22 @@ func handleWebUsage(app core.App) func(e *core.RequestEvent) error {
 			"subscription_count": subCount,
 			"max_stores":         maxStores,
 			"max_pos_instances":  maxPos,
+			"max_kds":            maxKDS,
+			"tier_key":           tierKey,
 		})
+	}
+}
+
+// maxKDSForTier returns the KDS screen entitlement for a tier:
+// Free/Plus → 0, Pro → 2, Premium/Enterprise → 999 (effectively unlimited).
+func maxKDSForTier(tier string) int64 {
+	switch tier {
+	case "premium", "enterprise":
+		return 999
+	case "pro":
+		return 2
+	default: // free, plus
+		return 0
 	}
 }
 
