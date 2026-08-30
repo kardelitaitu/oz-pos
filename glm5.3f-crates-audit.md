@@ -1048,6 +1048,23 @@ remote-authoritative ties; CRDT merge preserves both deltas under a fresh
 UUID; unknown statuses rank lowest (fail-safe); settings dispatch matches
 SYNC-10. `replication.rs` is a counts struct only.
 
+### Slice D — transport.rs (1,309: production 1–538 fully read; tests
+540+)
+
+**No new findings — exemplary.** RUST-05 fail-closed client construction
+(bearer header + 30 s timeout; the `expect` convenience wrapper is a
+documented impossible-invariant with production paths on `try_new`);
+actionable `classify_transport_error` diagnostics; 401 bodies classified
+per the P1/P4 auth contract (`token_expired` → refresh-once,
+`invalid_token` → config problem, never masked); 403 `plan_required` is
+terminal; ADR #11 `server_migrated` redirects parsed with strict field
+checks; 410 Gone maps to `AnchorExpired` carrying `oldest_available`;
+response bodies read exactly once; `no_proxy`; a separate 5 s health-check
+timeout prevents daemon stalls; and a test pins the snapshot-user wire
+format against every profile field (ADR #35 D6 residency).
+
+---
+
 ---
 
 ---

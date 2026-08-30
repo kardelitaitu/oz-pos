@@ -1,5 +1,11 @@
 //! Sync Transport — async HTTP client for communicating with the remote
 //! sync server.
+/*
+last audited 25-07-26 by RSA-Agent (platform-sync slice D: transport deep read)
+crate: platform-sync | status: SAFE | lint: CLEAN
+findings: exemplary — RUST-05 fail-closed client construction (bearer header + 30s timeout; convenience new() expect is a documented impossible-invariant wrapper, production paths use try_new); classify_transport_error gives actionable diagnostics; 401 bodies classified per P1/P4 (token_expired refresh-once vs invalid_token config problem); 403 plan_required terminal; ADR #11 server_migrated JSON redirect parsing (strict field checks, tested); 410 Gone maps to AnchorExpired with oldest_available; body read once; no_proxy; separate 5s health-check timeout prevents daemon stalls; test pins the snapshot user wire format against all profile fields (ADR #35 D6 residency)
+next: none | perf: gzip on
+*/
 //!
 //! The transport layer handles:
 //!
