@@ -44,8 +44,11 @@ const SESSION_PATH = '/__oz/session';
 const LOGOUT_PATH = '/__oz/logout';
 const COOKIE_NAME = 'oz_session';
 
-/** Dashboard subdomains that require authentication. */
-const DASHBOARD_HOSTS = new Set(['dashboard.ozpos.my.id', 'admin.ozpos.my.id']);
+/** Subdomains that require authentication (admin-only). */
+const DASHBOARD_HOSTS = new Set(['admin.ozpos.my.id']);
+
+/** Customer dashboard subdomain — redirects to the marketing account portal. */
+const CUSTOMER_DASHBOARD_HOST = 'dashboard.ozpos.my.id';
 
 /** Marketing site domain — no auth required. */
 const MARKETING_HOST = 'ozpos.my.id';
@@ -58,6 +61,11 @@ const ALLOWED_CORS_ORIGINS = new Set([
   'https://dashboard.ozpos.my.id',
   'https://admin.ozpos.my.id',
 ]);
+
+/** URL the customer dashboard subdomain redirects to for account management. */
+const CUSTOMER_ACCOUNT_URL = 'https://ozpos.my.id/en/account/';
+/** URL the customer dashboard subdomain redirects to for login. */
+const CUSTOMER_LOGIN_URL = 'https://ozpos.my.id/en/login';
 
 /** Parse a named cookie value from the Cookie header. */
 function getCookie(headers: Headers, name: string): string | null {
@@ -126,6 +134,25 @@ export default {
     const url = new URL(request.url);
     const hostname = url.hostname;
 
+    // ── Customer dashboard subdomain redirect ─────────────────────────
+    // dashboard.ozpos.my.id is no longer a separate SPA; it redirects
+    // transparently to the fully-featured account portal on the marketing
+    // host (ozpos.my.id/en/account/). This eliminates the cookie isolation
+    // problem (separate Domain=dashboard.ozpos.my.id) and removes the
+    // fragile vanilla-JS duplicate of AccountView.tsx.
+    if (hostname === CUSTOMER_DASHBOARD_HOST) {
+      const isLoginPath = url.pathname.includes('login');
+      const target = isLoginPath ? CUSTOMER_LOGIN_URL : CUSTOMER_ACCOUNT_URL;
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: target,
+          'Cache-Control': 'no-store',
+          'Referrer-Policy': 'no-referrer',
+        },
+      });
+    }
+
     // ── Hostname-based auth gate ──────────────────────────────────
     if (DASHBOARD_HOSTS.has(hostname)) {
       // ── API Proxy to license server (resolves CORS and in-handler Origin checks) ──
@@ -165,6 +192,7 @@ export default {
         const target = `https://${MARKETING_HOST}${url.pathname}${url.search}`;
         return new Response(null, { status: 302, headers: { Location: target } });
       }
+
 
       const sessionCookie = getCookie(request.headers, COOKIE_NAME);
 
@@ -238,9 +266,7 @@ export default {
         // the same host. The marketing host (ozpos.my.id) does NOT have it.
         const loginUrl = hostname === 'admin.ozpos.my.id'
           ? 'https://admin.ozpos.my.id/'
-          : hostname === 'dashboard.ozpos.my.id'
-            ? 'https://dashboard.ozpos.my.id/'
-            : `https://${MARKETING_HOST}/en/login`;
+          : `https://${MARKETING_HOST}/en/login`;
         return new Response(null, {
           status: 302,
           headers: {
@@ -258,17 +284,16 @@ export default {
       // → /dashboard/login), so the login.js relative API calls go through
       // the Worker's /api/v1/ proxy. The marketing host has no proxy.
       if (!sessionCookie) {
-        if (hostname === 'admin.ozpos.my.id' || hostname === 'dashboard.ozpos.my.id') {
+        if (hostname === 'admin.ozpos.my.id') {
           const isStatic = /\.(css|js|svg|png|jpg|jpeg|webp|gif|ico|woff2?|ttf|map)$/i.test(url.pathname);
           if (isStatic) {
             const asset = new URL(request.url);
             asset.hostname = MARKETING_HOST;
             return env.ASSETS.fetch(new Request(asset.toString(), request));
           }
-          const loginPath = hostname === 'admin.ozpos.my.id' ? '/admin/login' : '/dashboard/login';
           const rewritten = new URL(request.url);
           rewritten.hostname = MARKETING_HOST;
-          rewritten.pathname = loginPath;
+          rewritten.pathname = '/admin/login';
           rewritten.search = '';
           return withStrictCSP(await env.ASSETS.fetch(new Request(rewritten.toString(), request)));
         }
@@ -280,20 +305,14 @@ export default {
         });
       }
 
-      // Step 3: Cookie present. Serve the dashboard/admin SPA. Rewrite the
-      // request path to the sub-app under /dashboard/ or /admin/ so the
-      // ASSETS binding returns the correct SPA (not the marketing site).
-      const isAdmin = hostname === 'admin.ozpos.my.id';
-      const appBase = isAdmin ? '/admin' : '/dashboard';
+      // Step 3: Cookie present — only admin.ozpos.my.id reaches here now.
+      // Rewrite the request path to /admin/* so ASSETS returns the admin SPA.
       const rewritten = new URL(request.url);
       rewritten.hostname = MARKETING_HOST;
-      // The SPA HTML references its assets with the absolute /dashboard/ or
-      // /admin/ prefix (e.g. /dashboard/dashboard.css). Don't double-prefix:
       const p = url.pathname;
       const isAsset = /\.(css|js|svg|png|jpg|jpeg|webp|gif|ico|woff2?|ttf|map)$/i.test(p);
-      // Static assets already carry their correct bundle path (e.g. /admin/admin-utils.js,
-      // /dashboard/dashboard.css). Only prepend appBase for non-asset HTML/SPA navigation paths.
-      rewritten.pathname = isAsset ? p : (p === '/' || !p.startsWith(appBase) ? appBase + p : p);
+      // Static assets carry their correct /admin/* path already. Only prepend /admin for HTML paths.
+      rewritten.pathname = isAsset ? p : (p === '/' || !p.startsWith('/admin') ? '/admin' + p : p);
       rewritten.search = isAsset ? url.search : '';
       const spaResp = await env.ASSETS.fetch(new Request(rewritten.toString(), request));
       return withStrictCSP(spaResp);

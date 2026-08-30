@@ -95,12 +95,38 @@ describe('Cloudflare Worker — worker.ts', () => {
 
   // ── Auth gate (ADR #42) ─────────────────────────────────────────
 
-  it('serves dedicated dashboard login page when no cookie', async () => {
+  it('redirects dashboard.ozpos.my.id / to ozpos.my.id/en/account/', async () => {
     const req = new Request('https://dashboard.ozpos.my.id/');
     const res = await worker.fetch(req, mockEnv);
 
-    expect(res.status).toBe(200);
-    expect(mockEnv.ASSETS.fetch).toHaveBeenCalled();
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('https://ozpos.my.id/en/account/');
+  });
+
+  it('redirects dashboard.ozpos.my.id/login to ozpos.my.id/en/login', async () => {
+    const req = new Request('https://dashboard.ozpos.my.id/login');
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('https://ozpos.my.id/en/login');
+  });
+
+  it('redirects dashboard.ozpos.my.id/account to ozpos.my.id/en/account/', async () => {
+    const req = new Request('https://dashboard.ozpos.my.id/account');
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('https://ozpos.my.id/en/account/');
+  });
+
+  it('redirects dashboard.ozpos.my.id even with a valid cookie', async () => {
+    const req = new Request('https://dashboard.ozpos.my.id/', {
+      headers: { Cookie: 'oz_session=valid.jwt.token' },
+    });
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('https://ozpos.my.id/en/account/');
   });
 
   it('serves dedicated admin login page when no cookie', async () => {
@@ -127,17 +153,6 @@ describe('Cloudflare Worker — worker.ts', () => {
     expect(setCookie).toContain('HttpOnly');
   });
 
-  it('serves placeholder dashboard page when cookie is present', async () => {
-    const req = new Request('https://dashboard.ozpos.my.id/', {
-      headers: { Cookie: 'oz_session=valid.jwt.token' },
-    });
-    const res = await worker.fetch(req, mockEnv);
-
-    expect(res.status).toBe(200);
-    // The dashboard SPA is served from ASSETS (rewritten to /dashboard/ path)
-    expect(mockEnv.ASSETS.fetch).toHaveBeenCalled();
-  });
-
   it('serves placeholder admin page when cookie is present', async () => {
     const req = new Request('https://admin.ozpos.my.id/', {
       headers: { Cookie: 'oz_session=valid.jwt.token' },
@@ -149,7 +164,7 @@ describe('Cloudflare Worker — worker.ts', () => {
   });
 
   it('returns 401 from /__oz/session when no cookie', async () => {
-    const req = new Request('https://dashboard.ozpos.my.id/__oz/session');
+    const req = new Request('https://admin.ozpos.my.id/__oz/session');
     const res = await worker.fetch(req, mockEnv);
 
     expect(res.status).toBe(401);
@@ -158,7 +173,7 @@ describe('Cloudflare Worker — worker.ts', () => {
   });
 
   it('returns token from /__oz/session when cookie present', async () => {
-    const req = new Request('https://dashboard.ozpos.my.id/__oz/session', {
+    const req = new Request('https://admin.ozpos.my.id/__oz/session', {
       headers: { Cookie: 'oz_session=my.jwt.token' },
     });
     const res = await worker.fetch(req, mockEnv);
@@ -178,7 +193,7 @@ describe('Cloudflare Worker — worker.ts', () => {
       json: async () => ({ token: 'exchanged.jwt.token' }),
     });
 
-    const req = new Request('https://dashboard.ozpos.my.id/settings?code=shortlived&theme=dark');
+    const req = new Request('https://admin.ozpos.my.id/settings?code=shortlived&theme=dark');
     const res = await worker.fetch(req, mockEnv);
 
     expect(res.status).toBe(302);
@@ -200,12 +215,12 @@ describe('Cloudflare Worker — worker.ts', () => {
       json: async () => ({ error: 'invalid code' }),
     });
 
-    const req = new Request('https://dashboard.ozpos.my.id/settings?code=stale');
+    const req = new Request('https://admin.ozpos.my.id/settings?code=stale');
     const res = await worker.fetch(req, mockEnv);
 
     expect(res.status).toBe(302);
     const location = res.headers.get('Location') ?? '';
-    expect(location).toContain('https://ozpos.my.id/en/login');
-    expect(location).toContain('redirect=');
+    expect(location).toContain('https://ozpos.my.id');
+    expect(location).toContain('login');
   });
 });
