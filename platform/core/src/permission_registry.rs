@@ -820,4 +820,303 @@ mod tests {
             assert!(seen.insert(e.key), "duplicate registry key: {}", e.key);
         }
     }
+
+    // ── NEW TESTS: gaps identified in TDD analysis ───────────────────
+
+    // ── lookup / is_registered / is_sensitive direct coverage ─────────
+
+    #[test]
+    fn lookup_returns_entry_for_registered_key() {
+        let entry = lookup(permissions::SALES_VOID).expect("sales:void must be registered");
+        assert_eq!(entry.key, "sales:void");
+        assert_eq!(entry.family, "sales");
+        assert!(entry.sensitive);
+    }
+
+    #[test]
+    fn lookup_returns_none_for_unknown_key() {
+        assert!(lookup("sales:typo").is_none());
+        assert!(lookup("unknown:key").is_none());
+        assert!(lookup("").is_none());
+    }
+
+    #[test]
+    fn is_registered_true_for_known_keys() {
+        assert!(is_registered(permissions::SALES_PROCESS));
+        assert!(is_registered(permissions::SETTINGS_EDIT));
+        assert!(is_registered(permissions::DATA_EXPORT));
+    }
+
+    #[test]
+    fn is_registered_false_for_unknown_keys() {
+        assert!(!is_registered("sales:typo"));
+        assert!(!is_registered("*"));
+        assert!(!is_registered(""));
+    }
+
+    #[test]
+    fn is_sensitive_true_for_sensitive_keys() {
+        assert!(is_sensitive(permissions::SALES_VOID));
+        assert!(is_sensitive(permissions::STAFF_DELETE));
+        assert!(is_sensitive(permissions::PAYMENTS_SETTLE));
+        assert!(is_sensitive(permissions::GIFTCARDS_ISSUE));
+        assert!(is_sensitive(permissions::SECURITY_MANAGE));
+        assert!(is_sensitive(permissions::DATA_EXPORT));
+    }
+
+    #[test]
+    fn is_sensitive_false_for_operational_keys() {
+        assert!(!is_sensitive(permissions::SALES_PROCESS));
+        assert!(!is_sensitive(permissions::PRODUCTS_READ));
+        assert!(!is_sensitive(permissions::SETTINGS_READ));
+    }
+
+    #[test]
+    fn is_sensitive_false_for_unknown_keys() {
+        assert!(!is_sensitive("sales:typo"));
+        assert!(!is_sensitive(""));
+    }
+
+    // ── validate_grants (multi-error collector) ───────────────────────
+
+    #[test]
+    fn validate_grants_ok_for_valid_set() {
+        let grants = vec![
+            permissions::SALES_PROCESS.to_string(),
+            permissions::PRODUCTS_READ.to_string(),
+            permissions::SETTINGS_EDIT.to_string(),
+        ];
+        assert!(validate_grants(&grants, false).is_ok());
+    }
+
+    #[test]
+    fn validate_grants_err_for_unknown_key() {
+        let grants = vec![
+            permissions::SALES_PROCESS.to_string(),
+            "sales:typo".to_string(),
+        ];
+        let errs = validate_grants(&grants, false).unwrap_err();
+        assert_eq!(errs.len(), 1);
+        assert!(matches!(&errs[0], RegistryError::UnknownKey(k) if k == "sales:typo"));
+    }
+
+    #[test]
+    fn validate_grants_collects_multiple_errors() {
+        let grants = vec![
+            "sales:typo".to_string(),
+            "unknown:*".to_string(),
+            "not:registered".to_string(),
+        ];
+        let errs = validate_grants(&grants, false).unwrap_err();
+        assert_eq!(errs.len(), 3);
+    }
+
+    #[test]
+    fn validate_grants_rejects_global_wildcard_when_not_allowed() {
+        let grants = vec!["*".to_string()];
+        let errs = validate_grants(&grants, false).unwrap_err();
+        assert_eq!(errs.len(), 1);
+        assert!(matches!(&errs[0], RegistryError::GlobalWildcardDenied));
+    }
+
+    #[test]
+    fn validate_grants_allows_global_wildcard_when_permitted() {
+        let grants = vec!["*".to_string()];
+        assert!(validate_grants(&grants, true).is_ok());
+    }
+
+    #[test]
+    fn validate_grants_rejects_sensitive_wildcard() {
+        let grants = vec!["sales:*".to_string()];
+        let errs = validate_grants(&grants, false).unwrap_err();
+        assert_eq!(errs.len(), 1);
+        assert!(matches!(&errs[0], RegistryError::SensitiveUnderWildcard(w, _) if w == "sales:*"));
+    }
+
+    #[test]
+    fn validate_grants_empty_set_is_ok() {
+        let grants: Vec<String> = vec![];
+        assert!(validate_grants(&grants, false).is_ok());
+    }
+
+    #[test]
+    fn validate_grants_mix_of_valid_and_invalid() {
+        let grants = vec![
+            permissions::SALES_PROCESS.to_string(),
+            "sales:typo".to_string(),
+            permissions::PRODUCTS_READ.to_string(),
+        ];
+        let errs = validate_grants(&grants, false).unwrap_err();
+        assert_eq!(errs.len(), 1);
+        assert!(matches!(&errs[0], RegistryError::UnknownKey(k) if k == "sales:typo"));
+    }
+
+    // ── RegistryError Display ─────────────────────────────────────────
+
+    #[test]
+    fn registry_error_unknown_key_display() {
+        let err = RegistryError::UnknownKey("sales:typo".into());
+        let msg = err.to_string();
+        assert!(msg.contains("sales:typo"));
+        assert!(msg.contains("unregistered"));
+    }
+
+    #[test]
+    fn registry_error_sensitive_wildcard_display() {
+        let err = RegistryError::SensitiveUnderWildcard(
+            "sales:*".into(),
+            "sales:void, sales:refund".into(),
+        );
+        let msg = err.to_string();
+        assert!(msg.contains("sales:*"));
+        assert!(msg.contains("sensitive"));
+        assert!(msg.contains("sales:void"));
+    }
+
+    #[test]
+    fn registry_error_global_wildcard_display() {
+        let err = RegistryError::GlobalWildcardDenied;
+        let msg = err.to_string();
+        assert!(msg.contains("global wildcard"));
+        assert!(msg.contains("Owner"));
+    }
+
+    // ── RegistryError Debug ───────────────────────────────────────────
+
+    #[test]
+    fn registry_error_debug() {
+        let err = RegistryError::UnknownKey("test".into());
+        let debug = format!("{err:?}");
+        assert!(debug.contains("UnknownKey"));
+    }
+
+    // ── RegistryError Clone/Eq ────────────────────────────────────────
+
+    #[test]
+    fn registry_error_clone() {
+        let err = RegistryError::UnknownKey("test".into());
+        let cloned = err.clone();
+        assert_eq!(err, cloned);
+    }
+
+    #[test]
+    fn registry_error_eq() {
+        let a = RegistryError::UnknownKey("test".into());
+        let b = RegistryError::UnknownKey("test".into());
+        assert_eq!(a, b);
+
+        let c = RegistryError::UnknownKey("other".into());
+        assert_ne!(a, c);
+    }
+
+    // ── PermissionEntry integrity ─────────────────────────────────────
+
+    #[test]
+    fn every_entry_has_non_empty_description() {
+        for e in REGISTRY {
+            assert!(
+                !e.description.is_empty(),
+                "entry {} has empty description",
+                e.key
+            );
+        }
+    }
+
+    #[test]
+    fn every_entry_key_matches_domain_action_format() {
+        for e in REGISTRY {
+            assert!(
+                e.key.contains(':'),
+                "entry key {} is missing ':' separator",
+                e.key
+            );
+            let parts: Vec<&str> = e.key.splitn(2, ':').collect();
+            assert_eq!(
+                parts.len(),
+                2,
+                "entry key {} must have domain:action",
+                e.key
+            );
+            assert!(!parts[0].is_empty(), "entry {} has empty domain", e.key);
+            assert!(!parts[1].is_empty(), "entry {} has empty action", e.key);
+        }
+    }
+
+    #[test]
+    fn family_matches_domain_from_key() {
+        for e in REGISTRY {
+            let domain = e.key.splitn(2, ':').next().unwrap();
+            assert_eq!(
+                e.family, domain,
+                "entry {} has family '{}' but key domain is '{}'",
+                e.key, e.family, domain
+            );
+        }
+    }
+
+    #[test]
+    fn registry_size_matches_enforced_count() {
+        // The registry must have at least as many entries as ALL_ENFORCED.
+        // It can have more (future keys not yet enforced), but never fewer.
+        assert!(
+            REGISTRY.len() >= ALL_ENFORCED.len(),
+            "registry ({} entries) is smaller than ALL_ENFORCED ({} entries)",
+            REGISTRY.len(),
+            ALL_ENFORCED.len()
+        );
+    }
+
+    // ── Sensitive key inventory ───────────────────────────────────────
+
+    #[test]
+    fn all_expected_sensitive_keys_are_flagged() {
+        // Every key that should be sensitive per ADR #35 D2 must be flagged.
+        for key in [
+            permissions::SALES_VOID,
+            permissions::SALES_REFUND,
+            permissions::PAYMENTS_REFUND,
+            permissions::PAYMENTS_SETTLE,
+            permissions::STAFF_MANAGE_ROLES,
+            permissions::STAFF_DELETE,
+            permissions::STAFF_READ_IDENTITY,
+            permissions::STAFF_READ_PAYROLL,
+            permissions::STAFF_EDIT_NOTES,
+            permissions::REPORTS_EXPORT,
+            permissions::AUDIT_EXPORT,
+            permissions::GIFTCARDS_ISSUE,
+            permissions::SECURITY_MANAGE,
+            permissions::DATA_EXPORT,
+        ] {
+            assert!(is_sensitive(key), "{} must be classified sensitive", key);
+        }
+    }
+
+    #[test]
+    fn operational_keys_are_not_sensitive() {
+        // Core operational keys must never be sensitive — they are
+        // grantable through family wildcards.
+        for key in [
+            permissions::SALES_PROCESS,
+            permissions::SALES_VIEW,
+            permissions::SALES_DISCOUNT,
+            permissions::SALES_SPLIT,
+            permissions::PRODUCTS_CREATE,
+            permissions::PRODUCTS_READ,
+            permissions::PRODUCTS_UPDATE,
+            permissions::INVENTORY_VIEW,
+            permissions::INVENTORY_ADJUST,
+            permissions::STAFF_CREATE,
+            permissions::STAFF_READ,
+            permissions::SETTINGS_READ,
+            permissions::SETTINGS_EDIT,
+            permissions::PAYMENTS_CASH,
+            permissions::PAYMENTS_CARD,
+            permissions::CUSTOMERS_CREATE,
+            permissions::CUSTOMERS_VIEW,
+            permissions::KDS_VIEW,
+            permissions::KDS_UPDATE,
+        ] {
+            assert!(!is_sensitive(key), "{} must NOT be sensitive", key);
+        }
+    }
 }

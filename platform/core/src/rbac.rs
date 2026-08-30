@@ -1448,4 +1448,85 @@ mod tests {
         assert!(!role.updated_at.is_empty());
         assert!(role.created_at.contains('T'));
     }
+
+    // ── NEW TESTS: gaps identified in TDD analysis ───────────────────
+
+    #[test]
+    fn role_new_trims_whitespace() {
+        let r = Role::new("r", "  Cashier  ");
+        assert_eq!(r.name, "Cashier");
+    }
+
+    #[test]
+    fn authorization_error_clone() {
+        let err = AuthorizationError {
+            required: "sales:void".into(),
+            role_name: "Cashier".into(),
+        };
+        let cloned = err.clone();
+        assert_eq!(err.required, cloned.required);
+        assert_eq!(err.role_name, cloned.role_name);
+    }
+
+    #[test]
+    fn permission_eq_different_names() {
+        let a = Permission::new("sales:void");
+        let b = Permission::new("sales:process");
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn has_permission_domain_wildcard_matches_all_actions_in_domain() {
+        // A domain wildcard like "admin:*" matches ANY action in the domain,
+        // including "admin:read", "admin:write", etc.
+        assert!(has_permission(&["admin:*".into()], "admin:read"));
+        assert!(has_permission(&["admin:*".into()], "admin:write"));
+        assert!(has_permission(&["admin:*".into()], "admin"));
+        // But it does NOT match actions in other domains.
+        assert!(!has_permission(&["admin:*".into()], "sales:void"));
+    }
+
+    #[test]
+    fn all_enforced_list_is_non_empty() {
+        assert!(!ALL_ENFORCED.is_empty(), "ALL_ENFORCED must not be empty");
+    }
+
+    #[test]
+    fn all_enforced_entries_have_domain_action_format() {
+        for &p in ALL_ENFORCED {
+            let parts: Vec<&str> = p.splitn(2, ':').collect();
+            assert_eq!(
+                parts.len(),
+                2,
+                "ALL_ENFORCED entry '{p}' must have domain:action"
+            );
+            assert!(
+                !parts[0].is_empty(),
+                "ALL_ENFORCED entry '{p}' has empty domain"
+            );
+            assert!(
+                !parts[1].is_empty(),
+                "ALL_ENFORCED entry '{p}' has empty action"
+            );
+        }
+    }
+
+    #[test]
+    fn role_preset_permissions_json_matches_role_field() {
+        // The JSON produced by permissions_json() must round-trip correctly.
+        for preset in ROLE_PRESETS {
+            let json = preset.permissions_json();
+            let parsed: Vec<String> =
+                serde_json::from_str(&json).expect("permissions_json must be valid JSON");
+            assert_eq!(parsed.len(), preset.permissions.len());
+            for perm in &parsed {
+                assert!(
+                    preset.permissions.contains(&perm.as_str()),
+                    "parsed perm '{}' not in preset permissions for {}",
+                    perm,
+                    preset.id
+                );
+            }
+        }
+    }
 }
