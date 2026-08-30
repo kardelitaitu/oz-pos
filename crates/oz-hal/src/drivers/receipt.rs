@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-hal slice B: receipt deep read)
+crate: oz-hal | status: SAFE | lint: CLEAN
+findings: HAL-1 INFO — receipt layout padding/centering uses byte .len() not char counts (line-gap and column paddings): Unicode store names, product names, or footers misalign columns (saturating math prevents panics; cosmetic only; consistent with the foundation chars-vs-bytes note). Otherwise exemplary: Money/format_minor delegation, documented PaperWidth/DecimalSeparator, per-store ReceiptConfig from settings, Indonesian NPWP/tax-id footer support, payment-link QR config hook
+next: char-count-based padding in fix-order phase | perf: N/A
+*/
 //! Receipt data types and ESC/POS formatting.
 //!
 //! Defines structured receipt models (`SalesReceipt`) and the

@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-hal slice B: verified)
+crate: oz-hal | status: SAFE | lint: CLEAN
+findings: clean driver — no unwrap/panic/unsafe, sibling tests per convention
+next: none | perf: N/A
+*/
 //! TCP / network receipt printer driver.
 //!
 //! Implements `ReceiptPrinter` over raw TCP (port 9100). Many POS

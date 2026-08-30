@@ -1,4 +1,17 @@
 
+### Slice B — print path: receipt.rs (584 fully read), escpos, tcp/usb/bt
+printers, serial_display, kds_chit, drawer (all verified structurally)
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| HAL-1 | ℹ️ INFO | crates/oz-hal/src/drivers/receipt.rs:429+ | Receipt layout padding/centering uses byte `.len()` rather than char counts — Unicode store names, product names, or footers misalign receipt columns (saturating math prevents panics; cosmetic only; same family as the foundation chars-vs-bytes note). | Switch paddings to `chars().count()`. |
+
+Otherwise exemplary: `Money`/`format_minor` delegation, documented
+`PaperWidth`/`DecimalSeparator`, per-store `ReceiptConfig` loaded from
+settings before each print, Indonesian NPWP/tax-id footer support, and a
+payment-link QR config hook. All seven companion driver files are clean
+(no unwrap/panic/unsafe anywhere).
+
 ---
 
 ## 25. crates/oz-hal — hardware abstraction layer
