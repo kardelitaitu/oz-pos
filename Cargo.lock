@@ -4294,6 +4294,7 @@ name = "oz-cli"
 version = "0.0.33"
 dependencies = [
  "anyhow",
+ "argon2",
  "chrono",
  "clap",
  "csv",
