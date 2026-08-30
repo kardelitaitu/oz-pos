@@ -862,6 +862,25 @@ convention-documented DTOs whose only `unwrap()`s are inside test modules
 
 ---
 
+## 7. platform/core — RBAC, permissions, settings, database
+
+Baseline: ~5.7k production lines (settings/tests.rs excluded). Slice A
+(rbac.rs 1,408: 1–910 fully read; 911–1408 is the permission-constant
+catalog, verified structurally).
+
+**No new findings.** The wildcard resolver is a closed three-level design
+(global `*`, domain `x:*`, exact — malformed strings match exactly only),
+and `Role::has_permission` treats malformed stored JSON as **deny-all**
+(fail-closed — the correct contrast to COR-30's fail-open access guards).
+The preset catalog is pinned by invariant tests: no retired
+cashier/kitchen roles, Admin is never a wildcard and never holds
+staff-deletion by default, Staff is checkout-only (40+ negative
+assertions), Auditor is read-only.
+
+---
+
+---
+
 ---
 
 ---
