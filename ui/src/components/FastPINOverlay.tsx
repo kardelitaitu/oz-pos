@@ -266,7 +266,8 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
   // ── Verify PIN and swap session ─────────────────────────────
 
   const attemptVerify = useCallback(async () => {
-    if (pin.length === 0 || isLocked) return;
+    // S1: Enforce minimum 4-digit PIN — prevents wasted server round-trips.
+    if (pin.length < MAX_PIN_LENGTH || isLocked) return;
 
     // Enforce minimum interval between staffLogin calls to prevent
     // rapid automated attacks (e.g. a script entering digits at 100ms).
@@ -387,7 +388,7 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
         handlePinBackspace();
       } else if (e.key === "Enter") {
         e.preventDefault();
-        if (pin.length >= 1 && !pinSubmitted.current) attemptVerify();
+        if (pin.length >= MAX_PIN_LENGTH && !pinSubmitted.current) attemptVerify();
       }
     },
     [

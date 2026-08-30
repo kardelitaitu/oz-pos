@@ -9,7 +9,8 @@ import './SessionLockScreen.css';
 
 const MAX_PIN_LENGTH = 4;
 const MAX_PIN_ATTEMPTS = 5;
-const LOCKOUT_DURATION_MS = 30_000;
+/** Fallback lockout when the server doesn't return a retry-after value. */
+const FALLBACK_LOCKOUT_MS = 30_000;
 
 function AlertIcon() {
   return (
@@ -39,6 +40,7 @@ export default function SessionLockScreen({
   const [time, setTime] = useState(new Date());
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [pinAttempts, setPinAttempts] = useState(0);
+  const [lockoutRemaining, setLockoutRemaining] = useState(0);
   const pinWrapRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const lastErrorRef = useRef<string | null>(null);
@@ -74,24 +76,27 @@ export default function SessionLockScreen({
     return () => { mounted = false; };
   }, []);
 
-  // Auto-unlock after lockout period
+  // U1: Auto-unlock after lockout period with visible countdown.
   useEffect(() => {
-    if (lockedUntil === null) return;
-    const remaining = lockedUntil - Date.now();
-    if (remaining <= 0) {
-      setLockedUntil(null);
+    if (lockedUntil === null) {
+      setLockoutRemaining(0);
       return;
     }
-    const timer = setTimeout(() => {
-      setLockedUntil(null);
-    }, remaining);
-    return () => clearTimeout(timer);
+    // Tick every second to update the countdown display.
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((lockedUntil - Date.now()) / 1000));
+      setLockoutRemaining(remaining);
+      if (remaining <= 0) {
+        setLockedUntil(null);
+        setPinAttempts(0);
+      }
+    };
+    tick(); // initial tick
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
   }, [lockedUntil]);
 
   const isLocked = lockedUntil !== null;
-  const lockoutRemainingSec = lockedUntil !== null
-    ? Math.max(0, Math.ceil((lockedUntil - Date.now()) / 1000))
-    : 0;
 
   // Shake card on error
   useEffect(() => {
@@ -157,15 +162,15 @@ export default function SessionLockScreen({
         const nextAttempts = pinAttempts + 1;
         setPinAttempts(nextAttempts);
 
-        // Enforce local lockout after MAX_PIN_ATTEMPTS.
-        if (nextAttempts >= MAX_PIN_ATTEMPTS) {
-          setLockedUntil(Date.now() + LOCKOUT_DURATION_MS);
-        }
-
-        // Also respect backend rate-limit instructions, if present.
+        // S2: Respect backend rate-limit instructions first.
+        // The server uses exponential backoff (up to 1h) which is more
+        // accurate than our local hardcoded fallback.
         const lockoutSeconds = parseRateLimitSeconds(msg, errObj);
         if (lockoutSeconds !== null) {
           setLockedUntil(Date.now() + lockoutSeconds * 1000);
+        } else if (nextAttempts >= MAX_PIN_ATTEMPTS) {
+          // Fallback: local lockout when server doesn't provide retry-after.
+          setLockedUntil(Date.now() + FALLBACK_LOCKOUT_MS);
         }
       }
     };
@@ -308,16 +313,16 @@ export default function SessionLockScreen({
             </button>          </div>
         </div>
 
-        {/* Error — below the keypad, same as the login PIN step */}
+        {/* U1: Error + visible countdown timer — below the keypad */}
         {error && (
           <div className="session-lock-error" role="alert" aria-live="polite">
             <AlertIcon />
             {error}
-            {isLocked && (
-              <span className="session-lock-rate-limit">
-                {' '}{requiredLocalized(l10n, 'session-lock-lockout', { seconds: String(lockoutRemainingSec) })}
-              </span>
-            )}
+          </div>
+        )}
+        {isLocked && lockoutRemaining > 0 && (
+          <div className="session-lock-countdown" role="status" aria-live="polite">
+            {requiredLocalized(l10n, 'session-lock-lockout', { seconds: String(lockoutRemaining) })}
           </div>
         )}
         </div>
@@ -329,7 +334,7 @@ export default function SessionLockScreen({
       {/* ── Footer: version + connection status pills (login-style) ── */}
       <div className="session-lock-footer">
         <div className="session-lock-footer-left">
-          <span className="session-lock-footer-version">OZ-POS Enterprise v0.0.25</span>
+          <span className="session-lock-footer-version">v0.0.33</span>
         </div>
         <div className="session-lock-footer-right">
           <div className="session-lock-connection-group">

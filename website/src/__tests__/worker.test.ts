@@ -95,12 +95,12 @@ describe('Cloudflare Worker — worker.ts', () => {
 
   // ── Auth gate (ADR #42) ─────────────────────────────────────────
 
-  it('redirects dashboard.ozpos.my.id to login when no cookie', async () => {
+  it('serves dedicated dashboard login page when no cookie', async () => {
     const req = new Request('https://dashboard.ozpos.my.id/');
     const res = await worker.fetch(req, mockEnv);
 
-    expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toMatch(/^https:\/\/ozpos\.my\.id\/en\/login\?redirect=/);
+    expect(res.status).toBe(200);
+    expect(mockEnv.ASSETS.fetch).toHaveBeenCalled();
   });
 
   it('serves dedicated admin login page when no cookie', async () => {
@@ -122,6 +122,22 @@ describe('Cloudflare Worker — worker.ts', () => {
     expect(setCookie).toContain('HttpOnly');
     expect(setCookie).toContain('Secure');
     expect(setCookie).toContain('Domain=.ozpos.my.id');
+  });
+
+  it('clears the httpOnly cookie on /__oz/logout and redirects to login', async () => {
+    const req = new Request('https://admin.ozpos.my.id/__oz/logout', {
+      headers: { Cookie: 'oz_session=stale.jwt.token' },
+    });
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(302);
+    // Logout redirects to the admin subdomain itself (login page served via
+    // the Worker proxy), not the marketing host.
+    expect(res.headers.get('Location')).toBe('https://admin.ozpos.my.id/');
+    const setCookie = res.headers.get('Set-Cookie');
+    expect(setCookie).toContain('oz_session=;');
+    expect(setCookie).toContain('Max-Age=0');
+    expect(setCookie).toContain('HttpOnly');
   });
 
   it('serves placeholder dashboard page when cookie is present', async () => {

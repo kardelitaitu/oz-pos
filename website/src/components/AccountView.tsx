@@ -4,7 +4,7 @@ import { pricingFor } from '../content/pricing';
 import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
 import { clearSession, getSessionEmail, isPaddleConfigured, isPlaceholderPriceId, openPaddleCheckout } from './paddle';
 import { openMidtransCheckout } from './midtrans';
-import { type Region, getRegion, setRegion } from '../lib/region';
+import { type Region, getRegion, getExplicitRegion, setRegion } from '../lib/region';
 import PasswordField from './PasswordField';
 import PasswordStrength from './PasswordStrength';
 import { licenseApiUrl } from '../lib/runtime-config';
@@ -121,8 +121,11 @@ function statusPillClass(status: string | undefined): string {
 function fmtDate(dateStr: string | undefined, locale: string): string {
   if (!dateStr) return '—';
   try {
+    // Use UTC timezone so the displayed calendar day is the same on every
+    // machine — "2027-01-01" and "2027-01-01T00:00:00Z" both show "Jan 1,
+    // 2027" regardless of whether the user is in Los Angeles or Jakarta.
     return new Date(dateStr).toLocaleDateString(locale === 'id' ? 'id-ID' : 'en-US', {
-      year: 'numeric', month: 'short', day: 'numeric',
+      timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric',
     });
   } catch {
     return dateStr;
@@ -133,8 +136,19 @@ function fmtDate(dateStr: string | undefined, locale: string): string {
 function daysUntil(dateStr: string | undefined): number | null {
   if (!dateStr) return null;
   try {
-    const diff = new Date(dateStr).getTime() - Date.now();
-    return Math.ceil(diff / 86_400_000);
+    // UTC-based calendar-day count, timezone- and clock-independent: the
+    // difference between the expiry's UTC date and today's UTC date. A
+    // subscription expiring "in 10 days" reports exactly 10 on any machine.
+    const d = new Date(dateStr);
+    // new Date('not-a-date') produces an Invalid Date (not a throw); its
+    // UTC getters return NaN. Treat that as "no date" instead of leaking
+    // NaN into the countdown label.
+    if (Number.isNaN(d.getTime())) return null;
+    const expiryUTC = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    const now = new Date();
+    const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const days = Math.round((expiryUTC - todayUTC) / 86_400_000);
+    return Number.isNaN(days) ? null : days;
   } catch {
     return null;
   }
@@ -153,7 +167,11 @@ function renewsLabel(locale: string, days: number): string {
 function renderRenewBadge(locale: string, status: string | undefined, expiresAt: string | undefined) {
   if (status !== 'active' || !expiresAt) return null;
   const d = daysUntil(expiresAt);
-  if (d === null) return null;
+  // A negative/past countdown is meaningless ("Renews in -3 days") — the
+  // server can report status=active while the expiry has already lapsed
+  // (clock skew, grace-period data). Hide the badge rather than show a
+  // nonsensical countdown.
+  if (d === null || d < 0) return null;
   const cls = d < 7 ? 'bg-danger/15 text-danger' : d < 30 ? 'bg-warning/15 text-warning' : 'bg-ink/10 text-muted';
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{renewsLabel(locale, d)}</span>;
 }
@@ -220,6 +238,17 @@ export default function AccountView({ locale }: Props) {
   const [regionMsg, setRegionMsg] = useState(false);
   const [regionOpen, setRegionOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
+  // Payment routing follows the saved region (ADR #39 D1) exactly like the
+  // pricing-page CheckoutButton: Indonesia → Midtrans Snap, everything else
+  // → Paddle. Falls back to the locale only when region is unset.
+  const [useMidtrans, setUseMidtrans] = useState<boolean>(() => {
+    const r = getExplicitRegion();
+    return r === 'id' || (!r && locale === 'id');
+  });
+  useEffect(() => {
+    const r = getExplicitRegion();
+    setUseMidtrans(r === 'id' || (!r && locale === 'id'));
+  }, [region, locale]);
   // Device revoke state: record id currently being revoked, plus the last
   // failure message (shown inline on the device row).
   const [revokingId, setRevokingId] = useState<string | null>(null);
@@ -301,8 +330,8 @@ export default function AccountView({ locale }: Props) {
     setSubscribing(tierKey);
     setSubscribeError(false);
     // Indonesian market bills through Midtrans Snap (ADR #39 D1); every
-    // other locale through Paddle.
-    const useMidtrans = locale === 'id';
+    // other region through Paddle. useMidtrans follows the saved region
+    // preference (see state init), same as the pricing-page CheckoutButton.
     try {
       if (useMidtrans) {
         // The bundle (C3.2) rides the snap request (custom_field4) so the
@@ -363,13 +392,15 @@ export default function AccountView({ locale }: Props) {
       });
       if (!res.ok) throw new Error(`revoke failed (${res.status})`);
       // Mark this device revoked in local state immediately; refresh the
-      // full list so any server-side ordering is preserved.
+      // full list so any server-side ordering is preserved. If the refresh
+      // fails (null), keep the existing list and just stamp the revoked
+      // device — the list must not collapse to the fallback hint.
       const fresh = await fetchDevices();
       if (mountedRef.current) {
-        setDevices(fresh);
-        // Keep the just-revoked device visible as revoked even if the refresh
-        // raced ahead (fetchDevices can return before the revoke commit).
-        setDevices((prev) => prev?.map((d) => (d.id === device.id ? { ...d, revoked_at: d.revoked_at ?? new Date().toISOString() } : d)) ?? fresh);
+        setDevices((prev) => {
+          const list = fresh ?? prev ?? [];
+          return list.map((d) => (d.id === device.id ? { ...d, revoked_at: d.revoked_at ?? new Date().toISOString() } : d));
+        });
       }
     } catch (err) {
       if (mountedRef.current) setRevokeError(err instanceof Error ? err.message : String(err));
@@ -445,9 +476,12 @@ export default function AccountView({ locale }: Props) {
   // out and the section shows "checkout unavailable".
   // The id market bills through Midtrans (fixed Rp from the server's
   // MIDTRANS_PRICE_TIERS map), so Paddle price ids don't gate it; other
-  // locales need a real, non-placeholder Paddle price.
-  const useMidtrans = locale === 'id';
-  const subscribable = (pricingFor(locale) ?? [])
+  // markets need a real, non-placeholder Paddle price. useMidtrans is the
+  // region-derived state (see state init) — do not redeclare it here.
+  // The pricing source follows the payment provider: when useMidtrans is true
+  // the checkout goes through Midtrans (IDR) so the displayed prices must
+  // match — use the id pricing content, not the URL locale.
+  const subscribable = (pricingFor(useMidtrans ? 'id' : locale) ?? [])
     .filter((tier) => tier.tierKey === 'plus' || tier.tierKey === 'pro' || tier.tierKey === 'premium')
     .map((tier) => {
       const yearly = tier.prices.yearly;
@@ -465,7 +499,9 @@ export default function AccountView({ locale }: Props) {
   // the subscribe section hides placeholder plans.
   // WIP: bundle checkout needs a real Paddle bundle price id (currently
   // pri_placeholder_plus_bundle_*) — the card stays hidden until then.
-  const plusBundle = (pricingFor(locale) ?? []).find((tier) => tier.tierKey === 'plus')?.bundle;
+  // Pricing source follows the payment provider, same as the subscribe
+  // section: Midtrans (useMidtrans) bills in IDR, so show the id pricing.
+  const plusBundle = (pricingFor(useMidtrans ? 'id' : locale) ?? []).find((tier) => tier.tierKey === 'plus')?.bundle;
   const bundleYearly = plusBundle?.prices.yearly;
   const bundleCheckoutAvailable =
     Boolean(plusBundle) &&
@@ -895,7 +931,7 @@ export default function AccountView({ locale }: Props) {
             </div>
             <div>
               <dt className="text-muted">{t(locale, 'account.grace')}</dt>
-              <dd>{subscription.graceUntil ?? '—'}</dd>
+              <dd>{fmtDate(subscription.graceUntil, locale)}</dd>
             </div>
           </dl>
           {subscription.status !== 'active' && (

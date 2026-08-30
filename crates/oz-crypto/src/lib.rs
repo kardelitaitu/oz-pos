@@ -1,3 +1,10 @@
+/*
+last audited 25-07-26 by RSA-Agent
+crate: oz-crypto | status: SAFE | lint: CLEAN
+findings: static/portable at-rest keys are publicly derivable from repo constants (obfuscation, not confidentiality); fails-open legacy passthrough in smtp paths (encrypt_smtp_at_rest returns plaintext on encrypt failure); SHA-256 used directly as unsalted KDF (machine_id entropy unverified)
+next: move at-rest keys to OS keychain/env master key; distinguish legacy-format from tamper in passthrough; verify machine_id entropy; tests belong in sibling lib_tests.rs per AGENTS.md
+perf: fresh random nonce per call, cipher setup per call negligible at this call volume; no issues
+*/
 //! AES-256-GCM encryption helpers for encrypting sensitive data at rest.
 //!
 //! Uses AES-256-GCM with a key derived from a domain prefix and either

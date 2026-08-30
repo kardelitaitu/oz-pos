@@ -246,6 +246,85 @@ describe('AuthContext', () => {
     });
   });
 
+  it('calls onLogin callback after successful login', async () => {
+    const onLogin = vi.fn();
+    mockStaffLogin.mockResolvedValue({
+      session: { display_name: 'Alice', role_name: 'cashier', user_id: 'u1', role_id: 'r1', permissions: [] },
+      picker_ticket: 'ticket-1',
+    });
+
+    await renderInAct(
+      <AuthProvider onLogin={onLogin}>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('login-btn'));
+
+    await waitFor(() => {
+      expect(onLogin).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('prevents concurrent login attempts (submittingRef guard)', async () => {
+    // When login is called while a previous call is still in-flight,
+    // the second call must be silently rejected.
+    let resolveLogin: (v: unknown) => void;
+    mockStaffLogin.mockImplementation(
+      () => new Promise((resolve) => { resolveLogin = resolve; }),
+    );
+
+    await renderProvider();
+
+    // First login attempt — still in-flight.
+    fireEvent.click(screen.getByTestId('login-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('loading').textContent).toBe('true');
+    });
+
+    // Second login attempt while first is pending — should be rejected.
+    fireEvent.click(screen.getByTestId('login-btn'));
+
+    // staffLogin should only have been called once.
+    expect(mockStaffLogin).toHaveBeenCalledTimes(1);
+
+    // Resolve the first call.
+    resolveLogin!({
+      session: { display_name: 'Alice', role_name: 'cashier', user_id: 'u1', role_id: 'r1', permissions: [] },
+      picker_ticket: 'ticket-1',
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('session').textContent).toBe('Alice');
+    });
+
+    // staffLogin still only called once.
+    expect(mockStaffLogin).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears previous error on next login attempt', async () => {
+    // First attempt fails.
+    mockStaffLogin.mockRejectedValueOnce(new Error('Wrong PIN'));
+    await renderProvider();
+    fireEvent.click(screen.getByTestId('login-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('error').textContent).toBe('Wrong PIN');
+    });
+
+    // Second attempt succeeds — error must be cleared.
+    mockStaffLogin.mockResolvedValueOnce({
+      session: { display_name: 'Alice', role_name: 'cashier', user_id: 'u1', role_id: 'r1', permissions: [] },
+      picker_ticket: 'ticket-1',
+    });
+    fireEvent.click(screen.getByTestId('login-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('error').textContent).toBe('no-error');
+      expect(screen.getByTestId('session').textContent).toBe('Alice');
+    });
+  });
+
   it('throws when useAuth is used outside AuthProvider', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const preventJsdomError = (e: ErrorEvent) => e.preventDefault();

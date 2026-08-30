@@ -40,7 +40,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
           '<div class="card" style="text-align:center;padding:2rem">' +
           '<h2 style="margin:0 0 .5rem;color:var(--bad)">Access denied</h2>' +
           '<p class="empty">Your session is not authorized for the admin panel. ' +
-          'If you are the admin, please <a href="/" style="color:var(--accent)">sign in again</a>.</p>' +
+          'If you are the admin, please <a href="/__oz/logout" style="color:var(--accent)">sign in again</a>.</p>' +
           '</div>';
         // Throw so callers don't overwrite the access-denied screen with a
         // generic error state (the fetch was fine; auth is the problem).
@@ -479,9 +479,8 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
     function flash(msg) { const f = el('div', 'flash', msg); document.body.appendChild(f); setTimeout(() => f.remove(), 3000); }
 
     // ── Boot ────────────────────────────────────────────────────────
-    document.getElementById('logout-btn').addEventListener('click', async () => {
-      try { const t = (await (await fetch('/__oz/session')).json()).token; await fetch(API + '/api/v1/web/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + t } }); } catch {}
-      window.location.href = '/';
+    document.getElementById('logout-btn').addEventListener('click', () => {
+      window.location.href = '/__oz/logout';
     });
 
     // Theme toggle (light/dark) — theme.js sets data-theme on <html> and

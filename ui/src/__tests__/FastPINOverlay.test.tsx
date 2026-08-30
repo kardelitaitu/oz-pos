@@ -415,9 +415,11 @@ describe("FastPINOverlay", () => {
       typeUsername("bob");
       clickButton("Next");
 
-      // Enter partial PIN
+      // Enter full 4-digit PIN
       clickDigit("1");
       clickDigit("2");
+      clickDigit("3");
+      clickDigit("4");
 
       // Press Enter on the dialog
       fireEvent.keyDown(screen.getByRole("dialog"), { key: "Enter" });
@@ -495,6 +497,57 @@ describe("FastPINOverlay", () => {
       await waitFor(() => {
         expect(screen.getByPlaceholderText("Username")).toBeInTheDocument();
       });
+    });
+  });
+
+  // ── S1: PIN minimum length enforcement ────────────────────────────
+
+  describe("PIN minimum length (S1)", () => {
+    it("does not call staffLogin with fewer than 4 digits", async () => {
+      renderOverlay(true);
+      typeUsername("cashier1");
+      clickButton("Next");
+
+      await waitFor(() => {
+        expect(screen.queryByPlaceholderText("Username")).not.toBeInTheDocument();
+      });
+
+      // Enter only 3 digits.
+      clickDigit("1");
+      clickDigit("2");
+      clickDigit("3");
+
+      // staffLogin must NOT have been called.
+      expect(mockStaffLogin).not.toHaveBeenCalled();
+
+      // Enter the 4th digit — NOW staffLogin should be called.
+      clickDigit("4");
+      await waitFor(() => {
+        expect(mockStaffLogin).toHaveBeenCalled();
+      });
+    });
+
+    it("Enter key does not trigger verify with fewer than 4 digits", async () => {
+      renderOverlay(true);
+      typeUsername("cashier1");
+      clickButton("Next");
+
+      await waitFor(() => {
+        expect(screen.queryByPlaceholderText("Username")).not.toBeInTheDocument();
+      });
+
+      // Type 3 digits then press Enter.
+      // The keyDown handler is on the document, so we fire on the pad
+      // group element which is the keyboard focus target.
+      const pad = document.querySelector(".fastpin-pad");
+      expect(pad).toBeTruthy();
+      fireEvent.keyDown(pad!, { key: "1" });
+      fireEvent.keyDown(pad!, { key: "2" });
+      fireEvent.keyDown(pad!, { key: "3" });
+      fireEvent.keyDown(pad!, { key: "Enter" });
+
+      // staffLogin must NOT have been called.
+      expect(mockStaffLogin).not.toHaveBeenCalled();
     });
   });
 });

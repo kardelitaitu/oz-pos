@@ -20,8 +20,15 @@ fi
 SCCACHE_VERSION=$(sccache --version 2>&1 || true)
 echo "    $SCCACHE_VERSION"
 
-echo "==> Setting cache size to 20 GB..."
-sccache --set-config cache.disk.size 20G
+echo "==> Setting cache size to 20 GB (SCCACHE_CACHE_SIZE)..."
+# `sccache --set-config` was removed in modern sccache releases; the
+# supported knob is the SCCACHE_CACHE_SIZE env var, which must be in
+# the environment when the sccache server starts.
+export SCCACHE_CACHE_SIZE="${SCCACHE_CACHE_SIZE:-20G}"
+echo "    SCCACHE_CACHE_SIZE=$SCCACHE_CACHE_SIZE (session only; persist in your shell profile if desired)"
+# Restart the local server so the new size takes effect immediately.
+sccache --stop-server >/dev/null 2>&1 || true
+sccache --start-server >/dev/null 2>&1 || true
 
 echo "==> Zeroing stats (fresh start)..."
 sccache --zero-stats

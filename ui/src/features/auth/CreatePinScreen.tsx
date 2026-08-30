@@ -32,7 +32,16 @@ export default function CreatePinScreen({ onCreated }: CreatePinScreenProps) {
       setErrorMsg(l10n.getString('auth-create-pin-error-fields'));
       return;
     }
-    if (pin.length < 4) {
+    // Strip non-digits from PIN fields — paste may inject letters.
+    const digitsOnly = (s: string) => s.replace(/\D/g, '').slice(0, 8);
+    const cleanPin = digitsOnly(pin);
+    const cleanConfirm = digitsOnly(confirmPin);
+    if (cleanPin !== pin || cleanConfirm !== confirmPin) {
+      setPin(cleanPin);
+      setConfirmPin(cleanConfirm);
+      return; // re-render with cleaned values; user sees digits-only
+    }
+    if (cleanPin.length < 4) {
       setErrorMsg(l10n.getString('auth-create-pin-error-pin-length'));
       return;
     }

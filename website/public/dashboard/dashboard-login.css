@@ -1,0 +1,26 @@
+:root { --accent:#147efb; --bg:#0b1220; --surface:#121a2c; --surface2:#1a2440; --text:#e6edf7; --muted:#93a4bd; --border:rgba(255,255,255,.09); --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; }
+:root[data-theme="light"] { --bg:#f4f6fb; --surface:#ffffff; --surface2:#eef1f8; --text:#101828; --muted:#5b6b82; --border:rgba(16,24,40,.12); }
+* { box-sizing:border-box; }
+body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; display:flex; align-items:center; justify-content:center; }
+.card { max-width:22rem; width:100%; padding:2rem; border:1px solid var(--border); border-radius:1rem; background:var(--surface); }
+.logo { display:flex; align-items:center; gap:.5rem; font-weight:700; font-size:1.1rem; margin-bottom:1.5rem; }
+.logo-dot { width:10px; height:10px; border-radius:50%; background:var(--accent); }
+h1 { font-size:1.2rem; margin:0 0 .3rem; }
+.sub { color:var(--muted); font-size:.82rem; margin:0 0 1.5rem; }
+.auth-tabs { display:flex; gap:.25rem; margin-bottom:1.25rem; background:var(--surface2); border-radius:.55rem; padding:.2rem; }
+.auth-tab { flex:1; padding:.45rem; border-radius:.4rem; border:none; background:transparent; color:var(--muted); font-size:.82rem; font-weight:600; cursor:pointer; transition:all .15s; }
+.auth-tab.active { background:var(--surface); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.15); }
+label { display:block; font-size:.82rem; color:var(--muted); margin-bottom:.3rem; }
+input { display:block; width:100%; padding:.55rem .7rem; border-radius:.5rem; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-size:.9rem; outline:none; margin-bottom:1rem; }
+input:focus { border-color:var(--accent); }
+.hidden { display:none !important; }
+.otp-row { display:flex; gap:.5rem; }
+.otp-row input { flex:1; }
+.btn { display:block; width:100%; padding:.6rem; border-radius:.5rem; border:none; background:var(--accent); color:#fff; font-size:.9rem; font-weight:600; cursor:pointer; transition:opacity .15s; }
+.btn:hover { opacity:.88; }
+.btn:disabled { opacity:.4; cursor:default; }
+.error { color:var(--bad); font-size:.82rem; margin:.5rem 0; }
+.success { color:var(--ok); font-size:.82rem; margin:.5rem 0; }
+.note { color:var(--muted); font-size:.75rem; margin-top:1rem; text-align:center; }
+.loading-text { text-align:center; color:var(--muted); font-size:.9rem; }
+@media (max-width:480px) { .card { padding:1.5rem; } }

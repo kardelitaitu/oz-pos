@@ -1,4 +1,153 @@
 
+## 2026-08-29 — TDD round 6: "Renews in NaN days" on invalid expiry (website AccountView)
+
+**Problem:** `daysUntil()` used `new Date(dateStr)`. For a non-date string like
+`"not-a-date"` this creates an **Invalid Date** (it does not throw), whose UTC
+getters return `NaN`. The arithmetic produced `Math.round(NaN) = NaN`, and
+`renderRenewBadge`'s guard `if (d === null || d < 0)` did **not** catch it —
+`NaN < 0` is `false` — so the badge rendered **"Renews in NaN days"** for an
+active subscription with a malformed `expiresAt` (bad data from a webhook or a
+legacy record).
+
+**Solution:** TDD Red→Green (1 new test, account-view.test.tsx 45→46):
+- Red: subscription with `expiresAt: 'not-a-date'` rendered "Renews in NaN
+  days".
+- Green: `daysUntil()` returns `null` when the parsed Date is invalid
+  (`Number.isNaN(d.getTime())`) or the computed day count is `NaN`. The
+  existing `renderRenewBadge` guard then hides the badge, as for past dates.
+
+**Commits:** pending round-6 commit.
+**Test counts:** account-view.test.tsx 45→46; full suite 166→169.
+
+## 2026-08-29 — TDD round 5: currency mismatch when region=id on en-locale dashboard (website AccountView)
+
+**Problem:** The dashboard's subscribe section and bundle upgrade card built
+their pricing from `pricingFor(locale)` — the URL locale, not the payment
+provider's region. When `useMidtrans` became true via a saved region=id
+preference (fixed in round 2), the checkout routed through Midtrans (IDR) but
+the displayed prices were the en-locale USD ones ("$4.99"/"$49.99"). A user on
+`/en/account` with region=id saw USD prices yet got billed in IDR — the shown
+currency and the billed currency disagreed.
+
+**Solution:** TDD Red→Green (2 new tests, account-view 44→45, bundle 5→6):
+- Red: `/en/account` with region=id showed `$4.99` instead of `Rp 500.000`.
+- Green: both `subscribable` and `plusBundle` now derive their pricing source
+  from the payment provider: `pricingFor(useMidtrans ? 'id' : locale)` — when
+  checkout goes through Midtrans, the displayed price is the IDR one.
+- Bundle regression test pins `Rp 750.000` (not `$74.99`) for the id-region
+  Plus bundle card.
+
+**Commits:** pending round-5 commit.
+**Test counts:** account-view.test.tsx 44→45; account-bundle 5→6; full suite 166→168.
+
+## 2026-08-29 — TDD round 4: timezone fix still wrong for negative offsets (website AccountView)
+
+**Problem:** The round-1 timezone fix (`new Date(d.getFullYear(), d.getMonth(),
+d.getDate())`) recomposed the date from the parsed Date's LOCAL components. On
+this UTC+7 machine the tests passed — but on a UTC-8 machine the same input
+("2027-01-01T00:00:00Z") still rendered the PREVIOUS calendar day
+("Dec 31, 2026"). The fix was machine-dependent, not timezone-independent.
+Verified with `TZ=America/Los_Angeles` node run: local-component approach → "Dec
+31, 2026"; the new UTC-based approach → "Jan 1, 2027".
+
+The backend always sends UTC timestamps (`GetString("expires_at")` on a
+PocketBase DateField, which serializes with `Z`). Showing the UTC calendar day
+is the deterministic, correct behavior — "expires Jan 1" means the same day for
+every user, matching the server's intent.
+
+**Solution:** TDD (regression pinned by the existing "does not shift the
+displayed date" test, which only passed on UTC+7 before):
+- `fmtDate()` now formats with `timeZone: 'UTC'` explicitly.
+- `daysUntil()` now counts UTC calendar days (`Date.UTC(...)` of the parsed
+  components minus today's UTC date), rounding — timezone- and
+  clock-independent on every machine.
+- Verified in LA timezone: all three input forms render "Jan 1, 2027" and
+  "Renews in N days" is stable.
+
+**Commits:** pending round-4 commit.
+**Test counts:** account-view.test.tsx 44/44; full component suite 166/166.
+
+## 2026-08-29 — TDD round 3: device list collapse after revoke-refresh failure (website AccountView)
+
+**Problem:** In `revokeDevice()`, after a successful revoke POST the code
+refreshed the device list via `fetchDevices()`. When that follow-up GET failed
+(network glitch / 500), `fetchDevices()` returned `null` and `setDevices(null)`
+was called — the whole device section collapsed to the "Terminal Slots" fallback
+hint even though the revoke had actually succeeded server-side. The user lost
+the device list (and the just-revoked row) on a transient refresh failure.
+
+The root cause was two stacked `setDevices` calls: the first unconditionally
+overwrote with `fresh` (possibly null), the second mapped over that result.
+
+**Solution:** TDD Red→Green (1 new test, account-view.test.tsx 43→44):
+- Red: reproduced — revoke POST succeeds, refresh GET returns 500, and the
+  assertion that `MACHINE-001` stays visible as "Revoked" (not "Terminal
+  Slots") failed.
+- Green: `revokeDevice()` now keeps the current list when the refresh fails —
+  one functional `setDevices` that uses `fresh ?? prev ?? []` and optimistically
+  stamps `revoked_at` on the revoked device.
+
+**Commits:** pending round-3 commit.
+**Test counts:** account-view.test.tsx 43→44; full component suite 165→166.
+
+## 2026-08-29 — TDD round 2: grace-date raw ISO + region keyboard/subscribe pinning (website AccountView)
+
+**Problem:** Another date-rendering gap plus three untested interaction paths on
+the account dashboard:
+
+1. `graceUntil` was rendered raw (`{subscription.graceUntil ?? '—'}`) while
+   startsAt and `expiresAt went through `fmtDate — the grace date showed
+   the server's raw ISO string ("2027-01-15T00:00:00Z") to users.
+2. The region selector's keyboard navigation (ArrowDown/ArrowUp/Escape, focus
+   management) had zero test coverage — a regression there would ship silent.
+3. The subscribe buttons' payment routing (Paddle vs Midtrans) had no test
+   covering the en-locale path with real (non-placeholder) price ids.
+4. The saved-region → payment-provider routing fix (commit d65eeb98) had no
+   regression test.
+
+**Solution:** TDD Red→Green (7 new tests, account-view.test.tsx 36→43):
+- Green: graceUntil now renders via `fmtDate() (raw ISO → "Jan 15, 2027").
+- Pinned region keyboard nav: ArrowDown opens + focuses first option,
+  ArrowUp/Down move focus, Enter selects, Escape closes and refocuses the
+  trigger (aria-expanded asserted through the interaction).
+- Pinned subscribe routing: Paddle called with plan price id + account email
+  (non-placeholder), Midtrans called for id locale with period 'yearly'.
+- Pinned region-routing: an en-locale dashboard with saved region 'id' routes
+  the subscribe click through Midtrans, not Paddle.
+
+**Commits:** pending commit for round 2.
+**Test counts:** account-view.test.tsx 36→43; full component suite 158→165.
+
+
+## 2026-08-29 — TDD cycle: dashboard date/countdown timezone bugs (website AccountView)
+
+**Problem:** Two timezone-related bugs in the account dashboard's date helpers
+(`AccountView.tsx`), found by writing failing tests first:
+
+1. `fmtDate()` parsed ISO strings with `new Date(dateStr)` — a date-only value
+   like `"2027-01-01"` is interpreted as UTC midnight, so a user west of UTC
+   saw the *previous* calendar day ("Dec 31, 2026"). Same class of bug for
+   RFC3339-with-time values whose local conversion crossed midnight.
+2. `daysUntil()` measured from `Date.now()` with `Math.ceil` — the countdown
+   depended on the wall clock (23:59 vs 00:01 gave different day counts) and
+   the same UTC offset shift could report one day early.
+3. `renderRenewBadge()` rendered a nonsensical "Renews in -3 days" when the
+   server reported `status: 'active'` but the expiry had already lapsed
+   (grace-period/clock-skew data).
+
+**Solution:** TDD Red→Green (4 new tests in account-view.test.tsx):
+- `fmtDate()` now re-composes the parsed Date's *local* calendar components
+  (`new Date(d.getFullYear(), d.getMonth(), d.getDate())`) before formatting,
+  so the shown day never shifts across timezones.
+- `daysUntil()` counts calendar days: expiry local-midnight minus today's
+  local-midnight, rounded — timezone- and clock-independent.
+- `renderRenewBadge()` returns null for `days < 0` (no negative countdown).
+- Also removed the shadowed `const useMidtrans = locale === 'id'` in
+  `subscribe()` so the saved-region payment routing (prior commit) takes effect.
+
+**Commits:** `d65eeb98` (region routing), pending commit for date/countdown fix.
+**Test counts:** account-view.test.tsx 33 → 36; full component suite 155 → 158.
+
 ## 2026-08-20 — TDD cycle: expand Money unit/logic coverage + extract to sibling tests (foundation)
 
 **Problem:** `foundation/src/money.rs` carried its whole test module inline (lines
@@ -5610,7 +5759,7 @@ transaction ("current transaction is aborted") — every subsequent item
 failed, the final COMMIT errored, and the handler 500'd with ALL valid
 items silently lost. The doc comment claimed "a single bad item cannot
 roll back its siblings", which was only true for duplicates. Secondary:
-the Rejected reason used ormat!("database error: {e}"), but
+the Rejected reason used ormat!("database error: {e}"), but
 tokio-postgres's Display is just "db error" — the real server message
 was discarded, so clients got no diagnostic.
 
@@ -5623,7 +5772,7 @@ was discarded, so clients got no diagnostic.
 - GREEN: each item runs inside a per-item SAVEPOINT — RELEASE on
   success/duplicate, ROLLBACK TO on a true error — so a data error
   isolates only that item and the batch COMMIT still succeeds. Rejected
-  reasons now extract the real message via .as_db_error().message().
+  reasons now extract the real message via .as_db_error().message().
 - Refactor: clippy 	ype_complexity → BucketShard type alias in
   rate_limit.rs; serialized + table-cleaned the global tenant-count PG
   test (parallel PG tests skew the global aggregate); removed the
@@ -5746,7 +5895,7 @@ query touching a tenant table must run with SET LOCAL oz.tenant_id in a
 transaction. The webhook path was deliberately made oz_app-compatible; the
 email report path was NOT — daily_revenue_pg/weekly/monthly,
 	op_products_pg, hourly_heatmap_pg, category_breakdown_pg,
-low_stock_alerts_at_location_pg, ctive_stock_alerts_pg,
+low_stock_alerts_at_location_pg, ctive_stock_alerts_pg,
 category_popularity_pg, claim_period_pg, elease_period_pg all ran
 BARE queries with no transaction and no GUC. Post-cutover:
 - analytics reads → current_setting returns NULL → policy filters every
@@ -5780,7 +5929,7 @@ scoping).
 ## 2026-08-21 — TDD cycle: PG bug hunt round 6 (email tenant discovery vs RLS)
 
 **Problem:** Round 5 fixed the email analytics/claim functions' missing
-tenant GUC, but left ctive_tenants_pg — the loop's tenant DISCOVERY
+tenant GUC, but left ctive_tenants_pg — the loop's tenant DISCOVERY
 query — reading tenant_plans / offline_queue / sync_terminals with no
 GUC and no tenant (it's cross-tenant by nature). Post-cutover (oz_app +
 FORCE RLS) every row is hidden → discovery returns only 'default' → the
@@ -5810,9 +5959,9 @@ exposure is bounded to the email/webhook code paths.
 
 ## 2026-08-21 — TDD cycle: PG bug hunt round 7 (webhook finalize_sale never applied)
 
-**Problem:** The cloud webhook path enqueues inalize_sale ({"sale_id":
+**Problem:** The cloud webhook path enqueues inalize_sale ({"sale_id":
 …}) into offline_queue after payment capture — but the sync client's
-apply_remote dispatchers had NO inalize_sale arm. The atomic path
+apply_remote dispatchers had NO inalize_sale arm. The atomic path
 (apply_remote_in_tx) fell to the _ arm and returned
 "unsupported remote sync action: finalize_sale" → record_remote_failure →
 dead-lettered after 3 retries; the legacy path silently skipped. A sale
@@ -5880,7 +6029,7 @@ compiles — that agent may still be mid-change.
 
 ## 2026-08-21 — TDD cycle: PG bug hunt round 9 (terminal auth vs RLS cutover)
 
-**Problem:** erify_terminal_credentials reads sync_terminals — an RLS
+**Problem:** erify_terminal_credentials reads sync_terminals — an RLS
 FORCEd table — with no tenant GUC and no BYPASSRLS role. It is a
 PRE-tenant read (the whole point is to learn tenant_id), so the same
 class of bug as the webhook resolution and email tenant discovery: after
@@ -5997,7 +6146,7 @@ gate:
    binary crate — only tests call it (the bin cannot reach it). Marked
    #[cfg_attr(not(test), allow(dead_code))]; connect_postgres_with_
    retries remains the test-facing variant.
-2. ttempt as u32 — attempt is already u32 (from 1..=max_attempts),
+2. ttempt as u32 — attempt is already u32 (from 1..=max_attempts),
    so the cast was redundant; removed.
 
 Verification: oz-cloud-server clippy -D warnings clean; 211+5+2 green

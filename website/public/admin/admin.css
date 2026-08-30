@@ -44,6 +44,11 @@
   /* ── Top bar + nav ─────────────────────────────────────────── */
   .topbar { background:var(--surface); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:10; }
   .topbar-inner { max-width:1400px; margin:0 auto; padding:.65rem 1.5rem; display:flex; align-items:center; gap:1.25rem; }
+  .back-link { display:inline-flex; align-items:center; justify-content:center; width:2rem; height:2rem; border-radius:.5rem;
+    border:1px solid var(--border); color:var(--muted); text-decoration:none; flex-shrink:0;
+    transition:color .15s, background .15s, border-color .15s; }
+  .back-link svg { width:1.1rem; height:1.1rem; }
+  .back-link:hover { color:var(--text); background:var(--surface2); border-color:var(--muted); }
   .brand { display:flex; align-items:center; gap:.6rem; font-weight:700; font-size:1rem; white-space:nowrap; }
   .brand-dot { width:10px; height:10px; border-radius:50%; background:var(--accent); }
 

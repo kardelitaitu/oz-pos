@@ -87,7 +87,7 @@ type Step = 'username' | 'pin';
 /** Staff login screen — two-step authentication flow with username entry followed by PIN pad input and shake animation on error. */
 export default function StaffLoginScreen() {
   const { l10n } = useLocalization();
-  const { login, loading: authLoading, error, clearError } = useAuth();
+  const { login, loading: authLoading, error, clearError, session } = useAuth();
   const { settings: brandSettings, loading: brandLoading } = useBrand();
   // Convert local filesystem path to a Tauri-compatible asset URL.
   const logoUrl = useMemo(() => {
@@ -107,7 +107,22 @@ export default function StaffLoginScreen() {
   const [step, setStep] = useState<Step>('username');
   const [username, setUsername] = useState('');
   const [usernameChecking, setUsernameChecking] = useState(false);
+  const [usernameAccepted, setUsernameAccepted] = useState(false);
   const [pin, setPin] = useState<string[]>([]);
+  // U5: Last login timestamp for shared-terminal security awareness.
+  const [lastLogin, setLastLogin] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const ts = localStorage.getItem('oz-last-login');
+      if (ts) {
+        const d = new Date(ts);
+        if (!Number.isNaN(d.getTime())) {
+          const numLocale = navigator.language || 'en-US';
+          setLastLogin(d.toLocaleString(numLocale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }));
+        }
+      }
+    } catch { /* ignore */ }
+  }, []);
   const usernameInputRef = useRef<HTMLInputElement>(null);
   const pinWrapRef = useRef<HTMLDivElement>(null);
   const pinSubmitted = useRef(false);
@@ -151,6 +166,15 @@ export default function StaffLoginScreen() {
   }, []);
 
   const cardRef = useRef<HTMLDivElement>(null);
+
+  // U5: Store last login timestamp when session becomes active.
+  useEffect(() => {
+    if (session) {
+      try {
+        localStorage.setItem('oz-last-login', new Date().toISOString());
+      } catch { /* ignore */ }
+    }
+  }, [session]);
 
   // ── Shake card + toast + rate-limit on PIN error ──────────────
 
@@ -238,14 +262,15 @@ export default function StaffLoginScreen() {
   // ── Attempt login ────────────────────────────────────────────
 
   const attemptLogin = useCallback(() => {
-    if (pin.length >= 1) {
-      // Count every submitted PIN as an attempt so the client-side
-      // rate-limit/lockout counter advances even when the backend returns
-      // an identical error message on consecutive failures (the error effect
-      // dedupes duplicate toasts but must not freeze the attempt counter).
-      setPinAttempts((prev) => prev + 1);
-      login(username.trim(), pin.join(''));
-    }
+    // S1: Enforce minimum 4-digit PIN — both client-side (prevents
+    // wasted server round-trips) and server-side (defense in depth).
+    if (pin.length < MAX_PIN_LENGTH) return;
+    // Count every submitted PIN as an attempt so the client-side
+    // rate-limit/lockout counter advances even when the backend returns
+    // an identical error message on consecutive failures (the error effect
+    // dedupes duplicate toasts but must not freeze the attempt counter).
+    setPinAttempts((prev) => prev + 1);
+    login(username.trim(), pin.join(''));
   }, [pin, username, login]);
 
   // ── Back button ──────────────────────────────────────────────
@@ -253,6 +278,7 @@ export default function StaffLoginScreen() {
   const goBack = useCallback(() => {
     setStep('username');
     setPin([]);
+    setUsernameAccepted(false);
     pinSubmitted.current = false;
   }, []);
 
@@ -275,7 +301,7 @@ export default function StaffLoginScreen() {
         goBack();
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        if (pin.length >= 1 && !pinSubmitted.current) attemptLogin();
+        if (pin.length >= MAX_PIN_LENGTH && !pinSubmitted.current) attemptLogin();
       }
     },
     [step, authLoading, handlePinDigit, handlePinBackspace, handlePinClear, goBack, attemptLogin, pin.length],
@@ -298,6 +324,7 @@ export default function StaffLoginScreen() {
       // login endpoint as a single uniform error — this screen must not branch
       // on account existence or activation status.
       await checkUsername({ username: trimmed });
+      setUsernameAccepted(true);
       setStep('pin');
     } catch {
       addToast({ type: 'error', message: l10n.getString('staff-login-error-connection') });
@@ -308,6 +335,7 @@ export default function StaffLoginScreen() {
 
   const handleUsernameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setUsername(e.target.value);
+    setUsernameAccepted(false);
   }, []);
 
   const handleUsernameKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -541,12 +569,16 @@ export default function StaffLoginScreen() {
                 </Localized>
                 <button
                   type="submit"
-                  className="staff-login-submit-btn"
+                  className={`staff-login-submit-btn ${usernameAccepted ? 'staff-login-submit-btn--accepted' : ''}`}
                   disabled={!username.trim() || usernameChecking}
                   aria-label={l10n.getString('staff-login-next-aria')}
                 >
                   {usernameChecking ? (
                     <span className="staff-login-btn-spinner" />
+                  ) : usernameAccepted ? (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
                   ) : (
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
                       <line x1="5" y1="12" x2="19" y2="12" />
@@ -595,6 +627,11 @@ export default function StaffLoginScreen() {
         <div className="staff-login-footer-left">
           <span className="staff-login-footer-version">v0.0.33</span>
           <span className="staff-login-footer-copyright">&copy; OZ-POS. All rights reserved.</span>
+          {lastLogin && (
+            <span className="staff-login-last-login" title="Last login timestamp for this device">
+              Last login: {lastLogin}
+            </span>
+          )}
         </div>
         <div className="staff-login-footer-right">
           <div className="staff-login-connection-group">

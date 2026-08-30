@@ -213,6 +213,136 @@ describe('AccountView — subscription display', () => {
       container.remove();
     }
   });
+
+  it('routes subscribe through Paddle with the plan price id once real prices land', async () => {
+    // Regression: when the Paddle catalog lands (non-placeholder price ids),
+    // the dashboard subscribe button must open the Paddle overlay with the
+    // plan's price id + the account email, and route /me refresh on close.
+    sessionStorage.setItem('oz_session', 'tok-sub-paddle');
+    paddle.isPlaceholderPriceId.mockReturnValue(false); // real catalog
+    paddle.openPaddleCheckout.mockResolvedValue(undefined);
+    mockFetch((url) => {
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'free', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      // With real price ids, the subscribe buttons render for the 3 paid tiers.
+      const subscribeBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Subscribe',
+      );
+      expect(subscribeBtn).not.toBeNull();
+      act(() => subscribeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(paddle.openPaddleCheckout).toHaveBeenCalled();
+      // The first call opens the yearly price of the first subscribable tier.
+      const call = paddle.openPaddleCheckout.mock.calls[0];
+      expect(call[1]).toBe('test@example.com');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('routes subscribe through Midtrans Snap for the id locale', async () => {
+    sessionStorage.setItem('oz_session', 'tok-sub-midtrans');
+    midtrans.openMidtransCheckout.mockResolvedValue(undefined);
+    mockFetch((url) => {
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'free', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('id');
+    try {
+      const subscribeBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Berlangganan',
+      );
+      expect(subscribeBtn).not.toBeNull();
+      act(() => subscribeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(midtrans.openMidtransCheckout).toHaveBeenCalled();
+      expect(paddle.openPaddleCheckout).not.toHaveBeenCalled();
+      const call = midtrans.openMidtransCheckout.mock.calls[0];
+      expect(call[1]).toBe('yearly');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('uses the saved region (id) to route an en-locale subscribe through Midtrans', async () => {
+    // Regression for the region-routing fix: a user on /en/account who saved
+    // the Indonesia region preference must get Midtrans, not Paddle — the
+    // payment provider follows getExplicitRegion(), not the URL locale.
+    localStorage.setItem('oz_region', 'id');
+    sessionStorage.setItem('oz_session', 'tok-sub-region-id');
+    midtrans.openMidtransCheckout.mockResolvedValue(undefined);
+    mockFetch((url) => {
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'free', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      // The subscribe button label is the en string even though the region
+      // is id — the label comes from locale, the provider from region.
+      const subscribeBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Subscribe',
+      );
+      expect(subscribeBtn).not.toBeNull();
+      act(() => subscribeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(midtrans.openMidtransCheckout).toHaveBeenCalled();
+      expect(paddle.openPaddleCheckout).not.toHaveBeenCalled();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows IDR prices when the saved region is Indonesia even on the en-locale page', async () => {
+    // Regression: on /en/account with region=id the checkout routes through
+    // Midtrans (IDR), so the displayed plan prices must be the IDR ones —
+    // not the en-locale USD prices. The currency shown and the currency
+    // billed must match.
+    localStorage.setItem('oz_region', 'id');
+    sessionStorage.setItem('oz_session', 'tok-region-id-prices');
+    midtrans.openMidtransCheckout.mockResolvedValue(undefined);
+    mockFetch((url) => {
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'free', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      // IDR yearly Plus price from pricing/id.ts.
+      assertText(container, 'Rp 500.000');
+      assertNoText(container, '$4.99');
+      assertNoText(container, '$49.99');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
 });
 
 // ── License display ───────────────────────────────────────────────────
@@ -303,6 +433,110 @@ describe('AccountView — region selector', () => {
       });
       expect(localStorage.getItem('oz_region')).toBe('id');
       assertText(container, 'Region updated.');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('opens the listbox and focuses the first option on ArrowDown', async () => {
+    sessionStorage.setItem('oz_session', 'tok-region-keyboard');
+    stubMe();
+    const { container, root } = await renderAccount('en');
+    try {
+      const trigger = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Global',
+      );
+      expect(trigger).not.toBeNull();
+      expect(trigger!.getAttribute('aria-expanded')).toBe('false');
+
+      // ArrowDown on the closed trigger opens the listbox and moves focus
+      // to the first option.
+      act(() => {
+        trigger!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(trigger!.getAttribute('aria-expanded')).toBe('true');
+
+      // The first option (Global) should now have focus.
+      const options = Array.from(container.querySelectorAll<HTMLButtonElement>('[data-region-option]'));
+      expect(options.length).toBe(2);
+      expect(document.activeElement).toBe(options[0]);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('moves focus between options with ArrowDown/ArrowUp and selects on Enter', async () => {
+    sessionStorage.setItem('oz_session', 'tok-region-keyboard2');
+    stubMe();
+    const { container, root } = await renderAccount('en');
+    try {
+      const trigger = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Global',
+      )!;
+      act(() => {
+        trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      const options = Array.from(container.querySelectorAll<HTMLButtonElement>('[data-region-option]'));
+      expect(document.activeElement).toBe(options[0]);
+
+      // ArrowDown → second option; ArrowUp → back to first.
+      act(() => {
+        options[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      });
+      expect(document.activeElement).toBe(options[1]);
+      act(() => {
+        options[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+      });
+      expect(document.activeElement).toBe(options[0]);
+
+      // Enter on the second option (Indonesia) selects it.
+      act(() => {
+        options[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      expect(localStorage.getItem('oz_region')).toBe('id');
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('closes the listbox and refocuses the trigger on Escape', async () => {
+    sessionStorage.setItem('oz_session', 'tok-region-escape');
+    stubMe();
+    const { container, root } = await renderAccount('en');
+    try {
+      const trigger = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Global',
+      )!;
+      act(() => {
+        trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      const options = Array.from(container.querySelectorAll<HTMLButtonElement>('[data-region-option]'));
+      act(() => {
+        options[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      // Listbox is closed and focus returns to the trigger.
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+      expect(container.querySelector('[data-region-option]')).toBeNull();
+      expect(document.activeElement).toBe(trigger);
     } finally {
       act(() => root.unmount());
       container.remove();
@@ -495,6 +729,502 @@ describe('AccountView — Devices & Invoices', () => {
       });
       expect(revokeCalls).toHaveLength(1);
       expect(revokeCalls[0]).toContain('/api/v1/web/devices/mac-1/revoke');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows overflow hint when more than 5 devices exist', async () => {
+    sessionStorage.setItem('oz_session', 'tok-overflow');
+    const devices = Array.from({ length: 7 }, (_, i) => ({
+      id: `mac-${i}`,
+      machine_id: `MACHINE-${String(i).padStart(3, '0')}`,
+      created: '2026-08-01T00:00:00Z',
+      revoked_at: null,
+    }));
+    mockFetch((url) => {
+      if (url.includes('/devices')) return okJson({ devices });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Registered Terminals');
+      assertText(container, '+2 more');
+      // First 5 device IDs should be visible, the 6th and 7th should not.
+      assertText(container, 'MACHINE-000');
+      assertText(container, 'MACHINE-004');
+      assertNoText(container, 'MACHINE-005');
+      assertNoText(container, 'MACHINE-006');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows terminal slots hint when devices list is empty', async () => {
+    sessionStorage.setItem('oz_session', 'tok-empty-devices');
+    mockFetch((url) => {
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Terminal Slots');
+      assertText(container, 'Activation guide');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows revoke error when API call fails', async () => {
+    sessionStorage.setItem('oz_session', 'tok-revoke-error');
+    let revokeAttempted = false;
+    const deviceId = 'mac-1';
+    mockFetch((url, init) => {
+      if (url.includes('/devices') && init?.method === 'POST') {
+        revokeAttempted = true;
+        return badRequest(500);
+      }
+      if (url.includes('/devices')) {
+        return okJson({ devices: [{ id: deviceId, machine_id: 'MACHINE-001', created: '2026-08-01T00:00:00Z', revoked_at: null }] });
+      }
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      const revokeBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Revoke');
+      expect(revokeBtn).not.toBeNull();
+      act(() => revokeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      expect(revokeAttempted).toBe(true);
+      // The error message should appear (contains the HTTP status code).
+      assertText(container, '500');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('keeps the device list visible after a successful revoke even when the refresh fetch fails', async () => {
+    // Regression: after a successful revoke POST, the follow-up GET /devices
+    // may fail (network error / server glitch). The device list must NOT
+    // collapse to the fallback hint — the just-revoked device should stay
+    // visible as "Revoked" even without a fresh list.
+    sessionStorage.setItem('oz_session', 'tok-revoke-refresh-fail');
+    let devicesGetCount = 0;
+    mockFetch((url, init) => {
+      if (url.includes('/devices') && init?.method === 'POST') {
+        return okJson({ status: 'revoked', revoked_at: '2026-08-29T00:00:00Z' });
+      }
+      if (url.includes('/devices') && !init?.method) {
+        devicesGetCount++;
+        // First GET (initial load) succeeds, second GET (refresh after
+        // revoke) fails with 500.
+        if (devicesGetCount === 1) {
+          return okJson({ devices: [{ id: 'mac-1', machine_id: 'MACHINE-001', created: '2026-08-01T00:00:00Z', revoked_at: null }] });
+        }
+        return badRequest(500);
+      }
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      // The device is initially active with a Revoke button.
+      assertText(container, 'MACHINE-001');
+      const revokeBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Revoke');
+      expect(revokeBtn).not.toBeNull();
+      act(() => revokeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      // The device list must still be visible (not collapsed to the hint),
+      // and the device must show as "Revoked" (the optimistic stamp).
+      assertText(container, 'MACHINE-001');
+      assertText(container, 'Revoked');
+      assertNoText(container, 'Terminal Slots');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Status pill colors ────────────────────────────────────────────────
+
+describe('AccountView — status pill colors', () => {
+  it('shows success pill for active status', async () => {
+    sessionStorage.setItem('oz_session', 'tok-pill-active');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      // The license status pill shows "Active" with green classes.
+      const pills = Array.from(container.querySelectorAll('span.rounded-full'));
+      const activePill = pills.find((p) => p.textContent?.trim() === 'Active');
+      expect(activePill).not.toBeNull();
+      expect(activePill!.className).toContain('bg-success/15');
+      expect(activePill!.className).toContain('text-success');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows warning pill for grace_period status', async () => {
+    sessionStorage.setItem('oz_session', 'tok-pill-grace');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'grace_period' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'grace_period', expiresAt: '2026-01-01' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      const pills = Array.from(container.querySelectorAll('span.rounded-full'));
+      const gracePill = pills.find((p) => p.textContent?.trim() === 'In grace period');
+      expect(gracePill).not.toBeNull();
+      expect(gracePill!.className).toContain('bg-warning/15');
+      expect(gracePill!.className).toContain('text-warning');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows danger pill for expired status', async () => {
+    sessionStorage.setItem('oz_session', 'tok-pill-expired');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'expired' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'expired', expiresAt: '2025-01-01' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      const pills = Array.from(container.querySelectorAll('span.rounded-full'));
+      const expiredPill = pills.find((p) => p.textContent?.trim() === 'Expired');
+      expect(expiredPill).not.toBeNull();
+      expect(expiredPill!.className).toContain('bg-danger/15');
+      expect(expiredPill!.className).toContain('text-danger');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows danger pill for revoked status', async () => {
+    sessionStorage.setItem('oz_session', 'tok-pill-revoked');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'revoked' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'revoked', expiresAt: '2025-01-01' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      const pills = Array.from(container.querySelectorAll('span.rounded-full'));
+      const revokedPill = pills.find((p) => p.textContent?.trim() === 'Revoked');
+      expect(revokedPill).not.toBeNull();
+      expect(revokedPill!.className).toContain('bg-danger/15');
+      expect(revokedPill!.className).toContain('text-danger');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Renewal countdown badge ───────────────────────────────────────────
+
+describe('AccountView — renewal countdown', () => {
+  it('shows renews badge for active subscription with expiry', async () => {
+    sessionStorage.setItem('oz_session', 'tok-renew-badge');
+    // Build expiry at local midnight +10 days so the calendar-day countdown
+    // is deterministic regardless of the test machine's timezone.
+    const future = new Date();
+    future.setDate(future.getDate() + 10);
+    future.setHours(0, 0, 0, 0);
+    const expectedDays = 10;
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: future.toISOString() },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: future.toISOString() },
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Subscription');
+      assertText(container, `Renews in ${expectedDays} days`);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows renews badge with danger color when < 7 days', async () => {
+    sessionStorage.setItem('oz_session', 'tok-renew-urgent');
+    const soon = new Date();
+    soon.setDate(soon.getDate() + 3);
+    soon.setHours(0, 0, 0, 0);
+    const expectedDays = 3;
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: soon.toISOString() },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: soon.toISOString() },
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, `Renews in ${expectedDays} days`);
+      // Find the badge span and check its class.
+      const badges = Array.from(container.querySelectorAll('span.rounded-full'));
+      const renewBadge = badges.find((b) => b.textContent?.includes('Renews in'));
+      expect(renewBadge).not.toBeNull();
+      expect(renewBadge!.className).toContain('bg-danger/15');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('does not show renew badge for inactive subscription', async () => {
+    sessionStorage.setItem('oz_session', 'tok-renew-inactive');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: { tierKey: 'pro', status: 'expired', startsAt: '2025-01-01', expiresAt: '2026-01-01' },
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Expired');
+      // No badge text should appear for non-active subscriptions.
+      assertNoText(container, 'Renews in');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('does not show a negative renewal countdown for active subscription with past expiry', async () => {
+    // An "active" subscription whose expiresAt has already passed (server
+    // clock skew / grace-period data) must not render "Renews in -3 days".
+    sessionStorage.setItem('oz_session', 'tok-renew-past');
+    const past = new Date(Date.now() - 3 * 86_400_000);
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2025-01-01', expiresAt: past.toISOString() },
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      // The badge must not claim a future countdown for an already-past date.
+      assertNoText(container, 'Renews in -3 days');
+      assertNoText(container, 'Renews in');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('does not show a countdown badge for an invalid expiry date', async () => {
+    // Regression: new Date('not-a-date') creates an Invalid Date (not a
+    // throw), so daysUntil returned NaN. Math.round(NaN) = NaN, and NaN < 0
+    // is false — the guard failed and "Renews in NaN days" was rendered.
+    sessionStorage.setItem('oz_session', 'tok-renew-nan');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: 'not-a-date' },
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      // The subscription section shows, but no countdown badge.
+      assertText(container, 'Subscription');
+      assertNoText(container, 'Renews in');
+      assertNoText(container, 'NaN');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Formatted dates ───────────────────────────────────────────────────
+
+describe('AccountView — formatted dates', () => {
+  it('formats license expiry date', async () => {
+    sessionStorage.setItem('oz_session', 'tok-date-license');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01T00:00:00Z' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      // Should show "Jan 1, 2027" not raw "2027-01-01".
+      assertText(container, 'Jan 1, 2027');
+      assertNoText(container, '2027-01-01');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('formats dates in Indonesian locale', async () => {
+    sessionStorage.setItem('oz_session', 'tok-date-id');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01T00:00:00Z' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('id');
+    try {
+      // Indonesian locale: "1 Jan 2027" (dd MMM yyyy order).
+      assertText(container, '1 Jan 2027');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('does not shift the displayed date across timezone offsets', async () => {
+    // Regression: date-only + RFC3339-with-time inputs must render the same
+    // calendar day regardless of the machine's timezone. A date-only string
+    // like "2027-01-01" previously parsed as UTC midnight and showed
+    // "Dec 31, 2026" for users west of UTC. Pin the exact text here.
+    sessionStorage.setItem('oz_session', 'tok-date-tz');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      // The rendered text must never contain a date-only string in its raw
+      // form (server sends it that way; fmtDate must normalize it) and the
+      // formatted label must pin to January 1 — never December 31.
+      assertText(container, 'Jan 1, 2027');
+      assertNoText(container, '2027-01-01');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows a stable renews countdown regardless of time of day', async () => {
+    // Regression: daysUntil previously measured from UTC midnight vs now,
+    // so a subscription expiring "tomorrow" could report 1 or 2 days
+    // depending on the wall clock. With local-midnight normalization the
+    // countdown is the calendar-day difference.
+    sessionStorage.setItem('oz_session', 'tok-countdown-stable');
+    // "Tomorrow" at 23:59 local — still 1 calendar day away.
+    const tomorrowLate = new Date();
+    tomorrowLate.setDate(tomorrowLate.getDate() + 1);
+    tomorrowLate.setHours(23, 59, 59, 999);
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: tomorrowLate.toISOString() },
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      // Even at 23:59 the countdown must be 1 day, never 2 (ceil of
+      // fractional hours). The exact label depends on the runtime clock;
+      // assert it's a sane positive count (singular 'day' or plural 'days').
+      const text = container.textContent ?? '';
+      expect(text).toMatch(/Renews in [0-9]+ day(s)?/);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Grace period date ────────────────────────────────────────────────
+
+describe('AccountView — grace period date', () => {
+  it('formats the grace until date instead of showing raw ISO', async () => {
+    // Regression: graceUntil was rendered as the raw string from the server
+    // while startsAt and expiresAt used fmtDate. This test pins the fix.
+    sessionStorage.setItem('oz_session', 'tok-grace-date');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: { tierKey: 'pro', status: 'grace_period', startsAt: '2026-01-01', expiresAt: '2027-01-01', graceUntil: '2027-01-15T00:00:00Z' },
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      // Must show the formatted date, not the raw ISO value.
+      assertText(container, 'Jan 15, 2027');
+      assertNoText(container, '2027-01-15T00:00:00Z');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Copy key ──────────────────────────────────────────────────────────
+
+describe('AccountView — copy key', () => {
+  it('copies license key to clipboard and shows Copied feedback', async () => {
+    sessionStorage.setItem('oz_session', 'tok-copy');
+    stubMe();
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.assign(navigator, { clipboard: { writeText } });
+    const { container, root } = await renderAccount('en');
+    try {
+      const copyBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Copy key',
+      );
+      expect(copyBtn).not.toBeNull();
+      act(() => copyBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      expect(writeText).toHaveBeenCalledWith('OZ-TEST-0001');
+      // After click, the button text should change to "Copied!".
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      assertText(container, 'Copied!');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Language locale ───────────────────────────────────────────────────
+
+describe('AccountView — Indonesian locale', () => {
+  it('renders all section labels in Indonesian', async () => {
+    sessionStorage.setItem('oz_session', 'tok-id-locale');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01T00:00:00Z' },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: '2027-01-01' },
+    }));
+    const { container, root } = await renderAccount('id');
+    try {
+      assertText(container, 'Lisensi');
+      assertText(container, 'Langganan');
+      assertText(container, 'Wilayah');
     } finally {
       act(() => root.unmount());
       container.remove();

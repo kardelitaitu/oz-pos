@@ -1,6 +1,11 @@
-    // The JWT lives in an httpOnly cookie; fetch it from the same-origin
+    // JWT lives in an httpOnly cookie; fetch it from the same-origin
     // /__oz/session endpoint so we can call the license API with Bearer.
-    const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'https://license.ozpos.my.id';
+    // Use the relative API path when on a subdomain so requests flow through
+    // the Worker /api/v1/ proxy (no cross-origin CORS needed).
+    const isSubdomain = window.location.hostname.endsWith('ozpos.my.id');
+    const API = isSubdomain
+      ? ''
+      : ((window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'https://license.ozpos.my.id');
 
     function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
 
@@ -120,9 +125,10 @@
 
     // ── Boot ────────────────────────────────────────────────────────
     (async () => {
-      document.getElementById('logout-btn').addEventListener('click', async () => {
-        try { const t = (await (await fetch('/__oz/session')).json()).token; await fetch(API + '/api/v1/web/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + t } }); } catch {}
-        window.location.href = '/';
+      // The httpOnly cookie cannot be deleted by page JS — the Worker must
+      // expire it via /__oz/logout (same as the admin dashboard).
+      document.getElementById('logout-btn').addEventListener('click', () => {
+        window.location.href = '/__oz/logout';
       });
 
       try {

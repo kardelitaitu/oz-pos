@@ -211,6 +211,26 @@
   50%      { opacity: 0.6; }
 }
 
+/* U1: Countdown timer — visible lockout indicator */
+.session-lock-countdown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: var(--space-2) 0;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-warning);
+  letter-spacing: var(--tracking-wide);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .session-lock-countdown {
+    animation: session-lock-rate-pulse var(--duration-1000) var(--ease-in-out) infinite;
+  }
+}
+
 /* ── PIN pad ─────────────────────────────────────────────────────── */
 
 .session-lock-pad {

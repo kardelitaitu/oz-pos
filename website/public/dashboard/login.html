@@ -3,16 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OZ-POS Admin — Sign in</title>
-<link rel="stylesheet" href="/admin/login.css?v=3" />
+<title>OZ-POS Dashboard — Sign in</title>
+<link rel="stylesheet" href="/dashboard/dashboard-login.css?v=1" />
 </head>
 <body>
   <div class="card">
     <div class="logo"><span class="logo-dot"></span>OZ-POS</div>
-    <h1>Admin Sign in</h1>
-    <p class="sub">Sign in to manage tenants, licenses, and system settings</p>
+    <h1>Sign in</h1>
+    <p class="sub">Sign in to manage your account and subscriptions</p>
 
-    <!-- Clear Segmented Mode Tabs -->
     <div class="auth-tabs" role="tablist">
       <button type="button" class="auth-tab active" id="tab-otp" role="tab" aria-selected="true">Email Code</button>
       <button type="button" class="auth-tab" id="tab-password" role="tab" aria-selected="false">Password</button>
@@ -20,16 +19,14 @@
 
     <div id="login-form">
       <form id="auth-form">
-        <label for="email">Admin Email</label>
-        <input id="email" type="email" placeholder="admin@example.com" autocomplete="email" required />
+        <label for="email">Email</label>
+        <input id="email" type="email" placeholder="you@example.com" autocomplete="email" required />
 
-        <!-- Password Mode Input -->
         <div id="password-group" class="hidden">
           <label for="password">Password</label>
-          <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
+          <input id="password" type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password" />
         </div>
 
-        <!-- Email Code (OTP) Input -->
         <div id="otp-group" class="hidden">
           <label for="otp-code">6-Digit Verification Code</label>
           <div class="otp-row">
@@ -50,6 +47,6 @@
       <p class="loading-text">Communicating with server…</p>
     </div>
   </div>
-  <script src="/admin/login.js?v=3"></script>
+  <script src="/dashboard/dashboard-login.js?v=1"></script>
 </body>
 </html>
