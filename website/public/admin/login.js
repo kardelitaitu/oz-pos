@@ -67,7 +67,6 @@ function setAuthMode(mode) {
     if (pwdGroup) pwdGroup.classList.add('hidden');
     
     // Check if code was already sent
-    const codeVal = document.getElementById('otp-code') ? document.getElementById('otp-code').value.trim() : '';
     const isCodeActive = otpGroup && !otpGroup.classList.contains('hidden');
     if (isCodeActive) {
       if (loginBtn) loginBtn.textContent = t('login.verifyCode');

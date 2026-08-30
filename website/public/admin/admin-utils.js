@@ -45,9 +45,9 @@
   }
 
   // svgChart renders a multi-series line chart as an SVG string. Pure:
-  // takes id (unused, kept for signature compat), data + series + opts and
-  // returns an SVG string (no DOM access).
-  function svgChart(id, data, series, opts) {
+  // takes _id (unused, kept for signature compatibility with call sites
+  // that pass a chart id), data + series + opts and returns an SVG string.
+  function svgChart(_id, data, series, opts) {
     if (!data || !Array.isArray(data) || data.length === 0) {
       return '<div class="chart-empty">No data</div>';
     }
@@ -86,7 +86,8 @@
   }
 
   // svgDonut renders a donut chart + legend. Pure; guards empty/zero data.
-  function svgDonut(id, data, labelKey, valueKey, colors) {
+  // _id is unused (kept for signature compatibility).
+  function svgDonut(_id, data, labelKey, valueKey, colors) {
     if (!data || !Array.isArray(data) || data.length === 0) {
       return { svg: '<div class="chart-empty">No data</div>', legend: '' };
     }
