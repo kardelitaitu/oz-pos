@@ -1,8 +1,8 @@
 /*
-stub module — created as part of the growable-workspace plan
+last audited 25-07-26 by RSA-Agent (modules-promotions slice A: lib deep read)
 crate: modules-promotions | status: SAFE | lint: CLEAN
-findings: No-op Module implementation. No unsafe code, no DB access yet.
-next: Migrate the promotion rule engine and cart-time evaluation into this module.
+findings: clean documented STUB — kernel registration + sales dependency only; promotion path documented (repository, rule engine in service keeping Money minor units, cart-before-tax evaluation matching foundation Cart ordering); promotions-engine feature flag depends on discount-engine; sibling tests file per convention
+next: none (migrate rule engine when built) | perf: N/A
 */
 
 //! Promotions Module — discount rules and campaign evaluation.

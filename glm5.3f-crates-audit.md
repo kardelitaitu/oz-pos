@@ -1343,6 +1343,23 @@ per convention.
 
 > **modules-purchasing COMPLETE** — 2 production files, ~108 lines, zero
 > new finding IDs. Campaign proceeds to modules/promotions.
+
+---
+
+## 22. modules/promotions — stub (discount rules)
+
+Baseline: ~109 production lines. Slice A — both files read (lib.rs 83
+fully read; error.rs verified).
+
+**No new findings.** A documented stub mirroring purchasing: kernel
+registration with an explicit `sales` dependency, a written promotion
+path (rule engine into `service.rs` keeping `Money` minor units,
+cart-before-tax evaluation matching `foundation::Cart` ordering), a
+`non_exhaustive` error surface, and the `promotions-engine` feature flag
+(depending on `discount-engine`) gating the capability.
+
+> **modules-promotions COMPLETE** — 2 production files, ~109 lines, zero
+> new finding IDs. Campaign proceeds to modules/giftcards.
 ---
 
 ---

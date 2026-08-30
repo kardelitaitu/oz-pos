@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-promotions slice A: error verified)
+crate: modules-promotions | status: SAFE | lint: CLEAN
+findings: clean thiserror promotions error taxonomy (stub)
+next: none | perf: N/A
+*/
 //! Error type for the promotions domain.
 //!
 //! Mirrors the shape used by the other module crates (`Db`, `NotFound`,
