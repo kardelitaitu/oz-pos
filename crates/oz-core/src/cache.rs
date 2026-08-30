@@ -224,22 +224,14 @@ pub mod redis_cache {
                     match pubsub.get_message() {
                         Ok(msg) => {
                             let payload: String = msg.get_payload().unwrap_or_default();
-                            if let Ok(notification) =
-                                serde_json::from_str::<serde_json::Value>(&payload)
+                            if let Some(pid) =
+                                super::inventory_invalidation_target(&payload, &own_id)
                             {
-                                let msg_terminal_id =
-                                    notification["terminal_id"].as_str().unwrap_or("");
-                                // Skip own messages.
-                                if own_id == msg_terminal_id {
-                                    continue;
-                                }
-                                if let Some(pid) = notification["product_id"].as_str() {
-                                    cache.invalidate_inventory(pid);
-                                    tracing::debug!(
-                                        product_id = pid,
-                                        "invalidated inventory cache from pub/sub"
-                                    );
-                                }
+                                cache.invalidate_inventory(&pid);
+                                tracing::debug!(
+                                    product_id = %pid,
+                                    "invalidated inventory cache from pub/sub"
+                                );
                             }
                         }
                         Err(e) => {
@@ -400,6 +392,35 @@ pub mod redis_cache {
     }
 }
 
+/// Decide what one `inventory:updates` pub/sub notification means for the
+/// local cache: `Some(product_id)` to invalidate, `None` to ignore.
+///
+/// Deliberately lives OUTSIDE the `cache-redis` gate: the filtering rules
+/// are pure, and extracting them is what makes the subscriber — which
+/// otherwise needs a live Redis plus a background thread — testable at
+/// all. `RedisCache`'s listener thread is the only caller.
+///
+/// `own_terminal_id` is this terminal's identity; messages carrying the
+/// same id are our own writes and must not bounce back as invalidations.
+pub(crate) fn inventory_invalidation_target(
+    payload: &str,
+    own_terminal_id: &str,
+) -> Option<String> {
+    let notification: serde_json::Value = serde_json::from_str(payload).ok()?;
+    let msg_terminal_id = notification["terminal_id"].as_str().unwrap_or("");
+    // Skip our own messages — but only when we actually HAVE an identity
+    // to compare. publish_inventory_change() writes "" for an unknown
+    // remote terminal and a None local terminal_id also arrives as "", so
+    // treating "" == "" as "our own write" made a terminal with unknown
+    // identity ignore EVERY notification and serve stale inventory until
+    // the TTL (B48). The trait documents the opposite: "Pass None if
+    // terminal identity is unknown (all messages will be processed)."
+    if !own_terminal_id.is_empty() && own_terminal_id == msg_terminal_id {
+        return None;
+    }
+    notification["product_id"].as_str().map(str::to_owned)
+}
+
 /// Create a cache, attempting Redis first and falling back to no-op.
 ///
 /// When the `cache-redis` feature is enabled, tries to connect to the
@@ -421,3 +442,7 @@ pub fn create_cache(redis_url: &str, ttl_seconds: u64) -> Arc<dyn Cache> {
 #[cfg(test)]
 #[path = "cache_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "cache_pubsub_tests.rs"]
+mod pubsub_tests;
