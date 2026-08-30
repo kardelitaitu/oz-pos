@@ -90,6 +90,8 @@ pub mod product_bundle;
 pub mod product_variant;
 /// Discount and promotion rules.
 pub mod promotion;
+/// Promotion discount engine — pure, fail-closed discount computation.
+pub mod promotion_engine;
 /// Purchase orders — order stock from suppliers.
 pub mod purchase_order;
 /// Sliding-window rate limiter for login PIN attempts.
@@ -216,6 +218,7 @@ pub use product::{Product, ProductType};
 pub use product_bundle::{BundleItem, BundleWithItems, ProductBundle};
 pub use product_variant::ProductVariant;
 pub use promotion::{Promotion, PromotionApplication, PromotionType};
+pub use promotion_engine::{compute_discount, compute_discount_unscoped};
 pub use purchase_order::{PurchaseOrder, PurchaseOrderLine, PurchaseOrderWithLines};
 pub use rate_limiter::LoginRateLimiter;
 pub use recipe::RecipeItem;

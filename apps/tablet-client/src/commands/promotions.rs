@@ -128,6 +128,53 @@ pub async fn delete_promotion(
     Ok(store.delete_promotion(&id)?)
 }
 
+/// Shared promotion-application pipeline: fetch promotion + sale, compute
+/// the discount via the oz-core engine (single source of truth, PROMO-7),
+/// and record the application row.
+fn run_apply_promotion_unchecked(
+    db: &rusqlite::Connection,
+    sale_id: &str,
+    promotion_id: &str,
+) -> Result<PromotionApplication, AppError> {
+    let store = Store::new(db);
+
+    let promo = store
+        .get_promotion(promotion_id)?
+        .ok_or_else(|| AppError::Invalid(format!("promotion {promotion_id} not found")))?;
+
+    let sale = store
+        .get_sale(sale_id)?
+        .ok_or_else(|| AppError::Invalid(format!("sale {sale_id} not found")))?;
+
+    // Category scope resolution: SKU -> product category (PROMO-6).
+    // Only consulted when the promotion carries a category_id.
+    let category_of = |sku: &str| {
+        store
+            .get_product(sku)
+            .ok()
+            .flatten()
+            .and_then(|p| p.product.category_id)
+    };
+
+    let discount_minor = oz_core::compute_discount(&promo, &sale, chrono::Utc::now(), category_of)?;
+
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let app = PromotionApplication {
+        id: uuid::Uuid::now_v7().to_string(),
+        promotion_id: promotion_id.to_string(),
+        sale_id: sale_id.to_string(),
+        discount_minor,
+        description: format!(
+            "{}: {} off",
+            promo.name,
+            format_minor(discount_minor, sale.currency)
+        ),
+        created_at: now,
+    };
+
+    Ok(store.record_promotion_application(&app)?)
+}
+
 #[command]
 /// Apply promotion.
 pub async fn apply_promotion(
@@ -141,99 +188,7 @@ pub async fn apply_promotion(
 
     require_permission_for_user(&store, &user_id, oz_core::permissions::PROMOTIONS_APPLY)?;
 
-    let promo = store
-        .get_promotion(&promotion_id)?
-        .ok_or_else(|| AppError::Invalid(format!("promotion {promotion_id} not found")))?;
-
-    let sale = store
-        .get_sale(&sale_id)?
-        .ok_or_else(|| AppError::Invalid(format!("sale {sale_id} not found")))?;
-
-    if !promo.active {
-        return Err(AppError::Invalid("promotion is not active".into()));
-    }
-
-    if let Some(ref starts_at) = promo.starts_at {
-        let now = chrono::Utc::now();
-        let start = chrono::DateTime::parse_from_rfc3339(starts_at)
-            .map_err(|e| AppError::Invalid(format!("invalid starts_at: {e}")))?;
-        if now < start {
-            return Err(AppError::Invalid("promotion has not started yet".into()));
-        }
-    }
-    if let Some(ref ends_at) = promo.ends_at {
-        let now = chrono::Utc::now();
-        let end = chrono::DateTime::parse_from_rfc3339(ends_at)
-            .map_err(|e| AppError::Invalid(format!("invalid ends_at: {e}")))?;
-        if now > end {
-            return Err(AppError::Invalid("promotion has expired".into()));
-        }
-    }
-
-    if sale.total.minor_units < promo.min_order_minor {
-        return Err(AppError::Invalid(format!(
-            "sale total {} is below minimum order {}",
-            sale.total.minor_units, promo.min_order_minor
-        )));
-    }
-
-    let discount_minor = match promo.promo_type.as_str() {
-        "percentage" => {
-            let total = sale.total.minor_units;
-            (total * promo.value_minor) / 100
-        }
-        "fixed_amount" => promo.value_minor.min(sale.total.minor_units),
-        "buy_x_get_y" => {
-            let trigger_sku = promo.trigger_sku.as_deref().unwrap_or_default();
-            let reward_sku = promo.reward_sku.as_deref().unwrap_or(trigger_sku);
-            let min_qty = promo.min_qty.unwrap_or(1);
-            let reward_qty = promo.reward_qty.unwrap_or(1);
-
-            let trigger_qty: i64 = sale
-                .lines
-                .iter()
-                .filter(|l| l.sku == trigger_sku)
-                .map(|l| l.qty)
-                .sum();
-
-            let reward_lines: Vec<&oz_core::SaleLine> =
-                sale.lines.iter().filter(|l| l.sku == reward_sku).collect();
-
-            if trigger_qty < min_qty || reward_lines.is_empty() {
-                0
-            } else {
-                let cheapest = reward_lines
-                    .iter()
-                    .map(|l| l.unit_price.minor_units)
-                    .min()
-                    .unwrap_or(0);
-                let applicable = reward_qty.min(reward_lines.iter().map(|l| l.qty).sum::<i64>());
-                (cheapest * applicable * promo.value_minor) / 100
-            }
-        }
-        _ => {
-            return Err(AppError::Invalid(format!(
-                "unknown promo_type: {}",
-                promo.promo_type
-            )));
-        }
-    };
-
-    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    let app = PromotionApplication {
-        id: uuid::Uuid::now_v7().to_string(),
-        promotion_id,
-        sale_id,
-        discount_minor,
-        description: format!(
-            "{}: {} off",
-            promo.name,
-            format_minor(discount_minor, sale.currency)
-        ),
-        created_at: now,
-    };
-
-    Ok(store.record_promotion_application(&app)?)
+    run_apply_promotion_unchecked(&db, &sale_id, &promotion_id)
 }
 
 #[command]
@@ -379,99 +334,7 @@ pub async fn apply_promotion_scoped(
 
     require_permission_for_user(&store, &user_id, oz_core::permissions::PROMOTIONS_APPLY)?;
 
-    let promo = store
-        .get_promotion(&promotion_id)?
-        .ok_or_else(|| AppError::Invalid(format!("promotion {promotion_id} not found")))?;
-
-    let sale = store
-        .get_sale(&sale_id)?
-        .ok_or_else(|| AppError::Invalid(format!("sale {sale_id} not found")))?;
-
-    if !promo.active {
-        return Err(AppError::Invalid("promotion is not active".into()));
-    }
-
-    if let Some(ref starts_at) = promo.starts_at {
-        let now = chrono::Utc::now();
-        let start = chrono::DateTime::parse_from_rfc3339(starts_at)
-            .map_err(|e| AppError::Invalid(format!("invalid starts_at: {e}")))?;
-        if now < start {
-            return Err(AppError::Invalid("promotion has not started yet".into()));
-        }
-    }
-    if let Some(ref ends_at) = promo.ends_at {
-        let now = chrono::Utc::now();
-        let end = chrono::DateTime::parse_from_rfc3339(ends_at)
-            .map_err(|e| AppError::Invalid(format!("invalid ends_at: {e}")))?;
-        if now > end {
-            return Err(AppError::Invalid("promotion has expired".into()));
-        }
-    }
-
-    if sale.total.minor_units < promo.min_order_minor {
-        return Err(AppError::Invalid(format!(
-            "sale total {} is below minimum order {}",
-            sale.total.minor_units, promo.min_order_minor
-        )));
-    }
-
-    let discount_minor = match promo.promo_type.as_str() {
-        "percentage" => {
-            let total = sale.total.minor_units;
-            (total * promo.value_minor) / 100
-        }
-        "fixed_amount" => promo.value_minor.min(sale.total.minor_units),
-        "buy_x_get_y" => {
-            let trigger_sku = promo.trigger_sku.as_deref().unwrap_or_default();
-            let reward_sku = promo.reward_sku.as_deref().unwrap_or(trigger_sku);
-            let min_qty = promo.min_qty.unwrap_or(1);
-            let reward_qty = promo.reward_qty.unwrap_or(1);
-
-            let trigger_qty: i64 = sale
-                .lines
-                .iter()
-                .filter(|l| l.sku == trigger_sku)
-                .map(|l| l.qty)
-                .sum();
-
-            let reward_lines: Vec<&oz_core::SaleLine> =
-                sale.lines.iter().filter(|l| l.sku == reward_sku).collect();
-
-            if trigger_qty < min_qty || reward_lines.is_empty() {
-                0
-            } else {
-                let cheapest = reward_lines
-                    .iter()
-                    .map(|l| l.unit_price.minor_units)
-                    .min()
-                    .unwrap_or(0);
-                let applicable = reward_qty.min(reward_lines.iter().map(|l| l.qty).sum::<i64>());
-                (cheapest * applicable * promo.value_minor) / 100
-            }
-        }
-        _ => {
-            return Err(AppError::Invalid(format!(
-                "unknown promo_type: {}",
-                promo.promo_type
-            )));
-        }
-    };
-
-    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    let app = PromotionApplication {
-        id: uuid::Uuid::now_v7().to_string(),
-        promotion_id,
-        sale_id,
-        discount_minor,
-        description: format!(
-            "{}: {} off",
-            promo.name,
-            format_minor(discount_minor, sale.currency)
-        ),
-        created_at: now,
-    };
-
-    Ok(store.record_promotion_application(&app)?)
+    run_apply_promotion_unchecked(db, &sale_id, &promotion_id)
 }
 
 /// Session-scoped variant of `get_sale_promotions`.
