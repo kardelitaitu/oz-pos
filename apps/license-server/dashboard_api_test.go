@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tests"
@@ -389,5 +390,229 @@ func TestAdminTierOverride_UpdatesTier(t *testing.T) {
 	}
 	if body["tier_key"] != "premium" {
 		t.Errorf("expected tier_key premium, got %v", body["tier_key"])
+	}
+}
+
+// ── Contract: /api/v1/web/me shape ──────────────────────────────────
+
+// testContractFields asserts every key in expected is present in the JSON
+// response body and has the right Go type (string, bool, float64 etc.).
+func testContractFields(t *testing.T, body map[string]any, expected map[string]string) {
+	t.Helper()
+	for field, typeName := range expected {
+		v, ok := body[field]
+		if !ok {
+			t.Errorf("missing field %q", field)
+			continue
+		}
+		switch typeName {
+		case "string":
+			if _, ok := v.(string); !ok {
+				t.Errorf("field %q should be string, got %T", field, v)
+			}
+		case "bool":
+			if _, ok := v.(bool); !ok {
+				t.Errorf("field %q should be bool, got %T", field, v)
+			}
+		case "float64":
+			if _, ok := v.(float64); !ok {
+				t.Errorf("field %q should be float64, got %T", field, v)
+			}
+		}
+	}
+}
+
+// TestMeContract_FullShape verifies the /me endpoint returns the complete
+// set of fields the frontend AccountView consumes, with correct types.
+func TestMeContract_FullShape(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+
+	tenantID, token := seedDashboardTenant(t, app, "contract-me@test.com")
+	// Seed an activated license key so licenseSummary returns a non-nil block.
+	seedLicenseKey(t, app, "OZ-CONTRACT-KEY-001", "pro", "activated", "2027-01-01T00:00:00Z")
+	keys, err := app.FindRecordsByFilter("license_keys", "key = 'OZ-CONTRACT-KEY-001'", "", 1, 0, nil)
+	if err != nil || len(keys) == 0 {
+		t.Fatalf("seeded license key not found: %v", err)
+	}
+	keys[0].Set("activated_by", tenantID)
+	if err := app.Save(keys[0]); err != nil {
+		t.Fatalf("failed to activate license key: %v", err)
+	}
+
+	rec := doJSON(mux, http.MethodGet, "/api/v1/web/me", "Bearer "+token, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+
+	// Tenant block — consumed by the profile card.
+	tenant, ok := body["tenant"].(map[string]any)
+	if !ok {
+		t.Fatal("missing tenant block")
+	}
+	testContractFields(t, tenant, map[string]string{
+		"id":            "string",
+		"email":         "string",
+		"emailVerified": "bool",
+		"status":        "string",
+	})
+
+	// License block — consumed by the license section.
+	license, ok := body["license"].(map[string]any)
+	if !ok {
+		t.Fatal("missing license block")
+	}
+	testContractFields(t, license, map[string]string{
+		"key":       "string",
+		"tierKey":   "string",
+		"status":    "string",
+		"expiresAt": "string",
+	})
+	if license["expiresAt"].(string) == "" {
+		t.Error("license.expiresAt should be non-empty for an activated key")
+	}
+
+	// Subscription block — consumed by the subscription section.
+	sub, ok := body["subscription"].(map[string]any)
+	if !ok {
+		t.Fatal("missing subscription block")
+	}
+	testContractFields(t, sub, map[string]string{
+		"tierKey":    "string",
+		"status":     "string",
+		"startsAt":   "string",
+		"expiresAt":  "string",
+		"graceUntil": "string",
+		"bundleId":   "string",
+	})
+	if sub["startsAt"].(string) == "" {
+		t.Error("subscription.startsAt should be non-empty")
+	}
+	if sub["expiresAt"].(string) == "" {
+		t.Error("subscription.expiresAt should be non-empty")
+	}
+
+	// Property: every date field the frontend parses must be RFC3339 UTC —
+	// the JS fmtDate/daysUntil helpers assume `2027-01-01T00:00:00Z` shape.
+	// A date-only string ("2027-01-01") or non-UTC zone would break them.
+	dateFields := []struct {
+		name  string
+		value string
+	}{
+		{"license.expiresAt", license["expiresAt"].(string)},
+		{"subscription.startsAt", sub["startsAt"].(string)},
+		{"subscription.expiresAt", sub["expiresAt"].(string)},
+		{"subscription.graceUntil", sub["graceUntil"].(string)},
+	}
+	for _, df := range dateFields {
+		// Empty dates are valid (not-yet-set grace), but a non-empty value
+		// must parse as RFC3339 and be timezone-agnostic UTC.
+		if df.value == "" {
+			continue
+		}
+		parsed, err := time.Parse(time.RFC3339, df.value)
+		if err != nil {
+			t.Errorf("field %q (%q) is not RFC3339: %v", df.name, df.value, err)
+			continue
+		}
+		zone, _ := parsed.Zone()
+		if zone != "UTC" {
+			t.Errorf("field %q (%q) should serialize in UTC, got zone %q", df.name, df.value, zone)
+		}
+	}
+}
+
+// TestMeContract_NilLicense verifies that /me returns a nil license block
+// (not a missing key) when the tenant has no activated license key.
+func TestMeContract_NilLicense(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+
+	_, token := seedDashboardTenant(t, app, "contract-nolicense@test.com")
+	// No seedLicenseKey — no activated key, no subscription-linked key.
+
+	rec := doJSON(mux, http.MethodGet, "/api/v1/web/me", "Bearer "+token, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	if body["license"] != nil {
+		t.Error("expected license to be nil when no key exists")
+	}
+}
+
+// Contract: /api/v1/web/devices shape — every device must carry the
+// full set of fields the frontend revoke + device-list logic expects.
+func TestWebDevices_ContractFields(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+	_, token := seedDashboardTenant(t, app, "contract-devices@test.com")
+
+	rec := doJSON(mux, http.MethodGet, "/api/v1/web/devices", "Bearer "+token, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var list struct {
+		Devices []map[string]any `json:"devices"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	if len(list.Devices) == 0 {
+		t.Fatal("expected at least one device from the seeded tenant")
+	}
+	for i, d := range list.Devices {
+		// All fields the frontend reads (AccountView Device interface).
+		if _, ok := d["id"]; !ok {
+			t.Errorf("devices[%d] missing id", i)
+		}
+		if _, ok := d["machine_id"]; !ok {
+			t.Errorf("devices[%d] missing machine_id", i)
+		}
+		if _, ok := d["created"]; !ok {
+			t.Errorf("devices[%d] missing created", i)
+		}
+		if _, ok := d["revoked_at"]; !ok {
+			t.Errorf("devices[%d] missing revoked_at", i)
+		}
+		// created must be a parseable RFC3339 string.
+		created, ok := d["created"].(string)
+		if !ok || created == "" {
+			t.Errorf("devices[%d].created should be a non-empty string", i)
+		}
+	}
+}
+
+// Contract: /api/v1/web/usage shape — every field the frontend
+// (or the static dashboard) consumes must be present.
+func TestWebUsage_ContractFields(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+	_, token := seedDashboardTenant(t, app, "contract-usage@test.com")
+
+	rec := doJSON(mux, http.MethodGet, "/api/v1/web/usage", "Bearer "+token, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	testContractFields(t, body, map[string]string{
+		"device_count":       "float64",
+		"subscription_count": "float64",
+		"max_stores":         "float64",
+		"max_pos_instances":  "float64",
+	})
+	if body["device_count"].(float64) < 1 {
+		t.Error("device_count should be at least 1 for a seeded tenant with a machine")
 	}
 }

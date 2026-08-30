@@ -878,6 +878,21 @@ func tenantSummary(tenant *core.Record) map[string]any {
 	}
 }
 
+// formatDateField serializes a record's date field as RFC3339 UTC (the
+// contract the website frontend parses: "2027-01-01T00:00:00Z"). PocketBase
+// GetString on a DateField returns its internal storage form
+// ("2027-01-01 00:00:00.000Z" — space-separated), which is NOT RFC3339 and
+// breaks strict parsers. Empty/zero values return "" so the JSON omits the
+// timestamp rather than emitting an invalid one.
+func formatDateField(rec *core.Record, field string) string {
+	dt := rec.GetDateTime(field)
+	t := dt.Time()
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}
+
 // licenseSummary returns the tenant's latest activated license key
 // record, or nil when none exists (account page shows the fallback).
 func licenseSummary(app core.App, tenantID string) any {
@@ -924,7 +939,7 @@ func licenseSummary(app core.App, tenantID string) any {
 		"key":       k.GetString("key"),
 		"tierKey":   k.GetString("tier_key"),
 		"status":    k.GetString("status"),
-		"expiresAt": k.GetString("expires_at"),
+		"expiresAt": formatDateField(k, "expires_at"),
 	}
 }
 
@@ -948,9 +963,9 @@ func subscriptionSummary(app core.App, tenantID string) any {
 	return map[string]any{
 		"tierKey":    s.GetString("tier_key"),
 		"status":     s.GetString("status"),
-		"startsAt":   s.GetString("starts_at"),
-		"expiresAt":  s.GetString("expires_at"),
-		"graceUntil": s.GetString("grace_until"),
+		"startsAt":   formatDateField(s, "starts_at"),
+		"expiresAt":  formatDateField(s, "expires_at"),
+		"graceUntil": formatDateField(s, "grace_until"),
 		// Vertical-bundle id (C3.2) the subscription was purchased with — the
 		// account dashboard uses it to hide the bundle upgrade card once the
 		// subscriber already owns the bundle (restaurant_starter).
