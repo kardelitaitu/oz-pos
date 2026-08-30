@@ -23,15 +23,16 @@ func TestRevenueEvent_SaveAndDedup(t *testing.T) {
 	defer app.Cleanup()
 	tenantID, _ := seedDashboardTenant(t, app, "rev-test@test.com")
 
-	// First save: should succeed.
+	// First save: should succeed. LSE-7: NativeAmountMinor is i64 minor
+	// units (USD cents here — 9.99 USD = 999 cents).
 	saved, err := saveRevenueEvent(app, revenueEvent{
-		Provider:       "paddle",
-		EventID:        "evt-paddle-001",
-		TenantID:       tenantID,
-		TierKey:        "pro",
-		NativeAmount:   9.99,
-		NativeCurrency: "USD",
-		Notes:          "subscription_id=sub_001",
+		Provider:          "paddle",
+		EventID:           "evt-paddle-001",
+		TenantID:          tenantID,
+		TierKey:           "pro",
+		NativeAmountMinor: 999,
+		NativeCurrency:    "USD",
+		Notes:             "subscription_id=sub_001",
 	})
 	if err != nil {
 		t.Fatalf("first save: %v", err)
@@ -42,12 +43,12 @@ func TestRevenueEvent_SaveAndDedup(t *testing.T) {
 
 	// Duplicate event_id: should be skipped (idempotency).
 	saved, err = saveRevenueEvent(app, revenueEvent{
-		Provider:       "paddle",
-		EventID:        "evt-paddle-001",
-		TenantID:       tenantID,
-		TierKey:        "pro",
-		NativeAmount:   9.99,
-		NativeCurrency: "USD",
+		Provider:          "paddle",
+		EventID:           "evt-paddle-001",
+		TenantID:          tenantID,
+		TierKey:           "pro",
+		NativeAmountMinor: 999,
+		NativeCurrency:    "USD",
 	})
 	if err != nil {
 		t.Fatalf("duplicate save: %v", err)
@@ -79,12 +80,12 @@ func TestRevenueEvent_MidtransIDR(t *testing.T) {
 	tenantID, _ := seedDashboardTenant(t, app, "rev-midtrans@test.com")
 
 	saved, err := saveRevenueEvent(app, revenueEvent{
-		Provider:       "midtrans",
-		EventID:        "txn-midtrans-001",
-		TenantID:       tenantID,
-		TierKey:        "plus",
-		NativeAmount:   149000,
-		NativeCurrency: "IDR",
+		Provider:          "midtrans",
+		EventID:           "txn-midtrans-001",
+		TenantID:          tenantID,
+		TierKey:           "plus",
+		NativeAmountMinor: 149000,
+		NativeCurrency:    "IDR",
 	})
 	if err != nil {
 		t.Fatalf("save midtrans revenue: %v", err)
@@ -113,11 +114,11 @@ func TestRevenueEvent_EmptyEventID(t *testing.T) {
 	defer app.Cleanup()
 
 	saved, err := saveRevenueEvent(app, revenueEvent{
-		Provider:       "paddle",
-		EventID:        "",
-		TenantID:       "x",
-		NativeAmount:   5.00,
-		NativeCurrency: "USD",
+		Provider:          "paddle",
+		EventID:           "",
+		TenantID:          "x",
+		NativeAmountMinor: 500,
+		NativeCurrency:    "USD",
 	})
 	if err != nil {
 		t.Fatalf("empty event_id: %v", err)
@@ -127,14 +128,17 @@ func TestRevenueEvent_EmptyEventID(t *testing.T) {
 	}
 }
 
-// ── parseMidtransGrossAmount tests ────────────────────────────────
+// ── parseMidtransGrossAmountMinor tests ───────────────────────────
 
-func TestParseMidtransGrossAmount(t *testing.T) {
+func TestParseMidtransGrossAmountMinor(t *testing.T) {
 	cases := []struct {
 		input string
-		want  float64
+		want  int64
 	}{
 		{"149000", 149000},
+		{"149000.00", 149000},
+		{"149000.40", 149000},
+		{"149000.50", 149001},
 		{"0", 0},
 		{"", 0},
 		{"  ", 0},
@@ -142,9 +146,9 @@ func TestParseMidtransGrossAmount(t *testing.T) {
 		{"999999999", 999999999},
 	}
 	for _, c := range cases {
-		got := parseMidtransGrossAmount(c.input)
+		got := parseMidtransGrossAmountMinor(c.input)
 		if got != c.want {
-			t.Errorf("parseMidtransGrossAmount(%q) = %v, want %v", c.input, got, c.want)
+			t.Errorf("parseMidtransGrossAmountMinor(%q) = %d, want %d", c.input, got, c.want)
 		}
 	}
 }
