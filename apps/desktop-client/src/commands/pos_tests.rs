@@ -123,6 +123,60 @@ fn line_unit_price_rejects_invalid_currency() {
     );
 }
 
+// ── FRONTEND-03 follow-up: shortfall line currency ─────────────
+
+#[test]
+fn cart_line_data_unit_price_currency_shape() {
+    let with_cur: CartLineData = serde_json::from_str(
+        r#"{"sku":"IMPORT","qty":2,"unitPriceMinor":500,"unitPriceCurrency":"EUR"}"#,
+    )
+    .unwrap();
+    assert_eq!(with_cur.unit_price_currency.as_deref(), Some("EUR"));
+    let without_cur: CartLineData =
+        serde_json::from_str(r#"{"sku":"COFFEE","qty":1,"unitPriceMinor":350}"#).unwrap();
+    assert_eq!(without_cur.unit_price_currency, None);
+}
+
+#[test]
+fn shortfall_line_unit_price_uses_wire_currency_over_sale_currency() {
+    let line_data = CartLineData {
+        sku: "IMPORT".into(),
+        qty: 1,
+        unit_price_minor: 500,
+        unit_price_currency: Some("EUR".into()),
+    };
+    let money = shortfall_line_unit_price(&line_data, usd()).unwrap();
+    assert_eq!(money.currency, "EUR".parse::<Currency>().unwrap());
+    assert_eq!(money.minor_units, 500);
+}
+
+#[test]
+fn shortfall_line_unit_price_falls_back_to_sale_currency_when_absent() {
+    let line_data = CartLineData {
+        sku: "COFFEE".into(),
+        qty: 1,
+        unit_price_minor: 350,
+        unit_price_currency: None,
+    };
+    let money = shortfall_line_unit_price(&line_data, usd()).unwrap();
+    assert_eq!(money.currency, usd());
+}
+
+#[test]
+fn shortfall_line_unit_price_rejects_invalid_currency() {
+    let line_data = CartLineData {
+        sku: "COFFEE".into(),
+        qty: 1,
+        unit_price_minor: 350,
+        unit_price_currency: Some("NOPE!".into()),
+    };
+    let err = shortfall_line_unit_price(&line_data, usd()).unwrap_err();
+    assert!(
+        err.to_string().to_lowercase().contains("currency"),
+        "invalid currency must surface as a clear error, got: {err}"
+    );
+}
+
 #[test]
 fn serial_number_arg_fields() {
     let arg = SerialNumberArg {

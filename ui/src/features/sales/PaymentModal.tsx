@@ -1098,6 +1098,9 @@ export default function PaymentModal({
             sku: l.sku,
             qty: l.qty,
             unitPriceMinor: l.unit_price.minor_units,
+            // FRONTEND-03 follow-up: carry the line's own currency so the
+            // backend can enforce it on reconstruction.
+            unitPriceCurrency: l.unit_price.currency,
           }))}
           totalMinor={total.minor_units}
           currency={total.currency}

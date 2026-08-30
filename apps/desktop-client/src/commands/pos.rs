@@ -621,6 +621,31 @@ pub struct CartLineData {
     pub qty: i64,
     /// Unit price in minor units.
     pub unit_price_minor: i64,
+    /// FRONTEND-03 follow-up: ISO-4217 code the line is priced in. When
+    /// present the reconstruction builds the line in this currency and
+    /// `Cart::add_line` enforces it matches the sale currency; absent
+    /// (legacy callers) falls back to the sale currency as before.
+    pub unit_price_currency: Option<String>,
+}
+
+/// Resolve the unit price for a reconstructed shortfall line
+/// (FRONTEND-03 follow-up). Mirrors [`line_unit_price`]: the line's own
+/// currency crosses the IPC boundary so a mismatch is rejected instead of
+/// silently re-stamped to the sale currency.
+fn shortfall_line_unit_price(
+    line_data: &CartLineData,
+    sale_currency: Currency,
+) -> Result<Money, AppError> {
+    let currency = match line_data.unit_price_currency.as_deref() {
+        Some(s) => s
+            .parse::<Currency>()
+            .map_err(|_| AppError::Invalid(format!("invalid unit price currency: {s}")))?,
+        None => sale_currency,
+    };
+    Ok(Money {
+        minor_units: line_data.unit_price_minor,
+        currency,
+    })
 }
 
 /// Arguments for completing a sale with resolved shortfalls (split fulfillment).
@@ -703,10 +728,7 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
 
     let mut cart = oz_core::Cart::new(currency);
     for line_data in &args.lines {
-        let unit_price = oz_core::Money {
-            minor_units: line_data.unit_price_minor,
-            currency: cart.currency(),
-        };
+        let unit_price = shortfall_line_unit_price(line_data, cart.currency())?;
         let line =
             oz_core::CartLine::new(oz_core::Sku::new(&line_data.sku), line_data.qty, unit_price);
         cart.add_line(line)

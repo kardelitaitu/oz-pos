@@ -245,6 +245,23 @@ describe('PaymentModal — shortfall resolution', () => {
     expect(screen.getByText('Coffee')).toBeInTheDocument();
     expect(screen.getByText('Confirm & Continue')).toBeInTheDocument();
     expect(screen.getByText('Cancel Sale')).toBeInTheDocument();
+
+    // FRONTEND-03 follow-up: the reconstructed lines sent to the second
+    // command must carry their own currency so the backend can enforce it
+    // instead of silently re-stamping the sale currency.
+    await userEvent.click(screen.getByText('Confirm & Continue'));
+    await waitFor(() => {
+      const calls = invokeMock.mock.calls as unknown as Array<[string, unknown]>;
+      const secondCmd = calls.find(
+        ([cmd]) => cmd === 'complete_sale_with_resolved_shortfalls_scoped',
+      );
+      expect(secondCmd).toBeDefined();
+      expect(secondCmd?.[1]).toMatchObject({
+        args: {
+          lines: [{ sku: 'COFFEE', qty: 2, unitPriceMinor: 350, unitPriceCurrency: 'USD' }],
+        },
+      });
+    });
   });
 
   // ── FRONTEND-03: line currency crosses the IPC boundary ──────────

@@ -76,7 +76,7 @@ function partialStockResult(
 
 const defaultProps = {
   shortfallResult: partialStockResult(),
-  cartLines: [{ sku: 'SKU-001', qty: 20, unitPriceMinor: 5000 }] as CartLineData[],
+  cartLines: [{ sku: 'SKU-001', qty: 20, unitPriceMinor: 5000, unitPriceCurrency: 'USD' }] as CartLineData[],
   totalMinor: 100_000,
   currency: 'IDR',
   paymentMethod: 'CASH',
@@ -434,8 +434,16 @@ describe('StockShortfallDialog', () => {
 
     const argsPayload = mockCompleteSaleWithResolvedShortfalls.mock.calls[0]![1] as {
       resolutions: Array<{ sku: string; allocations: Array<{ locationId: string; qty: number }> }>;
+      lines: Array<{ sku: string; qty: number; unitPriceMinor: number; unitPriceCurrency?: string }>;
     };
     expect(argsPayload.resolutions).toHaveLength(1);
+    // FRONTEND-03 follow-up: the dialog must pass the line currency
+    // through to the second command untouched.
+    expect(argsPayload.lines[0]).toMatchObject({
+      sku: 'SKU-001',
+      unitPriceMinor: 5000,
+      unitPriceCurrency: 'USD',
+    });
     const resolution = argsPayload.resolutions[0]!;
     // With no alternatives, allocation falls back to primaryLocationId
     expect(resolution.sku).toBe('SKU-001');

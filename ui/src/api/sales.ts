@@ -165,6 +165,13 @@ export interface CartLineData {
   sku: string;
   qty: number;
   unitPriceMinor: number;
+  /**
+   * FRONTEND-03 follow-up: ISO-4217 code the line is priced in. When
+   * present the backend builds the reconstructed line in this currency and
+   * rejects it if it differs from the sale currency; omitted lines fall
+   * back to the sale currency.
+   */
+  unitPriceCurrency?: string;
 }
 
 export interface CompleteSaleWithResolvedShortfallsArgs {
