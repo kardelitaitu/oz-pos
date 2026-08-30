@@ -1790,3 +1790,26 @@ depending on `restaurant`.
 *This file is appended after each completed crate audit. Findings get IDs
 prefixed by crate (`CRY-`, `SEC-`, `PAY-`, `COR-`, …) so they can be referenced
 in commits and specs without ambiguity.*
+
+---
+
+## 35. apps/cloud-server — axum multi-tenant server (risk-ranked sampling)
+
+Baseline: ~7.9k production lines. Slice A — webhooks.rs (878:
+verification surface 411–540 fully read + both verifiers), rate_limit/
+metrics/db/config/shutdown/redirect verified structurally + global
+sweep.
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| CS-1 | 🟠 HIGH | apps/cloud-server/src/webhooks.rs:451 | Both webhook verifiers compare HMAC hex with plain string equality (`expected_hex == sig`, `expected_hex == signature_header` at :477) — a short-circuiting compare is a **timing oracle on internet-facing endpoints**. The project already uses constant-time `verify_slice` in oz-notification. | Verify raw bytes via `hmac::verify_slice` or a constant-time eq. |
+| CS-2 | 🟡 MED | apps/cloud-server/src/webhooks.rs:416 | Stripe verification never checks the `t=` timestamp freshness (Stripe guidance: reject skew beyond ~5 min), so a captured valid payload+signature replays until the idempotency row is pruned. | Enforce timestamp tolerance before HMAC verify. |
+
+Otherwise strong: the webhook router is unauthenticated by design and
+verified solely via HMAC, with an event-idempotency gate, subscription
+lifecycle routing, and a 5xx metric middleware. `rate_limit.rs` uses
+sharded token buckets with per-route configs and background cleanup;
+all other unwraps carry SAFETY comments or are deliberate pool-type
+panic guards; no SQL interpolation found.
+
+> Slice B (sync_api.rs, sync_store.rs, main.rs, email_pg.rs) next.

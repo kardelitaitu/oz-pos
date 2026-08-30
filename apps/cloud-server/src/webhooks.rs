@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (cloud-server slice A: webhooks deep read)
+crate: cloud-server | status: NEEDS-FIX | lint: CLEAN
+findings: CS-1 HIGH — both webhook verifiers compare HMAC hex with plain string equality (expected_hex == sig at 451, expected_hex == signature_header at 477): short-circuiting compare is a timing oracle on INTERNET-FACING endpoints (Stripe/Square); the project already uses constant-time hmac verify_slice in oz-notification; proposed: verify_slice on raw bytes or a subtle-style constant-time eq. CS-2 MED — Stripe verification never checks the t= timestamp freshness (Stripe guidance: reject skew beyond ~5 minutes), so a captured valid payload+signature replays until the idempotency row is pruned (prune.rs exists); proposed: enforce timestamp tolerance before HMAC verify. Otherwise strong: unauthenticated router verified solely via HMAC, event idempotency gate, subscription lifecycle routing, 5xx metric middleware
+next: CS-1/CS-2 in fix-order phase | perf: N/A
+*/
 //! Webhook receiver — accepts payment events from Stripe and Square,
 //! verifies their signatures, and routes them:
 //!

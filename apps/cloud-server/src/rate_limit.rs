@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (cloud-server slice A: verified)
+crate: cloud-server | status: SAFE | lint: CLEAN
+findings: clean — sharded token buckets with per-route configs and background cleanup; unwraps carry SAFETY comments on static metric names; panic guards are deliberate pool-type mismatches; sweep found no SQL interpolation
+next: none | perf: N/A
+*/
 //! Per-tenant token-bucket rate limiter (P8-1).
 //!
 //! Provides an axum middleware that limits request rates per tenant

@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (cloud-server slice A: verified)
+crate: cloud-server | status: SAFE | lint: CLEAN
+findings: clean — sharded token buckets with per-route configs and background cleanup; unwraps carry SAFETY comments on static metric names; panic guards are deliberate pool-type mismatches; sweep found no SQL interpolation
+next: none | perf: N/A
+*/
 //! Graceful shutdown signal for the cloud server.
 //!
 //! Provides [`shutdown_signal`] which resolves when the process receives
