@@ -1,8 +1,8 @@
 /*
-stub module — created as part of the growable-workspace plan
+last audited 25-07-26 by RSA-Agent (modules-purchasing slice A: lib deep read)
 crate: modules-purchasing | status: SAFE | lint: CLEAN
-findings: No-op Module implementation. No unsafe code, no DB access yet.
-next: Migrate supplier + purchase-order tables and commands into this module.
+findings: clean documented STUB — kernel registration + inventory dependency only; promotion path to repository/service documented; PurchaseOrders feature flag gates the capability separately from module start; sibling tests file per convention
+next: none (migrate supplier/PO logic when built) | perf: N/A
 */
 
 //! Purchasing Module — suppliers, purchase orders, and goods receipt.

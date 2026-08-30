@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-purchasing slice A: error verified)
+crate: modules-purchasing | status: SAFE | lint: CLEAN
+findings: clean thiserror purchasing error taxonomy (stub)
+next: none | perf: N/A
+*/
 //! Error type for the purchasing domain.
 //!
 //! Mirrors the shape used by the other module crates (`Db`, `NotFound`,

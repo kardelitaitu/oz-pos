@@ -1325,6 +1325,24 @@ Reads are parameterized; the shell files are clean.
 
 > **modules-loyalty COMPLETE** — 5 production files, ~843 lines. One LOW
 > (MSL-10). Campaign proceeds to modules/purchasing.
+
+---
+
+## 21. modules/purchasing — stub (suppliers, purchase orders)
+
+Baseline: ~108 production lines. Slice A — both files read (lib.rs 82
+fully read; error.rs verified).
+
+**No new findings.** A documented stub: kernel registration with an
+explicit `inventory` dependency, a written promotion path
+(repository → service behind a transaction → event subscriptions), a
+`non_exhaustive` error surface mirroring the other modules so future
+promotion cannot break callers, and the `PurchaseOrders` feature flag
+gating the capability independently of module start. Sibling test file
+per convention.
+
+> **modules-purchasing COMPLETE** — 2 production files, ~108 lines, zero
+> new finding IDs. Campaign proceeds to modules/promotions.
 ---
 
 ---
