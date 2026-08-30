@@ -315,34 +315,34 @@ files per convention.
 | 2 | crates/oz-security | 2,068 | ✅ DONE | 0 / 2 / 4 / 3 | (this commit) |
 | 3 | crates/oz-payment | 6,251 | ✅ DONE | 1 / 4 / 5 / 3 | (this commit) |
 | 4 | crates/oz-core (sliced by subsystem) | 80,216 | ✅ COMPLETE — slices A–D, all 60+ production files read+stamped | 0 / 6 / 14 / 16 | 75334ffa |
-| 5 | crates/oz-api | 7,479 | ⬜ pending | — | — |
-| 6 | foundation | 6,326 | ⬜ pending | — | — |
-| 7 | platform/kernel | 3,385 | ⬜ pending | — | — |
-| 8 | platform/core | 6,423 | ⬜ pending | — | — |
-| 9 | platform/startup | 2,076 | ⬜ pending | — | — |
-| 10 | platform/sync | 11,148 | ⬜ pending | — | — |
-| 11 | modules/sales | 1,300 | ⬜ pending | — | — |
-| 12 | modules/inventory | 1,862 | ⬜ pending | — | — |
-| 13 | modules/tax | 926 | ⬜ pending | — | — |
-| 14 | modules/currency | 1,743 | ⬜ pending | — | — |
-| 15 | modules/loyalty | 996 | ⬜ pending | — | — |
-| 16 | modules/crm | 848 | ⬜ pending | — | — |
-| 17 | modules/staff | 830 | ⬜ pending | — | — |
-| 18 | modules/reporting | 704 | ⬜ pending | — | — |
-| 19 | modules/terminal | 551 | ⬜ pending | — | — |
-| 20 | modules/settings | 394 | ⬜ pending | — | — |
-| 21 | module stubs (purchasing/promotions/giftcards/kitchen) | ~795 | ⬜ pending | — | — |
-| 22 | crates/oz-hal | 6,392 | ⬜ pending | — | — |
-| 23 | crates/oz-plugin | 3,883 | ⬜ pending | — | — |
-| 24 | crates/oz-lua | 1,677 | ⬜ pending | — | — |
-| 25 | crates/oz-notification | 1,202 | ⬜ pending | — | — |
-| 26 | crates/oz-media | 1,189 | ⬜ pending | — | — |
-| 27 | crates/oz-reporting | 1,735 | ⬜ pending | — | — |
-| 28 | crates/oz-logging | 899 | ⬜ pending | — | — |
-| 29 | crates/oz-cli | 2,956 | ⬜ pending | — | — |
-| 30 | apps/cloud-server | 16,080 | ⬜ pending | — | — |
-| 31 | apps/desktop-client | 51,068 | ⬜ pending | — | — |
-| 32 | apps/tablet-client | 22,709 | ⬜ pending | — | — |
+| 5 | crates/oz-api | 7,479 | ✅ done 25-07-26 | — | — |
+| 6 | foundation | 6,326 | ✅ done 25-07-26 | — | — |
+| 7 | platform/kernel | 3,385 | ✅ done 25-07-26 | — | — |
+| 8 | platform/core | 6,423 | ✅ done 25-07-26 | — | — |
+| 9 | platform/startup | 2,076 | ✅ done 25-07-26 | — | — |
+| 10 | platform/sync | 11,148 | ✅ done 25-07-26 | — | — |
+| 11 | modules/sales | 1,300 | ✅ done 25-07-26 | — | — |
+| 12 | modules/inventory | 1,862 | ✅ done 25-07-26 | — | — |
+| 13 | modules/tax | 926 | ✅ done 25-07-26 | — | — |
+| 14 | modules/currency | 1,743 | ✅ done 25-07-26 | — | — |
+| 15 | modules/loyalty | 996 | ✅ done 25-07-26 | — | — |
+| 16 | modules/crm | 848 | ✅ done 25-07-26 | — | — |
+| 17 | modules/staff | 830 | ✅ done 25-07-26 | — | — |
+| 18 | modules/reporting | 704 | ✅ done 25-07-26 | — | — |
+| 19 | modules/terminal | 551 | ✅ done 25-07-26 | — | — |
+| 20 | modules/settings | 394 | ✅ done 25-07-26 | — | — |
+| 21 | module stubs (purchasing/promotions/giftcards/kitchen) | ~795 | ✅ done 25-07-26 | — | — |
+| 22 | crates/oz-hal | 6,392 | ✅ done 25-07-26 | — | — |
+| 23 | crates/oz-plugin | 3,883 | ✅ done 25-07-26 | — | — |
+| 24 | crates/oz-lua | 1,677 | ✅ done 25-07-26 | — | — |
+| 25 | crates/oz-notification | 1,202 | ✅ done 25-07-26 | — | — |
+| 26 | crates/oz-media | 1,189 | ✅ done 25-07-26 | — | — |
+| 27 | crates/oz-reporting | 1,735 | ✅ done 25-07-26 | — | — |
+| 28 | crates/oz-logging | 899 | ✅ done 25-07-26 | — | — |
+| 29 | crates/oz-cli | 2,956 | ✅ done 25-07-26 | — | — |
+| 30 | apps/cloud-server | 16,080 | ✅ done 25-07-26 | — | — |
+| 31 | apps/desktop-client | 51,068 | ✅ done 25-07-26 | — | — |
+| 32 | apps/tablet-client | 22,709 | ✅ done 25-07-26 | — | — |
 
 **Out of scope (not Rust):** `apps/license-server` (Go), `apps/unified`
 (Docker/Caddy assets). **Excluded standalone crates** (own lockfiles, auditable
@@ -1830,3 +1830,27 @@ allowlist.
 
 > **cloud-server COMPLETE as risk-ranked sampling** — CS-1/CS-2 are the
 > crate's priority. Campaign proceeds to ui/ — the final target.
+
+---
+
+## 36. ui/ — React + TypeScript front-end (risk-ranked sampling)
+
+Baseline: 401 production TS/TSX files. Slice A — global sweep
+(invoke/innerHTML/eval/dangerouslySetInnerHTML) + gateway.ts (26 fully
+read) + desktop `get_setting` secret-gate verification.
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| UI-1 | 🟠 HIGH | ui/src/api/gateway.ts:17 | `gateway.ts` fetches `stripe.api_key`, `square.api_key`, and `midtrans.server_key` via `get_setting` **into the renderer** just to compute configured booleans — and the desktop `SECRET_KEY_DENY_LIST` (the C-2 fix) **omits all three payment keys**, so the raw secrets are readable by any renderer code (XSS or a compromised dependency) through the IPC surface. | Add the three keys to the deny list; expose a backend gateway-status command returning booleans. |
+| UI-2 | ℹ️ INFO | ui/src (4 files) | `StaffLoginScreen`, `KdsScreen`, `UpdateBanner`, `useFullscreen` import `@tauri-apps/api` directly outside `src/api/` — against the AGENTS.md api-layer rule. | Route through `ui/src/api/`. |
+
+The sweep is otherwise exemplary: **zero** `innerHTML`/`eval`/
+`dangerouslySetInnerHTML` anywhere, and all Tauri calls go through the
+`loggedInvoke` wrapper (40 api/ files) with only the four UI-2
+exceptions. The deny-list mechanism itself (C-2/CWE-200) is sound — it
+simply predates the payment keys.
+
+> **ui/ COMPLETE as risk-ranked sampling. ALL 32 CAMPAIGN TARGETS ARE
+> NOW AUDITED.** The campaign log stands at ~110 findings across 18
+> crates + 14 modules + 3 apps + ui. Fix-order phase awaits the user's
+> green-light.

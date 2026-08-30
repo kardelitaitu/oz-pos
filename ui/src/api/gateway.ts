@@ -1,4 +1,9 @@
-import { loggedInvoke } from '@/utils/logged-invoke';
+/*
+last audited 25-07-26 by RSA-Agent (ui slice A: gateway + settings gate)
+crate: ui | status: NEEDS-FIX | lint: CLEAN
+findings: UI-1 HIGH — gateway.ts fetches stripe.api_key, square.api_key, and midtrans.server_key via get_setting into the RENDERER just to compute configured booleans, and the desktop SECRET_KEY_DENY_LIST (C-2) omits all three payment keys, so the raw secrets are readable by any renderer code (XSS or compromised dependency) via the IPC surface; proposed: add the three keys to the deny list and expose a backend gateway-status command returning booleans. UI-2 INFO — four production files import @tauri-apps/api directly outside src/api (StaffLoginScreen, KdsScreen, UpdateBanner, useFullscreen), against the AGENTS.md api-layer rule
+next: UI-1 in fix-order phase (top tier) | perf: N/A
+*/import { loggedInvoke } from '@/utils/logged-invoke';
 import type { GatewayStatus } from '@/hooks/useGatewayStatus';
 
 export type { GatewayStatus };
