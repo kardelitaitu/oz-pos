@@ -241,6 +241,40 @@ func normalizeBundleID(bundle string) string {
 	return ""
 }
 
+// machineLimitExceeded reports whether the tenant has reached its tier's
+// machine limit for a NEW machine. Returns a non-empty error message when
+// the limit is hit and `machineID` is not already registered to the tenant
+// (re-activating an existing machine is always allowed), or "" when the
+// activation may proceed.
+//
+// Shared by the re-activation and first-activation paths so the limit logic
+// (and its error text) can never drift apart.
+func machineLimitExceeded(app core.App, tenantID, machineID, tier string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	machines, _ := app.FindRecordsByFilter(
+		"tenant_machines",
+		"tenant_id = {:tenant_id}",
+		"", 0, 0,
+		map[string]any{"tenant_id": tenantID},
+	)
+	if len(machines) < max {
+		return ""
+	}
+	// Check if the machine being registered is already one of this
+	// tenant's machines (re-activation case).
+	for _, m := range machines {
+		if m.Id == machineID {
+			return ""
+		}
+	}
+	return fmt.Sprintf(
+		"machine limit reached (%d machines allowed on %s tier). Upgrade to add more.",
+		max, tier,
+	)
+}
+
 func handleActivate(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		// Cap request body at 64KB to prevent OOM via oversized JSON payloads (M4 audit).
@@ -495,30 +529,10 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				// renewal is correctly subject to the lower tier's limits.
 				rTier := subRecord.GetString("tier_key")
 				rMax := maxMachinesForTier(rTier)
-				if rMax > 0 {
-					existingMachines, _ := app.FindRecordsByFilter(
-						"tenant_machines",
-						"tenant_id = {:tenant_id}",
-						"", 0, 0,
-						map[string]any{"tenant_id": tenant.Id},
-					)
-					if len(existingMachines) >= rMax {
-						isExistingMachine := false
-						for _, m := range existingMachines {
-							if m.Id == req.MachineID {
-								isExistingMachine = true
-								break
-							}
-						}
-						if !isExistingMachine {
-							return e.JSON(http.StatusConflict, map[string]any{
-								"error": fmt.Sprintf(
-									"machine limit reached (%d machines allowed on %s tier). Upgrade to add more.",
-									rMax, rTier,
-								),
-							})
-						}
-					}
+				if msg := machineLimitExceeded(app, tenant.Id, req.MachineID, rTier, rMax); msg != "" {
+					return e.JSON(http.StatusConflict, map[string]any{
+						"error": msg,
+					})
 				}
 
 				// ── Register / update machine ──────────────────────────
@@ -735,32 +749,10 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			tierForLimit = trialTier
 		}
 		maxMachines := maxMachinesForTier(tierForLimit)
-		if maxMachines > 0 {
-			machines, _ := app.FindRecordsByFilter(
-				"tenant_machines",
-				"tenant_id = {:tenant_id}",
-				"", 0, 0,
-				map[string]any{"tenant_id": tenantID},
-			)
-			if len(machines) >= maxMachines {
-				// Check if the machine being registered is already
-				// one of this tenant's machines (re-activation case).
-				isExisting := false
-				for _, m := range machines {
-					if m.Id == req.MachineID {
-						isExisting = true
-						break
-					}
-				}
-				if !isExisting {
-					return e.JSON(http.StatusConflict, map[string]any{
-						"error": fmt.Sprintf(
-							"machine limit reached (%d machines allowed on %s tier). Upgrade to add more.",
-							maxMachines, tierForLimit,
-						),
-					})
-				}
-			}
+		if msg := machineLimitExceeded(app, tenantID, req.MachineID, tierForLimit, maxMachines); msg != "" {
+			return e.JSON(http.StatusConflict, map[string]any{
+				"error": msg,
+			})
 		}
 
 		// ── Register machine (non-fatal: subscription is already valid) ──
