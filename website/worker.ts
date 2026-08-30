@@ -60,9 +60,14 @@ function getCookie(headers: Headers, name: string): string | null {
   return null;
 }
 
-/** Build a Set-Cookie header string for the oz_session token. */
-function setCookieHeader(token: string, maxAge: number): string {
-  return `${COOKIE_NAME}=${token}; Domain=.ozpos.my.id; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
+/** Build a Set-Cookie header string for the oz_session token.
+ *
+ * H4 (hardening): the cookie is scoped to the specific dashboard subdomain
+ * (admin.ozpos.my.id or dashboard.ozpos.my.id) instead of the parent
+ * `.ozpos.my.id`, so it is never sent to the marketing site or other
+ * subdomains — no cross-subdomain session exposure. */
+function setCookieHeader(token: string, maxAge: number, domain: string): string {
+  return `${COOKIE_NAME}=${token}; Domain=${domain}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 }
 
 /**
@@ -148,7 +153,7 @@ export default {
                 status: 302,
                 headers: {
                   Location: cleanUrl,
-                  'Set-Cookie': setCookieHeader(body.token, 30 * 24 * 3600),
+                  'Set-Cookie': setCookieHeader(body.token, 30 * 24 * 3600, hostname),
                   'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
                   'Referrer-Policy': 'no-referrer',
                   'Pragma': 'no-cache',
@@ -178,7 +183,7 @@ export default {
           status: 302,
           headers: {
             Location: cleanUrl,
-            'Set-Cookie': setCookieHeader(tokenParam, 30 * 24 * 3600),
+            'Set-Cookie': setCookieHeader(tokenParam, 30 * 24 * 3600, hostname),
             'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
             'Referrer-Policy': 'no-referrer',
             'Pragma': 'no-cache',
@@ -220,7 +225,7 @@ export default {
           status: 302,
           headers: {
             Location: loginUrl,
-            'Set-Cookie': `${COOKIE_NAME}=; Domain=.ozpos.my.id; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
+            'Set-Cookie': `${COOKIE_NAME}=; Domain=${hostname}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
             'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
             'Referrer-Policy': 'no-referrer',
             'Pragma': 'no-cache',

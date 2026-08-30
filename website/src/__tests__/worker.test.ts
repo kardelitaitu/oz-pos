@@ -121,7 +121,7 @@ describe('Cloudflare Worker — worker.ts', () => {
     expect(setCookie).toContain('oz_session=my.jwt.token');
     expect(setCookie).toContain('HttpOnly');
     expect(setCookie).toContain('Secure');
-    expect(setCookie).toContain('Domain=.ozpos.my.id');
+    expect(setCookie).toContain('Domain=dashboard.ozpos.my.id');
   });
 
   it('clears the httpOnly cookie on /__oz/logout and redirects to login', async () => {
