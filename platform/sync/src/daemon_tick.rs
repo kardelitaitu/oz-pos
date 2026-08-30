@@ -22,6 +22,55 @@ use oz_core::offline::OfflineQueueItem;
 /// `settings_sink` is invoked after the pull phase applies a remote
 /// `settings.update` (SYNC-10) so the change is reactive in this
 /// terminal's UI even though it was made elsewhere.
+/// ADR sync-auth-hardening P1/P4: refresh the persisted API key and retry
+/// the push batch exactly once after an `AuthExpired` rejection. Returns
+/// (pushed, error) where `error` is set when the entire retry path fails
+/// (refresh failure, transport construction, or the retry push itself).
+/// On success `error` carries the `apply_push_results` outcome (if any).
+async fn push_retry_after_auth_refresh(
+    db: &DbConnection,
+    cfg: &SyncConfig,
+    pending: Vec<OfflineQueueItem>,
+) -> (usize, Option<String>) {
+    tracing::warn!("push rejected (401) — refreshing API key and retrying once");
+    if !refresh_persisted_api_key(db, &cfg.server_url).await {
+        return (
+            0,
+            Some("push rejected (401) and token refresh failed".into()),
+        );
+    }
+    let (retry_cfg, _) = {
+        let db_clone = db.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_clone.blocking_lock();
+            read_config_and_pending(&conn)
+        })
+        .await
+        .unwrap_or((None, Vec::new()))
+    };
+    let Some(retry_cfg) = retry_cfg else {
+        return (
+            0,
+            Some("push rejected (401) and refreshed key is not usable".into()),
+        );
+    };
+    let Ok(transport) = SyncTransport::try_new(&retry_cfg.server_url, retry_cfg.api_key.as_deref())
+    else {
+        return (
+            0,
+            Some("push rejected (401) and refreshed key is not usable".into()),
+        );
+    };
+    match transport.push_items(&pending).await {
+        Ok(results) => {
+            let pushed = results.len();
+            let apply_err = apply_push_results(db, pending, results).await;
+            (pushed, apply_err)
+        }
+        Err(retry_err) => (0, Some(retry_err.to_string())),
+    }
+}
+
 pub(super) async fn run_tick(
     db: &DbConnection,
     daemon_status: &Arc<RwLock<DaemonStatus>>,
@@ -102,47 +151,11 @@ pub(super) async fn run_tick(
                         // An explicit `invalid_token` is a config problem and
                         // must not be masked by a refresh.
                         if let SyncError::AuthExpired = e {
-                            tracing::warn!(
-                                "push rejected (401) — refreshing API key and retrying once"
-                            );
-                            if refresh_persisted_api_key(db, &cfg.server_url).await {
-                                let (retry_cfg, _) = {
-                                    let db_clone = db.clone();
-                                    tokio::task::spawn_blocking(move || {
-                                        let conn = db_clone.blocking_lock();
-                                        read_config_and_pending(&conn)
-                                    })
-                                    .await
-                                    .unwrap_or((None, Vec::new()))
-                                };
-                                if let Some(retry_cfg) = retry_cfg
-                                    && let Ok(transport) = SyncTransport::try_new(
-                                        &retry_cfg.server_url,
-                                        retry_cfg.api_key.as_deref(),
-                                    )
-                                {
-                                    match transport.push_items(&pending).await {
-                                        Ok(results) => {
-                                            pushed = results.len();
-                                            if let Some(apply_err) =
-                                                apply_push_results(db, pending, results).await
-                                            {
-                                                sync_error = Some(apply_err);
-                                            }
-                                        }
-                                        Err(retry_err) => {
-                                            sync_error = Some(retry_err.to_string());
-                                        }
-                                    }
-                                } else {
-                                    sync_error = Some(
-                                        "push rejected (401) and refreshed key is not usable"
-                                            .into(),
-                                    );
-                                }
-                            } else {
-                                sync_error =
-                                    Some("push rejected (401) and token refresh failed".into());
+                            let (retry_pushed, retry_err) =
+                                push_retry_after_auth_refresh(db, cfg, pending).await;
+                            pushed = retry_pushed;
+                            if sync_error.is_none() {
+                                sync_error = retry_err;
                             }
                         } else if sync_error.is_none() {
                             sync_error = Some(e.to_string());
