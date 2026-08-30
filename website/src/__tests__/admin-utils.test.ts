@@ -557,3 +557,42 @@ describe('admin-utils fetchWithTimeout (B12: api() had the same unbounded hang a
     await expect(utils.fetchWithTimeout(fetchImpl, 'https://x/api', {}, 50)).rejects.toThrow();
   });
 });
+
+describe('admin-utils exchangeUrlFrom + isLockoutActive (B13/B14: login flow)', () => {
+  // B13: login.js did window.location.href = '/?code=' + body.code with no
+  // guard — a 200 response missing the code sent the browser to
+  // /?code=undefined, the worker's exchange failed, redirected back to
+  // login: a silent loop with no error shown.
+  it('builds the exchange URL from a valid code', () => {
+    expect(utils.exchangeUrlFrom({ code: 'abc 123' })).toBe('/?code=abc%20123');
+  });
+
+  it('throws when the server returns no usable code', () => {
+    expect(() => utils.exchangeUrlFrom({})).toThrow();
+    expect(() => utils.exchangeUrlFrom({ code: '' })).toThrow();
+    expect(() => utils.exchangeUrlFrom(null)).toThrow();
+  });
+
+  // B14: setAuthMode overwrote the login button label on every tab
+  // switch — during an active 429 lockout that left a disabled button
+  // labelled "Send Verification Code" (the countdown text flickering back
+  // a second later). The mode switch must respect an active lockout.
+  it('isLockoutActive tracks the countdown lifecycle', () => {
+    vi.useFakeTimers();
+    try {
+      const btn = document.createElement('button');
+      expect(utils.isLockoutActive(btn)).toBe(false);
+      utils.startLockoutCountdown(btn, 5, (s) => `${s}`, () => 'done');
+      expect(utils.isLockoutActive(btn)).toBe(true);
+      vi.advanceTimersByTime(5000);
+      expect(utils.isLockoutActive(btn)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('isLockoutActive tolerates a missing button', () => {
+    expect(utils.isLockoutActive(null)).toBe(false);
+    expect(utils.isLockoutActive(undefined)).toBe(false);
+  });
+});

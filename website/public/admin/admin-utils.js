@@ -262,6 +262,26 @@
     return { rate: null, updatedAt: '', live: false };
   }
 
+  // exchangeUrlFrom validates the /exchange-issue response and builds the
+  // redirect URL. B13 fix: login.js concatenated body.code unguarded — a
+  // 200 response without a code sent the browser to /?code=undefined, the
+  // worker's consume failed, and it bounced back to login: a silent loop.
+  function exchangeUrlFrom(body) {
+    if (!body || typeof body.code !== 'string' || body.code === '') {
+      var err = new Error('exchange-issue returned no code');
+      err.exchangeFailed = true;
+      throw err;
+    }
+    return '/?code=' + encodeURIComponent(body.code);
+  }
+
+  // isLockoutActive reports whether a button currently carries a running
+  // startLockoutCountdown timer. B14: login.js setAuthMode must not
+  // overwrite the countdown label mid-lockout.
+  function isLockoutActive(btn) {
+    return !!(btn && btn._ozLockoutTimer);
+  }
+
   // fetchWithTimeout performs a fetch that is guaranteed to settle.
   // Extracted from admin.js api() so the timeout semantics are testable.
   // B12 fix: api() awaited two UN-TIMED fetches per call (the session
@@ -484,6 +504,7 @@
     'login.emailDeliveryNotConfigured': 'Email delivery is not configured on server',
     'login.accessDeniedOrigin': 'Access denied: origin not allowed',
     'login.couldNotConnect': 'Could not connect to authentication server',
+    'login.exchangeFailed': 'Sign-in succeeded but the session handoff failed. Please try again.',
     'login.resendPrompt': 'Did not receive code? Click below to resend.',
     'login.signingIn': 'Signing in…',
     'login.resendIn': 'Resend code in ',
@@ -555,6 +576,8 @@
     fetchFxRate: fetchFxRate,
     mountModal: mountModal,
     fetchWithTimeout: fetchWithTimeout,
+    exchangeUrlFrom: exchangeUrlFrom,
+    isLockoutActive: isLockoutActive,
     t: t,
     STRINGS: STRINGS,
     isAuthDenied: isAuthDenied,

@@ -68,11 +68,17 @@ function setAuthMode(mode) {
     
     // Check if code was already sent
     const isCodeActive = otpGroup && !otpGroup.classList.contains('hidden');
-    if (isCodeActive) {
-      if (loginBtn) loginBtn.textContent = t('login.verifyCode');
-    } else {
-      if (otpGroup) otpGroup.classList.add('hidden');
-      if (loginBtn) loginBtn.textContent = t('login.sendCode');
+    // B14 fix: never overwrite an active lockout countdown label — the
+    // button stays disabled and the timer owns its text until it ends.
+    if (loginBtn && !isLockoutActive(loginBtn)) {
+      if (isCodeActive) {
+        loginBtn.textContent = t('login.verifyCode');
+      } else {
+        if (otpGroup) otpGroup.classList.add('hidden');
+        loginBtn.textContent = t('login.sendCode');
+      }
+    } else if (!isCodeActive && otpGroup) {
+      otpGroup.classList.add('hidden');
     }
   } else {
     if (tabOtp) tabOtp.classList.remove('active');
@@ -80,7 +86,7 @@ function setAuthMode(mode) {
     if (pwdGroup) pwdGroup.classList.remove('hidden');
     if (otpGroup) otpGroup.classList.add('hidden');
     if (cd) cd.classList.add('hidden');
-    if (loginBtn) loginBtn.textContent = t('login.signInPassword');
+    if (loginBtn && !isLockoutActive(loginBtn)) loginBtn.textContent = t('login.signInPassword');
   }
 }
 
@@ -114,7 +120,10 @@ async function exchangeForCode(token) {
   });
   if (!res.ok) throw new Error('exchange failed');
   const body = await res.json();
-  window.location.href = '/?code=' + encodeURIComponent(body.code);
+  // B13 fix: validated via admin-utils.exchangeUrlFrom — the old code
+  // navigated to /?code=undefined when the response lacked a code,
+  // producing a silent login redirect loop with no error shown.
+  window.location.href = exchangeUrlFrom(body);
 }
 
 let isSubmitting = false;
@@ -212,7 +221,7 @@ async function handleLogin() {
         }
         showError(body.error || t('login.invalidOrExpiredCode'));
       } catch (err) {
-        showError(t('login.couldNotConnect'));
+        showError(err && err.exchangeFailed ? t('login.exchangeFailed') : t('login.couldNotConnect'));
       }
       setLoading(false);
       return;
