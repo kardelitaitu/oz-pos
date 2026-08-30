@@ -438,6 +438,14 @@ jobs:
         run: |
           cd apps/tablet-client
           cargo tauri android build --apk --target aarch64
+      # ── CICD-03: remove signing material after the build ───────
+      # Same hygiene as android.yml: keystore.properties holds plaintext
+      # passwords and the decoded .keystore is the signing key itself.
+      - name: Remove decoded signing material
+        if: always()
+        run: |
+          rm -f apps/tablet-client/gen/android/oz-pos-release.keystore
+          rm -f apps/tablet-client/gen/android/keystore.properties
       - name: Find APK output
         run: |
           find apps/tablet-client/gen/android -name "*.apk" -o -name "*.aab" 2>/dev/null | head -20
