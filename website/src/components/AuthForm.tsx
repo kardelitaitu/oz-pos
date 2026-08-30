@@ -105,9 +105,12 @@ export default function AuthForm({ locale }: Props) {
               return;
             }
           }
-          // Exchange failed — fall back to the direct ?token= path (the
-          // Worker still accepts it while the rollout completes).
-          u.searchParams.set('token', token);
+          // Exchange failed — land on the dashboard URL clean (no code,
+          // no token). The Worker's no-cookie gate redirects to the
+          // subdomain login page so the user is never stranded. The old
+          // `?token=` fallback is removed (WEB-1): the Worker no longer
+          // consumes `?token=`, so the fallback only leaked the JWT into
+          // browser history and the Referer header.
           window.location.href = u.toString();
           return;
         }

@@ -534,9 +534,13 @@ describe('AuthForm — open redirect guard', () => {
     }
   });
 
-  it('falls back to the direct token param when the exchange fails', async () => {
-    // If /exchange-issue errors (or returns no code), the Worker still
-    // accepts the deprecated ?token= path — the user must not be stranded.
+  it('lands on the clean dashboard URL when the exchange fails (no token in URL)', async () => {
+    // WEB-1: if /exchange-issue errors (or returns no code), the user is
+    // never stranded, but the removed `?token=` fallback must not come
+    // back — the Worker no longer consumes `?token=`, so putting the JWT
+    // in the URL would only leak it into browser history and Referer.
+    // The clean URL makes the Worker's no-cookie gate send the user to
+    // the subdomain login page instead.
     mockFetch((url) => {
       if (url.includes('verify-otp')) return okJson({ token: 'tok-dash-002' });
       if (url.includes('exchange-issue')) return badRequest(500);
@@ -565,7 +569,8 @@ describe('AuthForm — open redirect guard', () => {
         await new Promise((r) => setTimeout(r, 30));
       });
       expect(capturedHref).toContain('https://dashboard.ozpos.my.id/');
-      expect(capturedHref).toContain('token=tok-dash-002');
+      expect(capturedHref).not.toContain('token=');
+      expect(capturedHref).not.toContain('code=');
     } finally {
       act(() => root.unmount());
       container.remove();

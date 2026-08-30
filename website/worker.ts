@@ -50,6 +50,15 @@ const DASHBOARD_HOSTS = new Set(['dashboard.ozpos.my.id', 'admin.ozpos.my.id']);
 /** Marketing site domain — no auth required. */
 const MARKETING_HOST = 'ozpos.my.id';
 
+/** Origins the /api/v1/ proxy will echo as Access-Control-Allow-Origin
+ * (WEB-2): the marketing host and the two auth-gated subdomains. Any
+ * other Origin falls back to the marketing host. */
+const ALLOWED_CORS_ORIGINS = new Set([
+  'https://ozpos.my.id',
+  'https://dashboard.ozpos.my.id',
+  'https://admin.ozpos.my.id',
+]);
+
 /** Parse a named cookie value from the Cookie header. */
 function getCookie(headers: Headers, name: string): string | null {
   const raw = headers.get('Cookie');
@@ -73,9 +82,16 @@ function setCookieHeader(token: string, maxAge: number, domain: string): string 
 
 /**
  * Wrap a response with the strict CSP for admin/dashboard subdomains
- * (hardening F2): no inline scripts, no framing, no referrer leak.
- * Applied to the SPA pages and the admin login page — never the marketing
- * site (which needs 'unsafe-inline' for its Astro inline scripts).
+ * (hardening F2): no framing, no referrer leak. Applied to the SPA pages
+ * and the admin login page — never the marketing site (which needs
+ * 'unsafe-inline' for its Astro inline scripts).
+ *
+ * WEB-3 note: `script-src 'unsafe-inline'` is still present because the
+ * dashboard/admin bundles bootstrap through inline islands. Hardening
+ * path: move the inline bootstrap to an external hashed file (same
+ * approach as public/_headers documents for the marketing site) and drop
+ * 'unsafe-inline' from this policy — until then this CSP is strict
+ * everywhere except inline script injection.
  */
 function withStrictCSP(resp: Response): Response {
   const strictCSP = [
@@ -117,6 +133,11 @@ export default {
         const targetUrl = (env.LICENSE_API_URL ?? 'https://license.ozpos.my.id') + url.pathname + url.search;
         const reqHeaders = new Headers(request.headers);
         reqHeaders.set('Origin', 'https://ozpos.my.id');
+        // WEB-2: never forward the dashboard host's Cookie header to the
+        // backend — the SPA authenticates with a Bearer token obtained
+        // same-origin from /__oz/session, so Cookie here is pure
+        // cross-service leakage.
+        reqHeaders.delete('Cookie');
         const res = await fetch(targetUrl, {
           method: request.method,
           headers: reqHeaders,
@@ -124,7 +145,18 @@ export default {
           redirect: 'follow',
         });
         const respHeaders = new Headers(res.headers);
-        respHeaders.set('Access-Control-Allow-Origin', '*');
+        // WEB-2: echo a fixed allow-list origin instead of `*`. The
+        // subdomain login pages call the API same-origin (relative URL),
+        // so the echo must match the requesting host — a plain wildcard
+        // would still work for non-credentialed fetches but makes every
+        // token-bearing response readable from any origin that obtains a
+        // token, which buys nothing and widens the surface.
+        const requestOrigin = request.headers.get('Origin') ?? '';
+        const corsOrigin = ALLOWED_CORS_ORIGINS.has(requestOrigin)
+          ? requestOrigin
+          : 'https://ozpos.my.id';
+        respHeaders.set('Access-Control-Allow-Origin', corsOrigin);
+        respHeaders.set('Vary', 'Origin');
         return new Response(res.body, { status: res.status, headers: respHeaders });
       }
 
@@ -321,12 +353,18 @@ export default {
             headers: { 'Content-Type': 'application/json', ...corsHeaders },
           });
         }
-        // Format Discord embed
+        // Format Discord embed. WEB-4: every embed field is capped —
+        // Discord rejects embeds whose field values exceed 1024 chars,
+        // so unbounded name/email input would turn a valid support
+        // message into a 502. (Abuse/rate-limiting for this endpoint is
+        // handled at the edge: a Cloudflare WAF rate-limit rule on
+        // /api/contact — see the runbook; the Worker itself stays
+        // stateless.)
         const embed = {
           title: '📩 New Support Message',
           fields: [
-            { name: 'Name', value: name, inline: true },
-            { name: 'Email', value: email, inline: true },
+            { name: 'Name', value: name.slice(0, 100), inline: true },
+            { name: 'Email', value: email.slice(0, 200), inline: true },
             { name: 'Message', value: message.slice(0, 1024) },
           ],
           color: 0x147efb, // OZ-POS blue

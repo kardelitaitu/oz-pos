@@ -1935,3 +1935,31 @@ The last tracked item (TLS/noise-PSK upgrade from DC-1's threat model) is now im
 - **Scope note:** the KDS client side lives outside this repo; until clients adopt noise-psk-v1 the legacy path remains accepted (deprecated). Logged as the only follow-up.
 
 Also in this session: workspace consolidated — the `oz-pos-033` worktree was removed and the primary checkout now runs branch `0.0.33` directly (single clean tree). Plus two F-026 boundary-contract integration tests landed for modules/sales and modules/inventory (6 tests each, mirroring the tax vertical).
+---
+
+## 44. Continuation phase — website/ vertical (Astro + Cloudflare Worker) opened 30-08-26
+
+The original campaign covered 32 Rust/UI targets and explicitly scoped OUT the non-Rust surfaces. Continuation opens the unaudited surface, discovered while reconciling the tree after the worktree removal:
+
+- **website/** — Astro 7 + React 19 marketing/dashboard site served by a Cloudflare Worker (`worker.ts`: static assets, runtime-config endpoint, `/api/v1/` proxy, auth gate for `dashboard.` / `admin.` subdomains, Discord contact webhook).
+- **apps/license-server (Go)** — the portal backend (`web_password.go`, `web_otp.go`, `login_lockout.go`, `api_key.go`, Midtrans/Paddle webhooks, admin dashboards). Previously "out of scope (not Rust)"; it is the most security-critical unaudited code in the repo and becomes section 45.
+
+### Slice A/B — worker.ts (361 lines fully read), src/lib (5 files, 767 lines), AuthForm.tsx redirect/exchange flow, website/scripts (5 files)
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| WEB-1 | 🟡 MED ✅ FIXED 30-08-26 | website/src/components/AuthForm.tsx:108–112 | Dead `?token=` fallback: after the Worker removed the `?token=` flow (flow removed), the fallback still put the **real session JWT into the redirect URL** — browser history and the Referer header of every subresource on the dashboard page. No consumer reads it. | Removed. On exchange failure the login page now lands on the clean dashboard URL, where the Worker's no-cookie gate redirects to the subdomain login page. Test rewritten (`lands on the clean dashboard URL … no token in URL` asserting no `token=` and no `code=`). |
+| WEB-2 | 🟡 MED ✅ FIXED 30-08-26 | website/worker.ts:116–129 | The `/api/v1/` proxy (a) forwarded the dashboard host's **Cookie header** to the license server (pure cross-service leakage — the SPA authenticates with a Bearer token from same-origin `/__oz/session`), and (b) answered `Access-Control-Allow-Origin: *` on Bearer-authenticated responses. | Cookie stripped from proxied requests; ACAO now echoes a fixed allow-list origin (`ozpos.my.id` + both auth-gated subdomains — the echo must match the requesting host because the subdomain login pages call the API same-origin) with `Vary: Origin`. |
+| WEB-3 | 🟡 LOW ✅ FIXED 30-08-26 | website/worker.ts:81 | `withStrictCSP` doc comment claimed "no inline scripts" while the policy kept `script-src 'unsafe-inline'` (needed by the dashboard inline bootstrap) — a comment/policy contradiction that would mislead future hardening. | Comment corrected; hardening path documented (external hashed bootstrap file, then drop `unsafe-inline`). |
+| WEB-4 | 🟡 LOW ✅ FIXED (code) 30-08-26 | website/worker.ts:/api/contact | Contact endpoint has **no rate limiting** (anyone on the internet can spam the Discord webhook) and unbounded `name`/`email` fields — Discord rejects embed field values > 1024 chars, so oversized input turned a valid message into a 502. | All three fields capped (100/200/1024). Rate limiting is edge-side (Cloudflare WAF rule on `/api/contact`) — recorded for the runbook, out of Worker scope. |
+| WEB-5 | ℹ️ INFO | website/src/lib/useAuth.ts:97 | The session JWT lives in `sessionStorage` on the marketing host (XSS-readable). | Accepted tradeoff: strict CSP, and the dashboard handoff exchanges the JWT for a one-time code so the httpOnly cookie carries it on auth-gated hosts. Revisit with backend-set cookies if the marketing host ever hosts sensitive flows. |
+| WEB-6 | ℹ️ INFO | website/wrangler.toml:32 | `CONTACT_WEBHOOK_URL` in the committed config is a masked placeholder (`…xxxxxx`). | Keep it that way — the real webhook URL belongs in a Worker secret/var, never in git. |
+
+**Verified clean / exemplary:** password-policy parity is fixture-enforced on both sides (`scripts/password-policy-cases.json` consumed by the Go suite and `check-password-policy.mjs`, which imports the shipped TS module — the meter and the server cannot drift silently); the open-redirect guard uses a hostname allow-list (`dashboard.` / `admin.` only) plus a relative-path check for `?next=`; the one-time exchange-code flow (F1) and per-subdomain cookie scoping (H4) work as documented; authed HTML is `no-store` (M6); `import-portal.sh` / `sync-dev-files.mjs` are clean (`set -euo pipefail`, quoted paths, local-artifact copies only).
+
+**Test evidence:** worker tests 15/15, auth-form 20/20 (incl. the rewritten exchange-failure test), full website vitest run 36/37 files pass — the single failure (`theme-toggle.test.ts`) is the parallel session's in-flight ThemeToggle work (uncommitted), passes in isolation, and is out of this slice's scope.
+
+### Slice C — pending
+
+- `AccountView.tsx` full read (1,006 lines; session/token/password flows verified + covered by a 1,475-line test file) and the remaining ~40 components risk-ranked.
+- **Section 45: apps/license-server (Go) audit** — risk-ranked: `web_password.go`, `web_otp.go`, `login_lockout.go`, session middleware, `api_key.go`, webhook signature verification (Midtrans/Paddle), admin gates, `ratelimit.go`.
