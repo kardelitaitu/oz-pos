@@ -262,6 +262,19 @@
     return '<svg viewBox="0 0 440 180" style="max-height:180px">' + bars + '</svg>';
   }
 
+  // timeoutSignal builds an AbortSignal for a request, degrading to NO
+  // signal where AbortSignal.timeout is unavailable (B20: the static is
+  // Chrome/WebView 103+/Safari 16+; calling it unguarded threw TypeError
+  // on older browsers and broke EVERY api() call — a regression
+  // introduced by the B10/B12 timeout fixes). Un-timed beats broken.
+  function timeoutSignal(timeoutMs, fallbackMs) {
+    var ms = timeoutMs > 0 ? timeoutMs : fallbackMs;
+    if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+      return AbortSignal.timeout(ms);
+    }
+    return undefined;
+  }
+
   // fetchFxRate queries open.er-api.com for the live USD→IDR rate.
   // Extracted from admin.js so the timeout semantics are unit-testable.
   // B10 fix: the original awaited an UN-TIMED fetch — a firewalled or
@@ -273,7 +286,7 @@
     var f = fetchImpl || fetch;
     try {
       var r = await f('https://open.er-api.com/v6/latest/USD', {
-        signal: AbortSignal.timeout(timeoutMs > 0 ? timeoutMs : 5000),
+        signal: timeoutSignal(timeoutMs, 5000),
       });
       var d = await r.json();
       var idr = d && d.rates ? Number(d.rates.IDR) : NaN;
@@ -379,7 +392,8 @@
   async function fetchWithTimeout(fetchImpl, url, opts, timeoutMs) {
     var f = fetchImpl || fetch;
     var o = opts || {};
-    o.signal = AbortSignal.timeout(timeoutMs > 0 ? timeoutMs : 15000);
+    var sig = timeoutSignal(timeoutMs, 15000);
+    if (sig) o.signal = sig;
     return f(url, o);
   }
 

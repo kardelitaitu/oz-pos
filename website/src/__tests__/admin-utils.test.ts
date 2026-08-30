@@ -763,3 +763,45 @@ describe('admin-utils busyWrap (B19: double-click submitted the action twice)', 
     expect(calls).toBe(2);
   });
 });
+
+describe('admin-utils AbortSignal.timeout availability (B20: regression from B10/B12)', () => {
+  // B10/B12 attached AbortSignal.timeout unconditionally. That static is
+  // Chrome/WebView 103+ and Safari 16+ — on an older Android WebView the
+  // call throws TypeError, which in fetchWithTimeout rejected EVERY api()
+  // call: the whole dashboard broke on browsers that worked before.
+  // Without the primitive the fetch must proceed un-timed (old behavior)
+  // rather than throw.
+  const withoutTimeout = async (fn: () => Promise<void>) => {
+    const desc = Object.getOwnPropertyDescriptor(AbortSignal, 'timeout');
+    if (!desc) throw new Error('AbortSignal.timeout missing entirely — nothing to remove');
+    Object.defineProperty(AbortSignal, 'timeout', { value: undefined, configurable: true, writable: true });
+    try {
+      await fn();
+    } finally {
+      Object.defineProperty(AbortSignal, 'timeout', desc);
+    }
+  };
+
+  it('fetchWithTimeout still performs the fetch when AbortSignal.timeout is absent', async () => {
+    await withoutTimeout(async () => {
+      let seen: any = null;
+      const fetchImpl = async (_u: string, o?: any) => { seen = o; return { ok: true }; };
+      const res: any = await utils.fetchWithTimeout(fetchImpl, 'https://x/api', {}, 5000);
+      expect(res.ok).toBe(true);
+      expect(seen.signal).toBeUndefined(); // no signal — not a throw
+    });
+  });
+
+  it('fetchFxRate still resolves a live rate when AbortSignal.timeout is absent', async () => {
+    await withoutTimeout(async () => {
+      const fetchImpl = async () => ({ json: async () => ({ rates: { IDR: 16000 } }) });
+      const r = await utils.fetchFxRate(fetchImpl, 5000);
+      expect(r.live).toBe(true);
+      expect(r.rate).toBe(16000);
+    });
+  });
+
+  it('restores the primitive afterwards (no test pollution)', () => {
+    expect(typeof AbortSignal.timeout).toBe('function');
+  });
+});
