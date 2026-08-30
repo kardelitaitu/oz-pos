@@ -1,4 +1,10 @@
 //! Role-Based Access Control primitives.
+/*
+last audited 25-07-26 by RSA-Agent (platform-core slice A: rbac deep read)
+crate: platform-core | status: SAFE | lint: CLEAN
+findings: exemplary — has_permission is a closed 3-level wildcard resolver (global/domain/exact, malformed strings match exactly only); Role::has_permission treats malformed permissions JSON as deny-all (fail-closed, contrast COR-30); presets pin invariants by tests (no retired cashier/kitchen roles, Admin never wildcard, Staff checkout-only with 40+ negative assertions, Auditor read-only); permission catalog is compile-time constants
+next: none | perf: linear scan over small grant lists
+*/
 //!
 //! Provides the [`Role`] and [`Permission`] types, the [`permissions`]
 //! constant catalog, and the [`has_permission`] resolver that handles

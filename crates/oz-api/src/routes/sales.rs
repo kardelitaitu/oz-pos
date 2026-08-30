@@ -1,4 +1,10 @@
 //! Sale endpoints.
+/*
+last audited 25-07-26 by RSA-Agent (oz-api slice C: sales deep read)
+crate: oz-api | status: SAFE | lint: CLEAN
+findings: clean — currency inferred from first line and enforced per-line by Cart, checked total (overflow -> 422), header+lines in one tx, typed status transitions; unit prices are client-supplied (automation API contract — any valid token can book sales at arbitrary prices; documented INFO note)
+next: none | perf: N/A
+*/
 //!
 //! `POST /api/v1/sales` — create a sale from cart lines.
 //! `PATCH /api/v1/sales/{id}/status` — transition sale status.

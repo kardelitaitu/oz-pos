@@ -250,6 +250,42 @@ describe('AccountView — subscription display', () => {
     }
   });
 
+  it('shows the checkout error when Paddle subscribe fails due to missing session email', async () => {
+    // Regression: when getSessionEmail() returns null (no email cached and
+    // /me unavailable), the Paddle subscribe path must surface the localized
+    // checkout.error message, not fail silently.
+    sessionStorage.setItem('oz_session', 'tok-sub-paddle-noemail');
+    paddle.isPlaceholderPriceId.mockReturnValue(false);
+    paddle.getSessionEmail.mockResolvedValue(null); // no email available
+    mockFetch((url) => {
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'free', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      const subscribeBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Subscribe',
+      );
+      expect(subscribeBtn).not.toBeNull();
+      act(() => subscribeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
+      // The error message must appear — Paddle was not called.
+      expect(paddle.openPaddleCheckout).not.toHaveBeenCalled();
+      const alert = container.querySelector('[role="alert"]');
+      expect(alert).not.toBeNull();
+      expect(alert!.textContent).toContain("Couldn't start the checkout. Please try again.");
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
   it('routes subscribe through Midtrans Snap for the id locale', async () => {
     sessionStorage.setItem('oz_session', 'tok-sub-midtrans');
     midtrans.openMidtransCheckout.mockResolvedValue(undefined);
@@ -338,6 +374,85 @@ describe('AccountView — subscription display', () => {
       assertText(container, 'Rp 500.000');
       assertNoText(container, '$4.99');
       assertNoText(container, '$49.99');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows the checkout error message when the Midtrans checkout fails', async () => {
+    // Regression: when openMidtransCheckout throws (e.g. snap token request
+    // fails or the SDK is unavailable), the subscribe click must surface the
+    // localized checkout.error message, not fail silently.
+    sessionStorage.setItem('oz_session', 'tok-sub-midtrans-error');
+    localStorage.setItem('oz_region', 'id');
+    midtrans.openMidtransCheckout.mockRejectedValue(new Error('snap unavailable'));
+    mockFetch((url) => {
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'free', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      const subscribeBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Subscribe',
+      );
+      expect(subscribeBtn).not.toBeNull();
+      act(() => subscribeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
+      // The localized error message is rendered with role="alert".
+      const alert = container.querySelector('[role="alert"]');
+      expect(alert).not.toBeNull();
+      expect(alert!.textContent).toContain("Couldn't start the checkout. Please try again.");
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows the checking-subscription status when a checkout completes', async () => {
+    // Regression: after a completed checkout, the onClosed callback fires
+    // pollAfterCheckout which sets refreshState='checking' and shows the
+    // "Checking your subscription…" status line. This branch was untested.
+    sessionStorage.setItem('oz_session', 'tok-checking');
+    localStorage.setItem('oz_region', 'id');
+    // Capture the onClosed callback the component passes to Midtrans.
+    let onClosed: ((completed: boolean) => void) | undefined;
+    midtrans.openMidtransCheckout.mockImplementation(async (_tier: string, _period: string, cb?: (c: boolean) => void) => {
+      onClosed = cb;
+    });
+    mockFetch((url) => {
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'free', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      const subscribeBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Subscribe',
+      )!;
+      act(() => subscribeBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(onClosed).toBeTypeOf('function');
+      // Simulate the checkout completing → pollAfterCheckout runs.
+      act(() => {
+        onClosed!(true);
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      // The status line must be visible.
+      assertText(container, 'Checking your subscription…');
     } finally {
       act(() => root.unmount());
       container.remove();
@@ -542,6 +657,56 @@ describe('AccountView — region selector', () => {
       container.remove();
     }
   });
+
+  it('keeps the listbox open while the user navigates options with the keyboard', async () => {
+    // Regression: the trigger's onBlur schedules setRegionOpen(false) in
+    // 150ms. In a real browser, moving focus to an option fires the trigger's
+    // blur — that timer would close the listbox mid-navigation. jsdom does
+    // not fire blur on programmatic .focus(), so this test dispatches the
+    // blur explicitly to model the browser, then asserts the listbox stays
+    // open past the 150ms window.
+    sessionStorage.setItem('oz_session', 'tok-region-blur-nav');
+    stubMe();
+    const { container, root } = await renderAccount('en');
+    try {
+      const trigger = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Global',
+      )!;
+      act(() => {
+        trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      const options = Array.from(container.querySelectorAll<HTMLButtonElement>('[data-region-option]'));
+      expect(options.length).toBe(2);
+
+      // Model the browser: focus moved to the option, so the trigger blurred.
+      // React's synthetic onBlur listens for the bubbling `focusout` event,
+      // and the browser sets relatedTarget to the newly-focused option —
+      // which lives inside the listbox.
+      act(() => {
+        trigger.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: options[0] }));
+      });
+
+      // Wait past the 150ms blur-close window while an option is focused.
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 200));
+      });
+
+      // The listbox must STILL be open and navigable.
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+      expect(container.querySelector('[data-region-option]')).not.toBeNull();
+      // And ArrowDown still moves focus between options.
+      act(() => {
+        options[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      });
+      expect(document.activeElement).toBe(options[1]);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
 });
 
 // ── Logout flow ───────────────────────────────────────────────────────
@@ -558,6 +723,45 @@ describe('AccountView — logout', () => {
         set href(v: string) { capturedHref = v; },
       },
       writable: true,
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      clickButton(container, 'Sign out');
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      expect(paddle.clearSession).toHaveBeenCalled();
+      expect(capturedHref).toBe('/en');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('clears the session and redirects even when the logout API call fails', async () => {
+    // Regression: logout is idempotent server-side. A network error or 500
+    // must not prevent the local session from being cleared and the user
+    // being redirected — the catch block must still run clearSession.
+    sessionStorage.setItem('oz_session', 'tok-logout-fail');
+    sessionStorage.setItem('oz_email', 'test@example.com');
+    let capturedHref = '';
+    Object.defineProperty(window, 'location', {
+      value: {
+        get href() { return capturedHref; },
+        set href(v: string) { capturedHref = v; },
+      },
+      writable: true,
+    });
+    mockFetch((url, init) => {
+      // /me succeeds so the profile card (with Sign out) renders; only the
+      // logout POST fails.
+      if (url.includes('/logout')) return badRequest(500);
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
     });
     const { container, root } = await renderAccount('en');
     try {
@@ -952,6 +1156,93 @@ describe('AccountView — status pill colors', () => {
       container.remove();
     }
   });
+
+  it('shows a localized label for paused status instead of the raw server value', async () => {
+    // Regression: the license-server subscriptions schema allows status
+    // 'paused', but statusLabel did not handle it — it fell through to the
+    // raw English value ('paused') even for the id locale.
+    sessionStorage.setItem('oz_session', 'tok-pill-paused');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'paused', expiresAt: '2027-01-01' },
+      subscription: { tierKey: 'pro', status: 'paused', startsAt: '2026-01-01', expiresAt: '2027-01-01' },
+    }));
+    const { container, root } = await renderAccount('id');
+    try {
+      // The localized Indonesian label ('Ditangguhkan') must be shown, never
+      // the raw English 'paused' value.
+      assertText(container, 'Ditangguhkan');
+      assertNoText(container, 'paused');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Status label — edge cases ─────────────────────────────────────────
+
+describe('AccountView — status label edge cases', () => {
+  it('shows the localized label for unused status', async () => {
+    // statusLabel('unused') was untested — the server can report a license
+    // key as 'unused' (minted by the webhook, not yet activated). The
+    // dashboard must show the localized label, not the raw value.
+    sessionStorage.setItem('oz_session', 'tok-label-unused');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'unused', expiresAt: '2027-01-01' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      // 'Not activated' is the statusLabel return for 'unused' status.
+      assertText(container, 'Not activated');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows the raw value for an unknown status (fallback path)', async () => {
+    // statusLabel's default case returns the raw status value — the
+    // dashboard must not crash when the server sends a new/unexpected
+    // status string.
+    sessionStorage.setItem('oz_session', 'tok-label-unknown');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'suspended' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'suspended', expiresAt: '2027-01-01' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'suspended');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Formatted dates — edge cases ──────────────────────────────────────
+
+describe('AccountView — formatted dates edge cases', () => {
+  it('shows an em-dash when the license has no expiry date', async () => {
+    // fmtDate(undefined) returns '—' — the license section must not crash
+    // or show a raw JavaScript value when expiresAt is absent.
+    sessionStorage.setItem('oz_session', 'tok-date-missing');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: undefined },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, '—');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
 });
 
 // ── Renewal countdown badge ───────────────────────────────────────────
@@ -1060,6 +1351,56 @@ describe('AccountView — renewal countdown', () => {
       assertText(container, 'Subscription');
       assertNoText(container, 'Renews in');
       assertNoText(container, 'NaN');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows a muted (non-urgent) renew badge when 30+ days remain', async () => {
+    // renderRenewBadge: d < 30 → warning; d >= 30 → muted. The muted branch
+    // was untested. Build an expiry 45 days out (local midnight so the
+    // calendar-day count is deterministic) and assert the badge exists and
+    // carries the muted class — not the warning class.
+    sessionStorage.setItem('oz_session', 'tok-renew-muted');
+    const far = new Date();
+    far.setDate(far.getDate() + 45);
+    far.setHours(0, 0, 0, 0);
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: far.toISOString() },
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Renews in 45 days');
+      const badges = Array.from(container.querySelectorAll('span.rounded-full'));
+      const renewBadge = badges.find((b) => b.textContent?.includes('Renews in'));
+      expect(renewBadge).not.toBeNull();
+      expect(renewBadge!.className).toContain('bg-ink/10');
+      expect(renewBadge!.className).not.toContain('bg-warning');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows a danger renew badge when the subscription expires today', async () => {
+    // d === 0 (expires today) is < 7 → danger. This boundary was untested.
+    sessionStorage.setItem('oz_session', 'tok-renew-today');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: today.toISOString() },
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      const badges = Array.from(container.querySelectorAll('span.rounded-full'));
+      const renewBadge = badges.find((b) => b.textContent?.includes('Renews in'));
+      expect(renewBadge).not.toBeNull();
+      expect(renewBadge!.className).toContain('bg-danger/15');
     } finally {
       act(() => root.unmount());
       container.remove();

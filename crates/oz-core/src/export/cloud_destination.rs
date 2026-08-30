@@ -1,4 +1,10 @@
 //! Cloud warehouse export destinations for the analytics bundle.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice D2: cloud_destination deep read)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: COR-35 MED: Snowflake export builds INSERT statements by string concatenation with quote-only sql_escape — Snowflake treats backslash as an escape in string literals, so a value ending in '\' (user-controlled product/store names) breaks out of the literal (use bind variables or also double backslashes); GCP path exemplary (JWT RS256 service-account auth, token exchange, bearer insertAll); all 4 HTTP clients use Client::new() with NO timeout (COR-31 family); service-account key + Snowflake password persisted in settings JSON (base64 != encryption, COR-17/30 family)
+next: bind variables or backslash-aware escaping for Snowflake INSERTs (COR-35); add timeouts | perf: 50-row batched inserts
+*/
 //!
 //! Defines export targets (BigQuery, Snowflake) and their respective
 //! connection configurations. The [`CloudExporter`] trait provides a

@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent
+crate: oz-payment | status: SAFE | lint: CLEAN
+findings: PLANNED stub — every op returns Unsupported, fails closed
+next: none until Paddle integration | perf: N/A
+*/
 //! Paddle payment processor — PLANNED (stub).
 //!
 //! Implements [`PaymentProcessor`] for Paddle (https://www.paddle.com),

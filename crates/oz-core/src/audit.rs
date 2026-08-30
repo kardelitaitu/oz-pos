@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice A)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: append-only audit entry type sound; COR-1: id field doc says "UUID v4" but new() correctly generates v7 per ADR #6 — stale doc only
+next: fix field doc | perf: N/A
+*/
 //! Audit log — immutable, append-only record of sensitive actions.
 //!
 //! # PCI-DSS Compliance

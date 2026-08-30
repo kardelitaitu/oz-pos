@@ -1,4 +1,10 @@
 //! Generic migration runner.
+/*
+last audited 25-07-26 by RSA-Agent (platform-core slice D: database/migrations deep read)
+crate: platform-core | status: SAFE | lint: CLEAN
+findings: exemplary — DB-02 checksum verification with legacy-line-ending migration and drift re-apply (idempotency requirement documented, tx-atomic so no partial DDL); DB-05 FK isolation around applies/rollback (PRAGMA is a no-op inside tx — documented), restore-never-masks-error; last-only rollback prevents out-of-order reverts; parameterized; production 1-337 read, 338+ inline tests
+next: none | perf: single pass over registered migrations
+*/
 //!
 //! A [`Migration`] is a named SQL script. [`run`] applies every
 //! unapplied migration against a [`rusqlite::Connection`], tracking

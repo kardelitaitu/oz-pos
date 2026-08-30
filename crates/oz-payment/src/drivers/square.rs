@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent
+crate: oz-payment | status: SAFE | lint: CLEAN
+findings: PAY-2 fresh Uuid::now_v7() idempotency per call defeats Square retry protection (request.idempotency_key ignored); PAY-3 refund(None) sends zero-amount USD (Square requires amount_money; trait contract None = full amount); PAY-5 Square auto_capture=true default means authorize already captures — default sale() authorize->complete would fail against real API (tests pass via canned wiremock responses); currency hard-error on unknown codes good (PA-02)
+next: honor idempotency_key, resolve full amount on refund(None), set auto_capture=false | perf: N/A
+*/
 //! Square payment processor — implements [`PaymentProcessor`] using the
 //! Square REST API directly via `reqwest`.
 //!

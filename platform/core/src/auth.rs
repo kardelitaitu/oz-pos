@@ -1,4 +1,10 @@
 //! Authentication primitives — PIN hashing and verification.
+/*
+last audited 25-07-26 by RSA-Agent (platform-core slice B: auth deep read)
+crate: platform-core | status: SAFE | lint: CLEAN
+findings: exemplary — Argon2id with per-hash salts; malformed hashes AND the sync snapshot placeholder fail closed to Ok(false) (test-pinned, cross-referenced with oz-core SNAPSHOT_PIN_HASH_PLACEHOLDER so imported operators cannot log in without a credential)
+next: none | perf: Argon2 default params suit local PIN cadence
+*/
 //!
 //! Uses the `argon2` crate for password hashing with Argon2id.
 //! The default configuration provides reasonable security for a

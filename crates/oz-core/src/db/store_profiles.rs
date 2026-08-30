@@ -1,4 +1,10 @@
 //! Store-profile CRUD — list, get, create, update, set-primary.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B5 part 6)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: primary-invariant swap in tx with rollback on 0-rows; primary undeletable; store quota enforced; NOTE: the timezone column exists here — reports (COR-21) never consult it
+next: none | perf: N/A
+*/
 //!
 //! Every deployment has exactly one primary store, created on first
 //! startup by the `platform-startup` crate. Additional stores can be

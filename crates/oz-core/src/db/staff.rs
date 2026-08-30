@@ -1,4 +1,10 @@
 //! Staff management — User CRUD + Role CRUD.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B5 closeout)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: exemplary — STAFF-07 three-tier rate limiter (per-account/per-device/global + backoff) with settings-driven tuning object; role presets upsert-sync converge model; permission resolution fails closed (unresolvable role = PermissionDenied, never a crash); username normalized + conflict mapped to typed error; default global assignment on create; pin_hash column (user PINs hashed — contrast COR-17 gift-card PINs)
+next: none | perf: N/A
+*/
 
 use rusqlite::params;
 

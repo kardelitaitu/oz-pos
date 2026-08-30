@@ -1,4 +1,10 @@
 //! Audit Log — append-only immutable entries.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B5 finale)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: exemplary AUD-02..09 implementation — AUD-06 redaction (20 sensitive keys, byte-preserving fast path) + truncation with marker; keyset pagination (created_at,id) with clamped pages; export bound 100k; review checkpoint + audit event in one tx; schema immutability triggers back the append-only claim; day histogram substr() is UTC (COR-21 family, trivial)
+next: none | perf: SQL-computed counts per AUD-02/03
+*/
 
 use crate::AuditEntry;
 use crate::error::CoreError;

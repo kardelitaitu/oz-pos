@@ -1,4 +1,10 @@
 //! Caching layer for frequently-accessed POS data.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice D3: cache deep read)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: clean — Cache trait + NoopCache + feature-gated RedisCache; every Redis error degrades to miss/noop (fail-safe direction); pub/sub listener uses 5s read timeouts, skips own-terminal messages, exits cleanly on shutdown signal; create_cache falls back to noop with a warn; no secrets in keys
+next: none | perf: single mutex-guarded connection
+*/
 //!
 //! Provides a [`Cache`] trait, a [`NoopCache`] fallback, and an optional
 //! `RedisCache` implementation behind the `cache-redis` feature flag.

@@ -1,4 +1,10 @@
 //! Refund CRUD — create, list, and query refunds.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B5 part 4: refunds deep read)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: refund stock restoration per ADR-19 §5.3 is well built (FIFO full / reverse partial crediting via deduction_locations JSON, qty<=deducted guard, legacy fallback with warn audit, audit row inside the same tx); COR-25 MEDIUM: the over-refund guard runs OUTSIDE the transaction AND reads cumulative refunded with .unwrap_or(0) — a DB error reads as zero refunds and bypasses the guard (fail-open on a MONEY guard; same class as COR-11), and the check-then-act is race-safe only under the single-connection mutex; COR-26 LOW: refund currency never compared to the sale currency (comment defers to caller's checked_add, nothing enforces) — a cross-currency refund passes the over-refund guard against the wrong unit
+next: move the guard inside the tx, propagate SUM errors, compare currencies (COR-25/COR-26) | perf: N/A
+*/
 //!
 //! ADR-19 §5.3: On refund, stock is credited back to the original deduction
 //! source locations in FIFO order (oldest deduction first for full refunds;

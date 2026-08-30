@@ -1,4 +1,10 @@
 //! Offline Queue — enqueue, list, mark, delete offline sync items.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B5: offline queue deep read)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: sync plumbing production-grade — tenant-scoped variants throughout (SYNC-07: cross-tenant reads as NotFound/no-op), sync_applied_items idempotency ledger (INSERT OR IGNORE + in-tx variant co-located with the domain mutation), durable pull anchor with crash-safe write-after-apply ordering, atomic dead-letter requeue (predicate inside the DELETE) with anchor rewind; COR-20 INFO: enqueue dedup EXISTS check and observability summary degrade silently on DB errors (.unwrap_or(false)/.ok()) — benign direction (duplicate enqueue is replay-safe; dashboards show zeros) but errors are invisible
+next: none | perf: status summary is 4 small queries, fine at desktop scale
+*/
 
 use rusqlite::params;
 use serde::{Deserialize, Serialize};

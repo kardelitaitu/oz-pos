@@ -1,4 +1,10 @@
 //! CRUD for product bundles and bundle-items.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B5 part 6)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: tx on every multi-row write; batched item load avoids N+1; clean
+next: none | perf: batched load
+*/
 //!
 //! A bundle is a single SKU that contains multiple sub-items. All
 //! multi-row writes use transactions for atomicity.

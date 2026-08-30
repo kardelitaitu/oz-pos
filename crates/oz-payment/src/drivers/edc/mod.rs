@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent
+crate: oz-payment | status: SAFE | lint: CLEAN
+findings: EdcTerminal trait mirrors PaymentProcessor soundly; PAY-11: local PaymentResult struct shadows crate::types::PaymentResult with different shape — rename candidate EdcPaymentResult
+next: none | perf: N/A
+*/
 //! EDC (Electronic Data Capture) payment terminal drivers — PLANNED.
 //!
 //! EDC terminals are physical card-payment devices (Ingenico, Verifone,

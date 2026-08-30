@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent
+crate: oz-payment | status: SAFE | lint: CLEAN
+findings: PLANNED stub — all codec methods fail closed via stub_error
+next: none until Verix handler | perf: N/A
+*/
 //! Verifone SSL / Verix protocol codec — PLANNED (stub).
 //!
 //! Implements [`ProtocolCodec`] for Verifone terminals (VX520, VX680,

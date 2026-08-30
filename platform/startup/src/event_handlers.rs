@@ -1,4 +1,10 @@
 //! Shared application-level event handlers.
+/*
+last audited 25-07-26 by RSA-Agent (platform-startup slice A: event_handlers deep read)
+crate: platform-startup | status: SAFE | lint: CLEAN
+findings: COR-33 pattern note (inline tests at 471+ in a 1,219-line file; sibling *_tests.rs convention) — six handlers share a uniform lock/Store/enqueue-or-audit pattern with poison-safe mapping and structured error logs; sale completions enqueued at SyncPriority::Critical (P-2, documented); audit entries system-initiated; no unsafe/no SQL interpolation
+next: extract sibling tests file (COR-33) | perf: handlers hold the shared DB mutex briefly
+*/
 //!
 //! These handlers are cross-cutting concerns that don't belong to a
 //! single business module. They are registered on the kernel's event

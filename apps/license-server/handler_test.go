@@ -185,6 +185,30 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 	if err := app.Save(trialClaims); err != nil {
 		t.Fatalf("failed to create trial_claims collection: %v", err)
 	}
+
+	revenueEvents := core.NewBaseCollection("revenue_events")
+	revenueEvents.Fields.Add(
+		&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenants.Id, MaxSelect: 1},
+		&core.TextField{Name: "event_id", Required: true, Max: 128},
+		&core.SelectField{Name: "provider", Required: true, Values: []string{"paddle", "midtrans"}},
+		&core.NumberField{Name: "amount_usd"},
+		&core.NumberField{Name: "amount_idr", OnlyInt: true},
+		&core.SelectField{Name: "currency", Required: true, Values: []string{"USD", "IDR"}},
+		&core.SelectField{Name: "tier_key", Required: false, Values: []string{"plus", "pro", "premium", "enterprise"}},
+		&core.TextField{Name: "subscription_id", Max: 128},
+		&core.TextField{Name: "notes", Max: 512},
+	)
+	revenueEvents.Fields.Add(&core.AutodateField{Name: "created", OnCreate: true})
+	revenueEvents.Fields.Add(&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true})
+	revenueEvents.Indexes = append(revenueEvents.Indexes,
+		"CREATE UNIQUE INDEX idx_revenue_events_event ON revenue_events (event_id)")
+	revenueEvents.CreateRule = types.Pointer("")
+	revenueEvents.ListRule = types.Pointer("")
+	revenueEvents.ViewRule = types.Pointer("")
+	revenueEvents.UpdateRule = types.Pointer("")
+	if err := app.Save(revenueEvents); err != nil {
+		t.Fatalf("failed to create revenue_events collection: %v", err)
+	}
 }
 
 func registerTestRoutes(t *testing.T, app *tests.TestApp) {
@@ -992,6 +1016,51 @@ func TestStatusHandler_WithSubscription(t *testing.T) {
 		t.Error("expected grace_until in response")
 	}
 }
+
+// resetLimiterBuckets clears only the in-memory rate-limiter buckets,
+// WITHOUT detaching the SQLite DB handle. Unlike resetRateLimiters (which
+// nils out .db so the next attachPersistence binds to a fresh app), this is
+// safe to call between subtests that SHARE one TestApp — it lets repeated
+// requests pass the limiter while keeping the app's persistence attached.
+func resetLimiterBuckets() {
+	ipRateLimiter.mu.Lock()
+	ipRateLimiter.buckets = make(map[string]*tokenBucket)
+	ipRateLimiter.mu.Unlock()
+
+	contactRateLimiter.mu.Lock()
+	contactRateLimiter.buckets = make(map[string]*tokenBucket)
+	contactRateLimiter.mu.Unlock()
+
+	webLoginLimiter.mu.Lock()
+	webLoginLimiter.entries = make(map[string]*windowEntry)
+	webLoginLimiter.mu.Unlock()
+	otpRequestLimiter.mu.Lock()
+	otpRequestLimiter.entries = make(map[string]*windowEntry)
+	otpRequestLimiter.mu.Unlock()
+	otpVerifyLimiter.mu.Lock()
+	otpVerifyLimiter.entries = make(map[string]*windowEntry)
+	otpVerifyLimiter.mu.Unlock()
+	otpIPLimiter.mu.Lock()
+	otpIPLimiter.entries = make(map[string]*windowEntry)
+	otpIPLimiter.mu.Unlock()
+	webRegisterLimiter.mu.Lock()
+	webRegisterLimiter.entries = make(map[string]*windowEntry)
+	webRegisterLimiter.mu.Unlock()
+	webResetRequestLimiter.mu.Lock()
+	webResetRequestLimiter.entries = make(map[string]*windowEntry)
+	webResetRequestLimiter.mu.Unlock()
+	webResetVerifyLimiter.mu.Lock()
+	webResetVerifyLimiter.entries = make(map[string]*windowEntry)
+	webResetVerifyLimiter.mu.Unlock()
+}
+
+// ── Test infrastructure: shared-app helpers ──────────────────────
+//
+// sharedApp wraps one TestApp that multiple subtests reuse, cutting the
+// per-subtest setup cost (each newTestApp + createTestCollections +
+// registerTestRoutes is ~250ms). resetLimiterBuckets() (above) clears
+// only in-memory limiter state between subtests without detaching the
+// app's SQLite handle.
 
 func resetRateLimiters() {
 	ipRateLimiter.stop()

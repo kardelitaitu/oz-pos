@@ -1,4 +1,10 @@
 //! Raw key-value settings helpers.
+/*
+last audited 25-07-26 by RSA-Agent (platform-core slice C: settings/raw deep read)
+crate: platform-core | status: SAFE | lint: CLEAN
+findings: exemplary — DB-08 delta-ledger concurrency contract documented and implemented (UNIQUE (key,terminal,version) collision retry under BEGIN IMMEDIATE, bounded 32 attempts, savepoint variant for nested callers with lingering-savepoint logging); all SQL parameterized; delta loss documented non-fatal with sync reconstruction path; next_delta_version .unwrap_or(1) is safe (collision retried)
+next: none | perf: single-connection LOCAL GUC-free
+*/
 
 use super::Settings;
 use crate::error::PlatformError;

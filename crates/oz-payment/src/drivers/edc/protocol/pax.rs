@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent
+crate: oz-payment | status: SAFE | lint: CLEAN
+findings: PLANNED stub — all codec methods fail closed via stub_error
+next: none until PAX DCC handler | perf: N/A
+*/
 //! PAX DCC protocol codec — PLANNED (stub).
 //!
 //! Implements [`ProtocolCodec`] for PAX terminals (S80, S300, S920,

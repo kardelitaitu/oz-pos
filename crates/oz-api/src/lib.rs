@@ -1,9 +1,8 @@
 /*
-last audited 19-07-26 by RSA-Agent
+last audited 25-07-26 by RSA-Agent (oz-api slice A: lib deep read)
 crate: oz-api | status: SAFE | lint: CLEAN
-findings: No unsafe code. Axum HTTP server with JWT auth middleware. SQLite connection behind
-  Arc<Mutex<>> for handler safety. 104 unit tests pass covering health, tokens, products, sales.
-next: None | perf: Arc<Mutex<Connection>> is the standard axum+rusqlite pattern; one connection per server.
+findings: clean server scaffold — security headers on every response (nosniff/DENY/CSP, prod-only HSTS), CORS fail-closed parse with documented dev opt-in, RUST-07 startup Results; API-1 MED: auth::signing_secret falls back to a hard-coded dev constant when OZ_API_SECRET unset — known-constant JWT forgery on a misconfigured public server (no startup enforcement; propose refuse-to-serve with OZ_PRODUCTION); settings+plan routes sit in the public router but each handler admin-key-gates internally (verified)
+next: enforce secret presence in production mode (API-1) | perf: Arc<Mutex<Connection>> standard pattern
 */
 
 //! OZ-POS OpenAPI REST server.

@@ -1,4 +1,10 @@
 //! Typed store configuration helpers.
+/*
+last audited 25-07-26 by RSA-Agent (platform-core slice C: settings/typed deep read)
+crate: platform-core | status: SAFE | lint: CLEAN
+findings: clean typed accessors with documented defaults; sync API key, terminal secret, and PG password transparently ENCRYPTED at rest via oz_crypto with legacy-plaintext read fallback (corrects the broader COR-17/30 note: these secrets are not plaintext); decrypt-failure falls back to raw value silently rather than erroring (INFO — corrupted ciphertext yields garbage, no alert); currency default has documented old-key migration fallback
+next: surface decrypt failures | perf: N/A
+*/
 
 use super::{Settings, keys};
 use crate::error::PlatformError;

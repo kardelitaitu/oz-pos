@@ -1,4 +1,10 @@
 //! Supplier CRUD — list, get, create, update, delete.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B5 part 6)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: clean CRUD; length checks (255/50) present in BOTH create and update (unlike products.rs — see COR-12)
+next: none | perf: N/A
+*/
 
 use rusqlite::params;
 

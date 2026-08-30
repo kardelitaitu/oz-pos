@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice A)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: CourseFired/SettingsUpdated implement DomainEvent; published post-commit per docs; no findings
+next: none | perf: N/A
+*/
 //! Domain events published on the kernel event bus.
 //!
 //! These events are defined in `oz-core` so that all modules can

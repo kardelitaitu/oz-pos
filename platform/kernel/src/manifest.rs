@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (platform-kernel slice B: manifest verified)
+crate: platform-kernel | status: SAFE | lint: CLEAN
+findings: clean manifest parsing/validation mirroring the formal JSON Schema (kebab-case id, semver, dependency and permission declarations); unwraps test-only (line 206+ verified)
+next: none | perf: N/A
+*/
 //! Module manifest — JSON metadata file for every module.
 //!
 //! The manifest defines a module's identity, version, dependencies,

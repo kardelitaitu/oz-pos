@@ -4,6 +4,12 @@
 //! draft → pending → in_transit → received / cancelled.
 //! `send_transfer` decrements source inventory; `receive_transfer` increments
 //! destination inventory and records received quantities.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B4: stock transfers deep read)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: lifecycle handling exemplary (claim-first conditional status UPDATEs inside the same tx as stock writes; cancel re-reads status in-tx fixing a documented prior race; receives validated non-negative/ordered-cap/monotonic with delta-only crediting; checked_add/sub everywhere); COR-19 MEDIUM: send/receive/cancel read+write the LEGACY inventory table (single-PK product_id, per-location unrepresentable) while sales precheck/deduct the canonical stock_summary per ADR-18/19 — no schema trigger bridges them, so transfer moves are invisible to sale-time availability and the retail grid once ledger rows exist (ADR-36 fallback masks it). This is the §3.4 foot-gun the codebase self-documents, applied to production flows
+next: complete ADR-19 §3.4 — route transfers (and stock_counts) through stock_summary rows at source/destination locations, or bridge both tables atomically in the same tx as an interim step | perf: list_transfers_with_lines_by_status uses one grouped IN query (no N+1)
+*/
 
 use rusqlite::params;
 

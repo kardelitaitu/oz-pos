@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent
+crate: oz-payment | status: SAFE | lint: CLEAN
+findings: PLANNED stub — all codec methods fail closed via stub_error
+next: none until Telium handler | perf: N/A
+*/
 //! Ingenico Telium / Telium 2 protocol codec — PLANNED (stub).
 //!
 //! Implements [`ProtocolCodec`] for Ingenico terminals (iPP320, iPP350,

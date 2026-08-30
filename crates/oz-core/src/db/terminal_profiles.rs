@@ -1,4 +1,10 @@
 //! Terminal profile CRUD — kiosk/kds lockdown per terminal.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B5 part 6)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: exists-check then ON CONFLICT upsert; clean
+next: none | perf: N/A
+*/
 //!
 //! Each terminal can have a profile type that controls which UI is
 //! rendered and whether navigation is restricted. See the `050_terminal_profiles`

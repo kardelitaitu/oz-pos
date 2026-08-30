@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice A)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: safe-drop type sound; new() generates v7 correctly; COR-1: id field doc says "UUID v4" — stale doc only
+next: fix field doc | perf: N/A
+*/
 //! Cash Payout (Safe Drop) domain type.
 //!
 //! A cash payout represents cash physically removed from the drawer

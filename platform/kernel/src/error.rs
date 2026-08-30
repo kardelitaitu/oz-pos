@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (platform-kernel slice B: error verified)
+crate: platform-kernel | status: SAFE | lint: CLEAN
+findings: clean thiserror kernel error taxonomy
+next: none | perf: N/A
+*/
 //! Error type for `platform-kernel`.
 //!
 //! Uses `thiserror` so consumers can match on variants.

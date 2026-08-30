@@ -4,11 +4,12 @@ import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized, EmptyState } from '@/frontend/shared';
 import { NoPurchaseOrdersIcon } from '@/components/EmptyStateIllustrations';
 import {
-  listPurchaseOrders,
-  updatePoStatus,
-  receivePurchaseOrder,
+  listPurchaseOrdersScoped,
+  updatePoStatusScoped,
+  receivePurchaseOrderScoped,
   type PurchaseOrderDto,
 } from '@/api/purchasing';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -32,6 +33,10 @@ export default function PurchaseOrdersScreen() {
   l10nRef.current = l10n;
   const { currency } = useCurrency();
   const { addToast } = useToast();
+  // F-005: the desktop shell only registers the *_scoped purchasing
+  // commands, so every call below carries the session token.
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
   const [orders, setOrders] = useState<PurchaseOrderDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
@@ -42,14 +47,14 @@ export default function PurchaseOrdersScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await listPurchaseOrders();
+      const data = await listPurchaseOrdersScoped(sessionToken);
       setOrders(data);
     } catch {
       addToast({ message: requiredLocalized(l10nRef.current, 'po-error-load'), type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [addToast]);
+  }, [addToast, sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -61,26 +66,26 @@ export default function PurchaseOrdersScreen() {
   const handleStatusChange = useCallback(async (id: string, status: string) => {
     setActionLoading(id);
     try {
-      await updatePoStatus({ id, status });
+      await updatePoStatusScoped(sessionToken, { id, status });
       await load();
     } catch {
       addToast({ message: requiredLocalized(l10nRef.current, 'po-error-update'), type: 'error' });
     } finally {
       setActionLoading(null);
     }
-  }, [load, addToast]);
+  }, [load, addToast, sessionToken]);
 
   const handleReceive = useCallback(async (id: string) => {
     setActionLoading(id);
     try {
-      await receivePurchaseOrder(id);
+      await receivePurchaseOrderScoped(sessionToken, id);
       await load();
     } catch {
       addToast({ message: requiredLocalized(l10nRef.current, 'po-error-receive'), type: 'error' });
     } finally {
       setActionLoading(null);
     }
-  }, [load, addToast]);
+  }, [load, addToast, sessionToken]);
 
   const openCreate = useCallback(() => {
     setEditingId(null);

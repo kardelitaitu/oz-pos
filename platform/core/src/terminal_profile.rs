@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (platform-core slice E: terminal_profile verified)
+crate: platform-core | status: SAFE | lint: CLEAN
+findings: clean typed kiosk-profile persistence (save/load/ensure-default); PC-1 INFO: filename interpolates terminal_id without sanitization (line 173) - same hardening note as manager.rs store paths; ids UUID-minted in normal flows
+next: sanitize terminal ids (PC-1) | perf: N/A
+*/
 //! Per-terminal hardware profile — stores printer, scanner, scale, and
 //! local preference configuration in per-terminal JSON files under
 //! `terminal_profiles/`.

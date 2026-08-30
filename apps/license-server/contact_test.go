@@ -22,14 +22,18 @@ func postContact(t *testing.T, mux http.Handler, body string, remoteAddr string)
 }
 
 func TestContactHandler_Validation(t *testing.T) {
+	// Reuse ONE app across all subtests (avoids ~6 app creations, ~1.4s).
+	// resetRateLimiters() detaches the DB handle which breaks reuse, so
+	// clear only the in-memory buckets between subtests instead.
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+
 	t.Run("empty body rejected", func(t *testing.T) {
-		resetRateLimiters()
-		app, se := setupDirectApp(t)
-		defer app.Cleanup()
-		mux, err := se.Router.BuildMux()
-		if err != nil {
-			t.Fatalf("BuildMux failed: %v", err)
-		}
+		resetLimiterBuckets()
 		rec := postContact(t, mux, `{}`, "")
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400 for empty body, got %d: %s", rec.Code, rec.Body.String())
@@ -37,10 +41,7 @@ func TestContactHandler_Validation(t *testing.T) {
 	})
 
 	t.Run("missing name", func(t *testing.T) {
-		resetRateLimiters()
-		app, se := setupDirectApp(t)
-		defer app.Cleanup()
-		mux, _ := se.Router.BuildMux()
+		resetLimiterBuckets()
 		rec := postContact(t, mux, `{"email":"a@b.com","message":"this is a long enough message"}`, "")
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400 for missing name, got %d: %s", rec.Code, rec.Body.String())
@@ -48,10 +49,7 @@ func TestContactHandler_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid email", func(t *testing.T) {
-		resetRateLimiters()
-		app, se := setupDirectApp(t)
-		defer app.Cleanup()
-		mux, _ := se.Router.BuildMux()
+		resetLimiterBuckets()
 		rec := postContact(t, mux, `{"name":"Budi","email":"not-an-email","message":"this is a long enough message"}`, "")
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400 for invalid email, got %d: %s", rec.Code, rec.Body.String())
@@ -59,10 +57,7 @@ func TestContactHandler_Validation(t *testing.T) {
 	})
 
 	t.Run("message too short", func(t *testing.T) {
-		resetRateLimiters()
-		app, se := setupDirectApp(t)
-		defer app.Cleanup()
-		mux, _ := se.Router.BuildMux()
+		resetLimiterBuckets()
 		rec := postContact(t, mux, `{"name":"Budi","email":"a@b.com","message":"short"}`, "")
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400 for short message, got %d: %s", rec.Code, rec.Body.String())
@@ -70,10 +65,7 @@ func TestContactHandler_Validation(t *testing.T) {
 	})
 
 	t.Run("name too long", func(t *testing.T) {
-		resetRateLimiters()
-		app, se := setupDirectApp(t)
-		defer app.Cleanup()
-		mux, _ := se.Router.BuildMux()
+		resetLimiterBuckets()
 		long := strings.Repeat("x", contactNameMax+1)
 		rec := postContact(t, mux, `{"name":"`+long+`","email":"a@b.com","message":"this is a long enough message"}`, "")
 		if rec.Code != http.StatusBadRequest {
@@ -82,10 +74,7 @@ func TestContactHandler_Validation(t *testing.T) {
 	})
 
 	t.Run("message too long", func(t *testing.T) {
-		resetRateLimiters()
-		app, se := setupDirectApp(t)
-		defer app.Cleanup()
-		mux, _ := se.Router.BuildMux()
+		resetLimiterBuckets()
 		long := strings.Repeat("m", contactMessageMax+1)
 		rec := postContact(t, mux, `{"name":"Budi","email":"a@b.com","message":"`+long+`"}`, "")
 		if rec.Code != http.StatusBadRequest {

@@ -1,4 +1,10 @@
 //! Token management endpoint.
+/*
+last audited 25-07-26 by RSA-Agent (oz-api slice A: tokens deep read)
+crate: oz-api | status: SAFE | lint: CLEAN
+findings: clean structure — P2 admin-gated label mint, P3 terminal client-credentials path takes tenant from the registration (never the body); API-2 INFO: admin_key_authorised uses == (non-constant-time compare) and dev-open mode when OZ_ADMIN_KEY unset (documented; combine with API-1 deployment hardening)
+next: constant-time compare | perf: N/A
+*/
 //!
 //! `POST /api/v1/tokens` — generate a new API token.
 //!

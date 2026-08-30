@@ -1,12 +1,8 @@
 /*
-last audited 13-08-26 by RSA-Agent
+last audited 25-07-26 by RSA-Agent (foundation slice A: percentage deep read)
 crate: foundation (percentage.rs) | status: SAFE | lint: CLEAN
-findings: MONEY-AUDIT-2 — apply_to/complement_apply_to use the x = 100q + r
-  decomposition, eliminating the spurious overflow of the intermediate product.
-  100% of i64::MAX now correctly returns i64::MAX. The arithmetic is total
-  (never returns None) for any i64 amount and any pct 0..=100. Option return
-  type retained for API stability.
-next: Phase 2 | perf: two extra mul/add; no branch.
+findings: exemplary — MONEY-AUDIT-2 overflow-free decomposition verified (100% of i64::MAX = i64::MAX, tested at edges); total arithmetic for any i64 x 0..=100; bounded u8 construction incl. serde path; COR-33 pattern note: ~240 lines of inline tests in production file (AGENTS.md wants sibling files)
+next: move inline tests to sibling (COR-33 family) | perf: two extra mul/add
 */
 //! Percentage value object — a bounded 0–100 integer type.
 //!

@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (platform-startup slice B: console verified)
+crate: platform-startup | status: SAFE | lint: CLEAN
+findings: clean console bootstrap helper
+next: none | perf: N/A
+*/
 //! tokio-console integration.
 //!
 //! Enable with `RUSTFLAGS="--cfg tokio_unstable"` and the `console`

@@ -1,6 +1,12 @@
 //! Code-resident permission registry — the single source of truth for what a
 //! permission key means, which family it belongs to, and whether it is
 //! sensitive (ADR #35 D3 / spec 0046).
+/*
+last audited 25-07-26 by RSA-Agent (platform-core slice B: permission_registry deep read)
+crate: platform-core | status: SAFE | lint: CLEAN
+findings: exemplary — single source of truth with family/sensitivity classification; sensitive keys (voids, refunds, settlement, role mgmt, staff deletion, bulk export) never grantable through family wildcards (validate_grants enforces + tests); global * reserved for the Owner seed; duplicate-key invariant pinned
+next: none | perf: linear registry scan
+*/
 //!
 //! Growing the system means adding keys here — never editing roles. Sensitive
 //! keys (voids, refunds, settlement, role management, bulk export) are never

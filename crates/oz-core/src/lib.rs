@@ -1,8 +1,9 @@
 /*
-last audited 19-07-26 by RSA-Agent
+last audited 25-07-26 by RSA-Agent (slice A: lib/error/session/audit/events/rate_limiter/config_validator/payment/cash_payout/crypto)
 crate: oz-core | status: SAFE | lint: CLEAN
-findings: #![deny(unsafe_code)] — zero unsafe code in crate. No unsafe blocks, transmutes, or raw pointer manipulation.
-next: none | perf: N/A
+findings: zero unsafe verified by source sweep (#![deny(unsafe_code)] holds); baseline 2,536 tests pass (2,026 unit + 510 integration, 0 warnings); COR-1 stale UUID-v4 docs on v7-generating constructors; COR-3 config validator may log credential-bearing DATABASE_URL/REDIS_URL; domain shims are honest re-exports (canonical Money in foundation — CRY-3 machine_id follow-up resolves there)
+next: slices B (db/ 46k lines), C (sync/topology/features), D (export + remainder) pending — see glm5.3f-crates-audit.md
+perf: N/A for shims; db layer under slice B
 */
 
 //! Domain types for OZ-POS.

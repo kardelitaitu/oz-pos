@@ -1,4 +1,10 @@
 //! Semantic validation for the topology graph.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice C2: topology deep read)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: exemplary pure validation engine — vendored contract with fail-closed init (documented INVARIANT), every frontend-parity gate carries a rationale comment (direction deliberately ungated, zero-vs-multiple branch codes split), O(N+W) single indexing pass, closed semantic pairing matrix mirrored at the IPC boundary, purpose/type matrix, Kahn cycle detection, structured TopologyValidation error codes; zero findings
+next: none | perf: single index pass per validation
+*/
 //!
 //! The topology graph (nodes + wires as serde_json values) is validated
 //! against the shared semantic contract (`topologySemantics.json`) and the

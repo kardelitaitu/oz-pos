@@ -1,4 +1,10 @@
 //! Email report delivery — SMTP configuration and report email generation.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice D2: email_report deep read)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: COR-36 LOW-MED: render_text truncates with byte slicing (&row.name[..21] guarded by byte-len check) — panics when byte 21 is mid-UTF-8 (multi-byte product names); use char-boundary truncation; HTML path escapes all user-controlled cells properly; SMTP password encrypted at rest via crate::crypto with transparent decrypt and documented legacy-plaintext fallback (test-pinned); inline #[cfg(test)] mod store_tests in production file (COR-33 pattern)
+next: char-safe truncation (COR-36) | perf: N/A
+*/
 //!
 //! [`SmtpConfig`] holds the SMTP server connection parameters and is
 //! persisted in the `settings` table under key `smtp_config` as JSON

@@ -1,4 +1,10 @@
 //! Unified analytics export — collect all report data into a single JSON-bundle.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice D1: export/mod deep read)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: custom report builder injection-safe — per-dataset hardcoded tables + column whitelists (unknown columns silently dropped), parameterized dates, clamped u32 limit/offset; CSV escaping correct (quote doubling); bundle export aggregates db::reports queries; no findings
+next: none | perf: direct report-query reuse, no N+1
+*/
 //!
 //! [`Store::export_analytics_bundle`] runs every report query defined in
 //! [`crate::db::reports`] (daily/weekly/monthly revenue, top products, hourly

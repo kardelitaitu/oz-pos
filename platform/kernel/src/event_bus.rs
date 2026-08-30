@@ -1,4 +1,10 @@
 //! In-process, topic-based, synchronous event bus.
+/*
+last audited 25-07-26 by RSA-Agent (platform-kernel slice A: event_bus deep read)
+crate: platform-kernel | status: SAFE | lint: CLEAN
+findings: exemplary — Bug #2 reentrant-deadlock prevention (handler list snapshotted under short-lived read lock, released before dispatch); handler panics isolated via catch_unwind with structured logging (publisher never dies); errors logged-not-propagated per documented fire-and-forget contract; poison recovery via into_inner (documented choice); module-scoped unsubscribe atomically removes handlers across topics
+next: none | perf: snapshot avoids lock-held dispatch
+*/
 //!
 //! The [`EventBus`] decouples modules by allowing them to publish and
 //! subscribe to domain events without direct imports. Handlers are

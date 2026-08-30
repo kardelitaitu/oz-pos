@@ -1,4 +1,10 @@
 //! Barcode — a validated product barcode string.
+/*
+last audited 25-07-26 by RSA-Agent (foundation slice D: barcode deep read)
+crate: foundation | status: SAFE | lint: CLEAN
+findings: clean validated newtype — format-agnostic non-empty, serde validated; inline tests (COR-33 pattern)
+next: none | perf: N/A
+*/
 //!
 //! `Barcode` is a `#[serde(transparent)]` newtype validated to be
 //! non-empty after trimming. It accepts any barcode format (EAN-13,

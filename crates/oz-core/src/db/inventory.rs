@@ -1,4 +1,10 @@
 //! Inventory management DB methods — locations CRUD, shifts, transaction logs, thresholds.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B2: inventory deep read)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: COR-11 LOW: deactivate_inventory_location guard queries use .unwrap_or(0) — a DB read error satisfies the zero-stock/zero-transfer constraints and deactivation proceeds (fail-open on a data-integrity guard; shift-start unwrap_or(0) is fail-safe by contrast, dup blocked by migration-086 partial unique index); COR-13 INFO: read mappers coerce unknown stored enum values via from_stored_str().unwrap_or(ManualAdjustment) at 3 sites — misclassification risk for reports; positives: create_inventory_transaction writes header+lines+adjustments in ONE tx via the canonical adjust_stock_at_location_with_reason; set_stock_threshold distinguishes NoRows from real DB errors
+next: propagate guard query errors instead of unwrap_or(0) (COR-11) | perf: N/A
+*/
 
 use crate::error::CoreError;
 use crate::subscription::{QuotaError, SubscriptionTier};

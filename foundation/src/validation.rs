@@ -1,4 +1,10 @@
 //! Shared validation utilities for OZ-POS.
+/*
+last audited 25-07-26 by RSA-Agent (foundation slice C: validation deep read)
+crate: foundation | status: SAFE | lint: CLEAN
+findings: clean, fail-closed throughout; regexes LazyLock-compiled; INFO note: min/max-length validators count BYTES not chars (.len()) so multi-byte UTF-8 names hit limits early (a 50-char cap admits ~16 CJK chars) — consider chars().count() for display-name fields; production 1-441 read, 442-1000 inline tests (COR-33 pattern)
+next: byte-vs-char length decision | perf: single Regex compile
+*/
 //!
 //! These functions provide consistent, reusable validation for common
 //! constraints: non-empty strings, numeric ranges, and string lengths.

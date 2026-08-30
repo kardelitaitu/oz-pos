@@ -1,4 +1,10 @@
 //! EDC terminal configuration CRUD — PLANNED (stubs).
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B5: trivial stub file)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: honest fail-fast stubs (Internal "PLANNED, not implemented yet") + schema-mirroring struct; zero logic; no risk
+next: none | perf: N/A
+*/
 //!
 //! These methods are stubs until the EDC payment terminal feature is
 //! implemented. The `edc_terminals` table is created by migration

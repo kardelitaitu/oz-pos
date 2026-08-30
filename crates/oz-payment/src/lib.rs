@@ -1,10 +1,8 @@
 /*
-last audited 19-07-26 by RSA-Agent
+last audited 25-07-26 by RSA-Agent
 crate: oz-payment | status: SAFE | lint: CLEAN
-findings: #![deny(unsafe_code)] at crate root. All payment processors (Stripe, Square, QRIS, Mock)
-  implemented via async traits with reqwest HTTP; no FFI or raw pointer manipulation.
-  120 unit + 64 integration tests pass (184 total). Mock processor covers decline/timeout/approval paths.
-next: None | perf: HTTP calls are async/tokio; mock is in-memory with AtomicUsize counters.
+findings: re-verified 136 unit + 91 integration + 6 doctests pass; PAY-1 HIGH: qris parse_amount unwrap_or(0) zeroes Midtrans decimal amounts ("14500.00" fails i64 parse); PAY-2 idempotency_key ignored by all live drivers; stubs fail closed
+next: fix qris amount parsing (PAY-1), honor idempotency keys (PAY-2) | perf: HTTP async/tokio; mock in-memory atomics
 */
 #![deny(unsafe_code)]
 

@@ -1,4 +1,10 @@
 //! Stock-Keeping Unit (SKU) — a string identifier for a product.
+/*
+last audited 25-07-26 by RSA-Agent (foundation slice D: sku deep read)
+crate: foundation | status: SAFE | lint: CLEAN
+findings: clean validated newtype — trim+non-empty, serde validates via try_new; inline tests (COR-33 pattern)
+next: none | perf: N/A
+*/
 //!
 //! `Sku` is `#[serde(transparent)]` so it serializes as its inner
 //! `String`. `LineId` is a fresh UUID per line item.

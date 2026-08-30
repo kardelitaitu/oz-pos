@@ -1,4 +1,10 @@
 //! Media asset (image) CRUD — PLANNED (stubs).
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B5: trivial stub file)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: honest fail-fast stubs + schema-mirroring struct; zero logic; no risk
+next: none | perf: N/A
+*/
 //!
 //! These methods are stubs until the media/image processing pipeline is
 //! implemented. The `media_assets` and `media_thumbnails` tables are

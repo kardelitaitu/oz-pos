@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent
+crate: oz-payment | status: SAFE | lint: CLEAN
+findings: feature gates paddle/edc honest; live drivers mock/stripe/square/qris always compiled
+next: none | perf: N/A
+*/
 //! Driver implementations for payment processors.
 //!
 //! - `mock` — in-memory mock for testing and offline demo
