@@ -1052,6 +1052,9 @@ func resetLimiterBuckets() {
 	webResetVerifyLimiter.mu.Lock()
 	webResetVerifyLimiter.entries = make(map[string]*windowEntry)
 	webResetVerifyLimiter.mu.Unlock()
+	exchangeConsumeLimiter.mu.Lock()
+	exchangeConsumeLimiter.entries = make(map[string]*windowEntry)
+	exchangeConsumeLimiter.mu.Unlock()
 }
 
 // ── Test infrastructure: shared-app helpers ──────────────────────
@@ -1114,6 +1117,9 @@ func resetRateLimiters() {
 	webResetVerifyLimiter.mu.Lock()
 	webResetVerifyLimiter.entries = make(map[string]*windowEntry)
 	webResetVerifyLimiter.mu.Unlock()
+	exchangeConsumeLimiter.mu.Lock()
+	exchangeConsumeLimiter.entries = make(map[string]*windowEntry)
+	exchangeConsumeLimiter.mu.Unlock()
 
 	// Escalating brute-force login lockout (login_lockout.go) — clear so
 	// tests that exercise repeated failed attempts start from a clean slate.

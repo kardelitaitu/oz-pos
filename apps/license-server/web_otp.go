@@ -243,6 +243,7 @@ func windowSweepLoop() {
 		webRegisterLimiter.sweep()
 		webResetRequestLimiter.sweep()
 		webResetVerifyLimiter.sweep()
+		exchangeConsumeLimiter.sweep()
 	}
 }
 
@@ -758,43 +759,15 @@ func handleVerifyOTP(app core.App) func(e *core.RequestEvent) error {
 //
 // Returns the tenant profile + license + subscription summary, or a
 // generic 401 for a missing/unknown/expired token (never reveals which).
+// Session resolution is shared with the dashboard endpoints
+// (resolveWebSession in web_dashboard.go) — including the active-use TTL
+// refresh (hardening F6), so an operator who keeps the dashboard open
+// stays signed in without re-authenticating.
 func handleMe(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
-		if !webOriginAllowed(e) {
-			return e.JSON(http.StatusForbidden, map[string]any{
-				"error": "origin not allowed",
-			})
-		}
-
-		token, err := extractBearerToken(e)
-		if err != nil {
-			e.Response.Header().Set("WWW-Authenticate", `Bearer realm="web"`)
-			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "missing or invalid session token",
-			})
-		}
-
-		tenantID := webOtpStore.getSession(hashWebToken(token))
-		if tenantID == "" {
-			e.Response.Header().Set("WWW-Authenticate", `Bearer realm="web"`)
-			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "invalid or expired session",
-			})
-		}
-
-		// Active-use refresh: every /me call extends the session TTL so an
-		// operator who keeps the dashboard open stays signed in without
-		// re-authenticating (hardening F6).
-		webOtpStore.touchSession(hashWebToken(token))
-
-		tenant, err := app.FindRecordById("tenants", tenantID)
-		if err != nil {
-			// Tenant deleted mid-session — treat as expired, not a leak.
-			webOtpStore.deleteSession(hashWebToken(token))
-			e.Response.Header().Set("WWW-Authenticate", `Bearer realm="web"`)
-			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "invalid or expired session",
-			})
+		tenant, ok := resolveWebSession(app, e)
+		if !ok {
+			return nil // response already sent
 		}
 
 		return e.JSON(http.StatusOK, map[string]any{

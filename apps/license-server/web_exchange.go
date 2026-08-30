@@ -34,7 +34,28 @@ const (
 	exchangeTTL = 30 * time.Second
 	// exchangeSweepInterval is how often expired codes are cleaned up.
 	exchangeSweepInterval = 1 * time.Minute
+	// exchangeConsumeMax is the per-IP budget for exchange-consume
+	// (defense in depth — the codes are single-use 192-bit values, so the
+	// limiter is a backstop against a host spraying many guesses, not the
+	// primary control). Generous because the Worker proxy fans many users
+	// through shared egress IPs.
+	exchangeConsumeMax = 20
+	// exchangeConsumeWindow is how long the per-IP budget covers.
+	exchangeConsumeWindow = 15 * time.Minute
 )
+
+// exchangeConsumeLimiter is a per-IP backstop for browser-origin
+// exchange-consume calls so one host cannot spray one-time codes faster
+// than they can realistically be brute-forced (they are 48-char hex,
+// single-use, 30s TTL). Server-to-server callers (the Worker proxy, which
+// has no browser Origin header) are exempt: they fan many users through a
+// shared egress IP, so a per-IP bucket there would throttle everyone.
+// Swept by windowSweepLoop alongside the other windowed limiters.
+var exchangeConsumeLimiter = &windowLimiter{
+	entries: make(map[string]*windowEntry),
+	limit:   exchangeConsumeMax,
+	window:  exchangeConsumeWindow,
+}
 
 // exchangeEntry is a minted one-time code bound to a tenant.
 type exchangeEntry struct {
@@ -150,6 +171,18 @@ func handleExchangeConsume(app core.App) func(e *core.RequestEvent) error {
 		if !webOriginAllowed(e) {
 			return e.JSON(http.StatusForbidden, map[string]any{"error": "origin not allowed"})
 		}
+
+		// Per-IP backstop for browser-origin calls only (see
+		// exchangeConsumeLimiter doc — the Worker proxy is exempt so its
+		// shared egress IP never becomes a single point of throttling).
+		if e.Request.Header.Get("Origin") != "" {
+			if !exchangeConsumeLimiter.allow(e.RealIP()) {
+				return e.JSON(http.StatusTooManyRequests, map[string]any{
+					"error": "rate limit exceeded, try again later",
+				})
+			}
+		}
+
 		var req exchangeConsumeRequest
 		if err := json.NewDecoder(e.Request.Body).Decode(&req); err != nil {
 			return e.JSON(http.StatusBadRequest, map[string]any{"error": "invalid JSON body"})
