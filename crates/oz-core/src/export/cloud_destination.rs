@@ -1,9 +1,9 @@
 //! Cloud warehouse export destinations for the analytics bundle.
 /*
-last audited 25-07-26 by RSA-Agent (oz-core slice D2: cloud_destination deep read)
+last audited 25-07-26 by RSA-Agent (oz-core slice D2: cloud_destination deep read; COR-35 FIXED 25-07-26)
 crate: oz-core | status: SAFE | lint: CLEAN
-findings: COR-35 MED: Snowflake export builds INSERT statements by string concatenation with quote-only sql_escape — Snowflake treats backslash as an escape in string literals, so a value ending in '\' (user-controlled product/store names) breaks out of the literal (use bind variables or also double backslashes); GCP path exemplary (JWT RS256 service-account auth, token exchange, bearer insertAll); all 4 HTTP clients use Client::new() with NO timeout (COR-31 family); service-account key + Snowflake password persisted in settings JSON (base64 != encryption, COR-17/30 family)
-next: bind variables or backslash-aware escaping for Snowflake INSERTs (COR-35); add timeouts | perf: 50-row batched inserts
+findings: COR-35 FIXED — Snowflake INSERT now uses SQL API bind variables (question-mark placeholders plus a 1-based TEXT bindings map) instead of string-concatenated quote-escaped literals; values are transported out-of-band and never parsed as SQL text, eliminating the backslash-escape injection class; sql_escape helper and its test removed. Remaining (unchanged): GCP path exemplary (JWT RS256 service-account auth, token exchange, bearer insertAll); HTTP clients use Client::new() with NO timeout (COR-31 family); service-account key + Snowflake password persisted in settings JSON (base64 != encryption, COR-17/30 family)
+next: add HTTP timeouts (COR-31); encrypt stored warehouse credentials (COR-17/30) | perf: 50-row batched inserts
 */
 //!
 //! Defines export targets (BigQuery, Snowflake) and their respective
@@ -320,6 +320,14 @@ impl CloudExporter {
         ];
 
         for chunk in ndjson.chunks(batch_size) {
+            // COR-35 fix: build the statement with bind variables ("?" placeholders
+            // plus a "bindings" map) instead of string-concatenated, quote-escaped
+            // literals. Snowflake treats "\" as an escape inside string literals,
+            // so a user-controlled value ending in a backslash (product/store
+            // names) previously escaped the closing quote and broke out of the
+            // literal — SQL injection into the customer's warehouse. Bind values
+            // are transported out-of-band and never parsed as SQL text.
+            let row_placeholder = "(?, ?, ?, ?, PARSE_JSON(?))";
             let mut sql = format!(
                 "INSERT INTO {}.{}.{} ({}) VALUES ",
                 config.database,
@@ -327,34 +335,44 @@ impl CloudExporter {
                 config.table,
                 columns.join(", ")
             );
-
-            let rows: Vec<String> = chunk
-                .iter()
-                .map(|row| {
-                    let exported_at = sql_escape(
-                        row.get("exported_at")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or(""),
-                    );
-                    let tenant_id =
-                        sql_escape(row.get("tenant_id").and_then(|v| v.as_str()).unwrap_or(""));
-                    let store_name =
-                        sql_escape(row.get("store_name").and_then(|v| v.as_str()).unwrap_or(""));
-                    let report_type = sql_escape(
-                        row.get("report_type")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("unknown"),
-                    );
-                    let report_data = sql_escape(&serde_json::to_string(row).unwrap_or_default());
-                    format!(
-                        "('{}', '{}', '{}', '{}', PARSE_JSON('{}'))",
-                        exported_at, tenant_id, store_name, report_type, report_data
-                    )
-                })
-                .collect();
-
-            sql.push_str(&rows.join(", "));
+            sql.push_str(
+                &std::iter::repeat(row_placeholder)
+                    .take(chunk.len())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            );
             sql.push(';');
+
+            // Bindings are 1-based string keys in request order; each value is a
+            // RAW (unescaped) string — the driver applies the escaping.
+            let mut bindings = serde_json::Map::new();
+            let mut bind_index = 0usize;
+            for row in chunk {
+                let exported_at = row
+                    .get("exported_at")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let tenant_id = row.get("tenant_id").and_then(|v| v.as_str()).unwrap_or("");
+                let store_name = row.get("store_name").and_then(|v| v.as_str()).unwrap_or("");
+                let report_type = row
+                    .get("report_type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+                let report_data = serde_json::to_string(row).unwrap_or_default();
+                for value in [
+                    exported_at,
+                    tenant_id,
+                    store_name,
+                    report_type,
+                    &report_data,
+                ] {
+                    bind_index += 1;
+                    bindings.insert(
+                        bind_index.to_string(),
+                        serde_json::json!({ "type": "TEXT", "value": value }),
+                    );
+                }
+            }
 
             let stmt_url = format!("{}/api/v2/statements", config.account_url);
 
@@ -365,6 +383,7 @@ impl CloudExporter {
                 .header("Accept", "application/json")
                 .json(&serde_json::json!({
                     "statement": sql,
+                    "bindings": bindings,
                     "timeout": 60,
                     "database": config.database,
                     "schema": config.schema,
@@ -503,11 +522,6 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
     use base64::Engine;
     let engine = base64::engine::general_purpose::STANDARD;
     Engine::decode(&engine, input.as_bytes()).map_err(|e| format!("base64 decode: {e}"))
-}
-
-/// Escape a string for SQL (single-quote escaping).
-fn sql_escape(s: &str) -> String {
-    s.replace('\'', "''")
 }
 
 /// Obtain a GCP OAuth2 access token using a service-account JSON key.

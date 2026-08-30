@@ -107,13 +107,6 @@ fn bundle_to_ndjson_empty_bundle() {
 }
 
 #[test]
-fn sql_escape_handles_quotes() {
-    assert_eq!(sql_escape("hello"), "hello");
-    assert_eq!(sql_escape("it's"), "it''s");
-    assert_eq!(sql_escape("'single'"), "''single''");
-}
-
-#[test]
 fn export_result_serialization() {
     let result = CloudExportResult {
         success: true,

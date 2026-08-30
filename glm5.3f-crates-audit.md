@@ -974,7 +974,7 @@ the app is closed at send time (INFO).
 
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
-| COR-35 | 🟠 MED | export/cloud_destination.rs:316–351 | **Snowflake export builds INSERT statements by string concatenation** with quote-only `sql_escape`. Snowflake treats `\` as an escape character inside string literals, so a user-controlled value ending in a backslash (product/store names) escapes the closing quote and breaks out of the literal — SQL injection into the customer's warehouse. | Use Snowflake API bind variables, or extend the escaper to double backslashes as well as quotes. |
+| COR-35 | ✅ FIXED 25-07-26 | export/cloud_destination.rs:316–351 | ~~Snowflake export builds INSERT statements by string concatenation with quote-only `sql_escape`~~ — **FIXED**: the INSERT now uses Snowflake SQL API bind variables (`?` placeholders + 1-based TEXT `bindings` map); values are transported out-of-band and never parsed as SQL text; `sql_escape` and its test removed. | Bind variables (option 1 of the original proposal). |
 | COR-36 | 🟡 LOW-MED | export/email_report.rs:434–436 | `render_text` truncates with **byte slicing** (`&row.name[..21]`, guarded by a byte-length check) — panics when byte 21 falls mid-UTF-8 (multi-byte product names crash scheduled email rendering). | Truncate on char boundaries (`chars().take(21)`). |
 
 **Slice D2 positives:** the BigQuery path is exemplary — service-account
@@ -1854,3 +1854,17 @@ simply predates the payment keys.
 > NOW AUDITED.** The campaign log stands at ~110 findings across 18
 > crates + 14 modules + 3 apps + ui. Fix-order phase awaits the user's
 > green-light.
+---
+
+## 37. Fix-order phase (user green-light received 25-07-26)
+
+| Order | ID | Status |
+|---|---|---|
+| 1 | COR-35 | ✅ **FIXED** 25-07-26 — Snowflake INSERT switched to SQL API bind variables (`?` placeholders + 1-based TEXT `bindings` map); `sql_escape` helper and its test removed; stamp updated; **all 2,025 oz-core tests pass**. |
+| 2 | CS-1 | ⬜ next — constant-time webhook HMAC verification |
+| 3 | UI-1 | ⬜ deny-list payment keys + backend gateway-status command |
+| 4 | PLG-11 | ⬜ fail-closed quoted-identifier rejection (or authorizer) |
+| 5 | L-1 | ⬜ WorkerGuard lifetime fix |
+| 6 | API-1 | ⬜ remove dev JWT secret fallback |
+| 7+ | MEDs | ⬜ MSL-4, MSL-7, CLI-1, CLI-2, N-1, M-1, CS-2, DC-1 |
+
