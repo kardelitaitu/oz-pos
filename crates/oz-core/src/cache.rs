@@ -454,7 +454,11 @@ pub mod redis_cache {
 /// keeps reporting whatever it saw at boot.
 ///
 /// Lives outside the `cache-redis` gate: it is generic over the guard, so
-/// the policy is testable with a plain `Mutex<i32>` and no Redis.
+/// the policy is testable with a plain `Mutex<i32>` and no Redis. That also
+/// means its only production caller (`RedisCache`) is compiled out in a
+/// default build, where the tests are the sole user — hence the conditional
+/// `allow`, rather than gating the function and losing the coverage.
+#[cfg_attr(not(feature = "cache-redis"), allow(dead_code))]
 pub(crate) fn lock_or_report<T>(
     result: Result<T, std::sync::PoisonError<T>>,
     operation: &str,
@@ -480,8 +484,15 @@ pub(crate) fn lock_or_report<T>(
 /// otherwise needs a live Redis plus a background thread — testable at
 /// all. `RedisCache`'s listener thread is the only caller.
 ///
-/// `own_terminal_id` is this terminal's identity; messages carrying the
-/// same id are our own writes and must not bounce back as invalidations.
+/// Because that only caller is gated, the function is dead code in a default
+/// build and the tests are its sole user. The conditional `allow` keeps the
+/// coverage without gating the function itself, and without silencing the
+/// warning in the configuration where it would actually mean something.
+///
+/// `own_terminal_id` is this terminal's identity, `""` when unknown;
+/// messages carrying the same non-empty id are our own writes and must not
+/// bounce back as invalidations.
+#[cfg_attr(not(feature = "cache-redis"), allow(dead_code))]
 pub(crate) fn inventory_invalidation_target(
     payload: &str,
     own_terminal_id: &str,
