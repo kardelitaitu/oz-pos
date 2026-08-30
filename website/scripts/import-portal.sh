@@ -22,26 +22,4 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WEBSITE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_ROOT="$(cd "$WEBSITE_ROOT/.." && pwd)"
-
-PORTAL_SRC="$REPO_ROOT/docs/book"
-PORTAL_DEST="$WEBSITE_ROOT/public/docs-portal"
-
-if [ ! -f "$PORTAL_SRC/index.html" ]; then
-    if [ "${1:-}" = "--if-exists" ]; then
-        echo "import-portal: portal not built ($PORTAL_SRC missing) — skipping (--if-exists)"
-        exit 0
-    fi
-    echo "error: portal not built — run 'bash scripts/build-docs.sh' first (expected $PORTAL_SRC)" >&2
-    exit 1
-fi
-
-echo "import-portal: staging portal into website..."
-rm -rf "$PORTAL_DEST"
-mkdir -p "$(dirname "$PORTAL_DEST")"
-cp -r "$PORTAL_SRC" "$PORTAL_DEST"
-
-echo "✔ portal staged: $PORTAL_DEST"
-echo "  served at:     /docs-portal/  (astro dev + astro build)"
-echo "  size:          $(du -sh "$PORTAL_DEST" | cut -f1)"
+exec node "$SCRIPT_DIR/import-portal.mjs" "$@"

@@ -89,24 +89,28 @@ describe('admin.js — escapeHtml', () => {
 describe('admin.js — statusPill', () => {
   it('maps every known status to a valid pill class', () => {
     const { statusPill } = bootAdmin();
-    const cases: Record<string, string> = {
-      active: 'pill-ok',
-      unused: 'pill-muted',
-      grace_period: 'pill-warn',
-      expired: 'pill-bad',
-      revoked: 'pill-bad',
-      paused: 'pill-warn',
-      free: 'pill-muted',
-      plus: 'pill-ok',
-      pro: 'pill-warn',
-      premium: 'pill-ok',
-      enterprise: 'pill-ok',
-    };
-    for (const [status, wantCls] of Object.entries(cases)) {
+    // [status, expectedCssClass, expectedLabel]
+    // B16: statusLabel() maps server enums to human labels via STRINGS;
+    // statuses without a STRINGS entry fall back to the raw value.
+    const cases: Array<[string, string, string]> = [
+      ['active',       'pill-ok',   'Active'],
+      ['unused',       'pill-muted','Unused'],
+      ['grace_period', 'pill-warn', 'Grace Period'],
+      ['expired',      'pill-bad',  'Expired'],
+      ['revoked',      'pill-bad',  'Revoked'],
+      ['paused',       'pill-warn', 'Paused'],
+      // Tier/plan keys have no STRINGS entry — fall back to raw value
+      ['free',         'pill-muted','free'],
+      ['plus',         'pill-ok',   'plus'],
+      ['pro',          'pill-warn', 'pro'],
+      ['premium',      'pill-ok',   'premium'],
+      ['enterprise',   'pill-ok',   'enterprise'],
+    ];
+    for (const [status, wantCls, wantLabel] of cases) {
       const pill = statusPill(status);
       expect(pill.className, `status ${status}`).toContain('pill');
       expect(pill.className, `status ${status}`).toContain(wantCls);
-      expect(pill.textContent, `status ${status}`).toBe(status);
+      expect(pill.textContent, `status ${status}`).toBe(wantLabel);
     }
   });
 

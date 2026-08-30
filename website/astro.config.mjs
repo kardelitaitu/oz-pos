@@ -40,7 +40,11 @@ export default defineConfig({
     // src/content/docs/en/docs-authoring.md → Charts & diagrams).
     // rehypeMermaidClass must run first: Astro's shiki marks the block with
     // data-language="mermaid" and no class, which rehype-mermaid won't match.
-    processor: unified({ rehypePlugins: [rehypeCallouts, rehypeMermaidClass, rehypeMermaid] }),
+    //
+    // cache: true writes rendered SVGs to node_modules/.cache/rehype-mermaid
+    // so unchanged diagrams skip the Chromium launch on subsequent builds.
+    // strategy img-svg embeds the SVG inline (no extra HTTP request).
+    processor: unified({ rehypePlugins: [rehypeCallouts, rehypeMermaidClass, [rehypeMermaid, { strategy: 'img-svg', cache: true }]] }),
   },
   vite: {
     plugins: [tailwindcss()],

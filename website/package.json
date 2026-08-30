@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "prebuild": "node scripts/sync-dev-files.mjs && node scripts/audit-i18n.mjs && node scripts/check-password-policy.mjs && bash scripts/import-portal.sh --if-exists && vitest run",
+    "prebuild": "node scripts/prebuild.mjs",
+    "build:fast": "astro build",
     "check": "astro check",
     "precheck": "node scripts/audit-i18n.mjs && node scripts/check-password-policy.mjs && vitest run",
     "check:i18n": "node scripts/audit-i18n.mjs",
@@ -14,7 +15,8 @@
     "astro": "astro",
     "deploy": "bash ../scripts/wrangler-deploy.sh",
     "preview": "astro preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:fast": "vitest run --pool threads --reporter verbose"
   },
   "dependencies": {
     "@astrojs/markdown-remark": "^7.2.2",
