@@ -34,7 +34,7 @@ import { useWarehouseSession, type WarehouseMode } from './useWarehouseSession';
 import { useWarehouseScanner } from './useWarehouseScanner';
 import WarehouseFnBar from './WarehouseFnBar';
 import { WAREHOUSE_SHORTCUTS, ACTIVE_SHORTCUT_ACTIONS } from './warehouseShortcuts';
-import { listPurchaseOrders, receivePurchaseOrderWithLines, type PurchaseOrderDto } from '@/api/purchasing';
+import { listPurchaseOrdersScoped, receivePurchaseOrderWithLinesScoped, type PurchaseOrderDto } from '@/api/purchasing';
 import WarehouseCountFlow from './WarehouseCountFlow';
 import './WarehouseConsole.css';
 
@@ -307,7 +307,7 @@ export default function WarehouseConsole() {
   const loadApprovedPos = useCallback(async () => {
     if (!sessionToken) return;
     try {
-      const all = await listPurchaseOrders();
+      const all = await listPurchaseOrdersScoped(sessionToken);
       setPoList(all.filter((po) => po.status === 'approved'));
     } catch {
       // Non-critical — dialog shows the empty state.
@@ -342,7 +342,7 @@ export default function WarehouseConsole() {
           received_qty: Math.max(0, l.qty - l.damagedQty),
           damaged_qty: l.damagedQty,
         }));
-      const received = await receivePurchaseOrderWithLines(session.poId, input);
+      const received = await receivePurchaseOrderWithLinesScoped(sessionToken, session.poId, input);
       addToast({
         type: 'success',
         message: requiredLocalized(l10n, 'warehouse-receive-confirmed', {

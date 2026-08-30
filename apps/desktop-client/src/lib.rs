@@ -515,6 +515,10 @@ pub fn run() {
             commands::settings::set_user_preferences_scoped,
             commands::settings::set_setting_scoped,
             commands::settings::set_settings_scoped,
+            // Unscoped settings access for pre-login IPC callers (updater
+            // banner, cloud-sync token, gateway status) — mirrors the tablet
+            // registration; see review finding F-004.
+            commands::settings::set_setting,
             commands::setup::get_enabled_features,
             commands::setup::complete_setup,
             commands::setup::dismiss_setup_wizard,
@@ -681,6 +685,7 @@ pub fn run() {
             commands::product_variants::delete_product_variant_scoped,
             commands::settings::get_credit_settings_scoped,
             commands::settings::get_setting_scoped,
+            commands::settings::get_setting,
             commands::shifts::get_shift_scoped,
             commands::shifts::create_cash_payout_scoped,
             commands::shifts::get_shift_report_scoped,
@@ -731,6 +736,7 @@ pub fn run() {
             commands::purchasing::create_purchase_order_scoped,
             commands::purchasing::update_po_status_scoped,
             commands::purchasing::receive_purchase_order_scoped,
+            commands::purchasing::receive_purchase_order_with_lines_scoped,
         ])
         .run(tauri::generate_context!())
         .map_err(AppError::from);

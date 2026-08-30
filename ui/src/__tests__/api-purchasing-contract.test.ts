@@ -13,6 +13,10 @@ import {
   listPurchaseOrders,
   createPurchaseOrder,
   receivePurchaseOrder,
+  listPurchaseOrdersScoped,
+  updatePoStatusScoped,
+  receivePurchaseOrderScoped,
+  receivePurchaseOrderWithLinesScoped,
 } from '@/api/purchasing';
 
 describe('purchasing.ts API contract', () => {
@@ -69,6 +73,38 @@ describe('purchasing.ts API contract', () => {
     mockInvoke.mockResolvedValue(undefined);
     await receivePurchaseOrder('po1');
     expect(mockInvoke).toHaveBeenCalledWith('receive_purchase_order', { id: 'po1' });
+  });
+
+  // ── Scoped variants (review F-005): desktop registers only *_scoped ──
+
+  it('listPurchaseOrdersScoped calls correct command', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listPurchaseOrdersScoped('tok-1');
+    expect(mockInvoke).toHaveBeenCalledWith('list_purchase_orders_scoped', { sessionToken: 'tok-1' });
+  });
+
+  it('updatePoStatusScoped calls correct command', async () => {
+    const args = { id: 'po1', status: 'approved' };
+    mockInvoke.mockResolvedValue({ id: 'po1' });
+    await updatePoStatusScoped('tok-1', args);
+    expect(mockInvoke).toHaveBeenCalledWith('update_po_status_scoped', { args, sessionToken: 'tok-1' });
+  });
+
+  it('receivePurchaseOrderScoped calls correct command', async () => {
+    mockInvoke.mockResolvedValue({ id: 'po1' });
+    await receivePurchaseOrderScoped('tok-1', 'po1');
+    expect(mockInvoke).toHaveBeenCalledWith('receive_purchase_order_scoped', { id: 'po1', sessionToken: 'tok-1' });
+  });
+
+  it('receivePurchaseOrderWithLinesScoped calls correct command', async () => {
+    const lines = [{ line_id: 'l1', received_qty: 5, damaged_qty: 0 }];
+    mockInvoke.mockResolvedValue({ id: 'po1' });
+    await receivePurchaseOrderWithLinesScoped('tok-1', 'po1', lines);
+    expect(mockInvoke).toHaveBeenCalledWith('receive_purchase_order_with_lines_scoped', {
+      id: 'po1',
+      lines,
+      sessionToken: 'tok-1',
+    });
   });
 
   it('propagates errors', async () => {

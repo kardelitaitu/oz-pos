@@ -158,3 +158,37 @@ export const receivePurchaseOrderWithLines = (
   lines: ReceivePoLineInput[],
 ): Promise<PurchaseOrderDto> =>
   loggedInvoke<PurchaseOrderDto>('receive_purchase_order_with_lines', { id, lines });
+
+// ── Scoped variants (ADR #7) ──────────────────────────────────────────
+// Review F-005: the unscoped purchasing commands above are not registered
+// on the desktop shell — production screens must call the *_scoped ones.
+
+/** List purchase orders visible to the session's store. */
+export const listPurchaseOrdersScoped = (sessionToken: string): Promise<PurchaseOrderDto[]> =>
+  loggedInvoke<PurchaseOrderDto[]>('list_purchase_orders_scoped', { sessionToken });
+
+/** Update a purchase order's status within the session's store. */
+export const updatePoStatusScoped = (
+  sessionToken: string,
+  args: UpdatePoStatusArgs,
+): Promise<PurchaseOrderDto> =>
+  loggedInvoke<PurchaseOrderDto>('update_po_status_scoped', { args, sessionToken });
+
+/** Mark a purchase order as received (whole-order) within the session's store. */
+export const receivePurchaseOrderScoped = (
+  sessionToken: string,
+  id: string,
+): Promise<PurchaseOrderDto> =>
+  loggedInvoke<PurchaseOrderDto>('receive_purchase_order_scoped', { id, sessionToken });
+
+/** Receive a purchase order with per-line quantities within the session's store. */
+export const receivePurchaseOrderWithLinesScoped = (
+  sessionToken: string,
+  id: string,
+  lines: ReceivePoLineInput[],
+): Promise<PurchaseOrderDto> =>
+  loggedInvoke<PurchaseOrderDto>('receive_purchase_order_with_lines_scoped', {
+    id,
+    lines,
+    sessionToken,
+  });

@@ -7,9 +7,14 @@ import purchasingFtl from '@/locales/purchasing.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
 vi.mock('@/api/purchasing', () => ({
-  listPurchaseOrders: vi.fn(),
-  updatePoStatus: vi.fn(),
-  receivePurchaseOrder: vi.fn(),
+  listPurchaseOrdersScoped: vi.fn(),
+  updatePoStatusScoped: vi.fn(),
+  receivePurchaseOrderScoped: vi.fn(),
+}));
+
+// F-005: the screen resolves the session token from WorkspaceContext.
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({ sessionToken: 'tok-test', activeInstance: null }),
 }));
 
 // PO totals render via the store default currency (USD fixtures → 110.00).
@@ -28,11 +33,11 @@ vi.mock('@/features/purchasing/PurchaseOrderForm', () => ({
 }));
 
 import PurchaseOrdersScreen from '@/features/purchasing/PurchaseOrdersScreen';
-import { listPurchaseOrders, updatePoStatus, receivePurchaseOrder } from '@/api/purchasing';
+import { listPurchaseOrdersScoped, updatePoStatusScoped, receivePurchaseOrderScoped } from '@/api/purchasing';
 
-const mockListPOs = listPurchaseOrders as ReturnType<typeof vi.fn>;
-const mockUpdateStatus = updatePoStatus as ReturnType<typeof vi.fn>;
-const mockReceivePO = receivePurchaseOrder as ReturnType<typeof vi.fn>;
+const mockListPOs = listPurchaseOrdersScoped as ReturnType<typeof vi.fn>;
+const mockUpdateStatus = updatePoStatusScoped as ReturnType<typeof vi.fn>;
+const mockReceivePO = receivePurchaseOrderScoped as ReturnType<typeof vi.fn>;
 
 
 
@@ -206,7 +211,7 @@ describe('PurchaseOrdersScreen', () => {
     expect(screen.getByRole('button', { name: /submit/i })).toBeInTheDocument();
   });
 
-  it('calls updatePoStatus when Submit is clicked on a draft', async () => {
+  it('calls updatePoStatusScoped when Submit is clicked on a draft', async () => {
     const user = userEvent.setup();
     mockListPOs.mockResolvedValue([sampleOrders[0]!]);
     mockUpdateStatus.mockResolvedValue({});
@@ -220,6 +225,7 @@ describe('PurchaseOrdersScreen', () => {
 
     await waitFor(() => {
       expect(mockUpdateStatus).toHaveBeenCalledWith(
+        'tok-test',
         expect.objectContaining({ id: 'po-1', status: 'pending' }),
       );
     });
@@ -248,7 +254,7 @@ describe('PurchaseOrdersScreen', () => {
     expect(screen.getByRole('button', { name: 'Receive' })).toBeInTheDocument();
   });
 
-  it('calls receivePurchaseOrder when Receive is clicked', async () => {
+  it('calls receivePurchaseOrderScoped when Receive is clicked', async () => {
     const user = userEvent.setup();
     mockListPOs.mockResolvedValue([sampleOrders[2]!]);
     mockReceivePO.mockResolvedValue({});
@@ -261,7 +267,7 @@ describe('PurchaseOrdersScreen', () => {
     await user.click(screen.getByRole('button', { name: 'Receive' }));
 
     await waitFor(() => {
-      expect(mockReceivePO).toHaveBeenCalledWith('po-3');
+      expect(mockReceivePO).toHaveBeenCalledWith('tok-test', 'po-3');
     });
   });
 
