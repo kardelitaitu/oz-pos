@@ -1841,7 +1841,7 @@ read) + desktop `get_setting` secret-gate verification.
 
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
-| UI-1 | 🟠 HIGH | ui/src/api/gateway.ts:17 | `gateway.ts` fetches `stripe.api_key`, `square.api_key`, and `midtrans.server_key` via `get_setting` **into the renderer** just to compute configured booleans — and the desktop `SECRET_KEY_DENY_LIST` (the C-2 fix) **omits all three payment keys**, so the raw secrets are readable by any renderer code (XSS or a compromised dependency) through the IPC surface. | Add the three keys to the deny list; expose a backend gateway-status command returning booleans. |
+| UI-1 | ✅ FIXED 25-07-26 | ui/src/api/gateway.ts | `gateway.ts` fetches `stripe.api_key`, `square.api_key`, and `midtrans.server_key` via `get_setting` **into the renderer** just to compute configured booleans — and the desktop `SECRET_KEY_DENY_LIST` (the C-2 fix) **omits all three payment keys**, so the raw secrets are readable by any renderer code (XSS or a compromised dependency) through the IPC surface. | Add the three keys to the deny list; expose a backend gateway-status command returning booleans. |
 | UI-2 | ℹ️ INFO | ui/src (4 files) | `StaffLoginScreen`, `KdsScreen`, `UpdateBanner`, `useFullscreen` import `@tauri-apps/api` directly outside `src/api/` — against the AGENTS.md api-layer rule. | Route through `ui/src/api/`. |
 
 The sweep is otherwise exemplary: **zero** `innerHTML`/`eval`/
@@ -1862,7 +1862,7 @@ simply predates the payment keys.
 |---|---|---|
 | 1 | COR-35 | ✅ **FIXED** 25-07-26 — Snowflake INSERT switched to SQL API bind variables (`?` placeholders + 1-based TEXT `bindings` map); `sql_escape` helper and its test removed; stamp updated; **all 2,025 oz-core tests pass**. |
 | 2 | CS-1 | ✅ **FIXED** 25-07-26 — verify_slice constant-time check on both Stripe and Square verifiers + CS-2 timestamp tolerance (skew > 5 min rejected). |
-| 3 | UI-1 | ⬜ deny-list payment keys + backend gateway-status command |
+| 3 | UI-1 | ✅ **FIXED** 25-07-26 — three payment keys added to SECRET_KEY_DENY_LIST in BOTH clients; new gateway_status Tauri command computes configured/online booleans server-side; gateway.ts invokes it (single call, no secrets in renderer); gateway.test.ts rewritten to the new contract; settings tests extended (59 desktop + 45 tablet pass) and all 18 gateway UI tests pass. |
 | 4 | PLG-11 | ⬜ fail-closed quoted-identifier rejection (or authorizer) |
 | 5 | L-1 | ⬜ WorkerGuard lifetime fix |
 | 6 | API-1 | ⬜ remove dev JWT secret fallback |

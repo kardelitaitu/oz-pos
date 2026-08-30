@@ -352,6 +352,7 @@ pub fn run() {
                 commands::settings::get_user_preferences_scoped,
                 commands::settings::set_user_preferences_scoped,
                 commands::settings::get_setting,
+            commands::settings::gateway_status,
                 commands::settings::set_setting,
                 commands::setup::get_enabled_features,
                 commands::setup::complete_setup,

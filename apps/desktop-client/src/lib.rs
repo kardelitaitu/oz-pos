@@ -692,6 +692,7 @@ pub fn run() {
             commands::settings::get_credit_settings_scoped,
             commands::settings::get_setting_scoped,
             commands::settings::get_setting,
+            commands::settings::gateway_status,
             commands::shifts::get_shift_scoped,
             commands::shifts::create_cash_payout_scoped,
             commands::shifts::get_shift_report_scoped,

@@ -572,12 +572,19 @@ fn get_setting_redacts_secret_keys() {
     run_set_setting(&conn, "lan_server.psk", "psk-val", "t").unwrap();
     run_set_setting(&conn, "smtp_config", "smtp-secret", "t").unwrap();
     run_set_setting(&conn, "license.api_key", "lic-key", "t").unwrap();
+    run_set_setting(&conn, "stripe.api_key", "sk_test_stripe", "t").unwrap();
+    run_set_setting(&conn, "square.api_key", "sq_test_square", "t").unwrap();
+    run_set_setting(&conn, "midtrans.server_key", "mid_test", "t").unwrap();
     // All secret keys must return None via get_setting.
     assert_eq!(run_get_setting(&conn, "sync_api_key").unwrap(), None);
     assert_eq!(run_get_setting(&conn, "pg_sync.password").unwrap(), None);
     assert_eq!(run_get_setting(&conn, "lan_server.psk").unwrap(), None);
     assert_eq!(run_get_setting(&conn, "smtp_config").unwrap(), None);
     assert_eq!(run_get_setting(&conn, "license.api_key").unwrap(), None);
+    // UI-1: payment gateway credentials must never reach the renderer.
+    assert_eq!(run_get_setting(&conn, "stripe.api_key").unwrap(), None);
+    assert_eq!(run_get_setting(&conn, "square.api_key").unwrap(), None);
+    assert_eq!(run_get_setting(&conn, "midtrans.server_key").unwrap(), None);
     // Non-secret keys still work.
     run_set_setting(&conn, "store.name", "My Store", "t").unwrap();
     assert_eq!(

@@ -1,4 +1,10 @@
 //! Settings Tauri commands: get and persist receipt display options.
+/*
+last audited 25-07-26 by RSA-Agent (desktop-client UI-1 investigation + fix)
+crate: desktop-client | status: SAFE | lint: CLEAN
+findings: UI-1 FIXED 25-07-26 — SECRET_KEY_DENY_LIST extended with stripe.api_key, square.api_key, midtrans.server_key (payment credentials never reach the renderer); new gateway_status command computes configured/online booleans server-side; deny-list test extended with the three keys. Verified during UI-1: deny-list check on run_get_setting, scoped variants delegate to it
+next: none | perf: N/A
+*/
 //!
 //! This module exposes the receipt-related subset of the `settings` table
 //! to the front-end. Other settings (store name, currency, features) are
@@ -932,7 +938,59 @@ const SECRET_KEY_DENY_LIST: &[&str] = &[
     "license.payload",
     "license.signature",
     "license.tenant_id",
+    // UI-1: payment gateway credentials must never reach the renderer.
+    "stripe.api_key",
+    "square.api_key",
+    "midtrans.server_key",
 ];
+
+/// Status entry for one payment gateway.
+#[derive(Debug, Serialize)]
+pub struct GatewayStatusEntry {
+    /// Display name of the gateway.
+    pub name: String,
+    /// Whether a credential is configured.
+    pub configured: bool,
+    /// Whether the gateway is usable for charging (same as `configured`
+    /// today; kept separate so reachability checks can land later without
+    /// changing the wire shape).
+    pub online: bool,
+}
+
+/// Report which payment gateways have credentials configured.
+///
+/// UI-1: computes the configured/online booleans server-side so the raw
+/// credential values never leave the backend — the gateway keys are on
+/// the `SECRET_KEY_DENY_LIST`, and the renderer only ever sees booleans.
+#[tauri::command]
+pub async fn gateway_status(
+    state: State<'_, AppState>,
+) -> Result<Vec<GatewayStatusEntry>, AppError> {
+    let conn = state.db.lock().await;
+    let configured = |key: &str| -> Result<bool, AppError> {
+        Ok(Settings::get(&conn, key)?.is_some_and(|v| !v.is_empty()))
+    };
+    let stripe = configured("stripe.api_key")?;
+    let square = configured("square.api_key")?;
+    let midtrans = configured("midtrans.server_key")?;
+    Ok(vec![
+        GatewayStatusEntry {
+            name: "Stripe".into(),
+            configured: stripe,
+            online: stripe,
+        },
+        GatewayStatusEntry {
+            name: "Square".into(),
+            configured: square,
+            online: square,
+        },
+        GatewayStatusEntry {
+            name: "QRIS (Midtrans)".into(),
+            configured: midtrans,
+            online: midtrans,
+        },
+    ])
+}
 
 /// Returns `true` if the given settings key should be blocked from
 /// the raw `get_setting` IPC surface.
