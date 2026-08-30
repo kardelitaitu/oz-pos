@@ -144,21 +144,21 @@ The admin login page (`login.html`) is always dark. The dashboard has a theme to
 
 ## 6. Recommendations (Priority Order)
 
-| # | Priority | Finding | Action |
-|---|----------|---------|--------|
-| 1 | **HIGH** | Unsafe `innerHTML` patterns (C1, C2) | Replace with `textContent` / `el()` for all API-sourced strings (defense-in-depth; not exploitable today due to server-generated hex keys + enum-constrained fields) |
-| 2 | **HIGH** | MOCK fallback masks failures (C4) | Show error banner when API fails; keep MOCK only as last-resort skeleton |
-| 3 | **HIGH** | Tenants list has no pagination (C3) | Add page controls + pass `?page=` / `?perPage=` to the API |
-| 4 | **HIGH** | Monolithic admin.js (H1) | Split into testable modules (stats.js, tenants.js, charts.js) or move to a build step |
-| 5 | **HIGH** | Zero tests (H2) | Add unit tests for chart rendering, helpers, and API mock fallback |
-| 6 | **HIGH** | No i18n (H3) | Extract strings to an i18n structure; at minimum, add English `.ftl` keys for future localization |
-| 7 | **HIGH** | Shared session cookie (H4) | Restrict `Domain` to individual subdomains or use a dedicated auth domain |
-| 8 | **MEDIUM** | No loading/error states for charts (M1) | Guard `svgChart` against empty/NaN data; add per-chart error states |
-| 9 | **MEDIUM** | Remove `?token=` fallback (M3) | Delete the deprecated path once exchange-code rollout is confirmed stable |
-| 10 | **MEDIUM** | Duplicate `devices2` icon (M2) | Remove dead code |
-| 11 | **MEDIUM** | No search on tenants (M5) | Add a search endpoint on the backend + search input in the frontend |
-| 12 | **INFO** | SPA HTML edge-cached (M6) | Acceptable (`max-age=0, must-revalidate`); optional future: fingerprint asset filenames |
-| 13 | **LOW** | Login page always dark (L4) | Add theme.js to the login page or auto-detect OS preference |
+| # | Priority | Finding | Action | Status |
+|---|----------|---------|--------|--------|
+| 1 | **HIGH** | Unsafe `innerHTML` patterns (C1, C2) | Replace with `textContent` / `el()` for all API-sourced strings (defense-in-depth; not exploitable today due to server-generated hex keys + enum-constrained fields) | ✅ Resolved — `showTenantDetail` / `upgradePrompt` use `el()` + `textContent` (Phase 1) |
+| 2 | **HIGH** | MOCK fallback masks failures (C4) | Show error banner when API fails; keep MOCK only as last-resort skeleton | ✅ Resolved — MOCK object removed; API errors render a retry/error state (Phase 1) |
+| 3 | **HIGH** | Tenants list has no pagination (C3) | Add page controls + pass `?page=` / `?perPage=` to the API | ✅ Resolved — pagination controls + `?page=`/`?perPage=`/`?search=` (Phase 2) |
+| 4 | **HIGH** | Monolithic admin.js (H1) | Split into testable modules (stats.js, tenants.js, charts.js) or move to a build step | ✅ Resolved — pure helpers extracted into `admin-utils.js` (charts, formatting, cards, API auth, i18n) with unit tests |
+| 5 | **HIGH** | Zero tests (H2) | Add unit tests for chart rendering, helpers, and API mock fallback | ✅ Resolved — 25+ unit tests in `src/__tests__/admin-utils.test.ts` |
+| 6 | **HIGH** | No i18n (H3) | Extract strings to an i18n structure; at minimum, add English `.ftl` keys for future localization | ✅ Resolved — `STRINGS` key-value table + `t()` helper; all admin/dashboard/login strings extracted |
+| 7 | **HIGH** | Shared session cookie (H4) | Restrict `Domain` to individual subdomains or use a dedicated auth domain | ✅ Resolved — cookie scoped to `admin.ozpos.my.id` / `dashboard.ozpos.my.id` (not the parent domain) |
+| 8 | **MEDIUM** | No loading/error states for charts (M1) | Guard `svgChart` against empty/NaN data; add per-chart error states | ✅ Resolved — `svgChart` / `svgDonut` guard empty/NaN/zero data |
+| 9 | **MEDIUM** | Remove `?token=` fallback (M3) | Delete the deprecated path once exchange-code rollout is confirmed stable | ✅ Resolved — `?token=` fallback removed; exchange-code (`?code=`) is the only handoff |
+| 10 | **MEDIUM** | Duplicate `devices2` icon (M2) | Remove dead code | ✅ Resolved — dead code removed |
+| 11 | **MEDIUM** | No search on tenants (M5) | Add a search endpoint on the backend + search input in the frontend | ✅ Resolved — backend `?search=` + frontend search input (Phase 2) |
+| 12 | **INFO** | SPA HTML edge-cached (M6) | Acceptable (`max-age=0, must-revalidate`); optional future: fingerprint asset filenames | ✅ Resolved — `Cache-Control: no-store` on SPA HTML; `?v=` cache-busting now works via the worker query-string fix |
+| 13 | **LOW** | Login page always dark (L4) | Add theme.js to the login page or auto-detect OS preference | ✅ Resolved — sun/moon theme toggle on both admin and dashboard login pages |
 
 ---
 
