@@ -341,6 +341,20 @@ pub(super) async fn run_tick(
         pulled = 0;
     }
 
+    update_daemon_status(db, daemon_status, pushed, pulled, &sync_error, &read_error).await;
+}
+
+/// Finalize a tick: read the pending count, write the daemon status, and log
+/// the cycle outcome. Extracted from `run_tick` so the status bookkeeping is
+/// independently testable.
+async fn update_daemon_status(
+    db: &DbConnection,
+    daemon_status: &Arc<RwLock<DaemonStatus>>,
+    pushed: usize,
+    pulled: usize,
+    sync_error: &Option<String>,
+    read_error: &Option<String>,
+) {
     // Get pending count
     let db_clone = db.clone();
     let pending_count = tokio::task::spawn_blocking(move || {
@@ -360,7 +374,7 @@ pub(super) async fn run_tick(
     // If the read phase panicked, surface that error in the status.
     s.last_error = sync_error.clone().or_else(|| read_error.clone());
 
-    if let Some(ref err) = sync_error {
+    if let Some(err) = sync_error {
         tracing::error!(error = ?err, "sync cycle failed");
     } else {
         tracing::info!(pushed, "sync cycle completed");
