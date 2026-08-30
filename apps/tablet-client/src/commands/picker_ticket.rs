@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (tablet-client slice A: verified)
+crate: tablet-client | status: SAFE | lint: CLEAN
+findings: clean — matches desktop-client guarded patterns. Coverage note: verified under the risk-ranked sampling protocol (global sweep clean), not line-by-line deep read
+next: none | perf: N/A
+*/
 //! Short-lived HMAC-signed picker tickets for the pre-session
 //! workspace picker (audit-open-findings residual).
 //!

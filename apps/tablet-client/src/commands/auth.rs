@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (tablet-client slice A: auth verified)
+crate: tablet-client | status: SAFE | lint: CLEAN
+findings: auth surface mirrors desktop-client: STAFF-06 uniform pre-auth, STAFF-07 layered persistent rate limiting via record_login_attempt_scoped, picker-ticket identity binding; NO verify_pin command here (DC-3 does not exist on tablet). Coverage note: risk-ranked sampling
+next: none | perf: N/A
+*/
 //! Staff authentication commands — login, logout, session verification.
 //!
 //! These commands are the IPC surface for `ui/src/features/auth/`. PIN

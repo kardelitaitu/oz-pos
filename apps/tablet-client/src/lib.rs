@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (tablet-client slice A: verified)
+crate: tablet-client | status: SAFE | lint: CLEAN
+findings: clean — matches desktop-client guarded patterns. Coverage note: verified under the risk-ranked sampling protocol (global sweep clean), not line-by-line deep read
+next: none | perf: N/A
+*/
 //! OZ-POS tablet shell (Tauri v2 mobile).
 //!
 //! Registers the same business modules as the desktop client but

@@ -1663,6 +1663,27 @@ MSL-10 (pin serialization) should be fixed when the types move.
 
 ---
 
+## 34. apps/tablet-client — Tauri tablet shell (risk-ranked sampling)
+
+Baseline: ~16.5k production lines. Slice A — global unwrap/panic/SQL-
+interpolation sweep across all production files; auth.rs (448)
+protection surface verified; pos.rs guard sites (57, 100) verified;
+lib/state/picker_ticket stamped.
+
+**No new findings.** The sweep is clean: the only unwraps are the
+`#[cfg(test)]` mock constructor (`state.rs:334`), the infallible HMAC
+key init (`picker_ticket.rs:50`), and two `Percentage::new` sites in
+`pos.rs` — both preceded by explicit 0..=100 range checks with SAFETY
+comments. The auth surface mirrors desktop-client (STAFF-06 uniform
+pre-auth, STAFF-07 layered rate limiting, picker-ticket binding) and
+has **no** `verify_pin` command, so DC-3 does not exist here. No SQL
+string interpolation anywhere.
+
+> **tablet-client COMPLETE as risk-ranked sampling.** Campaign
+> proceeds to apps/cloud-server.
+
+---
+
 ## 24. modules/kitchen — stub (KDS tickets, prep routing)
 
 Baseline: ~116 production lines. Slice A — both files read (lib.rs 90

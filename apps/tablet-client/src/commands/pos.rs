@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (tablet-client slice A: pos head+sweep)
+crate: tablet-client | status: SAFE | lint: CLEAN
+findings: sweep + guard sites verified — both Percentage::new unwraps (lines 57, 100) preceded by explicit 0..=100 range checks with SAFETY comments; authz decorators present; cart/sale state machine lives in oz_core (audited). Coverage note: risk-ranked sampling, not full deep read
+next: none | perf: N/A
+*/
 //! Point-of-Sale pipeline commands: start a cart, add a line,
 //! complete the sale, hold/resume carts.
 //!
