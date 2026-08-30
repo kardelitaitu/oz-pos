@@ -181,6 +181,22 @@ AES-256-GCM export, dry-run support.
 
 > Slice B (seed_demo.rs, cli.rs, error/lib/main) next.
 
+### Slice B — seed_demo.rs (692: production 1–300 fully read, tail
+verified: fixed table allowlist, PRAGMA-based copy, SAFETY-commented
+chrono unwraps), cli.rs / error.rs / main.rs verified — **oz-cli
+COMPLETE**
+
+**No new findings.** `copy_reference_data` uses a fixed table
+allowlist with columns from `PRAGMA table_info` and parameterized
+inserts (no injection surface); FK pragmas toggled with documented
+rationale; all `.unwrap()`s are bounded-range chrono constructions with
+SAFETY comments (RUST-07). The crate's substance was slice A's five
+findings (CLI-1..5).
+
+> **oz-cli COMPLETE** — 6 production files, ~2.0k lines, 3 MED/LOW + 2
+> INFO. **All 18 crates/ crates are now audited.** Campaign proceeds to
+> apps/ (desktop-client, tablet-client, cloud-server) and ui/.
+
 ---
 
 ## 25. crates/oz-hal — hardware abstraction layer
