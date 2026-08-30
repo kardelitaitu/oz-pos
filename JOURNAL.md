@@ -7777,5 +7777,8 @@ cache.rs audit stamp instead of living only in this journal.
 An audit stamp that predates three bugs in the file it covers is worse than no
 stamp, because it reads as a warrant.
 
-**Totals:** B46-B49 = 4 bugs this area, 46 committed overall. Full crate green:
-2239 passed / 0 failed with --features cache-redis; 40/40 cache tests without it.
+**Totals:** B46-B49 = 4 bugs found in this area. No combined grand total is
+asserted: the admin hunt's B1-B45 range and this one overlap agents (B38 was a
+concurrent agent's find, B17/B23/B26 were dropped after evidence), so a summed
+figure across them would not be honest. Full crate green: 2239 passed / 0 failed
+with --features cache-redis; 40/40 cache tests without it.
