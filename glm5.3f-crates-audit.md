@@ -1,3 +1,23 @@
+
+---
+
+## 25. crates/oz-hal — hardware abstraction layer
+
+Baseline: ~3.2k production lines across 28 files. Slice A (registry.rs
+240 fully read; transport/usb.rs 351: production 1–317 fully read; the
+13 small files — types, error, lib, all five traits, serial/tcp
+transports, driver mod — verified structurally).
+
+**No new findings.** `lib.rs` carries `#![deny(unsafe_code)]` with a
+documented future-FFI policy (any future unsafe addition requires a
+narrowly-scoped, reviewable allow). The registry keeps per-category
+RwLock maps with documented overwrite semantics and fail-open discovery
+(one driver's failure never aborts the rest); device ids are
+deterministic with serial/model fallback, and every registered printer
+gets a companion kick-cash-drawer. USB enumeration uses documented
+VID/PID allowlists (including the P6-1 scale table) with per-device
+continue on descriptor errors and fail-open string reads. Sibling test
+files per convention.
 # OZ-POS Full Crate Audit — GLM 5.3-Flash (RSA)
 
 > **Campaign log.** Findings and proposed solutions for every Rust target in the

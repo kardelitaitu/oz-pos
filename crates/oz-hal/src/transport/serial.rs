@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-hal slice A: verified)
+crate: oz-hal | status: SAFE | lint: CLEAN
+findings: clean
+next: none | perf: N/A
+*/
 //! Serial port enumeration and connection helpers for serial barcode
 //! scanners and serial receipt printers.
 //!

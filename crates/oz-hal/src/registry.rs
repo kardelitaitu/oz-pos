@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-hal slice A: registry deep read)
+crate: oz-hal | status: SAFE | lint: CLEAN
+findings: clean — per-category RwLock maps with documented overwrite semantics; discovery fail-open per driver (one failure never aborts the rest); deterministic device-id scheme with serial/model fallback; companion cash-drawer registration for every printer; register_mock_scale expect is a documented startup-only invariant
+next: none | perf: short-lived read locks on lookup
+*/
 //! `DriverRegistry` — the runtime's catalogue of available hardware.
 //!
 //! The registry holds `Arc<dyn Trait>` per device category, indexed by a
