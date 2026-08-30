@@ -616,3 +616,148 @@ func TestWebUsage_ContractFields(t *testing.T) {
 		t.Error("device_count should be at least 1 for a seeded tenant with a machine")
 	}
 }
+
+// ── GET /api/v1/admin/tenants/{id} ────────────────────────────────
+
+func TestAdminGetTenant_ReturnsDetail(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+	tenantID, _ := seedDashboardTenant(t, app, "admin-get@test.com")
+	t.Setenv("OZ_ADMIN_KEY", "secret-admin-key")
+
+	rec := doJSON(mux, http.MethodGet, "/api/v1/admin/tenants/"+tenantID, "Bearer secret-admin-key", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	tenant, ok := body["tenant"].(map[string]any)
+	if !ok {
+		t.Fatal("missing tenant block")
+	}
+	if tenant["id"] != tenantID {
+		t.Errorf("tenant.id = %v, want %s", tenant["id"], tenantID)
+	}
+	if tenant["email"] != "admin-get@test.com" {
+		t.Errorf("tenant.email = %v", tenant["email"])
+	}
+	// License + subscription blocks surface (the seeded tenant has a sub).
+	if _, ok := body["subscription"].(map[string]any); !ok {
+		t.Error("expected subscription block in tenant detail")
+	}
+	// Device list: the seeded tenant has one machine.
+	devices, ok := body["devices"].([]any)
+	if !ok || len(devices) < 1 {
+		t.Errorf("expected at least 1 device in tenant detail, got %v", devices)
+	}
+}
+
+func TestAdminGetTenant_NotFound(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+	t.Setenv("OZ_ADMIN_KEY", "secret-admin-key")
+
+	rec := doJSON(mux, http.MethodGet, "/api/v1/admin/tenants/nonexistent", "Bearer secret-admin-key", "")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+}
+
+// ── POST /api/v1/admin/tenants/{id}/activate ──────────────────────
+
+func TestAdminActivate_FlipsTenantToActive(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+	tenantID, _ := seedDashboardTenant(t, app, "admin-activate@test.com")
+	t.Setenv("OZ_ADMIN_KEY", "secret-admin-key")
+
+	// Seed the tenant as revoked first, then activate it.
+	tenant, err := app.FindRecordById("tenants", tenantID)
+	if err != nil {
+		t.Fatalf("tenant not found: %v", err)
+	}
+	tenant.Set("status", "revoked")
+	if err := app.Save(tenant); err != nil {
+		t.Fatalf("seed revoked status: %v", err)
+	}
+
+	rec := doJSON(mux, http.MethodPost, "/api/v1/admin/tenants/"+tenantID+"/activate", "Bearer secret-admin-key", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	after, err := app.FindRecordById("tenants", tenantID)
+	if err != nil {
+		t.Fatalf("tenant not found: %v", err)
+	}
+	if after.GetString("status") != "active" {
+		t.Errorf("expected tenant status active after activate, got %q", after.GetString("status"))
+	}
+}
+
+func TestAdminActivate_NotFound(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+	t.Setenv("OZ_ADMIN_KEY", "secret-admin-key")
+
+	rec := doJSON(mux, http.MethodPost, "/api/v1/admin/tenants/nonexistent/activate", "Bearer secret-admin-key", "")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+}
+
+// ── POST /api/v1/admin/tenants/{id}/revoke ────────────────────────
+
+func TestAdminRevoke_FlipsTenantToRevoked(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+	tenantID, _ := seedDashboardTenant(t, app, "admin-revoke@test.com")
+	t.Setenv("OZ_ADMIN_KEY", "secret-admin-key")
+
+	rec := doJSON(mux, http.MethodPost, "/api/v1/admin/tenants/"+tenantID+"/revoke", "Bearer secret-admin-key", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	after, err := app.FindRecordById("tenants", tenantID)
+	if err != nil {
+		t.Fatalf("tenant not found: %v", err)
+	}
+	if after.GetString("status") != "revoked" {
+		t.Errorf("expected tenant status revoked, got %q", after.GetString("status"))
+	}
+}
+
+func TestAdminRevoke_RequiresKey(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+	tenantID, _ := seedDashboardTenant(t, app, "admin-revoke-nokey@test.com")
+
+	rec := doJSON(mux, http.MethodPost, "/api/v1/admin/tenants/"+tenantID+"/revoke", "", "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without admin key, got %d", rec.Code)
+	}
+}
+
+// ── GET /api/v1/admin/health ───────────────────────────────────────
+
+func TestAdminHealth_ReportsOK(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+	t.Setenv("OZ_ADMIN_KEY", "secret-admin-key")
+
+	rec := doJSON(mux, http.MethodGet, "/api/v1/admin/health", "Bearer secret-admin-key", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	if body["status"] != "ok" {
+		t.Errorf("expected status ok, got %v", body["status"])
+	}
+	if body["db_ok"] != true {
+		t.Errorf("expected db_ok true, got %v", body["db_ok"])
+	}
+}
