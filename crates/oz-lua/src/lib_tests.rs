@@ -740,3 +740,45 @@ fn sandbox_contract_survives_the_fuzz_crash_input() {
     }];
     assert!(lua.apply_discount(&lines).is_ok());
 }
+
+/// LUA-2 fix: the parse-site contract treats out-of-range percent values
+/// as "no discount" (None) — the same range the oz-plugin manager
+/// enforced (P0-5), now shared by the legacy global-hook and per-env
+/// hook paths.
+#[test]
+fn apply_discount_out_of_range_percent_treated_as_no_discount() {
+    let lua = runtime();
+    for pct in [-5i64, 101, 1000] {
+        lua.load_str(&format!(
+            "function apply_discount(_) return {{ percent = {pct}, label = \"x\" }} end"
+        ))
+        .unwrap();
+        let lines = vec![CartLineData {
+            sku: "ANY".into(),
+            qty: 1,
+            unit_price_minor: 500,
+            currency: "USD".into(),
+        }];
+        let result = lua.apply_discount(&lines).unwrap();
+        assert!(result.is_none(), "percent {pct} must yield None");
+    }
+}
+
+#[test]
+fn apply_discount_boundary_percents_are_accepted() {
+    let lua = runtime();
+    for pct in [0i64, 100] {
+        lua.load_str(&format!(
+            "function apply_discount(_) return {{ percent = {pct}, label = \"edge\" }} end"
+        ))
+        .unwrap();
+        let lines = vec![CartLineData {
+            sku: "ANY".into(),
+            qty: 1,
+            unit_price_minor: 500,
+            currency: "USD".into(),
+        }];
+        let result = lua.apply_discount(&lines).unwrap();
+        assert_eq!(result.unwrap().percent, pct);
+    }
+}

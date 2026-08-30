@@ -598,3 +598,43 @@ async fn pg_integration_push_batch_data_error_does_not_abort_batch() {
         .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
         .await;
 }
+
+/// CS-3 fix: the SQLite arm now runs the batch inside one transaction.
+/// These tests pin the commit path: all accepted rows land atomically and
+/// duplicate-rejection semantics are unchanged from the per-item loop.
+#[tokio::test]
+async fn sqlite_push_batch_commits_atomically_and_rejects_dups() {
+    let conn = fresh_db();
+    let store = SyncStore::sqlite(conn.clone());
+
+    // A batch where every item is new lands fully.
+    let batch = vec![
+        sample_item("cs3-a"),
+        sample_item("cs3-b"),
+        sample_item("cs3-c"),
+    ];
+    let outcomes = store.push_batch(&batch, "tenant-cs3").await.unwrap();
+    assert!(outcomes.iter().all(|o| matches!(o, PushOutcome::Accepted)));
+
+    // A batch with a duplicate inside it still records per-item outcomes
+    // (the UNIQUE failure rolls back only its own statement) and the
+    // non-duplicate items are committed — not lost to a batch rollback.
+    let dup_batch = vec![
+        sample_item("cs3-d"),
+        sample_item("cs3-a"),
+        sample_item("cs3-e"),
+    ];
+    let outcomes = store.push_batch(&dup_batch, "tenant-cs3").await.unwrap();
+    assert_eq!(outcomes.len(), 3);
+    assert!(matches!(outcomes[0], PushOutcome::Accepted));
+    assert!(matches!(&outcomes[1], PushOutcome::Rejected { .. }));
+    assert!(matches!(outcomes[2], PushOutcome::Accepted));
+
+    let pulled = store
+        .pull_items("tenant-cs3", Some("2026-01-01T00:00:00Z"), None, 501)
+        .await
+        .unwrap();
+    let mut ids: Vec<_> = pulled.iter().map(|i| i.id.as_str()).collect();
+    ids.sort_unstable();
+    assert_eq!(ids, vec!["cs3-a", "cs3-b", "cs3-c", "cs3-d", "cs3-e"]);
+}

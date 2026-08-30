@@ -1,7 +1,7 @@
 /*
 last audited 25-07-26 by RSA-Agent (modules-reporting slice A: handlers deep read)
-crate: modules-reporting | status: NEEDS-FIX | lint: CLEAN
-findings: MSL-8 LOW — SaleCompletedReporter inserts into report_sales with NO UNIQUE(sale_id) and NO receipt/pre-check, so a replayed sale.completed double-counts revenue in the reporting store (corpus pattern elsewhere is pre-check plus unique index); plus the lazy CREATE TABLE DDL executes on EVERY event (wasted prepare per sale). Refunded sales also remain in report revenue (no refund event exists) - product decision to confirm. Handler is otherwise clean (parameterized, tx-free single insert)
+crate: modules-reporting | status: SAFE | lint: CLEAN
+findings: MSL-8 FIXED — the insert is idempotent (INSERT..SELECT WHERE NOT EXISTS on sale_id; replayed events are logged and skipped), so a replayed sale.completed double-counts revenue in the reporting store (corpus pattern elsewhere is pre-check plus unique index); plus the lazy CREATE TABLE DDL executes on EVERY event (wasted prepare per sale). Refunded sales also remain in report revenue (no refund event exists) - product decision to confirm. Handler is otherwise clean (parameterized, tx-free single insert)
 next: add UNIQUE(sale_id) with INSERT OR IGNORE, hoist DDL to migration or first-use | perf: DDL per event
 */
 //! Event handlers for the Reporting module.
@@ -73,9 +73,18 @@ impl EventHandler<SaleCompleted> for SaleCompletedReporter {
             anyhow::anyhow!("reporting handler: failed to serialize line items: {e}")
         })?;
 
-        conn.execute(
+        // MSL-8 fix: idempotent insert — `report_sales` has no
+        // UNIQUE(sale_id) constraint, so a replayed `sale.completed`
+        // event (redelivery, retry, offline re-sync) previously
+        // double-counted revenue. The single-statement INSERT..SELECT
+        // WHERE NOT EXISTS is atomic under the connection mutex and
+        // works for both fresh and legacy tables (which may already
+        // contain duplicate rows, so a UNIQUE index creation could
+        // fail).
+        let inserted = conn.execute(
             "INSERT INTO report_sales (sale_id, total_minor, currency, customer_id, line_items, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6
+             WHERE NOT EXISTS (SELECT 1 FROM report_sales WHERE sale_id = ?1)",
             rusqlite::params![
                 event.sale_id,
                 event.total_minor,
@@ -85,6 +94,13 @@ impl EventHandler<SaleCompleted> for SaleCompletedReporter {
                 now,
             ],
         )?;
+
+        if inserted == 0 {
+            tracing::warn!(
+                sale_id = %event.sale_id,
+                "reporting handler: duplicate sale.completed ignored (already reported)"
+            );
+        }
 
         info!(
             sale_id = %event.sale_id,
@@ -184,6 +200,46 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM report_sales", [], |row| row.get(0))
             .unwrap();
         assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn handler_replayed_sale_event_is_idempotent() {
+        // MSL-8 fix: a replayed sale.completed (redelivery, retry,
+        // offline re-sync) must not double-count revenue.
+        let db = fresh_db();
+        let handler = SaleCompletedReporter::new(db.clone());
+
+        let event = SaleCompleted {
+            sale_id: "sale-replay".into(),
+            store_id: None,
+            line_items: vec![],
+            total_minor: 500,
+            currency: "USD".into(),
+            customer_id: None,
+        };
+
+        handler.handle(&event).unwrap();
+        handler.handle(&event).unwrap();
+        handler.handle(&event).unwrap();
+
+        let conn = db.lock().unwrap();
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM report_sales WHERE sale_id = ?1",
+                ["sale-replay"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+
+        let total: i64 = conn
+            .query_row(
+                "SELECT SUM(total_minor) FROM report_sales WHERE sale_id = ?1",
+                ["sale-replay"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(total, 500);
     }
 
     #[test]

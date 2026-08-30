@@ -1,8 +1,8 @@
 //! Sales Service — domain business logic, checkout orchestration, and event dispatching.
 /*
 last audited 25-07-26 by RSA-Agent (modules-sales slice B: service deep read)
-crate: modules-sales | status: NEEDS-FIX | lint: CLEAN
-findings: MSL-2 LOW (service.rs:53-57) — void_sale bypasses the state machine: the guard only rejects an already-voided sale, then writes SaleStatus::Voided directly via update_sale_status, so a COMPLETED sale is voided without transition_to (which forbids Completed-to-Voided); voiding also neither records a Refund nor restores stock, so the refund path (Refund model) should be the route for completed sales. Proposed: enforce the transition matrix here (Active-to-Voided only; route Completed-to-Voided to the refund flow or make the bypass an explicit policy). process_checkout is clean: cart construction validated, double transition enforces the DAG, tx-scoped insert, versioned
+crate: modules-sales | status: SAFE | lint: CLEAN
+findings: MSL-2 FIXED — void_sale enforces the transition matrix (Active-to-Voided only via SaleStatus::can_transition_to; Completed sales are rejected with refund-flow guidance): the guard only rejects an already-voided sale, then writes SaleStatus::Voided directly via update_sale_status, which previously let a COMPLETED sale be voided without transition_to (which forbids Completed-to-Voided); voiding also neither records a Refund nor restores stock, so the refund path (Refund model) should be the route for completed sales. Proposed: enforce the transition matrix here (Active-to-Voided only; route Completed-to-Voided to the refund flow or make the bypass an explicit policy). process_checkout is clean: cart construction validated, double transition enforces the DAG, tx-scoped insert, versioned
 next: fix MSL-2 in the fix-order phase | perf: N/A
 */
 
@@ -48,7 +48,15 @@ impl SalesService {
         repo.get_sale(id)
     }
 
-    /// Void an active or completed sale.
+    /// Void an active sale.
+    ///
+    /// MSL-2 fix: the transition matrix (`SaleStatus::can_transition_to`)
+    /// allows only Active→Voided. The previous guard rejected just an
+    /// already-voided sale and wrote `Voided` unconditionally, so a
+    /// Completed sale could be voided — even though `transition_to`
+    /// forbids Completed→Voided — with no refund recorded and no stock
+    /// restored. Completed sales must go through the refund flow
+    /// (`Refund` model) instead.
     pub fn void_sale(conn: &Connection, id: &str) -> Result<(), SalesError> {
         let repo = SalesRepository::new(conn);
         let sale = repo.get_sale(id)?.ok_or_else(|| SalesError::NotFound {
@@ -56,8 +64,18 @@ impl SalesService {
             id: id.to_string(),
         })?;
 
-        if sale.is_terminal() && sale.status == SaleStatus::Voided {
+        if sale.status == SaleStatus::Voided {
             return Err(SalesError::validation("status", "sale is already voided"));
+        }
+
+        if !SaleStatus::can_transition_to(sale.status, SaleStatus::Voided) {
+            return Err(SalesError::validation(
+                "status",
+                format!(
+                    "cannot void a {:?} sale; completed sales must go through the refund flow",
+                    sale.status
+                ),
+            ));
         }
 
         repo.update_sale_status(id, SaleStatus::Voided)?;

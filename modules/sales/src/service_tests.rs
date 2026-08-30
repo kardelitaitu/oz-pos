@@ -68,11 +68,21 @@ fn get_sale_via_service_missing_returns_none() {
 }
 
 #[test]
-fn void_sale_marks_sale_voided() {
-    let mut conn = fresh_conn();
-    let sale =
-        SalesService::process_checkout(&mut conn, &cart_with_line(), None, "cash".to_string())
-            .unwrap();
+fn void_sale_marks_active_sale_voided() {
+    let conn = fresh_conn();
+    // MSL-2 fix: only Active→Voided is legal. Seed an Active sale
+    // directly through the repository (process_checkout emits Completed
+    // sales, which must go through the refund flow, not void_sale).
+    let sale = Sale::from_cart_with_user(&cart_with_line(), None).unwrap();
+    {
+        let repo = SalesRepository::new(&conn);
+        let tx = conn.unchecked_transaction().unwrap();
+        repo.create_sale_tx(&tx, &sale).unwrap();
+        tx.commit().unwrap();
+    }
+    SalesRepository::new(&conn)
+        .update_sale_status(&sale.id, SaleStatus::Active)
+        .unwrap();
 
     SalesService::void_sale(&conn, &sale.id).unwrap();
 
@@ -90,12 +100,33 @@ fn void_sale_not_found_errors() {
 
 #[test]
 fn void_sale_already_voided_errors() {
+    let conn = fresh_conn();
+    let sale = Sale::from_cart_with_user(&cart_with_line(), None).unwrap();
+    {
+        let repo = SalesRepository::new(&conn);
+        let tx = conn.unchecked_transaction().unwrap();
+        repo.create_sale_tx(&tx, &sale).unwrap();
+        tx.commit().unwrap();
+    }
+    SalesRepository::new(&conn)
+        .update_sale_status(&sale.id, SaleStatus::Active)
+        .unwrap();
+    SalesService::void_sale(&conn, &sale.id).unwrap();
+
+    let err = SalesService::void_sale(&conn, &sale.id).unwrap_err();
+    assert!(err.to_string().contains("already voided"));
+}
+
+#[test]
+fn void_sale_completed_errors_routes_to_refund_flow() {
+    // MSL-2 fix: process_checkout emits Completed sales; voiding one is
+    // now rejected (Completed→Voided is not in the transition matrix) —
+    // the refund flow is the route for completed sales.
     let mut conn = fresh_conn();
     let sale =
         SalesService::process_checkout(&mut conn, &cart_with_line(), None, "cash".to_string())
             .unwrap();
 
-    SalesService::void_sale(&conn, &sale.id).unwrap();
     let err = SalesService::void_sale(&conn, &sale.id).unwrap_err();
-    assert!(err.to_string().contains("already voided"));
+    assert!(err.to_string().contains("refund flow"));
 }

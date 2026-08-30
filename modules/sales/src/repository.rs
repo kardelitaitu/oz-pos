@@ -1,8 +1,8 @@
 //! Sales Repository — database persistence layer for sales, held carts, and refunds.
 /*
 last audited 25-07-26 by RSA-Agent (modules-sales slice A: repository deep read)
-crate: modules-sales | status: NEEDS-FIX | lint: CLEAN
-findings: MSL-1 LOW (repository.rs:41-43) — get_sale maps an unrecognized stored status to SaleStatus::Pending via unwrap_or (fail-open): a corrupted status string becomes an editable pending sale that can be transitioned and re-processed; contrast foundation's fail-closed from_stored_str (returns None). Proposed: return SalesError::validation on unrecognized status (use foundation SaleStatus::from_stored_str). Also note the write/read asymmetry: status stored via serde_json to_string then trim_quotes, read via re-quote — works but obscures intent. Otherwise clean: all SQL parameterized, currency parse fails closed, legacy-row column defaults documented, update_sale_status bumps version, lines ordered by position, tx-scoped inserts
+crate: modules-sales | status: SAFE | lint: CLEAN
+findings: MSL-1 FIXED — get_sale now fails closed on an unrecognized stored status (SalesError::validation; the previous unwrap_or(Pending) turned a corrupted status into an editable pending sale): a corrupted status string becomes an editable pending sale that can be transitioned and re-processed; contrast foundation's fail-closed from_stored_str (returns None). Proposed: return SalesError::validation on unrecognized status (use foundation SaleStatus::from_stored_str). Also note the write/read asymmetry: status stored via serde_json to_string then trim_quotes, read via re-quote — works but obscures intent. Otherwise clean: all SQL parameterized, currency parse fails closed, legacy-row column defaults documented, update_sale_status bumps version, lines ordered by position, tx-scoped inserts
 next: fix MSL-1 in the fix-order phase | perf: prepared statements per call
 */
 
@@ -45,8 +45,16 @@ impl<'a> SalesRepository<'a> {
         })?;
 
         let status_str: String = row.get(1)?;
-        let status: SaleStatus =
-            serde_json::from_str(&format!("\"{}\"", status_str)).unwrap_or(SaleStatus::Pending);
+        // MSL-1 fix: fail closed on an unrecognized stored status. The
+        // previous `unwrap_or(SaleStatus::Pending)` turned a corrupted or
+        // hostile status string into an editable pending sale that the
+        // state machine would then happily transition.
+        let status: SaleStatus = SaleStatus::from_stored_str(&status_str).ok_or_else(|| {
+            SalesError::validation(
+                "status",
+                format!("unrecognized stored sale status: {}", status_str),
+            )
+        })?;
 
         let total_minor: i64 = row.get(2)?;
         let total = Money {

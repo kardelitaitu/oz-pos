@@ -71,7 +71,7 @@ production 1–460 fully read; bridge/error verified; the prior
 
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
-| LUA-2 | 🟡 LOW | crates/oz-lua/src/lib.rs:425 | Legacy global-hook path: `parse_discount_result` returns `percent` unvalidated — the only 0–100 check lives on the `oz.apply_discount` binding path (P0-5), so a legacy `apply_discount` hook returning an out-of-range percent flows through `apply_discount_in_env` unchecked. | Validate percent at the parse site (defense-in-depth). |
+| LUA-2 | ✅ FIXED 25-07-26 | crates/oz-lua/src/lib.rs | Legacy global-hook path: `parse_discount_result` returns `percent` unvalidated — the only 0–100 check lives on the `oz.apply_discount` binding path (P0-5), so a legacy `apply_discount` hook returning an out-of-range percent flows through `apply_discount_in_env` unchecked. | Validate percent at the parse site (defense-in-depth). |
 | LUA-3 | ℹ️ INFO | crates/oz-lua/src/lib.rs:255 | `detect_overwrites` never fires: its warn condition counts duplicate occurrences in the *input* name list (always 1 for unique names), not actual VM overwrites. | Fix the condition (snapshot globals before/after each script) or remove the dead check. |
 
 Sandbox hardening otherwise exemplary: dangerous globals removed, `os`
@@ -1401,7 +1401,7 @@ verified structurally).
 
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
-| MSL-1 | 🟡 LOW | modules/sales/src/repository.rs:41–43 | `get_sale` maps an unrecognized stored status to `SaleStatus::Pending` via `unwrap_or` — **fail-open**. A corrupted status string becomes an editable pending sale that can be transitioned and re-processed (double-processing risk on a completed sale read as pending). Contrasts with foundation's fail-closed `SaleStatus::from_stored_str` (returns `None`). Also a write/read asymmetry: status is stored via `serde_json::to_string` + trim-quotes and read by re-quoting — works, but obscures intent. | Return `SalesError::validation` on unrecognized status; use foundation's `from_stored_str` for both directions. |
+| MSL-1 | ✅ FIXED 25-07-26 | modules/sales/src/repository.rs | `get_sale` maps an unrecognized stored status to `SaleStatus::Pending` via `unwrap_or` — **fail-open**. A corrupted status string becomes an editable pending sale that can be transitioned and re-processed (double-processing risk on a completed sale read as pending). Contrasts with foundation's fail-closed `SaleStatus::from_stored_str` (returns `None`). Also a write/read asymmetry: status is stored via `serde_json::to_string` + trim-quotes and read by re-quoting — works, but obscures intent. | Return `SalesError::validation` on unrecognized status; use foundation's `from_stored_str` for both directions. |
 
 models.rs is clean: `Money` i64 minor units throughout, the
 `transition_to` matrix matches foundation's and is test-pinned, CUR-02
@@ -1416,7 +1416,7 @@ old 19-07 stamp replaced), error.rs — **modules-sales COMPLETE**
 
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
-| MSL-2 | 🟡 LOW | modules/sales/src/service.rs:53–57 | `void_sale` bypasses the state machine: the guard only rejects an *already-voided* sale, then writes `SaleStatus::Voided` directly via `update_sale_status` — so a **Completed** sale is voided even though `transition_to` forbids Completed→Voided. The void also records no `Refund` and restores no stock; the refund flow (`Refund` model) is the proper route for completed sales. | Enforce the transition matrix here (Active→Voided only) or route Completed→Voided to the refund flow as an explicit policy. |
+| MSL-2 | ✅ FIXED 25-07-26 | modules/sales/src/service.rs | `void_sale` bypasses the state machine: the guard only rejects an *already-voided* sale, then writes `SaleStatus::Voided` directly via `update_sale_status` — so a **Completed** sale is voided even though `transition_to` forbids Completed→Voided. The void also records no `Refund` and restores no stock; the refund flow (`Refund` model) is the proper route for completed sales. | Enforce the transition matrix here (Active→Voided only) or route Completed→Voided to the refund flow as an explicit policy. |
 
 `process_checkout` is clean (cart validation → double transition →
 tx-scoped insert); `lib.rs` is the kernel registration layer (previous
@@ -1536,7 +1536,7 @@ query; remaining files verified; lib's old 19-07 stamp replaced).
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
 | MSL-7 | ✅ FIXED 25-07-26 | modules/reporting/src/repository.rs | `generate_daily_report` queries `SUM(tax_minor) FROM sales`, but the `sales` table's column is `tax_total_minor` — `tax_minor` lives on `sale_lines` (verified in `crates/oz-core/migrations/20260813_init.sql` lines 589/614). The query fails at runtime with *no such column* on **every call**; no test exercises it against a migrated DB, so the break is invisible to `cargo test`. | Change to `SUM(tax_total_minor)`. |
-| MSL-8 | 🟡 LOW | modules/reporting/src/handlers.rs:37–81 | `report_sales` has no `UNIQUE(sale_id)` and no receipt/pre-check, so a replayed `sale.completed` double-counts revenue in the reporting store; the lazy `CREATE TABLE` DDL also executes on **every** event. Refunded sales remain in report revenue (no refund event exists) — product decision to confirm. | Add `UNIQUE(sale_id)` + `INSERT OR IGNORE`; hoist DDL to a migration or first-use. |
+| MSL-8 | ✅ FIXED 25-07-26 | modules/reporting/src/handlers.rs | `report_sales` has no `UNIQUE(sale_id)` and no receipt/pre-check, so a replayed `sale.completed` double-counts revenue in the reporting store; the lazy `CREATE TABLE` DDL also executes on **every** event. Refunded sales remain in report revenue (no refund event exists) — product decision to confirm. | Add `UNIQUE(sale_id)` + `INSERT OR IGNORE`; hoist DDL to a migration or first-use. |
 
 The handler is otherwise clean (parameterized insert, lock-safe), and the
 live-table query correctly filters `status = 'completed'`.
@@ -1596,7 +1596,7 @@ prior 2026-07-22 stamp replaced per convention).
 
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
-| MSL-10 | 🟡 LOW | modules/loyalty/src/models.rs:87 | `GiftCard` derives `Serialize` **and** `Debug` including the plain `pin` field — any JSON serialization (Tauri command response, log dump) emits the PIN and Debug prints it. Consistent with COR-17's plaintext-at-rest but adds wire/log exposure. | `#[serde(skip_serializing)]` on `pin` plus a redacted `Debug` (or manual impl). |
+| MSL-10 | ✅ FIXED 25-07-26 | modules/loyalty/src/models.rs | `GiftCard` derives `Serialize` **and** `Debug` including the plain `pin` field — any JSON serialization (Tauri command response, log dump) emits the PIN and Debug prints it. Consistent with COR-17's plaintext-at-rest but adds wire/log exposure. | `#[serde(skip_serializing)]` on `pin` plus a redacted `Debug` (or manual impl). |
 
 `LoyaltyTier.earn_multiplier` is `f64` (points math, not currency —
 consistent with the oz-core ledger note). The authoritative earn/redeem
@@ -1820,7 +1820,7 @@ bind/CORS — **cloud-server COMPLETE (risk-ranked sampling)**
 
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
-| CS-3 | 🟡 LOW | apps/cloud-server/src/sync_api.rs:239 | The push handler doc claims a single-transaction batch INSERT, but the SQLite arm of `push_batch` loops per-item in autocommit — a mid-batch failure persists partial items. | `unchecked_transaction` around the loop. |
+| CS-3 | ✅ FIXED 25-07-26 | apps/cloud-server/src/sync_store.rs + sync_api.rs | The push handler doc claims a single-transaction batch INSERT, but the SQLite arm of `push_batch` loops per-item in autocommit — a mid-batch failure persists partial items. | `unchecked_transaction` around the loop. |
 
 Tenant isolation is exemplary: `tenant_id` always derives from JWT
 claims (never the request body), every queue read is `WHERE tenant_id`
@@ -1908,3 +1908,18 @@ Per the project's skill-drift-guard convention (run after changes to `oz-*` crat
 - **Audit stamps:** every file touched by a fix carries the updated `last audited` stamp with its finding resolution, matching the project's stamp format.
 
 No skill patches were required. Campaign remains CLOSED; TLS/noise-PSK upgrade is the sole tracked future-work item.
+### 42. Remaining-LOWs sweep — stamp consistency audit (25-07-26)
+
+A `status: NEEDS-FIX` stamp sweep across all production sources surfaced six LOW findings that had never entered the fix-order tiers (the tiers tracked the significant findings; these module-level LOWs remained open), plus one stale status field. All fixed this round:
+
+| ID | Status |
+|---|---|
+| MSL-1 | ✅ FIXED — `modules/sales` `get_sale` fails closed on an unrecognized stored status (`SalesError::validation`) instead of mapping to editable `Pending`; modules-sales 44 tests pass. |
+| MSL-2 | ✅ FIXED — `void_sale` now enforces the transition matrix (`SaleStatus::can_transition_to`, Active→Voided only); Completed sales are rejected with refund-flow guidance; 3 tests rewritten/added to the new contract; modules-sales 44 pass. |
+| MSL-8 | ✅ FIXED — `report_sales` insert is idempotent (`INSERT..SELECT WHERE NOT EXISTS` on `sale_id`; replayed events warn + skip, works with legacy duplicate rows); replay-idempotency test added; modules-reporting 26 pass. |
+| MSL-10 | ✅ FIXED — `GiftCard.pin` is `skip_serializing` + `default`, and `GiftCard` has a manual redacting `Debug` impl; serde/Debug leak test added; modules-loyalty 39 pass. |
+| CS-3 | ✅ FIXED — SQLite arm of `sync_store::push_batch` wraps the batch in one `unchecked_transaction` (per-item UNIQUE outcomes unchanged, commit at end); atomicity test added; oz-cloud-server 217+7 pass. |
+| LUA-2 | ✅ FIXED — `parse_discount_result` validates percent 0–100 at the parse site (out-of-range → `None`, same contract as the plugin-manager P0-5 path); boundary tests added; oz-lua 65 pass. |
+| auth.rs stamp | ✅ status field bumped to SAFE (DC-3 was already fixed; only the status field was stale). |
+
+Post-fix verification: clippy had already passed workspace-wide; the six touched suites all green (modules-sales 44, modules-reporting 26, modules-loyalty 39, oz-lua 65, oz-cloud-server 222 total). The only remaining tracked item is the TLS/noise-PSK LAN-transport upgrade — scope note: the LAN protocol's client side (KDS device app) lives outside this repository, so the upgrade requires coordinated client+server work and cannot be landed unilaterally without breaking deployed clients; it stays tracked as future work.

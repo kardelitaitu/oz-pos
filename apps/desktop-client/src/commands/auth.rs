@@ -1,6 +1,6 @@
 /*
 last audited 25-07-26 by RSA-Agent (desktop-client slice B: auth deep read)
-crate: desktop-client | status: NEEDS-FIX | lint: CLEAN
+crate: desktop-client | status: SAFE | lint: CLEAN
 findings: DC-3 FIXED — verify_pin now records attempts through the persistent per-account limiter (record_login_attempt_scoped, 5/60s per account + global 60/60s, same flow as staff_login: clear on success, failures stay counted), closing the in-session 4-digit PIN brute-force window; verification failure semantics unchanged (Ok(false) on bad PIN). Otherwise exemplary: STAFF-06 uniform pre-auth (no enumeration oracle) with randomized 50-200ms delay; STAFF-07 layered persistent rate limiting (3/10/30 per 60s + exponential backoff); verify_pin fails closed on malformed/placeholder hashes; picker-ticket identity binding with user_id match; server-side instance-access authorization; deterministic LRU session eviction with lazy prune; keepalive validates before refresh
 next: none | perf: N/A
 */
