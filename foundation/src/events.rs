@@ -1,4 +1,10 @@
 //! Domain events published on the kernel event bus.
+/*
+last audited 25-07-26 by RSA-Agent (foundation slice D: events deep read)
+crate: foundation | status: SAFE | lint: CLEAN
+findings: clean typed domain events (sale.completed/product.created/stock.adjusted), i64 minor units, serde defaults for tax fields; inline tests (COR-33 pattern)
+next: none | perf: N/A
+*/
 
 use crate::Barcode;
 use crate::contracts::DomainEvent;

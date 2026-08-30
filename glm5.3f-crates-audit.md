@@ -833,6 +833,19 @@ not chars, so multi-byte UTF-8 display names hit length caps early (a 50
 "character" cap admits ~16 CJK characters) — a chars-vs-bytes decision is
 worth making explicitly for display-name fields.
 
+### Slice D — sku.rs (223), barcode.rs (237), events.rs (265), errors.rs +
+constants.rs + lib.rs verified — all clean
+
+No new findings. The `Sku`/`Barcode` newtypes validate on construction AND
+serde (trim + non-empty, fail-closed); domain events are typed with `i64`
+minor units and serde defaults; `errors.rs` is three thiserror structs;
+`constants.rs` documents every magic number (basis-point denominator,
+length limits) with doctests. The lib-level old stamp was replaced; the
+crate re-verifies the original audit's claims (zero unsafe, no FFI/IO,
+doc-enforced). `dto/contracts/contact/enums` remain for slice E.
+
+---
+
 ---
 
 ---

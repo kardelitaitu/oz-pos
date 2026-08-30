@@ -1,10 +1,8 @@
 /*
-last audited 19-07-26 by RSA-Agent
+last audited 25-07-26 by RSA-Agent (foundation slice D: lib+errors+constants verified)
 crate: foundation | status: SAFE | lint: CLEAN
-findings: Zero unsafe code. Pure value-objects, contracts, enums, and shared errors with no FFI or IO.
-  All 287 unit tests pass. All public items have doc comments (missing_docs warn).
-  Minimal dependency footprint — designed to be used everywhere without heavy transitive deps.
-next: None | perf: No allocations in hot paths; all types are Copy or lightweight.
+findings: zero unsafe, no FFI/IO, minimal deps, missing_docs enforced; errors.rs thiserror types clean; constants.rs documented magic numbers (basis points, length limits); slices A-D covered money/percentage/cart/validation/sku/barcode/events — dto/contracts/contact/enums remain for slice E
+next: slice E | perf: Copy types in hot paths
 */
 
 //! Foundation crate for OZ-POS.
