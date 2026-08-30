@@ -181,3 +181,29 @@ fn a_gcp_project_id_may_contain_hyphens() {
     assert!(bigquery_insert_url("proj/../x", "d", "t").is_err());
     assert!(bigquery_insert_url("proj?x=1", "d", "t").is_err());
 }
+
+// ── COR-31: no outbound request may be unbounded ─────────────────────────
+
+#[test]
+fn the_client_timeout_outlives_the_statement_timeout_we_ask_for() {
+    // The real risk in fixing a hang is fixing it by cutting the request
+    // short: the Snowflake body tells the warehouse a batch may take
+    // SNOWFLAKE_STATEMENT_TIMEOUT_SECS, so a client bound below that would
+    // abort legitimate exports - worse than the bug being closed, and
+    // silent until a big batch happens to run slow. Both numbers are now
+    // named constants used by the request itself, so this compares the
+    // values that are actually sent rather than two literals that can drift
+    // away from the code.
+    assert!(
+        HTTP_REQUEST_TIMEOUT.as_secs() > SNOWFLAKE_STATEMENT_TIMEOUT_SECS,
+        "client gives up after {}s but asks the warehouse for {}s",
+        HTTP_REQUEST_TIMEOUT.as_secs(),
+        SNOWFLAKE_STATEMENT_TIMEOUT_SECS,
+    );
+    // The connect bound is the tight one, and it must stay well under the
+    // overall bound or it buys nothing over just waiting for the request.
+    assert!(
+        HTTP_CONNECT_TIMEOUT < HTTP_REQUEST_TIMEOUT,
+        "connect bound must be the tighter of the two"
+    );
+}
