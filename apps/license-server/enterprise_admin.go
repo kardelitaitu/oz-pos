@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pocketbase/pocketbase/core"
 )
@@ -67,6 +68,31 @@ func handleGenerateEnterpriseCode(app core.App) func(e *core.RequestEvent) error
 			})
 		}
 
+		// B42: mirror the schema's field caps (ensureEnterpriseApprovals:
+		// code Max:64, email Max:254, prospect_name Max:256). PocketBase
+		// validates by RUNE count ("casted to []rune to count multi-byte
+		// chars as one"), so the pre-check must too — otherwise oversized
+		// input sails past the handler and fails at Save, surfacing a 500
+		// for plainly bad client data (same class as B30's unknown
+		// tier_key).
+		if utf8.RuneCountInString(code) > 64 {
+			return e.JSON(http.StatusBadRequest, map[string]any{
+				"error": "custom_code must be at most 64 characters",
+			})
+		}
+		email := strings.ToLower(strings.TrimSpace(req.Email))
+		if utf8.RuneCountInString(email) > 254 {
+			return e.JSON(http.StatusBadRequest, map[string]any{
+				"error": "email must be at most 254 characters",
+			})
+		}
+		prospect := strings.TrimSpace(req.ProspectName)
+		if utf8.RuneCountInString(prospect) > 256 {
+			return e.JSON(http.StatusBadRequest, map[string]any{
+				"error": "prospect_name must be at most 256 characters",
+			})
+		}
+
 		// Check for uniqueness
 		existing, _ := app.FindFirstRecordByData("enterprise_approvals", "code", code)
 		if existing != nil {
@@ -84,9 +110,14 @@ func handleGenerateEnterpriseCode(app core.App) func(e *core.RequestEvent) error
 		}
 		rec := core.NewRecord(coll)
 		rec.Set("code", code)
-		rec.Set("email", strings.ToLower(strings.TrimSpace(req.Email)))
-		rec.Set("prospect_name", req.ProspectName)
+		rec.Set("email", email)
+		rec.Set("prospect_name", prospect)
 		rec.Set("status", "unused")
+		// B43: the schema has created_by for attribution; the handler
+		// never filled it, so every privileged code was minted
+		// anonymously. Record which admin credential created it.
+		who := adminIdentity(app, e)
+		rec.Set("created_by", who)
 
 		if saveErr := app.Save(rec); saveErr != nil {
 			log.Printf("enterprise-admin: failed to save approval code: %v", saveErr)
@@ -95,8 +126,8 @@ func handleGenerateEnterpriseCode(app core.App) func(e *core.RequestEvent) error
 			})
 		}
 
-		log.Printf("enterprise-admin: generated approval code %s for %s", code[:4]+"****",
-			strings.TrimSpace(req.Email))
+		log.Printf("enterprise-admin: generated approval code %s for %s (by %s)", code[:4]+"****",
+			email, who)
 
 		return e.JSON(http.StatusOK, GenerateCodeResponse{
 			Code:         code,
@@ -171,4 +202,28 @@ func generateApprovalCode() string {
 	b := make([]byte, 4)
 	_, _ = rand.Read(b)
 	return "ENT-" + strings.ToUpper(hex.EncodeToString(b))
+}
+
+// adminIdentity labels WHICH admin credential authorized the current
+// request, for audit fields like enterprise_approvals.created_by (B43).
+// It mirrors authenticateAdmin's two accepted forms (addon_admin.go)
+// without re-deciding authorization — callers must already have passed
+// that gate, so "unknown" only labels an unexpected shape.
+func adminIdentity(app core.App, e *core.RequestEvent) string {
+	if adminKeyOK(e) {
+		return "admin_key"
+	}
+	token, err := extractBearerToken(e)
+	if err != nil {
+		return "unknown"
+	}
+	tenantID := webOtpStore.getSession(hashWebToken(token))
+	if tenantID == "" {
+		return "unknown"
+	}
+	tenant, err := app.FindRecordById("tenants", tenantID)
+	if err != nil {
+		return "unknown"
+	}
+	return tenant.GetString("email")
 }
