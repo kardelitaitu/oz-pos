@@ -286,12 +286,12 @@ fn validate_production_secrets(
     if !production {
         return Ok(());
     }
-    if api_secret.map_or(true, |s| s.trim().is_empty()) {
+    if api_secret.is_none_or(|s| s.trim().is_empty()) {
         return Err(
             "OZ_PRODUCTION=1 requires OZ_API_SECRET to be set (no dev-secret fallback)".into(),
         );
     }
-    if admin_key.map_or(true, |k| k.trim().is_empty()) {
+    if admin_key.is_none_or(|k| k.trim().is_empty()) {
         return Err("OZ_PRODUCTION=1 requires OZ_ADMIN_KEY to be set (no open token mint)".into());
     }
     Ok(())

@@ -4,8 +4,6 @@
 use super::*;
 use proptest::prelude::*;
 
-use proptest::prelude::*;
-
 /// List of all features for generating random selections.
 const ALL_FEATURES: &[Feature] = &[
     Feature::SimpleRetail,

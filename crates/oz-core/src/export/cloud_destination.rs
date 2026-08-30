@@ -336,8 +336,7 @@ impl CloudExporter {
                 columns.join(", ")
             );
             sql.push_str(
-                &std::iter::repeat(row_placeholder)
-                    .take(chunk.len())
+                &std::iter::repeat_n(row_placeholder, chunk.len())
                     .collect::<Vec<_>>()
                     .join(", "),
             );
