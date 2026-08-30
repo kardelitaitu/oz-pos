@@ -513,3 +513,59 @@ fn cli3_phc_validation_rejects_non_argon2_algorithm() {
     // Either the PHC parse or the algorithm check rejects it; both name --pin-hash.
     assert!(err.to_string().contains("--pin-hash"));
 }
+
+// ── CLI-4: restore removes WAL sidecars before copy ───────────────
+
+#[test]
+fn restore_removes_wal_sidecars_and_replaces_database() {
+    let dir = std::env::temp_dir().join(format!(
+        "oz-cli-restore-{}-{}",
+        std::process::id(),
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let db_path = dir.join("live.db");
+    let backup_path = dir.join("backup.db");
+
+    // Seed a live WAL-mode database.
+    {
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL; CREATE TABLE marker(x); INSERT INTO marker VALUES ('live');",
+        )
+        .unwrap();
+    }
+    // Simulate a crashed process: hot sidecars left on disk (a clean
+    // close would have removed them).
+    std::fs::write(db_path.with_extension("db-wal"), b"hot wal frames").unwrap();
+    std::fs::write(db_path.with_extension("db-shm"), b"hot shm").unwrap();
+
+    // A backup with different content.
+    {
+        let conn = Connection::open(&backup_path).unwrap();
+        conn.execute_batch("CREATE TABLE marker(x); INSERT INTO marker VALUES ('backup');")
+            .unwrap();
+    }
+
+    let conn = Connection::open(&db_path).unwrap();
+    super::run_restore(conn, backup_path.to_str().unwrap()).unwrap();
+
+    // Sidecars are gone.
+    assert!(
+        !db_path.with_extension("db-wal").exists(),
+        "-wal must be removed"
+    );
+    assert!(
+        !db_path.with_extension("db-shm").exists(),
+        "-shm must be removed"
+    );
+
+    // The database content is the backup's.
+    let check = Connection::open(&db_path).unwrap();
+    let value: String = check
+        .query_row("SELECT x FROM marker", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(value, "backup");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

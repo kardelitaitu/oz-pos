@@ -1,9 +1,9 @@
 //! Token management endpoint.
 /*
-last audited 25-07-26 by RSA-Agent (oz-api slice A: tokens deep read)
+last audited 25-07-26 by RSA-Agent (oz-api slice A: tokens deep read; API-2 FIXED 25-07-26)
 crate: oz-api | status: SAFE | lint: CLEAN
-findings: clean structure — P2 admin-gated label mint, P3 terminal client-credentials path takes tenant from the registration (never the body); API-2 INFO: admin_key_authorised uses == (non-constant-time compare) and dev-open mode when OZ_ADMIN_KEY unset (documented; combine with API-1 deployment hardening)
-next: constant-time compare | perf: N/A
+findings: API-2 FIXED — admin_key_authorised now compares via HMAC-SHA256 digests under a fixed context key with subtle-backed verify_slice (constant-time; plain == short-circuited on the first differing byte), 4 new unit tests (exact match, wrong/prefix/suffix probes, dev-open, missing header); dev-open mode remains documented and unreachable behind OZ_PRODUCTION=1 via the API-1 production-secrets gate. Clean structure otherwise — P2 admin-gated label mint, P3 terminal client-credentials path takes tenant from the registration (never the body)
+next: none | perf: N/A
 */
 //!
 //! `POST /api/v1/tokens` — generate a new API token.
@@ -60,15 +60,43 @@ const ADMIN_KEY_HEADER: &str = "x-admin-key";
 ///
 /// Returns `true` when the server has no admin key configured (dev mode),
 /// or when the `X-Admin-Key` header matches the configured key.
+///
+/// API-2 fix: the comparison is constant-time. Both values are hashed
+/// with HMAC-SHA256 under a fixed context key and the digests are checked
+/// with `verify_slice` (subtle-backed), so response timing does not leak
+/// how many leading bytes of the header matched — a plain `==` on strings
+/// short-circuits on the first differing byte. The fixed HMAC key is fine
+/// here: the admin key is not attacker-chosen secret input to the MAC, the
+/// hashing exists only to make the equality check data-independent.
 pub fn admin_key_authorised(headers: &HeaderMap, configured: Option<&str>) -> bool {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+
     let Some(key) = configured else {
         return true; // dev mode — no admin key configured
     };
-    headers
+    let Some(supplied) = headers
         .get(header::HeaderName::from_static(ADMIN_KEY_HEADER))
         .and_then(|v| v.to_str().ok())
-        .map(|supplied| supplied == key)
-        .unwrap_or(false)
+    else {
+        return false;
+    };
+
+    type HmacSha256 = Hmac<Sha256>;
+    let digest = |value: &str| {
+        let mut mac = HmacSha256::new_from_slice(b"oz-api-admin-key-compare")
+            .expect("HMAC accepts any key length");
+        mac.update(value.as_bytes());
+        mac.finalize().into_bytes()
+    };
+
+    let provided = digest(supplied);
+    let mut mac = HmacSha256::new_from_slice(b"oz-api-admin-key-compare")
+        .expect("HMAC accepts any key length");
+    mac.update(key.as_bytes());
+    // `verify_slice` is the constant-time comparison; a digest `==` is not
+    // guaranteed data-independent.
+    mac.verify_slice(provided.as_slice()).is_ok()
 }
 
 /// `POST /api/v1/tokens` — create a new API token.

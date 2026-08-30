@@ -1,8 +1,8 @@
 /*
 last audited 25-07-26 by RSA-Agent (desktop-client slice A: lan_server deep read; DC-1 FIXED 25-07-26)
 crate: desktop-client | status: SAFE | lint: CLEAN
-findings: DC-1 FIXED (mitigation) — the PSK handshake compare is now constant-time (psk_matches hashes both inputs with HMAC-SHA256 and compares digests via verify_slice; string == short-circuited on the first differing byte). Threat-model note added to the helper doc: the PSK still travels in cleartext in the hello JSON, so this handshake remains LAN discovery-filtering, not transport security — TLS/noise-PSK upgrade is tracked as future work. DC-2 INFO unchanged — per-peer offline buffer is unbounded across connect/disconnect cycles (drop-oldest cap proposed). Otherwise solid: handshake inside the spawned task (accept-loop DoS-safe), bounded broadcast with lagged-peer handling, safe 127.0.0.1 default with PSK required for external bind, heartbeat/replay design documented
-next: TLS/noise-PSK upgrade (future work); DC-2 drop-oldest cap (INFO) | perf: N/A
+findings: DC-1 FIXED (mitigation) — the PSK handshake compare is now constant-time (psk_matches hashes both inputs with HMAC-SHA256 and compares digests via verify_slice; string == short-circuited on the first differing byte). Threat-model note added to the helper doc: the PSK still travels in cleartext in the hello JSON, so this handshake remains LAN discovery-filtering, not transport security — TLS/noise-PSK upgrade is tracked as future work. DC-2 FIXED — per-peer offline buffer pushes now route through buffer_event_for_peer with a drop-oldest cap of 1,024 events/peer (2 new tests: cap + per-peer isolation; 22 lan_server tests pass). Otherwise solid: handshake inside the spawned task (accept-loop DoS-safe), bounded broadcast with lagged-peer handling, safe 127.0.0.1 default with PSK required for external bind, heartbeat/replay design documented
+next: TLS/noise-PSK upgrade (future work) | perf: N/A
 */
 //! LAN event forwarder — a lightweight TCP server that broadcasts domain
 //! events to KDS tablet peers on the local network.
@@ -50,6 +50,32 @@ const CHANNEL_CAPACITY: usize = 256;
 
 /// Interval between heartbeat pings sent to each peer (seconds).
 const HEARTBEAT_INTERVAL_SECS: u64 = 5;
+
+/// Maximum number of events buffered for one disconnected peer (DC-2
+/// fix: drop-oldest cap keeps a connect/disconnect cycle from growing
+/// its per-peer queue without bound — each queued event is a JSON line,
+/// so 1024 keeps memory per absent peer in the ~hundreds-of-KB range).
+const MAX_OFFLINE_BUFFER_PER_PEER: usize = 1024;
+
+/// Push `event` into the per-peer offline buffer with a drop-oldest cap.
+///
+/// DC-2 fix: both buffer sites (flush-failure re-buffer and live-write
+/// failure) route through here so neither can grow a peer's queue past
+/// [`MAX_OFFLINE_BUFFER_PER_PEER`]; when full, the oldest event is
+/// dropped to make room.
+async fn buffer_event_for_peer(
+    buffer: &Mutex<HashMap<String, Vec<String>>>,
+    peer_addr: &str,
+    event: String,
+) {
+    let mut map = buffer.lock().await;
+    let queue = map.entry(peer_addr.to_string()).or_default();
+    if queue.len() >= MAX_OFFLINE_BUFFER_PER_PEER {
+        queue.remove(0);
+        tracing::debug!(peer = %peer_addr, "offline buffer full, oldest event dropped");
+    }
+    queue.push(event);
+}
 
 /// Timeout for the PSK handshake (seconds).
 const PSK_HANDSHAKE_TIMEOUT_SECS: u64 = 5;
@@ -368,13 +394,9 @@ async fn handle_peer(
                 error = %e,
                 "failed to flush buffered events to reconnecting peer"
             );
-            // Re-buffer the remaining events for next reconnect attempt.
-            offline_buffer
-                .lock()
-                .await
-                .entry(peer_addr.clone())
-                .or_default()
-                .push(event);
+            // Re-buffer the remaining events for next reconnect attempt
+            // (drop-oldest capped).
+            buffer_event_for_peer(&offline_buffer, &peer_addr, event).await;
             return;
         }
     }
@@ -400,13 +422,9 @@ async fn handle_peer(
                                 error = %e,
                                 "LAN peer disconnected, event buffered"
                             );
-                            // Buffer the event for replay on reconnection.
-                            offline_buffer
-                                .lock()
-                                .await
-                                .entry(peer_addr.clone())
-                                .or_default()
-                                .push(msg);
+                            // Buffer the event for replay on reconnection
+                            // (drop-oldest capped).
+                            buffer_event_for_peer(&offline_buffer, &peer_addr, msg).await;
                             return;
                         }
                     }

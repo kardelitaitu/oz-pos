@@ -1,9 +1,9 @@
 //! Cloud settings administration — per-tenant SMTP / report-schedule
 //! provisioning.
 /*
-last audited 25-07-26 by RSA-Agent (oz-api slice A: settings routes deep read)
+last audited 25-07-26 by RSA-Agent (oz-api slice A: settings routes deep read; API-2 documented 25-07-26)
 crate: oz-api | status: SAFE | lint: CLEAN
-findings: clean — both handlers admin-key-gate first despite the public-router placement (verified); tenant ids charset-validated; field ops resolved before any write (no half-applied config); SMTP password encrypted at rest on write, DECRYPTED in GET responses (admin round-trip; contributes to API-2 dev-open exposure); PG and SQLite paths mirror each other
+findings: clean — both handlers admin-key-gate first despite the public-router placement (verified); tenant ids charset-validated; field ops resolved before any write (no half-applied config); SMTP password encrypted at rest on write, DECRYPTED in GET responses — API-2: the decrypted-GET tradeoff is now documented on get_settings_handler (safe because admin-gated with constant-time compare + OZ_ADMIN_KEY mandatory behind OZ_PRODUCTION=1; redaction path specified if either guard is ever relaxed); PG and SQLite paths mirror each other
 next: none here | perf: N/A
 */
 //!
@@ -166,6 +166,23 @@ fn parse_smtp_config(raw: &str) -> Option<SmtpConfig> {
 }
 
 /// `GET /api/v1/settings` — read a tenant's effective cloud settings.
+///
+/// # API-2 security note (decrypted SMTP password)
+///
+/// The response contains the tenant's SMTP password **decrypted** so the
+/// admin client can round-trip the full configuration. This is a
+/// deliberate tradeoff, safe only because:
+///
+/// 1. the endpoint is gated by the admin key with a constant-time compare
+///    (`admin_key_authorised`), and
+/// 2. `OZ_ADMIN_KEY` **must** be set in production (`validate_production_secrets`
+///    in [`crate::serve`] refuses to start without it) — the dev-open mode
+///    that would expose decrypted credentials to anyone is unreachable
+///    behind `OZ_PRODUCTION=1`.
+///
+/// Do not relax either guard without first switching the GET response to
+/// redact the password (e.g. return a `has_password: true` marker and
+/// accept "leave unchanged" semantics on PUT).
 pub async fn get_settings_handler(
     State(state): State<AppState>,
     headers: HeaderMap,

@@ -4273,6 +4273,7 @@ dependencies = [
  "deadpool-postgres",
  "foundation",
  "hex",
+ "hmac 0.12.1",
  "http-body-util",
  "jsonwebtoken",
  "oz-core",

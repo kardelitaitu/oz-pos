@@ -1,7 +1,7 @@
 /*
 last audited 25-07-26 by RSA-Agent (oz-cli slice A: commands deep read; CLI-1 + CLI-2 FIXED 25-07-26)
 crate: oz-cli | status: SAFE | lint: CLEAN
-findings: CLI-1 FIXED — run_import_ozpkg sale imports now use the new tx-aware Store::create_sale_in_tx (the previous store.create_sale opened a nested transaction inside the import transaction and failed with cannot-start-a-transaction-within-a-transaction, rolling back sale imports). CLI-2 FIXED — init-db seeds the admin user with a real argon2 hash of the documented default PIN 1234 (never-verifying hashed_pin_placeholder locked the first-run admin out) and prints a change-it-now warning. CLI-3 FIXED — run_user_create validates the --pin-hash argument as an argon2 PHC string (argon2 PHC parse + algorithm check, new argon2 workspace dep; placeholder/garbage/foreign-algorithm values are rejected up front); CLI-4 INFO unchanged (restore torn-restore risk); CLI-5 INFO unchanged (file length). Otherwise clean: parameterized SQL, single-tx import for other types, recoverable currency UTF-8 handling per RUST-07, Argon2id + AES-256-GCM export path, dry-run support
+findings: CLI-1 FIXED — run_import_ozpkg sale imports now use the new tx-aware Store::create_sale_in_tx (the previous store.create_sale opened a nested transaction inside the import transaction and failed with cannot-start-a-transaction-within-a-transaction, rolling back sale imports). CLI-2 FIXED — init-db seeds the admin user with a real argon2 hash of the documented default PIN 1234 (never-verifying hashed_pin_placeholder locked the first-run admin out) and prints a change-it-now warning. CLI-3 FIXED — run_user_create validates the --pin-hash argument as an argon2 PHC string (argon2 PHC parse + algorithm check, new argon2 workspace dep; placeholder/garbage/foreign-algorithm values are rejected up front); CLI-4 FIXED — run_restore checkpoints the WAL (TRUNCATE) then deletes stale -wal/-shm sidecars before the backup copy (simulated-crash test; hot sidecars would otherwise win the next open and resurrect pre-restore data); CLI-5 INFO unchanged (file length). Otherwise clean: parameterized SQL, single-tx import for other types, recoverable currency UTF-8 handling per RUST-07, Argon2id + AES-256-GCM export path, dry-run support
 next: CLI-3/4/5 (LOW/INFO) | perf: N/A
 */
 //! Command implementations for the `oz` CLI.
@@ -861,15 +861,43 @@ pub(crate) fn run_product_delete(store: &Store<'_>, sku: &str) -> Result<()> {
 // ── Restore ────────────────────────────────────────────────────────────
 
 /// Restore the database from a backup file.
+///
+/// CLI-4 fix: dropping the connection does not remove the `*-wal` /
+/// `*-shm` sidecar files — a live process (or a crashed previous one)
+/// can leave a hot WAL whose frames would win the next open and silently
+/// resurrect pre-restore data over the copied backup (torn restore).
+/// The restore therefore checkpoints away the connection's WAL, then
+/// deletes both sidecars before the copy.
 pub(crate) fn run_restore(conn: Connection, input: &str) -> Result<()> {
     eprintln!("restoring from {input}...");
 
-    // Close the existing connection, then copy the backup over.
+    // Close the existing connection cleanly, then copy the backup over.
     let db_path = conn
         .path()
         .map(|p| p.to_owned())
         .unwrap_or_else(|| "oz-pos.db".into());
+
+    // Fold any WAL frames back into the main file so nothing live is
+    // stranded in the sidecars, then close.
+    if let Err(e) = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);") {
+        // In-memory or non-WAL databases return an error here; nothing
+        // to checkpoint is fine — the sidecar deletion below is the
+        // load-bearing step.
+        eprintln!("  note: wal_checkpoint skipped ({e})");
+    }
     drop(conn);
+
+    for sidecar_ext in ["-wal", "-shm"] {
+        let sidecar = format!("{db_path}{sidecar_ext}");
+        match std::fs::remove_file(&sidecar) {
+            Ok(()) => eprintln!("  removed stale sidecar {sidecar}"),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => {
+                return Err(anyhow::Error::from(e))
+                    .with_context(|| format!("removing sidecar {sidecar} before restore"));
+            }
+        }
+    }
 
     std::fs::copy(input, &db_path)
         .with_context(|| format!("copying backup {input} to {db_path}"))?;

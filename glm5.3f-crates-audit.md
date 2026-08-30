@@ -172,7 +172,7 @@ read).
 | CLI-1 | ✅ FIXED 25-07-26 | crates/oz-cli/src/commands.rs | `run_import_ozpkg` calls `store.create_sale(&sale)` **inside** an `unchecked_transaction` — oz-core Store writes are tx-wrapped (F-022), so the nested transaction attempt should fail ("cannot start a transaction within a transaction") and roll back sale imports. | Raw-sale upsert via `tx` like the other types, or a tx-aware Store method. |
 | CLI-2 | ✅ FIXED 25-07-26 | crates/oz-cli/src/commands.rs | `init-db` seeds the admin user with `pin_hash = "hashed_pin_placeholder"` — never verifies under argon2, so first-run admin is locked out unless a bootstrap flow sets a real hash. | Seed a real hash of a documented default PIN or force PIN setup on first launch. |
 | CLI-3 | ✅ FIXED 25-07-26 | crates/oz-cli/src/commands.rs | `user create` accepts a raw `--pin-hash` from argv with no PHC-format check. | Validate the argon2 PHC string format. |
-| CLI-4 | ℹ️ INFO | crates/oz-cli/src/commands.rs:826 | `restore` copies a backup over the live DB file while WAL/SHM sidecars may exist — torn-restore risk. | Checkpoint/remove sidecars or restore via the backup API. |
+| CLI-4 | ✅ FIXED 25-07-26 | crates/oz-cli/src/commands.rs | `restore` copies a backup over the live DB file while WAL/SHM sidecars may exist — torn-restore risk. | Checkpoint/remove sidecars or restore via the backup API. |
 | CLI-5 | ℹ️ INFO | crates/oz-cli/src/commands.rs | 1,220 production lines — over the project's 1,000-line limit. | Split per command family. |
 
 Otherwise clean: parameterized SQL, single-transaction import for the
@@ -218,7 +218,7 @@ the consumer.
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
 | DC-1 | ✅ FIXED 25-07-26 (constant-time compare; TLS tracked as future work) | apps/desktop-client/src/lan_server.rs | PSK auth sends the shared key **in cleartext** over TCP and compares it with plain string equality — a LAN observer can sniff the PSK on first connect and impersonate a peer. | Document PSK as discovery-filtering only or upgrade to TLS/noise-PSK; constant-time compare meanwhile. |
-| DC-2 | ℹ️ INFO | apps/desktop-client/src/lan_server.rs:366 | Per-peer offline buffer is unbounded across reconnect cycles. | Drop-oldest cap per peer. |
+| DC-2 | ✅ FIXED 25-07-26 | apps/desktop-client/src/lan_server.rs | Per-peer offline buffer is unbounded across reconnect cycles. | Drop-oldest cap per peer. |
 
 Otherwise solid: handshake inside the spawned task (accept-loop
 DoS-safe), bounded broadcast channel with lagged handling, safe
@@ -1025,7 +1025,7 @@ Slice A (lib, auth, routes/settings, routes/tokens) deep-read.
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
 | API-1 | ✅ FIXED 25-07-26 | oz-api/src/auth.rs | **Hard-coded dev JWT signing secret fallback** (`"oz-pos-dev-secret-change-in-production"`) when `OZ_API_SECRET` is unset — anyone who knows the constant can forge valid tokens for every protected route on a misconfigured public server. There is no startup enforcement. | Refuse to serve (or log-a-fatal warn) when `OZ_PRODUCTION` is set and `OZ_API_SECRET` is missing; consider the same gate for `OZ_ADMIN_KEY`. |
-| API-2 | ℹ️ INFO | oz-api/src/routes/tokens.rs:57–66, routes/settings.rs:118–124 | Admin-key comparison is non-constant-time (`==`), dev-open mode when `OZ_ADMIN_KEY` is unset (documented), and `GET /api/v1/settings` returns the tenant's SMTP password **decrypted** — a misconfigured dev-open deployment discloses credentials. | Constant-time compare; require admin key in production; document the decrypted-GET tradeoff. |
+| API-2 | ✅ FIXED 25-07-26 | crates/oz-api/src/routes/tokens.rs + routes/settings.rs | Admin-key comparison is non-constant-time (`==`), dev-open mode when `OZ_ADMIN_KEY` is unset (documented), and `GET /api/v1/settings` returns the tenant's SMTP password **decrypted** — a misconfigured dev-open deployment discloses credentials. | Constant-time compare; require admin key in production; document the decrypted-GET tradeoff. |
 
 **Slice A positives:** security headers on every response (nosniff, DENY,
 CSP, prod-only HSTS), fail-closed CORS parsing with documented dev opt-in,
@@ -1876,4 +1876,4 @@ simply predates the payment keys.
 | CLI-3 | ✅ FIXED — `--pin-hash` validated as an argon2 PHC string (parse + algorithm check; 3 new tests incl. placeholder rejection; oz-cli 88 tests pass). |
 | DC-3 | ✅ FIXED — `verify_pin` routed through the persistent per-account limiter (5/60s + global budget, cleared on success); desktop auth tests 44 pass. |
 | UI-2 | ✅ FIXED — new `ui/src/api/tauri.ts` is the single re-export surface for `@tauri-apps/api/{core,event,app,window}`; the 4 offending files (StaffLoginScreen, KdsScreen, UpdateBanner, useFullscreen) now import from `@/api/tauri`; typecheck clean, 75 gateway/fullscreen/kds tests pass. |
-| Remaining | LOW/INFO backlog unchanged: CLI-4 (restore sidecars), CLI-5 (file split), M-2 (single decode), DC-2 (offline-buffer cap), API-2 (constant-time admin compare + decrypted-GET doc), TLS/noise-PSK upgrade. |
+| Remaining (25-07-26 round 2) | ✅ API-2 (constant-time admin compare via HMAC digest + verify_slice, 4 tests, oz-api 198 pass; decrypted-GET tradeoff documented with the redaction escape hatch), ✅ DC-2 (drop-oldest cap of 1,024 events/peer via buffer_event_for_peer, 2 tests, 22 lan_server pass), ✅ CLI-4 (restore checkpoints WAL + deletes stale -wal/-shm sidecars before the copy, simulated-crash test, oz-cli 89 pass). Still open: CLI-5 (commands.rs split — deferred: large mechanical refactor, deliberate-care item), M-2 (single decode pass — perf refactor best done with the storage promotion), TLS/noise-PSK upgrade (future work). |

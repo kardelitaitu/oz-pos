@@ -24,6 +24,7 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 sha2 = { workspace = true }
+hmac = { workspace = true }
 hex = { workspace = true }
 foundation = { workspace = true }
 # Phase 1.2 (unify-auth-and-sync.md): the cloud server's Postgres branch

@@ -398,3 +398,42 @@ fn without_discovery_has_no_payload() {
     // Default forwarder should work without discovery.
     fwd.broadcast("test".into());
 }
+
+// ── DC-2: offline buffer drop-oldest cap ──────────────────────────
+
+#[tokio::test]
+async fn offline_buffer_caps_per_peer_queue_with_drop_oldest() {
+    let buffer = Arc::new(Mutex::new(HashMap::new()));
+    for i in 0..(MAX_OFFLINE_BUFFER_PER_PEER + 250) {
+        buffer_event_for_peer(&buffer, "peer-a", format!("e{i}")).await;
+    }
+    let map = buffer.lock().await;
+    let queue = map.get("peer-a").unwrap();
+    assert_eq!(queue.len(), MAX_OFFLINE_BUFFER_PER_PEER);
+    // Oldest events were dropped: first retained is e250, last is the
+    // most recently pushed.
+    assert_eq!(queue.first().unwrap(), &format!("e{}", 250));
+    assert_eq!(
+        queue.last().unwrap(),
+        &format!("e{}", MAX_OFFLINE_BUFFER_PER_PEER + 249)
+    );
+}
+
+#[tokio::test]
+async fn offline_buffer_caps_are_per_peer_not_global() {
+    let buffer = Arc::new(Mutex::new(HashMap::new()));
+    for i in 0..(MAX_OFFLINE_BUFFER_PER_PEER + 10) {
+        buffer_event_for_peer(&buffer, "peer-a", format!("a{i}")).await;
+        buffer_event_for_peer(&buffer, "peer-b", format!("b{i}")).await;
+    }
+    let map = buffer.lock().await;
+    assert_eq!(
+        map.get("peer-a").unwrap().len(),
+        MAX_OFFLINE_BUFFER_PER_PEER
+    );
+    assert_eq!(
+        map.get("peer-b").unwrap().len(),
+        MAX_OFFLINE_BUFFER_PER_PEER
+    );
+    assert_eq!(map.len(), 2);
+}
