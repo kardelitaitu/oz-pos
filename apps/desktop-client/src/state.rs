@@ -50,6 +50,8 @@ use std::sync::RwLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use oz_security::mask::mask_token;
+
 use notify::Watcher as _;
 use oz_core::cache::Cache;
 use oz_plugin::PluginManager;
@@ -472,7 +474,11 @@ impl AppState {
             && ctx.is_expired()
         {
             store.remove(token);
-            tracing::info!(token = %token, "session expired — removed from store");
+            // Masked, not raw: this fires on ordinary use of a stale token,
+            // and a session token is a bearer credential — anyone who reads
+            // it off a console or a support capture can act as that session
+            // without knowing the PIN.
+            tracing::info!(token = %mask_token(token), "session expired — removed from store");
         }
 
         Err(AppError::InvalidSession)
@@ -501,7 +507,7 @@ impl AppState {
             tracing::info!(
                 user_id = %user_id,
                 removed = %removed,
-                keep_token = %keep_token,
+                keep_token = %mask_token(keep_token),
                 "sessions invalidated after PIN rotation"
             );
         }
@@ -524,7 +530,7 @@ impl AppState {
         let before = store.len();
         store.retain(|token, ctx| {
             if ctx.is_expired() {
-                tracing::trace!(token = %token, "pruning expired session");
+                tracing::trace!(token = %mask_token(token), "pruning expired session");
                 false
             } else {
                 true

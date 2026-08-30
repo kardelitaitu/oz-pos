@@ -17,6 +17,7 @@ use tauri::{State, command};
 use oz_core::auth::LoginSession;
 use oz_core::db::Store;
 use oz_core::session::SessionContext;
+use oz_security::mask::mask_token;
 
 use crate::commands::picker_ticket;
 use crate::error::AppError;
@@ -374,7 +375,7 @@ pub async fn create_session(
         }
 
         if session_store.contains_key(&token) {
-            tracing::warn!(token = %token, "session token collision detected — overwriting");
+            tracing::warn!(token = %mask_token(&token), "session token collision detected — overwriting");
         }
 
         // Deterministic LRU eviction: find the oldest session by created_at.
@@ -388,7 +389,7 @@ pub async fn create_session(
             if let Some(old_token) = oldest_entry {
                 session_store.remove(&old_token);
                 tracing::warn!(
-                    old_token = %old_token,
+                    old_token = %mask_token(&old_token),
                     "session store full — evicted oldest session by created_at"
                 );
             }

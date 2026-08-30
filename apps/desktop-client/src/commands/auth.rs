@@ -17,6 +17,7 @@ use tauri::State;
 use oz_core::auth::LoginSession;
 use oz_core::db::Store;
 use oz_core::session::SessionContext;
+use oz_security::mask::mask_token;
 
 use foundation::validate_not_empty;
 
@@ -410,7 +411,7 @@ pub async fn create_session(
 
         // Defensive: log if a UUID collision occurs (astronomically unlikely).
         if session_store.contains_key(&token) {
-            tracing::warn!(token = %token, "session token collision detected — overwriting");
+            tracing::warn!(token = %mask_token(&token), "session token collision detected — overwriting");
         }
 
         // Enforce a maximum session count with deterministic LRU eviction.
@@ -427,7 +428,7 @@ pub async fn create_session(
             if let Some(old_token) = oldest_entry {
                 session_store.remove(&old_token);
                 tracing::warn!(
-                    old_token = %old_token,
+                    old_token = %mask_token(&old_token),
                     "session store full — evicted oldest session by created_at"
                 );
             }

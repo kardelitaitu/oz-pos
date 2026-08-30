@@ -70,6 +70,7 @@ static TEST_MANIFEST_DIRECTIVES: [u8; 184] = *b" /MANIFEST:EMBED /MANIFESTDEPEND
 
 use crate::error::AppError;
 use crate::state::AppState;
+use oz_security::mask::mask_token;
 use tauri::{Emitter, Manager};
 
 /// Application entry point, called by `main.rs`.
@@ -233,7 +234,7 @@ pub fn run() {
                         store.retain(|token, ctx| {
                             if ctx.is_expired() {
                                 tracing::trace!(
-                                    token = %token,
+                                    token = %mask_token(token),
                                     "session cleanup: removing expired session"
                                 );
                                 false

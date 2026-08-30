@@ -29,6 +29,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::RwLock;
 
+use oz_security::mask::mask_token;
 use rusqlite::Connection;
 use tauri::AppHandle;
 use tauri::Manager;
@@ -209,7 +210,10 @@ impl AppState {
             && ctx.is_expired()
         {
             store.remove(token);
-            tracing::info!(token = %token, "session expired — removed from store");
+            // On Android this reaches logcat, which is a broader audience
+            // than a desktop console: any adb shell or a bug-report dump
+            // picks it up.
+            tracing::info!(token = %mask_token(token), "session expired — removed from store");
         }
 
         Err(AppError::InvalidSession)
@@ -262,7 +266,7 @@ impl AppState {
             tracing::info!(
                 user_id = %user_id,
                 removed = %removed,
-                keep_token = %keep_token,
+                keep_token = %mask_token(keep_token),
                 "sessions invalidated after PIN rotation"
             );
         }
