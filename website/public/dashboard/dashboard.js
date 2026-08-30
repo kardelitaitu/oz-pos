@@ -74,11 +74,23 @@ function stat(label, value, sub, icon, variant) {
 function renderUsage(usage) {
   const c = document.getElementById('content');
   const g = el('div', 'stat-grid');
-  g.appendChild(stat('Devices', String(usage.device_count ?? 0), 'registered terminals', ICONS.devices, 'stat--primary'));
-  g.appendChild(stat('Subscriptions', String(usage.subscription_count ?? 0), 'active plans', ICONS.subs, 'stat--success'));
-  g.appendChild(stat('Max Stores', String(usage.max_stores ?? 0), 'entitlement', ICONS.stores, 'stat--warning'));
-  g.appendChild(stat('Max POS', String(usage.max_pos_instances ?? 0), 'entitlement', ICONS.pos, 'stat--info'));
+  // Subscription (tier) | Max Stores | Max Terminal | Max KDS
+  const tier = usage.tier_key || (usage.subscription_count > 0 ? 'active' : 'free');
+  g.appendChild(stat('Subscription', tier === 'free' ? 'Free' : tier, 'current plan', ICONS.card, 'stat--primary'));
+  const maxStores = usage.max_stores ?? 0;
+  const maxTerm = usage.max_pos_instances ?? 0;
+  const maxKds = usage.max_kds ?? 0;
+  const dev = usage.device_count ?? 0;
+  g.appendChild(stat('Max Stores', fmtUsedMax(0, maxStores), 'stores', ICONS.stores, 'stat--warning'));
+  g.appendChild(stat('Max Terminal', fmtUsedMax(dev, maxTerm), 'registers', ICONS.pos, 'stat--info'));
+  g.appendChild(stat('Max KDS', fmtUsedMax(0, maxKds), 'screens', ICONS.devices, 'stat--success'));
   c.insertBefore(g, c.firstChild);
+}
+
+// fmtUsedMax renders "used / max" (or "∞" for the unlimited sentinel).
+function fmtUsedMax(used, max) {
+  if (max >= 999) return used + ' / ∞';
+  return used + ' / ' + max;
 }
 
 // ── Cards ────────────────────────────────────────────────────────
