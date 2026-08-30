@@ -7,36 +7,67 @@ import SearchModal from '../SearchModal';
 
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
+// ── Helpers ──────────────────────────────────────────────────────────
+
+async function renderModal(isOpen = true, onClose = vi.fn(), locale = 'en') {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(<SearchModal isOpen={isOpen} onClose={onClose} locale={locale} />);
+  });
+
+  return {
+    container,
+    root,
+    unmount: async () => {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    },
+  };
+}
+
+async function renderOpen(locale = 'en') {
+  const m = await renderModal(true, vi.fn(), locale);
+  // Wait for the mounted state + focus timeout to settle
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 10));
+  });
+  const options = () => Array.from(document.body.querySelectorAll('a[role="option"]')) as HTMLElement[];
+  const selected = () => options().findIndex((o) => o.getAttribute('aria-selected') === 'true');
+  return {
+    ...m,
+    options,
+    selected,
+    press: async (key: string, opts: KeyboardEventInit = {}) => {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...opts }));
+      });
+    },
+  };
+}
+
+function setInputValue(input: HTMLInputElement, value: string) {
+  const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+  nativeSetter.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  document.body.innerHTML = '';
+});
+
+afterEach(() => {
+  document.body.innerHTML = '';
+});
+
+// ── Basic rendering (existing) ───────────────────────────────────────
+
 describe('SearchModal Component', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    document.body.innerHTML = '';
-  });
-
-  afterEach(() => {
-    document.body.innerHTML = '';
-  });
-
-  async function renderModal(isOpen = true, onClose = vi.fn(), locale = 'en') {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    await act(async () => {
-      root.render(<SearchModal isOpen={isOpen} onClose={onClose} locale={locale} />);
-    });
-
-    return {
-      container,
-      unmount: async () => {
-        await act(async () => {
-          root.unmount();
-        });
-        container.remove();
-      },
-    };
-  }
-
   it('does not render when isOpen is false', async () => {
     const { unmount } = await renderModal(false);
     expect(document.body.querySelector('[role="dialog"]')).toBeNull();
@@ -57,9 +88,7 @@ describe('SearchModal Component', () => {
     const input = document.body.querySelector('input[type="search"]') as HTMLInputElement;
 
     await act(async () => {
-      const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-      nativeSetter.call(input, 'pricing');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
+      setInputValue(input, 'pricing');
     });
 
     const results = document.body.querySelectorAll('a[role="option"]');
@@ -74,9 +103,7 @@ describe('SearchModal Component', () => {
     const input = document.body.querySelector('input[type="search"]') as HTMLInputElement;
 
     await act(async () => {
-      const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-      nativeSetter.call(input, 'xyznonexistentterm123');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
+      setInputValue(input, 'xyznonexistentterm123');
     });
 
     expect(document.body.textContent).toContain('No matching results found');
@@ -113,5 +140,106 @@ describe('SearchModal Component', () => {
     expect(onClose).toHaveBeenCalled();
 
     await unmount();
+  });
+});
+
+// ── Keyboard navigation ──────────────────────────────────────────────
+
+describe('SearchModal — keyboard navigation', () => {
+  it('starts with the first option selected', async () => {
+    const m = await renderOpen();
+    try {
+      expect(m.selected()).toBe(0);
+    } finally {
+      await m.unmount();
+    }
+  });
+
+  it('ArrowDown moves selection forward', async () => {
+    const m = await renderOpen();
+    try {
+      await m.press('ArrowDown');
+      expect(m.selected()).toBe(1);
+    } finally {
+      await m.unmount();
+    }
+  });
+
+  it('ArrowDown wraps from the last option to the first', async () => {
+    const m = await renderOpen();
+    try {
+      for (let i = 0; i < 8; i++) await m.press('ArrowDown');
+      expect(m.selected()).toBe(0);
+    } finally {
+      await m.unmount();
+    }
+  });
+
+  it('ArrowUp wraps from the first option to the last', async () => {
+    const m = await renderOpen();
+    try {
+      await m.press('ArrowUp');
+      expect(m.selected()).toBe(m.options().length - 1);
+    } finally {
+      await m.unmount();
+    }
+  });
+
+  it('resets selection to 0 when the query changes', async () => {
+    const m = await renderOpen();
+    try {
+      await m.press('ArrowDown');
+      expect(m.selected()).toBe(1);
+
+      const input = document.body.querySelector('input[type="search"]') as HTMLInputElement;
+      await act(async () => {
+        setInputValue(input, 'qris');
+      });
+
+      expect(m.selected()).toBe(0);
+    } finally {
+      await m.unmount();
+    }
+  });
+
+  it('highlights the hovered option', async () => {
+    const m = await renderOpen();
+    try {
+      const third = m.options()[2];
+      // React onMouseEnter is triggered by native mouseover with relatedTarget
+      // outside the target element.
+      await act(async () => {
+        third.dispatchEvent(
+          new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body }),
+        );
+      });
+      expect(m.selected()).toBe(2);
+    } finally {
+      await m.unmount();
+    }
+  });
+
+  it('filters by keywords (docs)', async () => {
+    const m = await renderOpen();
+    try {
+      const input = document.body.querySelector('input[type="search"]') as HTMLInputElement;
+      await act(async () => {
+        setInputValue(input, 'cloud-sync');
+      });
+      const opts = m.options();
+      expect(opts.length).toBe(1);
+      expect(opts[0].textContent?.toLowerCase()).toContain('cloud sync');
+    } finally {
+      await m.unmount();
+    }
+  });
+
+  it('uses localized titles for the id locale', async () => {
+    const m = await renderOpen('id');
+    try {
+      expect(m.options().some((o) => o.textContent?.includes('Beranda'))).toBe(true);
+    } finally {
+      await m.unmount();
+    }
   });
 });
