@@ -474,7 +474,12 @@ async fn get_smtp_config_pg(pool: &Pool, tenant: &str) -> Result<Option<SmtpConf
     if let Some(ref pwd) = config.password
         && !pwd.is_empty()
     {
-        config.password = Some(oz_core::crypto::decrypt_smtp_at_rest(pwd));
+        // F-029: fails closed — legacy plaintext passes through inside
+        // decrypt_smtp_at_rest, tampered ciphertext surfaces as an error.
+        config.password = Some(
+            oz_core::crypto::decrypt_smtp_at_rest(pwd)
+                .map_err(|e| format!("stored SMTP password failed authentication: {e}"))?,
+        );
     }
     Ok(Some(config))
 }

@@ -200,7 +200,7 @@ async fn password_is_encrypted_at_rest() {
     );
     let stored: SmtpConfig = serde_json::from_str(&raw).unwrap();
     assert_eq!(
-        oz_core::crypto::decrypt_smtp_at_rest(stored.password.as_deref().unwrap()),
+        oz_core::crypto::decrypt_smtp_at_rest(stored.password.as_deref().unwrap()).unwrap(),
         "secret"
     );
 }

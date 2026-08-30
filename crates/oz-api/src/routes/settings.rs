@@ -145,13 +145,22 @@ fn scoped_key(base: &str, tenant: &str) -> String {
 }
 
 /// Deserialize a stored SMTP config, decrypting the password (legacy
-/// plaintext passes through unchanged). `None` on malformed storage.
+/// plaintext passes through unchanged). `None` on malformed storage or
+/// tampered ciphertext (F-029: decryption now fails closed — a
+/// well-formed value that no longer authenticates is NOT returned as
+/// if it were the stored secret).
 fn parse_smtp_config(raw: &str) -> Option<SmtpConfig> {
     let mut config: SmtpConfig = serde_json::from_str(raw).ok()?;
     if let Some(ref pwd) = config.password
         && !pwd.is_empty()
     {
-        config.password = Some(oz_core::crypto::decrypt_smtp_at_rest(pwd));
+        match oz_core::crypto::decrypt_smtp_at_rest(pwd) {
+            Ok(plaintext) => config.password = Some(plaintext),
+            Err(e) => {
+                tracing::error!(error = %e, "smtp at-rest ciphertext failed authentication");
+                return None;
+            }
+        }
     }
     Some(config)
 }
@@ -232,10 +241,22 @@ pub async fn put_settings_handler(
             Ok(mut config) => {
                 // Encrypt the password at rest like the rest of the cloud
                 // path expects (decrypt on read is lossless).
+                // F-029: encryption is fail-closed — an encrypt failure
+                // must never store the plaintext password.
                 if let Some(ref pwd) = config.password
                     && !pwd.is_empty()
                 {
-                    config.password = Some(oz_core::crypto::encrypt_smtp_at_rest(pwd));
+                    match oz_core::crypto::encrypt_smtp_at_rest(pwd) {
+                        Ok(encrypted) => config.password = Some(encrypted),
+                        Err(e) => {
+                            tracing::error!(error = %e, "smtp at-rest encryption failed");
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(serde_json::json!({"error": "settings_write_failed"})),
+                            )
+                                .into_response();
+                        }
+                    }
                 }
                 match serde_json::to_string(&config) {
                     Ok(json) => Op::Write(json),

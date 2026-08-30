@@ -113,12 +113,17 @@ impl Store<'_> {
     /// The password field is encrypted at rest before serialization
     /// so that casual database inspection does not reveal it.
     /// Decryption happens transparently in [`Self::get_smtp_config`].
+    ///
+    /// F-029: encryption fails closed — an encrypt failure returns an
+    /// error instead of storing the plaintext password.
     pub fn save_smtp_config(&self, config: &SmtpConfig) -> Result<(), CoreError> {
         let mut config = config.clone();
         if let Some(ref pwd) = config.password
             && !pwd.is_empty()
         {
-            config.password = Some(crate::crypto::encrypt_smtp_at_rest(pwd));
+            config.password = Some(crate::crypto::encrypt_smtp_at_rest(pwd).map_err(|e| {
+                CoreError::Internal(format!("failed to encrypt SMTP password: {e}"))
+            })?);
         }
         let json = serde_json::to_string(&config)
             .map_err(|e| CoreError::Internal(format!("failed to serialize SMTP config: {e}")))?;
@@ -129,7 +134,8 @@ impl Store<'_> {
     ///
     /// The password field is transparently decrypted if it was
     /// encrypted at rest. Legacy plaintext passwords are returned
-    /// as-is (backward compatible).
+    /// as-is (backward compatible); tampered ciphertext fails closed
+    /// with an error (F-029).
     /// Returns `None` if no config has been saved yet.
     pub fn get_smtp_config(&self) -> Result<Option<SmtpConfig>, CoreError> {
         let raw = match self.get_setting(SMTP_CONFIG_SETTINGS_KEY)? {
@@ -141,7 +147,9 @@ impl Store<'_> {
         if let Some(ref pwd) = config.password
             && !pwd.is_empty()
         {
-            config.password = Some(crate::crypto::decrypt_smtp_at_rest(pwd));
+            config.password = Some(crate::crypto::decrypt_smtp_at_rest(pwd).map_err(|e| {
+                CoreError::Internal(format!("stored SMTP password failed authentication: {e}"))
+            })?);
         }
         Ok(Some(config))
     }
