@@ -658,6 +658,28 @@ guard COUNT queries use `.unwrap_or(0)`, so a DB error lets the veto pass
 tests verify the dependency invariant, disable semantics, and settings
 round-trip — good test design, wrong location.
 
+### Slice C5 — subscription.rs (680) + license_verification.rs (605), fully read — **SLICE C COMPLETE**
+
+No new finding IDs — both files exemplary. `subscription.rs`: RSA
+verification delegation, the 30-second clock-skew tolerance (tightened
+from the M1 audit's 5-minute window, rationale documented), ledger-based
+rollback detection (MAX over `sales` + `audit_log`), canceled-never-in-grace
+with entitlements reverting to Free out-of-grace, and typed `QuotaError`s
+with actionable upgrade messaging. `license_verification.rs`: RSA-2048
+PKCS1v15/SHA-256 over a build-embedded key, the `BOOTSTRAP_FREE` sentinel
+accepted **only in debug builds** (release requires a real signature), every
+server response signature-verified **before** trust, credentials carried
+only in Authorization headers (documented body-log-leak rationale), and
+timeouts on all five HTTP clients. The api_key sits plaintext in
+`tenant_subscription` — the accepted local threat model (COR-17/30 family).
+
+> **SLICE C COMPLETE:** sync_client, topology, location_resolver, settings,
+> features, subscription, license_verification — 7 files, ~6,100 lines,
+> all read and stamped. oz-core remaining: slice D (export/ ~3,121,
+> cache.rs, top-level kds.rs, and the remainder).
+
+---
+
 ---
 
 ---
