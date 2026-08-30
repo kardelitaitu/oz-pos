@@ -9,9 +9,9 @@
 //! Invariants: the permission_registry inventory test fails if these
 //! tables and the registry drift apart.
 
+use super::RolePreset;
 use super::builtin_roles;
 use super::permissions;
-use super::RolePreset;
 /// All built-in role presets bundled together for bulk seeding.
 pub const ROLE_PRESETS: &[RolePreset] = &[
     RolePreset {
