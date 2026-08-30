@@ -198,6 +198,47 @@ fn create_refund_rejects_currency_mismatch() {
     );
 }
 
+/// COR-25: the over-refund guard must fail CLOSED. The cumulative SUM read
+/// used `.unwrap_or(0)`, so a read error — e.g. an integer SUM overflowing
+/// to float and failing the i64 decode — was silently read as "no refunds
+/// yet" and the guard let the refund through. Seed a sale totalling
+/// `i64::MAX` with two recorded refunds of `i64::MAX/2 + 1` each (the shape
+/// sync replay or a direct write can produce), making the SUM unreadable,
+/// then attempt a third refund: it must be rejected, not treated as the
+/// first one.
+#[test]
+fn over_refund_guard_fails_closed_when_cumulative_sum_unreadable() {
+    let conn = fresh();
+    let half = i64::MAX / 2 + 1; // 4_611_686_018_427_387_904
+    conn.execute_batch(&format!(
+        "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at)
+         VALUES ('ovf-sale', {max}, 'USD', 0, 'completed', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+         INSERT INTO refunds (id, sale_id, total_minor, currency, reason, processed_by, created_at) VALUES
+             ('ovf-r1', 'ovf-sale', {half}, 'USD', 'replayed', 'user-1', '2025-01-01T00:00:00.000Z'),
+             ('ovf-r2', 'ovf-sale', {half}, 'USD', 'replayed', 'user-1', '2025-01-01T00:00:00.000Z');",
+        max = i64::MAX
+    ))
+    .unwrap();
+    let s = store(&conn);
+
+    let refund = Refund::new("ovf-sale", price(1), "third", "", "user-1", vec![]);
+    let result = s.create_refund(&refund);
+    assert!(
+        result.is_err(),
+        "guard must fail closed when the cumulative refunded SUM cannot be read, \
+         got Ok — the refund was accepted against an unknown refunded balance"
+    );
+
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM refunds WHERE sale_id = 'ovf-sale'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 2, "the rejected refund must not be persisted");
+}
+
 #[test]
 fn multiple_partial_refunds() {
     let conn = fresh();
