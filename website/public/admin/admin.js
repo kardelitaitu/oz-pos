@@ -115,7 +115,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       });
       // Legend
       let legend = '';
-      data.forEach((d,i) => { const c = colors && colors[i] ? colors[i] : colorList[i % colorList.length]; legend += `<div class="donut-legend-item"><span class="donut-swatch" style="background:${c}"></span><span class="donut-label">${escapeHtml(d[labelKey])}</span> <span class="donut-pct">${Math.round(pct*100)}%</span></div>`; });
+      data.forEach((d,i) => { const c = colors && colors[i] ? colors[i] : colorList[i % colorList.length]; const pct = (Number(d[valueKey]) || 0) / total; legend += `<div class="donut-legend-item"><span class="donut-swatch" style="background:${c}"></span><span class="donut-label">${escapeHtml(d[labelKey])}</span> <span class="donut-pct">${Math.round(pct*100)}%</span></div>`; });
       return { svg: `<svg viewBox="0 0 160 160">${slices}</svg>`, legend };
     }
 
