@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-notification slice A: whatsapp deep read)
+crate: oz-notification | status: NEEDS-FIX | lint: CLEAN
+findings: N-1 MED — currency template parameters are stubbed: the WhatsApp mapping hardcodes code IDR and amount_1000: 0, so TemplateParameter::currency carries no amount or currency code (struct has only param_type + text) and Meta renders the fallback text instead of a formatted currency bubble; doc example TemplateParameter::currency("IDR", 50000) does not match the struct. Proposed: extend TemplateParameter with code/amount fields and map them. N-2 INFO — 429 handling hardcodes retry_after_seconds: 60 (ignores Retry-After header) and validate_phone doc says at least 10 digits while code accepts 7. HMAC webhook verification is correct (hmac crate verify_slice, constant-time; hex decode surfaced)
+next: N-1 in fix-order phase | perf: N/A
+*/
 //! WhatsApp Cloud API client implementation.
 //!
 //! Uses the Meta Graph API v21.0+ to send template messages, text messages,

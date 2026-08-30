@@ -84,6 +84,24 @@ hand-off documented with a regression test.
 
 ---
 
+## 28. crates/oz-notification — WhatsApp Cloud API + handlers
+
+Baseline: ~770 production lines. Slice A — all 4 files (whatsapp.rs 284
+fully read; lib/handlers/mock verified).
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| N-1 | 🟡 MED | crates/oz-notification/src/whatsapp.rs:160 | Currency template parameters are stubbed: the mapping hardcodes `"code": "IDR"` and `"amount_1000": 0` — `TemplateParameter` carries only `param_type` + `text`, so no amount or currency code is ever sent and Meta renders the fallback text instead of a formatted currency bubble (the doc example `TemplateParameter::currency("IDR", 50000)` does not even match the struct). | Extend `TemplateParameter` with code/amount fields and map them. |
+| N-2 | ℹ️ INFO | crates/oz-notification/src/whatsapp.rs:207 | 429 handling hardcodes `retry_after_seconds: 60` (ignores the `Retry-After` header); `validate_phone` doc says "at least 10 digits" while the code accepts 7. | Parse `Retry-After`; align the doc. |
+
+HMAC webhook verification is correct (constant-time `verify_slice`,
+hex decode surfaced). Mock unwraps are test-support locks only.
+
+> **oz-notification COMPLETE** — 4 production files, ~770 lines, one MED
+> + one INFO. Campaign proceeds to crates/oz-media.
+
+---
+
 ## 25. crates/oz-hal — hardware abstraction layer
 
 Baseline: ~3.2k production lines across 28 files. Slice A (registry.rs
