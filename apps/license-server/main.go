@@ -225,6 +225,10 @@ func main() {
 		registerLoginLockoutPersistence(app)
 
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
+		// LSE-11 phase A: emails a recovery code (inbox proof) that lets a
+		// re-activating caller rotate the tenant api_key. Requires the same
+		// email + license-key proof as activation; see license_recover.go.
+		se.Router.POST("/api/v1/license/recover", handleLicenseRecover(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
 		// Hardware-fingerprint trial lock (SPEC-2026-TRIAL-LOCK): claims a
 		// device's one trial; answers 403 TRIAL_ALREADY_CLAIMED on reuse.

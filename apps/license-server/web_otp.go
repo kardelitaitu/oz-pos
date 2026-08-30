@@ -258,6 +258,7 @@ func windowSweepLoop() {
 		otpVerifyLimiter.sweep()
 		otpIPLimiter.sweep()
 		apiRotationLimiter.sweep()
+		recoverLimiter.sweep()
 		webLoginLimiter.sweep()
 		webRegisterLimiter.sweep()
 		webResetRequestLimiter.sweep()

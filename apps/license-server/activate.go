@@ -53,6 +53,14 @@ type ActivateRequest struct {
 	// When a license key is already activated by the same email's tenant,
 	// the api_key is NOT required — the email + key pair is sufficient proof.
 	APIKey string `json:"api_key,omitempty"`
+	// RecoveryCode is the 6-digit code emailed to the tenant (requested
+	// via POST /api/v1/license/recover) that authorizes an api_key
+	// rotation on re-activation (LSE-11 phase A). Re-activating WITHOUT a
+	// valid api_key still works — the caller gets the existing signed
+	// subscription — but rotating the management credential requires this
+	// inbox proof, so knowing only email + license key no longer yields
+	// the tenant's renew/status credential.
+	RecoveryCode string `json:"recovery_code,omitempty"`
 }
 
 // apiRotationLimiter caps api_key rotations per tenant (LSE-11 phase B):
@@ -539,48 +547,64 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				// The stored api_key is a one-way bcrypt hash and can never
 				// be re-emitted. A caller who proved they hold the current
 				// key (email + key bound to this tenant AND a matching
-				// api_key) needs no re-emit. A caller who reached this branch
-				// on email + key alone (e.g. a reinstall that lost the key)
-				// gets a freshly rotated key so renew/status access is still
-				// recoverable without storing plaintext at rest.
+				// api_key) needs no re-emit.
 				//
-				// LSE-11 phase B: rotation is throttled to at most one per
-				// tenant per 24h and every rotation emails the owner, so a
-				// rotation forced by someone who merely knows email + key
-				// is bounded and immediately visible to the victim instead
-				// of a silent, unlimited ping-pong.
+				// LSE-11 phase A: a caller on email + key alone (a reinstall
+				// that lost the key) gets the existing signed subscription —
+				// enough to run the POS — but NOT a rotated api_key. The
+				// management credential now requires inbox proof: the client
+				// requests a code (POST /api/v1/license/recover) and re-sends
+				// activation with "recovery_code". Knowing only email + key
+				// therefore no longer yields the tenant's renew/status
+				// credential.
+				//
+				// LSE-11 phase B (retained as defense in depth): actual
+				// rotations are throttled to one per tenant per 24h and the
+				// owner is emailed on every rotation.
 				if !verifyAPIKey(tenant.GetString("api_key"), req.APIKey) {
-					if !apiRotationLimiter.allow(tenant.Id) {
-						remaining := apiRotationLimiter.remainingSeconds(tenant.Id)
-						log.Printf("LSE-11: api_key rotation throttled for tenant %q (retry in %ds)", tenant.Id, remaining)
-						return e.JSON(http.StatusTooManyRequests, map[string]any{
-							"error":       "license management key was recently rotated. Check your email — if this wasn't you, contact support. Try again later.",
-							"retry_after": remaining,
-						})
+					if req.RecoveryCode == "" {
+						resp["api_key_rotation"] = map[string]any{
+							"status": "recovery_required",
+						}
+					} else {
+						storedHash, codeOK := webOtpStore.takeCode(req.Email)
+						if !codeOK || !constantTimeHashEq(storedHash, hashOtpCode(req.RecoveryCode)) {
+							return e.JSON(http.StatusUnauthorized, map[string]any{
+								"error": "invalid or expired recovery code. Request a new code via POST /api/v1/license/recover.",
+							})
+						}
+						if !apiRotationLimiter.allow(tenant.Id) {
+							remaining := apiRotationLimiter.remainingSeconds(tenant.Id)
+							log.Printf("LSE-11: api_key rotation throttled for tenant %q (retry in %ds)", tenant.Id, remaining)
+							return e.JSON(http.StatusTooManyRequests, map[string]any{
+								"error":       "license management key was recently rotated. Check your email — if this wasn't you, contact support. Try again later.",
+								"retry_after": remaining,
+							})
+						}
+						newAPIKey := generateAPIKey()
+						apiKeyHash, apiKeyLookup, hashErr := hashAPIKey(newAPIKey)
+						if hashErr != nil {
+							log.Printf("Re-activation api_key rotation failed for tenant %q: %v", tenant.Id, hashErr)
+							return e.JSON(http.StatusInternalServerError, map[string]any{
+								"error": "failed to rotate api_key",
+							})
+						}
+						tenant.Set("api_key", apiKeyHash)
+						tenant.Set("api_key_lookup", apiKeyLookup)
+						if saveErr := app.Save(tenant); saveErr != nil {
+							log.Printf("Re-activation api_key rotation save failed for tenant %q: %v", tenant.Id, saveErr)
+							return e.JSON(http.StatusInternalServerError, map[string]any{
+								"error": "failed to rotate api_key",
+							})
+						}
+						// Notify the owner (best-effort, non-fatal). Send only
+						// after the save succeeded so we never email a rotation
+						// that didn't happen.
+						if noticeErr := sendAPIKeyRotationNotice(tenant.GetString("email")); noticeErr != nil {
+							log.Printf("LSE-11: rotation notice email failed for tenant %q: %v", tenant.Id, noticeErr)
+						}
+						resp["api_key"] = newAPIKey
 					}
-					newAPIKey := generateAPIKey()
-					apiKeyHash, apiKeyLookup, hashErr := hashAPIKey(newAPIKey)
-					if hashErr != nil {
-						log.Printf("Re-activation api_key rotation failed for tenant %q: %v", tenant.Id, hashErr)
-						return e.JSON(http.StatusInternalServerError, map[string]any{
-							"error": "failed to rotate api_key",
-						})
-					}
-					tenant.Set("api_key", apiKeyHash)
-					tenant.Set("api_key_lookup", apiKeyLookup)
-					if saveErr := app.Save(tenant); saveErr != nil {
-						log.Printf("Re-activation api_key rotation save failed for tenant %q: %v", tenant.Id, saveErr)
-						return e.JSON(http.StatusInternalServerError, map[string]any{
-							"error": "failed to rotate api_key",
-						})
-					}
-					// Notify the owner (best-effort, non-fatal). Send only
-					// after the save succeeded so we never email a rotation
-					// that didn't happen.
-					if noticeErr := sendAPIKeyRotationNotice(tenant.GetString("email")); noticeErr != nil {
-						log.Printf("LSE-11: rotation notice email failed for tenant %q: %v", tenant.Id, noticeErr)
-					}
-					resp["api_key"] = newAPIKey
 				}
 
 				// Clear any accumulated failure tracking for this key
