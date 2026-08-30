@@ -49,6 +49,12 @@ step "no-raw-params (ADR #7 Phase 4)" "bash scripts/verify-no-raw-params.sh" bas
 # ── H-1/H-2: every registered command has a _scoped variant or allowlist entry ──
 step "scoped coverage (H-1)" "bash scripts/verify-scoped-coverage.sh" bash scripts/verify-scoped-coverage.sh
 
+# ── IPC registration parity (F-008/F-050) ────────────────────────────────
+# Fails when the UI invokes a command string absent from a shell's
+# generate_handler![] unless allowlisted; stale allowlist entries fail
+# so the list shrinks to zero as F-006 removes the dead surface.
+step "ipc parity" "python3 scripts/verify-ipc-parity.py" python3 scripts/verify-ipc-parity.py
+
 # ── Architecture boundary checker (P1 pilot) ────────────────────────────
 # Existing transitional debt is reported but only new, expired, or stale
 # baseline entries fail. This is static-only and has no runtime impact.

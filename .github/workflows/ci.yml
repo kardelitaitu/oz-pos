@@ -112,6 +112,14 @@ jobs:
       - name: Verify architecture boundaries
         run: python3 scripts/verify-architecture-boundaries.py --strict
 
+  ipc-parity:
+    name: IPC Registration Parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify IPC parity (F-008/F-050)
+        run: python3 scripts/verify-ipc-parity.py
+
   # ── Rust: Clippy (needs system deps for compilation, all-features) ─
   rust-clippy:
     name: Rust Clippy
