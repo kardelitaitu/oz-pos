@@ -486,6 +486,134 @@ describe('AuthForm — open redirect guard', () => {
       Object.defineProperty(window, 'location', { value: { href: '', search: '', pathname: '/en/login' }, writable: true });
     }
   });
+
+  it('exchanges the session for a one-time code on ?redirect= to the dashboard', async () => {
+    // Hardening F1 dashboard gate: after auth, ?redirect=https://dashboard…
+    // must exchange the JWT for a short-lived code via /exchange-issue and
+    // redirect with ?code= — the real token never appears in the URL.
+    let exchangeCalled = false;
+    mockFetch((url, init) => {
+      if (url.includes('verify-otp')) return okJson({ token: 'tok-dash-001' });
+      if (url.includes('exchange-issue')) {
+        exchangeCalled = true;
+        expect(init?.headers).toBeDefined();
+        return okJson({ code: 'one-time-code-123' });
+      }
+      return okJson({ ok: true });
+    });
+    let capturedHref = '';
+    Object.defineProperty(window, 'location', {
+      value: {
+        get href() { return capturedHref; },
+        set href(v: string) { capturedHref = v; },
+        search: '?redirect=https://dashboard.ozpos.my.id/settings',
+        pathname: '/en/login',
+      },
+      writable: true,
+    });
+    const { container, root } = await renderAuthForm('en');
+    try {
+      setEmail(container, 'alice@example.com');
+      clickSubmit(container);
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      setCode(container, '123456');
+      clickSubmit(container);
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
+      expect(exchangeCalled).toBe(true);
+      expect(capturedHref).toContain('https://dashboard.ozpos.my.id/settings');
+      expect(capturedHref).toContain('code=one-time-code-123');
+      expect(capturedHref).not.toContain('token=');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+      Object.defineProperty(window, 'location', { value: { href: '', search: '', pathname: '/en/login' }, writable: true });
+    }
+  });
+
+  it('falls back to the direct token param when the exchange fails', async () => {
+    // If /exchange-issue errors (or returns no code), the Worker still
+    // accepts the deprecated ?token= path — the user must not be stranded.
+    mockFetch((url) => {
+      if (url.includes('verify-otp')) return okJson({ token: 'tok-dash-002' });
+      if (url.includes('exchange-issue')) return badRequest(500);
+      return okJson({ ok: true });
+    });
+    let capturedHref = '';
+    Object.defineProperty(window, 'location', {
+      value: {
+        get href() { return capturedHref; },
+        set href(v: string) { capturedHref = v; },
+        search: '?redirect=https://dashboard.ozpos.my.id/',
+        pathname: '/en/login',
+      },
+      writable: true,
+    });
+    const { container, root } = await renderAuthForm('en');
+    try {
+      setEmail(container, 'alice@example.com');
+      clickSubmit(container);
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      setCode(container, '123456');
+      clickSubmit(container);
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
+      expect(capturedHref).toContain('https://dashboard.ozpos.my.id/');
+      expect(capturedHref).toContain('token=tok-dash-002');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+      Object.defineProperty(window, 'location', { value: { href: '', search: '', pathname: '/en/login' }, writable: true });
+    }
+  });
+
+  it('blocks ?redirect= to a non-dashboard host (host allowlist)', async () => {
+    // The hostname allowlist (dashboard/admin.ozpos.my.id) is the
+    // open-redirect guard for the dashboard gate — an external host must
+    // fall through to the plain next/account handling.
+    let exchangeCalled = false;
+    mockFetch((url) => {
+      if (url.includes('verify-otp')) return okJson({ token: 'tok-dash-003' });
+      if (url.includes('exchange-issue')) { exchangeCalled = true; return okJson({ code: 'x' }); }
+      return okJson({ ok: true });
+    });
+    let capturedHref = '';
+    Object.defineProperty(window, 'location', {
+      value: {
+        get href() { return capturedHref; },
+        set href(v: string) { capturedHref = v; },
+        search: '?redirect=https://evil.example.com/steal',
+        pathname: '/en/login',
+      },
+      writable: true,
+    });
+    const { container, root } = await renderAuthForm('en');
+    try {
+      setEmail(container, 'alice@example.com');
+      clickSubmit(container);
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      setCode(container, '123456');
+      clickSubmit(container);
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
+      // Never called the exchange, never redirected to the evil host.
+      expect(exchangeCalled).toBe(false);
+      expect(capturedHref).toBe('/en/account');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+      Object.defineProperty(window, 'location', { value: { href: '', search: '', pathname: '/en/login' }, writable: true });
+    }
+  });
 });
 
 // ── Not-configured state ──────────────────────────────────────────────
