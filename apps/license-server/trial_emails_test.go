@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net"
 	"os"
 	"strings"
 	"testing"
@@ -36,6 +37,8 @@ func ensureTestCollection(t *testing.T, app *tests.TestApp, name string) {
 	case "tenants":
 		c := core.NewBaseCollection("tenants")
 		c.Fields.Add(
+			&core.AutodateField{Name: "created", OnCreate: true},
+			&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true},
 			&core.EmailField{Name: "email", Required: true},
 			&core.TextField{Name: "phone"},
 			&core.TextField{Name: "api_key", Required: true},
@@ -51,6 +54,8 @@ func ensureTestCollection(t *testing.T, app *tests.TestApp, name string) {
 	case "license_keys":
 		c := core.NewBaseCollection("license_keys")
 		c.Fields.Add(
+			&core.AutodateField{Name: "created", OnCreate: true},
+			&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true},
 			&core.TextField{Name: "key", Required: true},
 			&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "plus", "pro", "premium", "enterprise"}},
 			&core.NumberField{Name: "max_stores"},
@@ -73,6 +78,8 @@ func ensureTestCollection(t *testing.T, app *tests.TestApp, name string) {
 	case "subscriptions":
 		c := core.NewBaseCollection("subscriptions")
 		c.Fields.Add(
+			&core.AutodateField{Name: "created", OnCreate: true},
+			&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true},
 			&core.TextField{Name: "tenant_id", Required: true},
 			&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "plus", "pro", "premium", "enterprise"}},
 			&core.SelectField{Name: "status", Required: true, Values: []string{"active", "expired", "grace_period", "revoked", "paused"}},
@@ -98,6 +105,8 @@ func ensureTestCollection(t *testing.T, app *tests.TestApp, name string) {
 	case "tenant_machines":
 		c := core.NewBaseCollection("tenant_machines")
 		c.Fields.Add(
+			&core.AutodateField{Name: "created", OnCreate: true},
+			&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true},
 			&core.TextField{Name: "tenant_id", Required: true},
 			&core.TextField{Name: "machine_id", Required: true},
 		)
@@ -110,6 +119,8 @@ func ensureTestCollection(t *testing.T, app *tests.TestApp, name string) {
 	case "trial_registrations":
 		c := core.NewBaseCollection("trial_registrations")
 		c.Fields.Add(
+			&core.AutodateField{Name: "created", OnCreate: true},
+			&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true},
 			&core.TextField{Name: "claim_hash", Required: true},
 			&core.TextField{Name: "tenant_id"},
 			&core.TextField{Name: "email"},
@@ -124,6 +135,8 @@ func ensureTestCollection(t *testing.T, app *tests.TestApp, name string) {
 	case "trial_claims":
 		c := core.NewBaseCollection("trial_claims")
 		c.Fields.Add(
+			&core.AutodateField{Name: "created", OnCreate: true},
+			&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true},
 			&core.TextField{Name: "claim_hash", Required: true},
 			&core.TextField{Name: "tenant_id"},
 			&core.TextField{Name: "email"},
@@ -138,6 +151,8 @@ func ensureTestCollection(t *testing.T, app *tests.TestApp, name string) {
 	case "trial_email_log":
 		c := core.NewBaseCollection("trial_email_log")
 		c.Fields.Add(
+			&core.AutodateField{Name: "created", OnCreate: true},
+			&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true},
 			&core.TextField{Name: "subscription", Required: true, Max: 15},
 			&core.NumberField{Name: "day_offset", Required: true},
 			&core.DateField{Name: "sent_at", Required: true},
@@ -378,5 +393,114 @@ func TestWinBackAlreadySent(t *testing.T) {
 	// Should return false for different subscription.
 	if winBackAlreadySent(app, "sub-other", "winback_7d") {
 		t.Error("expected winBackAlreadySent to return false for different subscription")
+	}
+}
+
+// seedTrialTenant creates a minimal active tenant for scanner tests.
+func seedTrialTenant(t *testing.T, app *tests.TestApp, email, phone string) *core.Record {
+	t.Helper()
+	col, err := app.FindCollectionByNameOrId("tenants")
+	if err != nil {
+		t.Fatalf("tenants collection: %v", err)
+	}
+	rec := core.NewRecord(col)
+	rec.Set("email", email)
+	rec.Set("phone", phone)
+	rec.Set("api_key", "test-api-key")
+	rec.Set("status", "active")
+	if err := app.Save(rec); err != nil {
+		t.Fatalf("save tenant: %v", err)
+	}
+	return rec
+}
+
+// seedTrialSubscription creates a trial subscription with the given window.
+func seedTrialSubscription(t *testing.T, app *tests.TestApp, tenantID, tier string, startsAt, expiresAt time.Time) *core.Record {
+	t.Helper()
+	col, err := app.FindCollectionByNameOrId("subscriptions")
+	if err != nil {
+		t.Fatalf("subscriptions collection: %v", err)
+	}
+	rec := core.NewRecord(col)
+	rec.Set("tenant_id", tenantID)
+	rec.Set("tier_key", tier)
+	rec.Set("status", "active")
+	rec.Set("is_trial", true)
+	rec.Set("starts_at", startsAt)
+	rec.Set("expires_at", expiresAt)
+	rec.Set("signed_payload", "test-payload")
+	rec.Set("signature", "test-sig")
+	if err := app.Save(rec); err != nil {
+		t.Fatalf("save subscription: %v", err)
+	}
+	return rec
+}
+
+// ── LSE-23/24/25 regression: the scanners actually send ──────────────
+
+// TestTrialEmailScanner_SendsDay7Email pins the LSE-23 fix: a trial
+// subscription exactly 7 days old must receive its milestone email. The
+// old time.Parse(RFC3339, GetString(...)) rejected PocketBase's
+// "2006-01-02 15:04:05.000Z" format for EVERY record, so nothing was
+// ever sent. Also proves catch-up (LSE-24): the subscription is aged 9
+// days, past the day-7 milestone, and still gets exactly one email.
+func TestTrialEmailScanner_SendsDay7Email(t *testing.T) {
+	if os.Getenv("OZ_SMTP_HOST") != "" {
+		t.Setenv("OZ_SMTP_HOST", "")
+		defer os.Setenv("OZ_SMTP_HOST", os.Getenv("OZ_SMTP_HOST"))
+	}
+	addr, captures := runSMTPServer(t, nil, false, testTLSCertPtr(t))
+	host, port, _ := net.SplitHostPort(addr)
+	t.Setenv("OZ_SMTP_HOST", host)
+	t.Setenv("OZ_SMTP_PORT", port)
+	t.Setenv("OZ_SMTP_USER", "")
+	t.Setenv("OZ_SMTP_PASSWORD", "")
+
+	app := newTrialEmailTestApp(t)
+	defer app.Cleanup()
+
+	tenant := seedTrialTenant(t, app, "trial7@example.com", "+628123456789")
+	// 9 days ago → past the day-7 milestone (catch-up), before day-14.
+	startsAt := time.Now().UTC().Add(-9 * 24 * time.Hour)
+	seedTrialSubscription(t, app, tenant.Id, "plus", startsAt, time.Now().UTC().Add(5*24*time.Hour))
+
+	runTrialEmailScanner(app)
+
+	select {
+	case cap := <-captures:
+		if len(cap.rcpt) != 1 || cap.rcpt[0] != "trial7@example.com" {
+			t.Errorf("rcpt = %v, want [trial7@example.com]", cap.rcpt)
+		}
+		if subj := string(cap.data); !strings.Contains(subj, "first week") && !strings.Contains(subj, "Minggu pertama") {
+			// +62 phone → Indonesian locale is the expected path for this tenant.
+			t.Errorf("unexpected email data (want the day-7 subject): %q", subj)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no email captured — scanner is still broken (LSE-23 regression?)")
+	}
+
+	// Idempotency: a second scan must not resend.
+	runTrialEmailScanner(app)
+	select {
+	case extra := <-captures:
+		t.Errorf("duplicate email sent on second scan: %v", extra.rcpt)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+// TestSendTrialEmail_RejectsHeaderInjection pins the LSE-25 defense: the
+// recipient must be a single well-formed address before it reaches any
+// SMTP header or RCPT TO command.
+func TestSendTrialEmail_RejectsHeaderInjection(t *testing.T) {
+	t.Setenv("OZ_SMTP_HOST", "127.0.0.1") // must fail BEFORE dialing
+	for _, bad := range []string{
+		"victim@example.com\r\nBcc: attacker@evil.example",
+		"victim@example.com, other@example.com",
+		"not-an-email",
+		"",
+	} {
+		if err := sendTrialEmail(bad, "S", "B"); err == nil {
+			t.Errorf("sendTrialEmail(%q) unexpectedly succeeded", bad)
+		}
 	}
 }
