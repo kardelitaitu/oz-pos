@@ -73,6 +73,13 @@
     if (!data || !Array.isArray(data) || data.length === 0) {
       return '<div class="chart-empty">No data</div>';
     }
+    // B36 (fuzz-found): normalizeStats guarantees the ARRAY but not its
+    // ELEMENTS — a truncated/hostile payload with null rows crashed the
+    // whole render (Cannot read properties of null). Drop non-object rows.
+    data = data.filter(function (d) { return d && typeof d === 'object'; });
+    if (data.length === 0) {
+      return '<div class="chart-empty">No data</div>';
+    }
     var vals = data.map(function (d) { return series.map(function (s) { return Number(d[s]); }); }).flat().filter(function (n) { return Number.isFinite(n); });
     if (vals.length === 0) {
       return '<div class="chart-empty">No data</div>';
@@ -113,6 +120,11 @@
   // _id is unused (kept for signature compatibility).
   function svgDonut(_id, data, labelKey, valueKey, colors) {
     if (!data || !Array.isArray(data) || data.length === 0) {
+      return { svg: '<div class="chart-empty">No data</div>', legend: '' };
+    }
+    // B36 (fuzz-found): null rows crashed the reduce — drop non-objects.
+    data = data.filter(function (d) { return d && typeof d === 'object'; });
+    if (data.length === 0) {
       return { svg: '<div class="chart-empty">No data</div>', legend: '' };
     }
     var total = data.reduce(function (s, d) { return s + (Number(d[valueKey]) || 0); }, 0);
@@ -210,7 +222,9 @@
     var td1 = el('td'); td1.appendChild(statusPill(tenant.status)); row.appendChild(td1);
     row.appendChild(el('td', null, (tenant.license && tenant.license.key) || '—'));
     row.appendChild(el('td', null, (tenant.subscription && tenant.subscription.tierKey) || '—'));
-    row.appendChild(el('td', null, tenant.created ? tenant.created.slice(0, 10) : '—'));
+    // B37 (fuzz-found): a non-string truthy created (number/object from a
+    // truncated payload) crashed .slice and killed the whole table render.
+    row.appendChild(el('td', null, tenant.created ? String(tenant.created).slice(0, 10) : '—'));
     var tdAction = el('td');
     var btn = el('button', 'btn btn-sm btn-ghost', t('tenant.details'));
     btn.addEventListener('click', function () { onDetails(tenant.id); });
@@ -222,11 +236,12 @@
   // detail modal's key/value grid (extracted from admin.js
   // showTenantDetail so the data mapping is unit-testable).
   function tenantDetailRows(data) {
-    var tenant = data.tenant || {}, lic = data.license || {}, sub = data.subscription || {}, devices = data.devices || [];
+    var tenant = data.tenant || {}, lic = data.license || {}, sub = data.subscription || {};
+    var devices = Array.isArray(data.devices) ? data.devices : []; // B37 class
     return [
       [t('th.status'), statusLabel(tenant.status)],
       [t('th.emailVerified'), tenant.emailVerified ? '✓' : '○'],
-      [t('th.created'), tenant.created ? tenant.created.slice(0, 10) : '—'],
+      [t('th.created'), tenant.created ? String(tenant.created).slice(0, 10) : '—'],
       [t('th.licenseKey'), lic.key || '—'],
       [t('th.tier'), sub.tierKey || lic.tierKey || '—'],
       [t('th.subscriptionStatus'), statusLabel(sub.status)],
@@ -247,6 +262,9 @@
     if (!data || !Array.isArray(data) || data.length === 0) {
       return '<div class="chart-empty">No data</div>';
     }
+    // B36 (fuzz-found): null rows crashed the value map — drop non-objects
+    // (an all-filtered set falls to the existing maxS>0 empty guard).
+    data = data.filter(function (d) { return d && typeof d === 'object'; });
     var valueKey = (opts && opts.valueKey) || 'count';
     var maxS = Math.max.apply(null, data.map(function (d) { return Number(d[valueKey]) || 0; }));
     var barW = 420 / data.length;
@@ -635,7 +653,14 @@
     var k = (m.kpis && typeof m.kpis === 'object') ? m.kpis : {};
     var kpis = {};
     Object.keys(k).forEach(function (key) { kpis[key] = k[key]; });
-    ['totalUsers', 'activeUsers', 'totalSubscribers', 'activeDevices', 'mrrUsd', 'arpuUsd', 'trialToPaidRate']
+    // B35 (fuzz-found): the copy above passes EVERY key raw and only the
+    // old 7-key list was coerced — fxRate/mrrIdr/lifetimeUsd/lifetimeIdr
+    // could reach the cards as NaN/Infinity ("Rp NaN"). Coerce the full
+    // numeric set the server sends; fxUpdatedAt (string) and fxLive
+    // (boolean) intentionally pass through.
+    ['totalUsers', 'activeUsers', 'totalSubscribers', 'activeDevices',
+      'mrrUsd', 'mrrIdr', 'lifetimeUsd', 'lifetimeIdr', 'arpuUsd',
+      'trialToPaidRate', 'fxRate']
       .forEach(function (key) { kpis[key] = num(k[key]); });
     return {
       revenueTrend: arr(m.revenueTrend),

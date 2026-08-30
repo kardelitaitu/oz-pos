@@ -982,3 +982,78 @@ describe('admin-utils mountModal focus (B27: dialog announced but focus never en
     expect(document.activeElement).toBe(d.trigger);
   });
 });
+
+describe('admin-utils property fuzz — normalizeStats + renderers under hostile payloads (r8)', () => {
+  // Deterministic LCG: a failure reproduces exactly (seed pinned).
+  function lcg(seed: number) {
+    let s = seed >>> 0;
+    return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 0x100000000);
+  }
+  const rnd = lcg(0x20260830);
+  const weird: any[] = [
+    null, undefined, 0, -1, NaN, Infinity, -Infinity, '', 'abc', '123',
+    true, false, {}, [], [1, 2], { a: 1 }, () => 0, new Date(), 1e308,
+  ];
+  const pick = () => weird[Math.floor(rnd() * weird.length)];
+  const ARRAY_KEYS = [
+    'revenueTrend', 'subscriberGrowth', 'tierDistribution', 'providerSplit',
+    'signupsPerMonth', 'churnPerMonth', 'topSubscribers', 'recentSignups',
+    'expiringSoon',
+  ] as const;
+
+  function fuzzPayload(): any {
+    const raw: any = {};
+    for (const key of ARRAY_KEYS) {
+      const r = rnd();
+      if (r < 0.2) raw[key] = pick();
+      else if (r < 0.45) raw[key] = Array.from({ length: Math.floor(rnd() * 5) }, pick);
+    }
+    const k: any = {};
+    for (const kk of ['mrrUsd', 'mrrIdr', 'lifetimeUsd', 'lifetimeIdr',
+      'totalUsers', 'arpuUsd', 'fxRate', 'activeUsers', 'totalSubscribers',
+      'activeDevices', 'trialToPaidRate']) {
+      if (rnd() < 0.6) k[kk] = pick();
+    }
+    if (rnd() < 0.2) raw.kpis = pick(); else raw.kpis = k;
+    return raw;
+  }
+
+  it('normalizeStats never throws and always restores the shape contract', () => {
+    // The contract: the NUMERIC KPI keys (the server's money/count set)
+    // must come back finite — a NaN slipping through renders "$NaN"/
+    // "Rp NaN" text in the cards (the B4 class). Non-numeric keys
+    // (fxUpdatedAt string, fxLive boolean) pass through untouched.
+    const NUMERIC_KPIS = ['totalUsers', 'activeUsers', 'totalSubscribers', 'activeDevices',
+      'mrrUsd', 'mrrIdr', 'lifetimeUsd', 'lifetimeIdr', 'arpuUsd', 'trialToPaidRate', 'fxRate'];
+    for (let i = 0; i < 300; i++) {
+      let m: any;
+      expect(() => { m = utils.normalizeStats(fuzzPayload()); }).not.toThrow();
+      for (const key of ARRAY_KEYS) expect(Array.isArray(m[key])).toBe(true);
+      expect(m.kpis && typeof m.kpis === 'object').toBe(true);
+      for (const key of NUMERIC_KPIS) {
+        const v = m.kpis[key];
+        expect(typeof v === 'number' && Number.isFinite(v)).toBe(true);
+      }
+    }
+  });
+
+  it('chart builders tolerate fuzzed rows without throwing', () => {
+    for (let i = 0; i < 100; i++) {
+      const m = utils.normalizeStats(fuzzPayload());
+      expect(() => utils.svgChart('a', m.revenueTrend, ['usd', 'idr'], { area: true })).not.toThrow();
+      expect(() => utils.svgBarChart('b', m.signupsPerMonth, { valueKey: 'count' })).not.toThrow();
+      expect(() => utils.svgDonut('d', m.tierDistribution, 'tier', 'count', ['#fff'])).not.toThrow();
+    }
+  });
+
+  it('tenant row builders tolerate fuzzed tenants', () => {
+    for (let i = 0; i < 100; i++) {
+      const t: any = {};
+      for (const key of ['id', 'email', 'status', 'emailVerified', 'created', 'license', 'subscription']) {
+        if (rnd() < 0.7) t[key] = pick();
+      }
+      expect(() => utils.tenantRow(t, () => {})).not.toThrow();
+      expect(() => utils.tenantDetailRows(fuzzPayload())).not.toThrow();
+    }
+  });
+});
