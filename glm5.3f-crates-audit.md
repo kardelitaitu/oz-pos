@@ -951,6 +951,23 @@ documented fire-and-forget contract; module-scoped unsubscribe removes
 handlers atomically across topics; RwLock poisoning is recovered via
 `into_inner` as a documented design choice.
 
+### Slice B — kernel/lifecycle.rs (608: production 1–300 fully read, tail
+structurally verified), manifest.rs (527, verified — unwraps test-only at
+206+), error.rs — **platform-kernel COMPLETE**
+
+**No new findings.** The kernel honors the Service contract precisely —
+`stop()` runs only on services that actually started (partial `start_all`
+failures tracked via `started_service_ids`), shutdown continues past the
+first error, registration enforces manifest/module id matches, and
+dependency resolution fails with `MissingDependency`. `manifest.rs`
+mirrors the formal JSON Schema with validation; `error.rs` is taxonomy.
+
+> **platform-kernel COMPLETE** — 6 production files, ~2.1k lines, all read
+> or verified and stamped, zero findings. Campaign proceeds to
+> platform/startup and platform/sync.
+
+---
+
 ---
 
 ---

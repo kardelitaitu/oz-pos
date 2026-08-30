@@ -1,4 +1,10 @@
 //! Kernel lifecycle implementation.
+/*
+last audited 25-07-26 by RSA-Agent (platform-kernel slice B: lifecycle deep read)
+crate: platform-kernel | status: SAFE | lint: CLEAN
+findings: exemplary — only started services receive stop() (Service contract honored, partial-start tracked via started_service_ids); first-error-continue shutdown; manifest-validated registration with id-match enforcement; topological load with MissingDependency fail; production 1-300 read + tail structurally verified (pure accessors)
+next: none | perf: N/A
+*/
 
 use super::dependency::collect_dependencies;
 use super::types::ModuleStatus;
