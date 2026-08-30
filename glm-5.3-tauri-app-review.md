@@ -45,6 +45,25 @@ panic inventory, boundary checks, compliance tests), and docs governance are str
 the residual risk concentrates in (a) server-side authorization adoption, (b) the
 scoped/unscoped migration tail across two shells, and (c) the QRIS amount parsing.
 
+### Phase 2 — P1 remediation (2026-07-25, all 5 P1s closed)
+
+| Finding | Fix | Commit | Verification |
+|---------|-----|--------|--------------|
+| F-027 PAY-1 | `parse_amount` now maps decimal `"14500.00"` → `14500` 1:1 (IDR exp-0: minor unit IS the Rupiah); non-zero fraction / malformed → `PaymentError::InvalidResponse`; all 5 call sites use `?` (incl. refund line) | `b1a4f50e` | 20/20 qris tests |
+| F-028 PAY-2 | `order_id_for(request)` derives Midtrans `order_id` from `request.idempotency_key` (charset-filtered, `QRIS-{key}`, ≤44 chars); `generate_order_id()` random tail 12 chars (UUIDv7 head is timestamp → same-ms collisions) | `b1a4f50e` | +2 new tests |
+| F-004 | Registered unscoped `get_setting`/`set_setting` on desktop `generate_handler` (tablet parity) — unblocks UpdateBanner / useCloudSync / useGatewayStatus | `a0750ea5` | cargo check |
+| F-005 | Production screens switched to scoped purchasing: registered `receive_purchase_order_with_lines_scoped`; added 4 scoped api wrappers; PurchaseOrdersScreen (list/status/receive) + WarehouseConsole (list/receive-with-lines) now pass `useWorkspace()` session token | `a0750ea5` | tsc clean; 31/31 vitest (4 new contract tests, screen mocks updated) |
+| F-017 | ~93 scoped desktop commands now gated via `require_permission_for_session`; 9 registry keys added (`purchasing:view/manage`, `giftcards:issue/redeem/manage`, `sync:manage`, `security:manage`*, `data:export`*, `terminals:read`; * = sensitive, never wildcard-eligible) | `6e9ecbdb` | platform-core permission suite 28/28; desktop 1178/1178 |
+
+**F-017 deliberate allowlist (49 commands, session-auth-only by design):** health/version/ping/device-id/local-ip, hardware print/scan/display/discover ops, open_product_images, currency info + list, EDC status, feature list, POS cart-deduction location, product barcode/SKU lookup + search metrics, scale reads, own-shift reads (get_shift/get_active_shift), offline enqueue + queue counters/summaries, sync settings/status reads + settings-changed sink, table/section navigation reads, workspace list/instance/screens reads, license status/machine-id/fingerprint/auth-connection tests, user preferences get/set, promotions list/get (apply-gated at use time). Mutations and sensitive data all gated.
+
+**Behavior changes to note:** staff-role sessions now get `permissionDenied` for
+terminal reads (test flipped to `staff_denied_list_terminals`), gift-card ops,
+purchasing writes, cash drawer, backups, key rotation, and sync administration —
+Owner (`*`) unaffected; Manager/Admin presets need grants for the NEW families
+(purchasing, giftcards, sync, security, data) since they hold family wildcards,
+not `*`. Grant them in role presets when those features are enabled for managers.
+
 ---
 
 ## How to use this journal
