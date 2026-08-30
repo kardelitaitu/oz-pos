@@ -614,6 +614,24 @@ placeholder pin hash that can never verify, `pin_hash` is omitted from the
 UPDATE clause, and `deny_unknown_fields` makes a misbehaving server fail
 loudly instead of silently importing credential material.
 
+### Slice C2 — topology.rs (711) + location_resolver.rs (540), fully read
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-32 | 🟡 LOW-MED | location_resolver.rs:41–78, 334, 361, 371 | The 30s-TTL `LOCATION_CACHE` has **no production invalidation caller** — `invalidate_location_cache()` is invoked from tests only. After an admin rebinds a workspace (single or primary binding), terminals keep resolving the **old** location for up to 30 seconds and stock deductions land on the stale target. | Call `invalidate_location_cache()` (or per-key eviction) from every binding mutator: `set_workspace_inventory_locations`, `bound_location_id` updates, and topology apply. |
+
+**Slice C2 positives:** `topology.rs` is a model pure-validation engine —
+fail-closed vendored contract init with a documented INVARIANT, every
+frontend-parity gate annotated with its rationale (ungated wire direction,
+zero-vs-multiple branch codes), O(N+W) single-index gates, a closed
+semantic pairing matrix mirrored at the IPC boundary, Kahn cycle detection,
+and structured `TopologyValidation` error codes. `location_resolver.rs`
+implements the strict ADR-19 §4 priority tree with split-brain detection in
+both resolver paths, and its chain resolver degrades fail-closed for
+display purposes.
+
+---
+
 ---
 
 *This file is appended after each completed crate audit. Findings get IDs
