@@ -189,3 +189,10 @@ tr:last-child td { border-bottom:none; }
   .kv { grid-template-columns:1fr 1fr; }
   .brand { font-size:.95rem; }
 }
+
+/* ── Accessibility (phase-plan #16) ─────────────────────────────── */
+:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
+.skip-link { position:absolute; left:-9999px; top:0; z-index:100; background:var(--bg-surface);
+  color:var(--text); padding:.6rem 1rem; border-radius:0 0 .5rem 0; font-size:.85rem; font-weight:600;
+  text-decoration:none; }
+.skip-link:focus-visible { left:0; outline:none; }

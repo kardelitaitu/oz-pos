@@ -294,6 +294,8 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         const data = await api('/api/v1/admin/tenants/' + id);
         const t = data.tenant || {}, lic = data.license || {}, sub = data.subscription || {}, devices = data.devices || [];
         const m = el('div', 'modal-back'), box = el('div', 'modal');
+        box.setAttribute('role', 'dialog');
+        box.setAttribute('aria-modal', 'true');
         box.appendChild(el('h3', null, t('tenant.title') + (t.email || '')));
         const kv = el('div'); kv.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.82rem';
         // Build the key-value grid safely — never innerHTML with API data.
@@ -322,6 +324,9 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         const close = el('button', 'btn btn-ghost', t('tenant.close')); close.style.cssText = 'margin-top:.8rem;width:100%'; close.addEventListener('click', () => { modal.innerHTML = ''; }); box.appendChild(close);
         m.appendChild(box); modal.appendChild(m);
         m.addEventListener('click', e => { if (e.target === m) { modal.innerHTML = ''; } });
+        // ESC key closes the modal (a11y #16)
+        const escHandler = e => { if (e.key === 'Escape') { modal.innerHTML = ''; document.removeEventListener('keydown', escHandler); } };
+        document.addEventListener('keydown', escHandler);
       } catch (err) {
         if (err && err.authDenied) { modal.innerHTML = ''; return; }
         modal.innerHTML = '<div class="modal-back"><div class="modal"><p class="empty">' + t('common.failedToLoadTenantDetail') + '</p></div></div>';
