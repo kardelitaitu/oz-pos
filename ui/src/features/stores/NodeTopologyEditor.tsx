@@ -20,7 +20,6 @@ import {
   CheckIcon,
   TrashIcon,
   CloseIcon,
-  ChevronDownIcon,
   LockIcon,
   PlusIcon,
   MinusIcon,
@@ -51,7 +50,6 @@ import {
   deleteTemplate,
 } from './topologyExport';
 import { TopologyNodeCard } from './topologyNodeCard';
-import { TopologyShortcutsHelp } from './topologyShortcutsHelp';
 import { TopologyNodeFinder } from './topologyNodeFinder';
 import { TopologyMinimap } from './topologyMinimap';
 import { TopologyRelationshipPicker } from './topologyRelationshipPicker';
@@ -103,6 +101,7 @@ import {
 } from './topologyEditorHelpers';
 import { AlignGlyph, ALIGN_ACTIONS, type AlignMode } from './topologyAlignGlyph';
 import { CanvasCursorReadout } from './topologyCanvasCursorReadout';
+import { TopologyHeader, type TopologyPreset } from './topologyHeader';
 
 // Re-export the moved pure helpers so tests (nodeTopologyEditorHelpers,
 // canvasStateEqual) and runtime importers (topologyWarehouseCard) resolve
@@ -4988,6 +4987,126 @@ export default function NodeTopologyEditor({
   // coordinates).
   const pickerAnchor = relationshipPicker ? nodeMap.get(relationshipPicker.toNodeId) : null;
 
+  // ── Header actions (extracted JSX lives in topologyHeader.tsx) ─────
+  // The Apply gate: validate the raw canvas, then build the diff preview
+  // and open the PIN confirm popup. Same validation as the live badge
+  // surface — shared helper keeps the toast and badges in lockstep. A
+  // DISMISSED missing-stock-routing prompt (intentionally empty warehouse)
+  // is the one error that stops blocking once the user explicitly resolved
+  // it (round 81).
+  const handleApplyClick = useCallback(async () => {
+    const validationErrors = validateEditorGraph(nodes, wires, allowLegacyApply, currentTier).filter(
+      (e) => !(e.code === 'warehouse-missing-stock-routing' && e.nodeId && resolvedIssues.has(issueKey(e.nodeId, e.messageId))),
+    );
+    if (validationErrors.length > 0) {
+      // Open the issues panel so the user sees EVERY blocking issue at once
+      // instead of fixing them one at a time through the toast, then confirm
+      // what blocked Apply.
+      setValidationPanelOpen(true);
+      addToast({
+        message: l10n.getString('topology-apply-blocked', { count: String(validationErrors.length) }),
+        type: 'error',
+      });
+      return;
+    }
+    // Compute the diff preview and show the confirmation popup.
+    const snap = appliedSnapshotRef.current;
+    const beforeInstances = workspaceInstances !== undefined
+      ? workspaceInstances.map((s) => ({
+        instance_id: s.instanceId,
+        type_key: s.typeKey,
+        ...(s.purposeKey !== undefined ? { purpose_key: s.purposeKey } : {}),
+        name: s.name,
+      }))
+      : (snap?.nodes ?? [])
+        .filter((n) => n.type === 'workspace')
+        .map((n) => ({
+          instance_id: n.id,
+          type_key: (n.metadata?.['typeKey'] as string) ?? 'store-pos',
+          purpose_key: (n.metadata?.['purposeKey'] as string) ?? 'general',
+          name: n.name,
+        }));
+    const plan = planTopologyDiff(nodes, beforeInstances);
+    const wsNodes = new Map(nodes.filter((n) => n.type === 'workspace').map((n) => [n.id, n]));
+    const instanceMap = new Map((workspaceInstances ?? []).map((s) => [s.instanceId, s]));
+    const items = (ids: string[], map: Map<string, { name: string; typeKey?: string; type_key?: string }>): ApplyDiffItem[] =>
+      ids.map((id) => {
+        const entry = map.get(id);
+        return { id, name: entry?.name ?? id, typeKey: entry?.typeKey ?? entry?.type_key ?? 'store-pos' };
+      });
+    const createdItems = items(
+      plan.createNodeIds.filter((id) => !plan.typeChanges.has(id)),
+      wsNodes,
+    );
+    const typeChangedItems = [...plan.typeChanges.entries()].map(([id, ch]) => ({
+      id: ch.newId, name: wsNodes.get(id)?.name ?? id, typeKey: ch.newTypeKey,
+    }));
+    const updatedItems = items(plan.updateNodeIds, instanceMap);
+    const archivedItems = items(
+      plan.archiveIds.filter((id) => !plan.typeChanges.has(id)),
+      instanceMap,
+    );
+    // Resolve store IDs for the debug info panel.
+    const branchNode = nodes.find((n) => n.type === 'store');
+    const effectiveStoreId = branchNode?.storeProfileId
+      ?? (branchNode?.metadata?.['storeProfileId'] as string | undefined)
+      ?? sessionStoreId;
+    setApplyConfirmData({
+      created: [...createdItems, ...typeChangedItems],
+      updated: updatedItems,
+      archived: archivedItems,
+      typeChanged: typeChangedItems,
+      sessionStoreId,
+      effectiveStoreId,
+    });
+    setApplyPin('');
+    setApplyPinError(false);
+    setApplyConfirmOpen(true);
+    // Focus the PIN input after the popup renders.
+    setTimeout(() => applyPinRef.current?.focus(), 50);
+  }, [nodes, wires, allowLegacyApply, currentTier, resolvedIssues, workspaceInstances, sessionStoreId, addToast, l10n, setValidationPanelOpen, setApplyConfirmData, setApplyPin, setApplyPinError, setApplyConfirmOpen]);
+
+  /** Preset menu item click: close the popover, then dirty-gate the load. */
+  const handleLoadPreset = useCallback((preset: TopologyPreset) => {
+    setPresetsOpen(false);
+    if (isCanvasDirty()) setConfirmPreset(preset);
+    else loadPreset(preset);
+  }, [isCanvasDirty, loadPreset]);
+
+  /** Reactive "Unsaved changes" chip data. Round 153: the chip always
+   *  previews the workspace-instance diff through the SAME planTopologyDiff
+   *  the save path's payload builder is built on, so the preview can never
+   *  drift from the Apply. With real instances the before-side is the loaded
+   *  backend instances (round 150); on a standalone/demo canvas it is
+   *  synthesized from the committed snapshot (the preset or the last-loaded
+   *  diagram) — the workspace format is the single honest signal everywhere.
+   *  The plan is total: a workspace mid-wiring (no store ownership yet)
+   *  still counts as a creation instead of crashing the chip (round 152: a
+   *  type change surfaces as a destructive recreate, not a plain create +
+   *  archive). */
+  const dirtySummary = useMemo(() => {
+    if (!isDirty) return null;
+    const snap = appliedSnapshotRef.current;
+    const beforeInstances = workspaceInstances !== undefined
+      ? workspaceInstances.map((s) => ({
+        instance_id: s.instanceId,
+        type_key: s.typeKey,
+        // exactOptionalPropertyTypes: omit the key, never set it to undefined.
+        ...(s.purposeKey !== undefined ? { purpose_key: s.purposeKey } : {}),
+        name: s.name,
+      }))
+      : (snap?.nodes ?? [])
+        .filter((n) => n.type === 'workspace')
+        .map((n) => ({
+          instance_id: n.id,
+          type_key: (n.metadata?.['typeKey'] as string) ?? 'store-pos',
+          purpose_key: (n.metadata?.['purposeKey'] as string) ?? 'general',
+          name: n.name,
+        }));
+    const plan = planTopologyDiff(nodes, beforeInstances);
+    return summarizeTopologyPlan(plan);
+  }, [isDirty, nodes, workspaceInstances]);
+
   return (
     <div className="node-topology-editor">
       {/* Visually-hidden live region: announces alignment snaps and
@@ -5041,195 +5160,23 @@ export default function NodeTopologyEditor({
         />
       )}
 
-      <div className="node-topology-header">
-        {/* Visually-hidden heading keeps the topology screen's heading
-            hierarchy (h2 → h3 Palette Tools) intact for assistive tech
-            without occupying header space. */}
-        <Localized id="topology-builder-title">
-          <h2 className="sr-only">Visual Store & Workspace Topology Builder</h2>
-        </Localized>
-        {branchToolbar}
-        {!canSave && (
-          <div className="topology-readonly-note" role="status">
-            <Localized id="topology-readonly-note">
-              <span>View-only — only managers and owners can save topology changes.</span>
-            </Localized>
-          </div>
-        )}
-        <span className={`topology-tier-badge tier-${currentTier}`}>
-          <Localized id="topology-tier-suffix" vars={{ tier: currentTier.toUpperCase() }}>
-            <span>{currentTier.toUpperCase()} TIER</span>
-          </Localized>
-        </span>
-
-        <div className="node-topology-header-actions">
-
-          <div className="topology-presets-popover">
-            <Button
-              variant="secondary"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={() => setPresetsOpen((o) => !o)}
-              icon={<ChevronDownIcon size={16} />}
-            >
-              <Localized id="topology-presets-label">Presets</Localized>
-            </Button>
-            {presetsOpen && (
-              <div className="topology-presets-menu" role="menu" tabIndex={0} onMouseDown={(e) => e.stopPropagation()}>
-                <button type="button" role="menuitem" onClick={() => { setPresetsOpen(false); if (isCanvasDirty()) setConfirmPreset('retail'); else loadPreset('retail'); }}>
-                  <Localized id="topology-preset-retail">Retail Preset</Localized>
-                  <span className="topology-presets-menu-desc"><Localized id="topology-preset-retail-desc">Store, warehouse, and POS terminals</Localized></span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => { setPresetsOpen(false); if (isCanvasDirty()) setConfirmPreset('restaurant'); else loadPreset('restaurant'); }}>
-                  <Localized id="topology-preset-restaurant">Restaurant & KDS Preset</Localized>
-                  <span className="topology-presets-menu-desc"><Localized id="topology-preset-restaurant-desc">Restaurant POS, kitchen display, and warehouse</Localized></span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          <Button
-              variant="primary"
-              disabled={!canSave || saving || !onSave}
-              title={canSave && onSave ? undefined : l10n.getString('topology-apply-permission-tooltip')}
-              onClick={async () => {
-                // Same gate as the live badge surface — shared helper keeps
-                // the Apply toast and the on-canvas badges in lockstep. A
-                // DISMISSED missing-stock-routing prompt (intentionally
-                // empty warehouse) is the one error that stops blocking
-                // once the user explicitly resolved it (round 81).
-                const validationErrors = validateEditorGraph(nodes, wires, allowLegacyApply, currentTier).filter(
-                  (e) => !(e.code === 'warehouse-missing-stock-routing' && e.nodeId && resolvedIssues.has(issueKey(e.nodeId, e.messageId))),
-                );
-                if (validationErrors.length > 0) {
-                  // Open the issues panel so the user sees EVERY blocking
-                  // issue at once instead of fixing them one at a time
-                  // through the toast, then confirm what blocked Apply.
-                  setValidationPanelOpen(true);
-                  addToast({
-                    message: l10n.getString('topology-apply-blocked', { count: String(validationErrors.length) }),
-                    type: 'error',
-                  });
-                  return;
-                }
-                // Compute the diff preview and show the confirmation popup.
-                const snap = appliedSnapshotRef.current;
-                const beforeInstances = workspaceInstances !== undefined
-                  ? workspaceInstances.map((s) => ({
-                    instance_id: s.instanceId,
-                    type_key: s.typeKey,
-                    ...(s.purposeKey !== undefined ? { purpose_key: s.purposeKey } : {}),
-                    name: s.name,
-                  }))
-                  : (snap?.nodes ?? [])
-                    .filter((n) => n.type === 'workspace')
-                    .map((n) => ({
-                      instance_id: n.id,
-                      type_key: (n.metadata?.['typeKey'] as string) ?? 'store-pos',
-                      purpose_key: (n.metadata?.['purposeKey'] as string) ?? 'general',
-                      name: n.name,
-                    }));
-                const plan = planTopologyDiff(nodes, beforeInstances);
-                const wsNodes = new Map(nodes.filter((n) => n.type === 'workspace').map((n) => [n.id, n]));
-                const instanceMap = new Map((workspaceInstances ?? []).map((s) => [s.instanceId, s]));
-                const items = (ids: string[], map: Map<string, { name: string; typeKey?: string; type_key?: string }>): ApplyDiffItem[] =>
-                  ids.map((id) => {
-                    const entry = map.get(id);
-                    return { id, name: entry?.name ?? id, typeKey: entry?.typeKey ?? entry?.type_key ?? 'store-pos' };
-                  });
-                const createdItems = items(
-                  plan.createNodeIds.filter((id) => !plan.typeChanges.has(id)),
-                  wsNodes,
-                );
-                const typeChangedItems = [...plan.typeChanges.entries()].map(([id, ch]) => ({
-                  id: ch.newId, name: wsNodes.get(id)?.name ?? id, typeKey: ch.newTypeKey,
-                }));
-                const updatedItems = items(plan.updateNodeIds, instanceMap);
-                const archivedItems = items(
-                  plan.archiveIds.filter((id) => !plan.typeChanges.has(id)),
-                  instanceMap,
-                );
-                // Resolve store IDs for the debug info panel.
-                const branchNode = nodes.find((n) => n.type === 'store');
-                const effectiveStoreId = branchNode?.storeProfileId
-                  ?? (branchNode?.metadata?.['storeProfileId'] as string | undefined)
-                  ?? sessionStoreId;
-                setApplyConfirmData({
-                  created: [...createdItems, ...typeChangedItems],
-                  updated: updatedItems,
-                  archived: archivedItems,
-                  typeChanged: typeChangedItems,
-                  sessionStoreId,
-                  effectiveStoreId,
-                });
-                setApplyPin('');
-                setApplyPinError(false);
-                setApplyConfirmOpen(true);
-                // Focus the PIN input after the popup renders.
-                setTimeout(() => applyPinRef.current?.focus(), 50);
-              }}
-              icon={<CheckIcon size={16} />}
-            >
-            <Localized id="topology-apply-changes">Apply Topology Changes</Localized>
-          </Button>
-
-          {isDirty && (() => {
-            // Round 153: the chip always previews the workspace-instance
-            // diff through the SAME planTopologyDiff the save path's payload
-            // builder is built on, so the preview can never drift from the
-            // Apply. With real instances the before-side is the loaded
-            // backend instances (round 150); on a standalone/demo canvas it
-            // is synthesized from the committed snapshot (the preset or the
-            // last-loaded diagram) — the workspace format is the single
-            // honest signal everywhere. The plan is total: a workspace
-            // mid-wiring (no store ownership yet) still counts as a
-            // creation instead of crashing the chip (round 152: a type
-            // change surfaces as a destructive recreate, not a plain
-            // create + archive).
-            const snap = appliedSnapshotRef.current;
-            const beforeInstances = workspaceInstances !== undefined
-              ? workspaceInstances.map((s) => ({
-                instance_id: s.instanceId,
-                type_key: s.typeKey,
-                // exactOptionalPropertyTypes: omit the key, never set
-                // it to undefined.
-                ...(s.purposeKey !== undefined ? { purpose_key: s.purposeKey } : {}),
-                name: s.name,
-              }))
-              : (snap?.nodes ?? [])
-                .filter((n) => n.type === 'workspace')
-                .map((n) => ({
-                  instance_id: n.id,
-                  type_key: (n.metadata?.['typeKey'] as string) ?? 'store-pos',
-                  purpose_key: (n.metadata?.['purposeKey'] as string) ?? 'general',
-                  name: n.name,
-                }));
-            const plan = planTopologyDiff(nodes, beforeInstances);
-            const summary = summarizeTopologyPlan(plan);
-            return (
-              <span className="topology-dirty-chip" role="status">
-                <span className="topology-dirty-dot" aria-hidden="true" />
-                <Localized id="topology-unsaved">Unsaved changes</Localized>
-                <span className="topology-diff-summary">
-                  {l10n.getString('topology-apply-workspace-diff', {
-                    created: summary.created,
-                    updated: summary.updated,
-                    archived: summary.archived,
-                    typeChanged: summary.typeChanged,
-                    from: topologyRevision,
-                    to: topologyRevision + 1,
-                  })}
-                </span>
-              </span>
-            );
-          })()}
-
-          <TopologyShortcutsHelp
-            open={showShortcuts}
-            onToggle={toggleShortcuts}
-            onClose={closeShortcuts}
-          />
-        </div>
-      </div>
+      <TopologyHeader
+        l10n={l10n}
+        branchToolbar={branchToolbar}
+        canSave={canSave}
+        onSaveAvailable={!!onSave}
+        currentTier={currentTier}
+        saving={saving}
+        onApply={() => void handleApplyClick()}
+        presetsOpen={presetsOpen}
+        onTogglePresets={() => setPresetsOpen((o) => !o)}
+        onLoadPreset={handleLoadPreset}
+        dirtySummary={dirtySummary}
+        topologyRevision={topologyRevision}
+        showShortcuts={showShortcuts}
+        onToggleShortcuts={toggleShortcuts}
+        onCloseShortcuts={closeShortcuts}
+      />
 
       <div className="node-topology-main">
         <div className="node-tool-rack">
