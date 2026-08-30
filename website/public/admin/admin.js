@@ -285,11 +285,15 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       modal.innerHTML = '<div class="modal-back"><div class="modal"><h3>' + t('common.loading') + '</h3></div></div>';
       try {
         const data = await api('/api/v1/admin/tenants/' + id);
-        const t = data.tenant || {}, lic = data.license || {}, sub = data.subscription || {}, devices = data.devices || [];
+        // B2 fix: the old `const t = data.tenant` shadowed the global i18n
+        // t(), so every t('…') label below threw TypeError and the modal
+        // ALWAYS fell through to "Failed to load tenant detail". The kv
+        // mapping now lives in admin-utils.tenantDetailRows (unit-tested).
+        const tenant = data.tenant || {};
         const m = el('div', 'modal-back'), box = el('div', 'modal');
         box.setAttribute('role', 'dialog');
         box.setAttribute('aria-modal', 'true');
-        box.appendChild(el('h3', null, t('tenant.title') + (t.email || '')));
+        box.appendChild(el('h3', null, t('tenant.title') + (tenant.email || '')));
         const kv = el('div'); kv.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.82rem';
         // Build the key-value grid safely — never innerHTML with API data.
         function addRow(label, val) {
@@ -299,18 +303,11 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
           if (label === t('th.licenseKey')) { vs.style.cssText += ';font-family:monospace;font-size:.75rem'; }
           kv.appendChild(vs);
         }
-        addRow(t('th.status'), t.status);
-        addRow(t('th.emailVerified'), t.emailVerified ? '✓' : '○');
-        addRow(t('th.created'), t.created ? t.created.slice(0,10) : '—');
-        addRow(t('th.licenseKey'), lic.key || '—');
-        addRow(t('th.tier'), sub.tierKey || lic.tierKey || '—');
-        addRow(t('th.subscriptionStatus'), sub.status || '—');
-        addRow(t('th.expires'), sub.expiresAt || '—');
-        addRow(t('th.devices'), devices.length);
+        tenantDetailRows(data).forEach(pair => addRow(pair[0], pair[1]));
         box.appendChild(kv);
         const actions = el('div', null); actions.style.cssText = 'display:flex;gap:.4rem;margin-top:.8rem;flex-wrap:wrap';
-        if (t.status === 'active') { const revoke = el('button', 'btn btn-sm btn-bad', t('tenant.revoke')); revoke.addEventListener('click', () => doAction(id,'revoke',t('tenant.revoked'))); actions.appendChild(revoke); }
-        if (t.status !== 'active') { const activate = el('button', 'btn btn-sm btn-ok', t('tenant.activate')); activate.addEventListener('click', () => doAction(id,'activate',t('tenant.activated'))); actions.appendChild(activate); }
+        if (tenant.status === 'active') { const revoke = el('button', 'btn btn-sm btn-bad', t('tenant.revoke')); revoke.addEventListener('click', () => doAction(id,'revoke',t('tenant.revoked'))); actions.appendChild(revoke); }
+        if (tenant.status !== 'active') { const activate = el('button', 'btn btn-sm btn-ok', t('tenant.activate')); activate.addEventListener('click', () => doAction(id,'activate',t('tenant.activated'))); actions.appendChild(activate); }
         const renew = el('button', 'btn btn-sm', t('tenant.renew365')); renew.addEventListener('click', () => doAction(id,'renew',t('tenant.renewed'),'{"days":365}')); actions.appendChild(renew);
         const upgrade = el('button', 'btn btn-sm btn-warn', t('tenant.upgrade')); upgrade.addEventListener('click', () => upgradePrompt(id,data)); actions.appendChild(upgrade);
         box.appendChild(actions);

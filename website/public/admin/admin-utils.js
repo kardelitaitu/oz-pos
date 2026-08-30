@@ -184,6 +184,23 @@
     return row;
   }
 
+  // tenantDetailRows builds the [label, value] pairs for the tenant
+  // detail modal's key/value grid (extracted from admin.js
+  // showTenantDetail so the data mapping is unit-testable).
+  function tenantDetailRows(data) {
+    var tenant = data.tenant || {}, lic = data.license || {}, sub = data.subscription || {}, devices = data.devices || [];
+    return [
+      [t('th.status'), tenant.status === undefined || tenant.status === null ? '—' : tenant.status],
+      [t('th.emailVerified'), tenant.emailVerified ? '✓' : '○'],
+      [t('th.created'), tenant.created ? tenant.created.slice(0, 10) : '—'],
+      [t('th.licenseKey'), lic.key || '—'],
+      [t('th.tier'), sub.tierKey || lic.tierKey || '—'],
+      [t('th.subscriptionStatus'), sub.status || '—'],
+      [t('th.expires'), sub.expiresAt || '—'],
+      [t('th.devices'), devices.length],
+    ];
+  }
+
   // Returns true when an HTTP status means "session not authorized" for the
   // admin panel (401 unauth'd, 403 non-admin tenant).
   function isAuthDenied(status) {
@@ -370,6 +387,7 @@
     kpiC: kpiC,
     tableCard: tableCard,
     tenantRow: tenantRow,
+    tenantDetailRows: tenantDetailRows,
     t: t,
     STRINGS: STRINGS,
     isAuthDenied: isAuthDenied,

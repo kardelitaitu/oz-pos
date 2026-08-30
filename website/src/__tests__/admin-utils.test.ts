@@ -222,3 +222,32 @@ describe('admin-utils tenantRow (B1: t() shadowing regression)', () => {
     expect(cells[4].textContent).toBe('—');
   });
 });
+
+describe('admin-utils tenantDetailRows (B2: t() shadowing regression)', () => {
+  const data = {
+    tenant: { status: 'active', emailVerified: true, created: '2026-08-01T10:00:00Z' },
+    license: { key: 'OZ-KEY' },
+    subscription: { tierKey: 'pro', status: 'active', expiresAt: '2027-08-01' },
+    devices: [{ id: 'd1' }, { id: 'd2' }],
+  };
+
+  it('builds the 8 key/value rows without crashing', () => {
+    const rows = utils.tenantDetailRows(data);
+    expect(rows.length).toBe(8);
+    expect(rows[0]).toEqual(['Status', 'active']);
+    expect(rows[1]).toEqual(['Email verified', '✓']);
+    expect(rows[2]).toEqual(['Created', '2026-08-01']);
+    expect(rows[3]).toEqual(['License key', 'OZ-KEY']);
+    expect(rows[4]).toEqual(['Tier', 'pro']);
+    expect(rows[5]).toEqual(['Subscription status', 'active']);
+    expect(rows[6]).toEqual(['Expires', '2027-08-01']);
+    expect(rows[7]).toEqual(['Devices', 2]);
+  });
+
+  it('handles a fully empty payload with em-dash values', () => {
+    const rows = utils.tenantDetailRows({});
+    expect(rows.length).toBe(8);
+    expect(rows[0][1]).toBe('—');
+    expect(rows[7][1]).toBe(0);
+  });
+});
