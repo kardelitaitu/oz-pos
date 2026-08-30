@@ -102,3 +102,39 @@ describe('admin-utils svgDonut', () => {
     expect(legend).toContain('&lt;b&gt;bad&lt;/b&gt;');
   });
 });
+
+describe('admin-utils kpiC', () => {
+  it('builds a kpi card with label + value + sub', () => {
+    const k = utils.kpiC('Revenue', 'Rp 1M', 'this month');
+    expect(k.className).toBe('kpi');
+    expect(k.querySelector('.kpi-label').textContent).toBe('Revenue');
+    expect(k.querySelector('.kpi-value').textContent).toBe('Rp 1M');
+    expect(k.querySelector('.kpi-sub').textContent).toBe('this month');
+  });
+
+  it('renders an icon box with the given class when icon is provided', () => {
+    const k = utils.kpiC('Devices', '3', null, '<svg></svg>', 'kpi-icon-green');
+    const icon = k.querySelector('.kpi-icon');
+    expect(icon).not.toBeNull();
+    expect(icon.className).toContain('kpi-icon-green');
+    expect(icon.querySelector('svg')).not.toBeNull();
+  });
+});
+
+describe('admin-utils tableCard', () => {
+  it('builds a card with headers and rows', () => {
+    const t = utils.tableCard('Tenants', ['Email', 'Tier'], [['a@b.com', 'pro'], ['c@d.com', 'plus']]);
+    expect(t.className).toContain('card');
+    expect(t.querySelector('h2').textContent).toBe('Tenants');
+    expect(t.querySelectorAll('th').length).toBe(2);
+    expect(t.querySelectorAll('th')[0].textContent).toBe('Email');
+    expect(t.querySelectorAll('tbody tr').length).toBe(2);
+    expect(t.querySelectorAll('tbody td')[0].textContent).toBe('a@b.com');
+  });
+
+  it('renders an empty state for zero rows', () => {
+    const t = utils.tableCard('Tenants', ['Email'], []);
+    expect(t.textContent).toContain('No data.');
+    expect(t.querySelector('table')).toBeNull();
+  });
+});

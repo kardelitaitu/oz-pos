@@ -119,6 +119,45 @@
     return { svg: '<svg viewBox="0 0 160 160">' + slices + '</svg>', legend: legend };
   }
 
+  // kpiC builds a KPI stat card (label + value + optional sub + icon).
+  // Pure DOM helper — unit-testable in jsdom.
+  function kpiC(label, value, sub, icon, iconCls) {
+    var s = el('div', 'kpi');
+    if (icon) {
+      var ic = el('div', 'kpi-icon ' + (iconCls || 'kpi-icon-blue'));
+      ic.innerHTML = icon;
+      s.appendChild(ic);
+    }
+    var body = el('div', 'kpi-body');
+    body.appendChild(el('div', 'kpi-label', label));
+    body.appendChild(el('div', 'kpi-value', value));
+    if (sub) body.appendChild(el('div', 'kpi-sub', sub));
+    s.appendChild(body);
+    return s;
+  }
+
+  // tableCard builds a card with a header + data table (or an empty state).
+  // rows is an array of arrays of cell strings.
+  function tableCard(heading, headers, rows) {
+    var card = el('div', 'card table-card');
+    card.appendChild(el('h2', null, heading));
+    if (!rows || rows.length === 0) { card.appendChild(el('p', 'empty', 'No data.')); return card; }
+    var table = el('table');
+    var thead = el('thead');
+    var tr = el('tr');
+    headers.forEach(function (h) { tr.appendChild(el('th', null, h)); });
+    thead.appendChild(tr); table.appendChild(thead);
+    var tbody = el('tbody');
+    rows.forEach(function (row) {
+      var tr2 = el('tr');
+      row.forEach(function (cell) { tr2.appendChild(el('td', null, cell)); });
+      tbody.appendChild(tr2);
+    });
+    table.appendChild(tbody);
+    card.appendChild(table);
+    return card;
+  }
+
   return {
     el: el,
     escapeHtml: escapeHtml,
@@ -127,5 +166,7 @@
     statusPill: statusPill,
     svgChart: svgChart,
     svgDonut: svgDonut,
+    kpiC: kpiC,
+    tableCard: tableCard,
   };
 }));
