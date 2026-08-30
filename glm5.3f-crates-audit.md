@@ -142,6 +142,26 @@ with documented fallbacks for legacy/deleted products.
 
 ---
 
+## 31. crates/oz-logging — structured logging facade
+
+Baseline: ~510 production lines. Slice A — lib.rs (244 fully read);
+visitor/error verified; eventlog/syslog already carry current stamps
+(documented FFI SAFETY comments reviewed).
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| L-1 | 🟠 HIGH | crates/oz-logging/src/lib.rs:166 | Both file-init functions bind the `tracing_appender` **WorkerGuard** to a local `_guard` that drops at function exit — the non-blocking file writer flushes and shuts down immediately after init returns, so **file logging is dead for the rest of the process** (stdout continues). | Return the guard to the caller (or store it in a `OnceLock` static for the program lifetime). |
+| L-2 | ℹ️ INFO | crates/oz-logging/src/lib.rs:180 | Retention cleanup runs once in a detached thread at startup — log files created after startup are never cleaned until the next launch (documented best-effort). | Periodic re-run or cleanup on rotation. |
+
+Text/JSON variants, `RUST_LOG` fallback, and the documented-panic
+wrapper pattern are clean; platform FFI (OutputDebugStringW, syslog
+openlog/syslog) is minimally scoped with SAFETY comments.
+
+> **oz-logging COMPLETE** — 5 production files, ~510 lines, one HIGH +
+> one INFO. Campaign proceeds to crates/oz-cli.
+
+---
+
 ## 25. crates/oz-hal — hardware abstraction layer
 
 Baseline: ~3.2k production lines across 28 files. Slice A (registry.rs

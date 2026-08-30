@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-logging slice A: verified)
+crate: oz-logging | status: SAFE | lint: CLEAN
+findings: clean — sibling tests per convention
+next: none | perf: N/A
+*/
 //! Shared visitor for formatting `tracing` event fields into plain text.
 //!
 //! [`MessageVisitor`] collects all fields from a `tracing::Event` into

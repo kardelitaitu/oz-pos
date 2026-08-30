@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-logging slice A: lib deep read)
+crate: oz-logging | status: NEEDS-FIX | lint: CLEAN
+findings: L-1 HIGH — try_init_with_file and try_init_json_with_file bind the tracing_appender WorkerGuard to a local _guard that DROPS at function exit, flushing and shutting down the non-blocking file writer immediately after init returns; file logging is effectively dead for the rest of the process (stdout unaffected); the guard must be returned to the caller or stored for the program lifetime. L-2 INFO — retention cleanup runs once in a detached thread at startup, so files created after startup are never cleaned until the next launch (documented best-effort; propose periodic re-run or cleanup on rotation). Text/JSON init variants and RUST_LOG fallback are clean; eventlog/syslog FFI carries documented SAFETY comments
+next: L-1 must-fix in fix-order phase | perf: N/A
+*/
 //! Structured logging facade for OZ-POS.
 //!
 //! `oz-logging` wraps the `tracing` ecosystem with context-tagged
