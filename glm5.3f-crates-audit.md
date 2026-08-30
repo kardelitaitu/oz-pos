@@ -1963,3 +1963,31 @@ The original campaign covered 32 Rust/UI targets and explicitly scoped OUT the n
 
 - `AccountView.tsx` full read (1,006 lines; session/token/password flows verified + covered by a 1,475-line test file) and the remaining ~40 components risk-ranked.
 - **Section 45: apps/license-server (Go) audit** — risk-ranked: `web_password.go`, `web_otp.go`, `login_lockout.go`, session middleware, `api_key.go`, webhook signature verification (Midtrans/Paddle), admin gates, `ratelimit.go`.
+
+**Provenance (30-08-26):** the parallel session's concurrent commits twice caught this slice's work in a race — the fixes were first swept into a mixed commit, then clobbered by a later commit that staged older file versions. All four fixes + this section were re-verified against the working tree and recommitted as `4871ed9e` (`fix(website): WEB-1..4 audit fixes (recommit)`, HEAD-verified). Sessions committing to the same branch concurrently should stagger their commits.
+
+---
+
+## 45. Continuation phase — apps/license-server (Go) audit, opened 30-08-26
+
+The portal backend behind `dashboard.`/`admin.ozpos.my.id` and the Cloudflare Worker's `/api/v1/*` proxy. 31 production Go files, ~11.1k lines (largest: `paddle_webhook.go` 1195, `web_otp.go` 974, `main.go` 863, `activate.go` 791, `web_password.go` 783). Risk-ranked slices:
+
+- **Slice A (auth core) — this section:** `web_password.go`, `web_otp.go`, `login_lockout.go`, `web_exchange.go`, `api_key.go` (2,491 lines, all fully read).
+- **Slice B (routing/session middleware):** `main.go`, `web_dashboard.go`, `helpers.go`, `ratelimit.go`.
+- **Slice C (payment webhooks):** `paddle_webhook.go`, `midtrans_webhook.go`, `midtrans_checkout.go`.
+- **Slice D (admin + licensing):** `activate.go`, `admin_dashboard.go`, `admin_stats.go`, `addon_admin.go`, `enterprise_admin.go`, `trial.go`, `renew.go`, `pause.go`, `resume.go`, `expiry.go`, `status.go`, `contact.go`, `smtp_mail.go`, `health.go`.
+
+### Slice A — auth core (2,491 lines, fully read)
+
+**Architecture (verified, not just claimed):** in-memory OTP/session/exchange stores behind one mutex per store; codes and tokens stored **SHA-256-hashed at rest** (`hashOtpCode`/`hashWebToken` — a memory dump never yields a usable credential); session tokens are 32-byte CSPRNG hex (256-bit); OTP codes are 6-digit CSPRNG with **bias-free rejection sampling** (<16,000,000 of 24-bit space); every browser endpoint enforces `webMaxBodyBytes` (16 KB), a `webOriginAllowed` allowlist (documented as the real enforcement layer — PocketBase's global CORS is `*`), per-email fixed-window budgets, and a per-IP backstop (10/15 min); the escalating lockout (`login_lockout.go`) persists to SQLite (`rate_limit_login_lockouts`) across restarts with hydration, partial-failure decay, and sweeps. No-enumeration posture is real: unknown email, non-active tenant, wrong password, missing hash, wrong code, and expired code all return byte-identical generic errors; failed attempts record lockout failures on every path.
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| LSE-1 | ℹ️ INFO | web_otp.go:484–489 (`handleRequestOTP`) | Register-or-login **auto-creates an ACTIVE `tenants` row for any well-formed email** before any inbox proof. Bounded by 3/email/15min + 10/IP/15min, but distributed attackers can pollute the tenants table (each row gets an unusable hashed placeholder `api_key` — plaintext discarded, so no capability leaks). Account takeover is impossible (session requires the emailed code; first inbox proof wins the row). | Documented design tradeoff. If tenant-row pollution ever matters: create rows with `status=pending` and flip to `active` on first inbox proof, or add a global daily registration budget. |
+| LSE-2 | ℹ️ INFO | login_lockout.go:392–407 | Per-email escalating lockout enables **lockout-DoS of a victim's email**: a third party sending ≥3 failed logins for `victim@x` locks the victim out (up to 15 min cap). Bounded by the attacker's own per-IP budget (10/15min → ~3 emails/IP/window); distributed attackers scale linearly. Classic tradeoff — per-email lockout without inbox proof. | Accepted for now (documented here). If abuse appears: require CAPTCHA for the victim account after N attacker-side failures, or exempt known-good devices. |
+| LSE-3 | ℹ️ INFO | web_exchange.go:57–67 (`exchangeStore.mint`) | Exchange codes are stored **plaintext in memory**, breaking symmetry with the OTP store's SHA-256-at-rest rule (same rationale applies: a memory dump shouldn't yield a usable credential). Bounded: 24-byte CSPRNG, 30 s TTL, single-use, in-memory only. | One-line fix for symmetry: store `sha256(code)` and compare via `constantTimeHashEq` in `consume`. |
+| LSE-4 | 🟢 SAFE (verified) | api_key.go | Legacy plaintext api_key migration path is correct: constant-time compare, best-effort in-place upgrade to bcrypt + lookup hash, lookup-hash-miss falls back to one full scan then authenticates stale-hash rows. SHA-256 lookup of a 256-bit CSPRNG key is un-invertible — sound indexing choice. | None. |
+
+**Verified clean / exemplary:** bcrypt DefaultCost for passwords and api_keys; 72-byte bcrypt cap enforced by policy (no silent truncation); validation order in `reset-password` runs policy + confirm + must-differ **before** consuming the single-use code (fat-fingered password doesn't burn it) with the cooldown re-checked after consumption as defense in depth; `buildOtpEmail` header-injection is blocked because `isValidEmail` requires `mail.ParseAddress(...).Address == email` (CRLF payloads fail equality); SMTP env values never echoed; dead codes deleted when delivery fails; window limiter + sweeps are correct fixed-window implementations; `max()` helper shadows the Go 1.21+ builtin intentionally and harmlessly.
+
+**Slice B–D pending** — next: `main.go` route table + `web_dashboard.go` session middleware (Bearer extraction, `/me`, logout), then the webhook signature verification paths (Slice C), then admin gates (Slice D). Hygiene check on committed build artifacts (`license-server.exe`, `coverage.html`, `coverage.out`) still owed.
