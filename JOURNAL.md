@@ -7839,3 +7839,59 @@ unverified work.
 
 **Totals this area:** B46-B50 = 5 bugs. 42/42 ozpkg tests, 2247/2247 whole
 crate, rustfmt clean.
+
+## 2026-08-31 — round H: the audit stamp that said the injection class was closed (B51, B52)
+
+Chose the target by measurement rather than intuition: counted production
+lines against sibling test counts for every module in oz-core, then
+discounted the recently-split ones (db/products_crud, db/sales_*, db/kds_*,
+sync_auth, sync_pull all show 0 tests because their tests still live in the
+parent _tests.rs file). The worst genuine ratio in a module nobody was
+editing was export/cloud_destination.rs: 627 lines, 6 tests.
+
+**B51 (P3, aa9c51db).** COR-35 moved row VALUES into bind variables and the
+audit stamp recorded that as eliminating the injection class. Bind
+variables can do nothing for IDENTIFIERS, which were still interpolated
+verbatim: INSERT INTO database.schema.table, all three read from the
+persisted cloud_export_config setting. A table name of T1; DROP TABLE
+users; -- became part of the statement. The subtler payload needs no
+terminator at all: OTHER.PUBLIC.T in the table slot silently retargets the
+batch to a different table. Same shape on the BigQuery path, where
+project_id/dataset/table go into the insertAll URL. The BigQuery host is a
+literal, so the bearer token cannot be redirected - the damage there is
+misrouting, not exfiltration, and the finding says so.
+
+Severity kept honest: save_cloud_export_config and get_cloud_export_config
+have NO callers anywhere. No UI field, no Tauri command, no API. So this is
+latent, reachable today only by whoever can already write the settings row.
+Worth fixing anyway because the module advertises the injection problem as
+solved, which is precisely the false sense of completion that let the other
+half sit for a month, and the first caller to wire this config inherits it.
+
+**Method, same as B48.** The decision was welded into an async HTTP shell
+with no seam, so it could not be tested at all. Extracted
+snowflake_insert_statement and bigquery_insert_url as pure functions FIRST
+with behavior unchanged, pinned the extracted text with contract tests, and
+only then added validation - so the Red is attributable to the guard, not
+to the refactor. The contract tests also gave COR-35 its first regression
+protection: one asserts the statement contains no quoted literal at all,
+which is the structural form of its guarantee. Going back to inlined
+literals now fails a test.
+
+**The fix had a bug and the tests caught it.** Reusing the SQL identifier
+rule for project_id rejected my own test value "my-project" - GCP project
+ids are hyphenated almost without exception. Hence two rules:
+is_safe_sql_identifier and is_safe_gcp_project_id, plus a test pinning that
+a hyphen is legal while path syntax still is not. Chose strict allow-lists
+over double-quoting because quoting silently changes Snowflake semantics
+(quoted identifiers are case-sensitive, so a quoted MYTABLE stops matching
+a table created unquoted) and still has to reject an embedded quote.
+
+**B52 (P4, docs).** The module doc Usage example called
+CloudExportConfig::load(&store), a method that does not exist - the real
+accessor is Store::get_cloud_export_config. It is a rust,ignore block, so
+rustdoc never type-checks it and the drift is invisible to every gate in
+CI. Fixed the example and noted the receiver in the Configuration section.
+
+**Totals this area:** B46-B52. 18/18 in cloud_destination (6 existing + 12
+new), 2259/2259 whole crate, rustfmt clean.

@@ -15,12 +15,19 @@ next: add HTTP timeouts (COR-31); encrypt stored warehouse credentials (COR-17/3
 //!
 //! The [`CloudExportConfig`] is persisted in the `settings` table under
 //! key `cloud_export_config` as JSON (same pattern as
-//! [`ReportScheduleConfig`](super::ReportScheduleConfig)).
+//! [`ReportScheduleConfig`](super::ReportScheduleConfig)), reached through
+//! `Store::get_cloud_export_config`. Destination identifiers
+//! (`database`/`schema`/`table`, `project_id`/`dataset`/`table`) are
+//! allow-listed before use: bind variables protect values, never
+//! identifiers, and identifiers are interpolated verbatim into the SQL
+//! statement and the insertAll URL path (B51).
 //!
 //! # Usage
 //!
 //! ```rust,ignore
-//! let config = CloudExportConfig::load(&store)?;
+//! let config = store
+//!     .get_cloud_export_config()?
+//!     .expect("cloud export is not configured");
 //! let result = CloudExporter::export(&bundle, &config).await?;
 //! ```
 
