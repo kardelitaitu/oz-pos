@@ -341,6 +341,33 @@
     return !!(node && node._ozCdTimer);
   }
 
+  // busyWrap — single-flight async guard for action buttons (B19).
+  function busyWrap(btn, fn) {
+    var busy = false;
+    return function () {
+      if (busy) return Promise.resolve();
+      busy = true;
+      if (btn) btn.disabled = true;
+      var result;
+      try {
+        result = fn();
+      } catch (e) {
+        busy = false;
+        if (btn) btn.disabled = false;
+        throw e;
+      }
+      if (!result || typeof result.then !== 'function') {
+        busy = false;
+        if (btn) btn.disabled = false;
+        return result;
+      }
+      return result.then(
+        function (v) { busy = false; if (btn) btn.disabled = false; return v; },
+        function (e) { busy = false; if (btn) btn.disabled = false; return Promise.reject(e); }
+      );
+    };
+  }
+
   // fetchWithTimeout performs a fetch that is guaranteed to settle.
   // Extracted from admin.js api() so the timeout semantics are testable.
   // B12 fix: api() awaited two UN-TIMED fetches per call (the session
@@ -676,6 +703,7 @@
     startCountdown: startCountdown,
     stopCountdown: stopCountdown,
     countdownActive: countdownActive,
+    busyWrap: busyWrap,
     fetchFxRate: fetchFxRate,
     mountModal: mountModal,
     fetchWithTimeout: fetchWithTimeout,

@@ -721,3 +721,45 @@ describe('admin-utils startCountdown (B18: OTP cooldown lifecycle)', () => {
     expect(utils.countdownActive(null)).toBe(false);
   });
 });
+
+describe('admin-utils busyWrap (B19: double-click submitted the action twice)', () => {
+  // The tenant detail modal's Revoke/Activate/Renew/Upgrade-save buttons
+  // fired doAction on every click with no in-flight guard. Renew is
+  // +365 days per POST — a double-click granted 730 days.
+  it('ignores re-entry while the first call is in flight, re-enables after', async () => {
+    let calls = 0;
+    let release: () => void = () => {};
+    const btn = document.createElement('button');
+    const slow = utils.busyWrap(btn, () => {
+      calls++;
+      return new Promise<void>((r) => { release = r; });
+    });
+    const p1 = slow();
+    slow();
+    slow();
+    expect(calls).toBe(1);
+    expect(btn.disabled).toBe(true);
+    release();
+    await p1;
+    expect(btn.disabled).toBe(false);
+    const p2 = slow();
+    release();
+    await p2;
+    expect(calls).toBe(2);
+  });
+
+  it('re-enables even when the handler rejects', async () => {
+    const btn = document.createElement('button');
+    const boom = utils.busyWrap(btn, () => Promise.reject(new Error('x')));
+    await expect(boom()).rejects.toThrow('x');
+    expect(btn.disabled).toBe(false);
+  });
+
+  it('passes through sync handlers and tolerates a null button', () => {
+    let calls = 0;
+    const fn = utils.busyWrap(null, () => { calls++; });
+    fn();
+    fn();
+    expect(calls).toBe(2);
+  });
+});

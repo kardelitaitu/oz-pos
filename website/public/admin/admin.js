@@ -191,7 +191,9 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
     // ── Tab switching ──────────────────────────────────────────────
     document.querySelectorAll('.nav-btn').forEach(tab => {
       tab.addEventListener('click', () => {
-        document.querySelectorAll('.nav-btn').forEach(t => t.classList.remove('nav-active'));
+        // INVARIANT (B1/B2 class): never name a param `t` — it shadows the
+        // i18n t() helper. Renamed defensively; body must not call t().
+        document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('nav-active'));
         tab.classList.add('nav-active');
         currentTab = tab.dataset.tab;
         if (currentTab === 'dashboard') renderDashboard();
@@ -302,9 +304,11 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         tenantDetailRows(data).forEach(pair => addRow(pair[0], pair[1]));
         box.appendChild(kv);
         const actions = el('div', null); actions.style.cssText = 'display:flex;gap:.4rem;margin-top:.8rem;flex-wrap:wrap';
-        if (tenant.status === 'active') { const revoke = el('button', 'btn btn-sm btn-bad', t('tenant.revoke')); revoke.addEventListener('click', () => doAction(id,'revoke',t('tenant.revoked'),undefined,closeModal)); actions.appendChild(revoke); }
-        if (tenant.status !== 'active') { const activate = el('button', 'btn btn-sm btn-ok', t('tenant.activate')); activate.addEventListener('click', () => doAction(id,'activate',t('tenant.activated'),undefined,closeModal)); actions.appendChild(activate); }
-        const renew = el('button', 'btn btn-sm', t('tenant.renew365')); renew.addEventListener('click', () => doAction(id,'renew',t('tenant.renewed'),'{"days":365}',closeModal)); actions.appendChild(renew);
+        // B19: busyWrap (single-flight guard) on every action button —
+        // Renew POSTs +365 days per call, so a double-click granted 730.
+        if (tenant.status === 'active') { const revoke = el('button', 'btn btn-sm btn-bad', t('tenant.revoke')); revoke.addEventListener('click', busyWrap(revoke, () => doAction(id,'revoke',t('tenant.revoked'),undefined,closeModal))); actions.appendChild(revoke); }
+        if (tenant.status !== 'active') { const activate = el('button', 'btn btn-sm btn-ok', t('tenant.activate')); activate.addEventListener('click', busyWrap(activate, () => doAction(id,'activate',t('tenant.activated'),undefined,closeModal))); actions.appendChild(activate); }
+        const renew = el('button', 'btn btn-sm', t('tenant.renew365')); renew.addEventListener('click', busyWrap(renew, () => doAction(id,'renew',t('tenant.renewed'),'{"days":365}',closeModal))); actions.appendChild(renew);
         const upgrade = el('button', 'btn btn-sm btn-warn', t('tenant.upgrade')); upgrade.addEventListener('click', () => upgradePrompt(id,data)); actions.appendChild(upgrade);
         box.appendChild(actions);
         // B11: mountModal owns the backdrop/ESC/close wiring and always
@@ -338,7 +342,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       const act = el('div', 'modal-actions');
       const closeModal = mountModal(modal, box);
       const cancel = el('button', 'btn btn-ghost', t('tenant.cancel')); cancel.addEventListener('click', closeModal); act.appendChild(cancel);
-      const save = el('button', 'btn', t('tenant.save')); save.addEventListener('click', async () => { await doAction(id,'tier-override',t('tenant.tierChanged'),JSON.stringify({tier_key:select.value,reason:reason.value||'admin override'}),closeModal); }); act.appendChild(save);
+      const save = el('button', 'btn', t('tenant.save')); save.addEventListener('click', busyWrap(save, async () => { await doAction(id,'tier-override',t('tenant.tierChanged'),JSON.stringify({tier_key:select.value,reason:reason.value||'admin override'}),closeModal); })); act.appendChild(save);
       box.appendChild(act);
     }
 
