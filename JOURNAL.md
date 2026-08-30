@@ -8207,3 +8207,27 @@ is a JSON literal, and that limit is stated in the commit message.
 
 **Totals this area:** B46-B55, COR-31 in-module, COR-5 closed, API-4 gated.
 oz-core 2321, oz-api 201/201, oz-security 88+7, tablet 20/20.
+
+## 2026-08-31 — CRM-06 closed + incident #4 (self-inflicted near-sweep)
+
+**CRM-06 (real, P1):** `customers.total_spent_minor` had ZERO production
+writers — its only owner (`CrmHistoryHandler`) was never registered
+(`on_load`: "future phases"), while the DTO, CSV export and
+CustomReportScreen all read it: every customer showed 0 lifetime spend.
+Moved the projection into the completion transaction (same chokepoint as
+LOY-06): base-currency, statement-level atomic increment, replay-safe via
+the finalize CAS; `create_refund` reverses proportionally at the
+sale-recorded rate (integer round-half-up — no floats on money), floored
+at zero. Dead handler + its 7 tests deleted (also resolves CRM-07's
+"duplicate ownership"). 5 new tests, Red confirmed (`left: 0`).
+
+**Incident #4 — NEW failure mode, self-inflicted:** `git add` listed a
+file already staged-deleted via `git rm`; git ABORTS THE ENTIRE ADD
+atomically on a non-matching pathspec → none of my 6 modified files were
+staged, and the commit captured only the deletion + foreign pre-staged
+promotions files were in the index. HEAD briefly did not compile
+(`pub mod handlers;` → missing file). Recovery: `git restore --staged`
+the foreign files, stage the six (never re-add deleted paths), fixup
+commit 841448ca. **Lesson: after `git rm`, exclude that path from the
+following `git add`; always read the "N files changed" line against the
+expected file count.**
