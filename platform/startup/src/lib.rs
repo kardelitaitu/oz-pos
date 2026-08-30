@@ -1,6 +1,12 @@
 // Allow `cfg(feature = "metrics")` from the transitive dependency on
 // `oz-reporting` without requiring platform-startup to declare the feature.
 #![allow(unexpected_cfgs)]
+/*
+last audited 25-07-26 by RSA-Agent (platform-startup slice A: lib deep read)
+crate: platform-startup | status: SAFE | lint: CLEAN
+findings: clean shared startup — module set pinned by parity test against the modules manifest.json set, documented loyalty-registration fix, spawn_daemon panic-isolated harness (error-logged-not-crash), pending-sale reaper on a dedicated connection with 60s cadence and non-fatal failure handling
+next: none | perf: N/A
+*/
 
 //! Shared application startup for OZ-POS desktop and tablet clients.
 //!

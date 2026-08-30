@@ -968,6 +968,25 @@ mirrors the formal JSON Schema with validation; `error.rs` is taxonomy.
 
 ---
 
+## 9. platform/startup — shared client bootstrap
+
+Baseline: ~1.8k production lines. Slice A (lib.rs 334 fully read;
+event_handlers.rs 1,219: production 1–470 fully read, 471+ inline tests).
+
+**No new findings.** lib.rs pins the module-registration set with a parity
+test against `modules/*/manifest.json` (so a new module without a
+manifest-registered sibling fails startup), documents the
+loyalty-registration fix, and runs daemons through a panic-isolated
+`spawn_daemon` harness that logs instead of crashing. The six shared
+event handlers share one uniform lock→Store→enqueue-or-audit pattern with
+poison-safe lock mapping and structured logs; sale completions are
+enqueued at `SyncPriority::Critical` per P-2. One pattern note: the
+1,219-line `event_handlers.rs` carries inline tests (COR-33 family).
+
+---
+
+---
+
 ---
 
 ---
