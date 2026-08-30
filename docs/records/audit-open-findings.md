@@ -26,11 +26,12 @@ Key open items:
 
 ## Loyalty (`02-loyalty-module.md` — AUDITED)
 
-**Status:** LOY-01 remediated; **remaining findings require follow-up**.
+**Status:** LOY-01 remediated; **LOY-06 (P1, NEW 2026-08-30) — earning side is dead code**; remaining findings require follow-up.
 
 Key open items:
 - ~~**LOY-02** — Earning points is not idempotent by sale~~ — **VERIFIED FIXED 2026-08-30**: migration 128 enforces a unique earn/redeem projection index (`crates/oz-core/src/db/loyalty_tests.rs:556`).
-- **LOY-03** — No refund or void compensation path for earned points
+- **LOY-06** (P1, found 2026-08-30 during the CUR sweep) — **loyalty earning never fires in production**: the full chain exists (`Store::earn_points` with tier formula + per-sale idempotency → `earn_loyalty_points_scoped` IPC on both clients → `earnLoyaltyPoints` UI wrapper, contract-tested) but **no production caller invokes it** — the only references are tests/dev-mock. Meanwhile redemption IS wired (PaymentModal :706/:983), so the program is one-way: customers can redeem manually-granted points but purchases earn nothing. `SaleCompleted` (published at desktop pos.rs:824/:1088, tablet :767/:927/:1168) carries `customer_id`/`total_minor`/`currency` — the event design (and LOY-02's per-sale uniqueness) clearly intends backend-driven earn, but no subscriber exists. **Currency trap for the fix:** the earn formula `total_minor * points_per_unit / 100` is currency-naive — an IDR sale (exponent 0) of the same product earns ~165× the points of the USD equivalent at rate 16500; the fix must earn on a normalized amount (base total and/or exponent-normalized), which is a product-semantics decision.
+- **LOY-03** — No refund or void compensation path for earned points (blocked on LOY-06: nothing is earned yet; design the compensation together with the earn wiring)
 - **LOY-04** — Tier updates accept invalid business values
 - **LOY-05** — Load failures are silently presented as stale or empty data
 
