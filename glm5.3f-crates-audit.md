@@ -150,7 +150,7 @@ visitor/error verified; eventlog/syslog already carry current stamps
 
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
-| L-1 | 🟠 HIGH | crates/oz-logging/src/lib.rs:166 | Both file-init functions bind the `tracing_appender` **WorkerGuard** to a local `_guard` that drops at function exit — the non-blocking file writer flushes and shuts down immediately after init returns, so **file logging is dead for the rest of the process** (stdout continues). | Return the guard to the caller (or store it in a `OnceLock` static for the program lifetime). |
+| L-1 | ✅ FIXED 25-07-26 | crates/oz-logging/src/lib.rs | Both file-init functions bind the `tracing_appender` **WorkerGuard** to a local `_guard` that drops at function exit — the non-blocking file writer flushes and shuts down immediately after init returns, so **file logging is dead for the rest of the process** (stdout continues). | Return the guard to the caller (or store it in a `OnceLock` static for the program lifetime). |
 | L-2 | ℹ️ INFO | crates/oz-logging/src/lib.rs:180 | Retention cleanup runs once in a detached thread at startup — log files created after startup are never cleaned until the next launch (documented best-effort). | Periodic re-run or cleanup on rotation. |
 
 Text/JSON variants, `RUST_LOG` fallback, and the documented-panic
@@ -1864,7 +1864,7 @@ simply predates the payment keys.
 | 2 | CS-1 | ✅ **FIXED** 25-07-26 — verify_slice constant-time check on both Stripe and Square verifiers + CS-2 timestamp tolerance (skew > 5 min rejected). |
 | 3 | UI-1 | ✅ **FIXED** 25-07-26 — three payment keys added to SECRET_KEY_DENY_LIST in BOTH clients; new gateway_status Tauri command computes configured/online booleans server-side; gateway.ts invokes it (single call, no secrets in renderer); gateway.test.ts rewritten to the new contract; settings tests extended (59 desktop + 45 tablet pass) and all 18 gateway UI tests pass. |
 | 4 | PLG-11 | ✅ **FIXED** 25-07-26 — fail-closed lexical scan rejects any quote/bracket character outside string literals (the three SQLite quoting dialects can no longer bypass namespace regexes); unterminated literals rejected; 7 new tests; all 180+2 oz-plugin tests pass. |
-| 5 | L-1 | ⬜ WorkerGuard lifetime fix |
+| 5 | L-1 | ✅ **FIXED** 25-07-26 — WorkerGuards retained in a process-global FILE_LOG_GUARDS registry; behavioural write-after-init test proves the file writer stays alive; all 39+2 oz-logging tests pass. |
 | 6 | API-1 | ⬜ remove dev JWT secret fallback |
 | 7+ | MEDs | ⬜ MSL-4, MSL-7, CLI-1, CLI-2, N-1, M-1, DC-1 (CS-2 done alongside CS-1). Note: email_pg pg_integration_email_loop_reads_postgres is a pre-existing environmental flake (fake host smtp.test.com DNS varies by run) — observed failing intermittently on 25-07-26 with all webhook/auth tests green. |
 
