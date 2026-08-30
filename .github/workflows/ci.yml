@@ -23,6 +23,11 @@ env:
   RUSTFLAGS: -D warnings
   SCCACHE_GHA_ENABLED: "true"
 
+# CICD-01: least-privilege default; jobs that write (GHCR push, SARIF
+# upload) grant it in their own permissions blocks.
+permissions:
+  contents: read
+
 jobs:
   # ── Change Detection (PR Path Filtering) ────────────────────────────
   # Evaluates path filters on pull requests so non-relevant jobs skip.

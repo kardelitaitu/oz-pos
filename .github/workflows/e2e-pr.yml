@@ -54,6 +54,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# CICD-01: least-privilege default (artifact upload works with read).
+permissions:
+  contents: read
+
 jobs:
   e2e-pr:
     name: E2E (PR) — ${{ matrix.project }}
@@ -135,6 +139,12 @@ jobs:
           OZ_API_SECRET: ci-test-secret
           VITE_STARTUP_TIMEOUT: 120000
           VITE_LOG_LEVEL: info
+          # CICD-02: workflow_dispatch inputs reach the script through env,
+          # never direct ${{ }} interpolation (direct interpolation of
+          # user-controlled input into `run:` is a script-injection pattern).
+          INPUT_SPECS: ${{ github.event.inputs.specs }}
+          INPUT_HEADED: ${{ github.event.inputs.headed }}
+          INPUT_CHANGED_ONLY: ${{ github.event.inputs.changed_only }}
         run: |
           cd ui
 
@@ -142,15 +152,15 @@ jobs:
           ARGS=""
 
           # workflow_dispatch: use inputs if provided
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            if [[ "${{ github.event.inputs.headed }}" == "true" ]]; then
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            if [[ "${INPUT_HEADED}" == "true" ]]; then
               ARGS="$ARGS --headed"
             fi
-            if [[ "${{ github.event.inputs.changed_only }}" == "true" ]]; then
+            if [[ "${INPUT_CHANGED_ONLY}" == "true" ]]; then
               ARGS="$ARGS --changed-only"
             fi
-            if [[ -n "${{ github.event.inputs.specs }}" ]]; then
-              ARGS="$ARGS ${{ github.event.inputs.specs }}"
+            if [[ -n "${INPUT_SPECS}" ]]; then
+              ARGS="$ARGS ${INPUT_SPECS}"
             fi
           else
             # pull_request: run the specs that changed (or all if none

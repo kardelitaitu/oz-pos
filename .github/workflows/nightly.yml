@@ -24,6 +24,11 @@ env:
   RUSTFLAGS: -D warnings
   SCCACHE_GHA_ENABLED: "true"
 
+# CICD-01: least-privilege default; jobs that read GHCR images grant
+# packages: read in their own blocks.
+permissions:
+  contents: read
+
 jobs:
   # ── Rust: Test Full (all features, cross-platform) ───────────────
   rust-test:

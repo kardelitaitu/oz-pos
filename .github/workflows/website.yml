@@ -57,6 +57,11 @@ env:
   # against production; flip the secret to "production" when going live.
   PUBLIC_PADDLE_ENVIRONMENT: ${{ secrets.PUBLIC_PADDLE_ENVIRONMENT || 'sandbox' }}
 
+# CICD-01: least-privilege default — deploys authenticate with the
+# Cloudflare API token, not the GitHub token.
+permissions:
+  contents: read
+
 jobs:
   check:
     name: Website Check + Build

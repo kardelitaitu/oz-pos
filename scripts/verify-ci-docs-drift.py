@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 r"""
 scripts/verify-ci-docs-drift.py — Catch CI documentation drift between
-docs/ci-pipeline.md, the workflow definitions, and the local runners.
+docs/operations/ci-pipeline.md, the workflow definitions, and the local runners.
 
 WHY
 ===
 
-`docs/ci-pipeline.md` is the canonical CI dashboard (AUDIT-27 CI-08).
+`docs/operations/ci-pipeline.md` is the canonical CI dashboard (AUDIT-27 CI-08).
 When a job is renamed, removed, or moved between workflows, the docs
 tables go stale and contributors trust a matrix that no longer matches
 what CI actually runs. Likewise, `scripts/check.sh` (repository gate)
@@ -18,7 +18,7 @@ Since AUDIT-27 CI-08 the gate vocabulary + status live in a SINGLE
 source of truth: `scripts/gates.json`. This script derives everything
 from that manifest and verifies, fail-closed:
 
-  1. **Jobs:** every job name referenced in `docs/ci-pipeline.md` (the
+  1. **Jobs:** every job name referenced in `docs/operations/ci-pipeline.md` (the
      Job Matrix and Pre-Merge Validation Gates tables) exists as a real
      job in `.github/workflows/*.yml`.
   2. **Workflow inventory:** every workflow file named in the Workflow
@@ -69,7 +69,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DOCS = ROOT / "docs" / "ci-pipeline.md"
+# CICD-05 fix: the canonical CI dashboard lives under docs/operations/ —
+# the old docs/ci-pipeline.md path made this gate exit 2 ("docs not found")
+# on every run after the doc was moved.
+DOCS = ROOT / "docs" / "operations" / "ci-pipeline.md"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 GATES_MANIFEST = ROOT / "scripts" / "gates.json"
 CHECK_SH = ROOT / "scripts" / "check.sh"
@@ -324,7 +327,7 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(
         description=(
-            "Verify docs/ci-pipeline.md and scripts/gates.json only reference "
+            "Verify docs/operations/ci-pipeline.md and scripts/gates.json only reference "
             "jobs/workflows that exist and that runners + workflows match the "
             "manifest gate vocabulary and status."
         )
@@ -370,7 +373,7 @@ def main() -> int:
     ]
     if missing_sections:
         print(
-            f"error: docs/ci-pipeline.md is missing required section(s) — "
+            f"error: docs/operations/ci-pipeline.md is missing required section(s) — "
             f"{', '.join(missing_sections)}",
             file=sys.stderr,
         )
@@ -609,7 +612,7 @@ def main() -> int:
     if undocumented:
         print(
             f"  note: {len(undocumented)} ci.yml job(s) exist but are not "
-            f"referenced in docs/ci-pipeline.md (informational):"
+            f"referenced in docs/operations/ci-pipeline.md (informational):"
         )
         print("    " + ", ".join(undocumented))
         print()

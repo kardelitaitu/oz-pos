@@ -6,6 +6,11 @@ on:
     - cron: '0 6 * * 1'
   workflow_dispatch:
 
+# CICD-01: least-privilege default; container-scan grants
+# security-events: write in its own block.
+permissions:
+  contents: read
+
 jobs:
   audit:
     name: cargo audit

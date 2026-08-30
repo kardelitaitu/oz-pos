@@ -39,6 +39,11 @@ env:
   RUSTC_WRAPPER: sccache
   SCCACHE_GHA_ENABLED: "true"
 
+# CICD-01: least-privilege default; android-build grants contents: write
+# in its own block for the release upload.
+permissions:
+  contents: read
+
 jobs:
   android-build:
     name: Android APK
@@ -127,6 +132,17 @@ jobs:
         run: |
           cd apps/tablet-client
           cargo tauri android build --apk --target aarch64
+
+      # ── CICD-04: remove signing material after the build ───────
+      # keystore.properties holds the plaintext passwords and the decoded
+      # .keystore is the signing key itself; nothing after this step needs
+      # them and the artifact upload path (app/build/outputs) is scoped,
+      # but the files must not linger in the workspace.
+      - name: Remove decoded signing material
+        if: always()
+        run: |
+          rm -f apps/tablet-client/gen/android/oz-pos-release.keystore
+          rm -f apps/tablet-client/gen/android/keystore.properties
 
       # ── Locate output files ────────────────────────────────────
       - name: Find APK output

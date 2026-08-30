@@ -32,6 +32,11 @@ on:
   push:
     tags: ['v*']
 
+# CICD-01: least-privilege default. Jobs that need more grant it in their
+# own `permissions:` block (release-build reads; release-publish writes).
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -169,6 +174,9 @@ jobs:
           $bytes = [Convert]::FromBase64String($env:UPDATER_CERT)
           [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", $bytes)
           Import-PfxCertificate -FilePath "$env:RUNNER_TEMP\cert.pfx" -CertStoreLocation Cert:\CurrentUser\My -Exportable
+          # CICD-03: the PFX (password-less export of the signing key) must
+          # not linger on disk after the import.
+          Remove-Item "$env:RUNNER_TEMP\cert.pfx" -Force
 
       - name: Build desktop installers (Windows)
         if: matrix.tauri && runner.os == 'Windows'
