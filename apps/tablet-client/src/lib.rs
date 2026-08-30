@@ -240,7 +240,7 @@ pub fn run() {
                 commands::customers::list_customers_scoped,
                 commands::customers::search_customers_scoped,
                 commands::customers::get_customer_history_scoped,
-                commands::customers::get_customer,
+                commands::customers::get_customer_scoped,
                 commands::customers::create_customer_scoped,
                 commands::customers::update_customer_scoped,
                 commands::customers::delete_customer_scoped,

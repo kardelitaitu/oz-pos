@@ -89,11 +89,39 @@ pub async fn list_customers_scoped(
 
 #[command]
 /// Get customer.
+///
+/// **Deprecated:** NOT registered — use `get_customer_scoped`, which
+/// enforces the session, the `customers:view` permission and the
+/// store scope. This reads the global db with no checks at all.
 pub async fn get_customer(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<CustomerDto>, AppError> {
     let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let customer = store.get_customer(&id)?;
+    drop(db);
+    Ok(customer.map(CustomerDto::from))
+}
+
+/// Scoped variant of `get_customer` (ADR #7) — CRM-02 residual.
+///
+/// The legacy command above was the only customer read still registered
+/// without a session/permission/scope gate on the tablet (the desktop
+/// had already moved to this shape). Gated on `customers:view` like
+/// every other customer read.
+#[command]
+pub async fn get_customer_scoped(
+    id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Option<CustomerDto>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_customer_permission(&state, &session.user_id, permissions::CUSTOMERS_VIEW).await?;
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let customer = store.get_customer(&id)?;
     drop(db);

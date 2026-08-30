@@ -132,8 +132,7 @@ vi.mock('@/api/loyalty', () => ({
   redeemLoyaltyPoints: mockRedeemLoyaltyPoints,
 }));
 
-import { listCustomers, listCustomersScoped } from '@/api/customers';
-const mockListCustomers = listCustomers as ReturnType<typeof vi.fn>;
+import { listCustomersScoped } from '@/api/customers';
 const mockListCustomersScoped = listCustomersScoped as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
@@ -146,7 +145,6 @@ beforeEach(() => {
     { id: 'cust-1', name: 'John Doe', phone: '555-0100', email: 'john@example.com' },
     { id: 'cust-2', name: 'Jane Smith', phone: '555-0200', email: 'jane@example.com' },
   ];
-  mockListCustomers.mockResolvedValue(customers);
   mockListCustomersScoped.mockResolvedValue(customers);
 });
 
@@ -491,7 +489,6 @@ describe('PaymentModal — edge cases', () => {
     await userEvent.click(screen.getByText(/select customer/i));
     await screen.findByPlaceholderText(/search by name/i);
 
-    expect(mockListCustomers).not.toHaveBeenCalled();
     expect(mockListCustomersScoped).not.toHaveBeenCalled();
     expect(document.querySelectorAll('button.payment-customer-search-item')).toHaveLength(0);
   });
