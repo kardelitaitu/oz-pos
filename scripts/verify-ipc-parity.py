@@ -99,9 +99,14 @@ def extract_handlers(lib_path: Path) -> list[str]:
         raise SystemExit(f"error: no generate_handler![] in {lib_path}")
     end = text.find("]", start)
     block = text[start + len("generate_handler![") : end]
+    # Strip comments line-wise BEFORE splitting on commas: `$` without
+    # re.M never matches mid-string, so a per-chunk `//.*$` would leave
+    # comment prefixes attached and silently drop entries that follow a
+    # comment line (set_setting et al.).
+    code_lines = [line.split("//", 1)[0] for line in block.splitlines()]
     names: list[str] = []
-    for raw_entry in block.split(","):
-        entry = re.sub(r"//.*$", "", raw_entry.strip()).strip()
+    for raw_entry in ",".join(code_lines).split(","):
+        entry = raw_entry.strip()
         if ENTRY_RE.match(entry):
             names.append(entry.split("::")[-1])
     return sorted(set(names))
