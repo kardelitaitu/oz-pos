@@ -862,3 +862,58 @@ describe('admin-utils setAuthMode (B21: tab switch mid-submit corrupts the other
     }
   });
 });
+
+describe('admin-utils mountModal focus (B27: dialog announced but focus never entered)', () => {
+  function buildModalDom() {
+    document.body.innerHTML =
+      '<div id="modal-root"></div><button id="trigger">open</button>';
+    return {
+      root: document.getElementById('modal-root')!,
+      trigger: document.getElementById('trigger') as HTMLButtonElement,
+    };
+  }
+
+  it('moves focus into the dialog when mounted', () => {
+    const d = buildModalDom();
+    d.trigger.focus();
+    const box = document.createElement('div');
+    box.setAttribute('role', 'dialog');
+    box.innerHTML = '<button id="ok">OK</button>';
+    utils.mountModal(d.root, box);
+    // Focus must be inside the dialog — not left on the trigger behind
+    // the backdrop (keyboard/SR users tabbed through hidden content).
+    expect(d.root.contains(document.activeElement)).toBe(true);
+  });
+
+  it('restores focus to the opener when closed', () => {
+    const d = buildModalDom();
+    d.trigger.focus();
+    const box = document.createElement('div');
+    box.innerHTML = '<button id="ok">OK</button>';
+    const close = utils.mountModal(d.root, box);
+    close();
+    expect(document.activeElement).toBe(d.trigger);
+  });
+
+  it('focuses the dialog box itself when it has no focusable child yet', () => {
+    // The tenant-detail modal mounts with "Loading…" — no buttons until
+    // the fetch resolves. The box gets tabindex=-1 and takes focus.
+    const d = buildModalDom();
+    d.trigger.focus();
+    const box = document.createElement('div');
+    box.textContent = 'Loading…';
+    utils.mountModal(d.root, box);
+    expect(document.activeElement).toBe(box);
+    expect(box.getAttribute('tabindex')).toBe('-1');
+  });
+
+  it('survives close when the opener was removed (re-rendered table)', () => {
+    const d = buildModalDom();
+    d.trigger.focus();
+    const box = document.createElement('div');
+    box.innerHTML = '<button id="ok">OK</button>';
+    const close = utils.mountModal(d.root, box);
+    d.trigger.remove(); // e.g. renderTenants replaced the table
+    expect(() => close()).not.toThrow();
+  });
+});

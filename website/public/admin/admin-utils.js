@@ -416,6 +416,15 @@
     var m = el('div', 'modal-back');
     m.appendChild(box);
     var open = true;
+    // B27: focus management. The dialog was announced (role=dialog,
+    // aria-modal=true set by callers) but focus stayed on the trigger
+    // behind the backdrop — keyboard and screen-reader users tabbed
+    // through hidden content while the modal was open, and closing left
+    // focus wherever it happened to be. Move focus into the dialog on
+    // open (first focusable child, else the box via tabindex=-1) and
+    // restore it to the opener on close.
+    var prevFocus = document.activeElement;
+    if (!box.hasAttribute('tabindex')) box.setAttribute('tabindex', '-1');
     function close() {
       if (!open) return;
       open = false;
@@ -423,11 +432,19 @@
       // stacked modal (upgrade over detail) may already have replaced it.
       if (m.parentNode === modalRoot) modalRoot.innerHTML = '';
       document.removeEventListener('keydown', escHandler);
+      // The opener may have been removed meanwhile (renderTenants
+      // re-renders the table) — only restore into a live element.
+      if (prevFocus && prevFocus.focus && document.contains(prevFocus)) {
+        prevFocus.focus();
+      }
     }
     function escHandler(e) { if (e.key === 'Escape') close(); }
     m.addEventListener('click', function (e) { if (e.target === m) close(); });
     document.addEventListener('keydown', escHandler);
     modalRoot.appendChild(m);
+    var first = box.querySelector(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    (first || box).focus();
     return close;
   }
 
