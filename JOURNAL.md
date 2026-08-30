@@ -6648,3 +6648,56 @@ clippy -D warnings clean on oz-core/oz-api/oz-cloud-server.
   set but CREATE DATABASE fails, to prevent a silent-harness regression.
 - Refund callers (desktop+tablet) already fold with Money::zero(sale
   .currency); the new store-level guard makes that belt-and-braces.
+
+## 2026-08-30 — Admin dashboard bug hunt (TDD): 6 bugs, 6 regression-tested fixes
+
+**Problem:** User-ordered bug hunt on website>admin. Reading admin.js /
+admin-utils.js against the Go server's actual JSON shapes surfaced six
+real bugs, none caught by the existing 24-test suite (it only covered
+escapeHtml/fmt/statusPill — the chart/table logic paths were untested):
+
+1. **B1 (P0)** tenants.forEach(t => ...) — the i18n refactor (#73) put
+   t('tenant.details') inside a callback whose parameter was ALSO named t
+   → TypeError on the first row → Tenants tab rendered header + empty
+   tbody, pagination unreachable.
+2. **B2 (P0)** showTenantDetail: \const t = data.tenant\ shadowed t()
+   identically → the detail modal ALWAYS fell through to "Failed to load".
+3. **B3 (P1)** churn bars read d.count, but admin_stats.go sends
+   monthBucket{Month, Churn} with count at Go zero → churn chart was
+   permanently flat/NaN. Signups looked identical, so it was invisible
+   without checking the server shape.
+4. **B4 (P1)** svgDonut single 100% slice → one arc with start==end →
+   draws NOTHING per SVG spec → empty ring beside a "100%" legend (the
+   common all-one-tier early state).
+5. **B5 (P2)** svgChart did d.month.slice(5) unguarded — the M1 guard
+   protected values but not labels; one month-less row killed the render.
+6. **B6 (P2)** renderDashboard dereferenced m.revenueTrend.forEach /
+   m.kpis.mrrUsd BEFORE the chart guards ran — partial payload = blank
+   dashboard + console TypeError.
+
+**Solution:** TDD per bug (Red reproduced the exact TypeError/NaN/arc
+count, Green minimal). B1/B2/B3/B6 followed the H1 extraction pattern —
+tenantRow, tenantDetailRows, svgBarChart, normalizeStats now live in
+admin-utils.js (unit-testable) with admin.js rewired; B4/B5 are guards
+inside the existing pure renderers. INVARIANT comment in tenantRow pins
+the shadowing trap.
+
+**Commits:** b238540b (B1), ac7ed317 (B2), 27af049f (B3), c18a3e00
+(B4+B5), de489a16 (B6). All prefixed \(bugs)website:admin\ per user order.
+
+**Test counts:** admin-utils.test.ts 24→40; full website suite 566/566
+(37 files); drift 0.
+
+**Remaining risks / follow-ups (future slices):**
+- login.js showLockoutCountdown: a second 429 (or tab switch) leaves the
+  old interval racing the new one on btn.textContent — timer not tracked.
+- admin.js escHandler: closing the modal via button/backdrop never
+  removes the keydown listener (self-heals on next ESC; still a leak).
+- api() fetches /__oz/session on EVERY request (admin.js:23) — one extra
+  round-trip per call; token could be cached per page-load.
+- admin.js remains unimportable in tests (DOM boot side effects at
+  top level); further extraction (renderHealth kv, upgradePrompt) is the
+  standing H1 direction.
+- Concurrent tree editor renamed my B2 Red reproduction before its test
+  run (documented in ac7ed317) — Red for that slice rides on B1's
+  identical TypeError; behavior still pinned by tests.
