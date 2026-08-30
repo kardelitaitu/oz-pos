@@ -24,11 +24,25 @@
       if (body) { opts.method = 'POST'; opts.body = body; }
       const res = await fetchWithTimeout(undefined, API + path, opts);
       if (isAuthDenied(res.status)) {
-        document.getElementById('content').innerHTML =
-          '<div class="card" style="text-align:center;padding:2rem">' +
-          '<h2 style="margin:0 0 .5rem;color:var(--bad)">' + t('auth.accessDenied') + '</h2>' +
-          '<p class="empty">' + t('auth.signInAgain') + '</p>' +
-          '</div>';
+        // P3: build the card via DOM API (el() uses textContent), NOT
+        // innerHTML — the sign-in-again message is text-only i18n now, and
+        // a future translator cannot accidentally inject markup.
+        const card = el('div', 'card');
+        card.style.cssText = 'text-align:center;padding:2rem';
+        const h2 = el('h2', null, t('auth.accessDenied'));
+        h2.style.cssText = 'margin:0 0 .5rem;color:var(--bad)';
+        card.appendChild(h2);
+        const p = el('p', 'empty');
+        p.appendChild(document.createTextNode(t('auth.signInAgainBefore')));
+        const link = el('a', null, t('auth.signInAgainLink'));
+        link.href = '/__oz/logout';
+        link.style.color = 'var(--accent)';
+        p.appendChild(link);
+        p.appendChild(document.createTextNode(t('auth.signInAgainAfter')));
+        card.appendChild(p);
+        const content = document.getElementById('content');
+        content.innerHTML = '';
+        content.appendChild(card);
         // Throw so callers don't overwrite the access-denied screen with a
         // generic error state (the fetch was fine; auth is the problem).
         throw authDeniedError(path);

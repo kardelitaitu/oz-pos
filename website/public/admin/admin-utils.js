@@ -881,7 +881,14 @@
     'dash.unverified': '○ Unverified',
     'dash.couldNotLoad': 'Could not load the dashboard: ',
     'auth.accessDenied': 'Access denied',
-    'auth.signInAgain': 'Your session is not authorized for the admin panel. If you are the admin, please <a href="/__oz/logout" style="color:var(--accent)">sign in again</a>.',
+    // P3: auth.signInAgain was previously a single string containing an
+    // <a href="/__oz/logout" style="color:var(--accent)"> tag, injected
+    // via innerHTML — an HTML-in-i18n pattern that is a footgun for future
+    // editors. Split into three text-only keys so the admin.js access-denied
+    // card builds the link via DOM API (el('a', ...)), not innerHTML.
+    'auth.signInAgainBefore': 'Your session is not authorized for the admin panel. If you are the admin, please ',
+    'auth.signInAgainLink': 'sign in again',
+    'auth.signInAgainAfter': '.',
   };
 
   function t(key) {
