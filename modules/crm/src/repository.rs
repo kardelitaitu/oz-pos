@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-crm slice A: repository verified)
+crate: modules-crm | status: SAFE | lint: CLEAN
+findings: clean parameterized customer queries
+next: none | perf: N/A
+*/
 //! CRM Repository — database persistence for customer profiles.
 
 use crate::error::CrmError;

@@ -1169,6 +1169,30 @@ AGENTS.md convention.
 
 ---
 
+## 13. modules/crm — customers, purchase history, loyalty counter
+
+Baseline: ~741 production lines. Slice A (handlers.rs 321: production
+1–104 fully read; models/repository/service/error/lib verified
+structurally).
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| MSL-4 | 🟠 MED | modules/crm/src/handlers.rs:80–84 + platform/startup/src/event_handlers.rs (LoyaltyEarnHandler) | **Dual loyalty ledgers on the same event.** `CrmHistoryHandler` increments `customers.loyalty_points` at a flat `total/100` rate on `sale.completed`, while `LoyaltyEarnHandler` (subscribed to the same event) credits the authoritative `loyalty_accounts` ledger at the customer's tier multiplier (idempotent per account+sale+txn). The customers counter therefore ignores tier multipliers **and is never decremented on redemption** (redeem only touches `loyalty_accounts`) — it drifts upward forever, and any surface reading it (e.g. a customer-history loyalty summary) shows an inflated balance. | Make `customers.loyalty_points` a maintained projection of `loyalty_accounts` (or deprecate the column); if kept, mirror redemptions and apply tier multipliers. |
+
+The handler itself is exemplary: transaction-wrapped read-modify-write
+with documented lost-update prevention, `checked_add` overflow guards,
+and a clean skip when the customer is missing. The remaining files are
+clean (validated Email/Phone newtypes, parameterized queries, thin
+facade).
+
+> **modules-crm COMPLETE** — 6 production files, ~741 lines. One MED
+> (MSL-4, cross-cutting with platform/startup). Campaign proceeds to
+> modules/tax.
+
+---
+
+---
+
 ---
 
 ---

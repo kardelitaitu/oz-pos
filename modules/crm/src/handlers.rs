@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-crm slice A: handlers deep read)
+crate: modules-crm | status: NEEDS-FIX | lint: CLEAN
+findings: MSL-4 MED — CrmHistoryHandler increments customers.loyalty_points (flat total/100 rate) on sale.completed while platform-startup LoyaltyEarnHandler credits the authoritative loyalty_accounts ledger (tier-multiplied, redeemable, idempotent per account+sale+txn) for the SAME event: the two ledgers diverge (customers counter ignores tier multipliers and is never decremented on redeem). Handler itself is tx-safe (tx-wrapped read-modify-write, documented lost-update prevention, checked_add overflow guards, missing-customer clean skip)
+next: make customers.loyalty_points a projection of loyalty_accounts or deprecate it | perf: N/A
+*/
 //! Event handlers for the CRM module.
 //!
 //! These handlers respond to domain events published on the kernel

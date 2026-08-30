@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-crm slice A: models verified)
+crate: modules-crm | status: SAFE | lint: CLEAN
+findings: clean — Customer with validated Email/Phone newtypes from foundation contact module; unwraps test-only
+next: none | perf: N/A
+*/
 //! CRM domain models — Customer profile and contact tracking.
 
 use foundation::{Email, Phone};
