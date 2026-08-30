@@ -324,11 +324,19 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 				continue
 			}
 			tier := sub.GetString("tier_key")
+			// B32: GetString("expires_at") leaked the raw PocketBase
+			// datetime ("2027-01-01 00:00:00.000Z") into the Top
+			// Subscribers table — render the same clean date as
+			// recentSignups/expiringSoon; zero datetime → empty.
+			renewal := ""
+			if dt := sub.GetDateTime("expires_at"); !dt.IsZero() {
+				renewal = dt.Time().Format("2006-01-02")
+			}
 			topSubs = append(topSubs, topSub{
 				Email:    tenant.GetString("email"),
 				Tier:     tier,
 				MrrUsd:   TierPriceUSD[tier],
-				Renewal:  sub.GetString("expires_at"),
+				Renewal:  renewal,
 				Provider: sub.GetString("payment_provider"),
 			})
 		}

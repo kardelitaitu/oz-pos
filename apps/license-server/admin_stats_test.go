@@ -6,6 +6,8 @@ package main
 // and dropped — see the warning note at the bottom of this file.)
 
 import (
+	"encoding/json"
+	"net/http"
 	"testing"
 	"time"
 )
@@ -61,6 +63,43 @@ func TestGetFxRateSuccessCachedForTTL(t *testing.T) {
 	getFxRate()
 	if calls != 1 {
 		t.Fatalf("success must cache for fxCacheTTL: fetcher called %d times, want 1", calls)
+	}
+}
+
+// ── B32: top subscribers renewal is a raw PocketBase datetime ────────
+
+func TestAdminStatsB32_TopSubsRenewalIsCleanDate(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+	seedDashboardTenant(t, app, "stats-b32@test.com")
+	t.Setenv("OZ_ADMIN_KEY", "secret-admin-key")
+
+	rec := doJSON(mux, http.MethodGet, "/api/v1/admin/stats", "Bearer secret-admin-key", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var body struct {
+		TopSubscribers []struct {
+			Email   string `json:"email"`
+			Renewal string `json:"renewal"`
+		} `json:"topSubscribers"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	if len(body.TopSubscribers) == 0 {
+		t.Fatal("expected the seeded pro subscription in topSubscribers")
+	}
+	// recentSignups/expiringSoon render as 2006-01-02; the renewal column
+	// used GetString("expires_at") and leaked the raw PocketBase format
+	// ("2027-01-01 00:00:00.000Z") into the dashboard table.
+	for _, ts := range body.TopSubscribers {
+		if ts.Renewal == "" {
+			continue // no expiry — empty is fine
+		}
+		if _, err := time.Parse("2006-01-02", ts.Renewal); err != nil {
+			t.Fatalf("B32: renewal=%q is not a clean 2006-01-02 date", ts.Renewal)
+		}
 	}
 }
 
