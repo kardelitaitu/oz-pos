@@ -7387,3 +7387,55 @@ must hold scope constant.
 x1); package PASS (139s); drift 0.
 
 **Commits:** 6845b312 (B44), bbaab2cd (B45).
+
+## 2026-08-31 — TDD cycle: LOY-06 atomic loyalty award + SF-01 terminal retry sale
+
+**Problem:** after closing CUR-06, the sweep hit the loyalty registry
+items. LOY-03 ("refunds don't compensate earned points") looked next —
+but probing it exposed something bigger: the entire earn chain
+(`Store::earn_points` → scoped IPC → UI wrapper → idempotency index)
+has ZERO production callers while redemption IS wired in PaymentModal.
+A one-way program. Recorded as LOY-06, asked the user for the semantics
+call; chosen: backend-atomic, base-currency. Digging into the
+completion paths then surfaced SF-01: the shortfall retry writes
+`status='pending'` + a 30-min expiry and NOTHING finalizes it — retry
+sales are invisible to every report (all filter `status='completed'`)
+and become auto-voided paid sales the moment the ADR-20 reaper gets
+wired (it isn't yet, on either client).
+
+**Solution:** `earn_points` refactored into a connection-bound core
+(`earn_points_with_conn`) — rusqlite transactions borrow the connection
+`&self`, so statements on the same connection join the open tx; the
+public wrapper keeps its exact behavior (own tx, None→Validation).
+`finalize_sale`/`finalize_sale_in_tx` award inside the same tx as the
+pending→completed UPDATE (`changed == 1` guards replays); the shortfall
+retry awards inline and now writes `completed` with no expiry. Award
+uses `base_total_minor` when the CUR-02 snapshot exists — the formula
+is currency-naive. Award errors log non-fatal: a captured payment is
+never rolled back over points.
+
+**Red/Green:** 7 new core tests (5 finalize-award incl. base-currency +
+zero-total skip + replay-once; 2 shortfall terminal/award) Red first;
+three existing shortfall assertions pinned the buggy `Pending` —
+updated to `Completed` (legitimate behavior change); the void-credits
+test rebuilt its multi-location JSON via the route-order checkout path
+instead of the (now terminal) shortfall path.
+
+**Verification:** oz-core lib db-scope green; loyalty_integration 20/20;
+payment_failure_integration 13/13; desktop 1118/1118; tablet 463/463.
+Tree-wide reds were exclusively foreign WIP (kds split syntax error,
+platform-core RBAC mid-edit, 2-3 flapping ozpkg tamper tests) — none in
+files I touched.
+
+**Concurrency incident (5th+ today) — my staged files swept by THEIR
+commit:** my `git commit` died on `cannot lock ref HEAD` (they committed
+mid-flight) — and their commit `3c23e47b` (website docs) had swept my 4
+staged files into it. Content verified intact in HEAD; refused to
+rewrite shared history; attribution recorded here + registry. The
+index-staging window is the hazard: between `git add` and commit
+ref-update, ANY other agent's commit inherits my index. Lesson: commit
+within seconds of staging; on `cannot lock ref`, ALWAYS check whether
+the swept commit already carried the payload before re-committing.
+
+**Commits:** 3c23e47b (code, landed under a foreign message — see
+above), docs commit alongside this entry.
