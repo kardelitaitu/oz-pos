@@ -7100,3 +7100,52 @@ fxUpdatedAt is legitimately a string. One test-side signature slip
 website 668/668 (40 files); drift 0.
 
 **Commits:** 60a8c542 (B33+B34), 74b79da0 (B35-B37).
+
+## 2026-08-30 — TDD cycle: shortfall reconstruction carries line currency (FRONTEND-03 follow-up)
+
+**Problem:** same class as FRONTEND-03, second command of the ADR-19 §6b
+two-command flow: `CartLineData` in
+`complete_sale_with_resolved_shortfalls_scoped` args carried
+`unitPriceMinor` with no currency, so the reconstruction loop on both
+clients re-stamped every line to `args.currency` — `Cart::add_line`'s
+mismatch check was dead there too.
+
+**Solution:** `unit_price_currency: Option<String>` on `CartLineData`
+(desktop + tablet) + `shortfall_line_unit_price()` helper mirroring
+`line_unit_price` (wire currency wins, invalid ISO fails closed, absent
+= legacy fallback). PaymentModal's shortfall-dialog mapping sends
+`l.unit_price.currency`; StockShortfallDialog passes lines through
+untouched (pinned). Only the `_scoped` variant exists — the non-scoped
+command was removed by a8716045 (148 dead IPC commands) mid-slice, and
+my FRONTEND-03 wiring survived it (helper + scoped wiring verified in
+HEAD post-hoc).
+
+**New finding (FRONTEND-04, P2, open):** while analyzing the mapping I
+found PaymentModal passes RAW `lineItems` + `currency={total.currency}`
+to the dialog, while the first complete_sale used `cartCurrency` +
+converted lines — under multi-currency charge + shortfall the second
+command settles in the base currency, and the dialog forwards no CUR-02
+tender metadata (baseCurrency/rate/tip/service-charge) at all. Needs a
+semantics decision; recorded in the registry, deliberately NOT fixed in
+this slice.
+
+**Red/Green:** stubbed helper (legacy behavior) → 2 assertion failures
+per crate + UI flow test failed on the missing `unitPriceCurrency` in
+the second command's payload; implemented → all green. Fallback +
+serde-shape tests pinned behavior throughout.
+
+**Verification:** desktop lib 1118/1118, tablet lib 463/463, UI
+flow+dialog 27/27, all 5 sales suites 147/147, typecheck clean,
+pre-commit gates pass.
+
+**Concurrency incident (3rd today) — shared INDEX contamination:** my
+first commit attempt swept 14 website files another agent had STAGED
+(git add) but not committed into my commit (22 files instead of 8).
+Recovered: `git reset --soft HEAD~1` (HEAD was still mine — verified),
+`git restore --staged website/` (their content intact in worktree,
+staging state lost — they must re-add), recommitted clean 8-file
+`4439cfa3`. Lesson: `git status --short` BEFORE committing to inspect
+the index, not just the worktree; a pre-staged shared index is as
+dangerous as a dirty worktree.
+
+**Commits:** 4439cfa3 (fix + tests), docs commit pending alongside this entry.

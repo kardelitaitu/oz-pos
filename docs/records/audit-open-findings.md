@@ -99,13 +99,14 @@ Key items:
 
 ---
 
-## Money — Frontend (`32-money-frontend.md` — PARTIALLY REMEDIATED)
+## Money — Frontend (`32-money-frontend.md` — REMEDIATED, 1 NEW FINDING)
 
-**Status:** all 3 findings closed.
+**Status:** FRONTEND-01/02/03 closed (+ shortfall follow-up closed); **FRONTEND-04 open** (new, found during the FRONTEND-03 sweep).
 
 - **FRONTEND-01** — PaymentModal charge-amount row inflates by base exponent (P1, FIXED)
 - **FRONTEND-02** — usePosState silently mixes currencies in the subtotal (P1, FIXED)
-- ~~**FRONTEND-03** — IPC boundary drops line currency (P2, **DEFERRED to Phase 5 — open, needs backend change**)~~ — **CLOSED 2026-08-30**, commit `fc8eae22`: `AddLineArgs.unit_price_currency` (optional, wire-compatible) added on desktop + tablet; commands build the line in the wire currency so `Cart::add_line`'s (previously dead) mismatch check rejects cross-currency lines; invalid ISO codes fail closed. PaymentModal sends `line.unit_price.currency` on both sale paths. Pinned by tablet e2e (EUR line into USD cart → Err) + desktop serde-shape/helper tests + UI contract tests. **Follow-up (same class, not covered):** `CartLineData` in `complete_sale_with_resolved_shortfalls*` args still carries `unitPriceMinor` without currency.
+- ~~**FRONTEND-03** — IPC boundary drops line currency (P2, **DEFERRED to Phase 5 — open, needs backend change**)~~ — **CLOSED 2026-08-30**, commit `fc8eae22`: `AddLineArgs.unit_price_currency` (optional, wire-compatible) added on desktop + tablet; commands build the line in the wire currency so `Cart::add_line`'s (previously dead) mismatch check rejects cross-currency lines; invalid ISO codes fail closed. PaymentModal sends `line.unit_price.currency` on both sale paths. Pinned by tablet e2e (EUR line into USD cart → Err) + desktop serde-shape/helper tests + UI contract tests. Follow-up also **CLOSED 2026-08-30**, commit `4439cfa3`: `CartLineData.unit_price_currency` in `complete_sale_with_resolved_shortfalls_scoped` (both clients) — same helper pattern, same fail-closed parse; PaymentModal's shortfall-dialog mapping sends the line currency, dialog passthrough pinned by test.
+- **FRONTEND-04** (P2, **OPEN** — found 2026-08-30 during the FRONTEND-03 sweep) — multi-currency charge + stock shortfall settles the second command in the WRONG currency: the first `complete_sale_scoped` runs in `cartCurrency` (charge currency, converted lines), but on `PartialStockResult` the PaymentModal shortfall dialog passes raw `lineItems` + `currency={total.currency}` (PaymentModal.tsx:1097-1103), so `complete_sale_with_resolved_shortfalls_scoped` reconstructs and records the sale in the base currency — and the CUR-02 tender metadata (`baseCurrency`/`tenderRateMillionths`/tip) is not forwarded by `StockShortfallDialog` at all. Needs a decision on intended semantics (settle in charge currency with converted lines + forwarded tender snapshot, or reject shortfall flow under multi-currency).
 
 ---
 
