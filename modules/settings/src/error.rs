@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-settings slice A: error verified)
+crate: modules-settings | status: SAFE | lint: CLEAN
+findings: clean thiserror settings error taxonomy
+next: none | perf: N/A
+*/
 //! Error type for the settings domain.
 
 use thiserror::Error;

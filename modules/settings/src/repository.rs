@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-settings slice A: repository verified)
+crate: modules-settings | status: SAFE | lint: CLEAN
+findings: MSL-5 INFO — SettingsRepository.set writes the settings table directly WITHOUT the DB-08 delta ledger (no versioned delta row) and without platform-core typed.rs encrypted-at-rest handling; currently a thin shell (no secret/tracked-key callers found), but any future adopter would silently skip sync deltas and encryption; prefer platform-core Settings::set_tracked for tracked keys
+next: route tracked keys through platform-core Settings | perf: N/A
+*/
 //! Settings Repository — key-value database persistence layer.
 
 use crate::error::SettingsError;

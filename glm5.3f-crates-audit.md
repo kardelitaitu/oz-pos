@@ -1209,6 +1209,25 @@ math throughout.
 
 ---
 
+## 15. modules/settings — key-value shell
+
+Baseline: ~316 production lines. Slice A — all 5 files read/verified;
+lib's old 19-07 stamp replaced.
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| MSL-5 | ℹ️ INFO | modules/settings/src/repository.rs (set) | The module's `set` writes the `settings` table directly — **no DB-08 delta ledger row** and no platform-core `typed.rs` encrypted-at-rest handling. Currently a thin shell with no secret/tracked-key callers, but any future adopter would silently skip sync deltas and encryption. | Route tracked keys through platform-core `Settings::set_tracked`. |
+
+Everything else is clean (parameterized upsert, thin facade, registration
+layer).
+
+> **modules-settings COMPLETE** — 5 production files, ~316 lines. One
+> INFO (MSL-5). Campaign proceeds to modules/staff.
+
+---
+
+---
+
 ---
 
 ---
