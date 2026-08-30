@@ -217,3 +217,90 @@ fn large_payload_roundtrip() {
     assert_eq!(imported.products[0]["sku"], "SKU-0000");
     assert_eq!(imported.products[99]["sku"], "SKU-0099");
 }
+
+// ── Header budget (B46) ───────────────────────────────────────────────
+//
+// The header is written into a fixed HEADER_LEN block by padding with
+// spaces. Until the fix, an oversized header was silently TRUNCATED, so
+// export_ozpkg() returned Ok and produced a file whose header block was
+// invalid JSON — permanently unopenable. Export must fail loudly
+// instead.
+//
+// There is deliberately no byte-exact boundary test: created_at uses
+// to_rfc3339(), whose fractional-second digits vary in length, so a
+// test pinned to the exact limit would be flaky by construction.
+
+fn empty_payload() -> OzpkgPayload {
+    OzpkgPayload {
+        products: vec![],
+        categories: vec![],
+        sales: None,
+        customers: None,
+        users: None,
+        settings: None,
+    }
+}
+
+#[test]
+fn export_with_typical_enabled_flags_errors_instead_of_truncating() {
+    // Realistic production shape: an ordinary store name plus the set of
+    // enabled feature flags a mid-size store carries. to_settings_rows()
+    // emits EVERY enabled flag as "feature.<key>" -> "1" (~26 bytes
+    // each) and the registry holds ~39 flags, so this is not crafted
+    // input.
+    let mut features = HashMap::new();
+    for i in 0..16 {
+        features.insert(format!("feature.pos.module_{i:02}"), "1".to_string());
+    }
+    let err = export_ozpkg(
+        "password",
+        "Kopi Senja",
+        "0.0.33",
+        vec!["products".to_string(), "categories".to_string()],
+        features,
+        &empty_payload(),
+    )
+    .expect_err("a header past HEADER_LEN must not be written as a truncated archive");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("512") && msg.contains("header"),
+        "error should name the limit so the operator can act: {msg}"
+    );
+}
+
+#[test]
+fn export_with_oversized_store_name_errors_instead_of_truncating() {
+    let long_name = "Toko ".repeat(100); // ~600 chars, well past HEADER_LEN
+    let err = export_ozpkg(
+        "password",
+        &long_name,
+        "0.0.33",
+        vec!["products".to_string()],
+        HashMap::new(),
+        &empty_payload(),
+    )
+    .expect_err("a store name past HEADER_LEN must fail, not truncate");
+    assert!(
+        err.to_string().contains("512"),
+        "error should name the limit: {err}"
+    );
+}
+
+#[test]
+fn export_with_header_under_the_budget_still_roundtrips() {
+    // Guard against an over-eager check: a long-but-fitting header must
+    // still export and import cleanly. Sized with a wide margin (~450
+    // bytes) so the varying created_at length cannot straddle the limit.
+    let name = "a".repeat(200);
+    let exported = export_ozpkg(
+        "password",
+        &name,
+        "0.0.33",
+        vec!["products".to_string()],
+        HashMap::new(),
+        &empty_payload(),
+    )
+    .expect("a header comfortably under HEADER_LEN must export");
+    let (header, _) = import_ozpkg(&exported, "password").unwrap();
+    assert_eq!(header.store_name, name);
+}

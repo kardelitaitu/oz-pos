@@ -170,10 +170,23 @@ pub fn export_ozpkg(
     let header_json = serde_json::to_vec(&header)
         .map_err(|e| CoreError::Internal(format!("header JSON: {e}")))?;
 
+    // B46: the header is written into a fixed HEADER_LEN block. The old
+    // code truncated header_json with `min(HEADER_LEN)` to fit, which
+    // produced a file whose header block was invalid JSON — export()
+    // returned Ok and the archive was permanently unopenable (silent
+    // backup loss; ~12 enabled feature flags is enough to trip it).
+    // Fail loudly instead: the CLI propagates this and writes no file.
+    if header_json.len() > HEADER_LEN {
+        return Err(CoreError::Internal(format!(
+            "ozpkg header is {} bytes, which exceeds the {HEADER_LEN}-byte limit; \
+             shorten the store name or disable feature flags before exporting",
+            header_json.len()
+        )));
+    }
+
     // Pad header to HEADER_LEN bytes.
     let mut header_padded = vec![b' '; HEADER_LEN];
-    let header_len = header_json.len().min(HEADER_LEN);
-    header_padded[..header_len].copy_from_slice(&header_json[..header_len]);
+    header_padded[..header_json.len()].copy_from_slice(&header_json);
 
     // 7. Concatenate header + ciphertext.
     let mut result = header_padded;
