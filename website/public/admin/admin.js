@@ -148,35 +148,19 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       provCard.appendChild(provRow);
       chartGrid.appendChild(provCard);
 
-      // Signups per month (bar chart as SVG)
+      // Signups per month (bar chart — extracted to admin-utils.svgBarChart)
       const signupCard = el('div', 'chart-card');
       signupCard.appendChild(el('h3', null, t('chart.signupsPerMonth')));
-      const maxS = Math.max(...m.signupsPerMonth.map(d => d.count));
-      const barW = 420 / m.signupsPerMonth.length;
-      let bars = '';
-      m.signupsPerMonth.forEach((d,i) => {
-        const bh = (d.count / maxS) * 140;
-        const bx = 10 + i * (barW + 2);
-        bars += `<rect x="${bx}" y="${150 - bh}" width="${barW * 0.7}" height="${bh}" rx="2" fill="var(--accent)" opacity=".8"/>
-                 <text x="${bx + barW * 0.35}" y="${150 - bh - 4}" text-anchor="middle" fill="var(--text)" font-size="9">${d.count}</text>
-                 <text x="${bx + barW * 0.35}" y="165" text-anchor="middle" fill="var(--muted)" font-size="8">${escapeHtml(d.month.slice(5))}</text>`;
-      });
-      signupCard.innerHTML += `<svg viewBox="0 0 440 180" style="max-height:180px">${bars}</svg>`;
+      signupCard.innerHTML += svgBarChart('signups', m.signupsPerMonth, { valueKey: 'count', color: 'var(--accent)' });
       chartGrid.appendChild(signupCard);
 
-      // Churn per month
+      // Churn per month — B3 fix: the server's churnPerMonth rows carry the
+      // number in `churn` (count is Go's zero value), so the old inline code
+      // reading d.count rendered permanently-zero/NaN bars. Churn also reused
+      // the signups barW; each chart now sizes itself.
       const churnCard = el('div', 'chart-card');
       churnCard.appendChild(el('h3', null, t('chart.churnCanceled')));
-      const maxC = Math.max(...m.churnPerMonth.map(d => d.count), 1);
-      let churnBars = '';
-      m.churnPerMonth.forEach((d,i) => {
-        const bh = (d.count / maxC) * 140;
-        const bx = 10 + i * (barW + 2);
-        churnBars += `<rect x="${bx}" y="${150 - bh}" width="${barW * 0.7}" height="${bh}" rx="2" fill="var(--bad)" opacity=".8"/>
-                      <text x="${bx + barW * 0.35}" y="${150 - bh - 4}" text-anchor="middle" fill="var(--text)" font-size="9">${d.count}</text>
-                      <text x="${bx + barW * 0.35}" y="165" text-anchor="middle" fill="var(--muted)" font-size="8">${escapeHtml(d.month.slice(5))}</text>`;
-      });
-      churnCard.innerHTML += `<svg viewBox="0 0 440 180" style="max-height:180px">${churnBars}</svg>`;
+      churnCard.innerHTML += svgBarChart('churn', m.churnPerMonth, { valueKey: 'churn', color: 'var(--bad)' });
       chartGrid.appendChild(churnCard);
 
       c.appendChild(chartGrid);

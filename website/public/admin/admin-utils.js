@@ -201,6 +201,33 @@
     ];
   }
 
+  // svgBarChart renders a simple bar chart as an SVG string (extracted
+  // from the signups/churn blocks in admin.js renderDashboard).
+  // B3 fix: the value field is opts.valueKey (default 'count') — the
+  // server's churnPerMonth rows carry the number in `churn` with `count`
+  // at Go's zero value, so a hardcoded d.count rendered permanently-zero
+  // (NaN-height) churn bars. Empty data gets the chart-empty state
+  // instead of Math.max()=-Infinity / 420/0=Infinity geometry, and a
+  // missing month degrades to '' instead of throwing.
+  function svgBarChart(_id, data, opts) {
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      return '<div class="chart-empty">No data</div>';
+    }
+    var valueKey = (opts && opts.valueKey) || 'count';
+    var maxS = Math.max.apply(null, data.map(function (d) { return Number(d[valueKey]) || 0; }));
+    var barW = 420 / data.length;
+    var bars = '';
+    data.forEach(function (d, i) {
+      var v = Number(d[valueKey]) || 0;
+      var bh = maxS > 0 ? (v / maxS) * 140 : 0;
+      var bx = 10 + i * (barW + 2);
+      bars += '<rect x="' + bx + '" y="' + (150 - bh) + '" width="' + (barW * 0.7) + '" height="' + bh + '" rx="2" fill="' + (opts && opts.color || 'var(--accent)') + '" opacity=".8"/>' +
+        '<text x="' + (bx + barW * 0.35) + '" y="' + (150 - bh - 4) + '" text-anchor="middle" fill="var(--text)" font-size="9">' + v + '</text>' +
+        '<text x="' + (bx + barW * 0.35) + '" y="165" text-anchor="middle" fill="var(--muted)" font-size="8">' + escapeHtml(d.month ? d.month.slice(5) : '') + '</text>';
+    });
+    return '<svg viewBox="0 0 440 180" style="max-height:180px">' + bars + '</svg>';
+  }
+
   // Returns true when an HTTP status means "session not authorized" for the
   // admin panel (401 unauth'd, 403 non-admin tenant).
   function isAuthDenied(status) {
@@ -388,6 +415,7 @@
     tableCard: tableCard,
     tenantRow: tenantRow,
     tenantDetailRows: tenantDetailRows,
+    svgBarChart: svgBarChart,
     t: t,
     STRINGS: STRINGS,
     isAuthDenied: isAuthDenied,

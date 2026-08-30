@@ -251,3 +251,41 @@ describe('admin-utils tenantDetailRows (B2: t() shadowing regression)', () => {
     expect(rows[7][1]).toBe(0);
   });
 });
+
+describe('admin-utils svgBarChart (B3: churn chart read the wrong field)', () => {
+  // The server's churnPerMonth rows are monthBucket{Month, Churn} with
+  // count left at Go's zero value — a chart that reads d.count renders
+  // permanently-zero bars. valueKey must be honored.
+  const churnData = [
+    { month: '2026-01', count: 0, churn: 5 },
+    { month: '2026-02', count: 0, churn: 10 },
+  ];
+
+  it('scales bars by the requested valueKey, not a hardcoded field', () => {
+    const svg = utils.svgBarChart('churn', churnData, { valueKey: 'churn', color: 'var(--bad)' });
+    // max=10 → full height 140; 5 → half height 70.
+    expect(svg).toContain('height="140"');
+    expect(svg).toContain('height="70"');
+    expect(svg).not.toContain('NaN');
+  });
+
+  it('defaults to count for signup-shaped data', () => {
+    const svg = utils.svgBarChart('signups', [
+      { month: '2026-01', count: 4 },
+      { month: '2026-02', count: 8 },
+    ], { color: 'var(--accent)' });
+    expect(svg).toContain('height="140"');
+    expect(svg).toContain('height="70"');
+  });
+
+  it('renders the empty state instead of Infinity geometry for zero rows', () => {
+    expect(utils.svgBarChart('x', [], { valueKey: 'count' })).toContain('chart-empty');
+  });
+
+  it('escapes month labels and survives missing months', () => {
+    // Month labels are the slice AFTER 'YYYY-' — put the markup there.
+    const svg = utils.svgBarChart('x', [{ count: 1 }, { count: 1, month: '2026-<b>' }], { valueKey: 'count' });
+    expect(svg).not.toContain('<b>');
+    expect(svg).toContain('&lt;b&gt;');
+  });
+});
