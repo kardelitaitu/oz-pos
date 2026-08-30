@@ -315,6 +315,13 @@ async fn pg_integration_rest_roundtrip() {
         course: None,
         modifiers_json: None,
     }];
+    // CUR-02: a multi-currency tender sale — the metadata the desktop
+    // PaymentModal snapshots must round-trip through the cloud.
+    sale.base_currency = Some("IDR".into());
+    sale.base_total_minor = Some(11_000_000);
+    sale.tender_rate_millionths = Some(16_500_000);
+    sale.tip_minor = 150;
+    sale.service_charge_minor = 70;
     create_sale(&pool, &tenant, &sale)
         .await
         .expect("create_sale");
@@ -327,6 +334,19 @@ async fn pg_integration_rest_roundtrip() {
     assert_eq!(fetched_sale.lines[0].sku, sku);
     assert_eq!(fetched_sale.total.minor_units, 700);
     assert_eq!(fetched_sale.status, SaleStatus::Pending);
+    // CUR-02 cloud gap: the multi-currency tender metadata and the
+    // tip/service amounts must survive the create_sale → get_sale
+    // round-trip. The PG INSERT previously omitted all five columns, so
+    // the cloud always saw NULL/0 and reconciliation could not see what
+    // the customer was actually charged in.
+    assert_eq!(fetched_sale.base_currency, sale.base_currency);
+    assert_eq!(fetched_sale.base_total_minor, sale.base_total_minor);
+    assert_eq!(
+        fetched_sale.tender_rate_millionths,
+        sale.tender_rate_millionths
+    );
+    assert_eq!(fetched_sale.tip_minor, sale.tip_minor);
+    assert_eq!(fetched_sale.service_charge_minor, sale.service_charge_minor);
     assert_eq!(
         get_sale(&pool, &tenant, &unique_id("pg-nosale"))
             .await

@@ -988,10 +988,18 @@ pub async fn create_sale(pool: &Pool, tenant_id: &str, sale: &Sale) -> Result<()
     let cur_str = currency_str(&sale.currency)?;
     let status_str = sale.status.as_stored_str();
     tx.execute(
+        // CUR-02 cloud gap: the tender metadata (base currency/total/rate)
+        // and tip/service amounts must be written here — `get_sale` below
+        // already reads all five columns, so omitting them made every
+        // cloud-side sale show NULL tender info and lost the tip/service
+        // amounts for reconciliation.
         "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method, tendered_minor,
                             discount_percent, discount_label, user_id, created_at, updated_at,
-                            subtotal_minor, tax_total_minor, customer_id, version, tenant_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 1, $16)",
+                            subtotal_minor, tax_total_minor, customer_id, version, tenant_id,
+                            base_currency, base_total_minor, tender_rate_millionths,
+                            tip_minor, service_charge_minor)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 1, $16,
+                 $17, $18, $19, $20, $21)",
         &[
             &sale.id,
             &sale.total.minor_units,
@@ -1009,6 +1017,11 @@ pub async fn create_sale(pool: &Pool, tenant_id: &str, sale: &Sale) -> Result<()
             &sale.tax_total.minor_units,
             &sale.customer_id,
             &tenant_id,
+            &sale.base_currency,
+            &sale.base_total_minor,
+            &sale.tender_rate_millionths,
+            &sale.tip_minor,
+            &sale.service_charge_minor,
         ],
     )
     .await
