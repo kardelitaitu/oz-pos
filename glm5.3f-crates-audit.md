@@ -1265,6 +1265,26 @@ live-table query correctly filters `status = 'completed'`.
 
 ---
 
+## 18. modules/terminal — registration shell
+
+Baseline: ~473 production lines. Slice A — all 5 files (models.rs 214:
+production 1–107 fully read; repository/service/error verified; lib's
+old 19-07 stamp replaced).
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| MSL-9 | ℹ️ INFO | modules/terminal/src/models.rs:7 | `Terminal` derives `Debug` **without redacting `terminal_secret`** (contrast `pg_transport`'s deliberately redacted Debug) — a logged or panic-dumped `Terminal` leaks the device secret. Shell module (terminal logic lives in oz-core), so exposure is limited. | Redact the secret in Debug or drop the derive. |
+
+Everything else clean (parameterized queries, thin facade, registration
+layer, UUID v7 ids).
+
+> **modules-terminal COMPLETE** — 5 production files, ~473 lines. One
+> INFO (MSL-9). Campaign proceeds to modules/currency.
+
+---
+
+---
+
 ---
 
 ---

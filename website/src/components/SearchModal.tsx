@@ -36,6 +36,7 @@ export default function SearchModal({ isOpen, onClose, locale }: Props) {
       { id: 'features', title: locale === 'id' ? 'Fitur Lengkap' : 'Features & Architecture', category: 'pages', url: `/${locale}/features`, keywords: 'offline kds multi store shifts inventory payments' },
       { id: 'account', title: locale === 'id' ? 'Dashboard Akun & Lisensi' : 'Account & License Dashboard', category: 'pages', url: `/${locale}/account`, keywords: 'profile subscription license terminals' },
       { id: 'support', title: locale === 'id' ? 'Bantuan & Kontak' : 'Support & Contact', category: 'pages', url: `/${locale}/support`, keywords: 'faq contact discord email help' },
+      { id: 'tdd', title: locale === 'id' ? 'Test-Driven Development' : 'Test-Driven Development', category: 'pages', url: `/${locale}/tdd`, keywords: 'tdd testing workflow phases red green refactor' },
       
       // Vertical Solutions
       { id: 'kafe', title: locale === 'id' ? 'POS untuk Kafe & Kedai Kopi' : 'POS for Cafes & Coffee Shops', category: 'pages', url: `/${locale}/untuk-kafe`, keywords: 'cafe coffee table orders kds modifiers' },

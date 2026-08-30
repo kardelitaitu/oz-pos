@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-terminal slice A: error verified)
+crate: modules-terminal | status: SAFE | lint: CLEAN
+findings: clean thiserror terminal error taxonomy
+next: none | perf: N/A
+*/
 //! Error type for the terminal domain.
 
 use thiserror::Error;

@@ -1,9 +1,8 @@
 /*
-last audited 19-07-26 by RSA-Agent
+last audited 25-07-26 by RSA-Agent (modules-terminal slice A: lib re-verify)
 crate: modules-terminal | status: SAFE | lint: CLEAN
-findings: Transitional module implementing Module trait. No unsafe code. Re-exports Terminal from
-  oz-core. 8 unit tests pass covering lifecycle and kernel registration.
-next: Migrate terminal commands into this module | perf: N/A.
+findings: clean Module registration layer; unwraps test-only; previous 19-07 stamp replaced per campaign convention
+next: none | perf: N/A
 */
 
 //! Terminal Module — registered POS device management.
