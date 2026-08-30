@@ -542,6 +542,49 @@ async fn run() -> Result<(), String> {
     Ok(())
 }
 
+/// Verify one table after copying: re-read the Postgres rows and compare row
+/// count + content checksum against the source. Prints the per-table status
+/// line and returns `true` when verification passed.
+///
+/// `count_ok` tolerates `pg >= src` (a concurrent writer may legitimately
+/// add a row mid-migration; `ON CONFLICT DO NOTHING` never removes rows).
+/// `checksum_ok` requires exact equality, so a concurrent writer surfaces
+/// as `CHECKSUM-DIFF` — a false alarm, not a silent pass — and the run
+/// should be repeated once writers are quiesced.
+async fn verify_table(
+    pool: &Pool,
+    table: &str,
+    columns: &[String],
+    src_rows: &[Row],
+) -> Result<bool, String> {
+    let pg_rows = read_pg_rows(pool, table, columns).await?;
+    let src_checksum: u64 = src_rows
+        .iter()
+        .map(|r| fnv1a(&r.checksum_fragment()))
+        .fold(0u64, |acc, h| acc ^ h);
+    let pg_checksum: u64 = pg_rows
+        .iter()
+        .map(|r| fnv1a(&r.checksum_fragment()))
+        .fold(0u64, |acc, h| acc ^ h);
+
+    let count_ok = pg_rows.len() >= src_rows.len();
+    let checksum_ok = src_checksum == pg_checksum;
+    let status = if count_ok && checksum_ok {
+        "OK"
+    } else if count_ok {
+        "CHECKSUM-DIFF"
+    } else {
+        "COUNT-DIFF"
+    };
+    println!(
+        "  {table:<24} src={:<6} pg={:<6} checksum={:<20} {status}",
+        src_rows.len(),
+        pg_rows.len(),
+        format!("{src_checksum:016x}"),
+    );
+    Ok(status == "OK")
+}
+
 /// Copy the given tables from SQLite to Postgres (FK-topological order) and
 /// verify every table by row count + content checksum. Returns
 /// `(rows copied, tables processed, failed tables)`.
@@ -626,34 +669,9 @@ async fn copy_and_verify(
         total_copied += src_rows.len();
 
         // 6. Verify: row count + checksum on both sides.
-        let pg_rows = read_pg_rows(pool, table, &pg_cols).await?;
-        let src_checksum: u64 = src_rows
-            .iter()
-            .map(|r| fnv1a(&r.checksum_fragment()))
-            .fold(0u64, |acc, h| acc ^ h);
-        let pg_checksum: u64 = pg_rows
-            .iter()
-            .map(|r| fnv1a(&r.checksum_fragment()))
-            .fold(0u64, |acc, h| acc ^ h);
-
-        let count_ok = pg_rows.len() >= src_rows.len();
-        let checksum_ok = src_checksum == pg_checksum;
-        let status = if count_ok && checksum_ok {
-            "OK"
-        } else if count_ok {
-            "CHECKSUM-DIFF"
-        } else {
-            "COUNT-DIFF"
-        };
-        if status != "OK" {
+        if !verify_table(pool, table, &pg_cols, &src_rows).await? {
             failures += 1;
         }
-        println!(
-            "  {table:<24} src={:<6} pg={:<6} checksum={:<20} {status}",
-            src_rows.len(),
-            pg_rows.len(),
-            format!("{src_checksum:016x}"),
-        );
     }
 
     Ok((total_copied, order.len(), failures))
