@@ -919,3 +919,448 @@ fn addons_multiple_addons() {
     assert!(sub.has_addon("extra_storage"));
     assert!(sub.has_addon("custom_hal"));
 }
+
+// ── SubscriptionTier::tier_key() — explicit coverage ───────────────────
+
+#[test]
+fn tier_key_free_is_free() {
+    assert_eq!(SubscriptionTier::Free.tier_key(), "free");
+}
+
+#[test]
+fn tier_key_onetime_maps_to_free() {
+    // Critical: OneTime DB rows were always treated as free quota tier.
+    assert_eq!(SubscriptionTier::OneTime.tier_key(), "free");
+}
+
+#[test]
+fn tier_key_plus() {
+    assert_eq!(SubscriptionTier::Plus.tier_key(), "plus");
+}
+
+#[test]
+fn tier_key_pro() {
+    assert_eq!(SubscriptionTier::Pro.tier_key(), "pro");
+}
+
+#[test]
+fn tier_key_premium() {
+    assert_eq!(SubscriptionTier::Premium.tier_key(), "premium");
+}
+
+#[test]
+fn tier_key_enterprise() {
+    assert_eq!(SubscriptionTier::Enterprise.tier_key(), "enterprise");
+}
+
+// ── is_within_grace_period edge cases ───────────────────────────────────
+
+#[test]
+fn grace_period_unparseable_expiry_returns_false() {
+    let sub = TenantSubscription {
+        tenant_id: "test".into(),
+        tier: SubscriptionTier::Plus,
+        status: "active".into(),
+        expires_at: Some("not-a-valid-date".into()),
+        max_stores: 1,
+        max_pos_instances: 2,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    // Unparseable expiry → assume expired.
+    assert!(!sub.is_within_grace_period());
+    assert_eq!(sub.effective_tier(), SubscriptionTier::Free);
+}
+
+#[test]
+fn grace_period_premium_20_days_after_expiry_still_in_grace() {
+    // Premium has 30-day grace. 20 days past expiry → still within grace.
+    let past_expiry = chrono::Utc::now() - chrono::Duration::days(20);
+    let sub = TenantSubscription {
+        tenant_id: "test".into(),
+        tier: SubscriptionTier::Premium,
+        status: "active".into(),
+        expires_at: Some(past_expiry.to_rfc3339()),
+        max_stores: 5,
+        max_pos_instances: 10,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(sub.is_within_grace_period());
+    assert_eq!(sub.effective_tier(), SubscriptionTier::Premium);
+}
+
+#[test]
+fn grace_period_pro_20_days_after_expiry_outside_grace() {
+    // Pro has 14-day grace. 20 days past expiry → outside grace.
+    let past_expiry = chrono::Utc::now() - chrono::Duration::days(20);
+    let sub = TenantSubscription {
+        tenant_id: "test".into(),
+        tier: SubscriptionTier::Pro,
+        status: "active".into(),
+        expires_at: Some(past_expiry.to_rfc3339()),
+        max_stores: 2,
+        max_pos_instances: 5,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(!sub.is_within_grace_period());
+    assert_eq!(sub.effective_tier(), SubscriptionTier::Free);
+}
+
+#[test]
+fn grace_period_plus_13_days_still_in_grace() {
+    // Plus has 14-day grace. 13 days past expiry → safely within grace.
+    // (We avoid exactly 14 days because Utc::now() is called twice —
+    // once in setup and once in is_within_grace_period — and a few
+    // milliseconds elapse, making the boundary flaky.)
+    let past_expiry = chrono::Utc::now() - chrono::Duration::days(13);
+    let sub = TenantSubscription {
+        tenant_id: "test".into(),
+        tier: SubscriptionTier::Plus,
+        status: "active".into(),
+        expires_at: Some(past_expiry.to_rfc3339()),
+        max_stores: 1,
+        max_pos_instances: 2,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(sub.is_within_grace_period());
+}
+
+#[test]
+fn grace_period_plus_15_days_just_outside() {
+    // Plus has 14-day grace. 15 days past expiry → outside grace.
+    let past_expiry = chrono::Utc::now() - chrono::Duration::days(15);
+    let sub = TenantSubscription {
+        tenant_id: "test".into(),
+        tier: SubscriptionTier::Plus,
+        status: "active".into(),
+        expires_at: Some(past_expiry.to_rfc3339()),
+        max_stores: 1,
+        max_pos_instances: 2,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(!sub.is_within_grace_period());
+    assert_eq!(sub.effective_tier(), SubscriptionTier::Free);
+}
+
+#[test]
+fn grace_period_future_expiry_always_valid() {
+    // Subscription hasn't expired yet → always within grace.
+    let future = chrono::Utc::now() + chrono::Duration::days(365);
+    let sub = TenantSubscription {
+        tenant_id: "test".into(),
+        tier: SubscriptionTier::Pro,
+        status: "active".into(),
+        expires_at: Some(future.to_rfc3339()),
+        max_stores: 2,
+        max_pos_instances: 5,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(sub.is_within_grace_period());
+    assert_eq!(sub.effective_tier(), SubscriptionTier::Pro);
+}
+
+// ── QuotaError Display for all variants ─────────────────────────────────
+
+#[test]
+fn quota_error_staff_limit_display() {
+    let err = QuotaError::StaffLimit {
+        tier: "Plus".into(),
+        limit: 5,
+        current: 5,
+    };
+    let msg = err.to_string();
+    assert!(msg.contains("Plus"));
+    assert!(msg.contains("5"));
+    assert!(msg.contains("staff"));
+}
+
+#[test]
+fn quota_error_warehouse_limit_display() {
+    let err = QuotaError::WarehouseLimit {
+        tier: "Pro".into(),
+        limit: 3,
+        current: 3,
+    };
+    let msg = err.to_string();
+    assert!(msg.contains("Pro"));
+    assert!(msg.contains("3"));
+    assert!(msg.contains("warehouse"));
+}
+
+#[test]
+fn quota_error_type_not_allowed_display() {
+    let err = QuotaError::TypeNotAllowed {
+        tier: "Free".into(),
+        type_key: "kds".into(),
+    };
+    let msg = err.to_string();
+    assert!(msg.contains("kds"));
+    assert!(msg.contains("Free"));
+    assert!(msg.contains("higher tier"));
+}
+
+// ── QuotaError → CoreError conversion ───────────────────────────────────
+
+#[test]
+fn quota_error_converts_to_core_error() {
+    let err = QuotaError::RegisterLimit {
+        tier: "Free".into(),
+        limit: 1,
+        current: 1,
+    };
+    let core_err: CoreError = err.into();
+    let msg = core_err.to_string();
+    assert!(msg.contains("Free"));
+    assert!(msg.contains("register"));
+}
+
+#[test]
+fn quota_error_store_limit_converts_to_core_error() {
+    let err = QuotaError::StoreLimit {
+        tier: "Pro".into(),
+        limit: 2,
+        current: 2,
+    };
+    let core_err: CoreError = err.into();
+    let msg = core_err.to_string();
+    assert!(msg.contains("Pro"));
+    assert!(msg.contains("store"));
+}
+
+#[test]
+fn quota_error_staff_limit_converts_to_core_error() {
+    let err = QuotaError::StaffLimit {
+        tier: "Enterprise".into(),
+        limit: 50,
+        current: 50,
+    };
+    let core_err: CoreError = err.into();
+    let msg = core_err.to_string();
+    assert!(msg.contains("Enterprise"));
+    assert!(msg.contains("staff"));
+}
+
+#[test]
+fn quota_error_warehouse_limit_converts_to_core_error() {
+    let err = QuotaError::WarehouseLimit {
+        tier: "Premium".into(),
+        limit: 10,
+        current: 10,
+    };
+    let core_err: CoreError = err.into();
+    let msg = core_err.to_string();
+    assert!(msg.contains("Premium"));
+    assert!(msg.contains("warehouse"));
+}
+
+#[test]
+fn quota_error_type_not_allowed_converts_to_core_error() {
+    let err = QuotaError::TypeNotAllowed {
+        tier: "Plus".into(),
+        type_key: "kds".into(),
+    };
+    let core_err: CoreError = err.into();
+    let msg = core_err.to_string();
+    assert!(msg.contains("kds"));
+    assert!(msg.contains("Plus"));
+}
+
+// ── effective_tier edge cases ───────────────────────────────────────────
+
+#[test]
+fn effective_tier_canceled_with_future_expiry() {
+    // Canceled subscription with a future expiry → still reverts to Free.
+    let future = chrono::Utc::now() + chrono::Duration::days(365);
+    let sub = TenantSubscription {
+        tenant_id: "test".into(),
+        tier: SubscriptionTier::Premium,
+        status: "canceled".into(),
+        expires_at: Some(future.to_rfc3339()),
+        max_stores: 5,
+        max_pos_instances: 10,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(!sub.is_within_grace_period());
+    assert_eq!(sub.effective_tier(), SubscriptionTier::Free);
+}
+
+#[test]
+fn effective_tier_enterprise_active() {
+    let sub = TenantSubscription {
+        tenant_id: "test".into(),
+        tier: SubscriptionTier::Enterprise,
+        status: "active".into(),
+        expires_at: None,
+        max_stores: 0,
+        max_pos_instances: 0,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(sub.is_within_grace_period());
+    assert_eq!(sub.effective_tier(), SubscriptionTier::Enterprise);
+}
+
+#[test]
+fn effective_tier_plus_within_grace() {
+    let recent = chrono::Utc::now() - chrono::Duration::days(5);
+    let sub = TenantSubscription {
+        tenant_id: "test".into(),
+        tier: SubscriptionTier::Plus,
+        status: "active".into(),
+        expires_at: Some(recent.to_rfc3339()),
+        max_stores: 1,
+        max_pos_instances: 2,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(sub.is_within_grace_period());
+    assert_eq!(sub.effective_tier(), SubscriptionTier::Plus);
+}
+
+// ── workspace type entitlement with grace expiration ────────────────────
+
+#[test]
+fn workspace_type_grace_expired_plus_reverts_to_free_defaults() {
+    // Plus with expired grace → Free workspace types only.
+    let old = chrono::Utc::now() - chrono::Duration::days(30);
+    let sub = TenantSubscription {
+        tenant_id: "test".into(),
+        tier: SubscriptionTier::Plus,
+        status: "active".into(),
+        expires_at: Some(old.to_rfc3339()),
+        max_stores: 1,
+        max_pos_instances: 2,
+        // Even though kds is in the payload, grace expiry reverts to Free.
+        allowed_types_json:
+            r#"["store-pos","restaurant-pos","admin","warehouse","inventory","kds"]"#.into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    // Grace expired → Free defaults.
+    assert!(!sub.allows_workspace_type("kds"));
+    assert!(!sub.allows_workspace_type("warehouse"));
+    assert!(sub.allows_workspace_type("store-pos"));
+    assert!(sub.allows_workspace_type("admin"));
+}
+
+#[test]
+fn workspace_type_grace_expired_pro_reverts_to_free_defaults() {
+    // Pro with expired grace → Free workspace types only (no kds, no warehouse).
+    let old = chrono::Utc::now() - chrono::Duration::days(30);
+    let sub = TenantSubscription {
+        tenant_id: "test".into(),
+        tier: SubscriptionTier::Pro,
+        status: "active".into(),
+        expires_at: Some(old.to_rfc3339()),
+        max_stores: 2,
+        max_pos_instances: 5,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(!sub.allows_workspace_type("kds"));
+    assert!(!sub.allows_workspace_type("warehouse"));
+    assert!(!sub.allows_workspace_type("inventory"));
+    assert!(sub.allows_workspace_type("store-pos"));
+    assert!(sub.allows_workspace_type("restaurant-pos"));
+    assert!(sub.allows_workspace_type("admin"));
+}
+
+// ── from_db case sensitivity ───────────────────────────────────────────
+
+#[test]
+fn from_db_case_insensitive() {
+    assert_eq!(SubscriptionTier::from_db("FREE"), SubscriptionTier::Free);
+    assert_eq!(SubscriptionTier::from_db("Free"), SubscriptionTier::Free);
+    assert_eq!(SubscriptionTier::from_db("PLUS"), SubscriptionTier::Plus);
+    assert_eq!(SubscriptionTier::from_db("Pro"), SubscriptionTier::Pro);
+    assert_eq!(
+        SubscriptionTier::from_db("PREMIUM"),
+        SubscriptionTier::Premium
+    );
+    assert_eq!(
+        SubscriptionTier::from_db("ENTERPRISE"),
+        SubscriptionTier::Enterprise
+    );
+}
+
+// ── bootstrap_free helper ───────────────────────────────────────────────
+
+#[test]
+fn bootstrap_free_has_correct_defaults() {
+    let sub = TenantSubscription::bootstrap_free();
+    assert_eq!(sub.tenant_id, "default");
+    assert_eq!(sub.tier, SubscriptionTier::Free);
+    assert_eq!(sub.status, "active");
+    assert!(sub.expires_at.is_none());
+    assert_eq!(sub.max_stores, 1);
+    assert_eq!(sub.max_pos_instances, 1);
+    assert_eq!(sub.allowed_types_json, "[]");
+    assert!(sub.signature.is_empty());
+    assert!(sub.signed_payload.is_empty());
+    assert!(sub.api_key.is_empty());
+    assert!(sub.updated_at.is_empty());
+}
+
+// ── tier_key round-trip with from_db ───────────────────────────────────
+
+#[test]
+fn tier_key_roundtrip_for_all_tiers() {
+    // tier_key() should produce a value that from_db() can parse back.
+    let tiers = [
+        SubscriptionTier::Free,
+        SubscriptionTier::Plus,
+        SubscriptionTier::Pro,
+        SubscriptionTier::Premium,
+        SubscriptionTier::Enterprise,
+    ];
+    for tier in &tiers {
+        let key = tier.tier_key();
+        let parsed = SubscriptionTier::from_db(key);
+        match tier {
+            SubscriptionTier::Free => assert_eq!(parsed, SubscriptionTier::Free),
+            SubscriptionTier::OneTime => assert_eq!(parsed, SubscriptionTier::Free),
+            SubscriptionTier::Plus => assert_eq!(parsed, SubscriptionTier::Plus),
+            SubscriptionTier::Pro => assert_eq!(parsed, SubscriptionTier::Pro),
+            SubscriptionTier::Premium => assert_eq!(parsed, SubscriptionTier::Premium),
+            SubscriptionTier::Enterprise => assert_eq!(parsed, SubscriptionTier::Enterprise),
+        }
+    }
+}
