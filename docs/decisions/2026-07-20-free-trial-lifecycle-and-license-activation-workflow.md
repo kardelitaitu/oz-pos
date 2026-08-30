@@ -2,7 +2,7 @@
 num: 23
 area: subscription
 title: ADR #23: Free Trial Lifecycle & License Activation Workflow
-status: —
+status: Re-scoped — superseded by subscription-tiers.md §4 (FINAL, approved 2026-08-17)
 ---
 # ADR #23: Free Trial Lifecycle & License Activation Workflow
 
