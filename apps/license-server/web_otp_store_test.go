@@ -1,0 +1,128 @@
+package main
+
+// Direct unit tests for the in-memory OTP/session store (web_otp.go). The
+// HTTP-level tests exercise storeCode→takeCode→createSession through the
+// endpoints, but the store methods' branch logic — expiry, single-use,
+// sliding TTL, idempotency, and the sweep — has no direct unit coverage.
+// These pin the store contract so a subtle change (e.g. forgetting to delete
+// an expired code) is caught at the unit boundary, not by an auth flake.
+
+import (
+	"testing"
+	"time"
+)
+
+func TestStore_StoreAndTakeCode(t *testing.T) {
+	s := &otpStore{codes: map[string]*otpCode{}, sessions: map[string]*webSession{}}
+	s.storeCode("a@b.com", "abc123")
+	h, ok := s.takeCode("a@b.com")
+	if !ok || h != "abc123" {
+		t.Fatalf("takeCode = (%q,%v), want (abc123,true)", h, ok)
+	}
+	// Single-use: the second take must miss.
+	if _, ok := s.takeCode("a@b.com"); ok {
+		t.Error("takeCode should be single-use — second take must miss")
+	}
+}
+
+func TestStore_TakeCodeExpired(t *testing.T) {
+	s := &otpStore{codes: map[string]*otpCode{}, sessions: map[string]*webSession{}}
+	s.codes["a@b.com"] = &otpCode{hash: "abc123", expiresAt: time.Now().Add(-time.Minute)}
+	if _, ok := s.takeCode("a@b.com"); ok {
+		t.Error("takeCode must miss for an expired code")
+	}
+	// And it must be removed (sweep not required for a consumed/expired code).
+	if _, exists := s.codes["a@b.com"]; exists {
+		t.Error("expired code should be removed by takeCode")
+	}
+}
+
+func TestStore_DeleteCodeIdempotent(t *testing.T) {
+	s := &otpStore{codes: map[string]*otpCode{}, sessions: map[string]*webSession{}}
+	s.storeCode("a@b.com", "abc123")
+	s.deleteCode("a@b.com")
+	s.deleteCode("a@b.com") // idempotent, no panic
+	if _, exists := s.codes["a@b.com"]; exists {
+		t.Error("deleteCode should remove the code")
+	}
+}
+
+func TestStore_CreateAndGetSession(t *testing.T) {
+	s := &otpStore{codes: map[string]*otpCode{}, sessions: map[string]*webSession{}}
+	s.createSession("tokhash1", "tenant1")
+	if got := s.getSession("tokhash1"); got != "tenant1" {
+		t.Fatalf("getSession = %q, want tenant1", got)
+	}
+}
+
+func TestStore_GetSessionUnknown(t *testing.T) {
+	s := &otpStore{codes: map[string]*otpCode{}, sessions: map[string]*webSession{}}
+	if got := s.getSession("nope"); got != "" {
+		t.Fatalf("getSession for unknown token = %q, want empty", got)
+	}
+}
+
+func TestStore_GetSessionExpired(t *testing.T) {
+	s := &otpStore{codes: map[string]*otpCode{}, sessions: map[string]*webSession{}}
+	s.sessions["tokhash1"] = &webSession{tenantID: "tenant1", expiresAt: time.Now().Add(-time.Minute)}
+	if got := s.getSession("tokhash1"); got != "" {
+		t.Fatalf("getSession for expired token = %q, want empty", got)
+	}
+	// And the expired session must be cleaned up.
+	if _, exists := s.sessions["tokhash1"]; exists {
+		t.Error("expired session should be removed by getSession")
+	}
+}
+
+func TestStore_DeleteSessionIdempotent(t *testing.T) {
+	s := &otpStore{codes: map[string]*otpCode{}, sessions: map[string]*webSession{}}
+	s.createSession("tokhash1", "tenant1")
+	s.deleteSession("tokhash1")
+	s.deleteSession("tokhash1") // idempotent, no panic
+	if got := s.getSession("tokhash1"); got != "" {
+		t.Errorf("session should be gone after deleteSession, got %q", got)
+	}
+}
+
+func TestStore_TouchSessionExtendsTTL(t *testing.T) {
+	s := &otpStore{codes: map[string]*otpCode{}, sessions: map[string]*webSession{}}
+	s.createSession("tokhash1", "tenant1")
+	before := s.sessions["tokhash1"].expiresAt
+	time.Sleep(5 * time.Millisecond) // ensure expiry would differ
+	s.touchSession("tokhash1")
+	after := s.sessions["tokhash1"].expiresAt
+	if !after.After(before) {
+		t.Errorf("touchSession should extend TTL: before=%v after=%v", before, after)
+	}
+}
+
+func TestStore_TouchSessionUnknownNoOp(t *testing.T) {
+	s := &otpStore{codes: map[string]*otpCode{}, sessions: map[string]*webSession{}}
+	s.touchSession("nope") // must not panic or add a session
+	if _, exists := s.sessions["nope"]; exists {
+		t.Error("touchSession must not create a session for an unknown token")
+	}
+}
+
+func TestStore_SweepRemovesExpiredCodesAndSessions(t *testing.T) {
+	s := &otpStore{codes: map[string]*otpCode{}, sessions: map[string]*webSession{}}
+	s.codes["expired"] = &otpCode{hash: "x", expiresAt: time.Now().Add(-time.Minute)}
+	s.codes["fresh"] = &otpCode{hash: "y", expiresAt: time.Now().Add(time.Hour)}
+	s.sessions["sess-expired"] = &webSession{tenantID: "t", expiresAt: time.Now().Add(-time.Minute)}
+	s.sessions["sess-fresh"] = &webSession{tenantID: "t", expiresAt: time.Now().Add(time.Hour)}
+
+	s.sweep()
+
+	if _, exists := s.codes["expired"]; exists {
+		t.Error("sweep should remove the expired code")
+	}
+	if _, exists := s.codes["fresh"]; !exists {
+		t.Error("sweep should keep the fresh code")
+	}
+	if _, exists := s.sessions["sess-expired"]; exists {
+		t.Error("sweep should remove the expired session")
+	}
+	if _, exists := s.sessions["sess-fresh"]; !exists {
+		t.Error("sweep should keep the fresh session")
+	}
+}
