@@ -443,6 +443,64 @@ func handleReactivation(
 	return true, e.JSON(http.StatusOK, resp)
 }
 
+// handleExistingTenantNewKey authenticates a NEW key activation against an
+// existing tenant. Returns (handled, err, issuedAPIKey):
+//
+//   - handled=true → a response was written; the caller must return err.
+//   - issuedAPIKey non-empty → a webhook-issued key (paddle_sub_id /
+//     midtrans_sub_id) minted a fresh api_key the caller must return so
+//     /status and /renew work for the POS.
+//
+// The caller must prove they are the registered tenant admin by presenting
+// the api_key issued on first activation. EXCEPTION: webhook-issued keys are
+// bound to this tenant's email at purchase, so email + key is sufficient
+// proof (the same model as re-activation); their api_key is minted NOW and
+// returned in the response — the webhook only stored a placeholder hash
+// (both providers upsert the tenant the same way).
+func handleExistingTenantNewKey(
+	app core.App,
+	e *core.RequestEvent,
+	req ActivateRequest,
+	tenant *core.Record,
+	keyRecord *core.Record,
+	keyStatus string,
+) (handled bool, err error, issuedAPIKey string) {
+	if keyStatus == "unused" || keyStatus == "" {
+		providerIssued := keyRecord.GetString("paddle_sub_id") != "" || keyRecord.GetString("midtrans_sub_id") != ""
+		if providerIssued {
+			newAPIKey := generateAPIKey()
+			apiKeyHash, apiKeyLookup, hashErr := hashAPIKey(newAPIKey)
+			if hashErr != nil {
+				log.Printf("webhook-key activation api_key mint failed for tenant %q: %v", tenant.Id, hashErr)
+				return true, e.JSON(http.StatusInternalServerError, map[string]any{
+					"error": "failed to create api_key",
+				}), ""
+			}
+			tenant.Set("api_key", apiKeyHash)
+			tenant.Set("api_key_lookup", apiKeyLookup)
+			if saveErr := app.Save(tenant); saveErr != nil {
+				log.Printf("webhook-key activation api_key save failed for tenant %q: %v", tenant.Id, saveErr)
+				return true, e.JSON(http.StatusInternalServerError, map[string]any{
+					"error": "failed to create api_key",
+				}), ""
+			}
+			return false, nil, newAPIKey
+		}
+		if !verifyAPIKey(tenant.GetString("api_key"), req.APIKey) {
+			return true, e.JSON(http.StatusUnauthorized, map[string]any{
+				"error": "api_key required (or mismatched) — caller is not the registered administrator of this tenant",
+			}), ""
+		}
+		return false, nil, ""
+	}
+	// Key status is something unexpected (not unused, not activated).
+	// Block the attempt. This handles "revoked" and other edge states.
+	keyFailTracker.recordFailure(req.Key)
+	return true, e.JSON(http.StatusUnauthorized, map[string]any{
+		"error": "invalid or already used license key",
+	}), ""
+}
+
 func handleActivate(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		// Cap request body at 64KB to prevent OOM via oversized JSON payloads (M4 audit).
@@ -692,38 +750,10 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			// tenant's api_key is minted NOW and returned in the response so
 			// /status and /renew work for the POS — the webhook only stored a
 			// placeholder hash (both providers upsert the tenant the same way).
-			if keyStatus == "unused" || keyStatus == "" {
-				providerIssued := keyRecord.GetString("paddle_sub_id") != "" || keyRecord.GetString("midtrans_sub_id") != ""
-				if providerIssued {
-					newAPIKey := generateAPIKey()
-					apiKeyHash, apiKeyLookup, hashErr := hashAPIKey(newAPIKey)
-					if hashErr != nil {
-						log.Printf("webhook-key activation api_key mint failed for tenant %q: %v", tenant.Id, hashErr)
-						return e.JSON(http.StatusInternalServerError, map[string]any{
-							"error": "failed to create api_key",
-						})
-					}
-					tenant.Set("api_key", apiKeyHash)
-					tenant.Set("api_key_lookup", apiKeyLookup)
-					if saveErr := app.Save(tenant); saveErr != nil {
-						log.Printf("webhook-key activation api_key save failed for tenant %q: %v", tenant.Id, saveErr)
-						return e.JSON(http.StatusInternalServerError, map[string]any{
-							"error": "failed to create api_key",
-						})
-					}
-					issuedAPIKey = newAPIKey
-				} else if !verifyAPIKey(tenant.GetString("api_key"), req.APIKey) {
-					return e.JSON(http.StatusUnauthorized, map[string]any{
-						"error": "api_key required (or mismatched) — caller is not the registered administrator of this tenant",
-					})
-				}
-			} else {
-				// Key status is something unexpected (not unused, not activated).
-				// Block the attempt. This handles "revoked" and other edge states.
-				keyFailTracker.recordFailure(req.Key)
-				return e.JSON(http.StatusUnauthorized, map[string]any{
-					"error": "invalid or already used license key",
-				})
+			if handled, err, newKey := handleExistingTenantNewKey(app, e, req, tenant, keyRecord, keyStatus); handled {
+				return err
+			} else if newKey != "" {
+				issuedAPIKey = newKey
 			}
 
 		}
