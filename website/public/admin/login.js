@@ -102,6 +102,12 @@ let isSubmitting = false;
 
 async function handleLogin() {
   if (isSubmitting) return;
+  // B22 fix: the button is type=submit inside the form — Enter in any
+  // text input triggers IMPLICIT form submission regardless of the
+  // button's disabled state (HTML only blocks clicks on disabled
+  // buttons). Without this guard, the 429 lockout countdown was pure
+  // theatre: press Enter and keep hammering the rate limiter.
+  if (isLockoutActive(document.getElementById('login-btn'))) return;
   isSubmitting = true;
   hideError();
   hideSuccess();
@@ -251,7 +257,16 @@ function showLockoutCountdown(seconds) {
   startLockoutCountdown(
     btn, seconds,
     function (s) { return t('login.tryAgainIn') + s + t('login.seconds'); },
-    function () { return currentMode === 'otp' ? t('login.sendCode') : t('login.signIn'); }
+    function () {
+      // Restore the label the mode's own rules would show: in OTP mode
+      // the label depends on whether the code input is already visible
+      // (Verify vs Send), and the password label must match setAuthMode
+      // exactly — the old version said 'Sign In' on a tab whose button
+      // otherwise reads 'Sign In with Password'.
+      if (currentMode !== 'otp') return t('login.signInPassword');
+      const og = document.getElementById('otp-group');
+      return og && !og.classList.contains('hidden') ? t('login.verifyCode') : t('login.sendCode');
+    }
   );
 }
 
