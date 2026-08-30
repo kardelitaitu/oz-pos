@@ -689,6 +689,25 @@ chrono-tz would fix) and falls back to UTC on unknown names (COR-21
 family); the 2-minute send window with same-date dedup skips the day when
 the app is closed at send time (INFO).
 
+### Slice D2 — export/cloud_destination.rs (608) + export/email_report.rs (527), fully read
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-35 | 🟠 MED | export/cloud_destination.rs:316–351 | **Snowflake export builds INSERT statements by string concatenation** with quote-only `sql_escape`. Snowflake treats `\` as an escape character inside string literals, so a user-controlled value ending in a backslash (product/store names) escapes the closing quote and breaks out of the literal — SQL injection into the customer's warehouse. | Use Snowflake API bind variables, or extend the escaper to double backslashes as well as quotes. |
+| COR-36 | 🟡 LOW-MED | export/email_report.rs:434–436 | `render_text` truncates with **byte slicing** (`&row.name[..21]`, guarded by a byte-length check) — panics when byte 21 falls mid-UTF-8 (multi-byte product names crash scheduled email rendering). | Truncate on char boundaries (`chars().take(21)`). |
+
+**Slice D2 positives:** the BigQuery path is exemplary — service-account
+JWT (RS256) minted correctly with the `rsa` crate, token exchanged at
+Google's OAuth endpoint, rows sent via bearer-authenticated `insertAll`.
+`email_report.rs` encrypts the SMTP password at rest via `crate::crypto`
+with transparent decryption and a test-pinned legacy-plaintext fallback,
+and escapes every user-controlled HTML cell. All four HTTP clients in
+`cloud_destination.rs` use `Client::new()` without timeouts (COR-31
+family); the service-account key and Snowflake password persist in the
+settings JSON (base64 ≠ encryption — COR-17/30 family).
+
+---
+
 ---
 
 > **SLICE C COMPLETE:** sync_client, topology, location_resolver, settings,
