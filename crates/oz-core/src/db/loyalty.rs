@@ -302,117 +302,34 @@ impl Store<'_> {
 
     /// Earn points for a purchase.
     /// points_earned = (total_minor * tier.points_per_unit / 100) * tier.earn_multiplier
+    ///
+    /// Thin transactional wrapper over [`earn_points_with_conn`]; kept for
+    /// the standalone IPC path. `Ok(None)` (total too small) maps to the
+    /// historical `Validation` error for this public entry point.
     pub fn earn_points(
         &self,
         customer_id: &str,
         sale_id: &str,
         total_minor: i64,
     ) -> Result<LoyaltyTransaction, CoreError> {
-        let account = self.get_or_create_loyalty_account(customer_id)?;
-
-        // SaleCompleted can be delivered more than once during retries or
-        // recovery. Return the original ledger row instead of awarding again.
-        if let Some(existing) =
-            self.get_loyalty_transaction_for_sale(&account.id, sale_id, "earn")?
-        {
-            return Ok(existing);
-        }
-
-        // Get tier multiplier.
-        let tier = account
-            .tier_id
-            .as_ref()
-            .and_then(|tid| self.get_loyalty_tier(tid).ok()?)
-            .unwrap_or(LoyaltyTier {
-                id: "tier-bronze".into(),
-                name: "Bronze".into(),
-                min_points: 0,
-                points_per_unit: 10,
-                earn_multiplier: 1.0,
-                colour: "#cd7f32".into(),
-                sort_order: 1,
-                created_at: String::new(),
-            });
-
-        // Multiply first (still in i64) then convert to f64 for the /100 division
-        // to preserve fractional cents. Integer division truncates, which would
-        // cause precision loss for sub-dollar amounts.
-        let base = total_minor.saturating_mul(tier.points_per_unit);
-        let points = ((base as f64) / 100.0 * tier.earn_multiplier).round() as i64;
-
-        if points <= 0 {
-            return Err(CoreError::Validation {
-                field: "total_minor",
-                message: "purchase total too small to earn points".into(),
-            });
-        }
-
-        let txn_id = uuid::Uuid::now_v7().to_string();
-        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-
         let tx = self.conn.unchecked_transaction()?;
-
-        // Insert transaction. The unique projection index is the final
-        // concurrency guard; a losing replay returns the winning row.
-        if let Err(error) = tx.execute(
-            "INSERT INTO loyalty_transactions (id, account_id, sale_id, points, txn_type, description, created_at)
-             VALUES (?1, ?2, ?3, ?4, 'earn', ?5, ?6)",
-            params![
-                txn_id,
-                account.id,
-                sale_id,
-                points,
-                format!("Earned {} points from purchase", points),
-                now,
-            ],
-        ) {
-            tx.rollback()?;
-            if matches!(
-                &error,
-                rusqlite::Error::SqliteFailure(
-                    code,
-                    _
-                ) if code.code == rusqlite::ErrorCode::ConstraintViolation
-            ) {
-                return self
-                    .get_loyalty_transaction_for_sale(&account.id, sale_id, "earn")?
-                    .ok_or_else(|| CoreError::Db(error));
+        match earn_points_with_conn(&tx, customer_id, sale_id, total_minor) {
+            Ok(Some(t)) => {
+                tx.commit()?;
+                Ok(t)
             }
-            return Err(error.into());
+            Ok(None) => {
+                tx.rollback()?;
+                Err(CoreError::Validation {
+                    field: "total_minor",
+                    message: "purchase total too small to earn points".into(),
+                })
+            }
+            Err(e) => {
+                tx.rollback()?;
+                Err(e)
+            }
         }
-
-        // Update account.
-        tx.execute(
-            "UPDATE loyalty_accounts SET points = points + ?1, lifetime_points = lifetime_points + ?1,
-             tier_id = (SELECT id FROM loyalty_tiers WHERE min_points <= lifetime_points + ?1
-                        ORDER BY min_points DESC LIMIT 1),
-             updated_at = ?2 WHERE id = ?3",
-            params![points, now, account.id],
-        )?;
-
-        // MSL-4 fix: maintain `customers.loyalty_points` as a projection of
-        // the authoritative ledger balance (tier-multiplied), inside the
-        // same transaction. Previously the CRM event handler incremented the
-        // counter at a flat rate and nothing decremented it on redemption,
-        // so the two ledgers diverged upward forever.
-        tx.execute(
-            "UPDATE customers SET loyalty_points =
-                (SELECT points FROM loyalty_accounts WHERE customer_id = ?1),
-             updated_at = ?2 WHERE id = ?1",
-            params![customer_id, now],
-        )?;
-
-        tx.commit()?;
-
-        Ok(LoyaltyTransaction {
-            id: txn_id,
-            account_id: account.id,
-            sale_id: Some(sale_id.to_owned()),
-            points,
-            txn_type: "earn".into(),
-            description: format!("Earned {} points from purchase", points),
-            created_at: now,
-        })
     }
 
     /// Redeem points at checkout.
@@ -741,6 +658,178 @@ impl Store<'_> {
                 message: "points value overflowed".into(),
             })
     }
+}
+
+/// Fetch the `earn` ledger row for a sale, if any (idempotency lookup).
+fn fetch_earn_txn(
+    conn: &rusqlite::Connection,
+    account_id: &str,
+    sale_id: &str,
+) -> Result<Option<LoyaltyTransaction>, CoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, account_id, sale_id, points, txn_type, description, created_at
+         FROM loyalty_transactions
+         WHERE account_id = ?1 AND sale_id = ?2 AND txn_type = 'earn'
+         LIMIT 1",
+    )?;
+    let result = stmt.query_row(params![account_id, sale_id], |row| {
+        Ok(LoyaltyTransaction {
+            id: row.get("id")?,
+            account_id: row.get("account_id")?,
+            sale_id: row.get("sale_id")?,
+            points: row.get("points")?,
+            txn_type: row.get("txn_type")?,
+            description: row.get("description")?,
+            created_at: row.get("created_at")?,
+        })
+    });
+    match result {
+        Ok(t) => Ok(Some(t)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Connection-bound core of [`Store::earn_points`] (LOY-06).
+///
+/// Takes an explicit `&Connection` so a caller's in-flight transaction is
+/// joined (rusqlite transactions borrow the connection `&self`; statements
+/// on that same connection execute inside the open transaction). This is
+/// what lets the sale-completion paths award points *atomically* with the
+/// status transition — no orphaned award if the process dies mid-sale, no
+/// missing award if the UI never gets to call a separate IPC.
+///
+/// Returns `Ok(None)` when the total is too small to earn any points —
+/// completion-path callers treat that as a silent skip, while the public
+/// [`Store::earn_points`] maps it to a `Validation` error.
+///
+/// Idempotent per sale: `SaleCompleted` can be delivered more than once
+/// during retries or recovery, so a replay returns the original ledger row
+/// instead of awarding again; the unique projection index (migration 128)
+/// is the final concurrency guard.
+pub(crate) fn earn_points_with_conn(
+    conn: &rusqlite::Connection,
+    customer_id: &str,
+    sale_id: &str,
+    total_minor: i64,
+) -> Result<Option<LoyaltyTransaction>, CoreError> {
+    // The account must belong to a real customer.
+    let customer_exists: bool = conn
+        .query_row(
+            "SELECT 1 FROM customers WHERE id = ?1",
+            params![customer_id],
+            |_| Ok(true),
+        )
+        .unwrap_or(false);
+    if !customer_exists {
+        return Err(CoreError::NotFound {
+            entity: "customer",
+            id: customer_id.to_owned(),
+        });
+    }
+
+    // Get-or-create the account. INSERT OR IGNORE is atomic with respect
+    // to the UNIQUE(customer_id) constraint; concurrent callers then read
+    // the same canonical account below.
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    conn.execute(
+        "INSERT OR IGNORE INTO loyalty_accounts (id, customer_id, tier_id, updated_at, created_at)
+         VALUES (?1, ?2, 'tier-bronze', ?3, ?4)",
+        params![uuid::Uuid::now_v7().to_string(), customer_id, now, now],
+    )?;
+    let account: LoyaltyAccount = conn.query_row(
+        "SELECT id, customer_id, points, lifetime_points, tier_id, updated_at, created_at
+         FROM loyalty_accounts WHERE customer_id = ?1",
+        params![customer_id],
+        |row| {
+            Ok(LoyaltyAccount {
+                id: row.get("id")?,
+                customer_id: row.get("customer_id")?,
+                points: row.get("points")?,
+                lifetime_points: row.get("lifetime_points")?,
+                tier_id: row.get("tier_id")?,
+                updated_at: row.get("updated_at")?,
+                created_at: row.get("created_at")?,
+            })
+        },
+    )?;
+
+    // Replay guard: return the original award, never a second one.
+    if let Some(existing) = fetch_earn_txn(conn, &account.id, sale_id)? {
+        return Ok(Some(existing));
+    }
+
+    // Tier formula. Multiply first (still in i64) then convert to f64 for
+    // the /100 division to preserve fractional cents; integer division
+    // would truncate sub-dollar amounts to zero points.
+    let tier = account
+        .tier_id
+        .as_deref()
+        .and_then(|tid| {
+            conn.query_row(
+                "SELECT points_per_unit, earn_multiplier FROM loyalty_tiers WHERE id = ?1",
+                params![tid],
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, f64>(1)?)),
+            )
+            .ok()
+        })
+        .unwrap_or((10, 1.0));
+    let base = total_minor.saturating_mul(tier.0);
+    let points = ((base as f64) / 100.0 * tier.1).round() as i64;
+    if points <= 0 {
+        return Ok(None);
+    }
+
+    let txn_id = uuid::Uuid::now_v7().to_string();
+    let description = format!("Earned {points} points from purchase");
+    if let Err(error) = conn.execute(
+        "INSERT INTO loyalty_transactions (id, account_id, sale_id, points, txn_type, description, created_at)
+         VALUES (?1, ?2, ?3, ?4, 'earn', ?5, ?6)",
+        params![txn_id, account.id, sale_id, points, description, now],
+    ) {
+        if matches!(
+            &error,
+            rusqlite::Error::SqliteFailure(code, _)
+                if code.code == rusqlite::ErrorCode::ConstraintViolation
+        ) {
+            // A concurrent replay lost the unique-index race: hand back
+            // the winning row (statement-level auto-rollback keeps the
+            // caller's transaction usable).
+            let winner = fetch_earn_txn(conn, &account.id, sale_id)?;
+            return match winner {
+                Some(t) => Ok(Some(t)),
+                None => Err(CoreError::Db(error)),
+            };
+        }
+        return Err(error.into());
+    }
+
+    conn.execute(
+        "UPDATE loyalty_accounts SET points = points + ?1, lifetime_points = lifetime_points + ?1,
+         tier_id = (SELECT id FROM loyalty_tiers WHERE min_points <= lifetime_points + ?1
+                    ORDER BY min_points DESC LIMIT 1),
+         updated_at = ?2 WHERE id = ?3",
+        params![points, now, account.id],
+    )?;
+
+    // MSL-4: maintain `customers.loyalty_points` as a projection of the
+    // authoritative ledger balance, inside the same transaction.
+    conn.execute(
+        "UPDATE customers SET loyalty_points =
+            (SELECT points FROM loyalty_accounts WHERE customer_id = ?1),
+         updated_at = ?2 WHERE id = ?1",
+        params![customer_id, now],
+    )?;
+
+    Ok(Some(LoyaltyTransaction {
+        id: txn_id,
+        account_id: account.id,
+        sale_id: Some(sale_id.to_owned()),
+        points,
+        txn_type: "earn".into(),
+        description,
+        created_at: now,
+    }))
 }
 
 #[cfg(test)]

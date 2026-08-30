@@ -14,11 +14,61 @@ use super::*;
 use crate::AuditEntry;
 use crate::SaleStatus;
 
+/// LOY-06: award loyalty points at the moment a sale reaches `completed`.
+///
+/// Deliberately NON-FATAL: a captured payment must never be rolled back
+/// because the loyalty ledger had a problem (missing account, tier
+/// misconfiguration, …). Failures are logged and the completion proceeds;
+/// the award is idempotent per sale, so a later manual earn (or a future
+/// reconciliation) can recover it.
+///
+/// Earns on the BASE total when the CUR-02 snapshot is present: the
+/// points formula is currency-naive (`total_minor * points_per_unit /
+/// 100`), so charging in a low-exponent currency would otherwise
+/// multiply the reward by the exchange rate.
+fn award_loyalty_on_completion(conn: &rusqlite::Connection, sale_id: &str) {
+    let sale_row = conn.query_row(
+        "SELECT customer_id, base_total_minor, total_minor FROM sales WHERE id = ?1",
+        rusqlite::params![sale_id],
+        |row| {
+            Ok((
+                row.get::<_, Option<String>>(0)?,
+                row.get::<_, Option<i64>>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
+        },
+    );
+    let (customer_id, base_total_minor, total_minor) = match sale_row {
+        Ok((Some(cid), base, total)) => (cid, base, total),
+        // No customer attached (or row vanished): nothing to award.
+        Ok((None, _, _)) => return,
+        Err(e) => {
+            tracing::warn!(error = %e, sale_id, "loyalty award: sale lookup failed (non-fatal)");
+            return;
+        }
+    };
+    let earn_total = base_total_minor.unwrap_or(total_minor);
+    match crate::db::loyalty::earn_points_with_conn(conn, &customer_id, sale_id, earn_total) {
+        Ok(Some(t)) => {
+            tracing::debug!(
+                sale_id,
+                points = t.points,
+                "loyalty points awarded on completion"
+            );
+        }
+        // Total too small to earn — expected for near-zero sales.
+        Ok(None) => {}
+        Err(e) => {
+            tracing::warn!(error = %e, sale_id, "loyalty award failed (non-fatal)");
+        }
+    }
+}
+
 impl Store<'_> {
     /// Transition a pending sale's status to `completed` after payment capture is successful.
     pub fn finalize_sale(&self, sale_id: &str) -> Result<(), CoreError> {
         let tx = self.conn.unchecked_transaction()?;
-        tx.execute(
+        let changed = tx.execute(
             "UPDATE sales SET status = 'completed', updated_at = ?1, version = version + 1 \
              WHERE id = ?2 AND status = 'pending'",
             rusqlite::params![
@@ -26,6 +76,12 @@ impl Store<'_> {
                 sale_id
             ],
         )?;
+        // LOY-06: award loyalty points atomically with the transition.
+        // `changed == 1` guarantees exactly one award per sale even if the
+        // caller retries finalize.
+        if changed == 1 {
+            award_loyalty_on_completion(&tx, sale_id);
+        }
         tx.commit()?;
         Ok(())
     }
@@ -38,7 +94,7 @@ impl Store<'_> {
         tx: &rusqlite::Transaction<'_>,
         sale_id: &str,
     ) -> Result<(), CoreError> {
-        tx.execute(
+        let changed = tx.execute(
             "UPDATE sales SET status = 'completed', updated_at = ?1, version = version + 1 \
              WHERE id = ?2 AND status = 'pending'",
             rusqlite::params![
@@ -46,6 +102,10 @@ impl Store<'_> {
                 sale_id
             ],
         )?;
+        // LOY-06: same atomic award inside the caller's transaction.
+        if changed == 1 {
+            award_loyalty_on_completion(tx, sale_id);
+        }
         Ok(())
     }
 
@@ -64,7 +124,9 @@ impl Store<'_> {
     ///      while the dialog was shown), returns [`CoreError::InsufficientStockAtLocation`].
     ///   3. Executes all deductions via [`adjust_stock_batch`](Self::adjust_stock_batch).
     ///   4. Writes `deduction_locations` JSON with per-line per-location breakdown.
-    ///   5. Creates the sale row with `status = 'pending'`.
+    ///   5. Creates the sale row with `status = 'completed'` (SF-01: the
+    ///      retry settles an already-captured payment, so it is terminal —
+    ///      no pending window, no reaper exposure).
     ///   6. Creates payment records.
     ///   7. COMMIT.
     ///
@@ -333,12 +395,12 @@ impl Store<'_> {
         })
         .to_string();
 
-        // ADR-20 §6: pending_expires_at = NOW + 30 min for stale-reaper.
-        let pending_expires_at = chrono::Utc::now()
-            .checked_add_signed(chrono::Duration::minutes(30))
-            .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
-            .unwrap_or_else(|| now.clone());
-
+        // SF-01: the shortfall retry settles a payment that was already
+        // captured before the first attempt — the sale is terminal on
+        // write. Writing 'pending' here left retry sales invisible to
+        // every report (they filter status='completed') and, once the
+        // ADR-20 stale-pending reaper is wired, would auto-void paid
+        // transactions 30 minutes later. No expiry window is needed.
         tx.execute(
             "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method,
                                  tendered_minor, discount_percent, discount_label, user_id,
@@ -347,19 +409,23 @@ impl Store<'_> {
                                  pending_expires_at, tenant_id,
                                  base_currency, base_total_minor, tender_rate_millionths,
                                  tip_minor, service_charge_minor)
-             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, ?16, 'default',
-                     ?17, ?18, ?19, ?20, ?21)",
+             VALUES (?1, ?2, ?3, ?4, 'completed', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, NULL, 'default',
+                     ?16, ?17, ?18, ?19, ?20)",
             rusqlite::params![
                 sale.id, sale.total.minor_units, cur_str, sale.line_count,
                 sale.payment_method, sale.tendered_minor,
                 sale.discount_percent, sale.discount_label, sale.user_id,
                 sale.created_at, now,
                 sale.subtotal.minor_units, sale.tax_total.minor_units,
-                sale.customer_id, deduction_json, pending_expires_at,
+                sale.customer_id, deduction_json,
                 sale.base_currency, sale.base_total_minor, sale.tender_rate_millionths,
                 sale.tip_minor, sale.service_charge_minor,
             ],
         )?;
+
+        // LOY-06: this is a completion path too — award points atomically,
+        // exactly as finalize_sale does for the main two-step flow.
+        award_loyalty_on_completion(&tx, &sale.id);
 
         for line in &sale.lines {
             insert_sale_line(&tx, line)?;
@@ -401,7 +467,7 @@ impl Store<'_> {
 
         Ok(crate::sale_deduction::CompleteSaleResult {
             sale_id: sale.id.clone(),
-            status: foundation::SaleStatus::Pending,
+            status: foundation::SaleStatus::Completed,
             receipt_number: sale.id.clone(),
             deduct_tx_id,
         })

@@ -2235,7 +2235,10 @@ fn complete_sale_with_resolved_shortfalls_splits_across_locations() {
             &[resolution],
         )
         .unwrap();
-    assert_eq!(result.status, SaleStatus::Pending);
+    // SF-01: the retry settles a captured payment — the sale must reach
+    // 'completed', not linger as 'pending' (invisible to reports, and a
+    // void time-bomb once the stale-pending reaper is wired).
+    assert_eq!(result.status, SaleStatus::Completed);
 
     // Verify stock deducted correctly from both locations
     let stock_a: i64 = conn
@@ -2274,6 +2277,97 @@ fn complete_sale_with_resolved_shortfalls_splits_across_locations() {
         dl.contains(loc_b),
         "deduction_locations should reference loc-b"
     );
+}
+
+/// SF-01: the shortfall retry writes a terminal status and clears the
+/// pending-expiry window.
+#[test]
+fn complete_sale_with_resolved_shortfalls_marks_sale_completed() {
+    let conn = fresh();
+    let s = store(&conn);
+    setup_locations_with_stock(&conn, "COFFEE", "loc-a", 5, "loc-b", 10);
+
+    let sale = make_single_line_sale("COFFEE", 12, 350);
+    let resolution = crate::sale_deduction::ResolvedShortfall {
+        sku: "COFFEE".into(),
+        allocations: vec![
+            crate::sale_deduction::LocationAllocation {
+                location_id: crate::inventory::LocationId::from("loc-a"),
+                qty: 5,
+            },
+            crate::sale_deduction::LocationAllocation {
+                location_id: crate::inventory::LocationId::from("loc-b"),
+                qty: 7,
+            },
+        ],
+    };
+    s.complete_sale_with_resolved_shortfalls(
+        &sale,
+        None,
+        &tender(4200),
+        "cashier-1",
+        None,
+        &[resolution],
+    )
+    .unwrap();
+
+    let (status, expires): (String, Option<String>) = conn
+        .query_row(
+            "SELECT status, pending_expires_at FROM sales WHERE id = ?1",
+            rusqlite::params![sale.id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(status, "completed", "retry sale must be terminal");
+    assert!(
+        expires.is_none(),
+        "a completed sale must not carry a pending-expiry deadline"
+    );
+}
+
+/// LOY-06: the shortfall retry is a completion path too — it must award
+/// loyalty points like finalize_sale does.
+#[test]
+fn complete_sale_with_resolved_shortfalls_awards_loyalty_points() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_customer_row(&conn, "cust-1");
+    setup_locations_with_stock(&conn, "COFFEE", "loc-a", 5, "loc-b", 10);
+
+    let mut sale = make_single_line_sale("COFFEE", 12, 350); // total 4200
+    sale.customer_id = Some("cust-1".into());
+    let resolution = crate::sale_deduction::ResolvedShortfall {
+        sku: "COFFEE".into(),
+        allocations: vec![
+            crate::sale_deduction::LocationAllocation {
+                location_id: crate::inventory::LocationId::from("loc-a"),
+                qty: 5,
+            },
+            crate::sale_deduction::LocationAllocation {
+                location_id: crate::inventory::LocationId::from("loc-b"),
+                qty: 7,
+            },
+        ],
+    };
+    s.complete_sale_with_resolved_shortfalls(
+        &sale,
+        None,
+        &tender(4200),
+        "cashier-1",
+        None,
+        &[resolution],
+    )
+    .unwrap();
+
+    let points: Option<i64> = conn
+        .query_row(
+            "SELECT points FROM loyalty_transactions WHERE sale_id = ?1 AND txn_type = 'earn'",
+            rusqlite::params![sale.id],
+            |row| row.get(0),
+        )
+        .ok();
+    // Bronze: 4200 * 10 / 100 = 420.
+    assert_eq!(points, Some(420), "retry completion must award tier points");
 }
 
 /// Resolution sum validation rejects mismatch.
@@ -2466,7 +2560,8 @@ fn complete_sale_with_resolved_shortfalls_deducts_unresolved_lines_at_primary() 
             &[resolution],
         )
         .unwrap();
-    assert_eq!(result.status, SaleStatus::Pending);
+    // SF-01: retry completion is terminal.
+    assert_eq!(result.status, SaleStatus::Completed);
 
     // COFFEE deducted 3 from loc-wh (50 → 47)
     let coffee_wh: i64 = conn
@@ -2509,7 +2604,8 @@ fn complete_sale_with_resolved_shortfalls_empty_resolutions_deducts_at_primary()
     let result = s
         .complete_sale_with_resolved_shortfalls(&sale, None, &tender(1050), "cashier-1", None, &[])
         .unwrap();
-    assert_eq!(result.status, SaleStatus::Pending);
+    // SF-01: retry completion is terminal.
+    assert_eq!(result.status, SaleStatus::Completed);
 
     // COFFEE deducted 3 from canonical default
     let stock: i64 = conn
@@ -2611,6 +2707,12 @@ fn complete_sale_partial_shortfall_rolls_back_sale_row() {
 
 /// Void of a multi-location pending sale credits stock back to
 /// each original deduction source (ADR-19 §5.3 / §16.2).
+///
+/// SF-01 note: this used to build the multi-location `deduction_locations`
+/// JSON via the shortfall retry — but retry sales are now terminal
+/// (`completed`) and `void_pending_sale` correctly rejects them. The
+/// route-order checkout path produces the same multi-location JSON on a
+/// genuinely pending sale, which is what this test is about.
 #[test]
 fn void_sale_credits_back_to_original_deduction_source() {
     let conn = fresh();
@@ -2618,33 +2720,23 @@ fn void_sale_credits_back_to_original_deduction_source() {
     let loc_a = "loc-v-a";
     let loc_b = "loc-v-b";
 
-    // ── create a sale with split-location deduction_locations ───
+    // ── pending sale with split-location deduction_locations ─────
     setup_locations_with_stock(&conn, "TEA", loc_a, 10, loc_b, 5);
-    let sale = make_single_line_sale("TEA", 8, 200);
-    let resolution = crate::sale_deduction::ResolvedShortfall {
-        sku: "TEA".into(),
-        allocations: vec![
-            crate::sale_deduction::LocationAllocation {
-                location_id: crate::inventory::LocationId::from(loc_a),
-                qty: 5,
-            },
-            crate::sale_deduction::LocationAllocation {
-                location_id: crate::inventory::LocationId::from(loc_b),
-                qty: 3,
-            },
-        ],
-    };
-    s.complete_sale_with_resolved_shortfalls(
+    let sale = make_single_line_sale("TEA", 12, 200);
+    s.complete_sale_deduction_with_locations(
         &sale,
         None,
-        &tender(1600),
+        &[
+            crate::inventory::LocationId::from(loc_a),
+            crate::inventory::LocationId::from(loc_b),
+        ],
+        &tender(2400),
         "cashier-1",
         None,
-        &[resolution],
     )
     .unwrap();
 
-    // Confirm stock was deducted.
+    // Confirm stock was deducted (route order: 10 from a, 2 from b).
     let stock_a_before: i64 = conn
         .query_row(
             "SELECT COALESCE(qty, 0) FROM stock_summary WHERE item_id = \
@@ -2653,7 +2745,7 @@ fn void_sale_credits_back_to_original_deduction_source() {
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(stock_a_before, 5, "loc-a had 10, deducted 5 → 5");
+    assert_eq!(stock_a_before, 0, "loc-a had 10, deducted 10 → 0");
 
     let stock_b_before: i64 = conn
         .query_row(
@@ -2663,7 +2755,7 @@ fn void_sale_credits_back_to_original_deduction_source() {
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(stock_b_before, 2, "loc-b had 5, deducted 3 → 2");
+    assert_eq!(stock_b_before, 3, "loc-b had 5, deducted 2 → 3");
 
     // ── void the pending sale ───────────────────────────────────
     s.void_pending_sale(&sale.id).unwrap();

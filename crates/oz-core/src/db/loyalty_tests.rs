@@ -678,3 +678,126 @@ fn sale_less_transaction_rows_are_not_projection_constrained() {
         .unwrap_or_else(|e| panic!("sale-less adjust row {i} must insert: {e}"));
     }
 }
+
+// ── LOY-06: finalize_sale awards loyalty points atomically ─────────────
+
+fn seed_pending_sale(
+    conn: &Connection,
+    id: &str,
+    customer_id: Option<&str>,
+    total_minor: i64,
+    base_total_minor: Option<i64>,
+) {
+    conn.execute(
+        "INSERT INTO sales (id, total_minor, currency, line_count, status, customer_id,
+                            created_at, updated_at, subtotal_minor, tax_total_minor,
+                            base_total_minor)
+         VALUES (?1, ?2, 'USD', 0, 'pending', ?3, '2025-01-01T00:00:00.000Z',
+                 '2025-01-01T00:00:00.000Z', ?2, 0, ?4)",
+        params![id, total_minor, customer_id, base_total_minor],
+    )
+    .unwrap();
+}
+
+fn earn_points_for(conn: &Connection, sale_id: &str) -> Option<i64> {
+    conn.query_row(
+        "SELECT points FROM loyalty_transactions WHERE sale_id = ?1 AND txn_type = 'earn'",
+        params![sale_id],
+        |r| r.get(0),
+    )
+    .ok()
+}
+
+#[test]
+fn finalize_sale_awards_points_to_customer_sale() {
+    let conn = fresh();
+    seed_customer(&conn, "cust-1", "Alice");
+    seed_pending_sale(&conn, "sale-1", Some("cust-1"), 700, None);
+
+    store(&conn).finalize_sale("sale-1").unwrap();
+
+    // Bronze default: points_per_unit = 10, multiplier 1.0 → 700*10/100 = 70.
+    assert_eq!(
+        earn_points_for(&conn, "sale-1"),
+        Some(70),
+        "finalizing a customer sale must award tier points"
+    );
+    let projected: i64 = conn
+        .query_row(
+            "SELECT loyalty_points FROM customers WHERE id = 'cust-1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        projected, 70,
+        "customers.loyalty_points projection must update"
+    );
+}
+
+#[test]
+fn finalize_sale_awards_on_base_total_when_converted() {
+    let conn = fresh();
+    seed_customer(&conn, "cust-1", "Alice");
+    // Multi-currency charge: customer paid 115500 IDR-minor for a 700
+    // USD-minor sale. Points must follow the BASE total, not the charge
+    // amount — otherwise the charge currency silently multiplies rewards.
+    seed_pending_sale(&conn, "sale-1", Some("cust-1"), 115_500, Some(700));
+
+    store(&conn).finalize_sale("sale-1").unwrap();
+
+    assert_eq!(
+        earn_points_for(&conn, "sale-1"),
+        Some(70),
+        "earn must use base_total_minor when present (currency-naive formula guard)"
+    );
+}
+
+#[test]
+fn finalize_sale_without_customer_awards_nothing() {
+    let conn = fresh();
+    seed_pending_sale(&conn, "sale-1", None, 700, None);
+
+    store(&conn).finalize_sale("sale-1").unwrap();
+
+    assert_eq!(earn_points_for(&conn, "sale-1"), None);
+}
+
+#[test]
+fn finalize_sale_zero_total_completes_without_award() {
+    let conn = fresh();
+    seed_customer(&conn, "cust-1", "Alice");
+    seed_pending_sale(&conn, "sale-1", Some("cust-1"), 0, None);
+
+    store(&conn).finalize_sale("sale-1").unwrap();
+
+    // Too-small-to-earn is expected, not an error: the sale must still be
+    // completed and no ledger row written.
+    let status: String = conn
+        .query_row("SELECT status FROM sales WHERE id = 'sale-1'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(status, "completed");
+    assert_eq!(earn_points_for(&conn, "sale-1"), None);
+}
+
+#[test]
+fn finalize_replay_awards_once() {
+    let conn = fresh();
+    seed_customer(&conn, "cust-1", "Alice");
+    seed_pending_sale(&conn, "sale-1", Some("cust-1"), 700, None);
+
+    let s = store(&conn);
+    s.finalize_sale("sale-1").unwrap();
+    s.finalize_sale("sale-1").unwrap();
+
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM loyalty_transactions WHERE sale_id = 'sale-1' AND txn_type = 'earn'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 1, "replayed finalize must not double-award");
+}

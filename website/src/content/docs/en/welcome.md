@@ -3,7 +3,7 @@ title: Welcome to OZ-POS
 description: What OZ-POS is and how this documentation is organized.
 category: gettingStarted
 order: 1
-updated: "2026-08-17"
+updated: "2026-08-30"
 ---
 
 ## What is OZ-POS?
@@ -64,6 +64,14 @@ See [Licensing & Plans](../licensing/).
 3. [Ring up your first sale](../first-sale/) — even without internet.
 4. [Activate a license key](../activation/) when you're ready to unlock more
    stores, QRIS payments, and cloud sync.
+
+## Reinstalling or locked out?
+
+New register, wiped disk, or the app says your license needs a **recovery
+code**? That's normal and safe: re-activating with your email + license key
+keeps the POS working, and a 6-digit code from your email restores license
+management. Every key rotation also emails you a notice, at most once per
+24 hours. See [Reinstalling or recovering your license](../activation/#reinstalling-or-recovering-your-license).
 
 ## How the docs are organized
 
