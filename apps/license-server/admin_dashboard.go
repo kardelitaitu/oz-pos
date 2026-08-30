@@ -29,6 +29,13 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
+// adminDashboardVersion is the version string reported by
+// GET /api/v1/admin/health. B31: it was a stale literal ("0.0.31") — the
+// health card lied about what was deployed. Keep in sync with the repo
+// version lock (AGENTS.md); the B31 test pins it so a future bump
+// without an update goes red instead of silently misreporting.
+const adminDashboardVersion = "0.0.33"
+
 // adminKeyOK validates the Authorization: Bearer <admin_key> header.
 // Reads the key from OZ_ADMIN_KEY env; a missing env or wrong key is 401.
 func adminKeyOK(e *core.RequestEvent) bool {
@@ -252,8 +259,16 @@ func handleAdminRenew(app core.App) func(e *core.RequestEvent) error {
 		}
 		sub := subs[0]
 
-		// Extend expiry from now.
-		newExpiry := time.Now().UTC().Add(time.Duration(req.Days) * 24 * time.Hour)
+		// Extend expiry. B29: the old code anchored at time.Now(), so
+		// renewing a subscription that still had months of paid time left
+		// silently TRUNCATED it (2027-01-01 +30d became ~now+30d). Live
+		// subs extend from their current expiry; expired ones renew from
+		// now — max(now, expires_at) semantics.
+		base := time.Now().UTC()
+		if cur := sub.GetDateTime("expires_at").Time(); cur.After(base) {
+			base = cur
+		}
+		newExpiry := base.Add(time.Duration(req.Days) * 24 * time.Hour)
 		sub.Set("expires_at", newExpiry.Format(time.RFC3339))
 		sub.Set("status", "active")
 		if err := app.Save(sub); err != nil {
@@ -318,6 +333,13 @@ func handleAdminTierOverride(app core.App) func(e *core.RequestEvent) error {
 		if req.TierKey == "" {
 			return e.JSON(http.StatusBadRequest, map[string]any{"error": "tier_key is required"})
 		}
+		// B30: validate against the known tier set up front. An unknown
+		// key used to fall through to the SelectField schema and surface
+		// as a 500 "tier override failed" — an internal error for what is
+		// really bad input (and MRR would price unknown keys at $0).
+		if _, known := TierPriceUSD[req.TierKey]; !known {
+			return e.JSON(http.StatusBadRequest, map[string]any{"error": "unknown tier_key"})
+		}
 
 		// Update the latest subscription's tier.
 		subs, err := app.FindRecordsByFilter("subscriptions",
@@ -355,7 +377,7 @@ func handleAdminHealth(app core.App) func(e *core.RequestEvent) error {
 			"status":    "ok",
 			"db_ok":     dbOK,
 			"time":      time.Now().UTC().Format(time.RFC3339),
-			"version":   "0.0.31",
+			"version":   adminDashboardVersion,
 			"smtp_host": os.Getenv("OZ_SMTP_HOST") != "",
 		})
 	}
