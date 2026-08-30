@@ -643,6 +643,23 @@ plaintext in the unencrypted `settings` table — the same local-POS threat
 model accepted for COR-17/COR-30, tracked as a single revisit item when
 multi-terminal/cloud sync hardening happens.
 
+### Slice C4 — features.rs (1,349 lines), fully read
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-33 | ℹ️ INFO | features.rs:691–1349 | **~660 lines of inline `#[test]` + proptest code live inside the production file**, despite the file also declaring the sibling `features_tests.rs` — violates the AGENTS.md test-organization rule and pushes the file past the 1,000-line ceiling. | Move the inline tests into the existing sibling test file. |
+
+**Slice C4 notes:** the production half (1–685) is clean — a dependency
+DAG with recursive enable and documented non-cascading disable, kebab-case
+settings keys with exhaustive round-trip mapping, and a `FeatureGuard`
+veto registry protecting open KDS tickets and unreconciled shifts. The
+guard COUNT queries use `.unwrap_or(0)`, so a DB error lets the veto pass
+(fail-open on a safety guard — COR-11/25 family, INFO). Property-based
+tests verify the dependency invariant, disable semantics, and settings
+round-trip — good test design, wrong location.
+
+---
+
 ---
 
 ---
