@@ -1,13 +1,8 @@
 /*
-last audited 13-08-26 by RSA-Agent
+last audited 25-07-26 by RSA-Agent (foundation slice A: money deep read)
 crate: foundation (money.rs) | status: SAFE | lint: CLEAN
-findings: MONEY-AUDIT-1 fixed in oz-core compute_sale_tax (overflow no longer
-  silently zeroes sale totals). MONEY-AUDIT-2 fixed in Percentage (apply_to /
-  complement_apply_to are now overflow-free via x=100q+r decomposition —
-  100% of i64::MAX returns i64::MAX instead of None). Default impl retained as
-  documented serde-only fallback. checked_* arithmetic: i64::MIN edges covered.
-next: Phase 2 (frontend money arithmetic) | perf: hot-path checked ops are
-  branch-predictable; Percentage decomposition adds two integer ops.
+findings: exemplary — checked_* arithmetic everywhere with documented i64::MIN edges; currency mismatch -> None (no silent cross-currency math); deliberate no-Ord with PartialOrd-only rationale documented; format_minor handles i64::MIN via unsigned_abs + explicit sign; exponent table sync documented across migrations/cli/frontend; MONEY-AUDIT-1/2 fixes verified intact; serde-only Default fallback documented and fenced
+next: none | perf: checked ops branch-predictable
 */
 //! Money and currency primitives.
 //!

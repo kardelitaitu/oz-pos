@@ -794,6 +794,27 @@ no leaked internals.
 
 ---
 
+## 6. foundation — domain primitives (Money, Percentage, Cart, validation)
+
+Baseline: ~5.4k production lines across 15 files. Slice A
+(money.rs 326, percentage.rs 390) deep-read — the codebase's two most
+safety-critical value objects. Both carry prior MONEY-AUDIT stamps that
+were re-verified intact.
+
+**No new findings.** `money.rs`: checked arithmetic everywhere with
+documented `i64::MIN` edges, currency-mismatch → `None` (never silent
+cross-currency math), a deliberate no-`Ord` design with documented
+`PartialOrd`-only rationale, `i64::MIN`-safe rendering via `unsigned_abs`,
+and the minor-unit exponent table's four sync points listed in-doc.
+`percentage.rs`: the MONEY-AUDIT-2 overflow-free decomposition holds
+(100% of `i64::MAX` = `i64::MAX`, edge-tested), arithmetic is total, and
+construction is bounded including the serde path. Both files carry the
+COR-33 inline-test pattern note where applicable.
+
+---
+
+---
+
 ---
 
 ---
