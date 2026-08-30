@@ -6,10 +6,17 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pocketbase/pocketbase/core"
 )
+
+// enterpriseRedeemMu guards the check-and-redeem critical section of
+// handleEnterpriseTrial so a one-time approval code cannot be spent twice
+// by parallel requests (B45). Consistent with the other in-process state
+// this server keeps (webOtpStore, key-failure trackers, FX cache).
+var enterpriseRedeemMu sync.Mutex
 
 // EnterpriseTrialRequest is the JSON body for POST /api/v1/license/enterprise-trial.
 type EnterpriseTrialRequest struct {
@@ -77,6 +84,17 @@ func handleEnterpriseTrial(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		// ── Validate approval code against PocketBase collection ──
+		// B45: serialize the check-and-redeem critical section. The status
+		// check below and the "redeemed" write at the END of this handler
+		// are separated by tenant creation + license-key minting, so
+		// concurrent requests carrying the same one-time code all saw
+		// "unused" and each received an enterprise trial (reproduced: 2/2
+		// racers returned 200). Self-serve enterprise redemptions are low
+		// volume, so one mutex is the cheapest correct fix; holding it for
+		// the whole mint means the loser observes "redeemed" and gets 409.
+		enterpriseRedeemMu.Lock()
+		defer enterpriseRedeemMu.Unlock()
+
 		codeRec, err := app.FindFirstRecordByData("enterprise_approvals", "code",
 			strings.ToUpper(strings.TrimSpace(req.ApprovalCode)))
 		if err != nil {
