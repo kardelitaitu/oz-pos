@@ -1,4 +1,10 @@
 //! Replication — orchestrates push and pull sync cycles.
+/*
+last audited 25-07-26 by RSA-Agent (platform-sync slice C: replication verified)
+crate: platform-sync | status: SAFE | lint: CLEAN
+findings: clean — ReplicationResult counts struct only; orchestration lives in the engine and daemon
+next: none | perf: N/A
+*/
 //!
 //! A sync cycle consists of:
 //!

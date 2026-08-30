@@ -1,5 +1,11 @@
 //! Conflict Resolution — strategies for resolving conflicts between local
 //! and remote versions of the same data.
+/*
+last audited 25-07-26 by RSA-Agent (platform-sync slice C: conflict deep read)
+crate: platform-sync | status: SAFE | lint: CLEAN
+findings: exemplary ADR-21 entity dispatch — sale status DAG rank prevents a stale remote item from reverting a completed sale to pending (the critical POS property); version LWW with documented missing-field fallbacks and remote-authoritative ties; CRDT merge preserves both deltas under a fresh UUID; unknown status ranks 0 (fail-safe lowest); settings dispatched to version LWW consistent with SYNC-10; tests cover tie/missing/fallback matrices
+next: none | perf: N/A
+*/
 //!
 //! ADR-21 defines entity-type dispatch:
 //!

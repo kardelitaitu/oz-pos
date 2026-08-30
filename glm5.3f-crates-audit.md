@@ -1037,6 +1037,19 @@ non-atomic `apply_remote` remains only as a legacy mirror. Minor note:
 pull-item product payloads tolerate empty `sku`/`name` via `unwrap_or`
 (server-trusted; only the snapshot path gets RUST-04 validation).
 
+### Slice C — conflict.rs (881: production 1–217 fully read; tests 219+),
+replication.rs (75) — **no new findings**
+
+`conflict.rs` implements the ADR-21 dispatch table faithfully, and its
+most important property is test-pinned: the sale status DAG rank prevents
+a stale remote item from reverting a completed sale to pending. Version
+LWW handles missing fields with documented fallbacks and
+remote-authoritative ties; CRDT merge preserves both deltas under a fresh
+UUID; unknown statuses rank lowest (fail-safe); settings dispatch matches
+SYNC-10. `replication.rs` is a counts struct only.
+
+---
+
 ---
 
 ---
