@@ -1057,3 +1057,103 @@ describe('admin-utils property fuzz — normalizeStats + renderers under hostile
     }
   });
 });
+
+describe('admin-utils countdown seconds coercion (B39: NaN seconds = permanent lockout)', () => {
+  // login.js passes body.retry_after from the server. A stringy/garbage
+  // value ("abc", NaN) made `remaining -= 1` produce NaN forever —
+  // NaN <= 0 is false, so the interval NEVER ended: the login button
+  // stayed disabled until a full page reload.
+  it('lockout with non-numeric seconds ends immediately (button restored)', () => {
+    vi.useFakeTimers();
+    try {
+      const btn = document.createElement('button');
+      btn.textContent = 'Sign In';
+      utils.startLockoutCountdown(btn, 'abc' as any, (s) => `in ${s}`, () => 'Sign In');
+      // Not left disabled, no live timer, label restored via the end path.
+      expect(btn.disabled).toBe(false);
+      expect(utils.isLockoutActive(btn)).toBe(false);
+      expect(btn.textContent).toBe('Sign In');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('numeric-string seconds still run a real countdown', () => {
+    vi.useFakeTimers();
+    try {
+      const btn = document.createElement('button');
+      utils.startLockoutCountdown(btn, '3' as any, (s) => `in ${s}`, () => 'Go');
+      expect(btn.disabled).toBe(true);
+      expect(btn.textContent).toBe('in 3');
+      vi.advanceTimersByTime(3000);
+      expect(btn.disabled).toBe(false);
+      expect(btn.textContent).toBe('Go');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cooldown with NaN seconds fires onEnd instead of spinning forever', () => {
+    vi.useFakeTimers();
+    try {
+      const node = document.createElement('div');
+      let ended = 0;
+      utils.startCountdown(node, NaN, (s) => `in ${s}`, () => { ended++; });
+      expect(ended).toBe(1);
+      expect(utils.countdownActive(node)).toBe(false);
+      vi.advanceTimersByTime(5000);
+      expect(ended).toBe(1); // no zombie interval
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('admin-utils setAuthMode aria-selected sync (B40: stale tab state for AT)', () => {
+  function buildLoginDom() {
+    document.body.innerHTML = `
+      <div role="tablist">
+        <button id="tab-otp" role="tab" aria-selected="true">OTP</button>
+        <button id="tab-password" role="tab" aria-selected="false">Pwd</button>
+      </div>
+      <div id="password-group"></div><div id="otp-group" class="hidden"></div>
+      <button id="login-btn"></button><div id="otp-cooldown" class="hidden"></div>`;
+    return {
+      tabOtp: document.getElementById('tab-otp')!,
+      tabPwd: document.getElementById('tab-password')!,
+      pwdGroup: document.getElementById('password-group')!,
+      otpGroup: document.getElementById('otp-group')!,
+      loginBtn: document.getElementById('login-btn')!,
+      cd: document.getElementById('otp-cooldown')!,
+    };
+  }
+
+  it('flipping to password moves aria-selected with the visual state', () => {
+    const d = buildLoginDom();
+    utils.setAuthMode('password', d, { isSubmitting: () => false });
+    expect(d.tabPwd.getAttribute('aria-selected')).toBe('true');
+    expect(d.tabOtp.getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('flipping back to otp restores aria-selected', () => {
+    const d = buildLoginDom();
+    utils.setAuthMode('password', d, { isSubmitting: () => false });
+    utils.setAuthMode('otp', d, { isSubmitting: () => false });
+    expect(d.tabOtp.getAttribute('aria-selected')).toBe('true');
+    expect(d.tabPwd.getAttribute('aria-selected')).toBe('false');
+  });
+});
+
+describe('admin-utils tableCard malformed input (B41: B36 class in the table builder)', () => {
+  it('null rows and non-array headers do not crash the builder', () => {
+    expect(() => {
+      utils.tableCard('T', ['A', 'B'], [null, ['ok'], 42, undefined]);
+    }).not.toThrow();
+    // Malformed rows are skipped; valid ones still render.
+    const card = utils.tableCard('T', ['A'], [['x']]);
+    expect(card.querySelectorAll('tbody tr').length).toBe(1);
+    // Non-array rows entirely → empty-state, no throw.
+    expect(() => utils.tableCard('T', ['A'], { not: 'rows' } as any)).not.toThrow();
+    expect(() => utils.tableCard('T', null as any, [['a']])).not.toThrow();
+  });
+});

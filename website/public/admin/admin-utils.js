@@ -188,14 +188,21 @@
   function tableCard(heading, headers, rows) {
     var card = el('div', 'card table-card');
     card.appendChild(el('h2', null, heading));
-    if (!rows || rows.length === 0) { card.appendChild(el('p', 'empty', t('table.noData'))); return card; }
+    // B41 (B36 class): normalizeStats guarantees the ARRAY but not its
+    // ELEMENTS, and a truncated payload can hand this a non-array rows or
+    // headers — row.forEach then threw and took the whole view down.
+    // Validate the containers and skip malformed rows.
+    if (!Array.isArray(rows) || rows.length === 0) { card.appendChild(el('p', 'empty', t('table.noData'))); return card; }
     var table = el('table');
     var thead = el('thead');
     var tr = el('tr');
-    headers.forEach(function (h) { tr.appendChild(el('th', null, h)); });
+    if (Array.isArray(headers)) {
+      headers.forEach(function (h) { tr.appendChild(el('th', null, h)); });
+    }
     thead.appendChild(tr); table.appendChild(thead);
     var tbody = el('tbody');
     rows.forEach(function (row) {
+      if (!Array.isArray(row)) return; // malformed row — skip, don't crash
       var tr2 = el('tr');
       row.forEach(function (cell) { tr2.appendChild(el('td', null, cell)); });
       tbody.appendChild(tr2);
@@ -498,7 +505,18 @@
   function startCountdown(node, seconds, fmt, onEnd) {
     if (!node) return;
     if (node._ozCdTimer) clearInterval(node._ozCdTimer);
-    var remaining = seconds;
+    // B39: `seconds` comes straight from server JSON (body.retry_after).
+    // A garbage value ("abc", NaN) made `remaining -= 1` produce NaN
+    // forever — NaN <= 0 is false, so the interval NEVER ended: the OTP
+    // cooldown ran invisibly and (in the lockout variant) the login
+    // button stayed disabled until a full page reload. Coerce to a
+    // finite integer; invalid or non-positive means "already over".
+    var remaining = Math.floor(Number(seconds));
+    if (!Number.isFinite(remaining) || remaining <= 0) {
+      node._ozCdTimer = null;
+      if (onEnd) onEnd();
+      return;
+    }
     node.textContent = fmt(remaining);
     node._ozCdTimer = setInterval(function () {
       remaining -= 1;
@@ -541,8 +559,12 @@
     var tabOtp = els.tabOtp, tabPwd = els.tabPwd, pwdGroup = els.pwdGroup,
         otpGroup = els.otpGroup, loginBtn = els.loginBtn, cd = els.cd;
     if (mode === 'otp') {
-      if (tabOtp) tabOtp.classList.add('active');
-      if (tabPwd) tabPwd.classList.remove('active');
+      // B40 (WCAG 4.8.2): the visual .active class was toggled but
+      // aria-selected never was — after switching modes a screen reader
+      // still reported the ORIGINAL tab as selected, so the user could
+      // not tell which credential the form was asking for.
+      if (tabOtp) { tabOtp.classList.add('active'); tabOtp.setAttribute('aria-selected', 'true'); }
+      if (tabPwd) { tabPwd.classList.remove('active'); tabPwd.setAttribute('aria-selected', 'false'); }
       if (pwdGroup) pwdGroup.classList.add('hidden');
       // B18: the resend cooldown is enforced server-side and its countdown
       // keeps running across a tab switch — re-show it when returning.
@@ -560,8 +582,8 @@
         otpGroup.classList.add('hidden');
       }
     } else {
-      if (tabOtp) tabOtp.classList.remove('active');
-      if (tabPwd) tabPwd.classList.add('active');
+      if (tabOtp) { tabOtp.classList.remove('active'); tabOtp.setAttribute('aria-selected', 'false'); }
+      if (tabPwd) { tabPwd.classList.add('active'); tabPwd.setAttribute('aria-selected', 'true'); }
       if (pwdGroup) pwdGroup.classList.remove('hidden');
       if (otpGroup) otpGroup.classList.add('hidden');
       if (cd) cd.classList.add('hidden');
@@ -588,8 +610,19 @@
   function startLockoutCountdown(btn, seconds, fmt, restore) {
     if (!btn) return;
     if (btn._ozLockoutTimer) clearInterval(btn._ozLockoutTimer);
+    // B39: `seconds` is server-supplied (body.retry_after). A garbage
+    // value made `remaining--` stay NaN forever — NaN <= 0 is false, so
+    // the interval never fired the restore path and the login button
+    // remained disabled until the page was reloaded. Treat invalid or
+    // non-positive seconds as "no lockout": leave the button usable.
+    var remaining = Math.floor(Number(seconds));
+    if (!Number.isFinite(remaining) || remaining <= 0) {
+      btn._ozLockoutTimer = null;
+      btn.disabled = false;
+      btn.textContent = restore();
+      return;
+    }
     btn.disabled = true;
-    var remaining = seconds;
     btn.textContent = fmt(remaining);
     btn._ozLockoutTimer = setInterval(function () {
       remaining--;
