@@ -164,26 +164,28 @@ The admin login page (`login.html`) is always dark. The dashboard has a theme to
 
 ## 7. Phase Plan
 
-### Phase 1 (immediate — hours)
-1. Fix stored XSS (C1, C2) — replace `innerHTML` with `textContent` in `showTenantDetail` + `upgradePrompt`
-2. Fix MOCK fallback (C4) — add an error banner; don't silently fall back
-3. Remove dead code (M2)
-4. Set `Cache-Control: no-store` on SPA HTML (M6)
+_Status as of the hardening pass (PRs #64–#86): items 1–13 and 15 are done; 14 and 16 remain open._
 
-### Phase 2 (short-term — days)
-5. Add pagination controls to the tenants list (C3)
-6. Guard `svgChart` against empty data (M1)
-7. Add loading/error states for all API calls
-8. Add search to tenants list (M5)
+### Phase 1 (immediate — hours) ✅
+1. ✅ Fix stored XSS (C1, C2) — replace `innerHTML` with `textContent` in `showTenantDetail` + `upgradePrompt`
+2. ✅ Fix MOCK fallback (C4) — add an error banner; don't silently fall back
+3. ✅ Remove dead code (M2)
+4. ✅ Set `Cache-Control: no-store` on SPA HTML (M6)
 
-### Phase 3 (medium-term — weeks)
-9. Split `admin.js` into modules (H1) — at minimum, separate chart rendering, tenant management, and API helper into distinct files
-10. Add unit tests for chart rendering, helpers, and error states (H2)
-11. Add i18n infrastructure (H3) — even if only English, use a key-value pattern
-12. Remove `?token=` fallback after confirming `?code=` works (M3)
+### Phase 2 (short-term — days) ✅
+5. ✅ Add pagination controls to the tenants list (C3)
+6. ✅ Guard `svgChart` against empty data (M1)
+7. ✅ Add loading/error states for all API calls
+8. ✅ Add search to tenants list (M5)
 
-### Phase 4 (long-term)
-13. Restrict session cookie domain (H4)
-14. Move admin dashboard to a build step (Vite/Rollup) for TypeScript, module resolution, and tree-shaking
-15. Add theme.js to the login page (L4)
-16. Accessibility pass (ARIA, keyboard navigation, focus management)
+### Phase 3 (medium-term — weeks) ✅
+9. ✅ Split `admin.js` into modules (H1) — pure helpers extracted into `admin-utils.js` (charts, formatting, cards, API auth, i18n)
+10. ✅ Add unit tests for chart rendering, helpers, and error states (H2)
+11. ✅ Add i18n infrastructure (H3) — `STRINGS` key-value pattern + `t()` helper
+12. ✅ Remove `?token=` fallback after confirming `?code=` works (M3)
+
+### Phase 4 (long-term) ⏳
+13. ✅ Restrict session cookie domain (H4) — cookie scoped to each dashboard subdomain
+14. ☐ Move admin dashboard to a build step (Vite/Rollup) for TypeScript, module resolution, and tree-shaking — **open**: not required while the dashboard stays a plain-vanilla static SPA
+15. ✅ Add theme.js to the login page (L4) — sun/moon toggle on both admin and dashboard login pages
+16. ☐ Accessibility pass (ARIA, keyboard navigation, focus management) — **open**: KPI icons have aria-labels and SVGs use aria-hidden, but a full keyboard/focus audit remains
