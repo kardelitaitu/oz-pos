@@ -103,13 +103,13 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         arpu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
       };
       const kpiGrid = el('div', 'kpi-grid');
-      kpiGrid.appendChild(kpiC('Total Users', String(m.kpis.totalUsers), `active: ${m.kpis.activeUsers}`, ICONS.users, 'kpi-icon-blue'));
-      kpiGrid.appendChild(kpiC('Total Subscribers', String(m.kpis.totalSubscribers), 'non-free (plus/pro/premium/enterprise)', ICONS.subscribers, 'kpi-icon-green'));
-      kpiGrid.appendChild(kpiC('MRR', fmtUsd(m.kpis.mrrUsd), '', ICONS.mrr, 'kpi-icon-orange'));
-      kpiGrid.appendChild(kpiC('Monthly Gross (IDR)', fmtIdr(mrrIdr), `≈ $${m.kpis.mrrUsd} × ${fxRate.toLocaleString()}`, ICONS.trend, 'kpi-icon-cyan'));
-      kpiGrid.appendChild(kpiC('ARPU', fmtUsd(m.kpis.arpuUsd), 'per subscriber', ICONS.arpu, 'kpi-icon-pink'));
-      kpiGrid.appendChild(kpiC('Active Terminals', String(m.kpis.activeDevices), '', ICONS.devices, 'kpi-icon-blue'));
-      kpiGrid.appendChild(kpiC('Trial → Paid', m.kpis.trialToPaidRate + '%', 'conversion rate', ICONS.conversion, 'kpi-icon-green'));
+      kpiGrid.appendChild(kpiC(t('kpi.totalUsers'), String(m.kpis.totalUsers), `active: ${m.kpis.activeUsers}`, ICONS.users, 'kpi-icon-blue'));
+      kpiGrid.appendChild(kpiC(t('kpi.totalSubscribers'), String(m.kpis.totalSubscribers), 'non-free (plus/pro/premium/enterprise)', ICONS.subscribers, 'kpi-icon-green'));
+      kpiGrid.appendChild(kpiC(t('kpi.mrr'), fmtUsd(m.kpis.mrrUsd), '', ICONS.mrr, 'kpi-icon-orange'));
+      kpiGrid.appendChild(kpiC(t('kpi.monthlyGrossIdr'), fmtIdr(mrrIdr), `≈ $${m.kpis.mrrUsd} × ${fxRate.toLocaleString()}`, ICONS.trend, 'kpi-icon-cyan'));
+      kpiGrid.appendChild(kpiC(t('kpi.arpu'), fmtUsd(m.kpis.arpuUsd), 'per subscriber', ICONS.arpu, 'kpi-icon-pink'));
+      kpiGrid.appendChild(kpiC(t('kpi.activeTerminals'), String(m.kpis.activeDevices), '', ICONS.devices, 'kpi-icon-blue'));
+      kpiGrid.appendChild(kpiC(t('kpi.trialToPaid'), m.kpis.trialToPaidRate + '%', 'conversion rate', ICONS.conversion, 'kpi-icon-green'));
       c.appendChild(kpiGrid);
 
       // --- Charts row ---
@@ -117,19 +117,19 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
 
       // Revenue trend
       const revCard = el('div', 'chart-card');
-      revCard.appendChild(el('h3', null, 'Revenue Trend (IDR)'));
+      revCard.appendChild(el('h3', null, t('chart.revenueTrendIdr')));
       revCard.innerHTML += svgChart('rev', m.revenueTrend, ['idr'], { area: true, fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt' });
       chartGrid.appendChild(revCard);
 
       // Subscriber growth
       const subCard = el('div', 'chart-card');
-      subCard.appendChild(el('h3', null, 'Subscriber Growth'));
+      subCard.appendChild(el('h3', null, t('chart.subscriberGrowth')));
       subCard.innerHTML += svgChart('subs', m.subscriberGrowth, ['count'], { area: true });
       chartGrid.appendChild(subCard);
 
       // Tier distribution (donut)
       const tierCard = el('div', 'chart-card');
-      tierCard.appendChild(el('h3', null, 'Tier Distribution'));
+      tierCard.appendChild(el('h3', null, t('chart.tierDistribution')));
       const donut = svgDonut('tiers', m.tierDistribution, 'tier', 'count');
       const tierRow = el('div', 'donut-row');
       const donutDiv = el('div', 'donut-chart'); donutDiv.innerHTML = donut.svg;
@@ -141,7 +141,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
 
       // Provider split (donut)
       const provCard = el('div', 'chart-card');
-      provCard.appendChild(el('h3', null, 'Payment Provider'));
+      provCard.appendChild(el('h3', null, t('chart.paymentProvider')));
       const donut2 = svgDonut('prov', m.providerSplit, 'provider', 'count', ['#147efb','#22c55e']);
       const provRow = el('div', 'donut-row');
       const donutDiv2 = el('div', 'donut-chart'); donutDiv2.innerHTML = donut2.svg;
@@ -153,7 +153,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
 
       // Signups per month (bar chart as SVG)
       const signupCard = el('div', 'chart-card');
-      signupCard.appendChild(el('h3', null, 'Signups per Month'));
+      signupCard.appendChild(el('h3', null, t('chart.signupsPerMonth')));
       const maxS = Math.max(...m.signupsPerMonth.map(d => d.count));
       const barW = 420 / m.signupsPerMonth.length;
       let bars = '';
@@ -169,7 +169,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
 
       // Churn per month
       const churnCard = el('div', 'chart-card');
-      churnCard.appendChild(el('h3', null, 'Churn / Canceled'));
+      churnCard.appendChild(el('h3', null, t('chart.churnCanceled')));
       const maxC = Math.max(...m.churnPerMonth.map(d => d.count), 1);
       let churnBars = '';
       m.churnPerMonth.forEach((d,i) => {
@@ -187,15 +187,15 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       // --- Tables ---
       // Top subscribers
       if (m.topSubscribers && m.topSubscribers.length > 0) {
-        c.appendChild(tableCard('Top Subscribers', ['Email','Tier','MRR','Renewal','Provider'], m.topSubscribers.map(d => [d.email, d.tier, fmtUsd(d.mrrUsd), d.renewal, d.provider])));
+        c.appendChild(tableCard(t('table.topSubscribers'), [t('th.email'),t('th.tier'),t('kpi.mrr'),t('th.renewal'),t('th.provider')], m.topSubscribers.map(d => [d.email, d.tier, fmtUsd(d.mrrUsd), d.renewal, d.provider])));
       }
       // Recent signups
       if (m.recentSignups && m.recentSignups.length > 0) {
-        c.appendChild(tableCard('Recent Signups', ['Email','Created','Verified','Tier'], m.recentSignups.map(d => [d.email, d.created, d.verified ? '✓' : '○', d.tier])));
+        c.appendChild(tableCard(t('table.recentSignups'), [t('th.email'),t('th.created'),t('th.emailVerified'),t('th.tier')], m.recentSignups.map(d => [d.email, d.created, d.verified ? '✓' : '○', d.tier])));
       }
       // Expiring soon
       if (m.expiringSoon && m.expiringSoon.length > 0) {
-        c.appendChild(tableCard('Expiring Soon (within 30 days)', ['Email','Tier','Expires','Days Left'], m.expiringSoon.map(d => [d.email, d.tier, d.expiresAt, String(d.daysLeft)])));
+        c.appendChild(tableCard(t('table.expiringSoon'), [t('th.email'),t('th.tier'),t('th.expires'),t('th.daysLeft')], m.expiringSoon.map(d => [d.email, d.tier, d.expiresAt, String(d.daysLeft)])));
       }
     }
 
@@ -237,25 +237,25 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       // ── Search + pagination toolbar ─────────────────────────────
       const toolbar = el('div', 'tenant-toolbar');
       const searchBox = el('input', 'input search-input');
-      searchBox.placeholder = 'Search by email…';
+      searchBox.placeholder = t('toolbar.searchPlaceholder');
       searchBox.value = tenantsSearch;
       searchBox.addEventListener('keydown', ev => {
         if (ev.key === 'Enter') { tenantsSearch = searchBox.value.trim(); tenantsPage = 1; renderTenants(); }
       });
-      const searchBtn = el('button', 'btn btn-sm', 'Search');
+      const searchBtn = el('button', 'btn btn-sm', t('toolbar.search'));
       searchBtn.addEventListener('click', () => { tenantsSearch = searchBox.value.trim(); tenantsPage = 1; renderTenants(); });
-      const clearBtn = el('button', 'btn btn-sm btn-ghost', 'Clear');
+      const clearBtn = el('button', 'btn btn-sm btn-ghost', t('toolbar.clear'));
       clearBtn.addEventListener('click', () => { tenantsSearch = ''; searchBox.value = ''; tenantsPage = 1; renderTenants(); });
       toolbar.appendChild(searchBox); toolbar.appendChild(searchBtn); toolbar.appendChild(clearBtn);
-      const totalLabel = el('span', 'tenant-total', 'Showing ' + tenants.length + ' of ' + tenantsTotal);
+      const totalLabel = el('span', 'tenant-total', t('toolbar.showing') + tenants.length + t('toolbar.of') + tenantsTotal);
       toolbar.appendChild(totalLabel);
       c.appendChild(toolbar);
 
-      const card = el('div', 'card'); card.appendChild(el('h2', null, 'Tenants'));
-      if (tenants.length === 0) { card.appendChild(el('p', 'empty', 'No tenants match.')); c.appendChild(card); return; }
+      const card = el('div', 'card'); card.appendChild(el('h2', null, t('table.tenants')));
+      if (tenants.length === 0) { card.appendChild(el('p', 'empty', t('table.noTenantsMatch'))); c.appendChild(card); return; }
       const table = el('table');
       const thead = el('thead'); const tr = el('tr');
-      ['Email','Status','License','Tier','Created',''].forEach(h => tr.appendChild(el('th', null, h)));
+      [t('th.email'),t('th.status'),t('th.license'),t('th.tier'),t('th.created'),''].forEach(h => tr.appendChild(el('th', null, h)));
       thead.appendChild(tr); table.appendChild(thead);
       const tbody = el('tbody');
       tenants.forEach(t => {
@@ -265,7 +265,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         row.appendChild(el('td', null, (t.license && t.license.key) || '—'));
         row.appendChild(el('td', null, (t.subscription && t.subscription.tierKey) || '—'));
         row.appendChild(el('td', null, t.created ? t.created.slice(0,10) : '—'));
-        const tdAction = el('td'); const btn = el('button', 'btn btn-sm btn-ghost', 'Details');
+        const tdAction = el('td'); const btn = el('button', 'btn btn-sm btn-ghost', t('tenant.details'));
         btn.addEventListener('click', () => showTenantDetail(t.id)); tdAction.appendChild(btn); row.appendChild(tdAction);
         tbody.appendChild(row);
       });
@@ -275,13 +275,13 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       const totalPages = Math.max(1, Math.ceil(tenantsTotal / tenantsPerPage));
       if (totalPages > 1) {
         const nav = el('div', 'pagination');
-        const prev = el('button', 'btn btn-sm btn-ghost', '← Prev');
+        const prev = el('button', 'btn btn-sm btn-ghost', t('toolbar.prev'));
         prev.disabled = tenantsPage <= 1;
         prev.addEventListener('click', () => { if (tenantsPage > 1) { tenantsPage--; renderTenants(); } });
         nav.appendChild(prev);
-        const pageInfo = el('span', 'page-info', 'Page ' + tenantsPage + ' of ' + totalPages);
+        const pageInfo = el('span', 'page-info', t('toolbar.page') + tenantsPage + t('toolbar.of') + totalPages);
         nav.appendChild(pageInfo);
-        const next = el('button', 'btn btn-sm btn-ghost', 'Next →');
+        const next = el('button', 'btn btn-sm btn-ghost', t('toolbar.next'));
         next.disabled = tenantsPage >= totalPages;
         next.addEventListener('click', () => { if (tenantsPage < totalPages) { tenantsPage++; renderTenants(); } });
         nav.appendChild(next);
@@ -297,32 +297,32 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         const data = await api('/api/v1/admin/tenants/' + id);
         const t = data.tenant || {}, lic = data.license || {}, sub = data.subscription || {}, devices = data.devices || [];
         const m = el('div', 'modal-back'), box = el('div', 'modal');
-        box.appendChild(el('h3', null, 'Tenant: ' + (t.email || '')));
+        box.appendChild(el('h3', null, t('tenant.title') + (t.email || '')));
         const kv = el('div'); kv.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.82rem';
         // Build the key-value grid safely — never innerHTML with API data.
         function addRow(label, val) {
           kv.appendChild(el('span', 'muted', label));
           const vs = el('span', null, val === undefined || val === null ? '—' : String(val));
           vs.style.textAlign = 'right';
-          if (label === 'License key') { vs.style.cssText += ';font-family:monospace;font-size:.75rem'; }
+          if (label === t('th.licenseKey')) { vs.style.cssText += ';font-family:monospace;font-size:.75rem'; }
           kv.appendChild(vs);
         }
-        addRow('Status', t.status);
-        addRow('Email verified', t.emailVerified ? '✓' : '○');
-        addRow('Created', t.created ? t.created.slice(0,10) : '—');
-        addRow('License key', lic.key || '—');
-        addRow('Tier', sub.tierKey || lic.tierKey || '—');
-        addRow('Subscription status', sub.status || '—');
-        addRow('Expires', sub.expiresAt || '—');
-        addRow('Devices', devices.length);
+        addRow(t('th.status'), t.status);
+        addRow(t('th.emailVerified'), t.emailVerified ? '✓' : '○');
+        addRow(t('th.created'), t.created ? t.created.slice(0,10) : '—');
+        addRow(t('th.licenseKey'), lic.key || '—');
+        addRow(t('th.tier'), sub.tierKey || lic.tierKey || '—');
+        addRow(t('th.subscriptionStatus'), sub.status || '—');
+        addRow(t('th.expires'), sub.expiresAt || '—');
+        addRow(t('th.devices'), devices.length);
         box.appendChild(kv);
         const actions = el('div', null); actions.style.cssText = 'display:flex;gap:.4rem;margin-top:.8rem;flex-wrap:wrap';
-        if (t.status === 'active') { const revoke = el('button', 'btn btn-sm btn-bad', 'Revoke'); revoke.addEventListener('click', () => doAction(id,'revoke','Revoked')); actions.appendChild(revoke); }
-        if (t.status !== 'active') { const activate = el('button', 'btn btn-sm btn-ok', 'Activate'); activate.addEventListener('click', () => doAction(id,'activate','Activated')); actions.appendChild(activate); }
-        const renew = el('button', 'btn btn-sm', 'Renew +365d'); renew.addEventListener('click', () => doAction(id,'renew','Renewed','{"days":365}')); actions.appendChild(renew);
-        const upgrade = el('button', 'btn btn-sm btn-warn', 'Upgrade'); upgrade.addEventListener('click', () => upgradePrompt(id,data)); actions.appendChild(upgrade);
+        if (t.status === 'active') { const revoke = el('button', 'btn btn-sm btn-bad', t('tenant.revoke')); revoke.addEventListener('click', () => doAction(id,'revoke',t('tenant.revoked'))); actions.appendChild(revoke); }
+        if (t.status !== 'active') { const activate = el('button', 'btn btn-sm btn-ok', t('tenant.activate')); activate.addEventListener('click', () => doAction(id,'activate',t('tenant.activated'))); actions.appendChild(activate); }
+        const renew = el('button', 'btn btn-sm', t('tenant.renew365')); renew.addEventListener('click', () => doAction(id,'renew',t('tenant.renewed'),'{"days":365}')); actions.appendChild(renew);
+        const upgrade = el('button', 'btn btn-sm btn-warn', t('tenant.upgrade')); upgrade.addEventListener('click', () => upgradePrompt(id,data)); actions.appendChild(upgrade);
         box.appendChild(actions);
-        const close = el('button', 'btn btn-ghost', 'Close'); close.style.cssText = 'margin-top:.8rem;width:100%'; close.addEventListener('click', () => { modal.innerHTML = ''; }); box.appendChild(close);
+        const close = el('button', 'btn btn-ghost', t('tenant.close')); close.style.cssText = 'margin-top:.8rem;width:100%'; close.addEventListener('click', () => { modal.innerHTML = ''; }); box.appendChild(close);
         m.appendChild(box); modal.appendChild(m);
         m.addEventListener('click', e => { if (e.target === m) { modal.innerHTML = ''; } });
       } catch (err) {
@@ -338,15 +338,15 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
 
     function upgradePrompt(id, data) {
       const modal = document.getElementById('modal-root'), m = el('div', 'modal-back'), box = el('div', 'modal');
-      box.appendChild(el('h3', null, 'Change tier'));
-      const p = el('p', 'small'); p.style.marginBottom = '.6rem'; p.textContent = 'Current tier: ' + ((data.subscription && data.subscription.tierKey) || 'none');
+      box.appendChild(el('h3', null, t('tenant.changeTier')));
+      const p = el('p', 'small'); p.style.marginBottom = '.6rem'; p.textContent = t('tenant.currentTier') + ((data.subscription && data.subscription.tierKey) || 'none');
       box.appendChild(p);
-      const select = el('select', 'input'); ['plus','pro','premium','enterprise'].forEach(t => { const opt = el('option', null, t); if (t === (data.subscription && data.subscription.tierKey)) opt.selected = true; select.appendChild(opt); });
+      const select = el('select', 'input'); ['plus','pro','premium','enterprise'].forEach(tier => { const opt = el('option', null, tier); if (tier === (data.subscription && data.subscription.tierKey)) opt.selected = true; select.appendChild(opt); });
       box.appendChild(select);
-      const reason = el('input', 'input'); reason.placeholder = 'Reason for override (audit)'; reason.style.cssText = 'margin-top:.5rem;' + reason.style.cssText; box.appendChild(reason);
+      const reason = el('input', 'input'); reason.placeholder = t('tenant.reasonOverride'); reason.style.cssText = 'margin-top:.5rem;' + reason.style.cssText; box.appendChild(reason);
       const act = el('div', 'modal-actions');
-      const cancel = el('button', 'btn btn-ghost', 'Cancel'); cancel.addEventListener('click', () => { modal.innerHTML = ''; }); act.appendChild(cancel);
-      const save = el('button', 'btn', 'Save'); save.addEventListener('click', async () => { await doAction(id,'tier-override','Tier changed',JSON.stringify({tier_key:select.value,reason:reason.value||'admin override'})); }); act.appendChild(save);
+      const cancel = el('button', 'btn btn-ghost', t('tenant.cancel')); cancel.addEventListener('click', () => { modal.innerHTML = ''; }); act.appendChild(cancel);
+      const save = el('button', 'btn', t('tenant.save')); save.addEventListener('click', async () => { await doAction(id,'tier-override',t('tenant.tierChanged'),JSON.stringify({tier_key:select.value,reason:reason.value||'admin override'})); }); act.appendChild(save);
       box.appendChild(act); m.appendChild(box); modal.appendChild(m);
       m.addEventListener('click', e => { if (e.target === m) { modal.innerHTML = ''; } });
     }
@@ -355,14 +355,14 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
     async function renderHealth() {
       const c = document.getElementById('content'); c.innerHTML = '<div class="card"><p class="empty">Loading…</p></div>';
       try { const h = await api('/api/v1/admin/health');
-        c.innerHTML = ''; const card = el('div', 'card'); card.appendChild(el('h2', null, 'System Health'));
+        c.innerHTML = ''; const card = el('div', 'card'); card.appendChild(el('h2', null, t('health.title')));
         const kv = el('div'); kv.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.82rem';
-        const status = h.status === 'ok' ? '✓ OK' : '✗ Degraded';
-        kv.innerHTML = '<span class="muted">Status</span><span style="text-align:right">'+escapeHtml(status)+'</span>' +
-          '<span class="muted">Database</span><span style="text-align:right">'+(h.db_ok?'✓ Connected':'✗ Unreachable')+'</span>' +
-          '<span class="muted">SMTP</span><span style="text-align:right">'+(h.smtp_host?'✓ Configured':'— Not configured')+'</span>' +
-          '<span class="muted">Version</span><span style="text-align:right">'+escapeHtml(h.version||'—')+'</span>' +
-          '<span class="muted">Time</span><span style="text-align:right">'+escapeHtml(h.time||'—')+'</span>';
+        const status = h.status === 'ok' ? t('health.ok') : t('health.degraded');
+        kv.innerHTML = '<span class="muted">'+t('health.status')+'</span><span style="text-align:right">'+escapeHtml(status)+'</span>' +
+          '<span class="muted">'+t('health.database')+'</span><span style="text-align:right">'+(h.db_ok?t('health.connected'):t('health.unreachable'))+'</span>' +
+          '<span class="muted">'+t('health.smtp')+'</span><span style="text-align:right">'+(h.smtp_host?t('health.configured'):t('health.notConfigured'))+'</span>' +
+          '<span class="muted">'+t('health.version')+'</span><span style="text-align:right">'+escapeHtml(h.version||'—')+'</span>' +
+          '<span class="muted">'+t('health.time')+'</span><span style="text-align:right">'+escapeHtml(h.time||'—')+'</span>';
         card.appendChild(kv); c.appendChild(card);
       } catch (err) { if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">Failed to load health.</p></div>'; }
     }

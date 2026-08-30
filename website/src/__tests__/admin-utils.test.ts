@@ -121,6 +121,23 @@ describe('admin-utils kpiC', () => {
   });
 });
 
+describe('admin-utils i18n (H3)', () => {
+  it('t() returns the localized string for known keys', () => {
+    expect(utils.t('kpi.totalUsers')).toBe('Total Users');
+    expect(utils.t('table.expiringSoon')).toBe('Expiring Soon (within 30 days)');
+    expect(utils.t('tenant.renew365')).toBe('Renew +365d');
+  });
+
+  it('t() falls back to the key itself for missing keys', () => {
+    expect(utils.t('missing.key.here')).toBe('missing.key.here');
+  });
+
+  it('exposes the full STRINGS dictionary', () => {
+    expect(utils.STRINGS).toBeDefined();
+    expect(Object.keys(utils.STRINGS).length).toBeGreaterThan(60);
+  });
+});
+
 describe('admin-utils tableCard', () => {
   it('builds a card with headers and rows', () => {
     const t = utils.tableCard('Tenants', ['Email', 'Tier'], [['a@b.com', 'pro'], ['c@d.com', 'plus']]);
