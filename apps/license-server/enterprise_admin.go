@@ -198,9 +198,15 @@ func handleListEnterpriseCodes(app core.App) func(e *core.RequestEvent) error {
 // generateApprovalCode creates a random alphanumeric code in the format
 // ENT-XXXXXXXX (8 hex chars after the prefix). The prefix makes enterprise
 // codes visually distinguishable from license keys.
+//
+// LSE-19: a crypto/rand failure is fatal (same policy as generateAPIKey) —
+// ignoring the error would deterministically mint ENT-00000000 on a broken
+// entropy source.
 func generateApprovalCode() string {
 	b := make([]byte, 4)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		log.Fatalf("crypto/rand.Read failed: %v — cannot generate secure approval code", err)
+	}
 	return "ENT-" + strings.ToUpper(hex.EncodeToString(b))
 }
 
