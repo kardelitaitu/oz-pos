@@ -7714,3 +7714,68 @@ is mechanical.
 
 **Commits:** 35d8bec4 (core), 98300bca (UI — foreign message), docs
 commit alongside this entry.
+
+## 2026-08-31 — oz-core rounds E-F: the cache connect path and the lock policy (B49)
+
+**B49 (P2, config-reachable, b1b5d21e).** RedisCache::connect used the UNTIMED
+client.get_connection(). A host that accepts no SYN and sends no RST blocks for
+the OS TCP default. Measured here: 21.06s to 192.0.2.1:6379, 21.03s to
+10.255.255.1 (Linux defaults higher - tcp_retries2, up to ~2min). Not a
+background thread: Settings::get_redis_url (platform/core/src/settings/typed.rs:
+467, user-editable, default redis://localhost) -> desktop-client state.rs:238 ->
+platform_startup::init_cache (platform/startup/src/lib.rs:62) -> create_cache ->
+connect. One mistyped setting stalls every terminal that syncs it, every boot,
+before create_cache can even log its fallback.
+
+The fix was already in the file: get_connection_with_timeout is used 33 lines
+below for the pub/sub listener, with a comment explaining why. The bounded
+variant was applied to the background path and not the foreground one.
+CONNECT_TIMEOUT now names it once for both.
+
+Red measured itself: "create_cache blocked for 21.0358558s". Three tests, no
+Redis and no container - a refused port plus RFC 5737 TEST-NET-1, which is
+reserved and must never be routed, so it black-holes exactly like the firewalled
+host an operator can actually configure. The test can only pass or fail on the
+bound, never spuriously: where the address refuses instantly it passes
+trivially, where it black-holes it validates the timeout. Suite went 21s ->
+10.75s.
+
+**Round F (3cb5b81c) - and what it was NOT.** All nine RedisCache operations did
+self.conn.lock() and dropped the PoisonError. A panic while holding the lock
+permanently converted every cache op into a silent no-op, including
+invalidate_product/invalidate_inventory (stale rows served until TTL) and
+publish_negative_stock_event (ADR-18 warnings dropped). is_healthy() does report
+false on poison, but it is called exactly once, inside the AppState startup
+info! log (state.rs:331), and never polled - so the one signal that could catch
+it fires before the panic can happen.
+
+This is not a Red/Green bug fix and is labelled as such in the commit: behavior
+today is already "return None", so no test fails against it, and the defect is
+silence - a log line has no honest Red. What the tests pin instead is the
+decision, which is the part worth defending: lock_or_report REFUSES a poisoned
+guard rather than recovering it with PoisonError::into_inner(). That reflex fix
+is wrong here - every critical section wraps a request/response exchange, so a
+panic between sending a RESP command and reading its reply leaves the socket
+mid-conversation, and the next caller reads a reply meant for a different
+command. A cache miss becomes a WRONG cache hit. Refusing degrades to a miss,
+the fail-safe direction. The test exists so a future into_inner() has to be
+argued past it.
+
+**Left open deliberately, with evidence rather than vibes:** create_cache prints
+nothing when the feature is simply not compiled, so a startup
+cache_healthy=false is ambiguous between "not built in" and "server down" - that
+is a log message, not a behavior, and there is no honest Red for it. The pub/sub
+listener also breaks permanently on its first non-timeout error with no
+reconnect, and the returned Sender cannot tell its owner it died; a real fix is
+a reconnect feature, not a TDD slice. Neither path is reachable today - nothing
+calls start_inventory_pubsub or publish_inventory_change - which is the same
+reason B48 was rated latent. All four residuals are now written into the
+cache.rs audit stamp instead of living only in this journal.
+
+**Stamp was lying (3589f34e).** cache.rs carried "findings: clean" from a
+25-07-26 audit while asserting the exact three properties this session disproved.
+An audit stamp that predates three bugs in the file it covers is worse than no
+stamp, because it reads as a warrant.
+
+**Totals:** B46-B49 = 4 bugs this area, 46 committed overall. Full crate green:
+2239 passed / 0 failed with --features cache-redis; 40/40 cache tests without it.
