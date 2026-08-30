@@ -112,3 +112,10 @@ input::placeholder { color:var(--text-muted); opacity:.7; }
 .loading-text { text-align:center; color:var(--text-muted); font-size:.9rem; }
 
 @media (max-width:480px) { .card { padding:1.5rem; } body { padding:1rem; } }
+
+/* ── Accessibility (phase-plan #16) ─────────────────────────────── */
+:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
+.skip-link { position:absolute; left:-9999px; top:0; z-index:100; background:var(--bg-surface);
+  color:var(--text); padding:.6rem 1rem; border-radius:0 0 .5rem 0; font-size:.85rem; font-weight:600;
+  text-decoration:none; }
+.skip-link:focus-visible { left:0; outline:none; }
