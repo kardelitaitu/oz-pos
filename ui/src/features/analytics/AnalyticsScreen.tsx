@@ -23,6 +23,7 @@ import { AnalyticsCardContent, ExportCsvButton } from './AnalyticsCardContent';
 import { analyticsDataCache, clearAnalyticsCache, cardQueryKey } from './analytics-cache';
 import { useToastManager } from './useToastManager';
 import { useCardLayout } from './useCardLayout';
+import { useCommandPalette } from './useCommandPalette';
 import {
   CARD_PAYLOAD_VALIDATORS,
   buildHeatmapCells,
@@ -317,6 +318,17 @@ export default function AnalyticsScreen() {
   // Detect InvalidSession from any IPC command and show a recovery banner.
   const showSessionBanner = useInvalidSession();
   const { toasts, showToast } = useToastManager();
+  const {
+    paletteOpen,
+    paletteQuery,
+    paletteIndex,
+    paletteInputRef,
+    setPaletteOpen,
+    setPaletteQuery,
+    setPaletteIndex,
+    filteredItemsRef,
+    runItemRef,
+  } = useCommandPalette<PaletteItem>();
 
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>(() => {
     // Reopen on the last-chosen view across sessions; fall back to the
@@ -356,9 +368,6 @@ export default function AnalyticsScreen() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [allCollapsed, setAllCollapsed] = useState(false);
-const [paletteOpen, setPaletteOpen] = useState(false);
-  const [paletteQuery, setPaletteQuery] = useState('');
-  const [paletteIndex, setPaletteIndex] = useState(0);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [menuCardId, setMenuCardId] = useState<string | null>(null);
   /** Viewport anchor for the portaled per-card options menu. */
@@ -367,7 +376,6 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const [showCacheMetrics, setShowCacheMetrics] = useState(false);
   const [compare, setCompare] = useState(false);
   const [, setMetricsTick] = useState(0);
-  const paletteInputRef = useRef<HTMLInputElement | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
   const [, setRecalcTick] = useState(0);
@@ -651,55 +659,10 @@ const [paletteOpen, setPaletteOpen] = useState(false);
     setPaletteQuery('');
   };
 
-  const runPaletteRef = useRef(runPaletteItem);
-  runPaletteRef.current = runPaletteItem;
-
-  // Ctrl/Cmd+K toggles the palette
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
-        e.preventDefault();
-        setPaletteQuery('');
-        setPaletteIndex(0);
-        setPaletteOpen((o) => !o);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  // Keyboard navigation inside the open palette
-  useEffect(() => {
-    if (!paletteOpen) return;
-    const onPaletteKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setPaletteIndex((i) => Math.min(i + 1, filteredItems.length - 1));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setPaletteIndex((i) => Math.max(i - 1, 0));
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        const item = filteredItems[paletteIndex];
-        if (item) runPaletteRef.current(item);
-      } else if (e.key === 'Escape') {
-        setPaletteOpen(false);
-        setPaletteQuery('');
-      }
-    };
-    window.addEventListener('keydown', onPaletteKey);
-    return () => window.removeEventListener('keydown', onPaletteKey);
-  }, [paletteOpen, filteredItems, paletteIndex]);
-
-  // Focus the search input when the palette opens
-  useEffect(() => {
-    if (paletteOpen) paletteInputRef.current?.focus();
-  }, [paletteOpen]);
-
-  // Keep the selection at the top when the query or palette changes
-  useEffect(() => {
-    setPaletteIndex(0);
-  }, [paletteQuery, paletteOpen]);
+  // Feed the hook's refs each render — the keydown listener stays mounted
+  // once and always reads the latest filtered list + run action.
+  filteredItemsRef.current = filteredItems;
+  runItemRef.current = runPaletteItem;
 
   const applyRangePreset = (days: number) => {
     const to = new Date();
