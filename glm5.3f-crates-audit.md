@@ -811,6 +811,20 @@ and the minor-unit exponent table's four sync points listed in-doc.
 construction is bounded including the serde path. Both files carry the
 COR-33 inline-test pattern note where applicable.
 
+### Slice B — cart.rs (1,205 lines: production 1–353 fully read; 355–1205
+are inline tests, boundary confirmed by structure scan)
+
+**No new findings.** The MONEY-AUDIT-3 fixes hold: `CartLine::total()`
+fails closed on a serde-bypassed `qty <= 0` (no zero/negative totals from
+corrupt persisted carts), and `discount_amount()` propagates failures
+instead of masking with `.or(Some(zero))`. Fixed discounts are capped at
+the payable total via `Money::min`, percentage and fixed discounts are
+mutually exclusive by construction, and `debug_assert!` currency guards
+catch direct-field mutation in dev builds. The ~850-line inline test
+block repeats the COR-33 pattern (AGENTS.md wants sibling test files).
+
+---
+
 ---
 
 ---

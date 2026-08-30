@@ -1,13 +1,8 @@
 /*
-last audited 13-08-26 by RSA-Agent
+last audited 25-07-26 by RSA-Agent (foundation slice B: cart deep read)
 crate: foundation (cart.rs) | status: SAFE | lint: CLEAN
-findings: MONEY-AUDIT-3 fixed — CartLine::total() fails closed on qty <= 0
-  (serde bypass of the new() assert previously allowed free/negative lines);
-  Cart::discount_amount no longer masks errors with .or(Some(zero)) and now
-  validates lines before the no-discount early return; both propagations match
-  the documented "None on overflow/mismatch/corrupt line" contract.
-next: Phase 2 (frontend money arithmetic) | perf: discount_amount folds lines
-  once even in the no-discount case (bounded by line count).
+findings: exemplary — MONEY-AUDIT-3 fixes verified intact (CartLine::total fails closed on serde-bypassed qty<=0; discount_amount never masks with .or(Some(zero))); fixed discount capped via Money::min; debug_assert currency guards for direct-field mutation; production logic 1-353 is clean; COR-33 pattern: ~850 lines of inline tests (355-1205) in the production file
+next: move inline tests to sibling cart_tests.rs (COR-33 family) | perf: discount folds lines once
 */
 //! Cart and CartLine — the in-memory sale pipeline.
 //!
