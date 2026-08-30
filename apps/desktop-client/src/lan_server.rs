@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (desktop-client slice A: lan_server deep read)
+crate: desktop-client | status: NEEDS-FIX | lint: CLEAN
+findings: DC-1 MED — PSK auth sends the shared key in CLEARTEXT over TCP (newline JSON) and compares it with plain string equality (line 263), so any LAN observer can sniff the PSK on first connect and impersonate a peer; the forwarder elsewhere uses constant-time HMAC verify; proposed: document PSK as LAN discovery-filtering only or upgrade to TLS/noise-PSK, and use a constant-time compare meanwhile. DC-2 INFO — per-peer offline buffer is unbounded across connect/disconnect cycles (drop-oldest cap proposed). Otherwise solid: handshake runs inside the spawned task (accept-loop DoS-safe), bounded broadcast channel with lagged-peer handling, safe 127.0.0.1 default with PSK required for external bind, heartbeat/replay design documented
+next: DC-1 in fix-order phase | perf: N/A
+*/
 //! LAN event forwarder — a lightweight TCP server that broadcasts domain
 //! events to KDS tablet peers on the local network.
 //!

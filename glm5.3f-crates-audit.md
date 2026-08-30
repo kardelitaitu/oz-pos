@@ -199,6 +199,35 @@ findings (CLI-1..5).
 
 ---
 
+## 33. apps/desktop-client — Tauri shell (risk-ranked sampling)
+
+Baseline: ~27k production lines across ~130 files — too large for
+file-by-file deep reads within the campaign; audited by the RSA
+risk-ranked sampling protocol instead (network/auth/money surfaces +
+global pattern sweeps). Slice A coverage: global unwrap/panic/SQL-
+interpolation sweep across all production files; lan_server.rs (456:
+production 1–413 fully read).
+
+**Sweep results (clean):** no SQL string interpolation anywhere; the
+only unwraps are (a) `state.rs:769` inside a `#[cfg(test)]` mock
+constructor, (b) `picker_ticket.rs:50` HMAC key init (infallible),
+(c) six `Percentage::new` sites in `pos.rs` — all preceded by explicit
+0..=100 range checks with SAFETY comments, which also contains LUA-2 at
+the consumer.
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| DC-1 | 🟡 MED | apps/desktop-client/src/lan_server.rs:263 | PSK auth sends the shared key **in cleartext** over TCP and compares it with plain string equality — a LAN observer can sniff the PSK on first connect and impersonate a peer. | Document PSK as discovery-filtering only or upgrade to TLS/noise-PSK; constant-time compare meanwhile. |
+| DC-2 | ℹ️ INFO | apps/desktop-client/src/lan_server.rs:366 | Per-peer offline buffer is unbounded across reconnect cycles. | Drop-oldest cap per peer. |
+
+Otherwise solid: handshake inside the spawned task (accept-loop
+DoS-safe), bounded broadcast channel with lagged handling, safe
+loopback default with PSK required for external bind.
+
+> Slice B (auth.rs, state.rs, lib.rs, sync_bootstrap) next.
+
+---
+
 ## 25. crates/oz-hal — hardware abstraction layer
 
 Baseline: ~3.2k production lines across 28 files. Slice A (registry.rs
