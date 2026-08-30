@@ -1,5 +1,11 @@
 //! Cloud settings administration — per-tenant SMTP / report-schedule
 //! provisioning.
+/*
+last audited 25-07-26 by RSA-Agent (oz-api slice A: settings routes deep read)
+crate: oz-api | status: SAFE | lint: CLEAN
+findings: clean — both handlers admin-key-gate first despite the public-router placement (verified); tenant ids charset-validated; field ops resolved before any write (no half-applied config); SMTP password encrypted at rest on write, DECRYPTED in GET responses (admin round-trip; contributes to API-2 dev-open exposure); PG and SQLite paths mirror each other
+next: none here | perf: N/A
+*/
 //!
 //! - `GET /api/v1/settings?tenant=<id>` — read a tenant's **effective**
 //!   cloud settings (scoped key `{base}:{tenant}` first, bare-key fallback),

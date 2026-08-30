@@ -736,6 +736,25 @@ the campaign proceeds to the remaining 27 targets.
 
 ---
 
+## 5. crates/oz-api — REST server (JWT, Postgres/SQLite dual backend)
+
+Baseline: 13 test files, ~3.6k production lines across lib/auth/pg/routes.
+Slice A (lib, auth, routes/settings, routes/tokens) deep-read.
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| API-1 | 🟠 MED | oz-api/src/auth.rs:75–81 | **Hard-coded dev JWT signing secret fallback** (`"oz-pos-dev-secret-change-in-production"`) when `OZ_API_SECRET` is unset — anyone who knows the constant can forge valid tokens for every protected route on a misconfigured public server. There is no startup enforcement. | Refuse to serve (or log-a-fatal warn) when `OZ_PRODUCTION` is set and `OZ_API_SECRET` is missing; consider the same gate for `OZ_ADMIN_KEY`. |
+| API-2 | ℹ️ INFO | oz-api/src/routes/tokens.rs:57–66, routes/settings.rs:118–124 | Admin-key comparison is non-constant-time (`==`), dev-open mode when `OZ_ADMIN_KEY` is unset (documented), and `GET /api/v1/settings` returns the tenant's SMTP password **decrypted** — a misconfigured dev-open deployment discloses credentials. | Constant-time compare; require admin key in production; document the decrypted-GET tradeoff. |
+
+**Slice A positives:** security headers on every response (nosniff, DENY,
+CSP, prod-only HSTS), fail-closed CORS parsing with documented dev opt-in,
+structured 401 taxonomy per sync-auth-hardening P4, tenant-scoped settings
+with charset validation and no-half-applied writes, and the terminal
+client-credentials path sourcing tenant from the registration — never the
+request body.
+
+---
+
 ---
 
 ---

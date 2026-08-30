@@ -1,4 +1,10 @@
 //! JSON Web Token generation and validation for the OZ-POS OpenAPI.
+/*
+last audited 25-07-26 by RSA-Agent (oz-api slice A: auth deep read)
+crate: oz-api | status: SAFE | lint: CLEAN
+findings: API-1 MED (rooted here): signing_secret falls back to the hard-coded dev constant when OZ_API_SECRET unset — forgeable HS256 tokens for all protected routes on a misconfigured deployment; API-2 INFO: 60s JWT validation cache means an expired token passes up to 60s past exp (documented tradeoff, bounded cache); structured 401 taxonomy per P4 with WWW-Authenticate; exp validated, HS256-only validation default (no alg confusion)
+next: API-1 enforcement | perf: cache saves HMAC on hot paths
+*/
 //!
 //! Tokens are signed with HS256 and carry an `exp` (expiration) claim.
 //! The signing secret is loaded from the `OZ_API_SECRET` env var at
