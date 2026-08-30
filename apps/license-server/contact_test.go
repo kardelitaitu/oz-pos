@@ -145,11 +145,11 @@ func TestContactHandler_ForwardsToWebhook(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var payload map[string]string
+	var payload map[string]any
 	if err := json.Unmarshal([]byte(gotPayload), &payload); err != nil {
 		t.Fatalf("webhook payload is not JSON: %v", err)
 	}
-	content := payload["content"]
+	content := payload["content"].(string)
 	for _, want := range []string{"Budi Santoso", "budi@example.com", "QRIS is not showing"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("webhook content missing %q: %s", want, content)
@@ -157,6 +157,16 @@ func TestContactHandler_ForwardsToWebhook(t *testing.T) {
 	}
 	if len(content) > discordContentMax {
 		t.Errorf("webhook content %d chars exceeds Discord limit", len(content))
+	}
+	// LSE-20: mentions must be disabled — the name/email fields are
+	// markdown-interpolated from an unauthenticated form, so an
+	// "@everyone" would ping the whole channel otherwise.
+	mentions, ok := payload["allowed_mentions"].(map[string]any)
+	if !ok {
+		t.Fatalf("webhook payload missing allowed_mentions: %v", payload)
+	}
+	if parse, ok := mentions["parse"].([]any); !ok || len(parse) != 0 {
+		t.Errorf("expected allowed_mentions.parse to be an empty list, got %v", mentions["parse"])
 	}
 }
 

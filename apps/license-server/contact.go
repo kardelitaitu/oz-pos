@@ -154,15 +154,27 @@ func postToDiscord(webhook, name, email, message string) error {
 		msgBudget = contactMessageMin
 	}
 	if len(message) > msgBudget {
-		message = message[:msgBudget]
+		// Rune-safe truncation: byte-slicing could split a multi-byte
+		// character and produce invalid UTF-8 in the JSON payload.
+		runes := []rune(message)
+		if len(runes) > msgBudget {
+			runes = runes[:msgBudget]
+		}
+		message = string(runes)
 	}
 
 	content := header + "\n**Name:** " + name + "\n**Email:** " + email +
 		"\n**Message:**\n```\n" + message + "\n```"
 
-	payload, err := json.Marshal(map[string]string{
-		"content":  content,
-		"username": "OZ-POS Support",
+	// LSE-20: disable all Discord mentions. name/email come from an
+	// unauthenticated public form and are interpolated as markdown OUTSIDE
+	// the code fence — without allowed_mentions a `@everyone` in the name
+	// field pings the whole support channel (webhook mentions are on by
+	// default).
+	payload, err := json.Marshal(map[string]any{
+		"content":          content,
+		"username":         "OZ-POS Support",
+		"allowed_mentions": map[string]any{"parse": []string{}},
 	})
 	if err != nil {
 		return err
