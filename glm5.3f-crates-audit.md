@@ -241,6 +241,25 @@ deterministic LRU session eviction.
 
 > Slice C (state.rs, lib.rs, sync_bootstrap.rs, pos.rs head) next.
 
+### Slice C — state.rs, lib.rs, sync_bootstrap.rs, error.rs,
+email_scheduler.rs verified + stamped; pos.rs head (1–160) + sweep —
+**desktop-client COMPLETE (risk-ranked sampling)**
+
+No new findings. `state.rs` opens its DB with `foreign_keys ON` + WAL
+and bounds the kernel-Drop lock retry; `lib.rs` documents its
+invoke-handler ordering convention and carries only a documented
+test-only Windows manifest `link_section`. Prior C-2 notes preserved
+(SQLCipher next; Arc-clone perf on checkout hot path). The checkout
+money paths (`pos.rs`) were sweep-verified with all discount-percent
+unwraps range-guarded; the cart/sale state machine itself lives in
+oz-core (audited).
+
+> **desktop-client COMPLETE as risk-ranked sampling** — the ~27k-line
+> surface is too large for file-by-file deep reads; coverage was
+> explicit: global pattern sweep + deep reads of the network (lan_server)
+> and auth (auth.rs) surfaces + head of pos.rs. Campaign proceeds to
+> apps/tablet-client.
+
 ---
 
 ## 25. crates/oz-hal — hardware abstraction layer
