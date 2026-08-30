@@ -1280,6 +1280,10 @@ layer, UUID v7 ids).
 
 > **modules-terminal COMPLETE** — 5 production files, ~473 lines. One
 > INFO (MSL-9). Campaign proceeds to modules/currency.
+>
+> *Provenance:* the parallel session's `a65bca50` (feat website) swept
+> this section's files into its commit (same pattern as `292aa003`
+> during modules-sales slice A); the RSA audit content above is intact.
 
 ---
 

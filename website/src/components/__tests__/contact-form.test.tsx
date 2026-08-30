@@ -134,6 +134,39 @@ describe('ContactForm', () => {
     }
   });
 
+  it('offers a mailto fallback with the entered message in the error state', async () => {
+    // When the POST fails, the user must still have a way to reach support —
+    // the error state renders a mailto link prefilled with the message.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    const { container, root } = await renderContact('en');
+    try {
+      const nameInput = getInputByPlaceholder(container, 'Your name');
+      const emailInput = getInputByPlaceholder(container, 'you@example');
+      const messageInput = getInputByPlaceholder(container, 'How can we help?');
+      await act(async () => {
+        setNativeValue(nameInput, 'Bob');
+        setNativeValue(emailInput, 'bob@example.com');
+        // message is a <textarea> — use the textarea native setter.
+        const taSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+        taSetter.call(messageInput, 'My printer stopped working.');
+        messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await act(async () => {
+        const form = container.querySelector('form') as HTMLFormElement;
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+
+      const mailto = container.querySelector('a[href^="mailto:"]') as HTMLAnchorElement | null;
+      expect(mailto).not.toBeNull();
+      expect(mailto?.getAttribute('href')).toContain('support@ozpos.my.id');
+      expect(mailto?.getAttribute('href')).toContain(encodeURIComponent('Support: Bob'));
+      expect(mailto?.getAttribute('href')).toContain(encodeURIComponent('My printer stopped working.'));
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
   it('honeypot field triggers fake success without sending', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
