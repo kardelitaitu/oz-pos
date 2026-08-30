@@ -14,7 +14,7 @@ fn fresh() -> Connection {
 fn generate_daily_report_delegates_to_repository() {
     let conn = fresh();
     conn.execute(
-        "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at, tax_minor)
+        "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at, tax_total_minor)
          VALUES ('s-1', 500, 'USD', 1, 'completed', '2025-06-15T10:00:00.000Z', '2025-06-15T10:00:00.000Z', 50)",
         [],
     )

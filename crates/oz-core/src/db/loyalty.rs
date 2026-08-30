@@ -1,9 +1,9 @@
 //! Loyalty program CRUD — points, tiers, redemption.
 /*
-last audited 25-07-26 by RSA-Agent (oz-core slice B3: loyalty deep read)
+last audited 25-07-26 by RSA-Agent (oz-core slice B1: loyalty deep read; MSL-4 projection fix 25-07-26)
 crate: oz-core | status: SAFE | lint: CLEAN
-findings: points ledger exemplary — earn/redeem both idempotent per (account, sale_id, txn_type) with pre-check PLUS unique projection index as final guard (constraint-violation -> return winning row, the pattern COR-15 wants for gift cards); redeem validates sale server-side (ownership + completed status + cap at sale total) and re-checks balance inside the atomic conditional UPDATE; COR-18 INFO: list_loyalty_accounts prepares a new statement per account (N+1) — fine at desktop scale, batch when sync lands; points math i64-first with documented f64 /100 step (points are not currency — policy holds)
-next: none required | perf: COR-18 N+1 in list_loyalty_accounts
+findings: MSL-4 FIXED here — earn_points and redeem_points now maintain customers.loyalty_points as a projection of the authoritative loyalty_accounts balance inside their transactions (single writer; tier-multiplied; redemption-mirrored), so the CRM counter can no longer diverge. Prior verified positives: earn/redeem idempotency via unique projection index + pre-check, tier multiplier math, server-side sale binding, tx-wrapped balance guards
+next: none | perf: projection UPDATE is one indexed row per mutation
 */
 
 use rusqlite::params;
@@ -390,6 +390,18 @@ impl Store<'_> {
             params![points, now, account.id],
         )?;
 
+        // MSL-4 fix: maintain `customers.loyalty_points` as a projection of
+        // the authoritative ledger balance (tier-multiplied), inside the
+        // same transaction. Previously the CRM event handler incremented the
+        // counter at a flat rate and nothing decremented it on redemption,
+        // so the two ledgers diverged upward forever.
+        tx.execute(
+            "UPDATE customers SET loyalty_points =
+                (SELECT points FROM loyalty_accounts WHERE customer_id = ?1),
+             updated_at = ?2 WHERE id = ?1",
+            params![customer_id, now],
+        )?;
+
         tx.commit()?;
 
         Ok(LoyaltyTransaction {
@@ -553,6 +565,15 @@ impl Store<'_> {
                 message: "insufficient points".into(),
             });
         }
+
+        // MSL-4 fix: mirror the redemption into the customers.loyalty_points
+        // projection inside the same transaction (see earn_points).
+        tx.execute(
+            "UPDATE customers SET loyalty_points =
+                (SELECT points FROM loyalty_accounts WHERE customer_id = ?1),
+             updated_at = ?2 WHERE id = ?1",
+            params![customer_id, now],
+        )?;
 
         tx.commit()?;
 

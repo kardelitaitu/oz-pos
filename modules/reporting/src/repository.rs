@@ -1,8 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent (modules-reporting slice A: repository deep read)
-crate: modules-reporting | status: NEEDS-FIX | lint: CLEAN
-findings: MSL-7 MED — generate_daily_report queries SUM(tax_minor) FROM sales but the sales table column is tax_total_minor (tax_minor lives on sale_lines, verified in crates/oz-core/migrations/20260813_init.sql lines 589/614); the query fails at runtime with no-such-column on EVERY call; no test exercises it against a migrated DB so the break is invisible to cargo test. Proposed: SUM(tax_total_minor). Live-table query correctly filters status = completed
-next: fix column name in fix-order phase | perf: strftime per row prevents index use
+last audited 25-07-26 by RSA-Agent (modules-reporting slice A: repository deep read; MSL-7 FIXED 25-07-26)
+crate: modules-reporting | status: SAFE | lint: CLEAN
+findings: MSL-7 FIXED — generate_daily_report now queries SUM(tax_total_minor) (the real sales column; the previous SUM(tax_minor) failed at runtime with no-such-column on every call). Test ALTER TABLE shims removed; tests seed tax_total_minor directly and pass against the migrated schema. Live-table query correctly filters status = completed
+next: strftime per row prevents index use (perf, INFO) | perf: see next
 */
 //! Reporting Repository — database query layer for reports.
 
@@ -24,8 +24,12 @@ impl<'a> ReportingRepository<'a> {
 
     /// Generate daily report for date.
     pub fn generate_daily_report(&self, date: &str) -> Result<DailyReport, ReportingError> {
+        // MSL-7 fix: the sales table column is `tax_total_minor` (the
+        // per-line `tax_minor` lives on `sale_lines`); the previous
+        // `SUM(tax_minor)` failed at runtime with "no such column" on
+        // every call.
         let mut stmt = self.conn.prepare(
-            "SELECT COUNT(*), COALESCE(SUM(total_minor), 0), COALESCE(SUM(tax_minor), 0)
+            "SELECT COUNT(*), COALESCE(SUM(total_minor), 0), COALESCE(SUM(tax_total_minor), 0)
              FROM sales WHERE strftime('%Y-%m-%d', created_at) = ?1 AND status = 'completed'",
         )?;
 

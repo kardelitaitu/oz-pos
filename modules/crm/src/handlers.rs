@@ -1,8 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent (modules-crm slice A: handlers deep read)
-crate: modules-crm | status: NEEDS-FIX | lint: CLEAN
-findings: MSL-4 MED — CrmHistoryHandler increments customers.loyalty_points (flat total/100 rate) on sale.completed while platform-startup LoyaltyEarnHandler credits the authoritative loyalty_accounts ledger (tier-multiplied, redeemable, idempotent per account+sale+txn) for the SAME event: the two ledgers diverge (customers counter ignores tier multipliers and is never decremented on redeem). Handler itself is tx-safe (tx-wrapped read-modify-write, documented lost-update prevention, checked_add overflow guards, missing-customer clean skip)
-next: make customers.loyalty_points a projection of loyalty_accounts or deprecate it | perf: N/A
+last audited 25-07-26 by RSA-Agent (modules-crm slice A: handlers deep read; MSL-4 FIXED 25-07-26)
+crate: modules-crm | status: SAFE | lint: CLEAN
+findings: MSL-4 FIXED — CrmHistoryHandler no longer writes customers.loyalty_points (removed the flat total/100 increment; that column is now a projection of the authoritative loyalty_accounts ledger maintained inside Store::earn_points/redeem_points). The handler keeps its own responsibility: tx-wrapped read-modify-write of total_spent_minor with checked_add overflow guards, missing-customer clean skip. 4 test assertions updated to the new single-writer contract
+next: none | perf: N/A
 */
 //! Event handlers for the CRM module.
 //!
@@ -21,10 +21,12 @@ use tracing::{info, warn};
 /// Handler that updates customer purchase history when a sale completes.
 ///
 /// If the sale is linked to a customer (`customer_id` is `Some`),
-/// this handler increments `total_spent_minor` and `loyalty_points`
-/// on the customer record.
+/// this handler increments `total_spent_minor` on the customer record.
 ///
-/// Currently awards 1 loyalty point per 100 minor units spent.
+/// Loyalty points are intentionally NOT awarded here (MSL-4 fix):
+/// `customers.loyalty_points` is a projection of the authoritative
+/// `loyalty_accounts` ledger, maintained by the loyalty `Store`
+/// mutations.
 #[derive(Debug)]
 pub struct CrmHistoryHandler {
     db: Arc<Mutex<Connection>>,
@@ -74,7 +76,13 @@ impl EventHandler<SaleCompleted> for CrmHistoryHandler {
             }
         };
 
-        // Update spending and loyalty points.
+        // Update spending. MSL-4 fix: this handler NO LONGER touches
+        // `customers.loyalty_points` — that column is a projection of the
+        // authoritative `loyalty_accounts` ledger and is maintained inside
+        // `Store::earn_points`/`Store::redeem_points` (tier-multiplied,
+        // redemption-mirrored, single writer). Writing it here at a flat
+        // rate duplicated the authoritative earn and drifted from it
+        // forever.
         customer.total_spent_minor = customer
             .total_spent_minor
             .checked_add(event.total_minor)
@@ -82,25 +90,17 @@ impl EventHandler<SaleCompleted> for CrmHistoryHandler {
                 anyhow::anyhow!("total_spent_minor overflow for customer {customer_id}")
             })?;
 
-        // Award 1 loyalty point per full 100 minor units spent.
-        let points_earned = event.total_minor / 100;
-        customer.loyalty_points = customer
-            .loyalty_points
-            .checked_add(points_earned)
-            .ok_or_else(|| anyhow::anyhow!("loyalty_points overflow for customer {customer_id}"))?;
-
         // Persist the update inside the transaction.
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         tx.execute(
-            "UPDATE customers SET total_spent_minor = ?1, loyalty_points = ?2, updated_at = ?3 WHERE id = ?4",
-            rusqlite::params![customer.total_spent_minor, customer.loyalty_points, now, customer_id],
+            "UPDATE customers SET total_spent_minor = ?1, updated_at = ?2 WHERE id = ?3",
+            rusqlite::params![customer.total_spent_minor, now, customer_id],
         )?;
         tx.commit()?;
 
         info!(
             customer_id = %customer_id,
             total_spent_minor = customer.total_spent_minor,
-            loyalty_points = customer.loyalty_points,
             "crm handler: customer history updated"
         );
 
@@ -158,8 +158,10 @@ mod tests {
         let store = Store::new(&conn);
         let customer = store.get_customer("cust-1").unwrap().unwrap();
         assert_eq!(customer.total_spent_minor, 1500);
-        // 1500 / 100 = 15 loyalty points
-        assert_eq!(customer.loyalty_points, 15);
+        // MSL-4: the CRM handler no longer awards loyalty points — the
+        // column is a projection of the loyalty_accounts ledger maintained
+        // by Store::earn_points/redeem_points.
+        assert_eq!(customer.loyalty_points, 0);
     }
 
     #[test]
@@ -208,7 +210,8 @@ mod tests {
         let store = Store::new(&conn);
         let customer = store.get_customer("cust-2").unwrap().unwrap();
         assert_eq!(customer.total_spent_minor, 2000);
-        assert_eq!(customer.loyalty_points, 20);
+        // MSL-4: loyalty projection is not written by this handler.
+        assert_eq!(customer.loyalty_points, 0);
     }
 
     #[test]
@@ -265,7 +268,8 @@ mod tests {
         let store = Store::new(&conn);
         let customer = store.get_customer("cust-3").unwrap().unwrap();
         assert_eq!(customer.total_spent_minor, 1700);
-        assert_eq!(customer.loyalty_points, 17);
+        // MSL-4: loyalty projection is not written by this handler.
+        assert_eq!(customer.loyalty_points, 0);
     }
 
     /// Thread-safety regression test: verifies the handler is safe to call
@@ -321,7 +325,7 @@ mod tests {
         let customer = store.get_customer("cust-concurrent").unwrap().unwrap();
         // Both sales should be accumulated: 1000 + 2000 = 3000
         assert_eq!(customer.total_spent_minor, 3000);
-        // Loyalty: 1000/100 + 2000/100 = 10 + 20 = 30
-        assert_eq!(customer.loyalty_points, 30);
+        // MSL-4: loyalty projection is not written by this handler.
+        assert_eq!(customer.loyalty_points, 0);
     }
 }
