@@ -2,7 +2,7 @@
 last audited 25-07-26 by RSA-Agent
 crate: oz-payment | status: SAFE | lint: CLEAN
 findings: PAY-2 fresh Uuid::now_v7() idempotency per call defeats Square retry protection (request.idempotency_key ignored); PAY-3 refund(None) sends zero-amount USD (Square requires amount_money; trait contract None = full amount); PAY-5 Square auto_capture=true default means authorize already captures — default sale() authorize->complete would fail against real API (tests pass via canned wiremock responses); currency hard-error on unknown codes good (PA-02)
-next: honor idempotency_key, resolve full amount on refund(None), set auto_capture=false | perf: N/A
+next: honor idempotency_key, resolve full amount on refund(None), set auto_capture=false. COR-31 HELD DELIBERATELY — no HTTP timeout here (Client::builder without .timeout, no request-level timeout), and adding one before PAY-2 is fixed would create a double-charge path: this driver sends a FRESH Uuid::now_v7() per call, so Square's own duplicate protection cannot fire and a post-timeout retry is a second charge. Honor request.idempotency_key first, then bound the client. | perf: N/A
 */
 //! Square payment processor — implements [`PaymentProcessor`] using the
 //! Square REST API directly via `reqwest`.
