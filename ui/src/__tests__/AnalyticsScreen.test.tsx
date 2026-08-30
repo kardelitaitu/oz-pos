@@ -104,8 +104,8 @@ const mockGetTopProducts = vi.fn(() => Promise.resolve([
   { product_id: 'p2', sku: 'SKU-002', name: 'Latte', total_qty: 38, total_minor: 95000, cogs_minor: 30000, gross_profit_minor: 65000, gross_margin_percent: 68.4 },
 ]));
 const mockGetHourlyHeatmap = vi.fn(() => Promise.resolve([
-  { day_of_week: 1, hour: 10, total_minor: 350000, sale_count: 3 },
-  { day_of_week: 2, hour: 11, total_minor: 400000, sale_count: 4 },
+  { currency: 'USD', day_of_week: 1, hour: 10, total_minor: 350000, sale_count: 3 },
+  { currency: 'USD', day_of_week: 2, hour: 11, total_minor: 400000, sale_count: 4 },
 ]));
 const mockGetLowStockAlerts = vi.fn(() => Promise.resolve([
   { product_id: 'lo1', sku: 'SKU-LO1', name: 'Milk', current_qty: 3, threshold: 10, currency: 'USD', price_minor: 1500, cost_minor: 900 },
@@ -144,7 +144,7 @@ const mockGetDiscountsSummary = vi.fn(() => Promise.resolve({
   sale_count: 100, discounted_sale_count: 12, share_percent: 12.5,
   codes: [{ label: 'WELCOME10', redeemed_count: 8 }, { label: 'HAPPYHOUR', redeemed_count: 4 }],
 }));
-const mockGetVoidedSalesSummary = vi.fn(() => Promise.resolve({ void_count: 3, void_total_minor: 45000 }));
+const mockGetVoidedSalesSummary = vi.fn(() => Promise.resolve([{ currency: 'USD', void_count: 3, void_total_minor: 45000 }]));
 const mockGetVoidedItems = vi.fn(() => Promise.resolve([
   { name: 'Cold Brew', qty: 2 },
   { name: 'Croissant', qty: 1 },
@@ -1165,9 +1165,10 @@ describe('AnalyticsScreen layout shell', () => {
     expect(downloadCsv).toHaveBeenCalledTimes(1);
     const [filename, columns, rows] = vi.mocked(downloadCsv).mock.calls[0]!;
     expect(filename).toContain('refunds-');
-    expect(columns.map((c) => c.key)).toEqual(['count', 'amount', 'average']);
-    expect(columns.map((c) => c.label)).toEqual(['Refund count', 'Refunded amount', 'Average refund']);
-    expect(rows).toEqual([{ count: '3', amount: '$450.00', average: '$150.00' }]);
+    // REP-06: one CSV row per currency, with a currency column.
+    expect(columns.map((c) => c.key)).toEqual(['currency', 'count', 'amount', 'average']);
+    expect(columns.map((c) => c.label)).toEqual(['Currency', 'Refund count', 'Refunded amount', 'Average refund']);
+    expect(rows).toEqual([{ currency: 'USD', count: '3', amount: '$450.00', average: '$150.00' }]);
   });
 
   it('exports the low stock CSV from the low-stock card', async () => {

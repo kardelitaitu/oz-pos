@@ -189,6 +189,7 @@ analytics-card-discounts-share = of sales from discounts
 analytics-card-refunds-count = Refund count
 analytics-card-refunds-amount = Refunded amount
 analytics-card-refunds-avg = Average refund
+analytics-csv-col-currency = Currency
 analytics-card-inventory-turnover = Turnover
 analytics-card-inventory-days = Days of stock
 analytics-card-inventory-skus = Active SKUs

@@ -252,19 +252,6 @@ export default function SalesReportScreen() {
     fetchPrevData();
   }, [fetchPrevData]);
 
-  const heatmapGrid: number[][] = Array.from({ length: 7 }, () =>
-    Array(24).fill(0),
-  );
-  for (const row of heatmap) {
-    if (
-      row.day_of_week >= 0 &&
-      row.day_of_week < 7 &&
-      row.hour >= 0 &&
-      row.hour < 24
-    ) {
-      heatmapGrid[row.day_of_week]![row.hour] = row.total_minor;
-    }
-  }
   const exportCsv = () => {
     const escapeCsvField = (field: string): string => {
       if (field.includes(',') || field.includes('"') || field.includes('\n')) {
@@ -667,9 +654,9 @@ export default function SalesReportScreen() {
                     <td>{i + 1}</td>
                     <td>{p.name}</td>
                     <td>{p.total_qty}</td>
-                    <td>{fmtCurrency(p.total_minor, currency, numLocale)}</td>
+                    <td>{fmtCurrency(p.total_minor, p.currency ?? currency, numLocale)}</td>
                     <td className={p.gross_profit_minor < 0 ? 'sales-report-top-negative' : ''}>
-                      {fmtCurrency(p.gross_profit_minor, currency, numLocale)}
+                      {fmtCurrency(p.gross_profit_minor, p.currency ?? currency, numLocale)}
                     </td>
                     <td>{p.gross_margin_percent.toFixed(1)}%</td>
                   </tr>
@@ -870,17 +857,28 @@ export default function SalesReportScreen() {
                   </Localized>
                 </div>
                 {Array.from({ length: 24 }, (_, h) => {
-                  const cell = heatmap.find((c) => c.day_of_week === dayIdx && c.hour === h);
-                  const value = cell ? cell.total_minor : 0;
-                  const sales = cell ? cell.sale_count : 0;
+                  // REP-06: one cell may carry several currency rows.
+                  // Intensity tracks the display currency only; the label
+                  // lists every currency's revenue for the cell.
+                  const cells = heatmap.filter(
+                    (c) => c.day_of_week === dayIdx && c.hour === h,
+                  );
+                  const value = cells.reduce(
+                    (sum, c) => sum + (c.currency === currency ? c.total_minor : 0),
+                    0,
+                  );
+                  const sales = cells.reduce((sum, c) => sum + c.sale_count, 0);
+                  const amounts = cells
+                    .map((c) => fmtCurrency(c.total_minor, c.currency, numLocale))
+                    .join(' · ');
                   return (
                     <div
                       key={h}
                       className="sales-report-heatmap-cell"
                       role="gridcell"
                       aria-label={
-                        cell
-                          ? `${dayKey.charAt(0).toUpperCase() + dayKey.slice(1, 3)} ${String(h).padStart(2, '0')}:00 - ${fmtCurrency(value, currency, numLocale)} (${sales} orders)`
+                        cells.length > 0
+                          ? `${dayKey.charAt(0).toUpperCase() + dayKey.slice(1, 3)} ${String(h).padStart(2, '0')}:00 - ${amounts || fmtCurrency(0, currency, numLocale)} (${sales} orders)`
                           : `${dayKey.charAt(0).toUpperCase() + dayKey.slice(1, 3)} ${String(h).padStart(2, '0')}:00 - $0.00 (0 orders)`
                       }
                       style={{

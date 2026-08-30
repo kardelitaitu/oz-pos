@@ -15,8 +15,8 @@ vi.mock('@/api/reports', () => ({
     { month: '2026-07', total_minor: 35000000, currency: 'USD', sale_count: 280, cogs_minor: 14000000, gross_profit_minor: 21000000, gross_margin_percent: 60 },
   ])),
   getHourlyHeatmap: vi.fn(() => Promise.resolve([
-    { day_of_week: 1, hour: 10, total_minor: 350000, sale_count: 3 },
-    { day_of_week: 2, hour: 11, total_minor: 400000, sale_count: 4 },
+    { currency: 'USD', day_of_week: 1, hour: 10, total_minor: 350000, sale_count: 3 },
+    { currency: 'USD', day_of_week: 2, hour: 11, total_minor: 400000, sale_count: 4 },
   ])),
   getTopProducts: vi.fn(() => Promise.resolve([])),
   getLowStockAlerts: vi.fn(() => Promise.resolve([])),
@@ -27,7 +27,7 @@ vi.mock('@/api/reports', () => ({
   getCustomerSplit: vi.fn(() => Promise.resolve({ new_count: 0, returning_count: 0 })),
   getPaymentMethodBreakdown: vi.fn(() => Promise.resolve([])),
   getDiscountsSummary: vi.fn(() => Promise.resolve({ sale_count: 0, discounted_sale_count: 0, share_percent: 0, codes: [] })),
-  getVoidedSalesSummary: vi.fn(() => Promise.resolve({ void_count: 0, void_total_minor: 0 })),
+  getVoidedSalesSummary: vi.fn(() => Promise.resolve([])),
   getVoidedItems: vi.fn(() => Promise.resolve([])),
   getInventoryTurnover: vi.fn(() => Promise.resolve({ units_sold: 0, stock_on_hand: 0, sku_count: 0, range_days: 0 })),
   getInventoryTrend: vi.fn(() => Promise.resolve([])),
@@ -381,9 +381,9 @@ describe('heatmap intensity builders', () => {
   it('weekdayIntensities aggregates hourly rows by Monday-first day', () => {
     // day_of_week 1 = Monday (JS getDay), day_of_week 7 = Sunday.
     const map = weekdayIntensities([
-      { day_of_week: 1, hour: 9, total_minor: 100, sale_count: 1 },
-      { day_of_week: 1, hour: 12, total_minor: 300, sale_count: 2 },
-      { day_of_week: 7, hour: 19, total_minor: 200, sale_count: 2 },
+      { currency: 'USD', day_of_week: 1, hour: 9, total_minor: 100, sale_count: 1 },
+      { currency: 'USD', day_of_week: 1, hour: 12, total_minor: 300, sale_count: 2 },
+      { currency: 'USD', day_of_week: 7, hour: 19, total_minor: 200, sale_count: 2 },
     ]);
     // Monday aggregates 100 + 300 = 400 → strongest; Sunday 200 → 2.
     expect(map.get('0')).toBe(4);
@@ -392,7 +392,7 @@ describe('heatmap intensity builders', () => {
 
   it('weeklyHourlyIntensities keys are dayIdx:hour', () => {
     const map = weeklyHourlyIntensities([
-      { day_of_week: 1, hour: 10, total_minor: 100, sale_count: 1 },
+      { currency: 'USD', day_of_week: 1, hour: 10, total_minor: 100, sale_count: 1 },
     ]);
     expect(map.get('0:10')).toBe(4);
   });
@@ -479,7 +479,7 @@ describe('heatmap intensity builders', () => {
   });
 
   it('buildHeatmapIntensities dispatches by granularity', () => {
-    const hourly = [{ day_of_week: 1, hour: 10, total_minor: 100, sale_count: 1 }];
+    const hourly = [{ currency: 'USD', day_of_week: 1, hour: 10, total_minor: 100, sale_count: 1 }];
     const daily = [{ date: '2026-07-27', total_minor: 100, currency: 'USD', sale_count: 1, cogs_minor: 0, gross_profit_minor: 100, gross_margin_percent: 100 }];
     const weekly = [{ week_start: '2026-07-21', total_minor: 100, currency: 'USD', sale_count: 1, cogs_minor: 0, gross_profit_minor: 100, gross_margin_percent: 100 }];
 
@@ -494,9 +494,9 @@ describe('heatmap intensity builders', () => {
 
 describe('buildHeatmapCells — per-cell values for the heatmap card', () => {
   const hourly = [
-    { day_of_week: 1, hour: 10, total_minor: 100, sale_count: 2 },
-    { day_of_week: 1, hour: 10, total_minor: 100, sale_count: 1 },
-    { day_of_week: 2, hour: 11, total_minor: 50, sale_count: 3 },
+    { currency: 'USD', day_of_week: 1, hour: 10, total_minor: 100, sale_count: 2 },
+    { currency: 'USD', day_of_week: 1, hour: 10, total_minor: 100, sale_count: 1 },
+    { currency: 'USD', day_of_week: 2, hour: 11, total_minor: 50, sale_count: 3 },
   ];
 
   it('sums duplicate keys and normalizes the level against the peak', () => {
@@ -528,7 +528,7 @@ describe('buildHeatmapCells — per-cell values for the heatmap card', () => {
     expect(peak?.key).toBe('0:10');
     expect(peak?.cell.minor).toBe(200);
 
-    const empty = buildHeatmapCells('weekly', { hourly: [{ day_of_week: 1, hour: 10, total_minor: 0, sale_count: 0 }] });
+    const empty = buildHeatmapCells('weekly', { hourly: [{ currency: 'USD', day_of_week: 1, hour: 10, total_minor: 0, sale_count: 0 }] });
     expect(heatPeak(empty)).toBeNull();
   });
 
@@ -538,7 +538,7 @@ describe('buildHeatmapCells — per-cell values for the heatmap card', () => {
     expect(low?.key).toBe('1:11');
     expect(low?.cell.minor).toBe(50);
 
-    const empty = buildHeatmapCells('weekly', { hourly: [{ day_of_week: 1, hour: 10, total_minor: 0, sale_count: 0 }] });
+    const empty = buildHeatmapCells('weekly', { hourly: [{ currency: 'USD', day_of_week: 1, hour: 10, total_minor: 0, sale_count: 0 }] });
     expect(heatLow(empty)).toBeNull();
   });
 });

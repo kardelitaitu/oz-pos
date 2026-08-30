@@ -183,6 +183,7 @@ analytics-card-discounts-share = dari penjualan lewat diskon
 analytics-card-refunds-count = Jumlah refund
 analytics-card-refunds-amount = Nominal refund
 analytics-card-refunds-avg = Rata-rata refund
+analytics-csv-col-currency = Mata uang
 analytics-card-inventory-turnover = Perputaran
 analytics-card-inventory-days = Hari stok
 analytics-card-inventory-skus = SKU aktif

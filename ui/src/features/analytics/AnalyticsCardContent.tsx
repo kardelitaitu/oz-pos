@@ -66,6 +66,11 @@ function useMoney() {
   const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const fmt = (minor: number) =>
     new Intl.NumberFormat(numLocale, { style: 'currency', currency, maximumFractionDigits: exp }).format(minor / 10 ** exp);
+  // REP-06: report rows carry their own currency — format in it, same locale.
+  const fmtIn = (minor: number, code: string) => {
+    const e = minorUnitExponent(code);
+    return new Intl.NumberFormat(numLocale, { style: 'currency', currency: code, maximumFractionDigits: e }).format(minor / 10 ** e);
+  };
   const short = (minor: number) =>
     new Intl.NumberFormat(numLocale, {
       style: 'currency',
@@ -74,7 +79,7 @@ function useMoney() {
       maximumFractionDigits: 1,
     }).format(minor / 10 ** exp);
   const count = (n: number) => new Intl.NumberFormat(numLocale).format(n);
-  return { fmt, short, count };
+  return { fmt, fmtIn, short, count };
 }
 
 const PALETTE = ['#4f46e5', '#3b82f6', '#06b6d4', '#22c55e', '#f59e0b', '#f97316', '#ef4444', '#8b5cf6'];
@@ -378,23 +383,28 @@ function exportDiscountsCsv(
   );
 }
 
-/** Download the refunds/voids summary (count, amount, average) as CSV. */
+/** Download the refunds/voids summary as CSV — one row per currency (REP-06). */
 function exportRefundsCsv(
-  summary: VoidedSummaryRow,
+  rows: VoidedSummaryRow[],
   from: string,
   to: string,
-  fmt: (minor: number) => string,
+  fmtIn: (minor: number, code: string) => string,
   getString: (id: string) => string,
 ) {
-  const average = summary.void_count > 0 ? Math.round(summary.void_total_minor / summary.void_count) : 0;
   downloadCsv(
     `refunds-${from}-to-${to}.csv`,
     [
+      { key: 'currency', label: getString('analytics-csv-col-currency') },
       { key: 'count', label: getString('analytics-card-refunds-count') },
       { key: 'amount', label: getString('analytics-card-refunds-amount') },
       { key: 'average', label: getString('analytics-card-refunds-avg') },
     ],
-    [{ count: String(summary.void_count), amount: fmt(summary.void_total_minor), average: fmt(average) }],
+    rows.map((r) => ({
+      currency: r.currency,
+      count: String(r.void_count),
+      amount: fmtIn(r.void_total_minor, r.currency),
+      average: fmtIn(r.void_count > 0 ? Math.round(r.void_total_minor / r.void_count) : 0, r.currency),
+    })),
   );
 }
 
@@ -914,23 +924,31 @@ function DiscountsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
 
 function RefundsCard({ q, compare }: { q: AnalyticsQuery; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
-  const { fmt } = useMoney();
-  const { data: summary, prev: prevSummary, error } = useCardDataCompare<VoidedSummaryRow>('refunds', q, compare ?? false);
+  const { fmtIn, count } = useMoney();
+  // REP-06: voided totals arrive as one row per currency.
+  const { data: rows, prev: prevRows, error } = useCardDataCompare<VoidedSummaryRow[]>('refunds', q, compare ?? false);
   if (error) return <CardError error={error} />;
-  if (!summary) return <CardLoading />;
-  if (summary.void_count === 0) return <CardEmpty message={l10n.getString('analytics-empty-generic')} />;
-  const avgRefund = summary.void_count > 0 ? Math.round(summary.void_total_minor / summary.void_count) : 0;
-  const delta = compare && prevSummary ? periodDelta(summary.void_count, prevSummary.void_count) : null;
+  if (!rows) return <CardLoading />;
+  const totalCount = rows.reduce((s, r) => s + r.void_count, 0);
+  if (totalCount === 0) return <CardEmpty message={l10n.getString('analytics-empty-generic')} />;
+  const amountDisplay = rows.map((r) => fmtIn(r.void_total_minor, r.currency)).join(' · ');
+  const avgDisplay = rows
+    .map((r) => fmtIn(r.void_count > 0 ? Math.round(r.void_total_minor / r.void_count) : 0, r.currency))
+    .join(' · ');
+  const delta =
+    compare && prevRows
+      ? periodDelta(totalCount, prevRows.reduce((s, r) => s + r.void_count, 0))
+      : null;
   return (
     <Visual>
       <div className="analytics-kpi-tiles">
-        <Kpi value={String(summary.void_count)} label={l10n.getString('analytics-card-refunds-count')} tone="bad" />
-        <Kpi value={fmt(summary.void_total_minor)} label={l10n.getString('analytics-card-refunds-amount')} tone="bad" />
-        <Kpi value={fmt(avgRefund)} label={l10n.getString('analytics-card-refunds-avg')} />
+        <Kpi value={count(totalCount)} label={l10n.getString('analytics-card-refunds-count')} tone="bad" />
+        <Kpi value={amountDisplay} label={l10n.getString('analytics-card-refunds-amount')} tone="bad" />
+        <Kpi value={avgDisplay} label={l10n.getString('analytics-card-refunds-avg')} />
       </div>
       <div className="analytics-kpi-actions analytics-card-insight">
         {delta !== null && <DeltaChip value={delta} tone="bad" compare={compare === true} />}
-        <ExportCsvButton ariaLabel={l10n.getString('analytics-export-refunds-aria')} onClick={() => exportRefundsCsv(summary, q.from, q.to, fmt, (id) => l10n.getString(id))} />
+        <ExportCsvButton ariaLabel={l10n.getString('analytics-export-refunds-aria')} onClick={() => exportRefundsCsv(rows, q.from, q.to, fmtIn, (id) => l10n.getString(id))} />
       </div>
     </Visual>
   );

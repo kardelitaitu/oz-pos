@@ -184,8 +184,9 @@ function buildMonthlyRevenue(overrides: Partial<{ month: string; total_minor: nu
   };
 }
 
-function buildTopProduct(overrides: Partial<{ product_id: string; sku: string; name: string; total_qty: number; total_minor: number; cogs_minor: number; gross_profit_minor: number; gross_margin_percent: number }> = {}) {
+function buildTopProduct(overrides: Partial<{ currency: string; product_id: string; sku: string; name: string; total_qty: number; total_minor: number; cogs_minor: number; gross_profit_minor: number; gross_margin_percent: number }> = {}) {
   return {
+    currency: overrides.currency ?? 'USD',
     product_id: overrides.product_id ?? 'prod-1',
     sku: overrides.sku ?? 'SKU001',
     name: overrides.name ?? 'Espresso',
@@ -207,8 +208,9 @@ function buildCategory(overrides: Partial<{ category_id: string | null; category
   };
 }
 
-function buildHeatmap(overrides: Partial<{ day_of_week: number; hour: number; total_minor: number; sale_count: number }> = {}) {
+function buildHeatmap(overrides: Partial<{ currency: string; day_of_week: number; hour: number; total_minor: number; sale_count: number }> = {}) {
   return {
+    currency: overrides.currency ?? 'USD',
     day_of_week: overrides.day_of_week ?? 1,
     hour: overrides.hour ?? 14,
     total_minor: overrides.total_minor ?? 25000,
@@ -1115,13 +1117,48 @@ describe('SalesReportScreen', () => {
     });
   });
 
+  it('renders a multi-currency heatmap cell listing both amounts (REP-06)', async () => {
+    mockGetDailyRevenue.mockResolvedValue([buildDailyRevenue()]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([
+      buildHeatmap({ day_of_week: 1, hour: 10, total_minor: 50000, sale_count: 3 }),
+      buildHeatmap({ currency: 'IDR', day_of_week: 1, hour: 10, total_minor: 8000000, sale_count: 5 }),
+    ]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      const cell = document.querySelector('[aria-label*="Mon 10:00"]');
+      expect(cell).toBeTruthy();
+      const label = cell!.getAttribute('aria-label') ?? '';
+      // Both currencies visible; order count aggregates across them.
+      expect(label).toContain('$500.00');
+      expect(label).toContain('IDR');
+      expect(cell!.textContent).toBe('8');
+    });
+  });
+
+  it('formats top product rows in their own currency (REP-06)', async () => {
+    mockGetDailyRevenue.mockResolvedValue([buildDailyRevenue()]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    mockGetTopProducts.mockResolvedValue([
+      buildTopProduct({ sku: 'LAT', name: 'Latte', total_minor: 70000 }),
+      buildTopProduct({ sku: 'LAT', name: 'Latte', currency: 'IDR', total_minor: 11550000 }),
+    ]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText(/\$700\.00/)).toBeTruthy();
+      expect(screen.getByText(/IDR 11,550,000/)).toBeTruthy();
+    });
+  });
+
   // ── Edge: heatmap row with out-of-bounds values ──────────────
   it('handles heatmap row with day_of_week and hour within bounds', async () => {
     mockGetDailyRevenue.mockResolvedValue([buildDailyRevenue()]);
     mockGetTopProducts.mockResolvedValue([]);
     mockGetHourlyHeatmap.mockResolvedValue([
-      { day_of_week: 0, hour: 0, total_minor: 100, sale_count: 1 },
-      { day_of_week: 6, hour: 23, total_minor: 200, sale_count: 2 },
+      { currency: 'USD', day_of_week: 0, hour: 0, total_minor: 100, sale_count: 1 },
+      { currency: 'USD', day_of_week: 6, hour: 23, total_minor: 200, sale_count: 2 },
     ]);
     mockGetCategoryBreakdown.mockResolvedValue([]);
     mockGetCategoryPopularity.mockResolvedValue([]);
