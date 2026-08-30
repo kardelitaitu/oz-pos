@@ -5,7 +5,7 @@
 use serde::Deserialize;
 use tauri::State;
 
-use oz_core::{Promotion, PromotionApplication, Store, format_minor};
+use oz_core::{Promotion, PromotionApplication, Store};
 
 use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
@@ -207,43 +207,11 @@ fn run_apply_promotion_unchecked(
     sale_id: &str,
     promotion_id: &str,
 ) -> Result<PromotionApplication, AppError> {
-    let store = Store::new(db);
-
-    let promo = store
-        .get_promotion(promotion_id)?
-        .ok_or_else(|| AppError::Invalid(format!("promotion {promotion_id} not found")))?;
-
-    let sale = store
-        .get_sale(sale_id)?
-        .ok_or_else(|| AppError::Invalid(format!("sale {sale_id} not found")))?;
-
-    // Category scope resolution: SKU -> product category (PROMO-6).
-    // Only consulted when the promotion carries a category_id.
-    let category_of = |sku: &str| {
-        store
-            .get_product(sku)
-            .ok()
-            .flatten()
-            .and_then(|p| p.product.category_id)
-    };
-
-    let discount_minor = oz_core::compute_discount(&promo, &sale, chrono::Utc::now(), category_of)?;
-
-    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    let app = PromotionApplication {
-        id: uuid::Uuid::now_v7().to_string(),
-        promotion_id: promotion_id.to_string(),
-        sale_id: sale_id.to_string(),
-        discount_minor,
-        description: format!(
-            "{}: {} off",
-            promo.name,
-            format_minor(discount_minor, sale.currency)
-        ),
-        created_at: now,
-    };
-
-    Ok(store.record_promotion_application(&app)?)
+    // Atomic pipeline (PROMO-3/4): engine-computed discount, dedup guard,
+    // application row, and the sale-total reduction — one transaction.
+    Store::new(db)
+        .apply_promotion_to_sale(sale_id, promotion_id, chrono::Utc::now())
+        .map_err(AppError::from)
 }
 
 /// Get sale promotions from the store resolved from a session token. ADR #7.

@@ -257,6 +257,116 @@ impl Store<'_> {
         Ok(app.clone())
     }
 
+    /// Atomically apply a promotion to a pending sale: compute the
+    /// discount via the promotion engine, record the application row,
+    /// and reduce the sale's payable total — all in one transaction
+    /// (PROMO-3: the recorded discount now changes what the customer
+    /// actually pays).
+    ///
+    /// Guards (PROMO-4): a second application of the same promotion to
+    /// the same sale is rejected, and only `pending` (modifiable) sales
+    /// accept promotions.
+    ///
+    /// `now` is injected so callers and tests control the clock.
+    pub fn apply_promotion_to_sale(
+        &self,
+        sale_id: &str,
+        promotion_id: &str,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<PromotionApplication, CoreError> {
+        let promo = self
+            .get_promotion(promotion_id)?
+            .ok_or_else(|| CoreError::NotFound {
+                entity: "promotion",
+                id: promotion_id.to_owned(),
+            })?;
+        let sale = self.get_sale(sale_id)?.ok_or_else(|| CoreError::NotFound {
+            entity: "sale",
+            id: sale_id.to_owned(),
+        })?;
+
+        // Category scope resolution: SKU -> product category. Only
+        // consulted when the promotion carries a category_id.
+        let category_of = |sku: &str| {
+            self.get_product(sku)
+                .ok()
+                .flatten()
+                .and_then(|p| p.product.category_id)
+        };
+        let discount_minor = crate::compute_discount(&promo, &sale, now, category_of)?;
+
+        let app = PromotionApplication {
+            id: uuid::Uuid::now_v7().to_string(),
+            promotion_id: promotion_id.to_owned(),
+            sale_id: sale_id.to_owned(),
+            discount_minor,
+            description: format!(
+                "{}: {} off",
+                promo.name,
+                crate::format_minor(discount_minor, sale.currency)
+            ),
+            created_at: now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        };
+
+        let tx = self.conn.unchecked_transaction()?;
+        let dup: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM promotion_applications
+             WHERE sale_id = ?1 AND promotion_id = ?2",
+            params![app.sale_id, app.promotion_id],
+            |r| r.get(0),
+        )?;
+        if dup > 0 {
+            return Err(CoreError::Validation {
+                field: "promotion_id",
+                message: "promotion already applied to this sale".into(),
+            });
+        }
+
+        let (status, stored_total): (String, i64) = tx.query_row(
+            "SELECT status, total_minor FROM sales WHERE id = ?1",
+            params![app.sale_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+        if status != "pending" {
+            return Err(CoreError::Validation {
+                field: "sale_id",
+                message: format!("sale is not modifiable (status: {status})"),
+            });
+        }
+        if stored_total < discount_minor {
+            return Err(CoreError::Validation {
+                field: "discount_minor",
+                message: "sale total changed below the discount amount".into(),
+            });
+        }
+
+        tx.execute(
+            "INSERT INTO promotion_applications (id, promotion_id, sale_id, discount_minor, description, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                app.id,
+                app.promotion_id,
+                app.sale_id,
+                app.discount_minor,
+                app.description,
+                app.created_at,
+            ],
+        )?;
+        let changed = tx.execute(
+            "UPDATE sales SET total_minor = total_minor - ?1, updated_at = ?2, version = version + 1
+             WHERE id = ?3 AND status = 'pending' AND total_minor >= ?1",
+            params![discount_minor, app.created_at, app.sale_id],
+        )?;
+        if changed == 0 {
+            return Err(CoreError::Validation {
+                field: "sale_id",
+                message: "sale is no longer modifiable".into(),
+            });
+        }
+        tx.commit()?;
+        Ok(app)
+    }
+
     /// List all promotion applications for a given sale.
     pub fn get_promotion_applications_for_sale(
         &self,
