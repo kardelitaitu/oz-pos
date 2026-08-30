@@ -5,10 +5,15 @@ import {
   createExchangeRate,
   deleteExchangeRate,
   listCurrencies,
+  listExchangeRatesScoped,
+  createExchangeRateScoped,
+  deleteExchangeRateScoped,
+  listCurrenciesScoped,
   formatExchangeRate,
   type ExchangeRateDto,
   type CurrencyDto,
 } from '@/api/currency';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -44,6 +49,12 @@ const EMPTY_FORM: FormData = {
 export default function ExchangeRateScreen() {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
+  // CUR-06: route every read/write through the session-scoped commands when
+  // a workspace session is active — the legacy commands hit the global
+  // database, which in multi-store deployments leaks configuration across
+  // stores. Without a session (single-store legacy/dev) fall back to them.
+  const { sessionToken: rawSessionToken } = useWorkspace();
+  const sessionToken = rawSessionToken ?? '';
   const [rates, setRates] = useState<ExchangeRateDto[]>([]);
   const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,8 +75,8 @@ export default function ExchangeRateScreen() {
     setError(null);
     try {
       const [items, currs] = await Promise.all([
-        listExchangeRates(),
-        listCurrencies(),
+        sessionToken ? listExchangeRatesScoped(sessionToken) : listExchangeRates(),
+        sessionToken ? listCurrenciesScoped(sessionToken) : listCurrencies(),
       ]);
       if (seq !== loadSeqRef.current) return;
       setRates(items);
@@ -78,7 +89,7 @@ export default function ExchangeRateScreen() {
         setLoading(false);
       }
     }
-  }, [l10n]);
+  }, [l10n, sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -109,7 +120,11 @@ export default function ExchangeRateScreen() {
       };
       if (form.source) args.source = form.source;
       if (form.effectiveDate) args.effective_date = form.effectiveDate;
-      await createExchangeRate(args);
+      if (sessionToken) {
+        await createExchangeRateScoped(sessionToken, args);
+      } else {
+        await createExchangeRate(args);
+      }
       setShowModal(false);
       await load();
     } catch {
@@ -117,7 +132,7 @@ export default function ExchangeRateScreen() {
     } finally {
       setSaving(false);
     }
-  }, [form, load, l10n, addToast]);
+  }, [form, load, l10n, addToast, sessionToken]);
 
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
@@ -125,14 +140,18 @@ export default function ExchangeRateScreen() {
     setDeleting(id);
     setDeleteTarget(null);
     try {
-      await deleteExchangeRate(id);
+      if (sessionToken) {
+        await deleteExchangeRateScoped(sessionToken, id);
+      } else {
+        await deleteExchangeRate(id);
+      }
       setDeleting(null);
       await load();
     } catch {
       addToast({ message: requiredLocalized(l10n, 'currency-delete-error'), type: 'error' });
       setDeleting(null);
     }
-  }, [deleteTarget, load, l10n, addToast]);
+  }, [deleteTarget, load, l10n, addToast, sessionToken]);
 
   const currencyOptions = currencies.map((c) => (
     <option key={c.code} value={c.code}>
