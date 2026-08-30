@@ -240,6 +240,35 @@
     return '<svg viewBox="0 0 440 180" style="max-height:180px">' + bars + '</svg>';
   }
 
+  // normalizeStats guarantees the shapes renderDashboard expects. admin.js
+  // dereferenced m.revenueTrend.forEach / m.kpis.mrrUsd BEFORE the chart
+  // guards ran, so a partial stats payload (older server build, truncated
+  // response) threw a bare TypeError and the dashboard rendered nothing.
+  // Non-object input is tolerated; numeric KPIs are coerced (null/undefined
+  // -> 0, numeric strings -> number) so fmtUsd/fmtIdr never see NaN text.
+  function normalizeStats(raw) {
+    var m = (raw && typeof raw === 'object') ? raw : {};
+    var arr = function (v) { return Array.isArray(v) ? v : []; };
+    var num = function (v) { var n = Number(v); return Number.isFinite(n) ? n : 0; };
+    var k = (m.kpis && typeof m.kpis === 'object') ? m.kpis : {};
+    var kpis = {};
+    Object.keys(k).forEach(function (key) { kpis[key] = k[key]; });
+    ['totalUsers', 'activeUsers', 'totalSubscribers', 'activeDevices', 'mrrUsd', 'arpuUsd', 'trialToPaidRate']
+      .forEach(function (key) { kpis[key] = num(k[key]); });
+    return {
+      revenueTrend: arr(m.revenueTrend),
+      subscriberGrowth: arr(m.subscriberGrowth),
+      tierDistribution: arr(m.tierDistribution),
+      providerSplit: arr(m.providerSplit),
+      signupsPerMonth: arr(m.signupsPerMonth),
+      churnPerMonth: arr(m.churnPerMonth),
+      topSubscribers: arr(m.topSubscribers),
+      recentSignups: arr(m.recentSignups),
+      expiringSoon: arr(m.expiringSoon),
+      kpis: kpis,
+    };
+  }
+
   // Returns true when an HTTP status means "session not authorized" for the
   // admin panel (401 unauth'd, 403 non-admin tenant).
   function isAuthDenied(status) {
@@ -428,6 +457,7 @@
     tenantRow: tenantRow,
     tenantDetailRows: tenantDetailRows,
     svgBarChart: svgBarChart,
+    normalizeStats: normalizeStats,
     t: t,
     STRINGS: STRINGS,
     isAuthDenied: isAuthDenied,

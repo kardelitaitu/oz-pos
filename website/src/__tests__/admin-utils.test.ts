@@ -325,3 +325,48 @@ describe('admin-utils svgDonut single-slice (B4: invisible 100% donut)', () => {
     expect((svg.match(/ A /g) || []).length).toBe(2);
   });
 });
+
+describe('admin-utils normalizeStats (B6: partial payload killed the dashboard)', () => {
+  it('fills missing collections so render code never throws', () => {
+    // admin.js did m.revenueTrend.forEach(...) and m.kpis.mrrUsd BEFORE
+    // the chart guards could help — a stats payload missing any of those
+    // fields (partial response, older server build, error body with 200)
+    // threw TypeError and the dashboard showed nothing but a console
+    // error. normalizeStats guarantees the shapes the render expects.
+    const m = utils.normalizeStats({});
+    expect(Array.isArray(m.revenueTrend)).toBe(true);
+    expect(Array.isArray(m.subscriberGrowth)).toBe(true);
+    expect(Array.isArray(m.tierDistribution)).toBe(true);
+    expect(Array.isArray(m.providerSplit)).toBe(true);
+    expect(Array.isArray(m.signupsPerMonth)).toBe(true);
+    expect(Array.isArray(m.churnPerMonth)).toBe(true);
+    expect(m.kpis).toBeTypeOf('object');
+    expect(m.kpis.mrrUsd).toBeTypeOf('number');
+    expect(m.kpis.totalUsers).toBeTypeOf('number');
+  });
+
+  it('keeps valid data untouched', () => {
+    const src = {
+      revenueTrend: [{ month: '2026-01', usd: 10 }],
+      kpis: { mrrUsd: 42.5, totalUsers: 7, fxRate: 16000 },
+    };
+    const m = utils.normalizeStats(src);
+    expect(m.revenueTrend).toEqual(src.revenueTrend);
+    expect(m.kpis.mrrUsd).toBe(42.5);
+    expect(m.kpis.totalUsers).toBe(7);
+    expect(m.kpis.fxRate).toBe(16000);
+  });
+
+  it('coerces null-ish numeric kpis to 0', () => {
+    const m = utils.normalizeStats({ kpis: { mrrUsd: null, totalUsers: undefined, arpuUsd: '12.5' } });
+    expect(m.kpis.mrrUsd).toBe(0);
+    expect(m.kpis.totalUsers).toBe(0);
+    expect(m.kpis.arpuUsd).toBe(12.5);
+  });
+
+  it('tolerates non-object input entirely', () => {
+    expect(() => utils.normalizeStats(null)).not.toThrow();
+    expect(() => utils.normalizeStats(undefined)).not.toThrow();
+    expect(Array.isArray(utils.normalizeStats(null).revenueTrend)).toBe(true);
+  });
+});

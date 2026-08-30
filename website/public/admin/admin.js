@@ -65,10 +65,13 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         if (retry) { retry.addEventListener('click', renderDashboard); }
         return;
       }
-      const m = stats;
+      // B6 fix: normalizeStats guarantees the array/kpis shapes the render
+      // below dereferences — previously a partial payload made
+      // m.revenueTrend.forEach throw before any chart guard could run.
+      const m = normalizeStats(stats);
 
       // FX rate: prefer the real endpoint's value; otherwise fetch live.
-      if (m.kpis && m.kpis.fxRate) { fxRate = m.kpis.fxRate; fxLive = !!m.kpis.fxLive; fxUpdatedAt = m.kpis.fxUpdatedAt || ''; }
+      if (m.kpis.fxRate) { fxRate = m.kpis.fxRate; fxLive = !!m.kpis.fxLive; fxUpdatedAt = m.kpis.fxUpdatedAt || ''; }
       else { await fetchFxRate(); }
       // Convert all revenue data to IDR.
       m.revenueTrend.forEach(d => d.idr = Math.round(d.usd * fxRate));
