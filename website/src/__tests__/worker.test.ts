@@ -111,19 +111,6 @@ describe('Cloudflare Worker — worker.ts', () => {
     expect(mockEnv.ASSETS.fetch).toHaveBeenCalled();
   });
 
-  it('sets cookie from ?token= param and redirects to clean URL', async () => {
-    const req = new Request('https://dashboard.ozpos.my.id/dashboard?token=my.jwt.token');
-    const res = await worker.fetch(req, mockEnv);
-
-    expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toBe('/dashboard');
-    const setCookie = res.headers.get('Set-Cookie');
-    expect(setCookie).toContain('oz_session=my.jwt.token');
-    expect(setCookie).toContain('HttpOnly');
-    expect(setCookie).toContain('Secure');
-    expect(setCookie).toContain('Domain=.ozpos.my.id');
-  });
-
   it('clears the httpOnly cookie on /__oz/logout and redirects to login', async () => {
     const req = new Request('https://admin.ozpos.my.id/__oz/logout', {
       headers: { Cookie: 'oz_session=stale.jwt.token' },
@@ -179,15 +166,6 @@ describe('Cloudflare Worker — worker.ts', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { token: string };
     expect(body.token).toBe('my.jwt.token');
-  });
-
-  it('removes token param from URL after setting cookie', async () => {
-    const req = new Request('https://dashboard.ozpos.my.id/settings?token=abc.def&theme=dark');
-    const res = await worker.fetch(req, mockEnv);
-
-    expect(res.status).toBe(302);
-    // The remaining query params should be preserved
-    expect(res.headers.get('Location')).toBe('/settings?theme=dark');
   });
 
   it('exchanges a one-time code for a session cookie and strips the code param', async () => {
