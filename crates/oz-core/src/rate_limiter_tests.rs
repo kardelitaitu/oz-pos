@@ -193,3 +193,228 @@ fn empty_username_is_independent_key() {
     // 'alice' should still have full quota — independent key space.
     assert_eq!(limiter.record_failure("alice").unwrap(), 1);
 }
+
+// ── NEW TESTS: gaps identified in TDD analysis ───────────────────────
+
+// ── Sliding window expiry (core feature) ─────────────────────────────
+
+#[test]
+fn window_expiry_allows_retry_after_wait() {
+    // The core sliding-window behavior: after the window elapses,
+    // old attempts are pruned and the user can try again.
+    let limiter = LoginRateLimiter::new(2, 1); // 1-second window
+    limiter.record_failure("alice").ok();
+    limiter.record_failure("alice").ok();
+    assert!(limiter.record_failure("alice").is_err()); // locked out
+
+    // Wait for the window to elapse.
+    std::thread::sleep(Duration::from_secs(2));
+
+    // Should succeed — old attempts pruned. max=2, 1 recorded → 1 remaining.
+    assert_eq!(limiter.record_failure("alice").unwrap(), 1);
+}
+
+#[test]
+fn window_expiry_partial_prune() {
+    // When some attempts are inside the window and some outside,
+    // only the old ones are pruned.
+    let limiter = LoginRateLimiter::new(3, 1); // 1-second window
+    limiter.record_failure("alice").ok(); // t=0
+    std::thread::sleep(Duration::from_millis(600));
+    limiter.record_failure("alice").ok(); // t=0.6s — still in window
+    std::thread::sleep(Duration::from_millis(600)); // total 1.2s
+    // First attempt (t=0) is now outside window, second (t=0.6) is inside.
+    // After pruning, only 1 attempt remains → 2 remaining.
+    assert_eq!(limiter.record_failure("alice").unwrap(), 1);
+}
+
+// ── retry_after exact value ──────────────────────────────────────────
+
+#[test]
+fn retry_after_is_based_on_oldest_attempt() {
+    // retry_after = window_secs - elapsed_since_oldest.
+    let limiter = LoginRateLimiter::new(2, 10); // 10-second window
+    limiter.record_failure("alice").ok(); // t=0
+    std::thread::sleep(Duration::from_secs(1));
+    limiter.record_failure("alice").ok(); // t=1 — locked out (max=2)
+    let err = limiter.record_failure("alice").unwrap_err();
+    // retry_after ≈ 10 - 1 = 9 seconds (±1 for sleep jitter)
+    assert!(err >= 8 && err <= 10, "retry_after should be ~9, got {err}");
+}
+
+#[test]
+fn retry_after_at_least_one_second() {
+    // Even if the oldest attempt is very recent, retry_after >= 1.
+    let limiter = LoginRateLimiter::new(1, 60);
+    limiter.record_failure("alice").ok(); // immediately locked out
+    let err = limiter.record_failure("alice").unwrap_err();
+    assert!(err >= 1, "retry_after should be at least 1, got {err}");
+    assert!(err <= 60, "retry_after should not exceed window, got {err}");
+}
+
+// ── window_secs=0 edge case ──────────────────────────────────────────
+
+#[test]
+fn zero_window_always_locks_out() {
+    // With a 0-second window, every attempt is outside the window
+    // (duration_since(now) = 0, which is NOT < 0), so the vec is always
+    // empty after pruning. But max_attempts=1 means the first attempt
+    // is recorded and immediately triggers lockout.
+    let limiter = LoginRateLimiter::new(1, 0);
+    assert!(limiter.record_failure("alice").is_err());
+}
+
+#[test]
+fn zero_window_with_higher_max() {
+    let limiter = LoginRateLimiter::new(5, 0);
+    // All attempts are pruned immediately (window=0), so the vec stays
+    // empty and we never hit the lockout. Each attempt returns remaining.
+    assert_eq!(limiter.record_failure("alice").unwrap(), 4);
+    assert_eq!(limiter.record_failure("alice").unwrap(), 4);
+    assert_eq!(limiter.record_failure("alice").unwrap(), 4);
+}
+
+// ── Concurrent access ────────────────────────────────────────────────
+
+#[test]
+fn concurrent_failures_do_not_panic() {
+    use std::sync::Arc;
+    use std::thread;
+
+    let limiter = Arc::new(LoginRateLimiter::new(100, 60));
+    let mut handles = vec![];
+
+    for i in 0..10 {
+        let limiter = Arc::clone(&limiter);
+        handles.push(thread::spawn(move || {
+            for j in 0..10 {
+                let username = format!("user-{i}");
+                let _ = limiter.record_failure(&username);
+                // Mix in resets to exercise contention.
+                if j % 3 == 0 {
+                    limiter.reset(&username);
+                }
+            }
+        }));
+    }
+
+    for h in handles {
+        h.join().expect("thread panicked");
+    }
+
+    // Verify no corruption — all users should have some attempts or be reset.
+    let map = limiter.attempts.lock().unwrap();
+    for i in 0..10 {
+        let username = format!("user-{i}");
+        // Each user may have 0-3 attempts depending on when resets happened.
+        if let Some(attempts) = map.get(&username) {
+            assert!(
+                attempts.len() <= 3,
+                "user-{i} has {} attempts, expected <= 3",
+                attempts.len()
+            );
+        }
+    }
+}
+
+#[test]
+fn concurrent_clear_and_record() {
+    use std::sync::Arc;
+    use std::thread;
+
+    let limiter = Arc::new(LoginRateLimiter::new(10, 60));
+    let mut handles = vec![];
+
+    // Half the threads record failures, half clear.
+    for i in 0..10 {
+        let limiter = Arc::clone(&limiter);
+        if i % 2 == 0 {
+            handles.push(thread::spawn(move || {
+                for _ in 0..10 {
+                    let _ = limiter.record_failure("shared-user");
+                }
+            }));
+        } else {
+            handles.push(thread::spawn(move || {
+                for _ in 0..10 {
+                    limiter.clear();
+                }
+            }));
+        }
+    }
+
+    for h in handles {
+        h.join().expect("thread panicked");
+    }
+}
+
+// ── max_attempts=0 edge case ─────────────────────────────────────────
+
+#[test]
+fn zero_max_attempts_retry_after_is_at_least_one() {
+    // The code has: Err(self.window_secs.max(1)).
+    // With window_secs=0, retry_after should be 1 (the .max(1) guard).
+    let limiter = LoginRateLimiter::new(0, 0);
+    let err = limiter.record_failure("alice").unwrap_err();
+    assert_eq!(err, 1, "retry_after should be 1 for max=0 window=0");
+}
+
+#[test]
+fn zero_max_attempts_with_window() {
+    let limiter = LoginRateLimiter::new(0, 30);
+    let err = limiter.record_failure("alice").unwrap_err();
+    assert_eq!(err, 30, "retry_after should be window_secs");
+}
+
+// ── Large max_attempts ───────────────────────────────────────────────
+
+#[test]
+fn large_max_attempts() {
+    let limiter = LoginRateLimiter::new(1000, 60);
+    for i in 0..999 {
+        let remaining = limiter.record_failure("alice").unwrap();
+        assert_eq!(remaining, 999 - i);
+    }
+    // 1000th attempt triggers lockout.
+    assert!(limiter.record_failure("alice").is_err());
+}
+
+// ── reset during lockout ─────────────────────────────────────────────
+
+#[test]
+fn reset_during_lockout_allows_immediate_retry() {
+    let limiter = LoginRateLimiter::new(2, 3600); // 1-hour window
+    limiter.record_failure("alice").ok();
+    limiter.record_failure("alice").ok();
+    assert!(limiter.record_failure("alice").is_err()); // locked out
+    limiter.reset("alice");
+    // Should succeed immediately — all attempts cleared.
+    assert_eq!(limiter.record_failure("alice").unwrap(), 1);
+}
+
+// ── clear during lockout ─────────────────────────────────────────────
+
+#[test]
+fn clear_during_lockout_allows_immediate_retry() {
+    let limiter = LoginRateLimiter::new(2, 3600);
+    limiter.record_failure("alice").ok();
+    limiter.record_failure("alice").ok();
+    assert!(limiter.record_failure("alice").is_err());
+    limiter.clear();
+    assert_eq!(limiter.record_failure("alice").unwrap(), 1);
+}
+
+// ── multiple users during lockout ────────────────────────────────────
+
+#[test]
+fn lockout_one_user_does_not_affect_others() {
+    let limiter = LoginRateLimiter::new(2, 60);
+    // Lock out alice.
+    limiter.record_failure("alice").ok();
+    limiter.record_failure("alice").ok();
+    assert!(limiter.record_failure("alice").is_err());
+    // bob, charlie, dave all have full quota.
+    assert_eq!(limiter.record_failure("bob").unwrap(), 1);
+    assert_eq!(limiter.record_failure("charlie").unwrap(), 1);
+    assert_eq!(limiter.record_failure("dave").unwrap(), 1);
+}
