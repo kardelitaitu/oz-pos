@@ -270,7 +270,7 @@ pub mod redis_cache {
     impl Cache for RedisCache {
         fn get_product(&self, sku: &str) -> Option<ProductWithDetails> {
             let key = format!("product:{sku}");
-            let mut conn = self.conn.lock().ok()?;
+            let mut conn = super::lock_or_report(self.conn.lock(), "get_product")?;
             let data: Option<String> = redis::cmd("GET").arg(&key).query(&mut *conn).ok()?;
             data.and_then(|s| serde_json::from_str(&s).ok())
         }
@@ -280,7 +280,7 @@ pub mod redis_cache {
             let Ok(data) = serde_json::to_string(product) else {
                 return;
             };
-            let Ok(mut conn) = self.conn.lock() else {
+            let Some(mut conn) = super::lock_or_report(self.conn.lock(), "set_product") else {
                 return;
             };
             let _: Result<(), _> = redis::cmd("SETEX")
@@ -292,7 +292,8 @@ pub mod redis_cache {
 
         fn invalidate_product(&self, sku: &str) {
             let key = format!("product:{sku}");
-            let Ok(mut conn) = self.conn.lock() else {
+            let Some(mut conn) = super::lock_or_report(self.conn.lock(), "invalidate_product")
+            else {
                 return;
             };
             let _: Result<(), _> = redis::cmd("DEL").arg(&key).query(&mut *conn);
@@ -300,13 +301,13 @@ pub mod redis_cache {
 
         fn get_inventory(&self, product_id: &str) -> Option<i64> {
             let key = format!("inventory:{product_id}");
-            let mut conn = self.conn.lock().ok()?;
+            let mut conn = super::lock_or_report(self.conn.lock(), "get_inventory")?;
             redis::cmd("GET").arg(&key).query(&mut *conn).ok()
         }
 
         fn set_inventory(&self, product_id: &str, qty: i64) {
             let key = format!("inventory:{product_id}");
-            let Ok(mut conn) = self.conn.lock() else {
+            let Some(mut conn) = super::lock_or_report(self.conn.lock(), "set_inventory") else {
                 return;
             };
             let _: Result<(), _> = redis::cmd("SETEX")
@@ -318,14 +319,15 @@ pub mod redis_cache {
 
         fn invalidate_inventory(&self, product_id: &str) {
             let key = format!("inventory:{product_id}");
-            let Ok(mut conn) = self.conn.lock() else {
+            let Some(mut conn) = super::lock_or_report(self.conn.lock(), "invalidate_inventory")
+            else {
                 return;
             };
             let _: Result<(), _> = redis::cmd("DEL").arg(&key).query(&mut *conn);
         }
 
         fn is_healthy(&self) -> bool {
-            let Ok(mut conn) = self.conn.lock() else {
+            let Some(mut conn) = super::lock_or_report(self.conn.lock(), "is_healthy") else {
                 return false;
             };
             redis::cmd("PING").query::<String>(&mut *conn).is_ok()
@@ -369,7 +371,9 @@ pub mod redis_cache {
             let Ok(msg) = serde_json::to_string(&payload) else {
                 return;
             };
-            let Ok(mut conn) = self.conn.lock() else {
+            let Some(mut conn) =
+                super::lock_or_report(self.conn.lock(), "publish_inventory_change")
+            else {
                 return;
             };
             let _: Result<(), _> = redis::cmd("PUBLISH").arg(key).arg(&msg).query(&mut *conn);
@@ -399,10 +403,52 @@ pub mod redis_cache {
             let Ok(msg) = serde_json::to_string(&payload) else {
                 return;
             };
-            let Ok(mut conn) = self.conn.lock() else {
+            let Some(mut conn) =
+                super::lock_or_report(self.conn.lock(), "publish_negative_stock_event")
+            else {
                 return;
             };
             let _: Result<(), _> = redis::cmd("PUBLISH").arg(key).arg(&msg).query(&mut *conn);
+        }
+    }
+}
+
+/// Borrow the shared Redis connection, refusing it if the lock is poisoned.
+///
+/// `Some(guard)` when the mutex is healthy; `None` when a previous holder
+/// panicked, with the fact logged at error level instead of swallowed.
+///
+/// The deliberate choice is NOT to recover the guard via
+/// `PoisonError::into_inner()`. Every critical section here sits around a
+/// request/response exchange, so a panic between sending a RESP command
+/// and reading its reply can leave the socket mid-conversation. Handing
+/// that connection to the next caller makes it read a reply meant for
+/// someone else — turning a cache miss into a *wrong cache hit*, which is
+/// the one outcome a cache must not produce. Refusing the lock degrades
+/// to a miss, the fail-safe direction.
+///
+/// The cost of refusing is that poisoning is permanent, so it must never
+/// be silent: without the log a terminal quietly stops invalidating
+/// products, stops publishing negative-stock warnings, and serves stale
+/// rows until the TTL, while `is_healthy()` — sampled exactly once at
+/// startup (`apps/desktop-client/src/state.rs:331`) and never polled —
+/// keeps reporting whatever it saw at boot.
+///
+/// Lives outside the `cache-redis` gate: it is generic over the guard, so
+/// the policy is testable with a plain `Mutex<i32>` and no Redis.
+pub(crate) fn lock_or_report<T>(
+    result: Result<T, std::sync::PoisonError<T>>,
+    operation: &str,
+) -> Option<T> {
+    match result {
+        Ok(guard) => Some(guard),
+        Err(_) => {
+            tracing::error!(
+                operation,
+                "Redis connection lock is poisoned; this operation is being \
+                 skipped and the cache will stay degraded until the process restarts"
+            );
+            None
         }
     }
 }
@@ -461,6 +507,10 @@ mod tests;
 #[cfg(test)]
 #[path = "cache_create_tests.rs"]
 mod create_tests;
+
+#[cfg(test)]
+#[path = "cache_lock_tests.rs"]
+mod lock_tests;
 
 #[cfg(test)]
 #[path = "cache_pubsub_tests.rs"]
