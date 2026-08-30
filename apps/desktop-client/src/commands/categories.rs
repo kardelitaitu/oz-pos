@@ -27,15 +27,6 @@ pub struct CategoryDto {
     pub icon: String,
 }
 
-/// Fetch all categories, ordered by name.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `list_categories_scoped`.
-#[tauri::command]
-pub async fn list_categories(state: State<'_, AppState>) -> Result<Vec<CategoryDto>, AppError> {
-    let db = state.db.lock().await;
-    run_list_categories(&db)
-}
-
 /// Fetch all categories for the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn list_categories_scoped(
@@ -92,24 +83,6 @@ pub struct CreateCategoryResult {
     pub id: String,
 }
 
-/// Create category.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `create_category_scoped`,
-/// which resolves the store from the session and enforces the manager
-/// permission on the session user.
-#[tauri::command]
-pub async fn create_category(
-    args: CreateCategoryArgs,
-    state: State<'_, AppState>,
-) -> Result<CreateCategoryResult, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-
-    store.create_category(&args.id, &args.name, &args.colour, &args.icon)?;
-
-    Ok(CreateCategoryResult { id: args.id })
-}
-
 /// Create category in the store resolved from a session token (CAT-01).
 ///
 /// Resolves the store from the opaque session token and enforces
@@ -158,20 +131,6 @@ pub struct UpdateCategoryResult {
     pub id: String,
 }
 
-/// Update an existing category's name, colour, and icon.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `update_category_scoped`.
-#[tauri::command]
-pub async fn update_category(
-    args: UpdateCategoryArgs,
-    state: State<'_, AppState>,
-) -> Result<UpdateCategoryResult, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    store.update_category(&args.id, &args.name, &args.colour, &args.icon)?;
-    Ok(UpdateCategoryResult { id: args.id })
-}
-
 /// Update a category in the store resolved from a session token (CAT-01).
 ///
 /// Enforces `products:update` on the session user. ADR #7.
@@ -207,20 +166,6 @@ pub struct DeleteCategoryArgs {
 pub struct DeleteCategoryResult {
     /// Number of products unlinked from the deleted category.
     pub affected_products: i64,
-}
-
-/// Delete category.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `delete_category_scoped`.
-#[tauri::command]
-pub async fn delete_category(
-    args: DeleteCategoryArgs,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    store.delete_category(&args.id)?;
-    Ok(())
 }
 
 /// Delete a category in the store resolved from a session token (CAT-01/02).

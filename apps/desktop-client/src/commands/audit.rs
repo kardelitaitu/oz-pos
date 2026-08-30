@@ -73,25 +73,6 @@ fn default_limit_u64() -> u64 {
     100
 }
 
-/// Fetch audit log entries in reverse chronological order.
-///
-/// Supports pagination via `limit` and `offset`. Returns an array of
-/// [`AuditEntryDto`] with action, target, outcome, and timestamp.
-///
-/// **Deprecated for multi-store UI paths (ADR #7):** Use
-/// [`list_audit_log_scoped`] so the session selects the store and user.
-#[tauri::command]
-pub async fn list_audit_log(
-    args: ListAuditLogArgs,
-    state: State<'_, AppState>,
-) -> Result<Vec<AuditEntryDto>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let entries = store.list_audit_entries(args.limit, args.offset)?;
-    drop(db);
-    Ok(entries.into_iter().map(AuditEntryDto::from).collect())
-}
-
 // ── Store-scoped audit log (AUD-01/AUD-02/AUD-03) ───────────────
 
 /// Server-filtered, keyset-paginated page of audit entries (AUD-02/AUD-03).

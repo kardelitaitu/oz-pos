@@ -165,15 +165,6 @@ pub struct UpdateTerminalResult {
 
 // ── Read Commands ────────────────────────────────────────────────────
 
-/// List all registered terminals.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `list_terminals_scoped`.
-#[tauri::command]
-pub async fn list_terminals(state: State<'_, AppState>) -> Result<Vec<TerminalDto>, AppError> {
-    let db = state.db.lock().await;
-    run_list_terminals(&db)
-}
-
 /// List terminals from the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn list_terminals_scoped(
@@ -199,24 +190,6 @@ fn run_list_terminals(conn: &rusqlite::Connection) -> Result<Vec<TerminalDto>, A
     Ok(dtos)
 }
 
-/// Get a single terminal by id.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `get_terminal_scoped`.
-#[tauri::command]
-pub async fn get_terminal(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<Option<TerminalDto>, AppError> {
-    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let terminal = store.get_terminal(&id)?;
-    drop(db);
-
-    Ok(terminal.map(TerminalDto::from))
-}
-
 /// Get a terminal from the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn get_terminal_scoped(
@@ -238,22 +211,6 @@ pub async fn get_terminal_scoped(
     drop(db);
 
     Ok(terminal.map(TerminalDto::from))
-}
-
-/// Ping a terminal to update its last_seen_at timestamp.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `ping_terminal_scoped`.
-#[tauri::command]
-pub async fn ping_terminal(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
-    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    store.ping_terminal(&id)?;
-    drop(db);
-
-    tracing::debug!(id, "terminal pinged");
-    Ok(())
 }
 
 /// Ping a terminal in the store resolved from a session token. ADR #7.
@@ -280,25 +237,6 @@ pub async fn ping_terminal_scoped(
     Ok(())
 }
 
-/// List feature overrides for a terminal.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `list_terminal_overrides_scoped`.
-#[tauri::command]
-pub async fn list_terminal_overrides(
-    terminal_id: String,
-    state: State<'_, AppState>,
-) -> Result<Vec<TerminalFeatureOverride>, AppError> {
-    validate_not_empty("terminal_id", &terminal_id)
-        .map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let overrides = store.list_terminal_overrides(&terminal_id)?;
-    drop(db);
-
-    Ok(overrides)
-}
-
 /// List terminal overrides from the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn list_terminal_overrides_scoped(
@@ -323,20 +261,6 @@ pub async fn list_terminal_overrides_scoped(
     Ok(overrides)
 }
 
-/// List all terminal profiles.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `list_terminal_profiles_scoped`.
-#[tauri::command]
-pub async fn list_terminal_profiles(
-    state: State<'_, AppState>,
-) -> Result<Vec<TerminalProfileDto>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let profiles = store.list_terminal_profiles()?;
-    drop(db);
-    Ok(profiles.into_iter().map(TerminalProfileDto::from).collect())
-}
-
 /// List terminal profiles from the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn list_terminal_profiles_scoped(
@@ -354,25 +278,6 @@ pub async fn list_terminal_profiles_scoped(
     let profiles = store.list_terminal_profiles()?;
     drop(db);
     Ok(profiles.into_iter().map(TerminalProfileDto::from).collect())
-}
-
-/// Get the profile for a terminal.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `get_terminal_profile_scoped`.
-#[tauri::command]
-pub async fn get_terminal_profile(
-    terminal_id: String,
-    state: State<'_, AppState>,
-) -> Result<Option<TerminalProfileDto>, AppError> {
-    validate_not_empty("terminal_id", &terminal_id)
-        .map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let profile = store.get_terminal_profile(&terminal_id)?;
-    drop(db);
-
-    Ok(profile.map(TerminalProfileDto::from))
 }
 
 /// Get a terminal profile from the store resolved from a session token. ADR #7.
@@ -397,25 +302,6 @@ pub async fn get_terminal_profile_scoped(
     drop(db);
 
     Ok(profile.map(TerminalProfileDto::from))
-}
-
-/// Get a terminal's device binding and validate its HMAC signature.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `get_device_binding_scoped`.
-#[tauri::command]
-pub async fn get_device_binding(
-    terminal_id: String,
-    state: State<'_, AppState>,
-) -> Result<DeviceBindingDto, AppError> {
-    validate_not_empty("terminal_id", &terminal_id)
-        .map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let binding = store.get_terminal_binding(&terminal_id)?;
-    drop(db);
-
-    build_device_binding_dto(&terminal_id, binding)
 }
 
 /// Get device binding from the store resolved from a session token. ADR #7.
@@ -550,51 +436,6 @@ pub async fn register_terminal_scoped(
     Ok(RegisterTerminalResult { id: terminal.id })
 }
 
-/// Update an existing terminal.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `update_terminal_scoped`.
-#[tauri::command]
-pub async fn update_terminal(
-    user_id: String,
-    args: UpdateTerminalArgs,
-    state: State<'_, AppState>,
-) -> Result<UpdateTerminalResult, AppError> {
-    validate_not_empty("id", &args.id).map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-
-    let mut terminal = store
-        .get_terminal(&args.id)?
-        .ok_or_else(|| AppError::Invalid(format!("terminal '{}' not found", args.id)))?;
-
-    if let Some(name) = args.name {
-        validate_not_empty("name", &name).map_err(|e| AppError::Invalid(e.to_string()))?;
-        terminal.name = name;
-    }
-    if let Some(device_id) = args.device_id {
-        validate_not_empty("device_id", &device_id)
-            .map_err(|e| AppError::Invalid(e.to_string()))?;
-        terminal.device_id = device_id;
-    }
-    if let Some(secret) = args.terminal_secret {
-        terminal.terminal_secret = Some(secret);
-    }
-    if let Some(active) = args.is_active {
-        terminal.is_active = active;
-    }
-    if let Some(meta) = args.metadata {
-        terminal.metadata = Some(meta);
-    }
-
-    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
-    store.update_terminal(&terminal)?;
-    drop(db);
-
-    tracing::info!(id = %terminal.id, "terminal updated");
-    Ok(UpdateTerminalResult { id: terminal.id })
-}
-
 /// Update a terminal in the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn update_terminal_scoped(
@@ -646,27 +487,6 @@ pub async fn update_terminal_scoped(
     Ok(UpdateTerminalResult { id: terminal.id })
 }
 
-/// Delete a terminal by id.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `delete_terminal_scoped`.
-#[tauri::command]
-pub async fn delete_terminal(
-    user_id: String,
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_DELETE)?;
-    store.delete_terminal(&id)?;
-    drop(db);
-
-    tracing::info!(id, "terminal deleted");
-    Ok(())
-}
-
 /// Delete a terminal in the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn delete_terminal_scoped(
@@ -692,36 +512,6 @@ pub async fn delete_terminal_scoped(
     drop(db);
 
     tracing::info!(id, "terminal deleted (scoped)");
-    Ok(())
-}
-
-/// Set (upsert) a feature override for a terminal.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `set_terminal_override_scoped`.
-#[tauri::command]
-pub async fn set_terminal_override(
-    user_id: String,
-    terminal_id: String,
-    feature: String,
-    enabled: bool,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    validate_not_empty("terminal_id", &terminal_id)
-        .map_err(|e| AppError::Invalid(e.to_string()))?;
-    validate_not_empty("feature", &feature).map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
-    store.set_terminal_override(&terminal_id, &feature, enabled)?;
-    drop(db);
-
-    tracing::info!(
-        terminal_id,
-        feature,
-        enabled,
-        "terminal feature override set"
-    );
     Ok(())
 }
 
@@ -758,30 +548,6 @@ pub async fn set_terminal_override_scoped(
         enabled,
         "terminal feature override set (scoped)"
     );
-    Ok(())
-}
-
-/// Delete a feature override for a terminal.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `delete_terminal_override_scoped`.
-#[tauri::command]
-pub async fn delete_terminal_override(
-    user_id: String,
-    terminal_id: String,
-    feature: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    validate_not_empty("terminal_id", &terminal_id)
-        .map_err(|e| AppError::Invalid(e.to_string()))?;
-    validate_not_empty("feature", &feature).map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
-    store.delete_terminal_override(&terminal_id, &feature)?;
-    drop(db);
-
-    tracing::info!(terminal_id, feature, "terminal feature override deleted");
     Ok(())
 }
 
@@ -858,38 +624,6 @@ pub struct SetTerminalProfileArgs {
     pub locked_screen: Option<String>,
 }
 
-/// Set (upsert) the profile for a terminal.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `set_terminal_profile_scoped`.
-#[tauri::command]
-pub async fn set_terminal_profile(
-    user_id: String,
-    args: SetTerminalProfileArgs,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    validate_not_empty("terminal_id", &args.terminal_id)
-        .map_err(|e| AppError::Invalid(e.to_string()))?;
-    validate_not_empty("profile_type", &args.profile_type)
-        .map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
-    store.set_terminal_profile(
-        &args.terminal_id,
-        &args.profile_type,
-        args.locked_screen.as_deref(),
-    )?;
-    drop(db);
-
-    tracing::info!(
-        terminal_id = %args.terminal_id,
-        profile_type = %args.profile_type,
-        "terminal profile set"
-    );
-    Ok(())
-}
-
 /// Set a terminal profile in the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn set_terminal_profile_scoped(
@@ -925,28 +659,6 @@ pub async fn set_terminal_profile_scoped(
         profile_type = %args.profile_type,
         "terminal profile set (scoped)"
     );
-    Ok(())
-}
-
-/// Delete a terminal's profile.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `delete_terminal_profile_scoped`.
-#[tauri::command]
-pub async fn delete_terminal_profile(
-    user_id: String,
-    terminal_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    validate_not_empty("terminal_id", &terminal_id)
-        .map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
-    store.delete_terminal_profile(&terminal_id)?;
-    drop(db);
-
-    tracing::info!(terminal_id, "terminal profile deleted");
     Ok(())
 }
 
@@ -990,53 +702,6 @@ pub struct SetDeviceBindingArgs {
     pub bound_store_id: String,
     /// ID of the associated bound instance.
     pub bound_instance_id: String,
-}
-
-/// Set (or update) a terminal's device binding with HMAC signature.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `set_device_binding_scoped`.
-#[tauri::command]
-pub async fn set_device_binding(
-    user_id: String,
-    args: SetDeviceBindingArgs,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    validate_not_empty("terminal_id", &args.terminal_id)
-        .map_err(|e| AppError::Invalid(e.to_string()))?;
-    validate_not_empty("bound_store_id", &args.bound_store_id)
-        .map_err(|e| AppError::Invalid(e.to_string()))?;
-    validate_not_empty("bound_instance_id", &args.bound_instance_id)
-        .map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let signature = {
-        let keyring = oz_security::default_keyring()
-            .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))?;
-        sign_binding(
-            keyring.as_ref(),
-            &args.terminal_id,
-            &args.bound_store_id,
-            &args.bound_instance_id,
-        )?
-    };
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
-    store.update_terminal_binding(
-        &args.terminal_id,
-        &args.bound_store_id,
-        &args.bound_instance_id,
-        &signature,
-    )?;
-    drop(db);
-
-    tracing::info!(
-        terminal_id = %args.terminal_id,
-        store_id = %args.bound_store_id,
-        instance_id = %args.bound_instance_id,
-        "device binding set"
-    );
-    Ok(())
 }
 
 /// Set a device binding in the store resolved from a session token. ADR #7.
@@ -1105,28 +770,6 @@ pub struct DeviceBindingDto {
     pub bound_instance_id: Option<String>,
     /// Signature Valid.
     pub signature_valid: bool,
-}
-
-/// Clear a terminal's device binding.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `clear_device_binding_scoped`.
-#[tauri::command]
-pub async fn clear_device_binding(
-    user_id: String,
-    terminal_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    validate_not_empty("terminal_id", &terminal_id)
-        .map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
-    store.clear_terminal_binding(&terminal_id)?;
-    drop(db);
-
-    tracing::info!(terminal_id, "device binding cleared");
-    Ok(())
 }
 
 /// Clear a device binding in the store resolved from a session token. ADR #7.

@@ -17,7 +17,7 @@ use foundation::validate_not_empty;
 
 use oz_core::permissions;
 
-use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -32,54 +32,6 @@ pub struct AdjustStockArgs {
     pub delta: i64,
     /// Reason for the adjustment (e.g. "stock-take", "damaged", "return").
     pub reason: String,
-}
-
-/// Adjust stock for a product identified by SKU.
-///
-/// Positive `delta` restocks, negative `delta` removes stock.
-/// Returns the new quantity on success.
-#[deprecated(note = "use adjust_stock_scoped instead")]
-#[allow(deprecated)]
-#[tauri::command]
-pub async fn adjust_stock(
-    args: AdjustStockArgs,
-    state: State<'_, AppState>,
-) -> Result<i64, AppError> {
-    validate_not_empty("sku", &args.sku).map_err(|e| AppError::Invalid(e.to_string()))?;
-    validate_not_empty("reason", &args.reason).map_err(|e| AppError::Invalid(e.to_string()))?;
-    if args.delta == 0 {
-        return Err(AppError::Invalid("delta must be non-zero".into()));
-    }
-
-    // Scope the DB borrow so Store (which is !Send) is dropped before
-    // the next .await point when we lock the kernel for event publishing.
-    let new_qty = {
-        let tid = state.terminal_id.lock().await.clone();
-        let db = state.db.lock().await;
-        let store = state.store_with_tid(&db, tid);
-        store.adjust_stock(&args.sku, args.delta)?
-    };
-
-    // Publish the StockAdjusted domain event so that subscribers
-    // (AuditLogHandler, etc.) fire their side effects.
-    {
-        let event = StockAdjusted {
-            sku: args.sku.clone(),
-            delta: args.delta,
-            new_qty,
-            reason: args.reason.clone(),
-        };
-
-        let kernel = state.kernel.lock().await;
-        let bus = kernel.event_bus();
-        if let Err(e) = bus.publish(&event) {
-            // Logged by the bus; do not fail the command.
-            tracing::warn!(sku = %args.sku, error = %e, "event bus publish failed");
-        }
-    }
-
-    tracing::info!(sku = %args.sku, delta = %args.delta, reason = %args.reason, new_qty, "stock adjusted");
-    Ok(new_qty)
 }
 
 /// Adjust stock for the store resolved from a session token.
@@ -208,22 +160,6 @@ pub struct MoneyDto {
     pub currency: String,
 }
 
-/// Fetch all products from the database.
-///
-/// Returns an array of product DTOs with category names and stock
-/// status. The front-end calls this on mount to populate the product
-/// lookup grid.
-///
-/// **Deprecated for multi-store (ADR #4 / ADR #7):** Use
-/// `list_products_scoped` with a `session_token` parameter instead.
-/// This command queries the global database, which only works in
-/// single-store mode.
-#[tauri::command]
-pub async fn list_products(state: State<'_, AppState>) -> Result<Vec<ProductDto>, AppError> {
-    let db = state.db.lock().await;
-    run_list_products(&db)
-}
-
 /// Fetch all products for the store resolved from a session token.
 ///
 /// ADR #4 / ADR #7 canonical pattern: The frontend passes an opaque
@@ -330,24 +266,6 @@ fn map_products_to_dtos(
 
 // ── Lookup by barcode ────────────────────────────────────────────────
 
-/// Look up a single product by barcode.
-///
-/// Returns the product DTO or `null` when no match is found.
-/// Returns validation error for empty barcodes.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `lookup_by_barcode_scoped`.
-#[tauri::command]
-pub async fn lookup_by_barcode(
-    barcode: String,
-    state: State<'_, AppState>,
-) -> Result<Option<ProductDto>, AppError> {
-    validate_not_empty("barcode", &barcode).map_err(|e| AppError::Invalid(e.to_string()))?;
-    let db = state.db.lock().await;
-    let result = run_lookup_by_barcode(&db, &barcode);
-    drop(db);
-    result
-}
-
 /// Look up a product by barcode for the store resolved from a
 /// session token. ADR #7 scoped variant.
 #[tauri::command]
@@ -372,23 +290,6 @@ fn run_lookup_by_barcode(
     let store = Store::new(conn);
     let pwd = store.lookup_product_with_details_by_barcode(barcode)?;
     map_pwd_to_dto(&store, pwd)
-}
-
-/// Look up a single product by SKU.
-///
-/// Returns the product DTO or `null` when no match is found.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `lookup_product_by_sku_scoped`.
-#[tauri::command]
-pub async fn lookup_product_by_sku(
-    sku: String,
-    state: State<'_, AppState>,
-) -> Result<Option<ProductDto>, AppError> {
-    validate_not_empty("sku", &sku).map_err(|e| AppError::Invalid(e.to_string()))?;
-    let db = state.db.lock().await;
-    let result = run_lookup_product_by_sku(&db, &sku);
-    drop(db);
-    result
 }
 
 /// Look up a product by SKU for the store resolved from a
@@ -567,84 +468,6 @@ fn default_product_type() -> String {
 pub struct CreateProductResult {
     /// Stock-keeping unit identifier.
     pub sku: String,
-}
-
-/// Create a product using the global database and a `user_id` parameter.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `create_product_scoped`
-/// with a `session_token` instead. The `user_id` field should be read
-/// from the resolved session, not passed as a frontend parameter.
-#[tauri::command]
-pub async fn create_product(
-    args: CreateProductArgs,
-    state: State<'_, AppState>,
-) -> Result<CreateProductResult, AppError> {
-    // Scope the DB borrow so Store (which is !Send) is dropped before
-    // the next .await point when we lock the kernel for event publishing.
-    {
-        let db = state.db.lock().await;
-        let store = Store::new(&db);
-
-        require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_CREATE)?;
-
-        let currency: oz_core::Currency = args
-            .currency
-            .parse()
-            .map_err(|_| AppError::Invalid(format!("invalid currency '{}'", args.currency)))?;
-
-        let price = Money {
-            minor_units: args.price_minor,
-            currency,
-        };
-
-        store.create_product_with_attributes(
-            &args.sku,
-            &args.name,
-            price,
-            args.category_id.as_deref(),
-            args.barcode.as_deref(),
-            args.initial_stock,
-            Some(&args.product_type),
-            &oz_core::db::CreateProductAttributes {
-                cost_minor: args.cost_minor,
-                brand: args.brand.clone(),
-                rack_location: args.rack_location.clone(),
-                notes: args.notes.clone(),
-                unit: args.unit.clone(),
-                is_active: args.is_active,
-                default_supplier_id: args.default_supplier_id.clone(),
-            },
-        )?;
-
-        store.set_product_tax_rates(&args.sku, &args.tax_rate_ids)?;
-    } // db and store dropped here before .await
-
-    // Publish the ProductCreated domain event so that subscribers
-    // (AuditLogHandler, etc.) fire their side effects.
-    {
-        let event = ProductCreated {
-            sku: args.sku.clone(),
-            name: args.name.clone(),
-            price_minor: args.price_minor,
-            currency: args.currency.clone(),
-            category_id: args.category_id.clone(),
-            barcode: args
-                .barcode
-                .as_ref()
-                .and_then(|s| foundation::Barcode::new(s).ok()),
-            initial_stock: args.initial_stock,
-        };
-
-        let kernel = state.kernel.lock().await;
-        let bus = kernel.event_bus();
-        if let Err(e) = bus.publish(&event) {
-            // Logged by the bus; do not fail the command.
-            tracing::warn!(sku = %args.sku, error = %e, "event bus publish failed");
-        }
-    }
-
-    tracing::info!(sku = %args.sku, name = %args.name, "product created");
-    Ok(CreateProductResult { sku: args.sku })
 }
 
 /// Create a product within the store resolved from a session token.
@@ -827,20 +650,7 @@ pub struct UpdateProductScopedArgs {
     pub default_supplier_id: Option<Option<String>>,
 }
 
-impl UpdateProductArgs {
-    /// Map the PATCH-style attribute fields onto the core update struct.
-    fn to_update_attributes(&self) -> oz_core::db::UpdateProductAttributes {
-        oz_core::db::UpdateProductAttributes {
-            cost_minor: self.cost_minor,
-            brand: self.brand.clone(),
-            rack_location: self.rack_location.clone(),
-            notes: self.notes.clone(),
-            unit: self.unit.clone(),
-            is_active: self.is_active,
-            default_supplier_id: self.default_supplier_id.clone(),
-        }
-    }
-}
+impl UpdateProductArgs {}
 
 impl UpdateProductScopedArgs {
     /// Map the PATCH-style attribute fields onto the core update struct.
@@ -862,47 +672,6 @@ impl UpdateProductScopedArgs {
 pub struct UpdateProductResult {
     /// Stock-keeping unit identifier.
     pub sku: String,
-}
-
-/// Update a product using the global database and a `user_id` parameter.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `update_product_scoped`
-/// with a `session_token` instead.
-#[tauri::command]
-pub async fn update_product(
-    args: UpdateProductArgs,
-    state: State<'_, AppState>,
-) -> Result<UpdateProductResult, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-
-    require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_UPDATE)?;
-
-    let currency: oz_core::Currency = args
-        .currency
-        .parse()
-        .map_err(|_| AppError::Invalid(format!("invalid currency '{}'", args.currency)))?;
-
-    let price = Money {
-        minor_units: args.price_minor,
-        currency,
-    };
-
-    store.update_product(
-        &args.sku,
-        &args.name,
-        price,
-        args.category_id.as_deref(),
-        args.barcode.as_deref(),
-        args.product_type.as_deref(),
-        None,
-    )?;
-
-    store.set_product_tax_rates(&args.sku, &args.tax_rate_ids)?;
-
-    store.update_product_attributes(&args.sku, &args.to_update_attributes())?;
-
-    Ok(UpdateProductResult { sku: args.sku })
 }
 
 /// Update a product within the store resolved from a session token.
@@ -965,21 +734,6 @@ pub async fn update_product_scoped(
     Ok(UpdateProductResult { sku: args.sku })
 }
 
-/// Check whether a product tracks serial numbers.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `get_product_track_serial_scoped`.
-#[tauri::command]
-pub async fn get_product_track_serial(
-    sku: String,
-    state: State<'_, AppState>,
-) -> Result<bool, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let product = store.get_product(&sku)?;
-    drop(db);
-    Ok(product.map(|p| p.product.track_serial).unwrap_or(false))
-}
-
 /// Check whether a product tracks serial numbers, store-scoped. ADR #7.
 #[tauri::command]
 pub async fn get_product_track_serial_scoped(
@@ -1007,23 +761,6 @@ pub struct SerialTrackRow {
     pub sku: String,
     /// Whether the product is configured for serial tracking.
     pub track_serial: bool,
-}
-
-/// Check serial-tracking flags for many SKUs in one round trip
-/// (PERF-03: replaces the N+1 `get_product_track_serial` loop).
-///
-/// Unknown SKUs resolve to `track_serial: false` (same behaviour as
-/// the single-SKU command). The response preserves request order.
-#[tauri::command]
-pub async fn get_product_track_serial_batch(
-    skus: Vec<String>,
-    state: State<'_, AppState>,
-) -> Result<Vec<SerialTrackRow>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let rows = run_get_product_track_serial_batch(&store, &skus);
-    drop(db);
-    Ok(rows)
 }
 
 /// Store-scoped batch variant of `get_product_track_serial_batch`. ADR #7.
@@ -1116,22 +853,6 @@ pub struct DeleteProductArgs {
 pub struct DeleteProductScopedArgs {
     /// Stock-keeping unit identifier.
     pub sku: String,
-}
-
-/// Delete a product using the global database and a `user_id` parameter.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `delete_product_scoped`
-/// with a `session_token` instead.
-#[tauri::command]
-pub async fn delete_product(
-    args: DeleteProductArgs,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_DELETE)?;
-    store.delete_product(&args.sku)?;
-    Ok(())
 }
 
 /// Delete a product within the store resolved from a session token.

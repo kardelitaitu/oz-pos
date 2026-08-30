@@ -12,7 +12,7 @@ use foundation::validate_not_empty;
 
 use oz_core::permissions;
 
-use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -115,30 +115,6 @@ pub struct OpenShiftScopedArgs {
 
 // ── Commands ──────────────────────────────────────────────────────────
 
-/// Open a new shift for a user using the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `open_shift_scoped`.
-#[tauri::command]
-pub async fn open_shift(
-    args: OpenShiftArgs,
-    state: State<'_, AppState>,
-) -> Result<ShiftDto, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-
-    require_permission_for_user(&store, &args.user_id, permissions::SHIFTS_OPEN)?;
-
-    let shift = store.open_shift(
-        &args.user_id,
-        args.terminal_id.as_deref(),
-        args.opening_balance_minor,
-    )?;
-    drop(db);
-
-    tracing::info!(id = %shift.id, user_id = %shift.user_id, "shift opened");
-    Ok(ShiftDto::from(shift))
-}
-
 /// Open a shift in the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn open_shift_scoped(
@@ -195,28 +171,6 @@ pub struct CloseShiftScopedArgs {
     pub notes: Option<String>,
 }
 
-/// Close an active shift using the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `close_shift_scoped`.
-#[tauri::command]
-pub async fn close_shift(
-    args: CloseShiftArgs,
-    state: State<'_, AppState>,
-) -> Result<ShiftDto, AppError> {
-    validate_not_empty("id", &args.id).map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-
-    require_permission_for_user(&store, &args.user_id, permissions::SHIFTS_CLOSE)?;
-
-    let shift = store.close_shift(&args.id, args.closing_balance_minor, args.notes.as_deref())?;
-    drop(db);
-
-    tracing::info!(id = %shift.id, "shift closed");
-    Ok(ShiftDto::from(shift))
-}
-
 /// Close a shift in the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn close_shift_scoped(
@@ -245,24 +199,6 @@ pub async fn close_shift_scoped(
     Ok(ShiftDto::from(shift))
 }
 
-/// Get the currently open shift for a user from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `get_active_shift_scoped`.
-#[tauri::command]
-pub async fn get_active_shift(
-    user_id: String,
-    state: State<'_, AppState>,
-) -> Result<Option<ShiftDto>, AppError> {
-    validate_not_empty("user_id", &user_id).map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let shift = store.get_active_shift(&user_id)?;
-    drop(db);
-
-    Ok(shift.map(ShiftDto::from))
-}
-
 /// Get the active shift for the session user from the store-scoped DB. ADR #7.
 #[tauri::command]
 pub async fn get_active_shift_scoped(
@@ -285,19 +221,6 @@ pub async fn get_active_shift_scoped(
     Ok(shift.map(ShiftDto::from))
 }
 
-/// List all shifts, most recent first.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `list_shifts_scoped`.
-#[tauri::command]
-pub async fn list_shifts(state: State<'_, AppState>) -> Result<Vec<ShiftDto>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let shifts = store.list_shifts()?;
-    drop(db);
-
-    Ok(shifts.into_iter().map(ShiftDto::from).collect())
-}
-
 /// List shifts for the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn list_shifts_scoped(
@@ -316,22 +239,6 @@ pub async fn list_shifts_scoped(
     drop(db);
 
     Ok(shifts.into_iter().map(ShiftDto::from).collect())
-}
-
-/// Get a single shift by id.
-#[tauri::command]
-pub async fn get_shift(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<Option<ShiftDto>, AppError> {
-    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let shift = store.get_shift(&id)?;
-    drop(db);
-
-    Ok(shift.map(ShiftDto::from))
 }
 
 // ── Shift Report DTOs ─────────────────────────────────────────────────
@@ -452,42 +359,6 @@ pub struct CreateCashPayoutArgs {
     pub amount_minor: i64,
     /// Reason.
     pub reason: String,
-}
-
-/// Record a cash payout (safe drop) against an open shift.
-#[tauri::command]
-pub async fn create_cash_payout(
-    args: CreateCashPayoutArgs,
-    state: State<'_, AppState>,
-) -> Result<CashPayoutDto, AppError> {
-    validate_not_empty("shift_id", &args.shift_id).map_err(|e| AppError::Invalid(e.to_string()))?;
-    if args.amount_minor <= 0 {
-        return Err(AppError::Invalid("amount_minor must be > 0".into()));
-    }
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let payout = store.create_cash_payout(&args.shift_id, args.amount_minor, &args.reason)?;
-    drop(db);
-
-    tracing::info!(id = %payout.id, shift_id = %args.shift_id, amount = %args.amount_minor, "cash payout recorded");
-    Ok(CashPayoutDto::from(payout))
-}
-
-/// Generate a comprehensive report for a single shift.
-#[tauri::command]
-pub async fn get_shift_report(
-    shift_id: String,
-    state: State<'_, AppState>,
-) -> Result<ShiftReportDto, AppError> {
-    validate_not_empty("shift_id", &shift_id).map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let report = store.get_shift_report(&shift_id)?;
-    drop(db);
-
-    Ok(ShiftReportDto::from(report))
 }
 
 // ── Scoped variants (ADR #7) ────────────────────────────────────

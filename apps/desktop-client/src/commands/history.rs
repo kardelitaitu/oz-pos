@@ -49,37 +49,6 @@ pub struct SaleListResponse {
     pub sales_history_capped: bool,
 }
 
-/// C1.2: load the tenant subscription and list sales capped to its history
-/// window (`sales_history_days()` — Free = 3 months, Plus = 1 year, Pro = 5
-/// years, Premium/Enterprise = unlimited).
-/// The subscription lives in the global identity DB that also holds sales for
-/// the legacy global variant; the store-scoped variant reads sales from the
-/// store DB but the subscription from the same global DB.
-fn load_capped_sales(db: &rusqlite::Connection) -> Result<SaleListResponse, AppError> {
-    let sub = TenantSubscription::load(db, "default")?
-        .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?;
-    sub.verify_signature()?;
-    let days = sub.effective_tier().sales_history_days();
-    let store = Store::new(db);
-    let (sales, capped) = store.list_sales_with_history_cap(days)?;
-    Ok(SaleListResponse {
-        sales: sales.into_iter().map(map_sale_to_item).collect(),
-        sales_history_capped: capped,
-    })
-}
-
-/// List all sales from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `list_sales_scoped`
-/// with a `session_token` to list sales from the store-scoped database.
-#[tauri::command]
-pub async fn list_sales(state: State<'_, AppState>) -> Result<SaleListResponse, AppError> {
-    let db = state.db.lock().await;
-    let response = load_capped_sales(&db);
-    drop(db);
-    response
-}
-
 /// List all sales for the store resolved from a session token.
 ///
 /// ADR #7: Scoped variant of `list_sales`. The backend resolves the
@@ -155,22 +124,6 @@ pub struct SaleDetail {
     pub lines: Vec<oz_core::SaleLine>,
 }
 
-/// Fetch a single sale by ID from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `get_sale_scoped`
-/// with a `session_token` to look up the sale in the store-scoped database.
-#[tauri::command]
-pub async fn get_sale(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<Option<SaleDetail>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let sale = store.get_sale(&id)?;
-    drop(db);
-    Ok(sale.map(map_sale_to_detail))
-}
-
 /// Fetch a single sale by ID from the store resolved from a session token.
 ///
 /// ADR #7: Scoped variant of `get_sale`. The backend resolves the
@@ -214,21 +167,6 @@ fn map_sale_to_detail(s: oz_core::Sale) -> SaleDetail {
 
 // ── Dashboard / Export ───────────────────────────────────────────────
 
-/// Fetch the daily sales summary from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `export_daily_summary_scoped`
-/// with a `session_token` for store-scoped reports.
-#[tauri::command]
-pub async fn export_daily_summary(
-    state: State<'_, AppState>,
-) -> Result<Vec<DailySummaryRow>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let rows = store.export_daily_summary()?;
-    drop(db);
-    Ok(rows)
-}
-
 /// Fetch the daily sales summary for the store resolved from a session token.
 ///
 /// ADR #7: Scoped variant of `export_daily_summary`.
@@ -246,20 +184,6 @@ pub async fn export_daily_summary_scoped(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let rows = store.export_daily_summary()?;
-    drop(db);
-    Ok(rows)
-}
-
-/// Fetch sales-by-hour breakdown from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `export_sales_by_hour_scoped`.
-#[tauri::command]
-pub async fn export_sales_by_hour(
-    state: State<'_, AppState>,
-) -> Result<Vec<SalesByHourRow>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let rows = store.export_sales_by_hour()?;
     drop(db);
     Ok(rows)
 }
@@ -319,15 +243,6 @@ pub struct PaymentBreakdown {
     pub count: i64,
     /// Total amount in minor currency units.
     pub total: i64,
-}
-
-/// Fetch the full EOD (End-of-Day) report from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `export_eod_report_scoped`.
-#[tauri::command]
-pub async fn export_eod_report(state: State<'_, AppState>) -> Result<EodReport, AppError> {
-    let db = state.db.lock().await;
-    build_eod_report(&db)
 }
 
 /// Fetch the full EOD report for the store resolved from a session token.

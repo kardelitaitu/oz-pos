@@ -298,18 +298,6 @@ fn assignment_spec(args: &AssignmentArgs) -> Result<AssignmentSpec, AppError> {
 
 // ── List staff ─────────────────────────────────────────────────────
 
-/// List staff.
-///
-/// **Deprecated for multi-store (ADR #7):** Use [`list_staff_scoped`] so the
-/// caller identity is resolved from the session token instead of a
-/// client-supplied `caller_user_id`.
-#[tauri::command]
-pub async fn list_staff(_state: State<'_, AppState>) -> Result<Vec<StaffMemberDto>, AppError> {
-    Err(AppError::PermissionDenied(
-        "legacy unscoped staff commands are disabled; use list_staff_scoped".into(),
-    ))
-}
-
 // ── List roles ─────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]

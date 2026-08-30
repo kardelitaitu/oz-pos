@@ -28,17 +28,6 @@ pub struct BrandSettingsDto {
     pub store_name: String,
 }
 
-/// Load all brand settings at once.
-#[tauri::command]
-pub async fn get_brand_settings(state: State<'_, AppState>) -> Result<BrandSettingsDto, AppError> {
-    let conn = state.db.lock().await;
-    Ok(BrandSettingsDto {
-        primary_colour: Settings::get_brand_primary_colour(&conn)?,
-        logo_path: Settings::get_brand_logo_path(&conn)?,
-        store_name: Settings::get_brand_store_name(&conn)?,
-    })
-}
-
 /// Load all brand settings resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn get_brand_settings_scoped(

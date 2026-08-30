@@ -7,7 +7,7 @@ use oz_core::db::Store;
 use oz_core::permissions;
 use oz_core::{Money, Refund, RefundLine, Sale};
 
-use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -69,27 +69,6 @@ pub struct ProcessRefundResult {
     pub total_minor: i64,
 }
 
-/// Process a refund against a completed sale using the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `process_refund_scoped`
-/// with a `session_token` instead. The `user_id` is read from the
-/// resolved session.
-#[tauri::command]
-pub async fn process_refund(
-    args: ProcessRefundArgs,
-    state: State<'_, AppState>,
-) -> Result<ProcessRefundResult, AppError> {
-    let db = state.db.lock().await;
-    run_process_refund(
-        &db,
-        &args.sale_id,
-        &args.reason,
-        args.note.as_deref(),
-        &args.user_id,
-        &args.lines,
-    )
-}
-
 /// Process a refund within the store resolved from a session token.
 ///
 /// ADR #7: Scoped variant of `process_refund`. The `user_id` for
@@ -119,20 +98,6 @@ pub async fn process_refund_scoped(
         &session.user_id,
         &args.lines,
     )
-}
-
-/// Shared business logic for processing a refund.
-fn run_process_refund(
-    db: &rusqlite::Connection,
-    sale_id: &str,
-    reason: &str,
-    note: Option<&str>,
-    user_id: &str,
-    lines: &[RefundLineArg],
-) -> Result<ProcessRefundResult, AppError> {
-    let store = Store::new(db);
-    require_permission_for_user(&store, user_id, permissions::SALES_REFUND)?;
-    run_process_refund_unchecked(db, sale_id, reason, note, user_id, lines)
 }
 
 /// Process an already-authorized refund against a store-scoped database.
@@ -225,21 +190,6 @@ fn run_process_refund_unchecked(
     })
 }
 
-/// Look up a sale by its receipt barcode from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `lookup_sale_by_receipt_barcode_scoped`.
-#[tauri::command]
-pub async fn lookup_sale_by_receipt_barcode(
-    barcode: String,
-    state: State<'_, AppState>,
-) -> Result<Option<Sale>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let sale = store.lookup_sale_by_receipt_barcode(&barcode)?;
-    drop(db);
-    Ok(sale)
-}
-
 /// Look up a sale by receipt barcode from the store resolved from a session token.
 ///
 /// ADR #7: Scoped variant of `lookup_sale_by_receipt_barcode`.
@@ -265,21 +215,6 @@ pub async fn lookup_sale_by_receipt_barcode_scoped(
     let sale = store.lookup_sale_by_receipt_barcode(&barcode)?;
     drop(db);
     Ok(sale)
-}
-
-/// List all refunds for a sale from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `list_refunds_scoped`.
-#[tauri::command]
-pub async fn list_refunds(
-    sale_id: String,
-    state: State<'_, AppState>,
-) -> Result<Vec<Refund>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let refunds = store.list_refunds_for_sale(&sale_id)?;
-    drop(db);
-    Ok(refunds)
 }
 
 /// List all refunds for a sale from the store resolved from a session token.

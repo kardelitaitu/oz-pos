@@ -7,7 +7,7 @@ use tauri::State;
 
 use oz_core::{Promotion, PromotionApplication, Store, format_minor};
 
-use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -52,15 +52,6 @@ fn default_true() -> bool {
 #[cfg(test)]
 #[path = "promotions_tests.rs"]
 mod tests;
-/// List all promotions.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `list_promotions_scoped`.
-#[tauri::command]
-pub async fn list_promotions(state: State<'_, AppState>) -> Result<Vec<Promotion>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    Ok(store.list_promotions()?)
-}
 
 /// List promotions for the store resolved from a session token. ADR #7.
 #[tauri::command]
@@ -78,19 +69,6 @@ pub async fn list_promotions_scoped(
     Ok(promos)
 }
 
-/// Get a single promotion by id.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `get_promotion_scoped`.
-#[tauri::command]
-pub async fn get_promotion(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<Option<Promotion>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    Ok(store.get_promotion(&id)?)
-}
-
 /// Get a promotion from the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn get_promotion_scoped(
@@ -106,42 +84,6 @@ pub async fn get_promotion_scoped(
     let promo = store.get_promotion(&id)?;
     drop(db);
     Ok(promo)
-}
-
-/// Create a new promotion.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `create_promotion_scoped`.
-#[tauri::command]
-pub async fn create_promotion(
-    user_id: String,
-    args: CreatePromotionArgs,
-    state: State<'_, AppState>,
-) -> Result<Promotion, AppError> {
-    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    let promo = Promotion {
-        id: uuid::Uuid::now_v7().to_string(),
-        name: args.name,
-        description: args.description,
-        promo_type: args.promo_type,
-        value_minor: args.value_minor,
-        min_qty: args.min_qty,
-        trigger_sku: args.trigger_sku,
-        reward_sku: args.reward_sku,
-        reward_qty: args.reward_qty,
-        starts_at: args.starts_at,
-        ends_at: args.ends_at,
-        min_order_minor: args.min_order_minor,
-        category_id: args.category_id,
-        active: args.active,
-        created_at: now.clone(),
-        updated_at: now,
-    };
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, oz_core::permissions::PROMOTIONS_CREATE)?;
-
-    Ok(store.create_promotion(&promo)?)
 }
 
 /// Create a promotion in the store resolved from a session token. ADR #7.
@@ -188,25 +130,6 @@ pub async fn create_promotion_scoped(
     Ok(result)
 }
 
-/// Update an existing promotion.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `update_promotion_scoped`.
-#[tauri::command]
-pub async fn update_promotion(
-    user_id: String,
-    promotion: Promotion,
-    state: State<'_, AppState>,
-) -> Result<Promotion, AppError> {
-    let mut p = promotion;
-    p.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, oz_core::permissions::PROMOTIONS_EDIT)?;
-
-    Ok(store.update_promotion(&p)?)
-}
-
 /// Update a promotion in the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn update_promotion_scoped(
@@ -233,22 +156,6 @@ pub async fn update_promotion_scoped(
     Ok(result)
 }
 
-/// Delete a promotion by id.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `delete_promotion_scoped`.
-#[tauri::command]
-pub async fn delete_promotion(
-    user_id: String,
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, oz_core::permissions::PROMOTIONS_DELETE)?;
-
-    Ok(store.delete_promotion(&id)?)
-}
-
 /// Delete a promotion in the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn delete_promotion_scoped(
@@ -273,20 +180,6 @@ pub async fn delete_promotion_scoped(
     Ok(())
 }
 
-/// Apply a promotion to a sale.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `apply_promotion_scoped`.
-#[tauri::command]
-pub async fn apply_promotion(
-    user_id: String,
-    sale_id: String,
-    promotion_id: String,
-    state: State<'_, AppState>,
-) -> Result<PromotionApplication, AppError> {
-    let db = state.db.lock().await;
-    run_apply_promotion(&db, &sale_id, &promotion_id, &user_id)
-}
-
 /// Apply a promotion in the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn apply_promotion_scoped(
@@ -307,20 +200,6 @@ pub async fn apply_promotion_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     run_apply_promotion_unchecked(&db, &sale_id, &promotion_id)
-}
-
-/// Shared business logic for applying a promotion using an already-authorized
-/// caller. Scoped commands authorize against the global identity DB before
-/// opening the store connection.
-fn run_apply_promotion(
-    db: &rusqlite::Connection,
-    sale_id: &str,
-    promotion_id: &str,
-    user_id: &str,
-) -> Result<PromotionApplication, AppError> {
-    let store = Store::new(db);
-    require_permission_for_user(&store, user_id, oz_core::permissions::PROMOTIONS_APPLY)?;
-    run_apply_promotion_unchecked(db, sale_id, promotion_id)
 }
 
 fn run_apply_promotion_unchecked(
@@ -423,19 +302,6 @@ fn run_apply_promotion_unchecked(
     };
 
     Ok(store.record_promotion_application(&app)?)
-}
-
-/// List all promotion applications for a sale.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `get_sale_promotions_scoped`.
-#[tauri::command]
-pub async fn get_sale_promotions(
-    sale_id: String,
-    state: State<'_, AppState>,
-) -> Result<Vec<PromotionApplication>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    Ok(store.get_promotion_applications_for_sale(&sale_id)?)
 }
 
 /// Get sale promotions from the store resolved from a session token. ADR #7.

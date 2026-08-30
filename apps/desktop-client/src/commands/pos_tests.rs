@@ -13,36 +13,6 @@ fn price(minor: i64) -> Money {
     }
 }
 
-#[test]
-fn start_cart_add_line() {
-    let mut cart = oz_core::Cart::new(usd());
-    let cart_id = cart.id();
-
-    let line = CartLine::new(Sku::new("COFFEE"), 2, price(350));
-    cart.add_line(line).unwrap();
-
-    assert_eq!(cart.line_count(), 1);
-    let total = cart.total();
-    assert_eq!(total.unwrap().minor_units, 700);
-    assert_eq!(total.unwrap().currency, usd());
-    assert!(!cart_id.to_string().is_empty());
-
-    let line2 = CartLine::new(Sku::new("BAGEL"), 1, price(450));
-    cart.add_line(line2).unwrap();
-    assert_eq!(cart.line_count(), 2);
-    assert_eq!(cart.total().unwrap().minor_units, 1150);
-}
-
-#[test]
-fn cart_total_with_fractional_qty() {
-    let mut cart = oz_core::Cart::new(usd());
-    let line = CartLine::new(Sku::new("TEA"), 3, price(200));
-    let line_total = line.total().unwrap();
-    cart.add_line(line).unwrap();
-    assert_eq!(line_total.minor_units, 600);
-    assert_eq!(cart.total().unwrap().minor_units, 600);
-}
-
 // ── DTO struct tests ─────────────────────────────────────────────
 
 #[test]

@@ -112,19 +112,6 @@ fn run_get_receipt_settings(conn: &rusqlite::Connection) -> Result<ReceiptSettin
 
 // ── Set receipt settings ──────────────────────────────────
 
-/// **Deprecated — use `set_receipt_settings_scoped` (ADR #7).**
-#[tauri::command]
-pub async fn set_receipt_settings(
-    args: ReceiptSettingsDto,
-    user_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    let conn = state.db.lock().await;
-    let store = oz_core::db::Store::new(&conn);
-    require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
-    run_set_receipt_settings(&conn, &args)
-}
-
 /// Set receipt settings resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn set_receipt_settings_scoped(
@@ -232,19 +219,6 @@ fn run_get_store_settings(conn: &rusqlite::Connection) -> Result<StoreSettingsDt
 
 // ── Set store settings ────────────────────────────────────────
 
-/// **Deprecated — use `set_store_settings_scoped` (ADR #7).**
-#[tauri::command]
-pub async fn set_store_settings(
-    args: StoreSettingsDto,
-    user_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    let conn = state.db.lock().await;
-    let store = oz_core::db::Store::new(&conn);
-    require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
-    run_set_store_settings(&conn, &args)
-}
-
 /// Set store settings resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn set_store_settings_scoped(
@@ -311,24 +285,6 @@ pub async fn get_credit_settings(
     })
 }
 
-/// **Deprecated — use `set_credit_settings_scoped` (ADR #7).**
-#[tauri::command]
-pub async fn set_credit_settings(
-    args: CreditSettingsDto,
-    user_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    let conn = state.db.lock().await;
-    let store = oz_core::db::Store::new(&conn);
-    require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
-    let tx = conn.unchecked_transaction()?;
-    Settings::set_credit_enabled(&tx, args.enabled)?;
-    Settings::set_credit_reminder_interval(&tx, args.reminder_interval_hours)?;
-    Settings::set_credit_max_limit(&tx, args.max_limit_minor)?;
-    tx.commit()?;
-    Ok(())
-}
-
 /// Set credit settings resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn set_credit_settings_scoped(
@@ -375,15 +331,6 @@ pub struct CreditSaleDto {
     pub cashier_name: String,
 }
 
-/// List credit sales.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `list_credit_sales_scoped`.
-#[tauri::command]
-pub async fn list_credit_sales(state: State<'_, AppState>) -> Result<Vec<CreditSaleDto>, AppError> {
-    let conn = state.db.lock().await;
-    run_list_credit_sales(&conn)
-}
-
 /// List credit sales for the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn list_credit_sales_scoped(
@@ -424,26 +371,6 @@ fn run_list_credit_sales(conn: &rusqlite::Connection) -> Result<Vec<CreditSaleDt
         })
     })?;
     rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
-}
-
-/// **Deprecated — use `settle_credit_scoped` (ADR #7).**
-#[tauri::command]
-pub async fn settle_credit(
-    sale_id: String,
-    user_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    let conn = state.db.lock().await;
-    let store = oz_core::db::Store::new(&conn);
-    require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
-    let tx = conn.unchecked_transaction()?;
-    let now = chrono::Utc::now().to_rfc3339();
-    tx.execute(
-        "UPDATE payments SET settled_at = ?1 WHERE sale_id = ?2 AND method = 'credit'",
-        rusqlite::params![now, sale_id],
-    )?;
-    tx.commit()?;
-    Ok(())
 }
 
 /// Settle a credit sale resolved from a session token. ADR #7.
@@ -712,57 +639,6 @@ pub async fn get_hardware_settings(
     Ok(HardwareSettingsDto::from(profile))
 }
 
-/// **Deprecated — use `set_hardware_settings_scoped` (ADR #7).**
-///
-/// Writes to both DB (canonical) and JSON file (fallback).
-#[tauri::command]
-pub async fn set_hardware_settings(
-    args: HardwareSettingsDto,
-    user_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    let terminal_id = state
-        .terminal_id
-        .lock()
-        .await
-        .clone()
-        .unwrap_or_else(|| "unknown".to_string());
-
-    // Permission check still requires DB access.
-    {
-        let conn = state.db.lock().await;
-        let store = oz_core::db::Store::new(&conn);
-        require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
-    }
-
-    let profile = TerminalProfile::from(args);
-    let json = serde_json::to_string(&profile)
-        .map_err(|e| AppError::Internal(format!("serializing profile: {e}")))?;
-
-    // Write to DB (canonical store).
-    {
-        let conn = state.db.lock().await;
-        conn.execute(
-            "INSERT OR REPLACE INTO hardware_profiles (terminal_id, profile_json, schema_version, updated_at)
-             VALUES (?1, ?2, ?3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-            rusqlite::params![&terminal_id, &json, profile.schema_version],
-        )?;
-    }
-
-    // Write to JSON file (backward compat fallback).
-    let base_dir = app_data_dir(&state)?;
-    let path = TerminalProfile::profile_path(&base_dir, &terminal_id);
-    if let Err(e) = profile.save(&path) {
-        tracing::warn!(
-            terminal_id = %terminal_id,
-            error = %e,
-            "failed to save hardware settings to JSON — DB write succeeded"
-        );
-    }
-
-    Ok(())
-}
-
 /// Set hardware settings resolved from a session token. ADR #7.
 ///
 /// Writes to both DB (canonical) and JSON file (fallback).
@@ -839,16 +715,6 @@ pub struct UserPrefEntry {
     pub value: String,
 }
 
-/// **Deprecated — use `get_user_preferences_scoped` (ADR #7).**
-#[tauri::command]
-pub async fn get_user_preferences(
-    user_id: String,
-    state: State<'_, AppState>,
-) -> Result<HashMap<String, String>, AppError> {
-    let conn = state.db.lock().await;
-    Ok(UserPreferences::get_all(&conn, &user_id)?)
-}
-
 /// Get user preferences resolved from a session token. ADR #7.
 /// Uses `session.user_id` for the preference lookup.
 #[tauri::command]
@@ -865,18 +731,6 @@ pub async fn get_user_preferences_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     Ok(UserPreferences::get_all(&db, &session.user_id)?)
-}
-
-/// **Deprecated — use `set_user_preferences_scoped` (ADR #7).**
-#[tauri::command]
-pub async fn set_user_preferences(
-    user_id: String,
-    prefs: Vec<UserPrefEntry>,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    let conn = state.db.lock().await;
-    let pairs: Vec<(String, String)> = prefs.into_iter().map(|e| (e.key, e.value)).collect();
-    Ok(UserPreferences::set_batch(&conn, &user_id, &pairs)?)
 }
 
 /// Set user preferences resolved from a session token. ADR #7.
@@ -1146,58 +1000,6 @@ fn enqueue_settings_updates(
 }
 
 // ── Batch key-value settings (single transaction) ───────────────
-
-/// Write (or overwrite) multiple settings in a single transaction.
-///
-/// All entries are written atomically — either all succeed or none
-/// do. A single `SettingsUpdated` event is published with all changed
-/// keys after the transaction commits.
-#[tauri::command]
-pub async fn set_settings(
-    entries: HashMap<String, String>,
-    user_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    let terminal_id = state
-        .terminal_id
-        .lock()
-        .await
-        .clone()
-        .unwrap_or_else(|| "unknown".to_string());
-
-    let keys: Vec<String> = entries.keys().cloned().collect();
-
-    {
-        let conn = state.db.lock().await;
-        let store = oz_core::db::Store::new(&conn);
-        require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
-        let tx = conn.unchecked_transaction()?;
-        for (key, value) in &entries {
-            Settings::set_tracked(&tx, key, value, &terminal_id)?;
-        }
-        tx.commit()?;
-        if let Err(e) = enqueue_settings_updates(&store, &entries, &terminal_id, "default") {
-            tracing::warn!(key_count = entries.len(), error = %e, "failed to enqueue settings.update sync items");
-        }
-    }
-
-    // Publish a single SettingsUpdated event for all changed keys.
-    let kernel = state.kernel.lock().await;
-    let bus = kernel.event_bus();
-    let event = oz_core::events::SettingsUpdated {
-        changed_keys: keys,
-        terminal_id,
-    };
-    if let Err(e) = bus.publish(&event) {
-        tracing::warn!(
-            key_count = entries.len(),
-            error = %e,
-            "failed to publish SettingsUpdated event"
-        );
-    }
-
-    Ok(())
-}
 
 /// Write (or overwrite) multiple settings in a single transaction, resolved from a session token. ADR #7.
 ///

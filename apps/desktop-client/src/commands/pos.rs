@@ -21,9 +21,9 @@ use tauri::State;
 use foundation::Percentage;
 use oz_core::db::Store;
 use oz_core::events::{SaleCompleted, SaleCompletedLine};
-use oz_core::{Cart, CartId, CartLine, Currency, LineId, Money, PaymentSplitArg, SaleStatus, Sku};
+use oz_core::{Cart, CartId, CartLine, Currency, LineId, Money, PaymentSplitArg, Sku};
 
-use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
+use crate::commands::authz::require_permission_for_session;
 use crate::commands::topology::TOPOLOGY_RUNTIME_SETTING_KEY;
 use crate::error::AppError;
 use crate::state::AppState;
@@ -145,39 +145,6 @@ pub struct SetCartDiscountArgs {
     pub user_id: String,
 }
 
-/// Set or clear a cart-level percentage discount using the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `set_cart_discount_scoped`
-/// with a `session_token` instead.
-#[tauri::command]
-pub async fn set_cart_discount(
-    args: SetCartDiscountArgs,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    if !(0..=100).contains(&args.percent) {
-        return Err(AppError::Invalid(format!(
-            "discount percent must be between 0 and 100, got {}",
-            args.percent
-        )));
-    }
-    // SAFETY: args.percent is validated 0..=100 above, so the unwrap is safe.
-    let percent = Percentage::new(args.percent as u8).unwrap();
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-
-    require_permission_for_user(&store, &args.user_id, oz_core::permissions::SALES_DISCOUNT)?;
-
-    let mut cart = store
-        .load_active_cart(&args.cart_id)?
-        .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
-    cart.set_discount(percent, args.label);
-    store.save_active_cart(&cart, None)?;
-    drop(db);
-    tracing::info!(cart_id = %args.cart_id, percent = %args.percent, "cart discount set");
-    Ok(())
-}
-
 /// Args for `set_cart_discount_scoped` — without `user_id`.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -249,41 +216,6 @@ pub struct StartSaleResult {
     pub cart_id: CartId,
     /// ADR-19 §5.1: the deduction location locked at cart-start time.
     pub deduction_location_id: Option<String>,
-}
-
-/// Start a new sale cart using the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `start_sale_scoped`
-/// with a `session_token` to create the cart in the store-scoped database.
-#[tauri::command]
-pub async fn start_sale(
-    args: StartSaleArgs,
-    state: State<'_, AppState>,
-) -> Result<StartSaleResult, AppError> {
-    let db = state.db.lock().await;
-
-    let currency: oz_core::Currency = if args.currency.is_empty() {
-        // M-6: lookup the store profile's default currency instead of hardcoding "USD".
-        let code =
-            oz_core::Settings::get_default_currency(&db)?.unwrap_or_else(|| "USD".to_string());
-        code.parse()
-            .map_err(|_| AppError::Invalid(format!("invalid default currency code: {code}")))?
-    } else {
-        args.currency
-            .parse()
-            .map_err(|_| AppError::Invalid(format!("invalid currency code: {}", args.currency)))?
-    };
-    let cart = Cart::new(currency);
-    let id = cart.id();
-
-    let store = Store::new(&db);
-    store.save_active_cart(&cart, None)?;
-    drop(db);
-
-    Ok(StartSaleResult {
-        cart_id: id,
-        deduction_location_id: None,
-    })
 }
 
 /// Start a new sale in the store resolved from a session token. ADR #7.
@@ -398,36 +330,6 @@ fn line_unit_price(args: &AddLineArgs, cart_currency: Currency) -> Result<Money,
     })
 }
 
-/// Add a line to an active cart using the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `add_line_scoped`.
-#[tauri::command]
-pub async fn add_line(
-    args: AddLineArgs,
-    state: State<'_, AppState>,
-) -> Result<AddLineResult, AppError> {
-    // Load the cart and add the line in a single DB transaction scope.
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let mut cart = store
-        .load_active_cart(&args.cart_id)?
-        .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
-
-    let unit_price = line_unit_price(&args, cart.currency())?;
-    let line = CartLine::new(args.sku.clone(), args.qty, unit_price);
-    let line_id = line.id;
-    let line_total = line.total();
-    cart.add_line(line)
-        .map_err(|e| AppError::Invalid(e.to_string()))?;
-    store.save_active_cart(&cart, None)?;
-    drop(db);
-
-    Ok(AddLineResult {
-        line_id,
-        line_total,
-    })
-}
-
 /// Add a line to an active cart in the store resolved from a session token. ADR #7.
 ///
 /// ADR-19 §5.1: rejects the command when the cart has no `deduction_location_id`
@@ -497,24 +399,6 @@ pub struct OverrideLinePriceArgs {
     pub user_id: String,
 }
 
-/// Override the unit price of a cart line using the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `override_line_price_scoped`.
-#[tauri::command]
-pub async fn override_line_price(
-    args: OverrideLinePriceArgs,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    let db = state.db.lock().await;
-    run_override_line_price(
-        &db,
-        &args.cart_id,
-        &args.line_id,
-        args.new_price_minor,
-        &args.user_id,
-    )
-}
-
 /// Args for `override_line_price_scoped` — without `user_id`.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -549,19 +433,6 @@ pub async fn override_line_price_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     run_override_line_price_unchecked(&db, &args.cart_id, &args.line_id, args.new_price_minor)
-}
-
-/// Shared business logic for overriding a line price.
-fn run_override_line_price(
-    db: &rusqlite::Connection,
-    cart_id: &CartId,
-    line_id: &LineId,
-    new_price_minor: i64,
-    user_id: &str,
-) -> Result<(), AppError> {
-    let store = Store::new(db);
-    require_permission_for_user(&store, user_id, oz_core::permissions::SALES_OVERRIDE_PRICE)?;
-    run_override_line_price_unchecked(db, cart_id, line_id, new_price_minor)
 }
 
 fn run_override_line_price_unchecked(
@@ -608,28 +479,6 @@ pub struct DeductionLocationInfo {
     pub location_name: String,
     /// ISO-8601 timestamp of the last manager override, or `None`.
     pub overridden_at: Option<String>,
-}
-
-/// Return the deduction location info for an active cart.
-///
-/// Returns `null` when the cart has no deduction location lock
-/// (unbound workspace) or the cart does not exist.
-#[tauri::command]
-pub async fn get_cart_deduction_location(
-    cart_id: CartId,
-    state: State<'_, AppState>,
-) -> Result<Option<DeductionLocationInfo>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let result = store.get_active_cart_deduction_location_info(&cart_id)?;
-    drop(db);
-    Ok(
-        result.map(|(loc_id, loc_name, overridden_at)| DeductionLocationInfo {
-            location_id: loc_id,
-            location_name: loc_name,
-            overridden_at,
-        }),
-    )
 }
 
 // ── Override Deduction Location ───────────────────────────────────────
@@ -760,239 +609,6 @@ pub struct CompleteSaleResult {
     pub total: Option<Money>,
     /// Line Count.
     pub line_count: usize,
-}
-
-/// Complete a sale using the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `complete_sale_scoped`
-/// with a `session_token` instead. The `user_id` is read from the
-/// resolved `SessionContext`.
-#[tauri::command]
-pub async fn complete_sale(
-    args: CompleteSaleArgs,
-    state: State<'_, AppState>,
-) -> Result<CompleteSaleResult, AppError> {
-    // Load and remove the cart from the DB in one scope.
-    let mut cart = {
-        let db = state.db.lock().await;
-        let store = Store::new(&db);
-
-        require_permission_for_user(&store, &args.user_id, oz_core::permissions::SALES_PROCESS)?;
-
-        let cart = store
-            .load_active_cart(&args.cart_id)?
-            .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
-        store.delete_active_cart(&args.cart_id)?;
-        // `db` / `store` dropped here, cart is now owned.
-        cart
-    };
-
-    let line_count = cart.line_count();
-
-    // ── Plugin business-rule hooks ────────────────────────────────
-    {
-        let plugins = state.plugins.lock().await;
-        if let Some(ref plugins) = *plugins {
-            let lines: Vec<oz_lua::CartLineData> = cart
-                .lines()
-                .iter()
-                .map(|cl| oz_lua::CartLineData {
-                    sku: cl.sku.as_str().to_owned(),
-                    qty: cl.qty,
-                    unit_price_minor: cl.unit_price.minor_units,
-                    currency: String::from_utf8_lossy(&cl.unit_price.currency.0).into_owned(),
-                })
-                .collect();
-
-            // Validate the order via Lua — abort on errors.
-            let errors = plugins
-                .validate_order(
-                    &lines,
-                    cart.total().map(|m| m.minor_units).unwrap_or(0),
-                    &String::from_utf8_lossy(&cart.currency().0),
-                )
-                .map_err(|e| AppError::Internal(e.to_string()))?;
-            if !errors.is_empty() {
-                return Err(AppError::Invalid(format!(
-                    "order validation failed: {}",
-                    errors.join("; ")
-                )));
-            }
-
-            // Apply a dynamic discount from Lua.
-            if let Some(discount) = plugins
-                .apply_discount(&lines)
-                .map_err(|e| AppError::Internal(e.to_string()))?
-            {
-                let label = discount.label.clone().unwrap_or_else(|| "Lua Rule".into());
-                if !(0..=100).contains(&discount.percent) {
-                    return Err(AppError::Invalid(format!(
-                        "Lua returned invalid discount percent: {}",
-                        discount.percent
-                    )));
-                }
-                // SAFETY: discount.percent is validated 0..=100 above.
-                let lua_pct = Percentage::new(discount.percent as u8).unwrap();
-                cart.set_discount(lua_pct, Some(label));
-            }
-
-            // Fire sale.before_complete event (registered via oz.register_hook).
-            let currency = String::from_utf8_lossy(&cart.currency().0).into_owned();
-            let total_minor = cart.total().map(|m| m.minor_units).unwrap_or(0);
-            plugins
-                .fire_sale_before_complete(&lines, total_minor, &currency, &args.user_id)
-                .map_err(|e| AppError::Internal(e.to_string()))?;
-
-            // Drain any pending discounts registered by hooks via oz.apply_discount().
-            if let Some(pd) = plugins.drain_pending_discounts().into_iter().next() {
-                if !(0..=100).contains(&pd.percent) {
-                    return Err(AppError::Invalid(format!(
-                        "Plugin returned invalid discount percent: {}",
-                        pd.percent
-                    )));
-                }
-                // SAFETY: pd.percent is validated 0..=100 above.
-                let pct = Percentage::new(pd.percent as u8).unwrap();
-                cart.set_discount(pct, Some(pd.target));
-            }
-        }
-    }
-
-    let mut sale = oz_core::Sale::from_cart_with_user(&cart, Some(args.user_id))
-        .ok_or_else(|| AppError::Invalid("cart total overflowed i64".into()))?;
-    let kind = if args.payment_splits.as_ref().is_some_and(|s| !s.is_empty()) {
-        PaymentKind::Split
-    } else {
-        PaymentKind::Single
-    };
-    sale.payment_method = Some(kind.wire_method(&args.payment_method));
-    sale.tendered_minor = args.tendered_minor;
-    sale.customer_id = args.customer_id.clone();
-    // CUR-02: record tender-currency metadata when multi-currency checkout
-    // was used. All three are None for single-currency sales.
-    sale.base_currency = args.base_currency.clone();
-    sale.base_total_minor = args.base_total_minor;
-    sale.tender_rate_millionths = args.tender_rate_millionths;
-    sale.tip_minor = args.tip_minor.unwrap_or(0);
-    sale.service_charge_minor = args.service_charge_minor.unwrap_or(0);
-
-    // ── Apply Lua calc_line_tax overrides before DB tax computation ───
-    let mut lua_overrides: Vec<(String, i64, bool)> = Vec::new();
-    {
-        let plugins = state.plugins.lock().await;
-        if let Some(ref plugins) = *plugins {
-            for cl in cart.lines() {
-                let currency_str = String::from_utf8_lossy(&cl.unit_price.currency.0).into_owned();
-                if let Some(override_) = plugins
-                    .calc_line_tax(
-                        cl.sku.as_str(),
-                        cl.qty,
-                        cl.unit_price.minor_units,
-                        &currency_str,
-                    )
-                    .map_err(|e| AppError::Internal(e.to_string()))?
-                {
-                    lua_overrides.push((
-                        cl.sku.as_str().to_owned(),
-                        override_.rate_bps,
-                        override_.is_inclusive,
-                    ));
-                }
-            }
-        }
-        // plugins lock released here
-    }
-
-    let sale_id = sale.id.clone();
-
-    // Scope the DB borrow so Store (which is !Send) is dropped before
-    // the next .await point when we lock the kernel for event publishing.
-    let updated = {
-        let db = state.db.lock().await;
-        let store = Store::new(&db);
-        store.compute_sale_tax(
-            &mut sale,
-            &lua_overrides,
-            oz_core::Settings::get_tax_rounding_mode(&db)?,
-        )?;
-
-        // Match serial numbers from args to sale lines by SKU.
-        if let Some(ref serial_numbers) = args.serial_numbers {
-            for sn in serial_numbers {
-                if let Some(line) = sale.lines.iter_mut().find(|l| l.sku == sn.sku) {
-                    line.serial_number = Some(sn.serial.clone());
-                }
-            }
-        }
-
-        store.create_sale(&sale)?;
-
-        // Create payment records for each split (or a single payment record
-        // for backward compatibility).
-        if let Some(ref splits) = args.payment_splits {
-            if !splits.is_empty() {
-                store.create_payments(&sale_id, splits, &sale.currency, &sale.created_at)?;
-            }
-        } else {
-            let payment_method = args.payment_method.as_str();
-            let single_split = vec![PaymentSplitArg {
-                method: payment_method.into(),
-                amount_minor: sale.total.minor_units,
-                gateway_reference: args.customer_name.clone(),
-                gateway_status: None,
-                gateway_response: None,
-                idempotency_key: None,
-            }];
-            store.create_payments(&sale_id, &single_split, &sale.currency, &sale.created_at)?;
-        }
-
-        // Transition through Active before Completed — the state machine
-        // does not allow Pending → Completed directly.
-        store.update_sale_status(&sale_id, SaleStatus::Active)?;
-        store.update_sale_status(&sale_id, SaleStatus::Completed)?
-    };
-
-    let total = cart.total();
-    tracing::info!(%sale_id, ?total, line_count, "sale completed and persisted");
-
-    // Publish the SaleCompleted domain event so that subscribers
-    // (InventoryStockHandler, CrmHistoryHandler, AuditLogHandler, etc.)
-    // fire their side effects.
-    {
-        let line_items: Vec<SaleCompletedLine> = sale
-            .lines
-            .iter()
-            .map(|l| SaleCompletedLine {
-                sku: l.sku.clone(),
-                qty: l.qty,
-                unit_price_minor: l.unit_price.minor_units,
-                tax_minor: l.tax_amount.minor_units,
-                tax_rate_id: l.tax_rate_id.clone(),
-            })
-            .collect();
-
-        let event = SaleCompleted {
-            sale_id: sale_id.clone(),
-            store_id: None,
-            line_items,
-            total_minor: total.map(|m| m.minor_units).unwrap_or(0),
-            currency: String::from_utf8_lossy(&sale.currency.0).into_owned(),
-            customer_id: args.customer_id.clone(),
-        };
-
-        let kernel = state.kernel.lock().await;
-        let bus = kernel.event_bus();
-        if let Err(e) = bus.publish(&event) {
-            // Logged by the bus; do not fail the command.
-            tracing::warn!(%sale_id, error = %e, "event bus publish failed");
-        }
-    }
-
-    Ok(CompleteSaleResult {
-        sale_id: updated.id,
-        total,
-        line_count,
-    })
 }
 
 /// A single cart line reconstructed by the frontend for the second command.
@@ -1543,31 +1159,6 @@ pub struct HoldCartResult {
     pub id: String,
 }
 
-/// Park the current sale as a held order in the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `hold_cart_scoped`.
-#[tauri::command]
-pub async fn hold_cart(
-    args: HoldCartArgs,
-    state: State<'_, AppState>,
-) -> Result<HoldCartResult, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let id = store.hold_cart(
-        &args.label,
-        &args.cart_data,
-        args.item_count,
-        args.total_minor,
-        &args.currency,
-        &args.bill_type,
-        args.customer_name.as_deref(),
-        args.deduction_location_id.as_deref(),
-    )?;
-    drop(db);
-    tracing::info!(held_cart_id = %id, label = %args.label, "cart held");
-    Ok(HoldCartResult { id })
-}
-
 /// Hold a cart in the store resolved from a session token. ADR #7.
 ///
 /// Requires `SALES_PROCESS` permission.
@@ -1603,20 +1194,6 @@ pub async fn hold_cart_scoped(
     Ok(HoldCartResult { id })
 }
 
-/// List all held carts from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `list_held_carts_scoped`.
-#[tauri::command]
-pub async fn list_held_carts(
-    state: State<'_, AppState>,
-) -> Result<Vec<oz_core::db::HeldCartRow>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let carts = store.list_held_carts()?;
-    drop(db);
-    Ok(carts)
-}
-
 /// List held carts for the store resolved from a session token. ADR #7.
 ///
 /// Requires `SALES_PROCESS` permission.
@@ -1637,20 +1214,6 @@ pub async fn list_held_carts_scoped(
     let store = Store::new(&db);
 
     let carts = store.list_held_carts()?;
-    drop(db);
-    Ok(carts)
-}
-
-/// List open bills from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `list_open_bills_scoped`.
-#[tauri::command]
-pub async fn list_open_bills(
-    state: State<'_, AppState>,
-) -> Result<Vec<oz_core::db::HeldCartRow>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let carts = store.list_open_bills()?;
     drop(db);
     Ok(carts)
 }
@@ -1679,21 +1242,6 @@ pub async fn list_open_bills_scoped(
     Ok(carts)
 }
 
-/// Resume a held cart from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `get_held_cart_scoped`.
-#[tauri::command]
-pub async fn get_held_cart(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<Option<oz_core::db::HeldCartFull>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let cart = store.get_held_cart(&id)?;
-    drop(db);
-    Ok(cart)
-}
-
 /// Get a held cart from the store resolved from a session token. ADR #7.
 ///
 /// Requires `SALES_PROCESS` permission.
@@ -1717,20 +1265,6 @@ pub async fn get_held_cart_scoped(
     let cart = store.get_held_cart(&id)?;
     drop(db);
     Ok(cart)
-}
-
-/// Delete a held cart from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `delete_held_cart_scoped`.
-#[tauri::command]
-pub async fn delete_held_cart(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-
-    store.delete_held_cart(&id)?;
-    drop(db);
-    tracing::info!(held_cart_id = %id, "held cart deleted");
-    Ok(())
 }
 
 /// Delete a held cart in the store resolved from a session token. ADR #7.

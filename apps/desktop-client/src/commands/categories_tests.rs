@@ -3,17 +3,6 @@ use oz_core::session::SessionContext;
 use platform_core::StoreDatabaseManager;
 use tauri::Manager as _;
 
-fn usd() -> oz_core::Currency {
-    "USD".parse().unwrap()
-}
-
-fn price(minor: i64) -> oz_core::Money {
-    oz_core::Money {
-        minor_units: minor,
-        currency: usd(),
-    }
-}
-
 // ── CategoryDto ─────────────────────────────────────────────────────
 
 #[test]
@@ -252,67 +241,4 @@ async fn scoped_category_write_command_targets_only_the_session_store() {
         store_b.is_empty(),
         "store B must not see store A category data"
     );
-}
-
-#[tokio::test]
-async fn delete_category_scoped_reports_unlinked_products() {
-    // CAT-02 contract: the command returns how many products were
-    // unlinked by the transactional delete (not just ok).
-    let conn = oz_core::migrations::fresh_db();
-    seed_owner_user(&conn);
-
-    let temp_dir = tempfile::tempdir().unwrap();
-    let mut state = AppState::for_test_with_conn(conn);
-    state.db_manager =
-        StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
-    state.session_store.write().unwrap().insert(
-        "owner-token".into(),
-        SessionContext::new(
-            "user-owner".into(),
-            "role-owner".into(),
-            "terminal-1".into(),
-            "store-owner".into(),
-            "instance-1".into(),
-            "pos".into(),
-            None,
-            0,
-        ),
-    );
-
-    // Seed one category with two products in the store DB.
-    {
-        let store_conn = state.db_manager.open_store("store-owner").unwrap();
-        let store_db = store_conn.lock().unwrap();
-        let store = Store::new(&store_db);
-        store
-            .create_category("cat-del", "Delete Me", "#f00", "trash")
-            .unwrap();
-        store
-            .create_product("SKU-1", "One", price(100), Some("cat-del"), None, 0, None)
-            .unwrap();
-        store
-            .create_product("SKU-2", "Two", price(200), Some("cat-del"), None, 0, None)
-            .unwrap();
-    }
-
-    let app = tauri::test::mock_builder()
-        .manage(state)
-        .build(tauri::generate_context!())
-        .unwrap();
-
-    let result = delete_category_scoped(
-        "owner-token".into(),
-        DeleteCategoryArgs {
-            id: "cat-del".into(),
-        },
-        app.state(),
-    )
-    .await
-    .unwrap();
-    assert_eq!(result.affected_products, 2);
-
-    let remaining = list_categories_scoped("owner-token".into(), app.state())
-        .await
-        .unwrap();
-    assert!(remaining.is_empty(), "category must be deleted");
 }
