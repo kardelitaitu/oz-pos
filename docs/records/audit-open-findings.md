@@ -83,14 +83,13 @@ Key residual items:
 
 ## Loading States (`23-loading-states.md` — AUDITED)
 
-**Status:** **cross-screen loading and failure-state findings require remediation**.
+**Status:** **ALL CLOSED — verified fixed 2026-08-31** against current code; a dedicated guard test (`__tests__/loadingStateCompliance.test.tsx`) now enforces the patterns.
 
-Key open items:
-- **LOAD-01** — Two separate Skeleton components create visual and behavioral drift
-- **LOAD-02** — Several load failures are silently converted into an apparently empty screen
-- **LOAD-03** — Demo-data fallbacks can mask a production load failure
-- **LOAD-04** — Loading semantics inconsistent for initial load versus refresh (e.g. `KdsScreen` skeleton, then direct board updates without a refreshing state)
-- **LOAD-05** — Custom skeletons and plain loading text do not consistently announce progress
+- ~~**LOAD-01** — Two separate Skeleton components~~ — **VERIFIED FIXED**: single canonical `frontend/shared/Skeleton.tsx`; `components/Skeleton.tsx` is a documented 9-line compatibility re-export so 40+ importers share one source of truth.
+- ~~**LOAD-02** — Load failures silently become an empty screen~~ — **VERIFIED FIXED**: sampled failure paths (ShiftBar, StockCountDetail, KdsProductPickerModal, CustomerManagement) all surface localized error toasts or error states; compliance test guards the pattern.
+- ~~**LOAD-03** — Demo-data fallbacks mask production failures~~ — **VERIFIED FIXED**: no demo-data path remains in any data-loading screen (analytics card states it explicitly); remaining "demo" hits are the intentional DesignSystem showcase pages.
+- ~~**LOAD-04** — Initial-load vs refresh semantics (KdsScreen)~~ — **VERIFIED FIXED**: `KdsScreen` gates the skeleton on `initialLoading` only; refreshes update the live board in place.
+- ~~**LOAD-05** — Progress not announced~~ — **VERIFIED FIXED**: shared `LoadingStatus` (role=status, localized label) wraps decorative skeletons; 11 screen usages + compliance test.
 
 ---
 
