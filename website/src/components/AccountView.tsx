@@ -160,16 +160,12 @@ export default function AccountView({ locale }: Props) {
       setState('error');
       return;
     }
-    // Synchronous storage gate for the initial state decision (skips the
-    // async httpOnly cookie fetch that would break fake-timer tests). The
-    // cookie is still preferred for the actual API calls via getSessionToken
-    // inside fetchMe/fetchDevices — the sessionStorage token here is just
-    // a quick "is there possibly a session?" hint.
-    const token = sessionStorage.getItem('oz_session');
-    if (!token) {
-      setState('anon');
-      return;
-    }
+    // P2: no synchronous sessionStorage gate here. fetchMe resolves the
+    // token cookie-first via getSessionToken (the Worker's /__oz/session
+    // httpOnly cookie, sessionStorage only as fallback) and returns null
+    // when neither exists — so a session that lives ONLY in the httpOnly
+    // cookie (sessionStorage cleared, another tab, or an R1-only login)
+    // still loads the dashboard instead of falsely showing "anon".
     fetchMe()
       .then((data) => {
         if (!mountedRef.current) return;
