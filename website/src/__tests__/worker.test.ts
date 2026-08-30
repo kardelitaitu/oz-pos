@@ -360,4 +360,29 @@ describe('Cloudflare Worker — worker.ts', () => {
     expect(res.status).toBe(302);
     expect(res.headers.get('Location')).toBe('https://ozpos.my.id/en/login');
   });
+
+  // ── R3: strict CSP without script-src 'unsafe-inline' ───────────────
+
+  it('R3: auth-gated admin pages carry a strict CSP with no inline scripts', async () => {
+    // The admin SPA loads every script from an external file, so the CSP
+    // must block inline script injection (no 'unsafe-inline' in script-src).
+    const req = new Request('https://admin.ozpos.my.id/', {
+      headers: { Cookie: 'oz_session=valid.jwt.token' },
+    });
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(200);
+    const csp = res.headers.get('Content-Security-Policy') ?? '';
+    // script-src must NOT permit inline script injection.
+    const scriptDirective = csp.split(';').find((d) => d.trim().startsWith('script-src')) ?? '';
+    expect(scriptDirective).not.toContain('unsafe-inline');
+    expect(scriptDirective).toContain("'self'");
+    // style-src keeps 'unsafe-inline' (admin pages style attributes).
+    const styleDirective = csp.split(';').find((d) => d.trim().startsWith('style-src')) ?? '';
+    expect(styleDirective).toContain("'unsafe-inline'");
+    // The rest of the hardening headers stay in place.
+    expect(res.headers.get('X-Frame-Options')).toBe('DENY');
+    expect(res.headers.get('Referrer-Policy')).toBe('no-referrer');
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+  });
 });

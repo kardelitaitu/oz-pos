@@ -94,17 +94,16 @@ function setCookieHeader(token: string, maxAge: number, domain: string): string 
  * and the admin login page — never the marketing site (which needs
  * 'unsafe-inline' for its Astro inline scripts).
  *
- * WEB-3 note: `script-src 'unsafe-inline'` is still present because the
- * dashboard/admin bundles bootstrap through inline islands. Hardening
- * path: move the inline bootstrap to an external hashed file (same
- * approach as public/_headers documents for the marketing site) and drop
- * 'unsafe-inline' from this policy — until then this CSP is strict
- * everywhere except inline script injection.
+ * R3: `script-src` no longer carries 'unsafe-inline'. The retired
+ * dashboard SPA bootstrapped through inline islands, but the remaining
+ * auth-gated pages (website/public/admin/*) load every script from an
+ * external file (theme.js, admin-utils.js, admin.js, login.js), so inline
+ * script injection is blocked outright.
  */
 function withStrictCSP(resp: Response): Response {
   const strictCSP = [
     "default-src 'none'",
-    "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
+    "script-src 'self' https://static.cloudflareinsights.com",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
     "font-src 'self'",
