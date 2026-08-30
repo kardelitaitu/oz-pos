@@ -524,6 +524,15 @@ If the service's native git trigger beats the workflow to the API (HTTP
 build for the same commit** and watches it to conclusion — a merge shows
 one green, auditable check either way.
 
+> **⏱️ Expected build time:** the unified image compiles the full Rust
+> workspace (`oz-cloud-server` + its dependency graph), which takes roughly
+> **15 minutes** on Northflank's 4-core / 16 GB builders. The deploy job's
+> 90-minute timeout and 50-minute poll window are sized for worst-case
+> cold caches — a warm cache (unchanged `Cargo.toml`/`Cargo.lock` between
+> builds) lands closer to ~10 minutes. A push that touches only docs or the
+> `website/`/`ui/` tree does not trigger a deploy (path filter above), so
+> these builds are backend-only.
+
 **Manual redeploy from a shell** (same API call, no GitHub needed):
 
 ```bash
