@@ -97,6 +97,9 @@ describe('getSessionEmail', () => {
   });
 
   it('returns null when there is no session token', async () => {
+    // getSessionToken calls /__oz/session first; stub it so the test
+    // doesn't hit the real network. A 401 or rejection means no cookie.
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no worker')));
     const email = await paddle.getSessionEmail();
     expect(email).toBeNull();
   });

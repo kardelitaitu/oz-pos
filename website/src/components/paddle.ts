@@ -30,6 +30,7 @@
  */
 
 import { licenseApiUrl } from '../lib/runtime-config';
+import { getSessionToken } from '../lib/session';
 
 /** Event payload handed to Paddle.Initialize's eventCallback (v2). */
 export interface PaddleEvent {
@@ -207,12 +208,17 @@ export function hasSession(): boolean {
  * The signed-in user's email: cached in sessionStorage (set by AuthForm
  * after verify), else fetched from /me. Returns null when not signed in
  * or the API is unreachable.
+ *
+ * R1: the token is resolved cookie-first via getSessionToken (the Worker's
+ * /__oz/session httpOnly cookie, falling back to sessionStorage for
+ * no-Worker dev), so a cookie-signed-in session — where sessionStorage may
+ * have been cleared — still resolves the email for checkout prefill.
  */
 export async function getSessionEmail(): Promise<string | null> {
   try {
     const cached = window.sessionStorage.getItem(EMAIL_KEY);
     if (cached) return cached;
-    const token = window.sessionStorage.getItem(SESSION_KEY);
+    const token = await getSessionToken();
     if (!token || !API) return null;
     const res = await fetch(`${API}/api/v1/web/me`, {
       headers: { Authorization: `Bearer ${token}` },
