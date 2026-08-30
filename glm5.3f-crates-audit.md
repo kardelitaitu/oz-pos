@@ -226,6 +226,21 @@ loopback default with PSK required for external bind.
 
 > Slice B (auth.rs, state.rs, lib.rs, sync_bootstrap) next.
 
+### Slice B — commands/auth.rs (641 fully read)
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| DC-3 | 🟡 LOW | apps/desktop-client/src/commands/auth.rs:571 | `verify_pin` (the destructive-op gate for void/topology Apply) verifies against the argon2 hash with **no rate limiting**, unlike `staff_login`'s STAFF-07 limiter — a compromised renderer can brute-force a 4-digit staff PIN within a valid session. | Route `verify_pin` through `record_login_attempt_scoped` per-account limits. |
+
+Notable: `verify_pin` **fails closed** on malformed/placeholder hashes,
+which confirms CLI-2's placeholder-seed admin is locked out (not
+bypassed) until a real hash is set. Login is exemplary: uniform
+pre-auth responses, randomized delay, layered persistent rate limiting,
+picker-ticket identity binding, server-side instance authorization,
+deterministic LRU session eviction.
+
+> Slice C (state.rs, lib.rs, sync_bootstrap.rs, pos.rs head) next.
+
 ---
 
 ## 25. crates/oz-hal — hardware abstraction layer
