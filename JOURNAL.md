@@ -7439,3 +7439,143 @@ the swept commit already carried the payload before re-committing.
 
 **Commits:** 3c23e47b (code, landed under a foreign message — see
 above), docs commit alongside this entry.
+
+## 2026-08-31 — oz-core bug hunt rounds A-B: .ozpkg header (B46-B47)
+
+**Problem:** Moved from website>admin to three Rust modules the user
+flagged (cache.rs, ozpkg.rs, user_preferences.rs). Their notes described
+ozpkg.rs as "package management, installation, dependency resolution" —
+it is actually the encrypted .ozpkg BACKUP format (Argon2id +
+AES-256-GCM + zstd). That misread inverted the priority: crypto and
+backup code with 7 tests is the highest-risk of the three, not MEDIUM.
+Assessed all three first, then ran TDD on the top two findings.
+
+**Findings:**
+
+1. **B46** (P1, 60cc266a) the header is written into a fixed 512-byte
+   space-padded block and overflow was handled with min(HEADER_LEN),
+   which SILENTLY TRUNCATED the header JSON. export_ozpkg() returned Ok,
+   the file was written, and its header block was invalid JSON - the
+   archive could never be opened. Silent backup loss discovered only at
+   restore time. Not crafted input: to_settings_rows() puts EVERY enabled
+   feature flag in the header (~26 bytes each) and the registry holds
+   ~39, so ~12-14 enabled flags cross 512. Proved with an ordinary
+   shape (store "Kopi Senja", 16 flags, 2 data types); the expect_err
+   dump showed truncated JSON running straight into raw ciphertext.
+   Export now fails loudly naming the actual size and the limit; the CLI
+   propagates via .context("encrypting export")? and writes no file.
+2. **B47** (P2, d4bbe3ee) the module doc claimed "authenticated
+   encryption (integrity + secrecy)" but only the payload was inside the
+   ciphertext - the header block was plaintext and unbound. Red imported
+   two forgeries CLEANLY with the tampered fields intact
+   (store_name "Loka Datar", features {"feature.pos.finance": "no!"}).
+   The tampers are same-length substitutions that keep the JSON valid,
+   so no parser could catch them. Fixed by building+padding the header
+   before encrypting and binding it in as GCM AAD (aead::Payload),
+   FORMAT_VERSION 1 -> 2. Import still accepts v1 with empty AAD (GCM
+   treats no-AAD and zero-length AAD identically) because users already
+   hold v1 backups from BOTH oz-cli and the desktop/tablet UI flow in
+   apps/*/data.rs - rejecting v1 would silently brick existing backups.
+   Also fixed the module doc, which claimed a 256-byte header when
+   HEADER_LEN is 512.
+
+**Test counts:** ozpkg 7 -> 14 (mine) and the module now sits at 38 with
+another agent's coverage push; full oz-core suite 25/25 binaries ok at
+Round A. No byte-exact header-boundary test on purpose: created_at uses
+to_rfc3339() and its fractional-second digit count varies between runs
+(visible in the Red output: .731925800 vs .731949), so an exact-limit
+test would be flaky by construction.
+
+**Process lessons (all cost real time):**
+
+1. **PowerShell Copy-Item preserves the SOURCE mtime.** After a
+   copy-out/checkout/revert A/B, restoring with Copy-Item gave the file
+   an mtime OLDER than the artifact built from the reverted source, so
+   cargo silently re-ran the STALE binary - my working fix appeared to
+   fail. Fix: touch LastWriteTime after any restore. An A/B must hold
+   scope constant AND invalidate build fingerprints.
+2. **A concurrent git stash swept up my in-flight file.** Halfway
+   through Round B, ozpkg.rs reverted to HEAD and git diff went empty;
+   stash@{0} (count 5 -> 6) contained exactly that file. Recovered with
+   git checkout 'stash@{0}' -- <path> WITHOUT popping, leaving their
+   stash intact. Note the snapshot predated my LAST edit, so one change
+   had to be re-applied by hand - and the symptom was subtle: tamper
+   tests passed while every honest round-trip failed (encrypt bound the
+   AAD, decrypt did not).
+3. **A pathspec commit commits the WORKING TREE version of a path, not
+   "my hunks".** d4bbe3ee swept in 10 of another agent's in-flight ozpkg
+   tests (~570 lines) that landed between my verification and my commit,
+   and HEAD went RED: their tests called my find_and_replace helper with
+   different-length needles, tripping its same-length assert. Lesson:
+   re-run the suite IMMEDIATELY before committing, and treat a shared
+   test file as contended. Fix-forward rather than amend - they may
+   already be based on the SHA.
+4. **scripts/test-tdd.sh is broken in this environment**: line 71
+   exec: cargo: not found (cargo is on PATH for pwsh but not for the bash
+   it spawns). Fell back to cargo test -p oz-core per the skill. Needs a
+   fix - likely resolve cargo's absolute path or inherit the parent PATH.
+
+**Residuals:** v1 archives remain header-unauthenticated (inherent to
+the legacy format, documented in the module doc); export_ozpkg and
+import_ozpkg still duplicate the Argon2 derive block (extraction is a
+clean refactor, deliberately left out of a behavior fix commit); a store
+whose header genuinely exceeds 512 bytes can no longer export at all
+until flags are disabled - the accepted trade-off, and the trigger for a
+follow-up spec to length-prefix the block.
+
+**Commits:** 60cc266a (B46), d4bbe3ee (B47).
+
+## 2026-08-31 — oz-core round C: inventory pub/sub (B48)
+
+**Finding (P3, latent, cfec0986):** the inventory pub/sub subscriber
+skips messages it wrote itself, keyed on terminal_id. But
+publish_inventory_change() writes "" for an unknown remote terminal and
+start_inventory_pubsub() maps a None local id to "" too - so with
+unknown identity BOTH sides were "" and compared equal, classifying
+every notification as "my own write". Such a terminal ignored all
+invalidations and served stale inventory until the TTL. The trait doc
+(cache.rs:39-40) promises the opposite: "Pass None if terminal identity
+is unknown (all messages will be processed)." The empty string was
+doubling as both "no identity" and "an identity".
+
+**Why it had no test:** the rule lived inside a thread::spawn loop
+needing a live Redis. inventory_invalidation_target extracts it and sits
+OUTSIDE the cache-redis gate (no Redis dependency), so it compiles and
+runs in the default build; the listener is now a thin I/O shell.
+
+**Method:** extracted with behavior UNCHANGED first and added 6 contract
+tests to prove the refactor was faithful, then wrote the 7th, which
+reproduced the bug (left: None, right: Some("p-1")). Only then the fix -
+a non-empty guard on the local identity. Reachability checked before
+claiming severity: nothing in the repo calls start_inventory_pubsub or
+publish_inventory_change, so this is a landmine for whoever wires it,
+not a live incident.
+
+**Coexistence:** another agent was concurrently adding a MockCache trait
+contract suite to cache_tests.rs (+263 lines) - exactly the Round C
+slice I had scoped. Re-scoped to the pub/sub finding (non-overlapping)
+and put my tests in a NEW file cache_pubsub_tests.rs so we never edit
+the same contended file. 35/35 cache tests pass with both suites.
+
+**Attribution went both ways:** my pathspec commit d4bbe3ee swept in 10
+of their in-flight ozpkg tests and left HEAD red (their tests called my
+find_and_replace with different-length needles, tripping its same-length
+assert). My follow-up fix to that helper was then swept into THEIR
+commit 018972d5. Both directions happened inside an hour. The code is
+committed and correct either way; the lesson is to re-run the suite
+immediately before committing and to commit the smallest unit as soon
+as it is verified.
+
+**Work-loss incident #2:** cache.rs was reverted mid-round (all three
+edits gone, no stash entry this time, unlike the ozpkg.rs recovery from
+stash@{0}). Re-applied from this session and committed within one
+cycle. In this shared worktree the mitigation is a shorter
+edit-to-commit window, not better recovery.
+
+**Blocked:** crates/oz-core/src/db/reports.rs is dirty with another
+agent's refactor adding net_revenue_minor/refund_minor without updating
+export/email_sender_tests.rs, so the crate does not compile and round D
+(user_preferences atomicity) cannot be verified yet. HEAD itself is
+fine - this is uncommitted WIP.
+
+**Commits:** cfec0986 (B48).
