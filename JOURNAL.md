@@ -6957,3 +6957,53 @@ constants; tableCard/tenantRow use textContent.
 PASS 114s); full website 659/659 (39 files); drift 0; gofmt clean.
 
 **Commits:** ed1d6054 (B25), 915e73b5 (B27), 5a8b0cc3 (B28).
+
+## 2026-08-30 — Admin bug hunt round 7: Go admin action endpoints (B29-B32)
+
+**Problem:** Seventh loop — the last un-swept admin surface: the Go
+handler BODIES behind the dashboard (round 6 audited only the auth
+wrappers). Four bugs fixed, several areas audited clean.
+
+**Findings:**
+
+1. **B29** (P2, ec2653d4) handleAdminRenew anchored new expiry at
+   time.Now() — renewing a subscription with months of paid time left
+   silently TRUNCATED it (test proved: 2027-01-01 +30d became
+   ~now+30d). Live subs now extend from max(now, current expiry);
+   expired subs still renew from now (guard test both directions).
+2. **B30** (P3, ec2653d4) tier-override accepted any string — unknown
+   keys hit the SelectField schema at save time and surfaced a 500
+   for bad input (and would price MRR at \ if the schema loosened).
+   Now 400 'unknown tier_key' via TierPriceUSD whitelist.
+3. **B31** (P3, ec2653d4) /admin/health hardcoded version 0.0.31 while
+   the repo is locked at 0.0.33 — the health card misreported the
+   deployment. Named const + test pin = bump reminder.
+4. **B32** (P3, 36055db6) Top Subscribers renewal column leaked the raw
+   PocketBase datetime (2027-01-01 00:00:00.000Z) while every other
+   date column formats 2006-01-02. Same format now; zero → empty.
+
+**Clean audits:** search filter (regexp.QuoteMeta + bound params — no
+injection), pagination clamps (perPage 1..100, page>=1),
+licenseSummary/subscriptionSummary (parameterized, consistent
+latest-by-starts_at — renew targets exactly what the dashboard shows).
+
+**Adjacent (NOT mine):** the concurrent agent's LSE-9 landed mid-round:
+addon_admin authenticateAdmin previously accepted ANY valid tenant
+api_key as admin — a P0 priv-esc (any customer could mint enterprise
+approval codes / mutate add-ons). They fixed it in their WIP while I
+was committing B32; recorded here so the admin-area hunt log is
+complete. Their LSE-8 (constant-time adminKeyOK) landed in the same
+file — my B29-B31 hunks untouched by it (different functions).
+
+**Process notes:** their mid-edit addon_admin.go (undefined: os)
+blocked my pre-commit vet gate for ~10 min — waited it out rather than
+touching their WIP or --no-verify. One commit message lost to PS
+quote-splitting (escaped double quotes) — single-quoted retry worked.
+My B32 test initially failed to compile (missing net/http import) and
+dt.Time vs dt.Time() (PB method, not field) — both caught by Red, not
+by review.
+
+**Test counts:** license-server +5 (B29 x2, B30, B31, B32); package
+PASS; gofmt clean.
+
+**Commits:** ec2653d4 (B29-B31), 36055db6 (B32).

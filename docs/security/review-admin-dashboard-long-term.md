@@ -223,7 +223,7 @@ merge history (`git log -S` + merge-ancestry), and a local test run:
 - **L1 corrected to OPEN**, **L3 marked won't-fix/by-design** — see §5.
 - Test count corrected: **24**, not "25+".
 
-### 8.1 Bug hunt (2026-08-30, TDD) — 24 bugs found & fixed
+### 8.1 Bug hunt (2026-08-30, TDD) — 28 bugs found & fixed
 
 A focused hunt over `admin.js`/`admin-utils.js` against the Go server's
 actual JSON shapes found six real bugs — none caught by the pre-existing
@@ -332,3 +332,24 @@ Lesson: check the WRITER before fixing a reader.
 `adminAuth` (admin key or admin-tenant session; registration verified);
 every innerHTML chart/donut path routes server strings through
 `escapeHtml` (String()-coerced); table cells use textContent.
+
+**Round 7** (same day) swept the Go admin action-endpoint BODIES — the
+last un-reviewed admin surface (round 6 covered only the auth wrappers):
+
+| # | Sev | Bug | Fix |
+|---|-----|-----|-----|
+| B29 | P2 | `handleAdminRenew` anchored the new expiry at `time.Now()` — renewing a subscription with months of paid time left silently TRUNCATED it (proved: 2027-01-01 +30d → ~now+30d) | extend from `max(now, current expiry)`; expired subs still renew from now (guard test both directions) |
+| B30 | P3 | tier-override accepted any string — unknown keys hit the SelectField schema at save time and surfaced a **500** for bad input (MRR would price unknown keys at $0 if the schema loosened) | 400 `unknown tier_key` via `TierPriceUSD` whitelist |
+| B31 | P3 | `/admin/health` hardcoded version `0.0.31` while the repo is locked at `0.0.33` — the health card misreported the deployment | named const + test pin (bump reminder) |
+| B32 | P3 | Top Subscribers `renewal` leaked the raw PocketBase datetime (`2027-01-01 00:00:00.000Z`) while every other date column formats `2006-01-02` | same format; zero datetime → empty |
+
+Round-7 commits: `ec2653d4` (B29–B31), `36055db6` (B32).
+**Clean audits this round**: tenant search filter (`regexp.QuoteMeta` +
+bound params — no injection), pagination clamps (`perPage` 1..100,
+`page` ≥ 1), `licenseSummary`/`subscriptionSummary` (parameterized,
+consistent latest-by-`starts_at` — renew targets exactly what the
+dashboard shows). **Adjacent, not this hunt**: the concurrent agent's
+LSE-9 landed mid-round — `addon_admin` `authenticateAdmin` previously
+accepted ANY valid tenant api_key as admin (P0 priv-esc: any customer
+could mint enterprise approval codes / mutate add-ons); fixed in their
+`fix(licensing)` slice alongside LSE-8 (constant-time `adminKeyOK`).
