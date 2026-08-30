@@ -15,8 +15,6 @@ import {
   CheckIcon,
   TrashIcon,
   CloseIcon,
-  PlusIcon,
-  MinusIcon,
   NodesIcon,
   WarningIcon,
 } from './NodeTopologyIcons';
@@ -97,6 +95,8 @@ import { AlignGlyph, ALIGN_ACTIONS, type AlignMode } from './topologyAlignGlyph'
 import { CanvasCursorReadout } from './topologyCanvasCursorReadout';
 import { TopologyHeader, type TopologyPreset } from './topologyHeader';
 import { TopologyToolRack } from './topologyToolRack';
+import { TopologyContextMenu } from './topologyContextMenu';
+import { TopologyCanvasZoomControls } from './topologyCanvasZoomControls';
 
 // Re-export the moved pure helpers so tests (nodeTopologyEditorHelpers,
 // canvasStateEqual) and runtime importers (topologyWarehouseCard) resolve
@@ -144,7 +144,6 @@ export type PortName = 'top' | 'right' | 'bottom' | 'left';
  *  endpoints exist". */
 
 /** Node types offered by the right-click canvas context menu. */
-const CONTEXT_ADD_TYPES: NodeType[] = ['store', 'workspace', 'warehouse', 'hardware'];
 
 export type SemanticRelationshipType =
   | 'location'
@@ -5331,195 +5330,32 @@ export default function NodeTopologyEditor({
             </div>
           )}
           {contextMenu && (
-            <div
-              className="topology-context-menu"
-              role="menu"
-              aria-label={l10n.getString('topology-context-add-title')}
-              tabIndex={-1}
-              onMouseDown={(e) => e.stopPropagation()}
-              onKeyDown={(e) => {
-                if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-                e.preventDefault();
-                const items = Array.from(
-                  e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
-                );
-                if (items.length === 0) return;
-                const idx = items.indexOf(document.activeElement as HTMLButtonElement);
-                const next = e.key === 'ArrowDown'
-                  ? (idx + 1) % items.length
-                  : (idx - 1 + items.length) % items.length;
-                items[next]!.focus();
-              }}
-              style={{ left: contextMenu.x, top: contextMenu.y }}
-            >
-              {(() => {
-                const menuNode = contextMenu.nodeId ? nodeMap.get(contextMenu.nodeId) : undefined;
-                const menuWire = contextMenu.wireId ? wires.find((w) => w.id === contextMenu.wireId) : undefined;
-                if (menuWire) {
-                  // Wire menu: object-scoped actions (direction + rename + delete).
-                  return (
-                    <>
-                      <div className="topology-context-section-title">{wireDisplayLabel(menuWire)}</div>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="topology-context-item"
-                        onClick={() => { setContextMenu(null); handleCycleWireDirection(menuWire.id); }}
-                      >
-                        {l10n.getString('topology-wire-toggle-aria')}
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="topology-context-item"
-                        onClick={() => { setContextMenu(null); startWireRename(menuWire.id); }}
-                      >
-                        {l10n.getString('topology-context-rename-wire')}
-                      </button>
-                      <div className="topology-context-divider" />
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="topology-context-item"
-                        onClick={() => { setContextMenu(null); setConfirmDelete(''); }}
-                      >
-                        {l10n.getString('topology-context-delete-wire')}
-                      </button>
-                    </>
-                  );
-                }
-                if (menuNode) {
-                  // Node menu: object-scoped actions (rename/duplicate/delete).
-                  const menuRenameable = (menuNode.type === 'store' && !!onRenameBranch)
-                    || (menuNode.type === 'workspace' && !!onRenameWorkspace);
-                  return (
-                    <>
-                      <div className="topology-context-section-title">{menuNode.name}</div>
-                      {menuRenameable && (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="topology-context-item"
-                          onClick={() => { setContextMenu(null); startNodeRename(menuNode.id, menuNode.name); }}
-                        >
-                          {l10n.getString('topology-context-rename')}
-                        </button>
-                      )}
-                      {menuNode.type !== 'store' && (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="topology-context-item"
-                          onClick={() => { setContextMenu(null); duplicateSelection(); }}
-                        >
-                          {l10n.getString('topology-context-duplicate')}
-                        </button>
-                      )}
-                      {menuNode.type !== 'store' && (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="topology-context-item"
-                          onClick={() => { setContextMenu(null); handleDeleteRequest(); }}
-                        >
-                          {l10n.getString('topology-confirm-delete-node-title')}
-                        </button>
-                      )}
-                      <div className="topology-context-divider" />
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="topology-context-item"
-                        onClick={() => { setContextMenu(null); zoomToSelection(); }}
-                      >
-                        {l10n.getString('topology-context-zoom-selection')}
-                      </button>
-                    </>
-                  );
-                }
-                // Canvas menu: an active (marquee) selection gets a summary
-                // + clear action up top; add node types + view actions follow.
-                return (
-                  <>
-                    {selectedNodeIds.size > 0 && (
-                      <>
-                        <div className="topology-context-section-title">
-                          {l10n.getString('topology-context-selection-title', { count: selectedNodeIds.size })}
-                        </div>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="topology-context-item"
-                          onClick={() => { setContextMenu(null); clearSelection(); }}
-                        >
-                          {l10n.getString('topology-context-clear-selection')}
-                        </button>
-                        <div className="topology-context-divider" />
-                      </>
-                    )}
-                    <div className="topology-context-section-title">
-                      {l10n.getString('topology-context-add-title')}
-                    </div>
-                    {CONTEXT_ADD_TYPES.filter((t) => allowLegacyApply || t !== 'store').map((type) => {
-                      const Icon = NODE_TYPE_ICON[type];
-                      return (
-                        <button
-                          key={type}
-                          type="button"
-                          role="menuitem"
-                          className="topology-context-item"
-                          onClick={() => {
-                            setContextMenu(null);
-                            handleAddNode(type, {
-                              x: (contextMenu.x - pan.x) / zoom,
-                              y: (contextMenu.y - pan.y) / zoom,
-                            });
-                          }}
-                        >
-                          <span className="topology-context-item-icon"><Icon size={14} /></span>
-                          {l10n.getString(`topology-new-${type}`)}
-                        </button>
-                      );
-                    })}
-                    <div className="topology-context-divider" />
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="topology-context-item"
-                      onClick={() => { setContextMenu(null); selectAllNodes(); }}
-                    >
-                      {l10n.getString('topology-context-select-all')}
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="topology-context-item"
-                      onClick={() => { setContextMenu(null); zoomToFit(); }}
-                    >
-                      {l10n.getString('topology-fit-all')}
-                    </button>
-                    {selectedNodeIds.size > 0 && (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="topology-context-item"
-                        onClick={() => { setContextMenu(null); zoomToSelection(); }}
-                      >
-                        {l10n.getString('topology-context-zoom-selection')}
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="topology-context-item"
-                      onClick={() => { setContextMenu(null); resetView(); }}
-                    >
-                      {l10n.getString('topology-reset-view')}
-                    </button>
-                  </>
-                );
-              })()}
-            </div>
+            <TopologyContextMenu
+              l10n={l10n}
+              menu={contextMenu}
+              onClose={() => setContextMenu(null)}
+              nodeMap={nodeMap}
+              wires={wires}
+              wireDisplayLabel={wireDisplayLabel}
+              onCycleWireDirection={handleCycleWireDirection}
+              onStartWireRename={startWireRename}
+              onStartNodeRename={startNodeRename}
+              onDuplicateSelection={duplicateSelection}
+              onDeleteRequest={handleDeleteRequest}
+              onZoomToSelection={zoomToSelection}
+              selectedCount={selectedNodeIds.size}
+              onClearSelection={clearSelection}
+              allowLegacyApply={allowLegacyApply}
+              onAddNode={handleAddNode}
+              pan={pan}
+              zoom={zoom}
+              onSelectAll={selectAllNodes}
+              onZoomToFit={zoomToFit}
+              onResetView={resetView}
+              canRenameBranch={!!onRenameBranch}
+              canRenameWorkspace={!!onRenameWorkspace}
+              onConfirmDeleteWire={() => setConfirmDelete('')}
+            />
           )}
           {relationshipPicker && pickerAnchor && (
             <TopologyRelationshipPicker
@@ -5893,79 +5729,19 @@ export default function NodeTopologyEditor({
             onClose={closeFinder}
           />
 
-          {/* ── Canvas zoom controls — the floating bottom-right
-                 cluster (standard canvas-tool pattern) ────────── */}
-          <div
-            className="canvas-zoom-controls"
-            role="toolbar"
-            aria-label={l10n.getString('topology-canvas-aria-label')}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              className="canvas-zoom-btn"
-              aria-label={l10n.getString('topology-zoom-out')}
-              onClick={() => zoomBy(1 / 1.25)}
-            >
-              <MinusIcon size={14} />
-            </button>
-            <div className="canvas-zoom-picker">
-              <button
-                type="button"
-                className="canvas-zoom-level"
-                aria-label={l10n.getString('topology-zoom-level-aria', { count: Math.round(zoom * 100) })}
-                aria-expanded={zoomPickerOpen}
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={() => setZoomPickerOpen((v) => !v)}
-              >
-                {Math.round(zoom * 100)}%
-              </button>
-              {zoomPickerOpen && (
-                <div
-                  className="canvas-zoom-slider-pop"
-                  role="group"
-                  aria-label={l10n.getString('topology-zoom-slider-aria')}
-                >
-                  <input
-                    type="range"
-                    min={40}
-                    max={200}
-                    step={5}
-                    value={Math.round(zoom * 100)}
-                    onChange={(e) => setZoom(Number(e.target.value) / 100)}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    aria-label={l10n.getString('topology-zoom-slider-aria')}
-                  />
-                  <span className="canvas-zoom-slider-value" aria-hidden="true">{Math.round(zoom * 100)}%</span>
-                </div>
-              )}
-            </div>
-            <button
-              type="button"
-              className="canvas-zoom-btn"
-              aria-label={l10n.getString('topology-zoom-in')}
-              onClick={() => zoomBy(1.25)}
-            >
-              <PlusIcon size={14} />
-            </button>
-            <span className="canvas-zoom-divider" aria-hidden="true" />
-            <button type="button" className="canvas-zoom-btn canvas-zoom-action" onClick={zoomToFit}>
-              <Localized id="topology-fit-all">Fit All</Localized>
-            </button>
-            <button type="button" className="canvas-zoom-btn canvas-zoom-action" onClick={resetView}>
-              <Localized id="topology-reset-view">Reset View</Localized>
-            </button>
-            <button
-              type="button"
-              className="canvas-zoom-btn canvas-zoom-action"
-              aria-pressed={minimapVisible}
-              onClick={() => setMinimapVisible((v) => !v)}
-            >
-              <Localized id={minimapVisible ? 'topology-minimap-hide' : 'topology-minimap-show'}>
-                {minimapVisible ? 'Hide Minimap' : 'Show Minimap'}
-              </Localized>
-            </button>
-          </div>
+          <TopologyCanvasZoomControls
+            l10n={l10n}
+            zoom={zoom}
+            zoomPickerOpen={zoomPickerOpen}
+            onToggleZoomPicker={() => setZoomPickerOpen((v) => !v)}
+            onZoomOut={() => zoomBy(1 / 1.25)}
+            onZoomIn={() => zoomBy(1.25)}
+            onSliderChange={(z) => setZoom(z)}
+            onZoomToFit={zoomToFit}
+            onResetView={resetView}
+            minimapVisible={minimapVisible}
+            onToggleMinimap={() => setMinimapVisible((v) => !v)}
+          />
 
           {/* ── Canvas minimap — bottom-left overview; click/drag to
                  recenter, arrows nudge the view, Enter centers on the
