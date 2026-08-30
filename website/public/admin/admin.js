@@ -407,7 +407,6 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         const m = el('div', 'modal-back'), box = el('div', 'modal');
         box.appendChild(el('h3', null, 'Tenant: ' + (t.email || '')));
         const kv = el('div'); kv.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.82rem';
-        // Build the key-value grid safely — never innerHTML with API data.
         function addRow(label, val) {
           kv.appendChild(el('span', 'muted', label));
           const vs = el('span', null, val === undefined || val === null ? '—' : String(val));
@@ -419,22 +418,62 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         addRow('Email verified', t.emailVerified ? '✓' : '○');
         addRow('Created', t.created ? t.created.slice(0,10) : '—');
         addRow('License key', lic.key || '—');
-        addRow('Tier', sub.tierKey || lic.tierKey || '—');
+        const currentTier = sub.tierKey || lic.tierKey || '—';
+        addRow('Current tier', currentTier);
         addRow('Subscription status', sub.status || '—');
         addRow('Expires', sub.expiresAt || '—');
         addRow('Devices', devices.length);
         box.appendChild(kv);
-        const actions = el('div', null); actions.style.cssText = 'display:flex;gap:.4rem;margin-top:.8rem;flex-wrap:wrap';
-        if (t.status === 'active') { const revoke = el('button', 'btn btn-sm btn-bad', 'Revoke'); revoke.addEventListener('click', () => doAction(id,'revoke','Revoked')); actions.appendChild(revoke); }
-        if (t.status !== 'active') { const activate = el('button', 'btn btn-sm btn-ok', 'Activate'); activate.addEventListener('click', () => doAction(id,'activate','Activated')); actions.appendChild(activate); }
-        const renew = el('button', 'btn btn-sm', 'Renew +365d'); renew.addEventListener('click', () => doAction(id,'renew','Renewed','{"days":365}')); actions.appendChild(renew);
-        const upgrade = el('button', 'btn btn-sm btn-warn', 'Upgrade'); upgrade.addEventListener('click', () => upgradePrompt(id,data)); actions.appendChild(upgrade);
+
+        // ── Inline tier change (no separate popup) ─────────────────
+        const tierRow = el('div', null); tierRow.style.cssText = 'display:flex;align-items:center;gap:.5rem;margin-top:.8rem;flex-wrap:wrap';
+        tierRow.appendChild(el('span', 'muted', 'Change tier:'));
+        const tierSelect = el('select', 'input');
+        tierSelect.style.cssText = 'flex:1;min-width:120px;' + tierSelect.style.cssText;
+        ['plus','pro','premium','enterprise'].forEach(tier => {
+          const opt = el('option', null, tier);
+          if (tier === sub.tierKey || tier === lic.tierKey) opt.selected = true;
+          tierSelect.appendChild(opt);
+        });
+        tierRow.appendChild(tierSelect);
+        const tierReason = el('input', 'input'); tierReason.placeholder = 'Reason for change'; tierReason.style.cssText = 'flex:1;min-width:160px;' + tierReason.style.cssText;
+        tierRow.appendChild(tierReason);
+        const saveTier = el('button', 'btn btn-sm', 'Change');
+        saveTier.addEventListener('click', async () => {
+          await doAction(id, 'tier-override', 'Tier changed',
+            JSON.stringify({tier_key: tierSelect.value, reason: tierReason.value || 'admin override'}));
+        });
+        tierRow.appendChild(saveTier);
+        box.appendChild(tierRow);
+
+        // ── Action buttons: +30d, +365d, Revoke/Activate, Close ───
+        const actions = el('div', null); actions.style.cssText = 'display:flex;gap:.4rem;margin-top:.6rem;flex-wrap:wrap';
+        const renew30 = el('button', 'btn btn-sm', '+30d');
+        renew30.addEventListener('click', () => doAction(id,'renew','Renewed','{"days":30}'));
+        actions.appendChild(renew30);
+        const renew365 = el('button', 'btn btn-sm', '+365d');
+        renew365.addEventListener('click', () => doAction(id,'renew','Renewed','{"days":365}'));
+        actions.appendChild(renew365);
+        if (t.status === 'active') {
+          const revoke = el('button', 'btn btn-sm btn-bad', 'Revoke');
+          revoke.addEventListener('click', () => doAction(id,'revoke','Revoked'));
+          actions.appendChild(revoke);
+        }
+        if (t.status !== 'active') {
+          const activate = el('button', 'btn btn-sm btn-ok', 'Activate');
+          activate.addEventListener('click', () => doAction(id,'activate','Activated'));
+          actions.appendChild(activate);
+        }
         box.appendChild(actions);
-        const close = el('button', 'btn btn-ghost', 'Close'); close.style.cssText = 'margin-top:.8rem;width:100%'; close.addEventListener('click', () => { modal.innerHTML = ''; }); box.appendChild(close);
+        const close = el('button', 'btn btn-ghost', 'Close'); close.style.cssText = 'margin-top:.8rem;width:100%';
+        close.addEventListener('click', () => { modal.innerHTML = ''; }); box.appendChild(close);
         m.appendChild(box); modal.appendChild(m);
         m.addEventListener('click', e => { if (e.target === m) { modal.innerHTML = ''; } });
       } catch (err) {
-        if (err && err.authDenied) { modal.innerHTML = ''; return; }
+        if (err && err.authDenied) {
+          modal.innerHTML = '<div class="modal-back"><div class="modal" style="text-align:center"><h3 style="color:var(--bad)">Session expired</h3><p class="empty">Your session is no longer valid. Please <a href="/__oz/logout" style="color:var(--accent)">sign in again</a>.</p></div></div>';
+          return;
+        }
         modal.innerHTML = '<div class="modal-back"><div class="modal"><p class="empty">Failed to load tenant detail.</p></div></div>';
       }
     }
