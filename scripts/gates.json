@@ -6,497 +6,276 @@
       "id": "ui-lint",
       "label": "UI lint",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "ui lint"
-        ],
-        "check:all": [
-          "eslint"
-        ]
-      },
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "ui-lint"
-      }
+      "runners": { "check.sh": ["ui lint"], "check:all": ["eslint"] },
+      "ci": { "workflow": "ci.yml", "job": "ui-lint" }
     },
     {
       "id": "ui-typecheck",
       "label": "UI typecheck",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "ui typecheck"
-        ],
-        "check:all": [
-          "type check"
-        ]
-      },
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "ui-typecheck"
-      }
+      "runners": { "check.sh": ["ui typecheck"], "check:all": ["type check"] },
+      "ci": { "workflow": "ci.yml", "job": "ui-typecheck" }
     },
     {
       "id": "ui-unit-tests",
       "label": "UI unit tests",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "ui test"
-        ],
-        "check:all": [
-          "unit tests"
-        ]
-      },
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "ui-test"
-      }
+      "runners": { "check.sh": ["ui test"], "check:all": ["unit tests"] },
+      "ci": { "workflow": "ci.yml", "job": "ui-test" }
     },
     {
       "id": "i18n-lint",
       "label": "i18n lint",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "i18n lint"
-        ],
-        "check:all": [
-          "i18n lint"
-        ]
-      },
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "ui-test"
-      }
+      "runners": { "check.sh": ["i18n lint"], "check:all": ["i18n lint"] },
+      "ci": { "workflow": "ci.yml", "job": "ui-test" }
     },
     {
       "id": "ftl-dedupe",
       "label": "FTL dedupe",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "ftl dedupe"
-        ],
-        "check:all": [
-          "ftl dedupe"
-        ]
-      }
+      "runners": { "check.sh": ["ftl dedupe"], "check:all": ["ftl dedupe"] }
     },
     {
       "id": "rust-fmt",
       "label": "Rust fmt",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "cargo fmt"
-        ]
-      },
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "rust-fmt"
-      }
+      "runners": { "check.sh": ["cargo fmt"] },
+      "ci": { "workflow": "ci.yml", "job": "rust-fmt" }
     },
     {
       "id": "go",
       "label": "Go (license-server)",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "go fmt",
-          "go vet",
-          "go test (short)"
-        ]
-      },
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "go"
-      }
+      "runners": { "check.sh": ["go fmt", "go vet", "go test (short)"] },
+      "ci": { "workflow": "ci.yml", "job": "go" }
     },
     {
       "id": "rust-clippy",
       "label": "Clippy",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "clippy"
-        ]
-      },
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "rust-clippy"
-      }
+      "runners": { "check.sh": ["clippy"] },
+      "ci": { "workflow": "ci.yml", "job": "rust-clippy" }
     },
     {
       "id": "rust-tests",
       "label": "Rust tests",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "test workspace",
-          "test doctests"
-        ]
-      },
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "rust-test-fast"
-      }
+      "runners": { "check.sh": ["test workspace", "test doctests"] },
+      "ci": { "workflow": "ci.yml", "job": "rust-test-fast" }
     },
     {
       "id": "architecture-boundaries",
       "label": "Architecture boundaries",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "architecture boundaries"
-        ]
-      },
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "architecture-boundaries"
-      }
+      "runners": { "check.sh": ["architecture boundaries"] },
+      "ci": { "workflow": "ci.yml", "job": "architecture-boundaries" }
     },
     {
       "id": "no-raw-params",
       "label": "No raw params (ADR #7 Phase 4)",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "no-raw-params"
-        ]
-      }
+      "runners": { "check.sh": ["no-raw-params"] }
     },
     {
       "id": "no-hardcoded-money-format",
       "label": "No hardcoded exp-2 money formatting",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "hardcoded-money-format"
-        ]
-      },
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "rust-money-format"
-      }
+      "runners": { "check.sh": ["hardcoded-money-format"] },
+      "ci": { "workflow": "ci.yml", "job": "rust-money-format" }
     },
     {
       "id": "docker-dry-run",
       "label": "Docker build smoke (--docker-dry-run)",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "docker build"
-        ]
-      }
+      "runners": { "check.sh": ["docker build"] }
     },
     {
       "id": "migration",
       "label": "Migration smoke",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "migration"
-        ]
-      }
+      "runners": { "check.sh": ["migration"] }
     },
     {
       "id": "skill-drift",
       "label": "Skill drift guard",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "skill-drift"
-        ]
-      },
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "skill-drift-tests"
-      }
+      "runners": { "check.sh": ["skill-drift"] },
+      "ci": { "workflow": "ci.yml", "job": "skill-drift-tests" }
     },
     {
       "id": "panic-inventory",
       "label": "Panic inventory",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "panic-inventory"
-        ]
-      },
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "rust-panic-inventory"
-      }
+      "runners": { "check.sh": ["panic-inventory"] },
+      "ci": { "workflow": "ci.yml", "job": "rust-panic-inventory" }
     },
     {
       "id": "a11y-advisory",
       "label": "A11y regression (advisory)",
       "status": "advisory",
-      "runners": {
-        "check.sh": [
-          "a11y"
-        ]
-      }
+      "runners": { "check.sh": ["a11y"] }
     },
     {
       "id": "feature-registry",
       "label": "Feature registry parity",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "feature registry"
-        ]
-      }
+      "runners": { "check.sh": ["feature registry"] }
     },
     {
       "id": "plugin-guide-parity",
       "label": "Plugin-guide parity",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "plugin-guide parity"
-        ]
-      }
+      "runners": { "check.sh": ["plugin-guide parity"] }
     },
     {
       "id": "ci-docs-drift",
       "label": "CI docs drift",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "ci docs drift"
-        ]
-      },
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "ci-docs-drift"
-      }
+      "runners": { "check.sh": ["ci docs drift"] },
+      "ci": { "workflow": "ci.yml", "job": "ci-docs-drift" }
     },
     {
       "id": "windows-config",
       "label": "Windows config drift (NSIS installMode + asInvoker manifests)",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "windows config"
-        ]
-      },
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "windows-config"
-      }
+      "runners": { "check.sh": ["windows config"] },
+      "ci": { "workflow": "ci.yml", "job": "windows-config" }
     },
     {
       "id": "unified-healthcheck",
       "label": "Unified healthcheck script test",
       "status": "required",
-      "runners": {
-        "check.sh": [
-          "healthcheck script test"
-        ]
-      },
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "unified-healthcheck"
-      }
+      "runners": { "check.sh": ["healthcheck script test"] },
+      "ci": { "workflow": "ci.yml", "job": "unified-healthcheck" }
     },
     {
       "id": "bundle-budget",
       "label": "Bundle budget",
       "status": "required",
-      "runners": {
-        "check:all": [
-          "bundle budget"
-        ]
-      }
+      "runners": { "check:all": ["bundle budget"] }
     },
     {
       "id": "e2e",
       "label": "E2E tests",
       "status": "required",
-      "runners": {
-        "check:all": [
-          "e2e"
-        ]
-      },
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "e2e"
-      }
+      "runners": { "check:all": ["e2e"] },
+      "ci": { "workflow": "ci.yml", "job": "e2e" }
     },
     {
       "id": "perf-smoke",
       "label": "Perf smoke",
       "status": "required",
-      "runners": {
-        "check:all": [
-          "perf smoke"
-        ]
-      }
+      "runners": { "check:all": ["perf smoke"] }
     },
     {
       "id": "rust-test-apps",
       "label": "Rust test apps",
       "status": "required",
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "rust-test-apps"
-      }
+      "ci": { "workflow": "ci.yml", "job": "rust-test-apps" }
     },
     {
       "id": "rust-test-full",
       "label": "Rust test full",
       "status": "required",
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "rust-test-full"
-      }
+      "ci": { "workflow": "ci.yml", "job": "rust-test-full" }
     },
     {
       "id": "sync-slow-tests",
       "label": "Sync slow tests",
       "status": "required",
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "sync-slow-tests"
-      }
+      "ci": { "workflow": "ci.yml", "job": "sync-slow-tests" }
     },
     {
       "id": "docker-build-scan",
       "label": "Docker build + blocking scan",
       "status": "required",
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "docker"
-      }
+      "ci": { "workflow": "ci.yml", "job": "docker" }
     },
     {
       "id": "security-pr",
       "label": "Security PR baseline",
       "status": "required",
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "security-pr"
-      }
+      "ci": { "workflow": "ci.yml", "job": "security-pr" }
     },
     {
       "id": "lighthouse",
       "label": "Lighthouse a11y",
       "status": "advisory",
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "lighthouse"
-      }
+      "ci": { "workflow": "ci.yml", "job": "lighthouse" }
     },
     {
       "id": "coverage",
       "label": "Coverage",
       "status": "advisory",
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "coverage"
-      }
+      "ci": { "workflow": "ci.yml", "job": "coverage" }
     },
     {
       "id": "audit",
       "label": "Dependency audit",
       "status": "required-on-push",
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "audit"
-      }
+      "ci": { "workflow": "ci.yml", "job": "audit" }
     },
     {
       "id": "fuzz",
       "label": "Fuzz",
       "status": "advisory",
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "fuzz"
-      },
+      "ci": { "workflow": "ci.yml", "job": "fuzz" },
       "note": "The fuzz job deliberately sets RUSTC_WRAPPER: '' in its job env. The ubuntu runner image globally wraps rustc with sccache, which breaks cargo-fuzz's --target build (its rustc version probe execs the resolved nightly toolchain path directly and dies with 'could not execute process sccache .../bin/rustc -vV'). The fuzz job is the only job affected (nightly + --target), so sccache must stay disabled there — do NOT re-add it. Caching is instead handled by Swatinem/rust-cache@v2 with `workspaces: fuzz` (cargo-fuzz builds into fuzz/target/, which default workspace discovery misses)."
     },
     {
       "id": "flaky-quarantine",
       "label": "Flaky quarantine registry",
       "status": "required",
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "flaky-quarantine"
-      }
+      "ci": { "workflow": "ci.yml", "job": "flaky-quarantine" }
     },
     {
       "id": "e2e-docker-image",
       "label": "E2E Docker image",
       "status": "required",
-      "ci": {
-        "workflow": "ci.yml",
-        "job": "e2e-docker-image"
-      }
+      "ci": { "workflow": "ci.yml", "job": "e2e-docker-image" }
     },
     {
       "id": "nightly-rust-test",
       "label": "Nightly rust test",
       "status": "required",
-      "ci": {
-        "workflow": "nightly.yml",
-        "job": "rust-test"
-      }
+      "ci": { "workflow": "nightly.yml", "job": "rust-test" }
     },
     {
       "id": "nightly-rust-doc",
       "label": "Nightly rust doc",
       "status": "required",
-      "ci": {
-        "workflow": "nightly.yml",
-        "job": "rust-doc"
-      }
+      "ci": { "workflow": "nightly.yml", "job": "rust-doc" }
     },
     {
       "id": "nightly-ui-test",
       "label": "Nightly UI tests",
       "status": "required",
-      "ci": {
-        "workflow": "nightly.yml",
-        "job": "ui-test"
-      }
+      "ci": { "workflow": "nightly.yml", "job": "ui-test" }
     },
     {
       "id": "nightly-e2e",
       "label": "Nightly E2E",
       "status": "required",
-      "ci": {
-        "workflow": "nightly.yml",
-        "job": "e2e"
-      }
+      "ci": { "workflow": "nightly.yml", "job": "e2e" }
     },
     {
       "id": "nightly-flaky-detect",
       "label": "Nightly flaky detection",
       "status": "advisory",
-      "ci": {
-        "workflow": "nightly.yml",
-        "job": "flaky-detect",
-        "advisory_at": "step"
-      }
+      "ci": { "workflow": "nightly.yml", "job": "flaky-detect", "advisory_at": "step" }
     },
     {
       "id": "nightly-flaky-registry",
       "label": "Nightly flaky quarantine registry",
       "status": "required",
-      "ci": {
-        "workflow": "nightly.yml",
-        "job": "flaky-quarantine-registry"
-      }
+      "ci": { "workflow": "nightly.yml", "job": "flaky-quarantine-registry" }
     },
     {
       "id": "nightly-benchmarks",
       "label": "Nightly benchmarks",
       "status": "required",
-      "ci": {
-        "workflow": "nightly.yml",
-        "job": "benchmarks"
-      }
+      "ci": { "workflow": "nightly.yml", "job": "benchmarks" }
     }
   ]
 }
