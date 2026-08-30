@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-reporting slice A: repository deep read)
+crate: modules-reporting | status: NEEDS-FIX | lint: CLEAN
+findings: MSL-7 MED — generate_daily_report queries SUM(tax_minor) FROM sales but the sales table column is tax_total_minor (tax_minor lives on sale_lines, verified in crates/oz-core/migrations/20260813_init.sql lines 589/614); the query fails at runtime with no-such-column on EVERY call; no test exercises it against a migrated DB so the break is invisible to cargo test. Proposed: SUM(tax_total_minor). Live-table query correctly filters status = completed
+next: fix column name in fix-order phase | perf: strftime per row prevents index use
+*/
 //! Reporting Repository — database query layer for reports.
 
 use crate::error::ReportingError;

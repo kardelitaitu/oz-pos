@@ -1246,6 +1246,27 @@ nothing — test-pinned); repository/service/error clean.
 
 ---
 
+## 17. modules/reporting — sale capture, daily reports
+
+Baseline: ~591 production lines. Slice A — all 6 files (handlers.rs 272:
+production 1–92 fully read; repository.rs read through the daily-report
+query; remaining files verified; lib's old 19-07 stamp replaced).
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| MSL-7 | 🟠 MED | modules/reporting/src/repository.rs:22 | `generate_daily_report` queries `SUM(tax_minor) FROM sales`, but the `sales` table's column is `tax_total_minor` — `tax_minor` lives on `sale_lines` (verified in `crates/oz-core/migrations/20260813_init.sql` lines 589/614). The query fails at runtime with *no such column* on **every call**; no test exercises it against a migrated DB, so the break is invisible to `cargo test`. | Change to `SUM(tax_total_minor)`. |
+| MSL-8 | 🟡 LOW | modules/reporting/src/handlers.rs:37–81 | `report_sales` has no `UNIQUE(sale_id)` and no receipt/pre-check, so a replayed `sale.completed` double-counts revenue in the reporting store; the lazy `CREATE TABLE` DDL also executes on **every** event. Refunded sales remain in report revenue (no refund event exists) — product decision to confirm. | Add `UNIQUE(sale_id)` + `INSERT OR IGNORE`; hoist DDL to a migration or first-use. |
+
+The handler is otherwise clean (parameterized insert, lock-safe), and the
+live-table query correctly filters `status = 'completed'`.
+
+> **modules-reporting COMPLETE** — 6 production files, ~591 lines. One
+> MED (MSL-7) and one LOW (MSL-8). Campaign proceeds to modules/terminal.
+
+---
+
+---
+
 ---
 
 ---

@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-reporting slice A: handlers deep read)
+crate: modules-reporting | status: NEEDS-FIX | lint: CLEAN
+findings: MSL-8 LOW — SaleCompletedReporter inserts into report_sales with NO UNIQUE(sale_id) and NO receipt/pre-check, so a replayed sale.completed double-counts revenue in the reporting store (corpus pattern elsewhere is pre-check plus unique index); plus the lazy CREATE TABLE DDL executes on EVERY event (wasted prepare per sale). Refunded sales also remain in report revenue (no refund event exists) - product decision to confirm. Handler is otherwise clean (parameterized, tx-free single insert)
+next: add UNIQUE(sale_id) with INSERT OR IGNORE, hoist DDL to migration or first-use | perf: DDL per event
+*/
 //! Event handlers for the Reporting module.
 //!
 //! These handlers respond to domain events published on the kernel
