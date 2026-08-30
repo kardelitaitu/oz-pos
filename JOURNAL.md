@@ -7149,3 +7149,58 @@ the index, not just the worktree; a pre-staged shared index is as
 dangerous as a dirty worktree.
 
 **Commits:** 4439cfa3 (fix + tests), docs commit pending alongside this entry.
+
+## 2026-08-30 — TDD cycle: FRONTEND-04 shortfall retry settles in charge currency
+
+**Problem:** found while closing the FRONTEND-03 follow-up. The
+two-command shortfall flow (ADR-19 §6b) diverged from its own first
+command: `complete_sale_scoped` settled in `cartCurrency` with converted
+lines + the CUR-02 tender snapshot, but on `PartialStockResult` the
+PaymentModal handed `StockShortfallDialog` RAW `lineItems`,
+`currency={total.currency}`, `total.minor_units` and unconverted
+`Number(tenderedMinor)` — and the dialog forwarded none of the CUR-02
+fields (the TS interface didn't even declare them, though the Rust
+struct accepted all five). Net effect: multi-currency shortfall retries
+recorded the sale in base currency with base amounts, and EVERY
+shortfall sale — even single-currency — recorded tip=0/service=0
+(backend `unwrap_or(0)`).
+
+**Semantics decision (mine, recorded):** the retry is the same sale —
+it must settle in the same currency the first command used (the charge
+currency the customer saw). Alternative (reject shortfall under
+multi-currency) rejected: breaks a legitimate flow.
+
+**Solution (UI-only):** lift the tender metadata into a shared
+`tenderSnapshot` useMemo (QRIS path, main path, dialog — one source of
+truth); dialog receives `lineItemsInCartCurrency`/`cartCurrency`/
+`effectiveTotalInCartCurrency`/`tenderedMinorInCartCurrency` + spread
+snapshot; dialog forwards the five optional fields into the retry args;
+`CompleteSaleWithResolvedShortfallsArgs` (TS) extended to match the
+Rust struct's camelCase.
+
+**Red/Green:** test A (single-currency tip/service pins) failed on the
+missing fields; test B (multi-currency e2e: USD cart → IDR charge at
+16500, IDR exponent 0 → converted line 57750, totalMinor 115500,
+baseCurrency/baseTotalMinor/tenderRateMillionths) initially failed on
+SETUP twice (`currencies.map`, `exchangeRates.find` — multi-currency
+mode fetches lists the default mock returned `{}` for), then failed on
+the REAL assertion (`currency: USD` vs `IDR`, unconverted amounts) —
+that middle failure exposed the last hidden gap: PaymentModal's
+`sessionToken` is a PROP (not the workspace context), so the rate-fetch
+effect early-returns unless the test passes it; fixed the test, then
+implemented → 7/7.
+
+**Verification:** 149/149 across all six sales UI suites, typecheck
+clean, pre-commit gates pass. Rust untouched (struct already accepted
+the fields; 4439cfa3 pinned them).
+
+**Concurrency incident (4th today) — stash swept my uncommitted work:**
+mid-verification another agent's `git stash` (their sales.rs split WIP)
+reverted ALL four of my uncommitted UI files including test B. Recovery:
+`git checkout stash@{0} -- <my 4 files>` extracted exactly my content
+without popping their stash (their oz-core hunks stayed stashed). Later
+a `git reset` (mixed) by them unstaged my staged files — content
+survived in the worktree both times. Lesson: on this tree, commit a
+verified slice within MINUTES; every minute uncommitted is exposure.
+
+**Commits:** 0e5e8bf9 (fix + tests), docs commit alongside this entry.
