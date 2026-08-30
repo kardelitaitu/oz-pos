@@ -158,7 +158,7 @@ The admin login page (`login.html`) is always dark. The dashboard has a theme to
 | 2 | **HIGH** | MOCK fallback masks failures (C4) | Show error banner when API fails; keep MOCK only as last-resort skeleton | ✅ Resolved — MOCK object removed; API errors render a retry/error state (Phase 1) |
 | 3 | **HIGH** | Tenants list has no pagination (C3) | Add page controls + pass `?page=` / `?perPage=` to the API | ✅ Resolved — pagination controls + `?page=`/`?perPage=`/`?search=` (Phase 2) |
 | 4 | **HIGH** | Monolithic admin.js (H1) | Split into testable modules (stats.js, tenants.js, charts.js) or move to a build step | ✅ Resolved — pure helpers extracted into `admin-utils.js` (charts, formatting, cards, API auth, i18n) with unit tests |
-| 5 | **HIGH** | Zero tests (H2) | Add unit tests for chart rendering, helpers, and API mock fallback | ✅ Resolved — 70 unit tests in `src/__tests__/admin-utils.test.ts` (+14 worker auth-gate tests); both suites now execute in CI via the `website-tests` gate. The 2026-08-30 bug hunt added 46 of those tests and fixed 16 real bugs (see §8.1) |
+| 5 | **HIGH** | Zero tests (H2) | Add unit tests for chart rendering, helpers, and API mock fallback | ✅ Resolved — 76 unit tests in `src/__tests__/admin-utils.test.ts` (+14 worker auth-gate tests); both suites now execute in CI via the `website-tests` gate. The 2026-08-30 bug hunt added 52 of those tests and fixed 19 real bugs (see §8.1) |
 | 6 | **HIGH** | No i18n (H3) | Extract strings to an i18n structure; at minimum, add English `.ftl` keys for future localization | ✅ Resolved — `STRINGS` key-value table + `t()` helper; all admin/dashboard/login strings extracted |
 | 7 | **HIGH** | Shared session cookie (H4) | Restrict `Domain` to individual subdomains or use a dedicated auth domain | ✅ Resolved — cookie scoped to `admin.ozpos.my.id` / `dashboard.ozpos.my.id` (not the parent domain) |
 | 8 | **MEDIUM** | No loading/error states for charts (M1) | Guard `svgChart` against empty/NaN data; add per-chart error states | ✅ Resolved — `svgChart` / `svgDonut` guard empty/NaN/zero data |
@@ -223,7 +223,7 @@ merge history (`git log -S` + merge-ancestry), and a local test run:
 - **L1 corrected to OPEN**, **L3 marked won't-fix/by-design** — see §5.
 - Test count corrected: **24**, not "25+".
 
-### 8.1 Bug hunt (2026-08-30, TDD) — 16 bugs found & fixed
+### 8.1 Bug hunt (2026-08-30, TDD) — 19 bugs found & fixed
 
 A focused hunt over `admin.js`/`admin-utils.js` against the Go server's
 actual JSON shapes found six real bugs — none caught by the pre-existing
@@ -276,3 +276,17 @@ loading overlay blocks all interaction, so two detail fetches cannot
 overlap. Round-3 commits: `bb73e268`, `d3017b63`, `fc184c30`. The B19
 helper was independently written by the concurrent agent session and
 adopted (attribution in the commit message).
+
+**Round 4** (same day) ran the adversarial pass over the hunt's own
+fixes — three more, including one self-inflicted regression
+(suite 70→76, full website 642/642):
+
+| # | Sev | Bug | Fix |
+|---|-----|-----|-----|
+| B20 | P1 | B10/B12 called `AbortSignal.timeout()` unconditionally — Chrome/WebView 103+/Safari 16+ only; on older WebViews EVERY `api()` call threw TypeError, making the dashboard permanently broken on browsers that worked before the timeout fixes | `timeoutSignal()` availability guard; un-timed fetch beats broken fetch |
+| B21 | P2 | tab click during an in-flight login flipped `currentMode` — the response handler wrote the wrong mode's label and could start the OTP cooldown on the password tab | `setAuthMode` extracted with `isSubmitting()` veto; refused flips leave DOM untouched |
+| B22 | P2 | `login-btn` is `type=submit`: Enter in any input triggers implicit form submission, which **ignores the disabled state** — the 429 lockout countdown was bypassable by pressing Enter | `handleLogin` vetoes while `isLockoutActive(btn)`; restore label mirrors the mode's real state |
+
+Round-4 commits: `70d5d869`, `aa808a93`, `d183645e`. Lesson recorded:
+timeout/abort primitives are themselves compatibility surfaces — a
+hardening fix can regress more than the bug it cures.

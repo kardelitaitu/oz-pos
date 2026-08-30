@@ -6814,3 +6814,49 @@ bug).
 - flash() toasts stack on rapid actions — cosmetic.
 - No URL state for tab/search/page — feature, not bug.
 - worker.ts/dashboard.js remain the concurrent agent's hot files.
+
+## 2026-08-30 — Admin bug hunt round 4: adversarial pass on my own fixes (B20-B22)
+
+**Problem:** Fourth loop turned the scope on the hunt itself — reviewing
+the B1-B19 rewires for regressions plus the remaining login-flow corners.
+Three more real bugs (suite 70 -> 76):
+
+1. **B20 (self-inflicted regression)** B10/B12 called
+   AbortSignal.timeout() unconditionally. That static is Chrome/WebView
+   103+/Safari 16+ — on an older Android WebView (plausible for POS
+   operators) it throws TypeError, which in fetchWithTimeout rejected
+   EVERY api() call: the dashboard became permanently broken on browsers
+   that worked BEFORE the fix. timeoutSignal() now attaches a signal only
+   where the primitive exists; un-timed beats broken.
+2. **B21** login tabs called setAuthMode unconditionally: clicking
+   Password mid-OTP-request flipped currentMode; the response handler
+   then wrote the wrong mode's button label and could start the OTP
+   cooldown on the password tab. setAuthMode extracted to admin-utils
+   with an isSubmitting() veto — refused flips leave the DOM untouched.
+3. **B22** login-btn is type=submit inside the form: Enter in any input
+   triggers IMPLICIT submission, which ignores the disabled state (HTML
+   only blocks clicks). The 429 lockout countdown was theatre — press
+   Enter and keep hammering the rate limiter. handleLogin now vetoes
+   while isLockoutActive(btn). Also fixed the restore label to mirror
+   the mode's real state (Verify vs Send) and use the correct password
+   label.
+
+**Also verified clean this round:** tenantRow fully guarded; worker.ts
+does not touch stats fields (pure passthrough -> fxRate always numeric);
+request-otp handles 429/403/503; setLoading never touches the button
+(no lockout conflict); isSubmitting resets via finally on every path
+including early returns; B17 dropped as unreachable (documented r3).
+
+**Commits:** 70d5d869 (B20), aa808a93 (B21), d183645e (B22).
+
+**Test counts:** admin-utils.test.ts 70 -> 76; full website suite
+642/642 (39 files); drift 0.
+
+**Process note:** the concurrent agent's uncommitted busyWrap was adopted
+in round 3 (fc184c30) — no further collisions this round; their
+admin-dashboard.test.ts edits pass against all my rewires (642 green).
+
+**Remaining residuals:** per-render fetchFxRate (no cache), flash toast
+stacking, no URL state (feature), session-token fetch per api() call
+(caching risks stale tokens after rotation — needs worker-side contract
+review first).
