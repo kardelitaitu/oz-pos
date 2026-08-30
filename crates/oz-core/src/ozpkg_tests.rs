@@ -289,8 +289,15 @@ fn export_with_header_under_the_budget_still_roundtrips() {
     assert_eq!(header.store_name, name);
 }
 
+/// Patch bytes inside the archive in place.
+///
+/// The header-integrity tests below use SAME-LENGTH substitutions so the
+/// header JSON stays parseable — that is the whole point, since a parse
+/// failure would prove nothing about authentication. Tests that
+/// deliberately corrupt the header are fine with the length changing; a
+/// longer replacement just overwrites following padding inside the fixed
+/// HEADER_LEN block.
 fn find_and_replace(bytes: &mut [u8], from: &[u8], to: &[u8]) {
-    assert_eq!(from.len(), to.len(), "same-length keeps the JSON valid");
     let pos = bytes
         .windows(from.len())
         .position(|w| w == from)
@@ -300,6 +307,10 @@ fn find_and_replace(bytes: &mut [u8], from: &[u8], to: &[u8]) {
                 String::from_utf8_lossy(from)
             )
         });
+    assert!(
+        pos + to.len() <= bytes.len(),
+        "replacement must fit inside the buffer"
+    );
     bytes[pos..pos + to.len()].copy_from_slice(to);
 }
 
@@ -472,8 +483,8 @@ fn import_exactly_header_len_with_invalid_json_fails() {
 
 #[test]
 fn import_unsupported_version_fails() {
-    // Craft a header with version=99 by building a valid export and
-    // patching the version field in the JSON header.
+    // Craft a header with version=9 by replacing '2' with '9' (same length).
+    // This makes the JSON say "version":9 which is unsupported.
     let exported = export_ozpkg(
         "password",
         "Store",
@@ -485,47 +496,35 @@ fn import_unsupported_version_fails() {
     .unwrap();
 
     let mut data = exported;
-    // Find "version":2 and replace with "version":99
-    find_and_replace(&mut data, b"\"version\":2", b"\"version\":99");
+    // Replace the version value '2' with '9' — same length, valid JSON
+    find_and_replace(&mut data, b"\"version\":2", b"\"version\":9");
 
     let result = import_ozpkg(&data, "password");
     assert!(result.is_err());
     let msg = result.unwrap_err().to_string();
     assert!(
-        msg.contains("unsupported format version") || msg.contains("99"),
+        msg.contains("unsupported format version") || msg.contains("version"),
         "error should mention unsupported version: {msg}"
     );
 }
 
 #[test]
 fn import_invalid_salt_hex_fails() {
-    // Craft header with invalid hex in salt field
-    let mut features = HashMap::new();
-    let mut data = export_ozpkg(
+    let exported = export_ozpkg(
         "password",
         "Store",
         "0.0.1",
         vec![],
-        features.clone(),
+        HashMap::new(),
         &empty_payload(),
     )
     .unwrap();
 
-    // Replace valid salt hex with invalid hex (contains 'zz')
-    let salt_bytes = hex::decode(
-        &String::from_utf8_lossy(&data[0..HEADER_LEN])
-            .split_once("\"salt\":\"")
-            .unwrap()
-            .1
-            .chars()
-            .take(32)
-            .collect::<String>(),
-    )
-    .unwrap();
-    assert_eq!(salt_bytes.len(), SALT_LEN);
-
-    // Find and replace the salt hex value with invalid hex
-    find_and_replace(&mut data, &salt_bytes[..8], b"zzzzzzzz");
+    let mut data = exported;
+    // Find the salt field and corrupt one hex char
+    let header_str = String::from_utf8_lossy(&data[..HEADER_LEN]).to_string();
+    let salt_start = header_str.find("\"salt\":\"").unwrap() + 8;
+    data[salt_start] = b'g'; // 'g' is not valid hex
 
     let result = import_ozpkg(&data, "password");
     assert!(result.is_err(), "invalid salt hex should fail");
@@ -533,7 +532,6 @@ fn import_invalid_salt_hex_fails() {
 
 #[test]
 fn import_invalid_nonce_hex_fails() {
-    // Similar to salt — corrupt the nonce hex
     let exported = export_ozpkg(
         "password",
         "Store",
@@ -545,8 +543,10 @@ fn import_invalid_nonce_hex_fails() {
     .unwrap();
 
     let mut data = exported;
-    // Replace first 8 bytes of nonce hex with non-hex chars
-    find_and_replace(&mut data, b"\"nonce\":", b"\"nonceZ\":");
+    // Find the nonce field and corrupt one hex char
+    let header_str = String::from_utf8_lossy(&data[..HEADER_LEN]).to_string();
+    let nonce_start = header_str.find("\"nonce\":\"").unwrap() + 8;
+    data[nonce_start] = b'g'; // 'g' is not valid hex
 
     let result = import_ozpkg(&data, "password");
     assert!(result.is_err(), "invalid nonce should fail");

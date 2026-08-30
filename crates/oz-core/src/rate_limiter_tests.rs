@@ -239,7 +239,10 @@ fn retry_after_is_based_on_oldest_attempt() {
     limiter.record_failure("alice").ok(); // t=1 — locked out (max=2)
     let err = limiter.record_failure("alice").unwrap_err();
     // retry_after ≈ 10 - 1 = 9 seconds (±1 for sleep jitter)
-    assert!(err >= 8 && err <= 10, "retry_after should be ~9, got {err}");
+    assert!(
+        (8..=10).contains(&err),
+        "retry_after should be ~9, got {err}"
+    );
 }
 
 #[test]
