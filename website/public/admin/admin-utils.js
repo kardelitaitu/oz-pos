@@ -240,6 +240,28 @@
     return '<svg viewBox="0 0 440 180" style="max-height:180px">' + bars + '</svg>';
   }
 
+  // fetchFxRate queries open.er-api.com for the live USD→IDR rate.
+  // Extracted from admin.js so the timeout semantics are unit-testable.
+  // B10 fix: the original awaited an UN-TIMED fetch — a firewalled or
+  // captive-portal-blocked er-api.com left the dashboard skeleton hanging
+  // for the browser's full connect timeout. The request now carries an
+  // AbortSignal.timeout and any failure degrades to {live:false}, so the
+  // caller falls back to the last-known/default rate immediately.
+  async function fetchFxRate(fetchImpl, timeoutMs) {
+    var f = fetchImpl || fetch;
+    try {
+      var r = await f('https://open.er-api.com/v6/latest/USD', {
+        signal: AbortSignal.timeout(timeoutMs > 0 ? timeoutMs : 5000),
+      });
+      var d = await r.json();
+      var idr = d && d.rates ? Number(d.rates.IDR) : NaN;
+      if (Number.isFinite(idr) && idr > 0) {
+        return { rate: idr, updatedAt: new Date().toISOString(), live: true };
+      }
+    } catch (e) { /* not live */ }
+    return { rate: null, updatedAt: '', live: false };
+  }
+
   // startLockoutCountdown drives the login button's 429 lockout label.
   // Extracted from login.js showLockoutCountdown so the timer semantics
   // are unit-testable (login.js has DOM boot side effects).
@@ -487,6 +509,7 @@
     svgBarChart: svgBarChart,
     normalizeStats: normalizeStats,
     startLockoutCountdown: startLockoutCountdown,
+    fetchFxRate: fetchFxRate,
     t: t,
     STRINGS: STRINGS,
     isAuthDenied: isAuthDenied,

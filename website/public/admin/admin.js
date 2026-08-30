@@ -5,14 +5,9 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
     let fxRate = 16000;
     let fxUpdatedAt = '';
     let fxLive = false;
-
-    async function fetchFxRate() {
-      try {
-        const r = await fetch('https://open.er-api.com/v6/latest/USD');
-        const d = await r.json();
-        if (d.rates && d.rates.IDR) { fxRate = d.rates.IDR; fxLive = true; fxUpdatedAt = new Date().toISOString(); }
-      } catch { fxLive = false; }
-    }
+    // fetchFxRate (with its B10 timeout) comes from admin-utils.js; the
+    // old local copy awaited an un-timed fetch and could hang the whole
+    // dashboard render. State is applied at the call site below.
 
     // ── Helpers ──────────────────────────────────────────────────────
     // el, escapeHtml, fmtIdr, fmtUsd, statusPill, svgChart, svgDonut are
@@ -72,7 +67,11 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
 
       // FX rate: prefer the real endpoint's value; otherwise fetch live.
       if (m.kpis.fxRate) { fxRate = m.kpis.fxRate; fxLive = !!m.kpis.fxLive; fxUpdatedAt = m.kpis.fxUpdatedAt || ''; }
-      else { await fetchFxRate(); }
+      else {
+        const fx = await fetchFxRate();
+        if (fx.live) { fxRate = fx.rate; fxLive = true; fxUpdatedAt = fx.updatedAt; }
+        else { fxLive = false; }
+      }
       // Convert all revenue data to IDR.
       m.revenueTrend.forEach(d => d.idr = Math.round(d.usd * fxRate));
       const mrrIdr = Math.round(m.kpis.mrrUsd * fxRate);

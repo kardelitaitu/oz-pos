@@ -415,3 +415,42 @@ describe('admin-utils startLockoutCountdown (B7: racing 429 timers)', () => {
     }
   });
 });
+
+describe('admin-utils fetchFxRate (B10: unbounded hang on a dead FX API)', () => {
+  // admin.js fetchFxRate awaited an un-timed fetch. When the stats payload
+  // carried no fxRate (the server's own FX lookup failed -> falsy 0), the
+  // dashboard fell into this path and hung on a captive-portal/firewalled
+  // er-api.com for the browser's full connect timeout — skeleton forever.
+  it('resolves a live rate from a good payload', async () => {
+    const fetchImpl = async () => ({ json: async () => ({ rates: { IDR: 16450.5 } }) });
+    const r = await utils.fetchFxRate(fetchImpl, 5000);
+    expect(r.live).toBe(true);
+    expect(r.rate).toBe(16450.5);
+    expect(typeof r.updatedAt).toBe('string');
+  });
+
+  it('reports not-live for a malformed payload', async () => {
+    const fetchImpl = async () => ({ json: async () => ({ rates: {} }) });
+    const r = await utils.fetchFxRate(fetchImpl, 5000);
+    expect(r).toEqual({ rate: null, updatedAt: '', live: false });
+  });
+
+  it('reports not-live when the fetch rejects', async () => {
+    const fetchImpl = async () => { throw new Error('network'); };
+    const r = await utils.fetchFxRate(fetchImpl, 5000);
+    expect(r.live).toBe(false);
+  });
+
+  it('gives up at the timeout instead of hanging forever', async () => {
+    // A fetch that never settles — the old code awaited this forever.
+    // Real timers: AbortSignal.timeout is a native primitive that vitest
+    // fake timers do not control; 50ms keeps the test fast.
+    const fetchImpl = (_url: string, opts?: { signal?: AbortSignal }) =>
+      new Promise((_resolve, reject) => {
+        opts?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+      });
+    const r = await utils.fetchFxRate(fetchImpl, 50);
+    expect(r.live).toBe(false);
+    expect(r.rate).toBeNull();
+  });
+});
