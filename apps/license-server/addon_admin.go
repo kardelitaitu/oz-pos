@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pocketbase/pocketbase/core"
 )
@@ -26,6 +27,17 @@ type AddonRemoveRequest struct {
 	// Addon identifier to remove.
 	AddonID string `json:"addon_id"`
 }
+
+// B44: license_keys.addons is a Max:1024 text column and addon_id had no
+// cap at all — one oversized id (or enough small ones) reached Save and
+// failed PocketBase's field validation, surfacing a 500 for plainly bad
+// admin input (same class as B42's enterprise fields and B30's unknown
+// tier_key). Both limits are enforced BEFORE Save, counting RUNES to
+// match PocketBase's len([]rune(value)) validator.
+const (
+	addonIDMax      = 64
+	addonsColumnMax = 1024 // must match the license_keys.addons field Max
+)
 
 // handleAddLicenseAddon returns an HTTP handler for adding an addon to a
 // license key (admin-only). This is called after a successful Paddle
@@ -54,6 +66,12 @@ func handleAddLicenseAddon(app core.App) func(e *core.RequestEvent) error {
 				"error": "license_key and addon_id are required",
 			})
 		}
+		// B44: reject an oversized identifier before it can reach Save.
+		if utf8.RuneCountInString(req.AddonID) > addonIDMax {
+			return e.JSON(http.StatusBadRequest, map[string]any{
+				"error": "addon_id must be at most 64 characters",
+			})
+		}
 
 		// ── Find the license key ──────────────────────────────
 		keyRec, err := app.FindFirstRecordByData("license_keys", "key", req.LicenseKey)
@@ -75,7 +93,19 @@ func handleAddLicenseAddon(app core.App) func(e *core.RequestEvent) error {
 
 		// ── Add the addon ─────────────────────────────────────
 		existingAddons = append(existingAddons, req.AddonID)
-		addonsJSON, _ := json.Marshal(existingAddons)
+		addonsJSON, marshalErr := json.Marshal(existingAddons)
+		if marshalErr != nil {
+			log.Printf("addon-admin: failed to serialize addons: %v", marshalErr)
+			return e.JSON(http.StatusInternalServerError, map[string]any{
+				"error": "failed to add addon to license key",
+			})
+		}
+		// B44: the whole serialized list must still fit the column.
+		if utf8.RuneCountInString(string(addonsJSON)) > addonsColumnMax {
+			return e.JSON(http.StatusBadRequest, map[string]any{
+				"error": "addon limit reached for this license key",
+			})
+		}
 		keyRec.Set("addons", string(addonsJSON))
 
 		if saveErr := app.Save(keyRec); saveErr != nil {
