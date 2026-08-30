@@ -384,3 +384,292 @@ fn promotion_neq_when_name_differs() {
     };
     assert_ne!(a, b);
 }
+
+// ── NEW TESTS: gaps identified in TDD analysis ───────────────────────
+
+// ── promo_type String vs PromotionType enum sync ─────────────────────
+
+#[test]
+fn promo_type_string_matches_promotion_type_as_str() {
+    // The struct stores promo_type as a raw String. Every valid value
+    // must be parseable by PromotionType::from_str().
+    for (promo_type_str, expected) in [
+        ("percentage", PromotionType::Percentage),
+        ("fixed_amount", PromotionType::FixedAmount),
+        ("buy_x_get_y", PromotionType::BuyXGetY),
+    ] {
+        let p = Promotion {
+            promo_type: promo_type_str.into(),
+            ..sample_promotion()
+        };
+        let parsed =
+            PromotionType::from_str(&p.promo_type).expect("promo_type should be parseable");
+        assert_eq!(parsed, expected);
+        assert_eq!(parsed.as_str(), promo_type_str);
+    }
+}
+
+#[test]
+fn promo_type_invalid_string_returns_none() {
+    let result = PromotionType::from_str("invalid_type");
+    assert_eq!(result, None);
+}
+
+#[test]
+fn promo_type_empty_string_returns_none() {
+    let result = PromotionType::from_str("");
+    assert_eq!(result, None);
+}
+
+// ── PromotionType Copy trait ──────────────────────────────────────────
+
+#[test]
+fn promotion_type_is_copy() {
+    let a = PromotionType::Percentage;
+    let b = a; // Copy, not move
+    assert_eq!(a, b); // Both still valid
+}
+
+#[test]
+fn promotion_type_copy_semantics() {
+    let original = PromotionType::BuyXGetY;
+    let copied = original;
+    // Both should be equal and independent
+    assert_eq!(original, copied);
+    assert_eq!(original.as_str(), "buy_x_get_y");
+    assert_eq!(copied.as_str(), "buy_x_get_y");
+}
+
+// ── Negative value_minor ─────────────────────────────────────────────
+
+#[test]
+fn promotion_negative_value_minor_allowed() {
+    // Negative value_minor could represent a surcharge or fee.
+    // The struct doesn't validate — it's the caller's responsibility.
+    let p = Promotion {
+        value_minor: -500,
+        ..sample_promotion()
+    };
+    assert_eq!(p.value_minor, -500);
+}
+
+#[test]
+fn promotion_negative_value_minor_serde_roundtrip() {
+    let p = Promotion {
+        value_minor: -100,
+        ..sample_promotion()
+    };
+    let json = serde_json::to_string(&p).unwrap();
+    let back: Promotion = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.value_minor, -100);
+}
+
+// ── All Optional fields as None ───────────────────────────────────────
+
+#[test]
+fn promotion_all_optional_fields_none() {
+    let p = Promotion {
+        id: "promo-none".into(),
+        name: "No Optionals".into(),
+        description: String::new(),
+        promo_type: "percentage".into(),
+        value_minor: 10,
+        min_qty: None,
+        trigger_sku: None,
+        reward_sku: None,
+        reward_qty: None,
+        starts_at: None,
+        ends_at: None,
+        min_order_minor: 0,
+        category_id: None,
+        active: true,
+        created_at: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(p.min_qty.is_none());
+    assert!(p.trigger_sku.is_none());
+    assert!(p.reward_sku.is_none());
+    assert!(p.reward_qty.is_none());
+    assert!(p.starts_at.is_none());
+    assert!(p.ends_at.is_none());
+    assert!(p.category_id.is_none());
+}
+
+#[test]
+fn promotion_all_optional_fields_none_serde() {
+    let p = Promotion {
+        id: "promo-none".into(),
+        name: "No Optionals".into(),
+        description: String::new(),
+        promo_type: "percentage".into(),
+        value_minor: 10,
+        min_qty: None,
+        trigger_sku: None,
+        reward_sku: None,
+        reward_qty: None,
+        starts_at: None,
+        ends_at: None,
+        min_order_minor: 0,
+        category_id: None,
+        active: true,
+        created_at: String::new(),
+        updated_at: String::new(),
+    };
+    let json = serde_json::to_string(&p).unwrap();
+    let back: Promotion = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, p);
+}
+
+// ── PromotionApplication description with content ─────────────────────
+
+#[test]
+fn application_description_with_content() {
+    let a = PromotionApplication {
+        id: "app-desc".into(),
+        promotion_id: "promo-1".into(),
+        sale_id: "sale-1".into(),
+        discount_minor: 500,
+        description: "Buy 2 Get 1 Free — coffee loyalty reward".into(),
+        created_at: "2025-01-01T00:00:00.000Z".into(),
+    };
+    let json = serde_json::to_string(&a).unwrap();
+    let back: PromotionApplication = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.description, "Buy 2 Get 1 Free — coffee loyalty reward");
+}
+
+// ── PromotionType serde from JSON string ──────────────────────────────
+
+#[test]
+fn promotion_type_serde_from_json_string() {
+    // The enum serializes as PascalCase ("Percentage"), not snake_case.
+    // This is different from the struct's promo_type field which uses snake_case.
+    let json = "\"Percentage\"";
+    let t: PromotionType = serde_json::from_str(json).unwrap();
+    assert_eq!(t, PromotionType::Percentage);
+}
+
+#[test]
+fn promotion_type_serde_roundtrip_all_variants() {
+    for variant in [
+        PromotionType::Percentage,
+        PromotionType::FixedAmount,
+        PromotionType::BuyXGetY,
+    ] {
+        let json = serde_json::to_string(&variant).unwrap();
+        let back: PromotionType = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, variant);
+    }
+}
+
+// ── BuyXGetY specific fields ──────────────────────────────────────────
+
+#[test]
+fn buy_x_get_y_all_fields_populated() {
+    let p = Promotion {
+        id: "promo-bogo".into(),
+        name: "Buy 2 Get 1 Free".into(),
+        description: "Buy two coffees, get one free".into(),
+        promo_type: "buy_x_get_y".into(),
+        value_minor: 100, // 100% discount on reward
+        min_qty: Some(2),
+        trigger_sku: Some("COFFEE".into()),
+        reward_sku: Some("COFFEE".into()),
+        reward_qty: Some(1),
+        starts_at: Some("2026-01-01T00:00:00.000Z".into()),
+        ends_at: Some("2026-12-31T23:59:59.000Z".into()),
+        min_order_minor: 0,
+        category_id: Some("cat-drinks".into()),
+        active: true,
+        created_at: "2026-01-01T00:00:00.000Z".into(),
+        updated_at: "2026-01-15T12:00:00.000Z".into(),
+    };
+    assert_eq!(p.min_qty, Some(2));
+    assert_eq!(p.trigger_sku.as_deref(), Some("COFFEE"));
+    assert_eq!(p.reward_sku.as_deref(), Some("COFFEE"));
+    assert_eq!(p.reward_qty, Some(1));
+    assert_eq!(p.value_minor, 100);
+}
+
+#[test]
+fn buy_x_get_y_different_trigger_and_reward_sku() {
+    let p = Promotion {
+        promo_type: "buy_x_get_y".into(),
+        trigger_sku: Some("PIZZA".into()),
+        reward_sku: Some("SODA".into()),
+        min_qty: Some(1),
+        reward_qty: Some(1),
+        value_minor: 100, // free soda
+        ..sample_promotion()
+    };
+    assert_eq!(p.trigger_sku.as_deref(), Some("PIZZA"));
+    assert_eq!(p.reward_sku.as_deref(), Some("SODA"));
+    assert_ne!(p.trigger_sku, p.reward_sku);
+}
+
+// ── Edge cases ────────────────────────────────────────────────────────
+
+#[test]
+fn promotion_empty_name() {
+    let p = Promotion {
+        name: String::new(),
+        ..sample_promotion()
+    };
+    assert!(p.name.is_empty());
+}
+
+#[test]
+fn promotion_empty_description() {
+    let p = Promotion {
+        description: String::new(),
+        ..sample_promotion()
+    };
+    assert!(p.description.is_empty());
+}
+
+#[test]
+fn promotion_empty_promo_type() {
+    let p = Promotion {
+        promo_type: String::new(),
+        ..sample_promotion()
+    };
+    assert!(p.promo_type.is_empty());
+    // from_str on empty string should return None
+    assert_eq!(PromotionType::from_str(&p.promo_type), None);
+}
+
+#[test]
+fn promotion_large_id() {
+    let long_id = "a".repeat(1000);
+    let p = Promotion {
+        id: long_id.clone(),
+        ..sample_promotion()
+    };
+    assert_eq!(p.id.len(), 1000);
+}
+
+#[test]
+fn promotion_unicode_name() {
+    let p = Promotion {
+        name: " Diskon 10% untuk Kopi ".into(),
+        ..sample_promotion()
+    };
+    let json = serde_json::to_string(&p).unwrap();
+    let back: Promotion = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.name, " Diskon 10% untuk Kopi ");
+}
+
+#[test]
+fn promotion_application_negative_discount() {
+    // Negative discount could represent a surcharge or fee adjustment.
+    let a = PromotionApplication {
+        id: "app-neg".into(),
+        promotion_id: "promo-1".into(),
+        sale_id: "sale-1".into(),
+        discount_minor: -100,
+        description: "surcharge".into(),
+        created_at: "2025-01-01T00:00:00.000Z".into(),
+    };
+    let json = serde_json::to_string(&a).unwrap();
+    let back: PromotionApplication = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.discount_minor, -100);
+}
