@@ -208,9 +208,21 @@ fn read_sqlite_rows(conn: &Connection, table: &str) -> Result<Vec<Row>, String> 
     Ok(out)
 }
 
-/// Insert a batch of rows into Postgres with `ON CONFLICT DO NOTHING`.
+/// Insert a batch of rows into Postgres with `ON CONFLICT DO NOTHING`,
+/// as ONE multi-row `VALUES` statement inside the caller's transaction.
+///
+/// Multi-row VALUES cuts the cutover cost from one round-trip + fsync per
+/// row (each `execute` previously autocommitted) to one round-trip per
+/// batch; wrapping each table in a single transaction makes the copy
+/// atomic per table — a mid-table failure rolls the whole table back, so
+/// a re-run never sees half-copied state.
+///
+/// Every cell binds with its natural type; NULLs bind as a wildcard null (a
+/// typed int8 null fails client-side with "error serializing parameter N"
+/// when Postgres infers a TEXT parameter, e.g. a NULL `category_id` on
+/// products).
 async fn insert_pg_batch(
-    client: &tokio_postgres::Client,
+    tx: &tokio_postgres::Transaction<'_>,
     table: &str,
     columns: &[String],
     rows: &[Row],
@@ -218,43 +230,44 @@ async fn insert_pg_batch(
     if rows.is_empty() {
         return Ok(());
     }
+    let col_count = columns.len();
     let col_list = columns
         .iter()
         .map(|c| format!("\"{c}\""))
         .collect::<Vec<_>>()
         .join(", ");
+    // One placeholder group per row: ($1..$N), ($N+1..$2N), …
+    let value_groups = (0..rows.len())
+        .map(|r| {
+            let base = r * col_count;
+            (1..=col_count)
+                .map(|c| format!("${}", base + c))
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
     let sql = format!(
-        "INSERT INTO \"{table}\" ({col_list}) VALUES ({}) ON CONFLICT DO NOTHING",
-        (1..=columns.len())
-            .map(|i| format!("${i}"))
-            .collect::<Vec<_>>()
-            .join(", ")
+        "INSERT INTO \"{table}\" ({col_list}) VALUES {value_groups} ON CONFLICT DO NOTHING"
     );
 
-    for row in rows {
-        // Bind every cell: NULLs as a wildcard null (a typed int8 null fails
-        // client-side with "error serializing parameter N" when Postgres
-        // infers a TEXT parameter, e.g. a NULL `category_id` on products),
-        // values with their natural type.
-        let params: Vec<Box<dyn ToSql + Sync>> = row
-            .cells
-            .iter()
-            .map(|cell| -> Box<dyn ToSql + Sync> {
-                match cell {
-                    Cell::Null => Box::new(WildcardNull),
-                    Cell::Int(i) => Box::new(*i),
-                    Cell::Real(f) => Box::new(*f),
-                    Cell::Text(t) => Box::new(t.clone()),
-                    Cell::Blob(b) => Box::new(b.clone()),
-                }
-            })
-            .collect();
-        let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
-        client
-            .execute(&sql, &param_refs)
-            .await
-            .map_err(|e| format!("insert into {table}: {e}"))?;
-    }
+    let params: Vec<Box<dyn ToSql + Sync>> = rows
+        .iter()
+        .flat_map(|row| row.cells.iter())
+        .map(|cell| -> Box<dyn ToSql + Sync> {
+            match cell {
+                Cell::Null => Box::new(WildcardNull),
+                Cell::Int(i) => Box::new(*i),
+                Cell::Real(f) => Box::new(*f),
+                Cell::Text(t) => Box::new(t.clone()),
+                Cell::Blob(b) => Box::new(b.clone()),
+            }
+        })
+        .collect();
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+    tx.execute(&sql, &param_refs)
+        .await
+        .map_err(|e| format!("insert into {table}: {e}"))?;
     Ok(())
 }
 
@@ -262,7 +275,12 @@ async fn insert_pg_batch(
 /// type in the same order `read_sqlite_rows` emits them (int → real → text →
 /// blob). Extracted from the read loop so the type-sniffing chain is a
 /// flat, independently testable function.
-fn decode_pg_cell(row: &tokio_postgres::Row, i: usize, col: &str, table: &str) -> Result<Cell, String> {
+fn decode_pg_cell(
+    row: &tokio_postgres::Row,
+    i: usize,
+    col: &str,
+    table: &str,
+) -> Result<Cell, String> {
     if let Ok(Some(i)) = row.try_get::<_, Option<i64>>(i) {
         return Ok(Cell::Int(i));
     }
@@ -588,12 +606,22 @@ async fn copy_and_verify(
         // 4. Read source rows.
         let src_rows = read_sqlite_rows(conn, table)?;
 
-        // 5. Write (unless dry-run), in batches.
+        // 5. Write (unless dry-run), in batches, inside ONE transaction per
+        // table so a mid-table failure rolls the whole table back (a re-run
+        // never sees half-copied state; `ON CONFLICT DO NOTHING` still makes
+        // re-runs safe against rows already synced).
         if !dry_run {
-            let client = pool.get().await.map_err(|e| e.to_string())?;
+            let mut client = pool.get().await.map_err(|e| e.to_string())?;
+            let tx = client
+                .transaction()
+                .await
+                .map_err(|e| format!("begin tx for {table}: {e}"))?;
             for chunk in src_rows.chunks(batch) {
-                insert_pg_batch(&client, table, &pg_cols, chunk).await?;
+                insert_pg_batch(&tx, table, &pg_cols, chunk).await?;
             }
+            tx.commit()
+                .await
+                .map_err(|e| format!("commit {table}: {e}"))?;
         }
         total_copied += src_rows.len();
 
