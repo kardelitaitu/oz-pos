@@ -2013,3 +2013,19 @@ The portal backend behind `dashboard.`/`admin.ozpos.my.id` and the Cloudflare Wo
 - Shared primitives re-verified in `web_otp.go`'s tail: `extractBearerToken` (strict Bearer prefix), `normalizeEmail`, `isValidEmail` (strict parse-equality — blocks header injection), `is6DigitCode`, `formatDateField` (RFC3339 normalization documented).
 
 No new findings in this batch. **Slice C next:** `paddle_webhook.go` (1195), `midtrans_webhook.go` (585), `midtrans_checkout.go` (239) — signature verification is the priority; then Slice D admin gates.
+
+### Slice C — payment webhooks: paddle_webhook.go (1276), midtrans_webhook.go (630), midtrans_checkout.go (257) — 30-08-26
+
+**Slice C complete** (2,163 lines, all fully read). **Verdict: exemplary — no code fixes required.**
+
+- **Paddle signature** (paddle_webhook.go:202–251): HMAC-SHA256 over `ts:rawBody` per Paddle Billing's scheme, per-group verification for key rotation, constant-time compare with length pre-check, ±5 min replay window (env-overridable), applied BEFORE any parsing; 256 KB body cap; `event_id` dedup with TTL + pruning; idempotent provisioning keyed by `paddle_sub_id` (re-delivery after a restart converges instead of double-minting).
+- **Midtrans signature** (midtrans_webhook.go:142–151): SHA512(`order_id + status_code + gross_amount + serverkey`) — Midtrans's documented scheme — constant-time. Crucially the **gross_amount is inside the signature**, so the amount→tier map is trustworthy; `custom_field1` (tier), `custom_field3` (period), `custom_field4` (bundle) are **cross-checked against the price map and rejected on disagreement** — never trusted alone. The fraud triple (status_code 200 + settlement/capture + fraud accept) gates provisioning; failed charges move to grace bounded by the paid period.
+- **Checkout** (midtrans_checkout.go): session-authed + origin allowlist; the buyer email comes from the tenant record, never the request body (anti-charge-attachment); the IDR amount is resolved server-side from the same price map the webhook verifies — the client only selects tier/period/bundle, it cannot influence the charge amount.
+- **Provisioning parity:** both webhooks write byte-identical RSA-signed subscription payloads (same `SubscriptionPayload` + `signSubscription` the Rust verifier checks), shared `upsertTenantByEmail` (placeholder api_key hashed + discarded), tier quotas from a single `tierQuotas` source, billing-cycle interval cross-checked against the price-map period (anti-cadence-drift).
+- **Boot gates** (`verifyPaddleConfig`/`verifyMidtransConfig`) fail fast on a misconfigured price map so purchases 500-and-retry loudly instead of silently provisioning nothing.
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| LSE-7 | ℹ️ INFO | paddle_webhook.go:781, revenue_events consumers | Revenue capture stores `NativeAmount` as `float64` (cents/100). Reporting-only (never touches licensing), and the Rust `Money`/i64 rule formally binds crates — but if `revenue_events` ever feeds finance tooling, float rounding on IDR-scale values is a mild smell. | Optionally switch `revenue_events.native_amount` to i64 minor units end-to-end. |
+
+**Slice D next:** `activate.go` (791), admin gates (`admin_dashboard.go` 338, `admin_stats.go` 394, `addon_admin.go` 206, `enterprise_admin.go` 185), licensing flows (`trial.go`, `renew.go`, `pause.go`, `resume.go`, `expiry.go`, `status.go`, `contact.go`, `smtp_mail.go`, `health.go`, `trial_emails.go` remainder), plus the build-artifact hygiene check (`license-server.exe`, `coverage.html/out` committed in tree).
