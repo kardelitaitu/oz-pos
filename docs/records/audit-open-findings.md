@@ -40,14 +40,15 @@ Key open items:
 
 ## Reporting (`03-reporting-module.md` — REMEDIATED IN PART)
 
-**Status:** security boundary and limit validation implemented; **financial/reporting UX findings remain open**.
+**Status:** security boundary and limit validation implemented; **REP-02/REP-04 closed; REP-06 (cross-currency SUMs) recorded 2026-08-30; remaining reporting UX findings open**.
 
 Key open items:
 - ~~**REP-02** — Revenue UI combines different currencies into one displayed total~~ — **VERIFIED FIXED 2026-08-30**: per-currency summing in `ui/src/features/reports/revenueTotals.ts` + DashboardScreen/SalesReportScreen tests.
+- ~~**REP-04** — Report queries do not show explicit refund/void/net-sales treatment~~ — **CLOSED 2026-08-30** (core `35d8bec4`; UI half landed inside foreign commit `98300bca` — content verified intact, attribution recorded in the journal): refunds never mutate the sale row, so revenue counted refunded sales at full value and the refund ledger was invisible everywhere. Daily/weekly/monthly revenue now aggregate sales and refunds via CTEs joined FULL OUTER on (period, currency) — each row carries `refund_minor` (attributed to the REFUND's own period) + `net_revenue_minor`; refund-only periods produce a row instead of dropping the refund. `refunds_summary` (per-currency count + totals) added in core — **no IPC/UI consumer yet** (intended for a future refunds panel; do not leave it orphaned). Voids were already surfaced (`voided_sales_summary`); net-sales semantics are now explicit in the row fields. SalesReportScreen shows Refunds + Net Revenue rows when the period has refunds.
+- **REP-06** (NEW 2026-08-30, found during the REP-04 sweep) — **cross-currency SUMs in the remaining report queries**: `top_products` (`SUM(sl.line_minor)` GROUP BY product), `hourly_heatmap`, `category_breakdown`, `payment_method_breakdown`, and `voided_sales_summary` all sum minor units across currencies into one number — the REP-02 class bug below the revenue trends. Harmless in single-currency stores; wrong totals (and wrong rankings/margins) once multi-currency is licensed. Fix pattern: add `currency` to the GROUP BY + row DTOs + UI per-currency rendering, mirroring the revenue-trend treatment. Cloud `email_pg.rs` mirrors the same queries and additionally lacks the REP-04 refund netting.
 - **REP-03** — Date boundaries have no store-timezone contract or input validation
-- **REP-04** — Report queries do not show explicit refund/void/net-sales treatment
 - **REP-05** — Current product/category joins can erase or rewrite historical sales attribution
-- Also: stale-request races, unbounded custom-report results, incomplete refund/void semantics in reporting queries, CSV escaping
+- Also: stale-request races, unbounded custom-report results, CSV escaping
 
 ---
 

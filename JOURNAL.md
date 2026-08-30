@@ -7643,3 +7643,74 @@ delimiter). HEAD itself is fine each time - these are uncommitted working
 tree states. Not committing unverified tests.
 
 **Commits:** aad69c6f (test-tdd.sh), 7ba53e0f (wtree-guard.sh).
+
+## 2026-08-31 — round D landed, and the guard caught its own reason for existing
+
+Round D (user_preferences, ba6ec9ac) had to be REDONE. The two tests were
+written before the crate compiled, sat uncommitted while another agent's db/
+refactor blocked the build, and by the time the build was green the file was
+back to its original 77 lines with a clean git status - silently reverted,
+the third time this session and the exact case wtree-guard names REVERTED.
+Nothing errored; the only symptom was 5 passed where 7 was expected. That
+is the whole argument for the own/verify/check loop, discovered by the count
+rather than by the tool.
+
+Re-applied, verified 7/7, committed inside one cycle with the claim active.
+54 insertions, one file, nothing swept in.
+
+What round D actually concluded: the LOW rating held. Cross-user isolation
+was already covered. Mid-batch atomicity is NOT testable without a
+failure-injection seam - the table is (user_id, pref_key) PRIMARY KEY with
+NOT NULLs, no CHECK, no FK, and the API takes &[(String, String)], so no
+caller-supplied value can fail row 2 but not row 1 - and it is already
+correct by construction because set_batch runs in an unchecked_transaction
+where every ? returns before commit, dropping the tx. Writing a contrived
+failure to assert what the types already prevent would be testing rusqlite.
+The two gaps that were real and realistic from the UI: a single save mixing
+existing and new keys (both UPSERT arms in one tx), and the same key twice
+in one batch (ON CONFLICT DO UPDATE makes it last-write-wins, not a second
+row).
+
+## 2026-08-31 — TDD cycle: REP-04 refund netting + the double-destruction incident
+
+**Problem:** after closing LOY-06/SF-01, the sweep moved to reports.
+REP-04 ("no explicit refund/void/net treatment") verified REAL: refunds
+only INSERT into the refunds table — the sale stays 'completed' — and
+zero report queries touch the refunds table. Refunded sales counted at
+full value; the refund ledger was invisible everywhere. (VOIDS were
+already surfaced via voided_sales_summary, so the scope narrowed to
+refund netting.) Bonus find: five more report queries SUM minor units
+across currencies (top_products, hourly_heatmap, category_breakdown,
+payment_method_breakdown, voided_sales_summary) — recorded as REP-06.
+
+**Solution:** daily/weekly/monthly revenue rewritten as sales/refunds
+CTEs joined FULL OUTER on (period, currency): refund_minor attributed to
+the REFUND's own period (accounting convention), net_revenue_minor
+derived, refund-only periods produce a row instead of silently dropping
+the refund. refunds_summary added (per-currency). UI: optional
+interface fields (fixtures construct partials), sumNetRevenueByCurrency
+helper, SalesReportScreen Refunds/Net rows shown only when the period
+has refunds, FTL en+id.
+
+**Red/Green:** 7 core tests + 5 UI tests; email export test
+constructors updated for the new struct fields. Verification: refund 33,
+reports 148, email 69, UI 121/121 + typecheck clean.
+
+**Concurrency incident (6th+7th) — UNCOMMITTED WORK DESTROYED TWICE:**
+mid-cycle, reports.rs + reports_tests.rs reverted to HEAD with my
+content absent from worktree, both stashes, and every commit (a hard
+`git checkout .` + `git clean -f` signature — the .tmp-*.txt untracked
+helpers were deleted too). Rebuilt everything from conversation text;
+committed the core slice immediately (35d8bec4, gates green). The UI
+half then landed inside foreign commit 98300bca (their commit inherited
+my staged files while mine died on `cannot lock ref HEAD` — same
+pattern as 3c23e47b earlier). Content verified intact in HEAD; no
+history rewrite. Lessons: (1) commit each file-group the moment its
+tests pass — the edit-to-commit window is now measured in MINUTES;
+(2) `git diff --cached` before staging can show a foreign file ALREADY
+staged — that is a sweep warning, not just a contamination check;
+(3) keep full text of destructive-risk work in conversation so rebuild
+is mechanical.
+
+**Commits:** 35d8bec4 (core), 98300bca (UI — foreign message), docs
+commit alongside this entry.
