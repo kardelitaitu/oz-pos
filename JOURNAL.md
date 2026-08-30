@@ -8231,3 +8231,80 @@ the foreign files, stage the six (never re-add deleted paths), fixup
 commit 841448ca. **Lesson: after `git rm`, exclude that path from the
 following `git add`; always read the "N files changed" line against the
 expected file count.**
+
+## 2026-08-31 — round L: the sweep that mostly disproved my own audit
+
+Went to close COR-31, the item I had flagged three times as the biggest open
+one. It turned out to be mostly a number I had made up badly.
+
+**The claim was 15 untimed Client::new() sites in 10 files.** I had written
+that into the cloud_destination.rs stamp in round I, and repeated it in two
+commit messages and three reports to the user. Measured properly it was 7
+sites in 4 files, and only 4 of those needed fixing.
+
+What went wrong is a specific, generalisable method error: I grepped for
+Client::new() and .build() and stopped at the client. reqwest lets a request
+carry its own .timeout() on the RequestBuilder, so a bare client is not
+evidence of an unbounded request. Following each client to its request:
+
+  - license_verification x5 - every request already had .timeout(15s or 30s).
+    Never needed anything. I had named this file first when listing the
+    remaining work.
+  - sync_client - already Client::builder().timeout(30s).
+  - oz-notification x4 - two were MockNotificationClient::new() in doc
+    examples, not HTTP clients at all.
+  - whatsapp x2, sync_pull x1, rate_sync x1 - real. Fixed (04d85ce7).
+  - oz-payment x3 - real, and deliberately NOT fixed.
+
+An inflated count is not a harmless over-report. It makes a closed issue look
+open and sends the next reader to the wrong files, and it is exactly the kind
+of number that gets copied forward because it sits in an audit stamp that
+people trust. Corrected in the stamp where I wrote it, with the method
+lesson attached: an unbounded-request audit has to end at the request.
+
+**The payment deferral is the actual finding.** All three drivers are
+genuinely untimed, so adding timeouts looks like the obvious completion of
+this round. It would have been a real bug:
+
+  - stripe sends no Idempotency-Key header at all
+  - square sends a FRESH Uuid::now_v7() per call, so Squares own duplicate
+    protection cannot fire
+  - qris reuses the caller key only when one is supplied, else a fresh
+    order_id
+
+A timeout leaves a charge outcome UNKNOWN. With no stable key, the retry
+after a timeout is a second real charge. So bounding these clients before
+PAY-2 converts a hang into a double-charge - strictly worse on the money
+path. QRIS is sharper: a timed-out issuance retried without a key mints a
+second live QR while the first stays scannable for its 300s validity (PAY-6).
+Checked idempotency BEFORE adding timeouts, which is the only reason this
+wasn't shipped as a fix in the previous commit. Recorded in all three stamps
+as COR-31 HELD DELIBERATELY so the next sweep does not redo it.
+
+**Timeout numbers, reasoned not copied.** sync_pull: the sync_client.rs stamp
+suggested 60s; used 120s because reqwest request timeouts also cover the body
+read and a snapshot is a bulk payload - a budget tight enough to cut off a
+legitimate large pull on a slow shop link trades one outage for another. The
+bug is unbounded, not merely long. whatsapp and rate_sync: 30s, small JSON
+calls, matching the convention already in sync_client.rs.
+
+**rate_sync was the one where the hang is worst, not least.** It is a daemon
+tick. If run_tick never returns the loop never reaches the next tick, and
+daemon_status.running stays true - rate sync silently stops updating while
+still reporting itself healthy. A blocked request path is visible; a blocked
+daemon with a live health flag is not.
+
+**Two crates do not compile at HEAD, neither from my work.**
+apps/cloud-server: a currency commit added net_revenue_minor, refund_minor
+and currency to oz-core row structs and missed email_pg.rs.
+platform-startup: 841448ca removed the modules_crm handlers module while
+platform/startup/src/lib.rs:124 still references modules_crm::handlers.
+Both offending files are clean in git status, so these are committed
+breakages, not in-flight edits. CI runs the workspace, so both should be
+failing there. Did not touch either - another agent is mid-refactor in this
+worktree and has already eaten in-flight work twice, so the rate_sync.rs edit
+ships unverified and says so in its commit message.
+
+**Totals this area:** B46-B55, COR-31 closed for non-payment paths and
+corrected, COR-5 closed, API-4 gated. oz-core 2321, oz-api 201,
+oz-notification 30, oz-payment clean.
