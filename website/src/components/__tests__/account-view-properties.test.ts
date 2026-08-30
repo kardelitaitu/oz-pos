@@ -67,10 +67,13 @@ describe('daysUntil invariants', () => {
   });
 
   it('returns 1 for tomorrow', () => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
-    expect(daysUntil(tomorrow.toISOString())).toBe(1);
+    // daysUntil compares UTC calendar dates (date-only), so "tomorrow" must
+    // be built at the UTC day boundary — local-midnight construction is off
+    // by one on any timezone east of UTC (e.g. UTC+7).
+    const now = new Date();
+    const base = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const tomorrow = new Date(base + 86_400_000).toISOString();
+    expect(daysUntil(tomorrow)).toBe(1);
   });
 
   it('returns a negative number for a past date', () => {
