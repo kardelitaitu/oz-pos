@@ -297,5 +297,13 @@ const tabPwd = document.getElementById('tab-password');
 if (tabOtp) tabOtp.addEventListener('click', () => setAuthMode('otp'));
 if (tabPwd) tabPwd.addEventListener('click', () => setAuthMode('password'));
 
+// Theme toggle (theme.js is loaded in <head>)
+const themeToggle = document.getElementById('theme-toggle');
+if (themeToggle) {
+  themeToggle.addEventListener('click', () => {
+    if (window.__ozAdminTheme) { window.__ozAdminTheme.toggle(); }
+  });
+}
+
 // Initialize default mode
 setAuthMode('otp');
