@@ -656,3 +656,68 @@ describe('admin-utils createSeqGuard (B15: stale list responses overwrote newer 
     expect(rendered).toEqual([3]);
   });
 });
+
+describe('admin-utils startCountdown (B18: OTP cooldown lifecycle)', () => {
+  // login.js startOtpCooldown kept its timer in a module global and
+  // setAuthMode('password') HID the cooldown element without touching the
+  // timer — switching back to the OTP tab never re-showed it, so a live
+  // 60s resend cooldown ran invisibly and the user walked into a 429.
+  // The countdown now lives on the node (same tracked-timer pattern as
+  // startLockoutCountdown), so visibility can follow countdownActive().
+  it('writes formatted text each second and fires onEnd at zero', () => {
+    vi.useFakeTimers();
+    try {
+      const cd = document.createElement('span');
+      let ended = 0;
+      utils.startCountdown(cd, 3, (s) => `in ${s}`, () => { ended++; cd.textContent = 'ready'; });
+      expect(cd.textContent).toBe('in 3');
+      vi.advanceTimersByTime(2000);
+      expect(cd.textContent).toBe('in 1');
+      expect(ended).toBe(0);
+      vi.advanceTimersByTime(1000);
+      expect(ended).toBe(1);
+      expect(cd.textContent).toBe('ready');
+      expect(utils.countdownActive(cd)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a second start supersedes the first — one writer per node', () => {
+    vi.useFakeTimers();
+    try {
+      const cd = document.createElement('span');
+      utils.startCountdown(cd, 5, (s) => `A${s}`, () => { cd.textContent = 'A-done'; });
+      utils.startCountdown(cd, 2, (s) => `B${s}`, () => { cd.textContent = 'B-done'; });
+      expect(utils.countdownActive(cd)).toBe(true);
+      vi.advanceTimersByTime(2000);
+      // Only B's timer exists: A's stale timer must not rewrite the label.
+      expect(cd.textContent).toBe('B-done');
+      vi.advanceTimersByTime(1000);
+      expect(cd.textContent).toBe('B-done');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stopCountdown halts the writer and clears active state', () => {
+    vi.useFakeTimers();
+    try {
+      const cd = document.createElement('span');
+      utils.startCountdown(cd, 5, (s) => `${s}`, () => {});
+      utils.stopCountdown(cd);
+      expect(utils.countdownActive(cd)).toBe(false);
+      const frozen = cd.textContent;
+      vi.advanceTimersByTime(3000);
+      expect(cd.textContent).toBe(frozen);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('tolerates a missing node', () => {
+    expect(() => utils.startCountdown(null, 5, (s) => `${s}`, () => {})).not.toThrow();
+    expect(() => utils.stopCountdown(null)).not.toThrow();
+    expect(utils.countdownActive(null)).toBe(false);
+  });
+});

@@ -304,6 +304,43 @@
     return !!(btn && btn._ozLockoutTimer);
   }
 
+  // startCountdown / stopCountdown / countdownActive — generic per-node
+  // countdown timer. B18 fix: login.js startOtpCooldown kept the resend
+  // cooldown in a module global. Switching auth mode (setAuthMode) hid the
+  // cooldown <span> without clearing the timer; switching back to OTP mode
+  // skipped showing it, so a live 60s cooldown ran invisibly and the user
+  // hit a 429 on the next resend. Timer is now stored on the DOM node
+  // (_ozCdTimer) so visibility can follow countdownActive(node) and
+  // stopCountdown() can tear it down from anywhere.
+  function startCountdown(node, seconds, fmt, onEnd) {
+    if (!node) return;
+    if (node._ozCdTimer) clearInterval(node._ozCdTimer);
+    var remaining = seconds;
+    node.textContent = fmt(remaining);
+    node._ozCdTimer = setInterval(function () {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(node._ozCdTimer);
+        node._ozCdTimer = null;
+        onEnd();
+        return;
+      }
+      node.textContent = fmt(remaining);
+    }, 1000);
+  }
+
+  function stopCountdown(node) {
+    if (!node) return;
+    if (node._ozCdTimer) {
+      clearInterval(node._ozCdTimer);
+      node._ozCdTimer = null;
+    }
+  }
+
+  function countdownActive(node) {
+    return !!(node && node._ozCdTimer);
+  }
+
   // fetchWithTimeout performs a fetch that is guaranteed to settle.
   // Extracted from admin.js api() so the timeout semantics are testable.
   // B12 fix: api() awaited two UN-TIMED fetches per call (the session
@@ -345,6 +382,38 @@
     document.addEventListener('keydown', escHandler);
     modalRoot.appendChild(m);
     return close;
+  }
+
+  // startCountdown drives a plain text node with a per-second countdown
+  // (the OTP resend cooldown). B18: the original kept its timer in a
+  // login.js module global and setAuthMode hid the element without
+  // touching the timer — a live cooldown ran invisibly after a tab
+  // switch and the user walked into a 429. The handle now lives on the
+  // node (same pattern as startLockoutCountdown), so visibility can
+  // follow countdownActive(node).
+  function startCountdown(node, seconds, fmt, onEnd) {
+    if (!node) return;
+    if (node._ozCdTimer) clearInterval(node._ozCdTimer);
+    var remaining = seconds;
+    node.textContent = fmt(remaining);
+    node._ozCdTimer = setInterval(function () {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(node._ozCdTimer);
+        node._ozCdTimer = null;
+        if (onEnd) onEnd();
+      } else {
+        node.textContent = fmt(remaining);
+      }
+    }, 1000);
+  }
+
+  function stopCountdown(node) {
+    if (node && node._ozCdTimer) { clearInterval(node._ozCdTimer); node._ozCdTimer = null; }
+  }
+
+  function countdownActive(node) {
+    return !!(node && node._ozCdTimer);
   }
 
   // startLockoutCountdown drives the login button's 429 lockout label.
@@ -604,6 +673,9 @@
     svgBarChart: svgBarChart,
     normalizeStats: normalizeStats,
     startLockoutCountdown: startLockoutCountdown,
+    startCountdown: startCountdown,
+    stopCountdown: stopCountdown,
+    countdownActive: countdownActive,
     fetchFxRate: fetchFxRate,
     mountModal: mountModal,
     fetchWithTimeout: fetchWithTimeout,

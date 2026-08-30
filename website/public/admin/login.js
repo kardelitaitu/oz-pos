@@ -6,7 +6,8 @@ const API = isSubdomain
   : ((window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'https://license.ozpos.my.id');
 
 let currentMode = 'otp'; // default to 'otp' since admin accounts start without a password
-let otpTimer = null;
+// B18: the OTP cooldown timer is no longer a module global — it lives on
+// the cooldown node via admin-utils.startCountdown (see startOtpCooldown).
 
 function showError(msg) {
   hideSuccess();
@@ -65,6 +66,9 @@ function setAuthMode(mode) {
     if (tabOtp) tabOtp.classList.add('active');
     if (tabPwd) tabPwd.classList.remove('active');
     if (pwdGroup) pwdGroup.classList.add('hidden');
+    // B18: the resend cooldown is enforced server-side and its countdown
+    // keeps running across a tab switch — re-show it when returning.
+    if (cd && countdownActive(cd)) cd.classList.remove('hidden');
     
     // Check if code was already sent
     const isCodeActive = otpGroup && !otpGroup.classList.contains('hidden');
@@ -91,25 +95,16 @@ function setAuthMode(mode) {
 }
 
 function startOtpCooldown(seconds = 60) {
-  let sec = seconds;
   const cd = document.getElementById('otp-cooldown');
   if (!cd) return;
   cd.classList.remove('hidden');
-  cd.textContent = t('login.resendIn') + sec + t('login.seconds');
-  if (otpTimer) clearInterval(otpTimer);
-  otpTimer = setInterval(() => {
-    sec--;
-    if (sec <= 0) {
-      clearInterval(otpTimer);
-      cd.textContent = t('login.resendPrompt');
-      const loginBtn = document.getElementById('login-btn');
-      if (loginBtn && currentMode === 'otp') {
-        // Allow resend
-      }
-    } else {
-      cd.textContent = t('login.resendIn') + sec + t('login.seconds');
-    }
-  }, 1000);
+  // B18 fix: timer now tracked on the node via admin-utils.startCountdown
+  // (the old module-global otpTimer kept running when setAuthMode hid the
+  // element, and switching back never re-showed it — a live server-side
+  // resend cooldown ran invisibly until the user walked into a 429).
+  startCountdown(cd, seconds,
+    (s) => t('login.resendIn') + s + t('login.seconds'),
+    () => { cd.textContent = t('login.resendPrompt'); });
 }
 
 // ── Exchange token for a one-time code (hardening F1) ──────────
