@@ -240,7 +240,10 @@ export default function AccountView({ locale }: Props) {
         await openMidtransCheckout(tierKey, 'yearly', (completed) => pollAfterCheckout(completed), bundle);
         return;
       }
-      const email = await getSessionEmail();
+      // P5: reuse the email already loaded on mount (me.tenant.email) instead
+      // of triggering a second /me fetch via getSessionEmail. The subscribe
+      // button only renders after state === 'ready', so me is live here.
+      const email = me?.tenant?.email ?? (await getSessionEmail());
       if (!email) throw new Error('no session email');
       // After the overlay closes, refresh /me so a completed purchase shows
       // the subscription without a manual reload. The webhook provisions

@@ -251,16 +251,19 @@ describe('AccountView — subscription display', () => {
   });
 
   it('shows the checkout error when Paddle subscribe fails due to missing session email', async () => {
-    // Regression: when getSessionEmail() returns null (no email cached and
-    // /me unavailable), the Paddle subscribe path must surface the localized
-    // checkout.error message, not fail silently.
+    // Regression: when the loaded /me payload has no tenant email AND
+    // getSessionEmail() returns null, the Paddle subscribe path must surface
+    // the localized checkout.error message, not fail silently. P5 reuses
+    // me.tenant.email first, so this mock omits the tenant to force the
+    // getSessionEmail() fallback path.
     sessionStorage.setItem('oz_session', 'tok-sub-paddle-noemail');
     paddle.isPlaceholderPriceId.mockReturnValue(false);
     paddle.getSessionEmail.mockResolvedValue(null); // no email available
     mockFetch((url) => {
       if (url.includes('/devices')) return okJson({ devices: [] });
       return okJson({
-        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        // No tenant.email on purpose — forces the getSessionEmail() fallback.
+        tenant: undefined,
         license: { key: 'OZ-TEST-0001', tierKey: 'free', status: 'active', expiresAt: '2027-01-01' },
         subscription: null,
       });
