@@ -598,6 +598,24 @@ devices auto-deactivated with logging.
 
 ---
 
+### Slice C1 — sync_client.rs (1,337 lines), fully read
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-31 | 🟡 LOW | sync_client.rs:1138 | `fetch_snapshot_from_server` builds `reqwest::Client::new()` with **no timeout** — the single path that downloads a large payload (the authoritative snapshot) can hang indefinitely on a stalled connection. Every other client in the file carries 10/15/30s timeouts. | Give it the same explicit timeout (60s, sized for the payload). |
+
+**Slice C1 positives:** the sync-auth-hardening ADR is fully realized —
+typed `SyncHttpError` classification (401 expired ⇒ refresh-and-retry-once;
+401 invalid ⇒ configuration problem, never masked; 403 `plan_required` ⇒
+terminal upgrade state with no retry or quarantine), admin-key mint gating
+(P2), client-credentials path (P3). Snapshot pull applies in **one**
+transaction with model credential hygiene: server user rows upsert with a
+placeholder pin hash that can never verify, `pin_hash` is omitted from the
+UPDATE clause, and `deny_unknown_fields` makes a misbehaving server fail
+loudly instead of silently importing credential material.
+
+---
+
 *This file is appended after each completed crate audit. Findings get IDs
 prefixed by crate (`CRY-`, `SEC-`, `PAY-`, `COR-`, …) so they can be referenced
 in commits and specs without ambiguity.*
