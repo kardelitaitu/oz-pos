@@ -158,7 +158,7 @@ The admin login page (`login.html`) is always dark. The dashboard has a theme to
 | 2 | **HIGH** | MOCK fallback masks failures (C4) | Show error banner when API fails; keep MOCK only as last-resort skeleton | ✅ Resolved — MOCK object removed; API errors render a retry/error state (Phase 1) |
 | 3 | **HIGH** | Tenants list has no pagination (C3) | Add page controls + pass `?page=` / `?perPage=` to the API | ✅ Resolved — pagination controls + `?page=`/`?perPage=`/`?search=` (Phase 2) |
 | 4 | **HIGH** | Monolithic admin.js (H1) | Split into testable modules (stats.js, tenants.js, charts.js) or move to a build step | ✅ Resolved — pure helpers extracted into `admin-utils.js` (charts, formatting, cards, API auth, i18n) with unit tests |
-| 5 | **HIGH** | Zero tests (H2) | Add unit tests for chart rendering, helpers, and API mock fallback | ✅ Resolved — 76 unit tests in `src/__tests__/admin-utils.test.ts` (+14 worker auth-gate tests); both suites now execute in CI via the `website-tests` gate. The 2026-08-30 bug hunt added 52 of those tests and fixed 19 real bugs (see §8.1) |
+| 5 | **HIGH** | Zero tests (H2) | Add unit tests for chart rendering, helpers, and API mock fallback | ✅ Resolved — 85 unit tests in `src/__tests__/admin-utils.test.ts` (+19 in `worker.test.ts`); both suites now execute in CI via the `website-tests` gate. The 2026-08-30 bug hunt added 63 of those tests and fixed 24 real bugs (see §8.1) |
 | 6 | **HIGH** | No i18n (H3) | Extract strings to an i18n structure; at minimum, add English `.ftl` keys for future localization | ✅ Resolved — `STRINGS` key-value table + `t()` helper; all admin/dashboard/login strings extracted |
 | 7 | **HIGH** | Shared session cookie (H4) | Restrict `Domain` to individual subdomains or use a dedicated auth domain | ✅ Resolved — cookie scoped to `admin.ozpos.my.id` / `dashboard.ozpos.my.id` (not the parent domain) |
 | 8 | **MEDIUM** | No loading/error states for charts (M1) | Guard `svgChart` against empty/NaN data; add per-chart error states | ✅ Resolved — `svgChart` / `svgDonut` guard empty/NaN/zero data |
@@ -223,7 +223,7 @@ merge history (`git log -S` + merge-ancestry), and a local test run:
 - **L1 corrected to OPEN**, **L3 marked won't-fix/by-design** — see §5.
 - Test count corrected: **24**, not "25+".
 
-### 8.1 Bug hunt (2026-08-30, TDD) — 21 bugs found & fixed
+### 8.1 Bug hunt (2026-08-30, TDD) — 24 bugs found & fixed
 
 A focused hunt over `admin.js`/`admin-utils.js` against the Go server's
 actual JSON shapes found six real bugs — none caught by the pre-existing
@@ -308,3 +308,27 @@ the HTML parser's SVG attribute adjustment fixes camelCase attrs.
 **Coverage is now complete**: admin.js, login.js, admin-utils.js,
 theme.js, index.html, login.html, and the worker admin gate have each
 been read end-to-end during the hunt.
+
+**Round 6** (same day) went server-side and into the accessibility
+surface — the Go stats endpoint behind the dashboard plus the modal
+focus lifecycle (3 fixed, 1 hypothesis dropped; commit format switched
+to the enforced conventional style, area `licensing`/`website-admin`):
+
+| # | Sev | Bug | Fix |
+|---|-----|-----|-----|
+| B25 | P2 | `getFxRate` cached a FAILED upstream fetch with the same 1h TTL as a success — one blip pinned the 16000 fallback for an hour; since revenue_events.go converts Midtrans IDR payments through it AT WRITE TIME, payments recorded during the window store a ~3% wrong USD equivalent | per-entry TTL: success 1h, failure `fxRetryTTL` 60s; `fxFetcher` test seam |
+| B27 | P3 | `mountModal` announced the dialog (role/aria-modal) but focus never entered it — keyboard/SR users tabbed through background content (WCAG 2.4.3) | capture opener, focus first focusable (or box via tabindex=-1 during Loading), restore on close |
+| B28 | P3 | Tab walked OUT of the open dialog (WCAG 2.1.2) | focus trap cycling Tab/Shift+Tab within the dialog, focusables queried at event time, removed via the B11 close() path |
+
+Round-6 commits: `ed1d6054` (B25), `915e73b5` (B27), `5a8b0cc3` (B28).
+**B26 dropped with a lesson**: hypothesized "revenue merge collapses
+IDR-only months to $0" and test-drove `usd + idr/fx` — the pre-existing
+`TestAdminStats_RealRevenue` then failed, correctly: revenue_events
+stores BOTH currencies of every payment (native + FX-converted at write
+time), so `realUsd` already includes Midtrans revenue and the "fix"
+double-counted everything. Reverted; NOTE comments pin the data model.
+Lesson: check the WRITER before fixing a reader.
+**Clean audits this round**: all 9 `/api/v1/admin/*` Go handlers wrap
+`adminAuth` (admin key or admin-tenant session; registration verified);
+every innerHTML chart/donut path routes server strings through
+`escapeHtml` (String()-coerced); table cells use textContent.

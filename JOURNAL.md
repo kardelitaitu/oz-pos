@@ -6905,3 +6905,55 @@ across 5 rounds (B1-B6, B7+B10-B14, B15-B16+B18-B19, B20-B22, B24+B24b),
 B23 parser fixes it, B8/B9 never existed as separate findings). Remaining
 logged residuals are perf/cosmetic (FX fetch cache, flash stacking,
 session-token caching, URL state = feature).
+
+## 2026-08-30 — Admin bug hunt round 6: server-side data source + modal a11y (B25, B27, B28)
+
+**Problem:** Sixth loop, deeper slices: the Go stats endpoint behind the
+dashboard (auth + correctness) and the modal accessibility surface.
+Commit format switched to the enforced conventional style (fix(licensing)
+/ fix(website-admin)) per the updated AGENTS.md — the user's AGENTS.md
+refresh answered the prefix conflict flagged at round 5's close.
+
+**Findings (3 fixed, 1 dropped with a lesson):**
+
+1. **B25** (fix(licensing) ed1d6054) getFxRate cached a FAILED upstream
+   fetch with the same 1h TTL as a success — one blip pinned the 16000
+   fallback for an hour. Not display-only: revenue_events.go converts
+   every Midtrans IDR payment through getFxRate AT WRITE TIME, so
+   payments recorded during the pinned window store a ~3% wrong USD
+   equivalent. Fix: per-entry ttl (success 1h, failure fxRetryTTL 60s)
+   + fxFetcher test seam. New admin_stats_test.go (2 cases).
+2. **B26 DROPPED — my own regression caught by the suite.** I
+   hypothesized 'IDR-only months collapse to \' and test-drove
+   usd+idr/fx into the merge. The pre-existing TestAdminStats_RealRevenue
+   then FAILED: revenue_events stores BOTH currencies of every payment
+   (native + FX-converted at write time) — realUsd already includes
+   Midtrans revenue; my fix double-counted everything. Reverted; NOTE
+   comment in the merge + warning block in the test file record the data
+   model. Lesson: check the WRITER before 'fixing' a reader.
+3. **B27** (fix(website-admin) 915e73b5) mountModal announced the dialog
+   (role=dialog, aria-modal) but focus never entered it — keyboard/SR
+   users tabbed through background content (WCAG 2.4.3). Now: capture
+   activeElement, focus first focusable (or the box via tabindex=-1 for
+   the Loading phase), restore on close guarded by document.contains
+   (opener may be re-rendered away). 4 tests.
+4. **B28** (fix(website-admin) 5a8b0cc3) the trap half: Tab walked OUT
+   of the open dialog (WCAG 2.1.2). mountModal now cycles Tab/Shift+Tab
+   within the dialog's focusables (queried at event time — late-arriving
+   detail content included), pulls background focus back in, and shares
+   close()'s detach path. 5 tests + 1 B11 assertion corrected: it pinned
+   the listener COUNT (toBe(1)) instead of the invariant — with the trap
+   there are two, and the stale assertion threw before close(), leaking
+   listeners into the next test (the -2 cascade it reported).
+
+**Clean audits this round (no bugs):** Go admin endpoint auth — all 9
+/api/v1/admin/* handlers wrap adminAuth (admin key or admin-tenant
+session; registration in main.go verified). innerHTML escaping audit —
+svgChart/svgBarChart/svgDonut-legend all route server strings through
+escapeHtml (String()-coerced, non-string safe); kpiC icons are
+constants; tableCard/tenantRow use textContent.
+
+**Test counts:** admin-utils 76 -> 85; Go license-server +2 (package
+PASS 114s); full website 659/659 (39 files); drift 0; gofmt clean.
+
+**Commits:** ed1d6054 (B25), 915e73b5 (B27), 5a8b0cc3 (B28).
