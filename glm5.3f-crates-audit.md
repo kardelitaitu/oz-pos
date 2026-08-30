@@ -673,6 +673,24 @@ only in Authorization headers (documented body-log-leak rationale), and
 timeouts on all five HTTP clients. The api_key sits plaintext in
 `tenant_subscription` — the accepted local threat model (COR-17/30 family).
 
+### Slice D1 — export/mod.rs (780) + export/email_sender.rs (334), fully read
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-34 | 🟡 LOW | export/email_sender.rs:60–79 | `build_smtp_transport` falls back to `builder_dangerous` (plaintext SMTP) when `use_tls=false` and port ≠ 465 — SMTP credentials would traverse the network unencrypted. | Warn on config save, or refuse credentialed plaintext SMTP. |
+
+**Slice D1 notes:** `export/mod.rs`'s custom report builder is
+injection-safe by construction — hardcoded per-dataset tables and column
+whitelists (unknown columns silently dropped), parameterized dates,
+clamped `u32` limit/offset — with correct CSV quote-doubling.
+`email_sender.rs` resolves timezones through a ~20-zone fixed-offset table
+with **no DST handling** (europe/london documented as a UTC approximation;
+chrono-tz would fix) and falls back to UTC on unknown names (COR-21
+family); the 2-minute send window with same-date dedup skips the day when
+the app is closed at send time (INFO).
+
+---
+
 > **SLICE C COMPLETE:** sync_client, topology, location_resolver, settings,
 > features, subscription, license_verification — 7 files, ~6,100 lines,
 > all read and stamped. oz-core remaining: slice D (export/ ~3,121,

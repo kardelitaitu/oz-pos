@@ -1,5 +1,11 @@
 //! Shared email scheduling & sending logic — used by both desktop-client
 //! and cloud-server.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice D1: email_sender deep read)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: COR-34 LOW: build_smtp_transport falls back to lettre builder_dangerous (plaintext SMTP) when use_tls=false and port!=465 — credentials would traverse the network unencrypted (config-driven admin choice; propose warn-on-save or refuse credentialed plaintext); timezone resolver is a ~20-zone fixed-offset table with NO DST (europe/london documented as UTC approximation — schedule drifts an hour seasonally; chrono-tz would fix); unknown tz falls back to UTC with a warn (COR-21 family); 2-minute send window + same-date dedup means an app closed at send time skips the day (INFO); several mislabeled // SAFETY: comments on constant unwraps (COR-15 pattern)
+next: enforce or warn on plaintext credentialed SMTP (COR-34) | perf: N/A
+*/
 //!
 //! ## Responsibilities
 //!
