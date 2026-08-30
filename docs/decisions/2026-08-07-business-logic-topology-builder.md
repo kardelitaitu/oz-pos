@@ -1,3 +1,9 @@
+---
+num: 34
+area: topology
+title: ADR #34: Topology Editor as the Business Logic Builder
+status: Proposed
+---
 # ADR #34: Topology Editor as the Business Logic Builder
 
 **Status:** Proposed  

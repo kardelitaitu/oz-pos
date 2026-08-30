@@ -1,3 +1,9 @@
+---
+num: 37
+area: products
+title: ADR #37: Product Popularity Index — Weighted Activity Score for Retail Sorting
+status: Implemented (2026-08-12)
+---
 # ADR #37: Product Popularity Index — Weighted Activity Score for Retail Sorting
 
 Date: 2026-08-11

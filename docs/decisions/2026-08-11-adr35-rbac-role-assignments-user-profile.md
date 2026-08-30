@@ -1,3 +1,9 @@
+---
+num: 35
+area: staff
+title: ADR #35: RBAC — Role Assignments with Branch/Workspace Scopes and User Profile Data
+status: Accepted (ratified 2026-08-11; implementation sequence in D9)
+---
 # ADR #35: RBAC — Role Assignments with Branch/Workspace Scopes and User Profile Data
 
 Date: 2026-08-11

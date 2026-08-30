@@ -1,3 +1,9 @@
+---
+num: 21
+area: sync
+title: ADR #21: Sync Conflict Resolution Strategy
+status: Phase 1 ✅ implemented — all four resolvers + `resolve_conflict()` dispatch are live in `platform/sync/src/conflict.rs`. Phase 2 ❌ **not shipped** — there is no `sync_conflicts` table, `log_conflict`, or `list_sync_conflicts` anywhere in the codebase (checked 2026-08-08). Phase 3 (tombstones) remains future work.
+---
 # ADR #21: Sync Conflict Resolution Strategy
 
 **Status:** Approved — Phase 1 implemented (2026-07-20; re-audited 2026-08-08 by docs-auditor)

@@ -1,3 +1,9 @@
+---
+num: 42
+area: website
+title: ADR #42: Website Admin Dashboard & User Dashboard (Subdomain Architecture)
+status: Partially Implemented — subdomain routing + auth gate + password rotation + dashboard/admin SPAs complete (2026-08-28); invoice history and webhook delivery log remain future work (see §5 Open Questions)
+---
 # ADR #42: Website Admin Dashboard & User Dashboard (Subdomain Architecture)
 
 **Status:** Partially Implemented — subdomain routing + auth gate + password rotation + dashboard/admin SPAs complete (2026-08-28); invoice history and webhook delivery log remain future work (see §5 Open Questions)  

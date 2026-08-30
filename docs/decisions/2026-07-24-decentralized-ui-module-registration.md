@@ -1,3 +1,9 @@
+---
+num: 31
+area: module-system
+title: ADR #31: Decentralized UI Feature Module Registration
+status: Accepted (2026-07-24)
+---
 <!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: ACTIVE · ADR #31: Decentralized UI Feature Module Registration -->
 
 # ADR #31: Decentralized UI Feature Module Registration

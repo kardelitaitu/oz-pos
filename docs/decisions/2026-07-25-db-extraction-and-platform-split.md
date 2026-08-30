@@ -1,3 +1,9 @@
+---
+num: 32
+area: database
+title: ADR #32: DB Layer Extraction (R2) & Platform File Split (R5)
+status: Draft — Planned
+---
 # ADR #32: DB Layer Extraction (R2) & Platform File Split (R5)
 
 **Status:** Draft — Planned  

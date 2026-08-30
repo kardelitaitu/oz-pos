@@ -1,3 +1,9 @@
+---
+num: 33
+area: architecture
+title: ADR #33: Panic Policy & Production unwrap/expect Enforcement
+status: Implemented (2026-08-03)
+---
 # ADR #33: Panic Policy & Production unwrap/expect Enforcement
 
 **Status:** Implemented (2026-08-03)

@@ -1,3 +1,9 @@
+---
+num: 44
+area: topology
+title: ADR #44: Typed Connection Gating & Live Validation (Implementation)
+status: Implemented (2026-08-08)
+---
 # ADR #44: Typed Connection Gating & Live Validation (Implementation)
 
 **Status:** Implemented (2026-08-08)  \

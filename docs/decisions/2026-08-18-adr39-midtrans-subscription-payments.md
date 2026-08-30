@@ -1,3 +1,9 @@
+---
+num: 39
+area: subscription
+title: ADR #39: Midtrans QRIS Subscription Payments (Phase 2)
+status: Approved — implementation tracked in `TODO.md` C3.1
+---
 # ADR #39: Midtrans QRIS Subscription Payments (Phase 2)
 
 Date: 2026-08-18

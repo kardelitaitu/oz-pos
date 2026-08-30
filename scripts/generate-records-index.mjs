@@ -68,7 +68,7 @@ function frontMatter(file) {
   const out = {};
   while (i < text.length && text[i] !== '---') {
     const m = text[i].match(/^([A-Za-z_-]+):\s*(.*)$/);
-    if (m) out[m[1].toLowerCase()] = m[2].trim();
+    if (m) out[m[1].toLowerCase()] = m[2].trim().replace(/^(['"])(.*)\1$/, '$2');
     i++;
   }
   return out;

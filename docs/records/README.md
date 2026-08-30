@@ -46,7 +46,7 @@ Unified registry for architectural decisions (ADRs), audits, verifications, and 
 | 41 | topology | [ADR #41: App Lifecycle, Device Onboarding, Dynamic Topology Workspaces, and Two-Layer Gated Home Experience (Tier & RBAC)](../decisions/2026-08-28-adr41-app-lifecycle-device-onboarding-topology-home-gating.md) | Accepted (2026-08-28) |
 | 42 | website | [ADR #42: Website Admin Dashboard & User Dashboard (Subdomain Architecture)](../decisions/2026-08-28-adr42-website-admin-and-user-dashboard.md) | Partially Implemented — subdomain routing + auth gate + password rotation + dashboard/admin SPAs complete (2026-08-28); invoice history and webhook delivery log remain future work (see §5 Open Questions) |
 | 43 | ui | [ADR #43 – React‑only UI decision](../decisions/2026-07-24-react-only-decision.md) | — |
-| 44 | topology | [ADR #44: Typed Connection Gating & Live Validation (Implementation)](../decisions/2026-08-08-adr34-typed-connection-gating.md) | Implemented (2026-08-08)  \ |
+| 44 | topology | [ADR #44: Typed Connection Gating & Live Validation (Implementation)](../decisions/2026-08-08-adr34-typed-connection-gating.md) | Implemented (2026-08-08) |
 
 ### Research Notes
 

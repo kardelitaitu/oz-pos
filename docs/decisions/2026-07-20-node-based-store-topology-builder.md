@@ -1,3 +1,9 @@
+---
+num: 22
+area: topology
+title: ADR #22: Visual Node-Based Store & Workspace Topology Builder
+status: Implemented (2026-07-22) — Amended (2026-07-23)
+---
 # ADR #22: Visual Node-Based Store & Workspace Topology Builder
 
 **Status:** Implemented (2026-07-22) — Amended (2026-07-23)  

@@ -1,3 +1,9 @@
+---
+num: 43
+area: ui
+title: ADR #43 – React‑only UI decision
+status: —
+---
 # ADR #43 – React‑only UI decision
 
 **Date:** 2026‑07‑24

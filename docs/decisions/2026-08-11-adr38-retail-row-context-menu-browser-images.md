@@ -1,3 +1,9 @@
+---
+num: 38
+area: products
+title: ADR #38: Retail POS Row Context Menu — View Product Images in Browser
+status: Implemented (2026-08-12)
+---
 # ADR #38: Retail POS Row Context Menu — View Product Images in Browser
 
 Date: 2026-08-11
