@@ -95,14 +95,16 @@ Key residual items:
 
 ## Topology — Rust (`30-topology-rust.md` — ⚠️ 8 FINDINGS, OPEN)
 
-**Status:** **all 8 findings open** (TOP-01→TOP-08, all P2/P3; no P0/P1). No production code changed — audit only, fixes pending approval.
+**Status:** **ALL CLOSED — verified fixed 2026-08-31** (TOP-01→TOP-08).
 
-Key items:
-- **TOP-01** — Raw control bytes (NUL/SOH) embedded in test string literals
-- **TOP-02** — Runtime setting-key constant duplicated across three modules
-- **TOP-03** — Duplicated paragraph in `load_topology_data` doc comment
-- **TOP-04** — `save_topology_data` duplicates structural validation with drift risk
-- TOP-05–TOP-08 — remaining hygiene/consistency fixes recommended before heavy expansion
+- ~~**TOP-01** — Raw control bytes in test string literals~~ — **VERIFIED FIXED**: no control-byte literals remain; `topology_setting_key` now REJECTS control chars (dedicated tests: `..._control_chars_rejected`, `..._rejects_path_injection`).
+- ~~**TOP-02** — Setting-key constant duplicated across three modules~~ — **VERIFIED FIXED**: single home in `topology/model.rs` (`TOPOLOGY_SETTING_KEY`, `TOPOLOGY_RUNTIME_SETTING_KEY`, `TOPOLOGY_APPLY_*`, `TOPOLOGY_SCHEMA_VERSION`), consumed via `pub(crate)`.
+- ~~**TOP-03** — Duplicated paragraph in `load_topology_data` doc~~ — **VERIFIED FIXED**: doc is a single coherent explanation (load-side raw-port faithfulness + healing rationale), pinned by `load_topology_data_preserves_raw_legacy_null_ports`.
+- ~~**TOP-04** — `save_topology_data` duplicated structural validation~~ — **VERIFIED FIXED**: save calls the shared `validate_topology_structure` (persistence.rs:726); the comment records the drifted inline copy's removal.
+- ~~**TOP-05** — Legacy typed API production-dead~~ — **VERIFIED FIXED**: `save_topology_data`/`load_topology_data` are now `#[cfg(test)]`-gated test-compat helpers; production flows through `apply_topology_diff` only.
+- ~~**TOP-06** — Missing doc comments~~ — **VERIFIED FIXED**: sampled items (`default_direction`, `topology_apply_request_key`, `persist_topology_recovery`) all carry doc comments.
+- ~~**TOP-07** — O(n²) scans in validation core~~ — **VERIFIED FIXED**: membership checks use prebuilt sets (`workspace_id_set.contains`, `warehouse_ids` via set lookups).
+- ~~**TOP-08** — File-size watch items~~ — **NO ACTION**: `persistence.rs` 786 lines (under the 1,000 cap); test files within the module's cited guideline. Watch item only.
 
 ---
 
