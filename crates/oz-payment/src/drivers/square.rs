@@ -311,6 +311,14 @@ impl SquarePaymentProcessor {
         Ok(resp.refund)
     }
 
+    /// Derive the Square `idempotency_key` for a charge request.
+    ///
+    /// Extracted verbatim from the inline expression in `authorize` so the
+    /// policy is testable; behavior is unchanged by this commit.
+    fn idempotency_key_for(_request: &PaymentRequest) -> String {
+        Uuid::now_v7().to_string()
+    }
+
     /// Extract success status and amount from payment data.
     fn payment_result(data: &PaymentData) -> Result<(bool, Money), PaymentError> {
         let success = data.status == "COMPLETED" || data.status == "APPROVED";
@@ -324,7 +332,7 @@ impl PaymentProcessor for SquarePaymentProcessor {
     async fn authorize(&self, request: &PaymentRequest) -> Result<PaymentResult, PaymentError> {
         let currency_str = String::from_utf8_lossy(&request.amount.currency.0).into_owned();
         let body = CreatePaymentRequest {
-            idempotency_key: Uuid::now_v7().to_string(),
+            idempotency_key: Self::idempotency_key_for(request),
             amount_money: MoneyAmount {
                 amount: Self::to_square_amount(&request.amount),
                 currency: currency_str,
