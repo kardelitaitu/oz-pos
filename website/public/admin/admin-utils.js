@@ -141,7 +141,7 @@
   function tableCard(heading, headers, rows) {
     var card = el('div', 'card table-card');
     card.appendChild(el('h2', null, heading));
-    if (!rows || rows.length === 0) { card.appendChild(el('p', 'empty', 'No data.')); return card; }
+    if (!rows || rows.length === 0) { card.appendChild(el('p', 'empty', t('table.noData'))); return card; }
     var table = el('table');
     var thead = el('thead');
     var tr = el('tr');
@@ -254,6 +254,20 @@
     'health.notConfigured': '— Not configured',
     'health.version': 'Version',
     'health.time': 'Time',
+    'common.loading': 'Loading…',
+    'common.loadingTenants': 'Loading tenants…',
+    'common.failedToLoadTenants': 'Failed to load tenants.',
+    'common.failedToLoadTenantDetail': 'Failed to load tenant detail.',
+    'common.failedToLoadHealth': 'Failed to load health.',
+    'common.statsUnavailable': 'Stats unavailable',
+    'common.statsApiNoResponse': 'The dashboard API did not respond. Try again.',
+    'common.retry': 'Retry',
+    'common.stale': ' stale',
+    'common.successfully': ' successfully',
+    'common.failed': ' failed',
+    'toolbar.nonFree': 'non-free (plus/pro/premium/enterprise)',
+    'toolbar.perSubscriber': 'per subscriber',
+    'toolbar.conversionRate': 'conversion rate',
     'auth.accessDenied': 'Access denied',
     'auth.signInAgain': 'Your session is not authorized for the admin panel. If you are the admin, please <a href="/__oz/logout" style="color:var(--accent)">sign in again</a>.',
   };
