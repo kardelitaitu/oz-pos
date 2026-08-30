@@ -1000,6 +1000,30 @@ failures without aborting the cycle.
 
 ---
 
+## 10. platform/sync — offline-first sync engine
+
+Baseline: ~9.9k production lines — the largest platform crate (lib,
+queue, transport, daemon, pg_daemon, pg_transport, conflict, replication).
+Slice A (lib.rs 2,030: production 1–122 + 1,518–2,030 fully read;
+1,518-line test module verified structurally).
+
+**No new findings — exemplary.** The engine-level sync cycle implements
+the sync ADRs faithfully: a **durable pull anchor that advances
+monotonically** only after a page applies (the `.or()`-regression hazard
+under clock skew is explicitly called out and handled), replay-safe
+atomic application with idempotency receipts, dead-letter quarantine that
+counts as applied, shared conflict strategy (SYNC-02), and a snapshot
+import whose `pin_hash` **never travels** — placeholder on insert, local
+hash preserved on conflict (SYNC-06) — plus RUST-04 pre-validation before
+the import transaction and a documented anchor reset after snapshot
+import. One organizational note: production items sit *after* the test
+module (COR-33 family; the file carries a
+`clippy::items_after_test_module` allow for it).
+
+---
+
+---
+
 ---
 
 ---

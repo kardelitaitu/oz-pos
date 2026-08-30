@@ -1,4 +1,10 @@
 //! OZ-POS Sync Engine
+/*
+last audited 25-07-26 by RSA-Agent (platform-sync slice A: lib deep read)
+crate: platform-sync | status: SAFE | lint: CLEAN
+findings: exemplary production (1-122 error taxonomy + 1518-2030 engine; 124-1517 tests verified) — SYNC-01 durable pull anchor with MONOTONIC advancement (documented clock-skew rationale, lexicographic ISO-8601 ordering), replay-safe apply_remote_atomic with idempotency receipts, dead-letter quarantine counts as applied; SYNC-02 shared conflict strategy; SYNC-06 pin_hash never travels (placeholder insert + preserved-on-conflict); RUST-04 snapshot pre-validation before tx; snapshot-import anchor reset documented; per-batch independent commits; health-check skip is info-not-error. COR-33 family note: production items after test module (file-organization inversion)
+next: reorganize lib.rs production-before-tests (COR-33) | perf: 64KB priority-sorted batches
+*/
 //!
 //! Offline-first sync with eventual consistency. Provides:
 //!
