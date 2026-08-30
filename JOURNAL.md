@@ -8125,3 +8125,85 @@ four suites; typecheck clean for owned files (foreign analytics WIP
 carries its own errors — untouched).
 
 **Commit:** 7967cc2d + registry rewrite in this entry's commit.
+
+## 2026-08-31 — round K: a documented finding nobody had wired, and a sweep that found nothing
+
+Started as a credential audit and ended as an authz fix, so both halves are
+worth recording.
+
+**The sweep came back clean.** After mask_token existed, the obvious question
+was what else skips the convention. Three passes over all production .rs
+files: log statements naming credential words, field-style assignments like
+password = %x (which catches multi-line tracing! invocations the first pass
+misses), and whole-struct Debug dumps like ?config. Result: zero raw
+credential logs beyond the ten session tokens from round J. The two hits
+were a SQL parameter list and a LAN protocol write. PINs are stored as
+Argon2id PHC hashes everywhere, and the CLI even validates the shape before
+writing. That is a negative result, and it is worth writing down: the
+masking convention holds, tokens were the single gap, and B53 was a real
+exception rather than the tip of an iceberg.
+
+**Then the indirect question was the productive one.** Direct field logging
+was clean, so the next shape is a struct that derives Debug and CONTAINS a
+secret - SnowflakeConfig.password, BigQueryConfig.service_account_key_b64.
+Chased it as far as: no caller formats those types today, so a custom Debug
+would be speculative hardening with no demonstrated path. Left alone, and
+recorded here so the next reader does not re-walk the same dead end.
+
+**B55 / API-4 (f43dccd5).** The 25-07-26 audit wrote the fix for this one and
+nobody implemented it: any valid JWT could POST /api/v1/users with any
+role_id including role-owner. The mechanism it proposed already existed in
+the codebase - ApiTokenClaims.terminal_id is Some only for tokens minted via
+the terminal client-credentials path - so the gate is one field check.
+
+Severity was worth re-judging rather than inheriting. LOW-MED understates it:
+a POS terminal is a physical device sitting in a shop, and its client_secret
+is stored on it. That is one credential between a tampered till and an owner
+session over an entire tenant.
+
+Three hypotheses looked worse than this one and all three were wrong, which
+is the useful part:
+  - PUT /api/v1/tenants/{tenant_id}/plan takes tenant_id from the PATH, not
+    the claims. A cross-tenant rewrite, if unchecked. It is gated by
+    admin_key_authorised and never touches the JWT at all.
+  - PUT /api/v1/settings, same - admin-key only.
+  - POST /api/v1/tokens terminal path derives scope from the VERIFIED
+    terminal record, not the request body, so a terminal cannot mint itself
+    something broader.
+Finding those gates is what reframed API-4: user creation is the ONE
+admin-tier operation left on the plain JWT tier. It is the outlier, not the
+design - which is also why gating it is obviously correct rather than a
+policy invention.
+
+**B54, found while writing the commit message.** The pin_hash field doc said
+"SHA-256 hash of the user PIN". hash_pin produces Argon2id PHC, and
+verify_pin rejects unparseable input cleanly. So an integrator who followed
+the documented contract got a 201 Created and a user who can never log in.
+A doc comment that is wrong in this specific way is a functional defect: the
+code behaves correctly and the caller is silently broken.
+
+**Red was easy because the harness already existed** - users_tests.rs had a
+claims() helper and called handlers directly, no HTTP stack. Two Red (a
+terminal token got 201 today), one Green-boundary test asserting admin-minted
+tokens keep working, and one ordering test that uses an UNSEEDED role so any
+response other than 403 proves the check has moved behind the store write.
+201/201 in oz-api.
+
+**My own regression, caught by accident (22afe575).** While building
+cloud-server for the spec update, two dead-code warnings appeared pointing at
+cache.rs:458 and :485 - lock_or_report and inventory_invalidation_target,
+both mine from rounds E and F. Placed outside the cache-redis gate on purpose
+so they are testable without Redis, but their only callers are inside it, so
+a default build had been printing warnings since 3589f34e. CI runs
+--all-features, where the warning cannot fire. Four rounds of green CI hid
+it. Fixed with a conditional allow, verified clean in both configurations.
+
+**cloud-server does not compile at HEAD.** Not from this change: a currency
+commit added net_revenue_minor, refund_minor and currency to oz-core row
+structs and missed apps/cloud-server/src/email_pg.rs, which is clean in git
+status - so the breakage is committed, not in-flight. The openapi.rs spec
+update in f43dccd5 therefore could not be run; rustfmt parses it and the edit
+is a JSON literal, and that limit is stated in the commit message.
+
+**Totals this area:** B46-B55, COR-31 in-module, COR-5 closed, API-4 gated.
+oz-core 2321, oz-api 201/201, oz-security 88+7, tablet 20/20.
