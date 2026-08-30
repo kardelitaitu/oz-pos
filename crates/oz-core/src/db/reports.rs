@@ -29,6 +29,14 @@ pub struct DailyRevenueRow {
     pub gross_profit_minor: i64,
     /// Gross margin as a percentage of revenue; 0.0 when revenue is 0.
     pub gross_margin_percent: f64,
+    /// Refunds processed on this date (minor units, same currency).
+    /// REP-04: refunds are attributed to the REFUND's own day, not the
+    /// original sale's — accounting convention, and the refund ledger is
+    /// otherwise invisible in reports.
+    pub refund_minor: i64,
+    /// Net revenue in minor units: gross revenue − refunds. Can be
+    /// negative on a day with only refunds (the row still appears).
+    pub net_revenue_minor: i64,
 }
 
 /// Weekly revenue aggregation.
@@ -49,6 +57,10 @@ pub struct WeeklyRevenueRow {
     pub gross_profit_minor: i64,
     /// Gross margin as a percentage of revenue; 0.0 when revenue is 0.
     pub gross_margin_percent: f64,
+    /// Refunds processed in this week (minor units, same currency; REP-04).
+    pub refund_minor: i64,
+    /// Net revenue in minor units: gross revenue − refunds (REP-04).
+    pub net_revenue_minor: i64,
 }
 
 /// Monthly revenue aggregation.
@@ -69,6 +81,21 @@ pub struct MonthlyRevenueRow {
     pub gross_profit_minor: i64,
     /// Gross margin as a percentage of revenue; 0.0 when revenue is 0.
     pub gross_margin_percent: f64,
+    /// Refunds processed in this month (minor units, same currency; REP-04).
+    pub refund_minor: i64,
+    /// Net revenue in minor units: gross revenue − refunds (REP-04).
+    pub net_revenue_minor: i64,
+}
+
+/// Refund ledger totals for a date range, grouped by currency (REP-04).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RefundsSummaryRow {
+    /// ISO-4217 currency code.
+    pub currency: String,
+    /// Number of refunds processed in the range.
+    pub refund_count: i64,
+    /// Sum of refund totals in minor units (same currency).
+    pub refund_total_minor: i64,
 }
 
 /// Top product ranking.
@@ -328,21 +355,38 @@ impl Store<'_> {
         // multiply revenue/count by the line count per sale, so revenue stays
         // on the sales table and only the cost side joins the lines. Costs
         // use the product's current cost_minor (reporting-layer semantics).
+        // REP-04: sales and refunds aggregate independently (CTEs) and join
+        // FULL OUTER on (date, currency) — a refund-only day must still
+        // produce a row, otherwise the refund silently vanishes from reports.
         let mut stmt = self.conn.prepare(
-            "SELECT DATE(s.created_at) AS date,
-                    SUM(s.total_minor) AS total_minor,
-                    s.currency AS currency,
-                    COUNT(*) AS sale_count,
-                    (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty), 0)
-                     FROM sale_lines sl2
-                     JOIN sales s2 ON sl2.sale_id = s2.id
-                     LEFT JOIN products p2 ON sl2.sku = p2.sku
-                     WHERE s2.status = 'completed'
-                       AND s2.currency = s.currency
-                       AND DATE(s2.created_at) = DATE(s.created_at)) AS cogs_minor
-             FROM sales s
-             WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
-             GROUP BY DATE(s.created_at), s.currency
+            "WITH s AS (
+                 SELECT DATE(s1.created_at) AS d, s1.currency AS c,
+                        SUM(s1.total_minor) AS t, COUNT(*) AS n,
+                        (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty), 0)
+                         FROM sale_lines sl2
+                         JOIN sales s2 ON sl2.sale_id = s2.id
+                         LEFT JOIN products p2 ON sl2.sku = p2.sku
+                         WHERE s2.status = 'completed'
+                           AND s2.currency = s1.currency
+                           AND DATE(s2.created_at) = DATE(s1.created_at)) AS cogs
+                 FROM sales s1
+                 WHERE s1.status = 'completed' AND DATE(s1.created_at) BETWEEN ?1 AND ?2
+                 GROUP BY DATE(s1.created_at), s1.currency
+             ),
+             r AS (
+                 SELECT DATE(created_at) AS d, currency AS c, SUM(total_minor) AS rf
+                 FROM refunds
+                 WHERE DATE(created_at) BETWEEN ?1 AND ?2
+                 GROUP BY DATE(created_at), currency
+             )
+             SELECT COALESCE(s.d, r.d) AS date,
+                    COALESCE(s.c, r.c) AS currency,
+                    COALESCE(s.t, 0) AS total_minor,
+                    COALESCE(s.n, 0) AS sale_count,
+                    COALESCE(s.cogs, 0) AS cogs_minor,
+                    COALESCE(r.rf, 0) AS refund_minor,
+                    COALESCE(s.t, 0) - COALESCE(r.rf, 0) AS net_revenue_minor
+             FROM s FULL OUTER JOIN r ON s.d = r.d AND s.c = r.c
              ORDER BY date ASC",
         )?;
         let rows = stmt.query_map(params![start_date, end_date], |row| {
@@ -356,6 +400,8 @@ impl Store<'_> {
                 cogs_minor,
                 gross_profit_minor,
                 gross_margin_percent,
+                refund_minor: row.get("refund_minor")?,
+                net_revenue_minor: row.get("net_revenue_minor")?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -374,20 +420,36 @@ impl Store<'_> {
         // keyed on the same week expression, so joining sale_lines never
         // multiplies revenue/count per sale line.
         let mut stmt = self.conn.prepare(
-            "SELECT DATE(s.created_at, '-6 days', 'weekday 1') AS week_start,
-                    SUM(s.total_minor) AS total_minor, s.currency AS currency,
-                    COUNT(*) AS sale_count,
-                    (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty), 0)
-                     FROM sale_lines sl2
-                     JOIN sales s2 ON sl2.sale_id = s2.id
-                     LEFT JOIN products p2 ON sl2.sku = p2.sku
-                     WHERE s2.status = 'completed'
-                       AND s2.currency = s.currency
-                       AND DATE(s2.created_at, '-6 days', 'weekday 1')
-                           = DATE(s.created_at, '-6 days', 'weekday 1')) AS cogs_minor
-             FROM sales s
-             WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
-             GROUP BY week_start, s.currency
+            "WITH s AS (
+                 SELECT DATE(s1.created_at, '-6 days', 'weekday 1') AS d, s1.currency AS c,
+                        SUM(s1.total_minor) AS t, COUNT(*) AS n,
+                        (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty), 0)
+                         FROM sale_lines sl2
+                         JOIN sales s2 ON sl2.sale_id = s2.id
+                         LEFT JOIN products p2 ON sl2.sku = p2.sku
+                         WHERE s2.status = 'completed'
+                           AND s2.currency = s1.currency
+                           AND DATE(s2.created_at, '-6 days', 'weekday 1')
+                               = DATE(s1.created_at, '-6 days', 'weekday 1')) AS cogs
+                 FROM sales s1
+                 WHERE s1.status = 'completed' AND DATE(s1.created_at) BETWEEN ?1 AND ?2
+                 GROUP BY DATE(s1.created_at, '-6 days', 'weekday 1'), s1.currency
+             ),
+             r AS (
+                 SELECT DATE(created_at, '-6 days', 'weekday 1') AS d, currency AS c,
+                        SUM(total_minor) AS rf
+                 FROM refunds
+                 WHERE DATE(created_at) BETWEEN ?1 AND ?2
+                 GROUP BY DATE(created_at, '-6 days', 'weekday 1'), currency
+             )
+             SELECT COALESCE(s.d, r.d) AS week_start,
+                    COALESCE(s.c, r.c) AS currency,
+                    COALESCE(s.t, 0) AS total_minor,
+                    COALESCE(s.n, 0) AS sale_count,
+                    COALESCE(s.cogs, 0) AS cogs_minor,
+                    COALESCE(r.rf, 0) AS refund_minor,
+                    COALESCE(s.t, 0) - COALESCE(r.rf, 0) AS net_revenue_minor
+             FROM s FULL OUTER JOIN r ON s.d = r.d AND s.c = r.c
              ORDER BY week_start ASC",
         )?;
         let rows = stmt.query_map(params![start_date, end_date], |row| {
@@ -401,6 +463,8 @@ impl Store<'_> {
                 cogs_minor,
                 gross_profit_minor,
                 gross_margin_percent,
+                refund_minor: row.get("refund_minor")?,
+                net_revenue_minor: row.get("net_revenue_minor")?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -415,19 +479,34 @@ impl Store<'_> {
         // COGS is a correlated subquery keyed on the same YYYY-MM expression,
         // so joining sale_lines never multiplies revenue/count per line.
         let mut stmt = self.conn.prepare(
-            "SELECT SUBSTR(s.created_at, 1, 7) AS month,
-                    SUM(s.total_minor) AS total_minor, s.currency AS currency,
-                    COUNT(*) AS sale_count,
-                    (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty), 0)
-                     FROM sale_lines sl2
-                     JOIN sales s2 ON sl2.sale_id = s2.id
-                     LEFT JOIN products p2 ON sl2.sku = p2.sku
-                     WHERE s2.status = 'completed'
-                       AND s2.currency = s.currency
-                       AND SUBSTR(s2.created_at, 1, 7) = SUBSTR(s.created_at, 1, 7)) AS cogs_minor
-             FROM sales s
-             WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
-             GROUP BY month, s.currency
+            "WITH s AS (
+                 SELECT SUBSTR(s1.created_at, 1, 7) AS d, s1.currency AS c,
+                        SUM(s1.total_minor) AS t, COUNT(*) AS n,
+                        (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty), 0)
+                         FROM sale_lines sl2
+                         JOIN sales s2 ON sl2.sale_id = s2.id
+                         LEFT JOIN products p2 ON sl2.sku = p2.sku
+                         WHERE s2.status = 'completed'
+                           AND s2.currency = s1.currency
+                           AND SUBSTR(s2.created_at, 1, 7) = SUBSTR(s1.created_at, 1, 7)) AS cogs
+                 FROM sales s1
+                 WHERE s1.status = 'completed' AND DATE(s1.created_at) BETWEEN ?1 AND ?2
+                 GROUP BY SUBSTR(s1.created_at, 1, 7), s1.currency
+             ),
+             r AS (
+                 SELECT SUBSTR(created_at, 1, 7) AS d, currency AS c, SUM(total_minor) AS rf
+                 FROM refunds
+                 WHERE DATE(created_at) BETWEEN ?1 AND ?2
+                 GROUP BY SUBSTR(created_at, 1, 7), currency
+             )
+             SELECT COALESCE(s.d, r.d) AS month,
+                    COALESCE(s.c, r.c) AS currency,
+                    COALESCE(s.t, 0) AS total_minor,
+                    COALESCE(s.n, 0) AS sale_count,
+                    COALESCE(s.cogs, 0) AS cogs_minor,
+                    COALESCE(r.rf, 0) AS refund_minor,
+                    COALESCE(s.t, 0) - COALESCE(r.rf, 0) AS net_revenue_minor
+             FROM s FULL OUTER JOIN r ON s.d = r.d AND s.c = r.c
              ORDER BY month ASC",
         )?;
         let rows = stmt.query_map(params![start_date, end_date], |row| {
@@ -441,6 +520,8 @@ impl Store<'_> {
                 cogs_minor,
                 gross_profit_minor,
                 gross_margin_percent,
+                refund_minor: row.get("refund_minor")?,
+                net_revenue_minor: row.get("net_revenue_minor")?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -785,6 +866,35 @@ impl Store<'_> {
             Ok(VoidedItemRow {
                 name: row.get("name")?,
                 qty: row.get("qty")?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// Refund ledger totals for a date range, grouped by currency (REP-04).
+    ///
+    /// Refunds never mutate the sale row, so without this (and the
+    /// `refund_minor` netting on the revenue trends) the refund side of
+    /// the money was invisible in every report.
+    pub fn refunds_summary(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<RefundsSummaryRow>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT currency,
+                    COUNT(*) AS refund_count,
+                    COALESCE(SUM(total_minor), 0) AS refund_total_minor
+             FROM refunds
+             WHERE DATE(created_at) BETWEEN ?1 AND ?2
+             GROUP BY currency
+             ORDER BY currency ASC",
+        )?;
+        let rows = stmt.query_map(params![start_date, end_date], |row| {
+            Ok(RefundsSummaryRow {
+                currency: row.get("currency")?,
+                refund_count: row.get("refund_count")?,
+                refund_total_minor: row.get("refund_total_minor")?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)

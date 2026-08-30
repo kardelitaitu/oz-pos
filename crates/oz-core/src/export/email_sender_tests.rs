@@ -123,6 +123,8 @@ fn filter_removes_unchecked_types() {
             cogs_minor: 0,
             gross_profit_minor: 1000,
             gross_margin_percent: 100.0,
+            refund_minor: 0,
+            net_revenue_minor: 0,
         }],
         weekly_revenue: vec![crate::db::reports::WeeklyRevenueRow {
             week_start: "2026-01-01".into(),
@@ -132,6 +134,8 @@ fn filter_removes_unchecked_types() {
             cogs_minor: 0,
             gross_profit_minor: 1000,
             gross_margin_percent: 100.0,
+            refund_minor: 0,
+            net_revenue_minor: 0,
         }],
         monthly_revenue: vec![],
         top_products: vec![],

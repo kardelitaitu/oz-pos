@@ -804,6 +804,8 @@ fn report_email_multiple_daily_revenue_rows() {
             cogs_minor: 30000,
             gross_profit_minor: 20000,
             gross_margin_percent: 40.0,
+            refund_minor: 0,
+            net_revenue_minor: 0,
         },
         crate::db::reports::DailyRevenueRow {
             date: "2026-08-30".into(),
@@ -813,6 +815,8 @@ fn report_email_multiple_daily_revenue_rows() {
             cogs_minor: 45000,
             gross_profit_minor: 30000,
             gross_margin_percent: 40.0,
+            refund_minor: 0,
+            net_revenue_minor: 0,
         },
     ];
     let email = ReportEmailBuilder::build(&bundle, "Store", "Aug 29-30");

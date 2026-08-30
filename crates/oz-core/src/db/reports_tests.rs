@@ -1569,3 +1569,159 @@ fn basket_size_trend_groups_daily_averages() {
     assert_eq!(rows[1].avg_line_count, 2.0);
     let _ = t3;
 }
+
+// ── REP-04: refund netting on revenue reports ──────────────────
+//
+// Refunds never change the sale row (status stays 'completed'), so the
+// revenue queries counted refunded sales at full value and the refund
+// ledger was invisible in every report. These tests pin the netting:
+// gross revenue unchanged, `refund_minor` attributed to the REFUND's
+// own day/week/month (accounting convention), `net_revenue_minor`
+// derived, per currency — and refund-only periods must still produce
+// a row (a day with only refunds must not silently drop the refund).
+
+fn seed_completed_sale_at(conn: &Connection, id: &str, total: i64, currency: &str, date: &str) {
+    conn.execute(
+        "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at)
+         VALUES (?1, ?2, ?3, 1, 'completed', ?4)",
+        params![id, total, currency, format!("{date}T09:00:00Z")],
+    )
+    .unwrap();
+}
+
+fn seed_refund_at(
+    conn: &Connection,
+    id: &str,
+    sale_id: &str,
+    total: i64,
+    currency: &str,
+    date: &str,
+) {
+    conn.execute(
+        "INSERT INTO refunds (id, sale_id, total_minor, currency, processed_by, created_at)
+         VALUES (?1, ?2, ?3, ?4, 'user-1', ?5)",
+        params![id, sale_id, total, currency, format!("{date}T12:00:00Z")],
+    )
+    .unwrap();
+}
+
+#[test]
+fn daily_revenue_nets_refunds_on_refund_day() {
+    let conn = fresh();
+    seed_completed_sale_at(&conn, "rn-1", 1000, "USD", "2026-07-10");
+    seed_refund_at(&conn, "rf-1", "rn-1", 300, "USD", "2026-07-10");
+    let rows = store(&conn)
+        .daily_revenue("2026-07-01", "2026-07-31")
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].total_minor, 1000, "gross revenue unchanged");
+    assert_eq!(rows[0].refund_minor, 300);
+    assert_eq!(rows[0].net_revenue_minor, 700);
+}
+
+#[test]
+fn daily_revenue_attributes_refund_to_refund_day_not_sale_day() {
+    let conn = fresh();
+    seed_completed_sale_at(&conn, "rn-2", 1000, "USD", "2026-07-10");
+    seed_refund_at(&conn, "rf-2", "rn-2", 400, "USD", "2026-07-15");
+    let rows = store(&conn)
+        .daily_revenue("2026-07-01", "2026-07-31")
+        .unwrap();
+    // Two rows: the sale day (gross, no refund) and the refund day
+    // (zero revenue, refund, NEGATIVE net — the refund is visible).
+    assert_eq!(rows.len(), 2, "refund-only day must produce a row");
+    let sale_day = rows.iter().find(|r| r.date == "2026-07-10").unwrap();
+    assert_eq!(sale_day.total_minor, 1000);
+    assert_eq!(sale_day.refund_minor, 0);
+    assert_eq!(sale_day.net_revenue_minor, 1000);
+    let refund_day = rows.iter().find(|r| r.date == "2026-07-15").unwrap();
+    assert_eq!(refund_day.total_minor, 0);
+    assert_eq!(refund_day.sale_count, 0);
+    assert_eq!(refund_day.refund_minor, 400);
+    assert_eq!(refund_day.net_revenue_minor, -400);
+}
+
+#[test]
+fn daily_revenue_refund_netting_is_per_currency() {
+    let conn = fresh();
+    seed_completed_sale_at(&conn, "rn-usd", 1000, "USD", "2026-07-10");
+    seed_completed_sale_at(&conn, "rn-idr", 165000, "IDR", "2026-07-10");
+    seed_refund_at(&conn, "rf-usd", "rn-usd", 500, "USD", "2026-07-10");
+    let rows = store(&conn)
+        .daily_revenue("2026-07-01", "2026-07-31")
+        .unwrap();
+    assert_eq!(rows.len(), 2);
+    let usd_row = rows.iter().find(|r| r.currency == "USD").unwrap();
+    let idr_row = rows.iter().find(|r| r.currency == "IDR").unwrap();
+    assert_eq!(usd_row.refund_minor, 500);
+    assert_eq!(usd_row.net_revenue_minor, 500);
+    assert_eq!(
+        idr_row.refund_minor, 0,
+        "USD refund must not net IDR revenue"
+    );
+    assert_eq!(idr_row.net_revenue_minor, 165000);
+}
+
+#[test]
+fn weekly_revenue_nets_refunds() {
+    let conn = fresh();
+    // Friday sale + Sunday refund: same Monday-first week (07-06..07-12).
+    seed_completed_sale_at(&conn, "rw-1", 2000, "USD", "2026-07-10");
+    seed_refund_at(&conn, "rf-w1", "rw-1", 600, "USD", "2026-07-12");
+    let rows = store(&conn)
+        .weekly_revenue("2026-07-01", "2026-07-31")
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].total_minor, 2000);
+    assert_eq!(rows[0].refund_minor, 600);
+    assert_eq!(rows[0].net_revenue_minor, 1400);
+}
+
+#[test]
+fn monthly_revenue_nets_refunds() {
+    let conn = fresh();
+    seed_completed_sale_at(&conn, "rm-1", 5000, "USD", "2026-07-10");
+    seed_refund_at(&conn, "rf-m1", "rm-1", 1200, "USD", "2026-07-28");
+    let rows = store(&conn)
+        .monthly_revenue("2026-01-01", "2026-12-31")
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].total_minor, 5000);
+    assert_eq!(rows[0].refund_minor, 1200);
+    assert_eq!(rows[0].net_revenue_minor, 3800);
+}
+
+#[test]
+fn refunds_summary_groups_by_currency() {
+    let conn = fresh();
+    seed_completed_sale_at(&conn, "rs-1", 1000, "USD", "2026-07-10");
+    seed_completed_sale_at(&conn, "rs-2", 165000, "IDR", "2026-07-10");
+    seed_refund_at(&conn, "rf-s1", "rs-1", 300, "USD", "2026-07-11");
+    seed_refund_at(&conn, "rf-s2", "rs-1", 200, "USD", "2026-07-12");
+    seed_refund_at(&conn, "rf-s3", "rs-2", 50000, "IDR", "2026-07-12");
+    let rows = store(&conn)
+        .refunds_summary("2026-07-01", "2026-07-31")
+        .unwrap();
+    assert_eq!(rows.len(), 2);
+    let usd_row = rows.iter().find(|r| r.currency == "USD").unwrap();
+    assert_eq!(usd_row.refund_count, 2);
+    assert_eq!(usd_row.refund_total_minor, 500);
+    let idr_row = rows.iter().find(|r| r.currency == "IDR").unwrap();
+    assert_eq!(idr_row.refund_count, 1);
+    assert_eq!(idr_row.refund_total_minor, 50000);
+}
+
+#[test]
+fn refunds_summary_respects_date_range() {
+    let conn = fresh();
+    seed_completed_sale_at(&conn, "rd-1", 1000, "USD", "2026-07-10");
+    seed_refund_at(&conn, "rf-d1", "rd-1", 300, "USD", "2026-06-30");
+    seed_refund_at(&conn, "rf-d2", "rd-1", 100, "USD", "2026-08-01");
+    let rows = store(&conn)
+        .refunds_summary("2026-07-01", "2026-07-31")
+        .unwrap();
+    assert!(
+        rows.is_empty(),
+        "refunds outside the window must not appear"
+    );
+}
