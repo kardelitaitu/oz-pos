@@ -171,6 +171,7 @@ RUN apt-get update && \
         libc6 \
         supervisor \
         wget \
+        jq \
     && rm -rf /var/lib/apt/lists/*
 
 # DOCKER-01: single non-root user owns both data directories. supervisord
