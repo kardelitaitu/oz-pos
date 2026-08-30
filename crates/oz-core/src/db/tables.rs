@@ -1,10 +1,17 @@
-use rusqlite::params;
 /*
 last audited 25-07-26 by RSA-Agent (oz-core slice B5 part 6)
 crate: oz-core | status: SAFE | lint: CLEAN
 findings: TBL-08 geometry validation exemplary (finite/bounds/min-size at DB boundary); parameterized SQL throughout; f64 is presentation geometry only, not money
 next: none | perf: N/A
 */
+//! Table (floor plan) persistence — CRUD on dining tables per section.
+//!
+//! [`Store`] methods list/get/create/update/delete tables, with
+//! [`validate_table_geometry`] enforcing TBL-08 bounds (finite,
+//! `0..=100` percentage positions/sizes, non-zero usable size) at the
+//! database boundary so persisted geometry always renders.
+
+use rusqlite::params;
 
 use crate::Table;
 use crate::error::CoreError;
