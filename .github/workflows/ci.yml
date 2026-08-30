@@ -24,10 +24,63 @@ env:
   SCCACHE_GHA_ENABLED: "true"
 
 jobs:
+  # ── Change Detection (PR Path Filtering) ────────────────────────────
+  # Evaluates path filters on pull requests so non-relevant jobs skip.
+  # On push to main, all required merge validation jobs run normally.
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      ui: ${{ steps.filter.outputs.ui }}
+      docker: ${{ steps.filter.outputs.docker }}
+      e2e: ${{ steps.filter.outputs.e2e }}
+      go: ${{ steps.filter.outputs.go }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters:
+            rust:
+              - 'crates/**'
+              - 'platform/**'
+              - 'modules/**'
+              - 'apps/desktop-client/**'
+              - 'apps/tablet-client/**'
+              - 'apps/cloud-server/**'
+              - 'foundation/**'
+              - 'fuzz/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.cargo/**'
+              - 'rust-toolchain.toml'
+              - '.github/workflows/ci.yml'
+            ui:
+              - 'ui/**'
+              - '.github/workflows/ci.yml'
+            docker:
+              - 'Dockerfile*'
+              - 'docker-compose*'
+              - 'apps/license-server/**'
+              - 'apps/cloud-server/**'
+              - '.github/workflows/ci.yml'
+            e2e:
+              - 'ui/e2e/**'
+              - 'docker-compose.e2e.yml'
+              - 'scripts/run-e2e.mjs'
+              - 'scripts/__tests__/**'
+              - '.github/workflows/ci.yml'
+            go:
+              - 'apps/license-server/**'
+              - '.github/workflows/ci.yml'
+
   # ── Rust: Format (fastest — ~30s, no deps needed) ──────────────────
   rust-fmt:
     name: Rust Format
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -42,6 +95,8 @@ jobs:
   go:
     name: Go Format + Vet
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: github.event_name == 'push' || needs.changes.outputs.go == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -83,6 +138,8 @@ jobs:
   rust-panic-inventory:
     name: Rust Panic Inventory
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@v4
       - name: Scan production unwrap/expect inventory
@@ -96,6 +153,8 @@ jobs:
   rust-money-format:
     name: Rust Money Format
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@v4
       - name: Verify no hardcoded exp-2 money formatting
@@ -107,6 +166,8 @@ jobs:
   architecture-boundaries:
     name: Architecture Boundaries
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@v4
       - name: Verify architecture boundaries
@@ -124,6 +185,8 @@ jobs:
   rust-clippy:
     name: Rust Clippy
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -151,7 +214,8 @@ jobs:
   rust-test-fast:
     name: Rust Test Fast (${{ matrix.shard }})
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    needs: [changes]
+    if: github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true'
     # Postgres for the cloud-server / oz-api PG integration tests
     # (`OZ_TEST_PG_URL`). Without it those tests skip-if-unreachable and the
     # Postgres data layer would never actually run in CI.
@@ -237,6 +301,9 @@ jobs:
   sync-slow-tests:
     name: Sync Integration (slow-tests)
     runs-on: ubuntu-latest
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    needs: [changes]
+    if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
     # Runs on every main push (release gate for the slow HTTP sync suite).
     # On PRs it only runs when sync-relevant code changed (platform/sync +
     # its deps) — the suite's multi-second integration tests would
@@ -327,7 +394,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -364,6 +431,8 @@ jobs:
   rust-test-apps:
     name: Rust Test Apps
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
     # Postgres for the cloud-server PG integration tests (same rationale as
     # rust-test-fast).
     env:
@@ -407,6 +476,8 @@ jobs:
   ui-lint:
     name: UI Lint
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: github.event_name == 'push' || needs.changes.outputs.ui == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -421,6 +492,8 @@ jobs:
   ui-typecheck:
     name: UI TypeCheck
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: github.event_name == 'push' || needs.changes.outputs.ui == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -435,6 +508,8 @@ jobs:
   ui-test:
     name: UI Tests (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: github.event_name == 'push' || needs.changes.outputs.ui == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -504,7 +579,8 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 10
-    needs: [ui-typecheck, ui-lint]
+    needs: [changes, ui-typecheck, ui-lint]
+    if: github.event_name == 'push' || needs.changes.outputs.ui == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -527,6 +603,8 @@ jobs:
   docker:
     name: Docker (build + scan + smoke)
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: github.event_name == 'push' || needs.changes.outputs.docker == 'true' || needs.changes.outputs.rust == 'true'
     # SARIF upload needs security-events: write on the token. Without an
     # explicit permissions block the repo's read-only default token makes
     # upload-sarif fail with "Resource not accessible by integration" on
@@ -648,6 +726,7 @@ jobs:
     name: Coverage Report
     runs-on: ubuntu-latest
     continue-on-error: true
+    if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -689,6 +768,8 @@ jobs:
     name: Dependency Audit
     runs-on: ubuntu-latest
     continue-on-error: ${{ github.event_name == 'pull_request' }}
+    needs: [changes]
+    if: github.event_name == 'push' || needs.changes.outputs.rust == 'true' || needs.changes.outputs.ui == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -800,11 +881,14 @@ jobs:
       - name: Check for fuzz-relevant changes
         id: gate
         run: |
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            exit 0
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+              BASE="HEAD~1"
+            fi
           fi
-          BASE="${{ github.event.pull_request.base.sha }}"
           if [ -z "$BASE" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             echo "::warning::No base SHA — running fuzz (fail-closed)"
@@ -1012,6 +1096,8 @@ jobs:
     name: E2E Tests (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    needs: [changes]
+    if: github.event_name == 'push' || needs.changes.outputs.e2e == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.docker == 'true' || needs.changes.outputs.rust == 'true'
     permissions:
       packages: read
     strategy:

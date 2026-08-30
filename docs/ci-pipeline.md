@@ -12,22 +12,23 @@
 | `go` | ✅ Required | ci.yml | `gofmt` + `go vet` + `go test -short` on license-server |
 | `unified-healthcheck` | ✅ Required | ci.yml | POSIX sh healthcheck script test |
 | `rust-panic-inventory` | ✅ Required | ci.yml | Scan production unwrap/expect |
+| `changes` | ✅ Required | ci.yml | Path-based change detection for PR filtering |
 | `rust-money-format` | ✅ Required | ci.yml | No hardcoded exp-2 money formatting |
 | `architecture-boundaries` | ✅ Required | ci.yml | Static boundary enforcement |
 | `rust-clippy` | ✅ Required | ci.yml | `cargo clippy --workspace --all-targets --all-features` |
 | `rust-test-fast` | ✅ Required | ci.yml | Sharded crate-group tests (PR only) |
 | `sync-slow-tests` | ⚠️ Advisory on PR, ✅ Required on push | ci.yml | Platform-sync integration suite (gated) |
-| `rust-test-full` | Push path | ci.yml | Full workspace tests (push only) |
+| `rust-test-full` | Push path | ci.yml | Full workspace tests (push only, Ubuntu; full matrix in nightly) |
 | `rust-test-apps` | ✅ Required | ci.yml | App crate unit tests |
 | `ui-lint` | ✅ Required | ci.yml | `npm run lint` |
 | `ui-typecheck` | ✅ Required | ci.yml | `npm run typecheck` |
 | `ui-test` | ✅ Required | ci.yml | `npm run test` (4 shards) |
 | `lighthouse` | ⚠️ Advisory | ci.yml | Lighthouse a11y audit (continue-on-error) |
 | `docker` | ✅ Required | ci.yml | Build + Trivy scan + Compose smoke |
-| `coverage` | ⚠️ Advisory | ci.yml | Coverage report (continue-on-error) |
+| `coverage` | ⚠️ Advisory | ci.yml | Coverage report (push only, continue-on-error) |
 | `audit` | ⚠️ Advisory on PR, ✅ Required on push | ci.yml | `cargo audit` + `npm audit` |
 | `security-pr` | ✅ Required | ci.yml | PR baseline security audit |
-| `fuzz` | ⚠️ Advisory | ci.yml | Fuzz tests (gated) |
+| `fuzz` | ⚠️ Advisory | ci.yml | Fuzz tests (gated on fuzz targets) |
 | `flaky-quarantine` | ✅ Required | ci.yml | Flaky quarantine registry |
 | `windows-config` | ✅ Required | ci.yml | NSIS installMode + asInvoker check |
 | `skill-drift-tests` | ✅ Required | ci.yml | Skill drift guard bats tests |
