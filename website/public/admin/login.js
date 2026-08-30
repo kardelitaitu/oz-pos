@@ -262,20 +262,16 @@ async function handleLogin() {
 // ── Lockout countdown (429 with retry_after) ─────────────────
 function showLockoutCountdown(seconds) {
   const btn = document.getElementById('login-btn');
-  if (!btn) return;
-  btn.disabled = true;
-  let remaining = seconds;
-  btn.textContent = t('login.tryAgainIn') + remaining + t('login.seconds');
-  const timer = setInterval(() => {
-    remaining--;
-    if (remaining <= 0) {
-      clearInterval(timer);
-      btn.disabled = false;
-      btn.textContent = currentMode === 'otp' ? t('login.sendCode') : t('login.signIn');
-      return;
-    }
-    btn.textContent = t('login.tryAgainIn') + remaining + t('login.seconds');
-  }, 1000);
+  // B7 fix: delegates to admin-utils.startLockoutCountdown, which keeps
+  // one tracked timer per button. The old inline version created a NEW
+  // setInterval per 429 without clearing the previous one, so a second
+  // rate-limited response left two timers racing: the shorter one
+  // re-enabled the button early and the other zombie-rewrote the label.
+  startLockoutCountdown(
+    btn, seconds,
+    function (s) { return t('login.tryAgainIn') + s + t('login.seconds'); },
+    function () { return currentMode === 'otp' ? t('login.sendCode') : t('login.signIn'); }
+  );
 }
 
 // Wire single submit event on form

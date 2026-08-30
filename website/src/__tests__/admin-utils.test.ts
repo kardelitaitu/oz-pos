@@ -2,7 +2,7 @@
 // Unit tests for the admin dashboard's pure helpers (H2 hardening).
 // The helpers live in public/admin/admin-utils.js — a UMD module that
 // exports for Node/vitest and defines window.AdminUtils in the browser.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import utils from '../../public/admin/admin-utils.js';
 
 describe('admin-utils escapeHtml', () => {
@@ -368,5 +368,50 @@ describe('admin-utils normalizeStats (B6: partial payload killed the dashboard)'
     expect(() => utils.normalizeStats(null)).not.toThrow();
     expect(() => utils.normalizeStats(undefined)).not.toThrow();
     expect(Array.isArray(utils.normalizeStats(null).revenueTrend)).toBe(true);
+  });
+});
+
+describe('admin-utils startLockoutCountdown (B7: racing 429 timers)', () => {
+  // login.js showLockoutCountdown created a NEW setInterval per 429
+  // without clearing the previous one. Two rate-limited attempts (e.g.
+  // request-otp then verify-otp) left two timers writing the same button:
+  // the label flickered between both remaining values, and the FIRST
+  // timer to expire re-enabled the button while the other still counted
+  // down — then kept overwriting the restored label.
+  const fmt = (s: number) => `Try again in ${s}s`;
+  const restore = () => 'Send Verification Code';
+
+  it('replaces the previous countdown instead of racing it', () => {
+    vi.useFakeTimers();
+    try {
+      const btn = document.createElement('button');
+      // First 429: retry_after 60. User retries anyway, second 429 says
+      // 120 — the real lockout. The stale 60s timer must NOT re-enable
+      // the button at t=60.
+      utils.startLockoutCountdown(btn, 60, fmt, restore);
+      utils.startLockoutCountdown(btn, 120, fmt, restore);
+      vi.advanceTimersByTime(60000);
+      expect(btn.disabled).toBe(true);
+      expect(btn.textContent).toBe('Try again in 60s');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('enables the button and restores the label exactly once at zero', () => {
+    vi.useFakeTimers();
+    try {
+      const btn = document.createElement('button');
+      utils.startLockoutCountdown(btn, 60, fmt, restore);
+      utils.startLockoutCountdown(btn, 2, fmt, restore);
+      vi.advanceTimersByTime(2000);
+      expect(btn.disabled).toBe(false);
+      expect(btn.textContent).toBe('Send Verification Code');
+      // The superseded 60s timer must not zombie-rewrite the label.
+      vi.advanceTimersByTime(1000);
+      expect(btn.textContent).toBe('Send Verification Code');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

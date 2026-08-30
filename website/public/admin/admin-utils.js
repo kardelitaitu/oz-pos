@@ -240,6 +240,34 @@
     return '<svg viewBox="0 0 440 180" style="max-height:180px">' + bars + '</svg>';
   }
 
+  // startLockoutCountdown drives the login button's 429 lockout label.
+  // Extracted from login.js showLockoutCountdown so the timer semantics
+  // are unit-testable (login.js has DOM boot side effects).
+  // B7 fix: the original created a NEW setInterval per 429 and only ever
+  // referenced it from its own closure — a second rate-limited response
+  // left the first timer racing: it re-enabled the button early (its
+  // shorter retry_after expired first) and zombie-rewrote the restored
+  // label afterwards. The handle now lives on the button, so a new
+  // countdown always supersedes the previous one.
+  function startLockoutCountdown(btn, seconds, fmt, restore) {
+    if (!btn) return;
+    if (btn._ozLockoutTimer) clearInterval(btn._ozLockoutTimer);
+    btn.disabled = true;
+    var remaining = seconds;
+    btn.textContent = fmt(remaining);
+    btn._ozLockoutTimer = setInterval(function () {
+      remaining--;
+      if (remaining <= 0) {
+        clearInterval(btn._ozLockoutTimer);
+        btn._ozLockoutTimer = null;
+        btn.disabled = false;
+        btn.textContent = restore();
+        return;
+      }
+      btn.textContent = fmt(remaining);
+    }, 1000);
+  }
+
   // normalizeStats guarantees the shapes renderDashboard expects. admin.js
   // dereferenced m.revenueTrend.forEach / m.kpis.mrrUsd BEFORE the chart
   // guards ran, so a partial stats payload (older server build, truncated
@@ -458,6 +486,7 @@
     tenantDetailRows: tenantDetailRows,
     svgBarChart: svgBarChart,
     normalizeStats: normalizeStats,
+    startLockoutCountdown: startLockoutCountdown,
     t: t,
     STRINGS: STRINGS,
     isAuthDenied: isAuthDenied,
