@@ -199,40 +199,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       }
     }
 
-    function kpiC(label, value, sub, icon, iconCls) {
-      const s = el('div', 'kpi');
-      if (icon) {
-        const ic = el('div', 'kpi-icon ' + (iconCls || 'kpi-icon-blue'));
-        ic.innerHTML = icon;
-        s.appendChild(ic);
-      }
-      const body = el('div', 'kpi-body');
-      body.appendChild(el('div', 'kpi-label', label));
-      body.appendChild(el('div', 'kpi-value', value));
-      if (sub) body.appendChild(el('div', 'kpi-sub', sub));
-      s.appendChild(body);
-      return s;
-    }
-
-    function tableCard(heading, headers, rows) {
-      const card = el('div', 'card table-card');
-      card.appendChild(el('h2', null, heading));
-      if (rows.length === 0) { card.appendChild(el('p', 'empty', 'No data.')); return card; }
-      const table = el('table');
-      const thead = el('thead');
-      const tr = el('tr');
-      headers.forEach(h => tr.appendChild(el('th', null, h)));
-      thead.appendChild(tr); table.appendChild(thead);
-      const tbody = el('tbody');
-      rows.forEach(row => {
-        const tr2 = el('tr');
-        row.forEach(cell => tr2.appendChild(el('td', null, cell)));
-        tbody.appendChild(tr2);
-      });
-      table.appendChild(tbody);
-      card.appendChild(table);
-      return card;
-    }
+// kpiC, tableCard are defined in admin-utils.js (loaded first).
 
     // ── Tab switching ──────────────────────────────────────────────
     document.querySelectorAll('.nav-btn').forEach(tab => {
