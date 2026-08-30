@@ -823,6 +823,18 @@ mutually exclusive by construction, and `debug_assert!` currency guards
 catch direct-field mutation in dev builds. The ~850-line inline test
 block repeats the COR-33 pattern (AGENTS.md wants sibling test files).
 
+### Slice C — validation.rs (1,000 lines: production 1–441 fully read;
+442–1000 are the inline test block)
+
+**No new finding IDs.** All validators fail closed with field-named errors,
+regexes compile once via `LazyLock`, and every function carries doctests.
+One INFO note: `validate_min_length`/`validate_max_length` count **bytes**,
+not chars, so multi-byte UTF-8 display names hit length caps early (a 50
+"character" cap admits ~16 CJK characters) — a chars-vs-bytes decision is
+worth making explicitly for display-name fields.
+
+---
+
 ---
 
 ---
