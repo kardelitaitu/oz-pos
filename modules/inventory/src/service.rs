@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-inventory slice A: service verified)
+crate: modules-inventory | status: SAFE | lint: CLEAN
+findings: clean — thin orchestration with tx-scoped adjust_stock; sibling tests file per AGENTS.md convention
+next: none | perf: N/A
+*/
 //! Inventory Service — product catalog and stock adjustment orchestration.
 
 use crate::error::InventoryError;

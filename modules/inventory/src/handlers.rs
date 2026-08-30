@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-inventory slice A: handlers deep read)
+crate: modules-inventory | status: SAFE | lint: CLEAN
+findings: MSL-3 INFO — InventoryStockHandler deduction is tx-safe (error path drops tx, rollback) and BOM-aware, but two error-swallow patterns exist: (1) stock_summary writes are .ok()-swallowed best-effort (derived-cache drift self-heals via the ADR #6 rebuild); (2) a recipe-table read error would yield an empty ingredient list and deduct the composite product instead of ingredients (infrastructure-failure only; unknown-SKU and non-inventory skips are correct). UPDATE-RETURNING no-row maps to insufficient-stock error (fail-closed, misleading message)
+next: tighten stock_summary error surfacing | perf: N/A
+*/
 //! Event handlers for the Inventory module.
 //!
 //! These handlers respond to domain events published on the kernel

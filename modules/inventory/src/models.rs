@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-inventory slice A: models deep read)
+crate: modules-inventory | status: SAFE | lint: CLEAN
+findings: clean — Sku/Barcode/Money newtypes; canonical default location UUID documented; ADR #36 D1/D2 local-only fields (cost_minor, default_supplier_id never synced) match transport omissions; ProductType parse fail-closed with round-trip tests; negative-qty assertion
+next: none | perf: N/A
+*/
 //! Inventory & Product domain types.
 
 use foundation::{Barcode, Money, Sku};

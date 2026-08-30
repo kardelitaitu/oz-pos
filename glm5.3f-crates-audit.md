@@ -1147,6 +1147,30 @@ tx-scoped insert); `lib.rs` is the kernel registration layer (previous
 
 ---
 
+## 12. modules/inventory — products, stock, BOM recipes, locations
+
+Baseline: ~1.7k production lines. Slice A (models.rs 788: production
+1–372 fully read; handlers.rs 662: production 1–201 fully read;
+repository/service/lib/error verified structurally; lib's old 19-07
+stamp replaced).
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| MSL-3 | ℹ️ INFO | modules/inventory/src/handlers.rs:120,154,101–109 | Two error-swallow patterns in `InventoryStockHandler`: (1) the mirrored `stock_summary` writes are `.ok()`-swallowed best-effort — derived-cache drift is possible until the ADR #6 rebuild repairs it; (2) a recipe-table read error would yield an empty ingredient list and deduct the composite product instead of BOM ingredients (infrastructure-failure only). Unknown-SKU and non-inventory skips are correct; the deduction itself is tx-safe (error path drops the transaction → rollback). | Surface `stock_summary` write failures in the handler result; let recipe-query errors propagate instead of collapsing to "no recipe". |
+
+models.rs is clean (Sku/Barcode/Money newtypes, canonical location UUID,
+ADR #36 D1/D2 local-only fields matching the transport's deliberate
+omissions, fail-closed `ProductType::parse`); the repository validates
+currency/SKU fail-closed; the service keeps sibling test files per the
+AGENTS.md convention.
+
+> **modules-inventory COMPLETE** — 6 production files, ~1.7k lines. One
+> INFO (MSL-3). Campaign proceeds to modules/crm.
+
+---
+
+---
+
 ---
 
 ---
