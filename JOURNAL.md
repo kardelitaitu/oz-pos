@@ -7895,3 +7895,54 @@ CI. Fixed the example and noted the receiver in the Configuration section.
 
 **Totals this area:** B46-B52. 18/18 in cloud_destination (6 existing + 12
 new), 2259/2259 whole crate, rustfmt clean.
+
+## 2026-08-31 — round I: COR-31, and the constraint that made the fix non-trivial
+
+**COR-31 in cloud_destination (235fd5de).** All three outbound sites used
+reqwest::Client::new(), which has no timeout at all: a warehouse endpoint
+that accepts the TCP connection and then goes silent parks the export task
+forever. The stamp had carried this as open since 25-07-26.
+
+The fix is four lines. The part worth writing down is that a naive timeout
+makes things worse. The Snowflake statements body already sends
+"timeout": 60, telling the warehouse a batch may take 60 seconds. A client
+overall timeout below that aborts legitimate exports - silent data loss on
+big batches, instead of a hang someone notices. So the 60 is now a named
+constant shared by the request body and by the test asserting the client
+outlives it. Before this it was a bare literal inside a json! macro,
+completely unrelated in the code to whatever the client timeout said.
+
+Two bounds, different sizes, because they catch different failures: connect
+(10s) fires on a host that neither accepts nor refuses and needs no server
+cooperation; overall (120s) fires on a request that connects then stalls.
+
+**What I could not test, said out loud.** The plan was to assert
+client.get_timeout().is_some() - a clean, instant, network-free test. It
+does not compile: reqwest 0.27 has no getter for either bound. The
+alternative was a behavioural test against a black-hole address costing 10
+seconds on every run, to prove a property that now has no seam to go wrong
+through (http_client is the module's only client constructor, all three
+sites call it, verified by grep). I took the construction guarantee and
+pinned the numeric relationship instead, which is the part a future edit can
+silently break. B49 was the opposite case: there, establishing the connection
+was the code under test, so the network test earned its cost.
+
+Tried to get an honest Red by temporarily reverting the helper body, and it
+produced a compile error rather than a failing assertion - which is how I
+found out the getter approach was dead before writing more of it. Reverted
+the revert; the final state was re-run, not assumed.
+
+**Scope, stated precisely.** COR-31 is a family and this closes one module.
+Counted the rest: 15 untimed Client::new() sites in 10 files -
+license_verification x5, oz-notification x4, three oz-payment drivers,
+sync_client, sync_pull, platform/startup/rate_sync. That is a much bigger
+deal than the stamp's "(COR-31 family)" parenthetical implies, and it is the
+best remaining lead in this area.
+
+**Also learned this round:** reqwest is optional in oz-core behind sync-http,
+but default = ["sync-http"], so the module ships in every normal build -
+checked rather than assumed, because if it had been off by default B51 would
+have been doubly dead.
+
+**Totals this area:** B46-B52 plus COR-31-in-module. 19/19 cloud_destination,
+2260/2260 whole crate.
