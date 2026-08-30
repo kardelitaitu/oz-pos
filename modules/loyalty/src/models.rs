@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-loyalty slice A: models deep read)
+crate: modules-loyalty | status: NEEDS-FIX | lint: CLEAN
+findings: MSL-10 LOW — GiftCard derives Serialize AND Debug including the plain pin field: any JSON serialization of a GiftCard (Tauri command response, log dump) emits the PIN, and Debug prints it; consistent with COR-17 plaintext-at-rest but adds wire/log exposure. Proposed: serde(skip_serializing) on pin plus a redacted Debug or manual impl. LoyaltyTier.earn_multiplier is f64 (points math, not currency — consistent with oz-core ledger note); earn/redeem service logic lives in oz-core db/loyalty.rs (audited exemplary: idempotent per account+sale+txn, redeem validates server-side)
+next: redact GiftCard pin in fix-order phase | perf: N/A
+*/
 //! Loyalty & Gift Card domain models.
 
 use serde::{Deserialize, Serialize};

@@ -1,9 +1,8 @@
 /*
-last audited 2026-07-22 by Buffy
+last audited 25-07-26 by RSA-Agent (modules-loyalty slice A: lib re-verify)
 crate: modules-loyalty | status: SAFE | lint: CLEAN
-findings: New module implementing Module trait. Re-exports loyalty types from oz-core.
-  No unsafe code. 8 unit tests verify lifecycle and kernel integration.
-next: Migrate loyalty commands and DB layer into this module | perf: N/A.
+findings: clean Module registration layer; unwraps test-only; prior 2026-07-22 Buffy stamp replaced per campaign convention
+next: none | perf: N/A
 */
 
 //! Loyalty Module — customer loyalty program and point management.

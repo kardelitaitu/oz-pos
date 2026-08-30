@@ -1304,6 +1304,27 @@ encrypted-at-rest and old-key migration semantics).
 
 > **modules-currency COMPLETE** — 5 production files, ~644 lines, zero
 > new finding IDs. Campaign proceeds to modules/loyalty.
+
+---
+
+## 20. modules/loyalty — tiers, accounts, gift cards
+
+Baseline: ~843 production lines. Slice A — all 5 files (models.rs 490:
+production 1–178 fully read; repository/service/error verified; lib's
+prior 2026-07-22 stamp replaced per convention).
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| MSL-10 | 🟡 LOW | modules/loyalty/src/models.rs:87 | `GiftCard` derives `Serialize` **and** `Debug` including the plain `pin` field — any JSON serialization (Tauri command response, log dump) emits the PIN and Debug prints it. Consistent with COR-17's plaintext-at-rest but adds wire/log exposure. | `#[serde(skip_serializing)]` on `pin` plus a redacted `Debug` (or manual impl). |
+
+`LoyaltyTier.earn_multiplier` is `f64` (points math, not currency —
+consistent with the oz-core ledger note). The authoritative earn/redeem
+service logic lives in `oz-core` `db/loyalty.rs` (audited earlier:
+idempotent per account+sale+txn, server-side redemption validation).
+Reads are parameterized; the shell files are clean.
+
+> **modules-loyalty COMPLETE** — 5 production files, ~843 lines. One LOW
+> (MSL-10). Campaign proceeds to modules/purchasing.
 ---
 
 ---
