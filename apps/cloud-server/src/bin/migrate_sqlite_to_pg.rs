@@ -12,6 +12,25 @@
 //!   `sync_terminals`, `settings`
 //! - webhooks: `processed_webhooks`, `stripe_customers`
 //!
+//! # Memory envelope
+//!
+//! Every table is read **entirely into memory** (`Vec<Row>`) for both the
+//! source and the verification read-back. A production `sales` table with,
+//! say, 1M rows × ~15 columns ≲ 250 MB on the heap — acceptable for a
+//! one-shot tool on a dedicated host but worth sizing before cutover.
+//! There is no streaming / LIMIT-OFFSET paging: the checksum fold requires
+//! the full set.
+//!
+//! # Verification
+//!
+//! Every table is verified by row count + FNV-1a content checksum. The
+//! count tolerates `pg >= src` so a concurrent writer does not cause a
+//! spurious failure (the `ON CONFLICT DO NOTHING` insert never removes
+//! rows). The checksum requires exact XOR equality, so a concurrent writer
+//! that adds a row mid-verify surfaces as `CHECKSUM-DIFF` — a **false
+//! alarm**, not a silent pass. If the final output shows `CHECKSUM-DIFF`
+//! on any table, quiesce writers and re-run to confirm.
+//!
 //! # Usage
 //!
 //! ```text
@@ -465,7 +484,26 @@ struct Args {
     dry_run: bool,
 }
 
-fn parse_args() -> Result<Args, String> {
+const USAGE: &str = "\
+migrate_sqlite_to_pg — copy the cloud server's SQLite DB to Postgres and verify
+
+USAGE:
+    migrate_sqlite_to_pg [OPTIONS]
+
+OPTIONS:
+    --sqlite <path>    SQLite database file (default: $OZ_DB_PATH or 'oz-pos.db')
+    --pg <url>         Postgres connection URL (default: $DATABASE_URL)
+    --tables <list>    Comma-separated table list (default: the full copy surface)
+    --batch <n>        Rows per INSERT batch (default: 500)
+    --dry-run          Verify connectivity and table metadata without writing
+    --help             Show this help and exit
+
+The destination schema (PG_INIT) is applied first; rows are copied with
+ON CONFLICT DO NOTHING so re-runs are safe. Every table is verified by
+row count + content checksum. See the module docs for the memory envelope
+and CHECKSUM-DIFF semantics.";
+
+fn parse_args() -> Result<Option<Args>, String> {
     let mut sqlite = env::var("OZ_DB_PATH").unwrap_or_else(|_| "oz-pos.db".into());
     let mut pg: Option<String> = env::var("DATABASE_URL").ok();
     let mut tables: Vec<String> = DEFAULT_TABLES.iter().map(|s| s.to_string()).collect();
@@ -475,6 +513,7 @@ fn parse_args() -> Result<Args, String> {
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "--help" | "-h" => return Ok(None),
             "--sqlite" => sqlite = args.next().ok_or("--sqlite needs a path")?,
             "--pg" => pg = Some(args.next().ok_or("--pg needs a URL")?),
             "--tables" => {
@@ -489,17 +528,17 @@ fn parse_args() -> Result<Args, String> {
                     .map_err(|_| "invalid --batch")?;
             }
             "--dry-run" => dry_run = true,
-            other => return Err(format!("unknown argument: {other}")),
+            other => return Err(format!("unknown argument: {other}\n\n{USAGE}")),
         }
     }
     let pg = pg.ok_or("DATABASE_URL must be set or --pg provided")?;
-    Ok(Args {
+    Ok(Some(Args {
         sqlite: PathBuf::from(sqlite),
         pg,
         tables,
         batch,
         dry_run,
-    })
+    }))
 }
 
 #[tokio::main]
@@ -511,7 +550,13 @@ async fn main() {
 }
 
 async fn run() -> Result<(), String> {
-    let args = parse_args()?;
+    let args = match parse_args()? {
+        Some(a) => a,
+        None => {
+            println!("{USAGE}");
+            return Ok(());
+        }
+    };
 
     // 1. Open the SQLite source (the old cloud DB).
     if !args.sqlite.exists() {
