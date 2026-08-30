@@ -7322,3 +7322,68 @@ identically, applied. Also: first docs-commit attempt died on a stale
 quote-free message after confirming the lock cleared.
 
 **Commits:** aa1f831f (fix + tests), docs commit alongside this entry.
+
+## 2026-08-31 — Admin bug hunt round 10: add-on caps + double-spend race (B44-B45)
+
+**Problem:** Tenth loop, requested continuation. Swept the last admin Go
+file whose bodies I had only read partially (addon_admin.go) and the
+redemption side of the enterprise codes opened in round 9. Two bugs,
+one of them a demonstrated entitlement bypass.
+
+**Findings:**
+
+1. **B44** (P3, 6845b312) license_keys.addons is Max:1024 but
+   handleAddLicenseAddon validated neither addon_id length nor the size
+   of the list it serialized — oversized input reached Save and failed
+   PocketBase field validation, so bad admin input surfaced as a 500
+   (B42/B30 class; Red leaked 'addons: Must be no more than 1024
+   character(s).'). Both caps enforced before Save, counting RUNES to
+   match PB's len([]rune(value)); the previously-ignored json.Marshal
+   error is now handled.
+2. **B45** (P2, bbaab2cd) handleEnterpriseTrial checked status ==
+   'unused' up front and marked the code 'redeemed' only at the END —
+   after creating a tenant AND minting a 30-day Enterprise key. One
+   one-time code therefore granted N trials, and it is deliberately
+   reachable: an attacker holding one leaked code just sends N parallel
+   requests. Reproduced 3/3 before the fix (2/2 racers returned 200 —
+   no flakiness, the window is wide enough that it always loses). Fixed
+   with enterpriseRedeemMu held across the whole mint; loser now gets
+   409. 5/5 clean runs after.
+
+**Clean audits:** parseAddonsFromRecord (empty/malformed/non-array JSON
+all degrade to an empty list, no crash); remove handler (404 when the
+addon is absent, no Save on the failure path so no B44 exposure); list
+handler (parameterized lookup); req.ApprovalCode[:4] and
+req.LicenseKey[:8] masking are safe because the schemas enforce
+Min:8/Min:10 on the stored values the request must match exactly.
+
+**Residuals (logged, deliberately not fixed):**
+- If the final 'redeemed' Save fails it is treated as non-fatal, so the
+  code stays reusable. Closing it means claiming before minting — which
+  changes WHO eats a mid-flow failure (customer loses a code vs business
+  grants two). Product call, not a silent fix.
+- enterprise_trial.go:182 logs the full minted license key. Checked the
+  convention first: activate.go:479/782/876 also log full keys, so this
+  is a pre-existing pattern, not an outlier — fixing one file while
+  activate.go (currently another agent's dirty WIP) stays the same would
+  be worse than consistent.
+- List handler returns updated_at = request time, not the record's
+  updated field (mislabelled metadata, B32 class). A deterministic test
+  needs a backdated 'updated', which PocketBase auto-manages.
+- Uniqueness pre-check → Save in the enterprise mint is a real TOCTOU
+  (unique index exists, so a true concurrent duplicate yields 500 not
+  409).
+
+**Process notes:** the full-package run initially failed on
+TestActivateHandler_Lifecycle and I nearly attributed it to my mutex —
+my first A/B was invalid (isolated test vs full package; package tests
+share process state and the panics named a closed DB). Re-running the
+FULL package without my change showed the only failure was my own B45
+test, so attribution was clean and the activate failure had already
+disappeared under the concurrent agent's advancing WIP. Lesson: an A/B
+must hold scope constant.
+
+**Test counts:** license-server +4 (B44 x3 incl. happy-path guard, B45
+x1); package PASS (139s); drift 0.
+
+**Commits:** 6845b312 (B44), bbaab2cd (B45).

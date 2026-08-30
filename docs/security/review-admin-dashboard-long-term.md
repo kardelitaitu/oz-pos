@@ -158,7 +158,7 @@ The admin login page (`login.html`) is always dark. The dashboard has a theme to
 | 2 | **HIGH** | MOCK fallback masks failures (C4) | Show error banner when API fails; keep MOCK only as last-resort skeleton | ✅ Resolved — MOCK object removed; API errors render a retry/error state (Phase 1) |
 | 3 | **HIGH** | Tenants list has no pagination (C3) | Add page controls + pass `?page=` / `?perPage=` to the API | ✅ Resolved — pagination controls + `?page=`/`?perPage=`/`?search=` (Phase 2) |
 | 4 | **HIGH** | Monolithic admin.js (H1) | Split into testable modules (stats.js, tenants.js, charts.js) or move to a build step | ✅ Resolved — pure helpers extracted into `admin-utils.js` (charts, formatting, cards, API auth, i18n) with unit tests |
-| 5 | **HIGH** | Zero tests (H2) | Add unit tests for chart rendering, helpers, and API mock fallback | ✅ Resolved — 103 unit tests across `admin-utils.test.ts` (94, incl. a seeded property fuzz) and `admin-a11y.test.ts` (9), +19 in `worker.test.ts`, +9 Go tests in `admin_stats_test.go`/`admin_dashboard_test.go`/`enterprise_admin_test.go`; all suites execute in CI via the `website-tests` gate. The 2026-08-30→31 bug hunt added 81 of the website tests and fixed 38 real bugs (see §8.1) |
+| 5 | **HIGH** | Zero tests (H2) | Add unit tests for chart rendering, helpers, and API mock fallback | ✅ Resolved — 103 unit tests across `admin-utils.test.ts` (94, incl. a seeded property fuzz) and `admin-a11y.test.ts` (9), +19 in `worker.test.ts`, +13 Go tests in `admin_stats_test.go`, `admin_dashboard_test.go`, `enterprise_admin_test.go`, `addon_admin_robustness_test.go` and `enterprise_trial_race_test.go`; all suites execute in CI via the `website-tests` gate. The 2026-08-30→31 bug hunt added 81 of the website tests and fixed 40 real bugs (see §8.1) |
 | 6 | **HIGH** | No i18n (H3) | Extract strings to an i18n structure; at minimum, add English `.ftl` keys for future localization | ✅ Resolved — `STRINGS` key-value table + `t()` helper; all admin/dashboard/login strings extracted |
 | 7 | **HIGH** | Shared session cookie (H4) | Restrict `Domain` to individual subdomains or use a dedicated auth domain | ✅ Resolved — cookie scoped to `admin.ozpos.my.id` / `dashboard.ozpos.my.id` (not the parent domain) |
 | 8 | **MEDIUM** | No loading/error states for charts (M1) | Guard `svgChart` against empty/NaN data; add per-chart error states | ✅ Resolved — `svgChart` / `svgDonut` guard empty/NaN/zero data |
@@ -223,7 +223,7 @@ merge history (`git log -S` + merge-ancestry), and a local test run:
 - **L1 corrected to OPEN**, **L3 marked won't-fix/by-design** — see §5.
 - Test count corrected: **24**, not "25+".
 
-### 8.1 Bug hunt (2026-08-30 → 08-31, TDD) — 38 bugs found & fixed
+### 8.1 Bug hunt (2026-08-30 → 08-31, TDD) — 40 bugs found & fixed
 
 A focused hunt over `admin.js`/`admin-utils.js` against the Go server's
 actual JSON shapes found six real bugs — none caught by the pre-existing
@@ -405,3 +405,37 @@ gate (possibly-null `getElementById` results + untyped
 `querySelectorAll` → 4 errors; `npm run check` at `website.yml:75` would
 have failed). Vitest can't see it — esbuild strips types without
 checking. The website gate is `npm run check`, not `npm test`.
+
+**Round 10** (2026-08-31) swept the last admin Go file whose body I had
+only partially read (`addon_admin.go`) plus the redemption side of the
+round-9 enterprise codes:
+
+| # | Sev | Bug | Fix |
+|---|-----|-----|-----|
+| B44 | P3 | `license_keys.addons` is `Max:1024` but `handleAddLicenseAddon` validated neither `addon_id` length nor the serialized list size — oversized input reached Save and failed PocketBase validation, so bad admin input surfaced as a **500** (B42/B30 class); Red leaked `addons: Must be no more than 1024 character(s).` | rune-count caps enforced before Save (matching PB's `len([]rune(value))`); the previously-ignored `json.Marshal` error is handled |
+| B45 | **P2** | `handleEnterpriseTrial` checked `status == "unused"` up front and marked the code `redeemed` only at the **end** — after creating a tenant *and* minting a 30-day Enterprise key. One one-time code granted **N trials**, and it is deliberately reachable: an attacker with one leaked code just sends N parallel requests | `enterpriseRedeemMu` held across the whole check-and-redeem section; the loser observes `redeemed` and gets 409 |
+
+Round-10 commits: `6845b312` (B44), `bbaab2cd` (B45).
+**B45 evidence:** reproduced 3/3 before the fix (2/2 racers returned
+200 — no flakiness, the window is wide enough that it always loses);
+5/5 clean after. **Clean audits:** `parseAddonsFromRecord` (empty,
+malformed, and non-array JSON all degrade to `[]`), the remove handler
+(404 when absent; no Save on failure paths, so no B44 exposure), the
+list handler (parameterized), and the `[:4]`/`[:8]` masking slices
+(safe only because the schemas enforce `Min:8`/`Min:10` on the stored
+values a request must match exactly).
+**Residuals deliberately not fixed:** a failed final `redeemed` write is
+treated as non-fatal, leaving the code reusable — closing it means
+claiming before minting, which moves a mid-flow failure onto the
+customer instead of the business (product call, not a silent fix);
+`enterprise_trial.go:182` logs a full license key, but `activate.go`
+does the same in three places, so it is a pre-existing convention rather
+than an outlier and fixing one file alone would be worse than
+consistent; the list handler's `updated_at` reports request time, not
+the record's; the enterprise mint's uniqueness pre-check → `Save` is a
+genuine TOCTOU (unique index exists, so a true concurrent duplicate
+yields 500 not 409).
+**Process lesson:** an A/B must hold scope constant — my first attempt
+compared an isolated test against a full-package run (package tests
+share process state), which briefly mis-attributed another agent's
+`TestActivateHandler_Lifecycle` failure to my mutex.
