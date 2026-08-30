@@ -262,6 +262,21 @@
     return { rate: null, updatedAt: '', live: false };
   }
 
+  // fetchWithTimeout performs a fetch that is guaranteed to settle.
+  // Extracted from admin.js api() so the timeout semantics are testable.
+  // B12 fix: api() awaited two UN-TIMED fetches per call (the session
+  // endpoint and the license API). A hung license-server connection —
+  // half-open TCP, overloaded origin — left renderDashboard/renderTenants/
+  // renderHealth pending forever: skeleton, no retry UI, no console error.
+  // Every admin fetch now carries AbortSignal.timeout; a timeout surfaces
+  // as a rejection the existing catch paths already render as errors.
+  async function fetchWithTimeout(fetchImpl, url, opts, timeoutMs) {
+    var f = fetchImpl || fetch;
+    var o = opts || {};
+    o.signal = AbortSignal.timeout(timeoutMs > 0 ? timeoutMs : 15000);
+    return f(url, o);
+  }
+
   // mountModal wires the shared modal mechanics: backdrop + dialog box,
   // backdrop-click close, ESC close, and a returned close() for buttons.
   // Extracted from the duplicated blocks in admin.js showTenantDetail /
@@ -539,6 +554,7 @@
     startLockoutCountdown: startLockoutCountdown,
     fetchFxRate: fetchFxRate,
     mountModal: mountModal,
+    fetchWithTimeout: fetchWithTimeout,
     t: t,
     STRINGS: STRINGS,
     isAuthDenied: isAuthDenied,

@@ -15,10 +15,14 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
     // admin-utils.js sets these as globals for backward compatibility.
 
     async function api(path, body) {
-      const token = (await (await fetch('/__oz/session')).json()).token;
+      // B12 fix: both fetches go through admin-utils.fetchWithTimeout —
+      // the old un-timed awaits left the whole render pending forever on
+      // a hung connection (skeleton, no retry UI, no console error).
+      const sess = await fetchWithTimeout(undefined, '/__oz/session');
+      const token = (await sess.json()).token;
       const opts = { headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } };
       if (body) { opts.method = 'POST'; opts.body = body; }
-      const res = await fetch(API + path, opts);
+      const res = await fetchWithTimeout(undefined, API + path, opts);
       if (isAuthDenied(res.status)) {
         document.getElementById('content').innerHTML =
           '<div class="card" style="text-align:center;padding:2rem">' +

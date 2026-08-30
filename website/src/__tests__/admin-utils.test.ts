@@ -527,3 +527,33 @@ describe('admin-utils mountModal (B11: ESC listener leak)', () => {
     expect(root.children.length).toBe(1);
   });
 });
+
+describe('admin-utils fetchWithTimeout (B12: api() had the same unbounded hang as the FX fetch)', () => {
+  // Every admin data call goes through api(), which awaited two un-timed
+  // fetches (/__oz/session and the license API). A hung license-server
+  // connection left renderDashboard/renderTenants/renderHealth pending
+  // forever — skeleton, no retry UI, no console error.
+
+  it('passes through a normal response and forwards opts', async () => {
+    let seen: any = null;
+    const fetchImpl = async (_u: string, o?: any) => { seen = o; return { ok: true, status: 200 }; };
+    const res: any = await utils.fetchWithTimeout(fetchImpl, 'https://x/api', { method: 'POST' }, 5000);
+    expect(res.ok).toBe(true);
+    expect(seen.method).toBe('POST');
+    expect(seen.signal).toBeDefined();
+  });
+
+  it('propagates a rejected fetch', async () => {
+    const fetchImpl = async () => { throw new Error('down'); };
+    await expect(utils.fetchWithTimeout(fetchImpl, 'https://x/api', {}, 5000)).rejects.toThrow('down');
+  });
+
+  it('rejects at the timeout instead of hanging forever', async () => {
+    // Real timers: AbortSignal.timeout is native and not faked.
+    const fetchImpl = (_u: string, opts?: { signal?: AbortSignal }) =>
+      new Promise((_resolve, reject) => {
+        opts?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+      });
+    await expect(utils.fetchWithTimeout(fetchImpl, 'https://x/api', {}, 50)).rejects.toThrow();
+  });
+});
