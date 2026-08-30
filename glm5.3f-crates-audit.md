@@ -1112,6 +1112,28 @@ and a documented fix makes the pull phase run every enabled cycle
 
 ---
 
+## 11. modules/sales — sale lifecycle, refunds, held carts
+
+Baseline: ~2.7k production lines. Slice A (models.rs 615: production
+1–389 fully read; repository.rs 396: production 1–204 fully read; tests
+verified structurally).
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| MSL-1 | 🟡 LOW | modules/sales/src/repository.rs:41–43 | `get_sale` maps an unrecognized stored status to `SaleStatus::Pending` via `unwrap_or` — **fail-open**. A corrupted status string becomes an editable pending sale that can be transitioned and re-processed (double-processing risk on a completed sale read as pending). Contrasts with foundation's fail-closed `SaleStatus::from_stored_str` (returns `None`). Also a write/read asymmetry: status is stored via `serde_json::to_string` + trim-quotes and read by re-quoting — works, but obscures intent. | Return `SalesError::validation` on unrecognized status; use foundation's `from_stored_str` for both directions. |
+
+models.rs is clean: `Money` i64 minor units throughout, the
+`transition_to` matrix matches foundation's and is test-pinned, CUR-02
+multi-currency tender fields are documented for refund reconstruction,
+TAX-02 per-line breakdowns ride the line rows, and the empty-cart
+zero-total sale is deliberate. The repository is otherwise exemplary:
+all SQL parameterized, currency parse fails closed, `update_sale_status`
+bumps the optimistic-concurrency version, lines read in positional order.
+
+---
+
+---
+
 ---
 
 ---

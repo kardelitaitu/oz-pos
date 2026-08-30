@@ -1,4 +1,10 @@
 //! Sales domain types — sale lifecycle, refund models, and report row structures.
+/*
+last audited 25-07-26 by RSA-Agent (modules-sales slice A: models deep read)
+crate: modules-sales | status: SAFE | lint: CLEAN
+findings: clean — Money i64 minor units throughout (no floats); transition_to duplicates foundation's exhaustive matrix (test-pinned both directions); CUR-02 multi-currency fields documented for refund reconstruction; TAX-02 per-line tax breakdown JSON; optimistic-concurrency version; empty-cart sale is deliberate (zero-total, test-pinned)
+next: none | perf: N/A
+*/
 
 use foundation::{Cart, Currency, InvalidTransition, Money, SaleStatus};
 use serde::{Deserialize, Serialize};
