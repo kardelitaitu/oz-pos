@@ -289,14 +289,11 @@ export default {
       rewritten.hostname = MARKETING_HOST;
       // The SPA HTML references its assets with the absolute /dashboard/ or
       // /admin/ prefix (e.g. /dashboard/dashboard.css). Don't double-prefix:
-      // only add appBase for paths that don't already carry it.
       const p = url.pathname;
-      rewritten.pathname = (p === '/' || !p.startsWith(appBase)) ? appBase + p : p;
-      // Preserve the query string for static assets so ?v=<version> cache
-      // busting actually works (a different ?v= is a different edge cache
-      // key). Only the HTML entry point needs a clean URL — strip search
-      // there so /__oz/exchange and ?code= handling stays deterministic.
       const isAsset = /\.(css|js|svg|png|jpg|jpeg|webp|gif|ico|woff2?|ttf|map)$/i.test(p);
+      // Static assets already carry their correct bundle path (e.g. /admin/admin-utils.js,
+      // /dashboard/dashboard.css). Only prepend appBase for non-asset HTML/SPA navigation paths.
+      rewritten.pathname = isAsset ? p : (p === '/' || !p.startsWith(appBase) ? appBase + p : p);
       rewritten.search = isAsset ? url.search : '';
       const spaResp = await env.ASSETS.fetch(new Request(rewritten.toString(), request));
       return withStrictCSP(spaResp);

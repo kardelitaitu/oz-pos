@@ -228,10 +228,15 @@ function renderDevices(devices) {
       api('/api/v1/web/usage'),
       api('/api/v1/web/devices'),
     ]);
-    renderUsage(usage);
-    renderMe(me);
-    renderDevices(dev && dev.devices);
+    const contentEl = document.getElementById('content');
+    if (contentEl) contentEl.innerHTML = '';
+    if (usage) renderUsage(usage);
+    if (me) renderMe(me);
+    if (dev && dev.devices) renderDevices(dev.devices);
   } catch (err) {
-    document.getElementById('content').innerHTML = '<div class="card"><p class="empty">' + t('dash.couldNotLoad') + (err && err.message || 'unknown error') + '</p></div>';
+    const contentEl = document.getElementById('content');
+    if (contentEl) {
+      contentEl.innerHTML = '<div class="card"><p class="empty">' + t('dash.couldNotLoad') + (err && err.message || 'unknown error') + '</p></div>';
+    }
   }
 })();

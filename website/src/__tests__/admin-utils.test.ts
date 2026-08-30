@@ -454,3 +454,76 @@ describe('admin-utils fetchFxRate (B10: unbounded hang on a dead FX API)', () =>
     expect(r.rate).toBeNull();
   });
 });
+
+describe('admin-utils mountModal (B11: ESC listener leak)', () => {
+  // The old inline modal code in admin.js registered a document keydown
+  // handler per open, but only the ESC path ever removed it. Closing via
+  // the Close button or a backdrop click left the listener attached —
+  // every modal open without an ESC permanently added one.
+  const trackKeydown = () => {
+    let active = 0;
+    const add = document.addEventListener.bind(document);
+    const rm = document.removeEventListener.bind(document);
+    document.addEventListener = ((type: string, ...rest: any[]) => {
+      if (type === 'keydown') active++;
+      return (add as any)(type, ...rest);
+    }) as typeof document.addEventListener;
+    document.removeEventListener = ((type: string, ...rest: any[]) => {
+      if (type === 'keydown') active--;
+      return (rm as any)(type, ...rest);
+    }) as typeof document.removeEventListener;
+    return { active: () => active, restore: () => { document.addEventListener = add as any; document.removeEventListener = rm as any; } };
+  };
+
+  it('close() detaches the keydown listener (no leak)', () => {
+    const t = trackKeydown();
+    try {
+      const root = document.createElement('div');
+      const close = utils.mountModal(root, document.createElement('div'));
+      expect(t.active()).toBe(1);
+      close();
+      expect(root.children.length).toBe(0);
+      expect(t.active()).toBe(0);
+    } finally {
+      t.restore();
+    }
+  });
+
+  it('ESC closes the modal and detaches the listener', () => {
+    const t = trackKeydown();
+    try {
+      const root = document.createElement('div');
+      utils.mountModal(root, document.createElement('div'));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(root.children.length).toBe(0);
+      expect(t.active()).toBe(0);
+      // A second ESC must be a no-op (handler already removed itself).
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(root.children.length).toBe(0);
+    } finally {
+      t.restore();
+    }
+  });
+
+  it('backdrop click closes and detaches', () => {
+    const t = trackKeydown();
+    try {
+      const root = document.createElement('div');
+      utils.mountModal(root, document.createElement('div'));
+      const back = root.firstElementChild as HTMLElement;
+      back.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(root.children.length).toBe(0);
+      expect(t.active()).toBe(0);
+    } finally {
+      t.restore();
+    }
+  });
+
+  it('clicks inside the dialog do not close it', () => {
+    const root = document.createElement('div');
+    const box = document.createElement('div');
+    utils.mountModal(root, box);
+    box.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(root.children.length).toBe(1);
+  });
+});
