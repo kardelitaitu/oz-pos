@@ -39,10 +39,13 @@ async fn throwaway_pool() -> Option<(deadpool_postgres::Pool, String)> {
             .await;
     }
 
+    // `.simple()` (hex only): the name is interpolated as an unquoted
+    // identifier — UUID `Display` hyphens made CREATE DATABASE a syntax
+    // error and silently skipped every sync-store PG test.
     let db_name = format!(
         "oz_sync_test_{}_{}",
         std::process::id(),
-        uuid::Uuid::now_v7()
+        uuid::Uuid::now_v7().simple()
     );
     admin
         .execute(&format!("CREATE DATABASE {db_name}"), &[])

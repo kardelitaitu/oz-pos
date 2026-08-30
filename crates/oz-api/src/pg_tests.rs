@@ -110,8 +110,15 @@ async fn throwaway_test_pool(
             .ok()?;
     }
     // PID + random suffix: unique even if the OS reuses a PID while a
-    // stale DB from a crashed run is still present.
-    let db_name = format!("{prefix}_{}_{}", std::process::id(), uuid::Uuid::now_v7());
+    // stale DB from a crashed run is still present. `.simple()` (hex only)
+    // is REQUIRED: the name is interpolated as an unquoted identifier, and
+    // UUID `Display` hyphens made `CREATE DATABASE` a syntax error on the
+    // server — every throwaway-DB test silently skipped and reported PASS.
+    let db_name = format!(
+        "{prefix}_{}_{}",
+        std::process::id(),
+        uuid::Uuid::now_v7().simple()
+    );
     if admin
         .execute(&format!("CREATE DATABASE {db_name}"), &[])
         .await
@@ -493,14 +500,20 @@ async fn pg_integration_rest_rls_non_owner() {
         .await
         .expect("probe role setup should succeed");
 
+    // Probe connections must target the THROWAWAY DB (where PG_INIT was
+    // applied and the owner's rows live), not the base DB behind `url` —
+    // the base DB has no schema under the throwaway harness.
+    let (base, _old_db) = url.rsplit_once('/').expect("URL must have a database path");
+    let db_url = format!("{base}/{db_name}");
+
     // Probe pool connecting AS the restricted role (same endpoint, just
     // different credentials) — never applies PG_INIT, the owner did.
-    let scheme_end = url.find("://").expect("URL has a scheme") + 3;
-    let at = url.find('@').expect("URL has credentials");
+    let scheme_end = db_url.find("://").expect("URL has a scheme") + 3;
+    let at = db_url.find('@').expect("URL has credentials");
     let probe_url = format!(
         "{}oz_rest_probe:oz_rest_probe_pw@{}",
-        &url[..scheme_end],
-        &url[at + 1..]
+        &db_url[..scheme_end],
+        &db_url[at + 1..]
     );
     let probe_pool = {
         use deadpool_postgres::Manager;
@@ -532,7 +545,7 @@ async fn pg_integration_rest_rls_non_owner() {
     .expect("owner create_product");
 
     // Proof 1a: dedicated probe connection, no GUC → zero rows visible.
-    let (probe_raw, conn) = tokio_postgres::connect(&url, tokio_postgres::NoTls)
+    let (probe_raw, conn) = tokio_postgres::connect(&db_url, tokio_postgres::NoTls)
         .await
         .expect("dedicated probe connection");
     tokio::spawn(async move {
@@ -702,7 +715,11 @@ async fn pg_integration_concurrent_adjust_stock() {
     }
     // PID + random suffix: unique even if the OS reuses a PID while a
     // stale DB from a crashed run is still present.
-    let db_name = format!("oz_race_{}_{}", std::process::id(), uuid::Uuid::now_v7());
+    let db_name = format!(
+        "oz_race_{}_{}",
+        std::process::id(),
+        uuid::Uuid::now_v7().simple()
+    );
     if admin
         .execute(&format!("CREATE DATABASE {db_name}"), &[])
         .await
