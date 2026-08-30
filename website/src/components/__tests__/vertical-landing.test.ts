@@ -47,8 +47,8 @@ describe('VerticalLanding source structure', () => {
   });
 
   it('builds tierHref with pricing deep-link', () => {
-    // Source uses template literal: `#${v.tierAnchor}`
-    expect(VERTICAL_SRC).toContain('#${v.tierAnchor}');
+    // Source uses template literal: `#${vStrings[vertical].tierAnchor}`
+    expect(VERTICAL_SRC).toContain('#${vStrings[vertical].tierAnchor}');
   });
 
   it('has bundle CTA with restaurant_starter', () => {

@@ -20,6 +20,14 @@ interface Props {
 }
 
 const { locale, entries, currentSlug } = Astro.props;
+// Known doc categories, wired through t() so each localized label is a
+// first-class key (the sidebar renders them via `categories[group.category]`
+// below; unknown categories fall back to the raw group name).
+const categories: Record<string, string> = {
+  gettingStarted: t(locale, 'docs.categories.gettingStarted'),
+  guides: t(locale, 'docs.categories.guides'),
+  reference: t(locale, 'docs.categories.reference'),
+};
 ---
 
 <div class="doc-sidebar">
@@ -39,7 +47,7 @@ const { locale, entries, currentSlug } = Astro.props;
     entries.map((group) => (
       <div class="mt-6" data-doc-group>
         <p class="px-2 text-xs font-semibold uppercase tracking-wide text-link">
-          {t(locale, `docs.categories.${group.category}`)}
+          {categories[group.category] ?? group.category}
         </p>
         <ul class="mt-2 space-y-0.5">
           {

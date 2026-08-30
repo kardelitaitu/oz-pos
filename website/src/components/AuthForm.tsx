@@ -383,6 +383,7 @@ export default function AuthForm({ locale }: Props) {
         <form onSubmit={verifyOtp} className="space-y-4" aria-label={t(locale, 'login.title')}>
           <div>
             <span className="mb-2 block text-sm text-muted">{t(locale, 'login.code')}</span>
+            <p className="mb-2 text-xs text-muted">{t(locale, 'login.codePlaceholder')}</p>
             <OtpInput
               value={code}
               onChange={(val) => {

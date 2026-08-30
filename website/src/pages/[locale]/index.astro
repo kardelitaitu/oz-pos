@@ -77,30 +77,34 @@ const techStack = [
     </div>
 
     <!-- Tech stack logos inside features area -->
-    <div class="mt-12 flex flex-wrap items-center justify-center gap-x-12 gap-y-6">
-      {techStack.map((logo) => (
-        <span
-          class="opacity-70 transition-opacity duration-200 hover:opacity-100 flex-shrink-0"
-          style={{
-            display: 'inline-block',
-            height: logo.height,
-            backgroundColor: 'var(--color-muted)',
-            aspectRatio: String(logo.ratio),
-            width: `calc(${logo.height} * ${logo.ratio})`,
-            maxWidth: '100%',
-            WebkitMaskImage: `url("${logo.src}")`,
-            WebkitMaskSize: 'contain',
-            WebkitMaskRepeat: 'no-repeat',
-            WebkitMaskPosition: 'center',
-            maskImage: `url("${logo.src}")`,
-            maskSize: 'contain',
-            maskRepeat: 'no-repeat',
-            maskPosition: 'center',
-          }}
-          aria-label={logo.name}
-          role="img"
-        />
-      ))}
+    <div class="mt-12" data-i18n-key={t(locale, 'techStack.title')}>
+      <h3 class="text-center text-lg font-semibold">{t(locale, 'techStack.title')}</h3>
+      <p class="mt-1 text-center text-sm text-muted">{t(locale, 'techStack.subtitle')}</p>
+      <div class="mt-6 flex flex-wrap items-center justify-center gap-x-12 gap-y-6">
+        {techStack.map((logo) => (
+          <span
+            class="opacity-70 transition-opacity duration-200 hover:opacity-100 flex-shrink-0"
+            style={{
+              display: 'inline-block',
+              height: logo.height,
+              backgroundColor: 'var(--color-muted)',
+              aspectRatio: String(logo.ratio),
+              width: `calc(${logo.height} * ${logo.ratio})`,
+              maxWidth: '100%',
+              WebkitMaskImage: `url("${logo.src}")`,
+              WebkitMaskSize: 'contain',
+              WebkitMaskRepeat: 'no-repeat',
+              WebkitMaskPosition: 'center',
+              maskImage: `url("${logo.src}")`,
+              maskSize: 'contain',
+              maskRepeat: 'no-repeat',
+              maskPosition: 'center',
+            }}
+            aria-label={logo.name}
+            role="img"
+          />
+        ))}
+      </div>
     </div>
   </section>
 

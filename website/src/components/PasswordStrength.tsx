@@ -33,18 +33,20 @@ export default function PasswordStrength({ locale, password }: Props) {
     passwordByteLength(password) <= passwordMaxBytes &&
     passwordRuneCount(password) >= passwordMinLen;
 
-  let labelKey = 'password.strengthTooShort';
+  let labelKey: string;
   let color = 'var(--callout-danger)';
   if (minLenOk) {
     if (classes < passwordMinClasses) {
-      labelKey = 'password.strengthWeak';
+      labelKey = t(locale, 'password.strengthWeak');
     } else if (classes === passwordMinClasses) {
-      labelKey = 'password.strengthGood';
+      labelKey = t(locale, 'password.strengthGood');
       color = 'var(--callout-tip)';
     } else {
-      labelKey = 'password.strengthStrong';
+      labelKey = t(locale, 'password.strengthStrong');
       color = 'var(--color-accent)';
     }
+  } else {
+    labelKey = t(locale, 'password.strengthTooShort');
   }
 
   return (
@@ -68,7 +70,7 @@ export default function PasswordStrength({ locale, password }: Props) {
         ))}
       </div>
       <p className="text-xs text-muted">
-        {t(locale, labelKey)}
+        {labelKey}
         {!minLenOk && <span> — {t(locale, 'password.minLength')}</span>}
       </p>
       <p className="text-xs text-muted">{t(locale, 'password.hint')}</p>
