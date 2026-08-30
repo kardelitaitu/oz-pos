@@ -1,5 +1,11 @@
 //! Sync Daemon — background task that periodically pushes pending offline
 //! mutations to the remote sync server and pulls remote updates.
+/*
+last audited 25-07-26 by RSA-Agent (platform-sync slice E: daemon deep read)
+crate: platform-sync | status: SAFE | lint: CLEAN
+findings: exemplary — SYNC-01 durable pull anchor advanced only after the whole page plus the ADR #6 stock_summary rebuild succeed; SYNC-09 mid-pull operator-rewind detection (full-state comparison under the same blocking_lock hold, never clobbers a rewind); exponential backoff capped 60s with random 60-120s jitter rhythm; RUST-05 fail-closed transport for both phases; P1/P4 refresh-once for push (in-tick retry) and pull (documented next-cycle recovery, avoids duplicating apply logic); ADR #11 migration redirects update the local URL on push, pull, and snapshot paths; AnchorExpired triggers snapshot recovery with anchor advance; per-phase join-panic capture into daemon status; prune task archives movements 90d+ and breaks on panic; token refresh keeps the stored key on failure
+next: none | perf: blocking DB phases in spawn_blocking
+*/
 //!
 //! The daemon splits each sync cycle into three phases to avoid holding
 //! the `Store` (which is `!Send`) across `.await` points:

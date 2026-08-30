@@ -1063,6 +1063,22 @@ response bodies read exactly once; `no_proxy`; a separate 5 s health-check
 timeout prevents daemon stalls; and a test pins the snapshot-user wire
 format against every profile field (ADR #35 D6 residency).
 
+### Slice E — daemon.rs (2,241: production 1–947 fully read; tests 949+)
+
+**No new findings — exemplary.** The daemon advances the durable pull
+anchor only after the whole page *and* the ADR #6 `stock_summary` rebuild
+succeed, and its SYNC-09 rewind detection compares the durable
+`(since, cursor)` against the tick's captured state **under the same
+lock hold** that writes the advance — an operator rewind mid-pull can
+never be clobbered. Failures back off exponentially (capped 60 s) inside
+a random 60–120 s rhythm; both phases construct the transport fail-closed
+(RUST-05); auth expiry refreshes once for push (in-tick) and once for
+pull (next cycle, with the no-duplication rationale documented); ADR #11
+redirects update the local URL on all three paths; anchor expiry triggers
+snapshot recovery; every phase's join-panic lands in daemon status.
+
+---
+
 ---
 
 ---
