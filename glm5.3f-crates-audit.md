@@ -1285,6 +1285,25 @@ layer, UUID v7 ids).
 > this section's files into its commit (same pattern as `292aa003`
 > during modules-sales slice A); the RSA audit content above is intact.
 
+
+---
+
+## 19. modules/currency — exchange rates, currency format
+
+Baseline: ~644 production lines. Slice A — all 5 files (repository.rs
+400: production 1–376 fully read; commands/models/error verified;
+lib.rs already carries a current 25-07-26 stamp).
+
+**No new findings — exemplary.** F-022's transactional exchange-rate
+writes (insert + read-back inside one tx) are in place with sibling test
+files; CUR-04 as-of-date selection includes a documented forward-looking
+fallback; CUR-08 bounds the checkout path to the pair it needs;
+`rate_millionths` is validated strictly positive with code trimming;
+currency-format settings correctly delegate to platform-core (preserving
+encrypted-at-rest and old-key migration semantics).
+
+> **modules-currency COMPLETE** — 5 production files, ~644 lines, zero
+> new finding IDs. Campaign proceeds to modules/loyalty.
 ---
 
 ---

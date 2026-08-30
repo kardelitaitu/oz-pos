@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-currency slice A: commands verified)
+crate: modules-currency | status: SAFE | lint: CLEAN
+findings: clean shared DTOs with documented millionths scale
+next: none | perf: N/A
+*/
 //! Shared DTO types for exchange-rate Tauri commands.
 //!
 //! Moved here during R2 Phase 2 so desktop and tablet clients can

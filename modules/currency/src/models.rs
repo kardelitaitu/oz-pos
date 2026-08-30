@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-currency slice A: models verified)
+crate: modules-currency | status: SAFE | lint: CLEAN
+findings: clean ExchangeRateRow and display formatting (integer millionths to decimal string, sign handling, display-only)
+next: none | perf: N/A
+*/
 //! Currency exchange-rate domain model.
 //!
 //! Rates are stored as **integer minor units** (`rate_millionths: i64`) at a

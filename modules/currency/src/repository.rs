@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-currency slice A: repository deep read)
+crate: modules-currency | status: SAFE | lint: CLEAN
+findings: exemplary — F-022 tx-wrapped writes with consistent read-back; CUR-04 as-of-date selection with documented forward-looking fallback; CUR-08 pair-scoped checkout query; rate_millionths strictly positive with pre-write validation and code trimming; settings delegated to platform-core (encrypted-at-rest and old-key migration preserved); all SQL parameterized
+next: none | perf: N/A
+*/
 //! Currency/Exchange repository — database persistence for exchange rates.
 
 use rusqlite::Connection;

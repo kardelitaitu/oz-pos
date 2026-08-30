@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-currency slice A: error verified)
+crate: modules-currency | status: SAFE | lint: CLEAN
+findings: clean thiserror currency error taxonomy
+next: none | perf: N/A
+*/
 //! Error type for the currency/exchange-rate domain.
 
 use thiserror::Error;
