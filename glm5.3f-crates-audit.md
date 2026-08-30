@@ -12,6 +12,21 @@ settings before each print, Indonesian NPWP/tax-id footer support, and a
 payment-link QR config hook. All seven companion driver files are clean
 (no unwrap/panic/unsafe anywhere).
 
+
+### Slice C — input drivers + mock: usb_scanner.rs (252: production
+1–226 fully read), bt_scanner, serial_scanner, scale, mock (387) verified
+— **oz-hal COMPLETE**
+
+**No new findings.** The USB HID scanner driver is exemplary: a
+const-evaluated HID keyboard table with Shift-modifier mapping, a
+deadline-bounded poll loop (50 ms slices, no unbounded block), spurious
+enter and key-up reports handled, and the inter-key timeout returning
+the partial barcode (documented heuristic for scanners without a
+terminator). The mock driver set (one per trait, AGENTS.md mandate) is
+present and clean.
+
+> **oz-hal COMPLETE** — 28 production files, ~3.2k lines, one INFO
+> (HAL-1). Campaign proceeds to crates/oz-plugin.
 ---
 
 ## 25. crates/oz-hal — hardware abstraction layer

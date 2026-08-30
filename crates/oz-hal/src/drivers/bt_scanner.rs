@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-hal slice C: verified)
+crate: oz-hal | status: SAFE | lint: CLEAN
+findings: clean driver — no unwrap/panic/unsafe
+next: none | perf: N/A
+*/
 //! Bluetooth (SPP / RFCOMM) barcode scanner driver.
 //!
 //! Implements [`BarcodeScanner`](crate::traits::barcode::BarcodeScanner) over a Bluetooth serial (SPP) connection.

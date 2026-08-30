@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-hal slice C: verified)
+crate: oz-hal | status: SAFE | lint: CLEAN
+findings: clean driver — no unwrap/panic/unsafe
+next: none | perf: N/A
+*/
 //! Serial barcode scanner driver (stub).
 //!
 //! Implements `BarcodeScanner` via a serial (RS-232 / USB-serial) port.
