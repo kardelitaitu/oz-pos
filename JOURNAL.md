@@ -7982,3 +7982,110 @@ UI 253/253 across six suites.
 this entry. Open follow-ups recorded: category pie cross-currency slice
 areas (visual decision), cloud email_pg parity (old shapes + no REP-04
 netting).
+
+## 2026-08-31 — round J: session tokens in the clear, and two things I chose not to report
+
+Target chosen the same way as round H: production lines against sibling test
+counts, uncontended modules only. session.rs, 152 lines / 9 tests, and its
+own stamp carried an unanswered question - COR-5: expires_at None means the
+session never expires and the type cannot enforce that this is dev-only.
+
+**COR-5 answered: the code is fine, the comment is wrong.** Both clients
+read the TTL with .unwrap_or(86400), so a missing or unparseable setting
+gives a 24 hour expiry, not an infinite session - fail-closed. Reaching None
+takes an operator explicitly setting the TTL to 0 or negative, which is the
+documented dev switch. But the comment above the desktop read says
+"0 or missing = no expiry", and missing actually means 24h. A reader
+trusting that comment would go looking for a bug that is not there, or worse,
+"fix" the fail-closed default. Stamp rewritten with the answer and the
+comment called out.
+
+**One thing I did not report.** resolve_session's double-check comment says
+another thread may have "removed or refreshed" the session, but if it was
+refreshed the code still falls through to Err(InvalidSession) - looks like a
+spurious logout. It is not reachable: session_keepalive REMOVES an expired
+session rather than refreshing it, so nothing can turn an expired entry valid
+again short of the system clock moving backwards between two lock
+acquisitions. I checked reachability before writing it up, and the check is
+what killed it. A finding that needs a clock skew to exist is not a bug.
+
+**B53 (P3, b6692a92 + d3e8beeb).** Ten log lines across both clients wrote
+raw session tokens: the expiry info line, the PIN-rotation info line, the
+LRU-eviction warn, the collision warn, and two cleanup traces. A session
+token is a bearer credential - read it off a log and you are that session,
+no PIN needed. The PIN-rotation one is the worst because it fires on an
+ordinary user action at the default level.
+
+Severity kept honest by checking where the logs actually go: both clients
+call oz_logging::try_init(), which is stdout at level info - NOT the
+file-writing initialisers that same crate offers. So this is console and
+support-capture exposure, not a persisted file. On the tablet it is logcat,
+which is wider than a desktop console. P3 hygiene, worth fixing because the
+repo already masks PAN, names and CVV and tokens were the one credential
+that skipped the convention.
+
+**mask_token design, two numbers that are not arbitrary.** Tail of 8
+characters, not 4: with 256 sessions allowed in the store, a 16-bit suffix
+collides between two of them about half the time, which makes the log
+misleading rather than merely lossy - the wrong session appears to have done
+something real and nothing detects it. And anything at or below twice the
+tail is fully masked, which I only found while writing the tests: a naive
+len <= 8 rule turns a 10-character token into "...23456789", leaking 80% of
+its entropy and returning a string LONGER than the secret.
+
+**Two mistakes worth recording.**
+
+1. My commit pathspec listed desktop auth.rs twice instead of tablet
+   auth.rs, so 2 of the 10 sites did not land while the message claimed all
+   ten. Caught by reading the committed file list rather than trusting the
+   commit succeeded - which is the same check that caught round D's revert.
+   HEAD was still my commit, so I amended it in; the message is now true.
+2. The desktop TEST binary cannot be built on this machine at all:
+   rustc-LLVM ERROR: out of memory with 17 GB free, reproducible at -j 1.
+   Not caused by this change - the diff is three use lines, five log
+   arguments and one comment, and cargo check on the same crate is clean.
+   Another agent has staff_tests.rs and both promotions.rs files dirty in
+   this worktree, which is the likely cause. So the desktop half of B53 is
+   verified by type-check and diff review, and the tablet half by 20/20
+   passing tests. That asymmetry is stated in the commit message instead of
+   being smoothed over with a claim that everything passed.
+
+**Totals this area:** B46-B53 plus COR-31-in-module and COR-5-closed.
+oz-security 88 unit + 7 doctests, tablet 20/20 session tests, both clients
+cargo check clean.
+
+## 2026-08-31 — TDD cycle: LOY-03 proportional loyalty reversal on refund
+
+**Problem:** the leak LOY-06 created. Completion now awards points
+atomically — but refunds never clawed them back, so every refund
+silently kept the points for returned merchandise. User decision:
+proportional reversal (exact against the stored award, currency-safe
+because the ratio cancels, works for legacy sales).
+
+**Solution:** `reverse_loyalty_on_refund` (connection-bound, joins the
+refund tx): deduct `round(award × refund/sale)` capped at the
+not-yet-reversed remainder; ledger row keeps the FULL proportional
+deduction (negative points, `refund_reversal` — redeem's sign
+convention) while the balance floors at zero (spent points are not
+dragged negative); lifetime drops → tier recomputes down; MSL-4
+projection maintained. Idempotency without a migration: deterministic
+PK `loyalty-reversal-<refund_id>` makes retries no-ops. create_refund
+hook is non-fatal (warn) — same policy as the award hook: loyalty bugs
+must never block money movement.
+
+**Red/Green:** 6 unit + 2 wiring tests. One self-inflicted FK-order
+flake in my own fixture (updated sales.customer_id before inserting the
+customer). One REAL find while writing tests: the earlier LOY-04
+registry close had been silently reverted by a foreign tree restore —
+the committed docs (19da6e37) carried only the STAFF line; re-recorded.
+
+**Concurrency incident (8th):** my LOY-03 commit died on
+`cannot lock ref HEAD` for the THIRD time — foreign commit 01d3932e
+(an analytics hook refactor) swept all four staged files mid-flight.
+Content verified intact in HEAD; no history rewrite; attribution here.
+Pattern is stable now: stage → commit → on lock failure, check whether
+a foreign commit already carried the payload BEFORE retrying.
+
+**Commits:** code inside 01d3932e (foreign message), docs alongside
+this entry. Open: void-path reversal (voids of completed sales bypass
+create_refund), cloud email parity, category pie visual semantics.
