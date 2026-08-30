@@ -55,6 +55,16 @@ describe('sales.ts API contract', () => {
     expect(mockInvoke).toHaveBeenCalledWith('add_line_scoped', { sessionToken: 'tok', args: { cartId: 'c1', sku: 'SKU-1', qty: 1, unitPriceMinor: 1000 } });
   });
 
+  // FRONTEND-03: the line's own currency must cross the IPC boundary so
+  // the backend can enforce it against the cart currency.
+  it('addLine/addLineScoped pass unitPriceCurrency through to the backend', async () => {
+    mockInvoke.mockResolvedValue({ lineId: 'l1' });
+    await addLine({ cartId: 'c1' as CartId, sku: 'SKU-1', qty: 2, unitPriceMinor: 500, unitPriceCurrency: 'EUR' });
+    expect(mockInvoke).toHaveBeenCalledWith('add_line', { args: { cartId: 'c1', sku: 'SKU-1', qty: 2, unitPriceMinor: 500, unitPriceCurrency: 'EUR' } });
+    await addLineScoped('tok', { cartId: 'c1' as CartId, sku: 'SKU-1', qty: 1, unitPriceMinor: 1000, unitPriceCurrency: 'EUR' });
+    expect(mockInvoke).toHaveBeenCalledWith('add_line_scoped', { sessionToken: 'tok', args: { cartId: 'c1', sku: 'SKU-1', qty: 1, unitPriceMinor: 1000, unitPriceCurrency: 'EUR' } });
+  });
+
   it('completeSale calls correct command', async () => {
     mockInvoke.mockResolvedValue({ saleId: 's1' });
     await completeSale({ cartId: 'c1' as CartId, paymentMethod: 'cash', tenderedMinor: 10000 });

@@ -24,6 +24,12 @@ export interface AddLineArgs {
   sku: string;
   qty: number;
   unitPriceMinor: number;
+  /**
+   * FRONTEND-03: ISO-4217 code the line is priced in. When present the
+   * backend builds the line in this currency and rejects it if it differs
+   * from the cart's currency; omitted lines fall back to the cart currency.
+   */
+  unitPriceCurrency?: string;
 }
 
 /** Result of adding a line item to a cart. */

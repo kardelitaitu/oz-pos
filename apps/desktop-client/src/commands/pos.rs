@@ -21,7 +21,7 @@ use tauri::State;
 use foundation::Percentage;
 use oz_core::db::Store;
 use oz_core::events::{SaleCompleted, SaleCompletedLine};
-use oz_core::{Cart, CartId, CartLine, LineId, Money, PaymentSplitArg, SaleStatus, Sku};
+use oz_core::{Cart, CartId, CartLine, Currency, LineId, Money, PaymentSplitArg, SaleStatus, Sku};
 
 use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
 use crate::commands::topology::TOPOLOGY_RUNTIME_SETTING_KEY;
@@ -364,6 +364,11 @@ pub struct AddLineArgs {
     pub qty: i64,
     /// Unit Price Minor.
     pub unit_price_minor: i64,
+    /// FRONTEND-03: ISO-4217 code of the currency the line is priced in.
+    /// When present the command builds the line in this currency and
+    /// `Cart::add_line` enforces it matches the cart's currency; when
+    /// absent (legacy callers) the cart currency is stamped as before.
+    pub unit_price_currency: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -373,6 +378,24 @@ pub struct AddLineResult {
     pub line_id: LineId,
     /// Line Total.
     pub line_total: Option<Money>,
+}
+
+/// Resolve the unit price for an `add_line` request (FRONTEND-03).
+///
+/// The line's own currency crosses the IPC boundary so a cross-currency
+/// line is rejected by `Cart::add_line` instead of being silently re-stamped
+/// to the cart's currency. `None` preserves the legacy fallback.
+fn line_unit_price(args: &AddLineArgs, cart_currency: Currency) -> Result<Money, AppError> {
+    let currency = match args.unit_price_currency.as_deref() {
+        Some(s) => s
+            .parse::<Currency>()
+            .map_err(|_| AppError::Invalid(format!("invalid unit price currency: {s}")))?,
+        None => cart_currency,
+    };
+    Ok(Money {
+        minor_units: args.unit_price_minor,
+        currency,
+    })
 }
 
 /// Add a line to an active cart using the global database.
@@ -390,11 +413,7 @@ pub async fn add_line(
         .load_active_cart(&args.cart_id)?
         .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
 
-    let currency = cart.currency();
-    let unit_price = Money {
-        minor_units: args.unit_price_minor,
-        currency,
-    };
+    let unit_price = line_unit_price(&args, cart.currency())?;
     let line = CartLine::new(args.sku.clone(), args.qty, unit_price);
     let line_id = line.id;
     let line_total = line.total();
@@ -447,11 +466,7 @@ pub async fn add_line_scoped(
         .load_active_cart(&args.cart_id)?
         .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
 
-    let currency = cart.currency();
-    let unit_price = Money {
-        minor_units: args.unit_price_minor,
-        currency,
-    };
+    let unit_price = line_unit_price(&args, cart.currency())?;
     let line = CartLine::new(args.sku.clone(), args.qty, unit_price);
     let line_id = line.id;
     let line_total = line.total();

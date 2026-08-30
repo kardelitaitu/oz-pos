@@ -221,6 +221,7 @@ fn add_line_scoped_rejects_user_without_sales_process() {
         sku: Sku::new("COFFEE"),
         qty: 1,
         unit_price_minor: 350,
+        unit_price_currency: None,
     };
     let result = run_add_line_scoped(&conn, "user-no-sales", &args);
 
@@ -250,6 +251,7 @@ fn add_line_scoped_allows_user_with_sales_process() {
         sku: Sku::new("LATTE"),
         qty: 2,
         unit_price_minor: 450,
+        unit_price_currency: None,
     };
     let result = run_add_line_scoped(&conn, "user-cashier", &args);
 
@@ -260,4 +262,81 @@ fn add_line_scoped_allows_user_with_sales_process() {
     );
     let r = result.unwrap();
     assert_eq!(r.line_total.unwrap().minor_units, 900);
+}
+
+// ── FRONTEND-03: line currency crosses the IPC boundary ─────────
+
+#[test]
+fn line_unit_price_uses_wire_currency_over_cart_currency() {
+    let args = AddLineArgs {
+        cart_id: CartId::new(),
+        sku: Sku::new("IMPORT"),
+        qty: 1,
+        unit_price_minor: 500,
+        unit_price_currency: Some("EUR".into()),
+    };
+    let money = line_unit_price(&args, usd()).unwrap();
+    assert_eq!(money.currency, "EUR".parse::<Currency>().unwrap());
+    assert_eq!(money.minor_units, 500);
+}
+
+#[test]
+fn line_unit_price_falls_back_to_cart_currency_when_absent() {
+    let args = AddLineArgs {
+        cart_id: CartId::new(),
+        sku: Sku::new("COFFEE"),
+        qty: 1,
+        unit_price_minor: 350,
+        unit_price_currency: None,
+    };
+    let money = line_unit_price(&args, usd()).unwrap();
+    assert_eq!(money.currency, usd());
+}
+
+#[test]
+fn line_unit_price_rejects_invalid_currency() {
+    let args = AddLineArgs {
+        cart_id: CartId::new(),
+        sku: Sku::new("COFFEE"),
+        qty: 1,
+        unit_price_minor: 350,
+        unit_price_currency: Some("NOPE!".into()),
+    };
+    let err = line_unit_price(&args, usd()).unwrap_err();
+    assert!(
+        err.to_string().to_lowercase().contains("currency"),
+        "invalid currency must surface as a clear error, got: {err}"
+    );
+}
+
+#[test]
+fn add_line_scoped_rejects_cross_currency_line() {
+    // FRONTEND-03 end-to-end: an EUR-priced line added to the seeded USD
+    // cart must be REJECTED. Before the fix the command re-stamped the
+    // line as USD (the wire carried no currency), so Cart::add_line's
+    // mismatch check could never fire and the sale silently recorded the
+    // wrong currency for the product.
+    let conn = fresh_conn();
+    seed_cashier_without_override_permission(&conn, "user-cashier");
+    let cart_id = seed_active_cart(&conn);
+
+    let args = AddLineArgs {
+        cart_id,
+        sku: Sku::new("EUR-COFFEE"),
+        qty: 1,
+        unit_price_minor: 500,
+        unit_price_currency: Some("EUR".into()),
+    };
+    let result = run_add_line_scoped(&conn, "user-cashier", &args);
+
+    assert!(
+        result.is_err(),
+        "cross-currency line must be rejected, got Ok: {:?}",
+        result.ok()
+    );
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.to_lowercase().contains("currency"),
+        "error must mention the currency mismatch, got: {err}"
+    );
 }

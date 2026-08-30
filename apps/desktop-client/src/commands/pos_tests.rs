@@ -83,10 +83,74 @@ fn add_line_args_fields() {
         sku: Sku::new("COFFEE"),
         qty: 3,
         unit_price_minor: 350,
+        unit_price_currency: None,
     };
     assert_eq!(args.qty, 3);
     assert_eq!(args.unit_price_minor, 350);
     assert_eq!(args.sku.as_str(), "COFFEE");
+}
+
+// ── FRONTEND-03: line currency crosses the IPC boundary ─────────
+
+#[test]
+fn add_line_args_unit_price_currency_shape() {
+    // camelCase wire shape: present → Some, absent → None (legacy callers).
+    let with_cur: AddLineArgs = serde_json::from_str(
+        r#"{"cartId":"11111111-1111-1111-1111-111111111111","sku":"BAGEL","qty":2,"unitPriceMinor":500,"unitPriceCurrency":"EUR"}"#,
+    )
+    .unwrap();
+    assert_eq!(with_cur.unit_price_currency.as_deref(), Some("EUR"));
+    let without_cur: AddLineArgs = serde_json::from_str(
+        r#"{"cartId":"11111111-1111-1111-1111-111111111111","sku":"BAGEL","qty":2,"unitPriceMinor":500}"#,
+    )
+    .unwrap();
+    assert_eq!(without_cur.unit_price_currency, None);
+}
+
+#[test]
+fn line_unit_price_uses_wire_currency_over_cart_currency() {
+    // FRONTEND-03: an EUR line against a USD cart must be BUILT in EUR so
+    // Cart::add_line can reject it — previously the command re-stamped the
+    // cart's currency and the mismatch check could never fire.
+    let args = AddLineArgs {
+        cart_id: CartId::new(),
+        sku: Sku::new("IMPORT"),
+        qty: 1,
+        unit_price_minor: 500,
+        unit_price_currency: Some("EUR".into()),
+    };
+    let money = line_unit_price(&args, usd()).unwrap();
+    assert_eq!(money.currency, "EUR".parse::<Currency>().unwrap());
+    assert_eq!(money.minor_units, 500);
+}
+
+#[test]
+fn line_unit_price_falls_back_to_cart_currency_when_absent() {
+    let args = AddLineArgs {
+        cart_id: CartId::new(),
+        sku: Sku::new("COFFEE"),
+        qty: 1,
+        unit_price_minor: 350,
+        unit_price_currency: None,
+    };
+    let money = line_unit_price(&args, usd()).unwrap();
+    assert_eq!(money.currency, usd());
+}
+
+#[test]
+fn line_unit_price_rejects_invalid_currency() {
+    let args = AddLineArgs {
+        cart_id: CartId::new(),
+        sku: Sku::new("COFFEE"),
+        qty: 1,
+        unit_price_minor: 350,
+        unit_price_currency: Some("NOPE!".into()),
+    };
+    let err = line_unit_price(&args, usd()).unwrap_err();
+    assert!(
+        err.to_string().to_lowercase().contains("currency"),
+        "invalid currency must surface as a clear error, got: {err}"
+    );
 }
 
 #[test]
@@ -266,6 +330,7 @@ async fn scoped_sale_deducts_from_topology_warehouse_not_pos_location() {
             sku: Sku::new("STOCK-ROUTE-COFFEE"),
             qty: 3,
             unit_price_minor: 1000,
+            unit_price_currency: None,
         },
         app.state(),
     )

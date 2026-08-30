@@ -4,7 +4,7 @@
 // complete_sale → get_sale → print_sales_receipt). These tests are
 // the heaviest in PaymentModal (~2-3s each) due to IPC round-trips.
 // Extracted to enable parallel execution with fast rendering tests.
-// 4 tests.
+// 6 tests.
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
@@ -245,5 +245,37 @@ describe('PaymentModal — shortfall resolution', () => {
     expect(screen.getByText('Coffee')).toBeInTheDocument();
     expect(screen.getByText('Confirm & Continue')).toBeInTheDocument();
     expect(screen.getByText('Cancel Sale')).toBeInTheDocument();
+  });
+
+  // ── FRONTEND-03: line currency crosses the IPC boundary ──────────
+  it('sends the line currency on add_line so the backend can enforce it', async () => {
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const input = screen.getByLabelText(/amount tendered/i);
+    await userEvent.type(input, '10');
+    await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
+
+    await waitFor(() => {
+      // The modal adds lines via add_line (or add_line_scoped when a
+      // session token is present); assert on the payload shape, which is
+      // identical for both commands.
+      const calls = invokeMock.mock.calls as unknown as Array<[string, unknown]>;
+      const addLineCall = calls.find(
+        ([cmd]) => cmd === 'add_line' || cmd === 'add_line_scoped',
+      );
+      expect(addLineCall).toBeDefined();
+      expect(addLineCall?.[1]).toMatchObject({
+        args: { sku: 'COFFEE', qty: 2, unitPriceMinor: 350, unitPriceCurrency: 'USD' },
+      });
+    });
   });
 });

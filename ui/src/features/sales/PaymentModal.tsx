@@ -551,6 +551,10 @@ export default function PaymentModal({
           sku: line.sku,
           qty: line.qty,
           unitPriceMinor: line.unit_price.minor_units,
+          // FRONTEND-03: carry the line's own currency across IPC so the
+          // backend can reject a mismatch instead of silently re-stamping
+          // it to the cart currency.
+          unitPriceCurrency: line.unit_price.currency,
         };
         if (sessionToken) {
           await addLineScoped(sessionToken, lineArgs);
@@ -814,6 +818,10 @@ export default function PaymentModal({
           sku: line.sku,
           qty: line.qty,
           unitPriceMinor: line.unit_price.minor_units,
+          // FRONTEND-03: carry the line's own currency across IPC so the
+          // backend can reject a mismatch instead of silently re-stamping
+          // it to the cart currency.
+          unitPriceCurrency: line.unit_price.currency,
         };
         if (sessionToken) {
           await addLineScoped(sessionToken, lineArgs);
