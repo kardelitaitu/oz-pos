@@ -1130,6 +1130,23 @@ zero-total sale is deliberate. The repository is otherwise exemplary:
 all SQL parameterized, currency parse fails closed, `update_sale_status`
 bumps the optimistic-concurrency version, lines read in positional order.
 
+### Slice B — service.rs (162: production 1–60 fully read), lib.rs (233,
+old 19-07 stamp replaced), error.rs — **modules-sales COMPLETE**
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| MSL-2 | 🟡 LOW | modules/sales/src/service.rs:53–57 | `void_sale` bypasses the state machine: the guard only rejects an *already-voided* sale, then writes `SaleStatus::Voided` directly via `update_sale_status` — so a **Completed** sale is voided even though `transition_to` forbids Completed→Voided. The void also records no `Refund` and restores no stock; the refund flow (`Refund` model) is the proper route for completed sales. | Enforce the transition matrix here (Active→Voided only) or route Completed→Voided to the refund flow as an explicit policy. |
+
+`process_checkout` is clean (cart validation → double transition →
+tx-scoped insert); `lib.rs` is the kernel registration layer (previous
+19-07 stamp replaced per convention); `error.rs` is a thiserror taxonomy.
+
+> **modules-sales COMPLETE** — 5 production files, ~2.7k lines, all read
+> or verified and stamped. Two LOW findings (MSL-1, MSL-2). Campaign
+> proceeds to modules/inventory.
+
+---
+
 ---
 
 ---

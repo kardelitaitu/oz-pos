@@ -1,9 +1,8 @@
 /*
-last audited 19-07-26 by RSA-Agent
+last audited 25-07-26 by RSA-Agent (modules-sales slice B: lib+module re-verify)
 crate: modules-sales | status: SAFE | lint: CLEAN
-findings: Transitional module implementing Module trait. No unsafe code. Re-exports Cart, Sale,
-  SaleStatus from oz-core. 8 unit tests pass covering lifecycle and kernel integration.
-next: Migrate cart/sales logic into this module | perf: N/A.
+findings: clean — Module trait registration layer with documented backend/frontend migration state; re-exports foundation cart/money types and module models; previous 19-07 stamp replaced per campaign convention
+next: none | perf: N/A
 */
 
 //! Sales Module — core point-of-sale functionality.

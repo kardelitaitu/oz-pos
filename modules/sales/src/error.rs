@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-sales slice B: error verified)
+crate: modules-sales | status: SAFE | lint: CLEAN
+findings: clean thiserror sales error taxonomy with validation helper
+next: none | perf: N/A
+*/
 //! Error type for the sales domain.
 
 use thiserror::Error;
