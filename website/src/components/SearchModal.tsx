@@ -36,6 +36,9 @@ export default function SearchModal({ isOpen, onClose, locale }: Props) {
       { id: 'features', title: locale === 'id' ? 'Fitur Lengkap' : 'Features & Architecture', category: 'pages', url: `/${locale}/features`, keywords: 'offline kds multi store shifts inventory payments' },
       { id: 'account', title: locale === 'id' ? 'Dashboard Akun & Lisensi' : 'Account & License Dashboard', category: 'pages', url: `/${locale}/account`, keywords: 'profile subscription license terminals' },
       { id: 'support', title: locale === 'id' ? 'Bantuan & Kontak' : 'Support & Contact', category: 'pages', url: `/${locale}/support`, keywords: 'faq contact discord email help' },
+      { id: 'login', title: locale === 'id' ? 'Masuk' : 'Sign In', category: 'pages', url: `/${locale}/login`, keywords: 'signin email code password account' },
+      { id: 'signup', title: locale === 'id' ? 'Buat Akun' : 'Create Account', category: 'pages', url: `/${locale}/signup`, keywords: 'register new account create password' },
+      { id: 'enterprise-trial', title: locale === 'id' ? 'Trial Enterprise' : 'Enterprise Trial', category: 'pages', url: `/${locale}/enterprise-trial`, keywords: 'enterprise trial approval code 30 day' },
       
       // Vertical Solutions
       { id: 'kafe', title: locale === 'id' ? 'POS untuk Kafe & Kedai Kopi' : 'POS for Cafes & Coffee Shops', category: 'pages', url: `/${locale}/untuk-kafe`, keywords: 'cafe coffee table orders kds modifiers' },

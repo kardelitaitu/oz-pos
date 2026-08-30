@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import SearchModal from '../SearchModal';
@@ -240,6 +242,65 @@ describe('SearchModal — keyboard navigation', () => {
       expect(m.options().some((o) => o.textContent?.includes('Beranda'))).toBe(true);
     } finally {
       await m.unmount();
+    }
+  });
+});
+
+// ── Search index completeness ────────────────────────────────────────
+
+describe('SearchModal — search index completeness', () => {
+  /**
+   * Every page in src/pages/[locale]/ must be reachable via Ctrl+K search.
+   * This test reads the actual page files and compares them against the
+   * hardcoded search index in SearchModal.tsx. If someone adds a page but
+   * forgets the search entry, this test fails.
+   */
+  it('search index includes every page from src/pages/[locale]/', () => {
+    const pagesDir = join(process.cwd(), 'src', 'pages', '[locale]');
+    const pageFiles = readFileSync(
+      join(process.cwd(), 'src', 'components', 'SearchModal.tsx'),
+      'utf8',
+    );
+
+    // Extract all id: '...' values from the searchItems array
+    const indexIds = [...pageFiles.matchAll(/id:\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
+
+    // Map page filenames to expected search index slugs
+    const pageSlugs = readdirSync(pagesDir, 'utf8')
+      .filter((f) => f.endsWith('.astro'))
+      .map((f) => f.replace('.astro', ''))
+      .filter((f) => !f.startsWith('[')) // skip [...slug].astro dynamic routes
+      .map((f) => {
+        if (f === 'index') return 'home';
+        if (f.startsWith('untuk-')) return f.replace('untuk-', '');
+        return f;
+      });
+
+    const missing = pageSlugs.filter((slug) => !indexIds.includes(slug));
+
+    expect(
+      missing,
+      `Pages missing from search index: ${missing.join(', ')}. ` +
+        `Add them to SearchModal.tsx searchItems array with id, title, category, url, and keywords.`,
+    ).toEqual([]);
+  });
+
+  it('every search index page entry has a title in both en and id', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'src', 'components', 'SearchModal.tsx'),
+      'utf8',
+    );
+
+    // Find all title expressions: locale === 'id' ? '...' : '...'
+    const titlePairs = [
+      ...source.matchAll(/title:\s*locale\s*===\s*['"]id['"]\s*\?\s*['"]([^'"]+)['"]\s*:\s*['"]([^'"]+)['"]/g),
+    ];
+
+    expect(titlePairs.length).toBeGreaterThan(0);
+
+    for (const [, idTitle, enTitle] of titlePairs) {
+      expect(enTitle.length, `EN title for must not be empty`).toBeGreaterThan(0);
+      expect(idTitle.length, `ID title must not be empty`).toBeGreaterThan(0);
     }
   });
 });
