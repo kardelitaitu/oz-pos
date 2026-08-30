@@ -25,6 +25,17 @@ export default function AccountRegion({ locale, region, onRegionChange }: Props)
   const [regionOpen, setRegionOpen] = useState(false);
   const [regionMsg, setRegionMsg] = useState(false);
   const timerRef = useRef<number | null>(null);
+  // P3: scope all listbox queries to this component instead of the global
+  // document, so a second region selector (or any other aria-haspopup
+  // element elsewhere on the page) never hijacks focus restoration or the
+  // first-option lookup.
+  const rootRef = useRef<HTMLElement>(null);
+
+  const scopedQuery = <T extends Element>(selector: string): T | null =>
+    rootRef.current ? rootRef.current.querySelector<T>(selector) : null;
+
+  const scopedQueryAll = <T extends Element>(selector: string): T[] =>
+    rootRef.current ? Array.from(rootRef.current.querySelectorAll<T>(selector)) : [];
 
   const closeSoon = () => {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
@@ -32,7 +43,7 @@ export default function AccountRegion({ locale, region, onRegionChange }: Props)
   };
 
   return (
-    <section className="rounded-xl border border-ink/10 bg-surface/40 p-6 shadow-sm" aria-label={t(locale, 'account.region')}>
+    <section ref={rootRef} className="rounded-xl border border-ink/10 bg-surface/40 p-6 shadow-sm" aria-label={t(locale, 'account.region')}>
       <h2 className="text-lg font-semibold">{t(locale, 'account.region')}</h2>
       <p className="mt-1 text-sm text-muted">{t(locale, 'account.regionHint')}</p>
       <div className="relative mt-3">
@@ -56,8 +67,7 @@ export default function AccountRegion({ locale, region, onRegionChange }: Props)
               e.preventDefault();
               setRegionOpen(true);
               window.setTimeout(() => {
-                const first = document.querySelector<HTMLButtonElement>('[data-region-option]');
-                first?.focus();
+                scopedQuery<HTMLButtonElement>('[data-region-option]')?.focus();
               }, 0);
             } else if (regionOpen && e.key === 'Escape') {
               setRegionOpen(false);
@@ -106,14 +116,13 @@ export default function AccountRegion({ locale, region, onRegionChange }: Props)
                   onKeyDown={(e) => {
                     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                       e.preventDefault();
-                      const options = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-region-option]'));
+                      const options = scopedQueryAll<HTMLButtonElement>('[data-region-option]');
                       const idx = options.indexOf(e.currentTarget);
                       const next = e.key === 'ArrowDown' ? options[idx + 1] : options[idx - 1];
                       next?.focus();
                     } else if (e.key === 'Escape') {
                       setRegionOpen(false);
-                      const trigger = document.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]');
-                      trigger?.focus();
+                      scopedQuery<HTMLButtonElement>('[aria-haspopup="listbox"]')?.focus();
                     } else if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
                       e.currentTarget.click();
