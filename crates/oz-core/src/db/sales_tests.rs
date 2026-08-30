@@ -1,6 +1,6 @@
 use super::*;
 use crate::migrations;
-use crate::{Cart, CartLine, Sku};
+use crate::{Cart, CartLine, SaleStatus, Sku};
 use rusqlite::Connection;
 use std::collections::HashSet;
 

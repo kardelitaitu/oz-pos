@@ -1,0 +1,354 @@
+//! Sale tax computation (TAX-04/05/06).
+//!
+//! Key functions: `compute_sale_tax` (per-line breakdown across all
+//! applicable rates), `compute_cart_tax` (cart-level IPC input), and
+//! `resolve_best_tax_rates_for_sku`. Line/rate math reuses the parent
+//! `compute_line_tax` helper, kept in the parent because the unit tests
+//! call it directly.
+//!
+//! Invariants: integer-only arithmetic with explicit rounding modes;
+//! inclusive tax is never added on top of displayed prices.
+
+use super::*;
+use crate::tax_rate::{RoundingMode, TaxRate};
+
+impl Store<'_> {
+    /// Compute tax breakdown for a sale in-place.
+    ///
+    /// For each line resolves ALL applicable tax rates via the chain:
+    /// 1. Product-level tax rates (`get_product_tax_rates`)
+    /// 2. Category-level tax rates (via the product's `category_id`)
+    /// 3. Default store-wide tax rate (where `is_default = true`)
+    ///
+    /// `lua_overrides` — per-SKU tax rate overrides from plugins.
+    /// When a SKU is present in `lua_overrides` its `(rate_bps, is_inclusive)`
+    /// values are used instead of the DB-resolved rates for that line.
+    ///
+    /// All rates for a line contribute to its total tax. Stores the
+    /// first rate's id in `tax_rate_id` for backward compatibility.
+    /// Updates each line's `tax_amount`, then sets `sale.subtotal`
+    /// and `sale.tax_total`.
+    ///
+    /// `mode` controls how fractional per-rate results are rounded
+    /// (TAX-05): pass [`RoundingMode::HalfUp`] for new sales and
+    /// [`RoundingMode::Truncate`] when reproducing legacy behavior.
+    pub fn compute_sale_tax(
+        &self,
+        sale: &mut Sale,
+        lua_overrides: &[(String, i64, bool)],
+        mode: RoundingMode,
+    ) -> Result<(), CoreError> {
+        let currency = sale.currency;
+        let mut total_tax: Option<Money> = None;
+        let mut subtotal: Option<Money> = None;
+        // TAX-06: exclusive-tax contributions tracked separately so the
+        // sale total reflects the true collectible amount. Inclusive tax
+        // is embedded in the displayed price (total already includes it);
+        // exclusive tax must be added to the total.
+        let mut exclusive_tax: Option<Money> = None;
+
+        // MONEY-02 follow-up: reject negative line totals in a pre-pass so a
+        // hand-built `Sale` cannot record negative tax on the ledger, and so
+        // the error path leaves no partially-mutated Sale behind. CartLine
+        // asserts qty > 0 so this is unreachable from the front-end, but this
+        // is the tax boundary.
+        for line in &sale.lines {
+            if line.line_total.minor_units < 0 {
+                return Err(CoreError::Validation {
+                    field: "line_total",
+                    message: format!(
+                        "line total must be non-negative, got {}",
+                        line.line_total.minor_units
+                    ),
+                });
+            }
+        }
+
+        for line in &mut sale.lines {
+            let line_subtotal = line.line_total;
+            let mut line_tax = Money::zero(currency);
+            // TAX-02: per-rate breakdown persisted on the line so multi-rate
+            // detail survives (state + local, etc.) even if a rate is later
+            // archived/renamed. `tax_rate_id` keeps only the FIRST rate id.
+            let mut line_breakdown: Vec<serde_json::Value> = Vec::new();
+
+            // Check for a Lua plugin override first.
+            let override_idx = lua_overrides
+                .iter()
+                .position(|(sku, _, _)| sku == &line.sku);
+
+            if let Some(idx) = override_idx {
+                let (_, rate_bps, is_inclusive) = &lua_overrides[idx];
+                let rbps = *rate_bps;
+                let tax = compute_line_tax(
+                    line_subtotal.minor_units,
+                    rbps,
+                    *is_inclusive,
+                    line_subtotal.currency,
+                    mode,
+                )?;
+                line_tax = line_tax
+                    .checked_add(tax)
+                    .ok_or_else(|| CoreError::Validation {
+                        field: "tax",
+                        message: "line tax overflow".into(),
+                    })?;
+                // TAX-06: track exclusive tax for the total correction.
+                if !is_inclusive {
+                    exclusive_tax = Some(match exclusive_tax {
+                        None => tax,
+                        Some(acc) => acc.checked_add(tax).ok_or_else(|| CoreError::Validation {
+                            field: "tax",
+                            message: "exclusive tax accumulation overflow".into(),
+                        })?,
+                    });
+                }
+                // No DB tax_rate_id for override lines.
+                line.tax_rate_id = None;
+                line_breakdown.push(serde_json::json!({
+                    "rate_id": null,
+                    "rate_bps": rbps,
+                    "is_inclusive": *is_inclusive,
+                    "tax_minor": tax.minor_units,
+                }));
+            } else {
+                let rates = self.resolve_best_tax_rates_for_sku(&line.sku)?;
+
+                for rate in &rates {
+                    let tax = compute_line_tax(
+                        line_subtotal.minor_units,
+                        rate.rate_bps,
+                        rate.is_inclusive,
+                        line_subtotal.currency,
+                        mode,
+                    )?;
+                    line_tax = line_tax
+                        .checked_add(tax)
+                        .ok_or_else(|| CoreError::Validation {
+                            field: "tax",
+                            message: "line tax overflow".into(),
+                        })?;
+                    // TAX-06: track exclusive tax for the total correction.
+                    if !rate.is_inclusive {
+                        exclusive_tax = Some(match exclusive_tax {
+                            None => tax,
+                            Some(acc) => {
+                                acc.checked_add(tax).ok_or_else(|| CoreError::Validation {
+                                    field: "tax",
+                                    message: "exclusive tax accumulation overflow".into(),
+                                })?
+                            }
+                        });
+                    }
+                    line_breakdown.push(serde_json::json!({
+                        "rate_id": rate.id,
+                        "rate_bps": rate.rate_bps,
+                        "is_inclusive": rate.is_inclusive,
+                        "tax_minor": tax.minor_units,
+                    }));
+                }
+
+                line.tax_rate_id = rates.first().map(|r| r.id.clone());
+            }
+
+            line.tax_breakdown_json =
+                if line_breakdown.is_empty() {
+                    None
+                } else {
+                    Some(serde_json::to_string(&line_breakdown).map_err(|e| {
+                        CoreError::Internal(format!("serializing tax breakdown: {e}"))
+                    })?)
+                };
+
+            line.tax_amount = line_tax;
+
+            total_tax = match total_tax {
+                None => Some(line_tax),
+                Some(acc) => {
+                    Some(
+                        acc.checked_add(line_tax)
+                            .ok_or_else(|| CoreError::Validation {
+                                field: "tax",
+                                message: "sale tax total overflow".into(),
+                            })?,
+                    )
+                }
+            };
+
+            subtotal =
+                match subtotal {
+                    None => Some(line.line_total),
+                    Some(acc) => Some(acc.checked_add(line.line_total).ok_or_else(|| {
+                        CoreError::Validation {
+                            field: "subtotal",
+                            message: "sale subtotal overflow".into(),
+                        }
+                    })?),
+                };
+        }
+
+        // A sale always has ≥ 1 line (the loop above runs once per line), so
+        // `subtotal`/`total_tax` are always `Some` here — overflow would have
+        // already returned a `Validation` error. `unwrap_or_else` is defensive
+        // only; it must NOT silently zero real money, which is why overflow
+        // is propagated above instead of folded into `None`.
+        sale.subtotal = subtotal.unwrap_or_else(|| Money::zero(currency));
+        sale.tax_total = total_tax.unwrap_or_else(|| Money::zero(currency));
+
+        // TAX-06: when exclusive tax was computed, the sale total must
+        // include it. `Sale::from_cart` sets `total` from the cart total
+        // (post-discount, pre-tax); the customer pays the discounted
+        // subtotal PLUS the exclusive tax on top. Adding it here makes
+        // `sales.total_minor` the true collectible amount, matching the
+        // receipt's "grand total (subtotal + tax)" contract.
+        if let Some(et) = exclusive_tax {
+            sale.total = sale
+                .total
+                .checked_add(et)
+                .ok_or_else(|| CoreError::Validation {
+                    field: "total",
+                    message: "sale total overflow from exclusive tax".into(),
+                })?;
+        }
+
+        Ok(())
+    }
+
+    /// Compute the total tax for a set of cart lines (live preview).
+    ///
+    /// For each cart line resolves ALL applicable tax rates and sums
+    /// their contributions. Returns the total tax amount plus whether any
+    /// EXCLUSIVE rate applied (see [`CartTaxResult`]).
+    ///
+    /// `mode` controls how fractional per-rate results are rounded
+    /// (TAX-05): pass [`RoundingMode::HalfUp`] for new sales and
+    /// [`RoundingMode::Truncate`] when reproducing legacy behavior.
+    pub fn compute_cart_tax(
+        &self,
+        lines: &[CartLineTaxInput],
+        currency: Currency,
+        mode: RoundingMode,
+    ) -> Result<CartTaxResult, CoreError> {
+        let mut total_tax: Option<Money> = None;
+        let mut has_exclusive = false;
+
+        for line in lines {
+            // MONEY-02: negative qty/price would produce a negative line total
+            // and a negative "tax" preview (the front-end renders it raw). The
+            // cart model never allows negative qty/price, so reject them with a
+            // structured Validation error naming the offending field.
+            if line.qty < 0 {
+                return Err(CoreError::Validation {
+                    field: "qty",
+                    message: format!("qty must be positive, got {}", line.qty),
+                });
+            }
+            if line.unit_price_minor < 0 {
+                return Err(CoreError::Validation {
+                    field: "price",
+                    message: format!(
+                        "unit price must be non-negative, got {}",
+                        line.unit_price_minor
+                    ),
+                });
+            }
+            // MONEY-01: the line total comes from untrusted IPC input and must
+            // use checked arithmetic like `compute_line_tax` (TAX-04). The
+            // workspace disables overflow-checks for dev/test builds, so a
+            // bare `*` silently wraps and feeds a wrong tax to the register.
+            let line_total_minor =
+                line.qty.checked_mul(line.unit_price_minor).ok_or_else(|| {
+                    CoreError::Validation {
+                        field: "tax",
+                        message: "cart line total overflow".into(),
+                    }
+                })?;
+            let rates = self.resolve_best_tax_rates_for_sku(&line.sku)?;
+
+            for rate in &rates {
+                let tax = compute_line_tax(
+                    line_total_minor,
+                    rate.rate_bps,
+                    rate.is_inclusive,
+                    currency,
+                    mode,
+                )?;
+                if !rate.is_inclusive {
+                    has_exclusive = true;
+                }
+                total_tax = match total_tax {
+                    None => Some(tax),
+                    Some(acc) => {
+                        Some(acc.checked_add(tax).ok_or_else(|| CoreError::Validation {
+                            field: "tax",
+                            message: "cart tax overflow".into(),
+                        })?)
+                    }
+                };
+            }
+        }
+
+        let tax = total_tax.unwrap_or_else(|| Money::zero(currency));
+        Ok(CartTaxResult {
+            tax_minor: tax.minor_units,
+            has_exclusive,
+        })
+    }
+
+    /// Resolve all applicable tax rates for a SKU using the chain:
+    /// product rates → category rates → default rate.
+    ///
+    /// Returns ALL rates at the first matching level (e.g. all product-
+    /// level rates). Returns an empty vec when no rate is configured.
+    pub fn resolve_best_tax_rates_for_sku(&self, sku: &str) -> Result<Vec<TaxRate>, CoreError> {
+        // 1. Product-level tax rates — return ALL assigned rates.
+        let product_rate_ids = self.get_product_tax_rates(sku)?;
+        if !product_rate_ids.is_empty() {
+            let mut rates = Vec::with_capacity(product_rate_ids.len());
+            for id in &product_rate_ids {
+                if let Some(rate) = self.get_tax_rate(id)? {
+                    rates.push(rate);
+                }
+            }
+            if !rates.is_empty() {
+                return Ok(rates);
+            }
+        }
+
+        // 2. Category-level tax rates (via product.category_id).
+        let product_id = self.product_id_by_sku(sku)?;
+        if let Some(pid) = product_id {
+            let category_id: Option<String> = self
+                .conn
+                .query_row(
+                    "SELECT category_id FROM products WHERE id = ?1",
+                    params![pid],
+                    |row| row.get(0),
+                )
+                .ok()
+                .and_then(|v| v);
+
+            if let Some(cid) = category_id {
+                let cat_rate_ids = self.get_category_tax_rates(&cid)?;
+                if !cat_rate_ids.is_empty() {
+                    let mut rates = Vec::with_capacity(cat_rate_ids.len());
+                    for id in &cat_rate_ids {
+                        if let Some(rate) = self.get_tax_rate(id)? {
+                            rates.push(rate);
+                        }
+                    }
+                    if !rates.is_empty() {
+                        return Ok(rates);
+                    }
+                }
+            }
+        }
+
+        // 3. Default store-wide tax rate (where `is_default = 1`).
+        if let Some(rate) = self.get_default_tax_rate()? {
+            return Ok(vec![rate]);
+        }
+
+        Ok(Vec::new())
+    }
+}
