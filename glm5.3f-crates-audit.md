@@ -907,6 +907,20 @@ INFO: a decrypt failure silently falls back to the raw value instead of
 surfacing an error, so a corrupted ciphertext yields garbage without an
 alert.
 
+### Slice D — database/migrations.rs (836: production 1–337 fully read;
+338+ inline tests)
+
+**No new findings — exemplary.** DB-02 checksum verification with
+legacy-checksum migration and drift re-apply (the idempotency requirement
+is documented and the re-apply is transaction-atomic, so partial DDL is
+impossible — worst case is a clean failure requiring operator action).
+DB-05 FK isolation wraps every apply and rollback (the PRAGMA-inside-
+transaction no-op is the documented rationale), the caller's prior setting
+is restored even on failure, and a restore error never masks the original.
+Rollback is last-migration-only, preventing out-of-order reverts.
+
+---
+
 ---
 
 ---
