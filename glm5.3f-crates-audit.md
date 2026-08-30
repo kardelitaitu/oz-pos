@@ -753,6 +753,26 @@ with charset validation and no-half-applied writes, and the terminal
 client-credentials path sourcing tenant from the registration — never the
 request body.
 
+### Slice B — pg.rs (1,307 lines): module doc + helpers + tenant-plan +
+terminal-verify + product-mapper regions fully read; remainder verified by
+structural sweep (all `format!` sites build error strings or static SELECT
+prefixes only; RLS `set_config` coverage counted; `unwrap_or` sites reviewed)
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| API-3 | ℹ️ INFO | oz-api/src/pg.rs:610, 892, 1149, 1211–1212 | Sale/product reads silently default on schema drift: `tip_minor`/`service_charge_minor` `.unwrap_or(0)` (money columns read as zero), `product_type`/`status` enum fallbacks (`ProductType::default`, `SaleStatus::Pending`). | Propagate column-read errors instead of defaulting money fields. |
+
+**Slice B positives:** the RLS contract is exemplary — every tenant-scoped
+function opens a transaction and sets `oz.tenant_id` as a LOCAL setting
+(verified: 12 sites), so pooled connections never leak one tenant's scope
+to the next; `verify_terminal_credentials` performs the documented
+pre-tenant lookup through a scoped discovery role (`SET LOCAL ROLE` inside
+a read-only transaction) and compares SHA-256 digests in SQL rather than
+process-memory secrets; all SQL is parameterized; `PgError` maps cleanly
+to 409/404/400/500.
+
+---
+
 ---
 
 ---
