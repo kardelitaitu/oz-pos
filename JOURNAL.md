@@ -6701,3 +6701,61 @@ the shadowing trap.
 - Concurrent tree editor renamed my B2 Red reproduction before its test
   run (documented in ac7ed317) — Red for that slice rides on B1's
   identical TypeError; behavior still pinned by tests.
+
+## 2026-08-30 — Admin bug hunt round 2: login flow + hang/leak classes (B7, B10-B14)
+
+**Problem:** Second loop of the admin-dashboard hunt. Six more real bugs,
+all now pinned by tests (suite 40 -> 57):
+
+1. **B7** login.js showLockoutCountdown created a NEW setInterval per 429
+   and only referenced it from its own closure — a second rate-limited
+   attempt left two timers racing: the shorter retry_after re-enabled the
+   button EARLY (server says wait 120s, stale 60s timer unlocks at 60s),
+   and the survivor zombie-rewrote the restored label.
+2. **B10** admin.js fetchFxRate awaited an un-timed fetch — when the stats
+   payload carried no fxRate the whole dashboard render hung on a
+   firewalled er-api.com for the browser's connect timeout.
+3. **B11** both admin.js modal builders registered a document keydown ESC
+   handler per open but only the ESC path removed it — every Close-button
+   or backdrop-click close LEAKED one listener that kept reacting to
+   later ESCs (Red demonstrated cross-test interference: -1 listener
+   count from a stale handler firing during the next modal's ESC).
+4. **B12** api() awaited TWO un-timed fetches per call (session + license
+   API) — a hung connection froze every tab forever with no error state
+   (same class as B10, on the hot path).
+5. **B13** exchangeForCode navigated to /?code=undefined when the server
+   returned 200 without a code — silent login loop, no error shown.
+6. **B14** setAuthMode overwrote the login button label during an active
+   lockout — disabled button labelled 'Send Verification Code', countdown
+   text flickering back each second.
+
+**Solution:** all fixes follow the H1 extraction pattern into
+admin-utils.js (startLockoutCountdown with per-button tracked timer,
+fetchFxRate/fetchWithTimeout with AbortSignal.timeout, mountModal with
+one idempotent close owning all paths, exchangeUrlFrom validator,
+isLockoutActive predicate); admin.js/login.js rewired to consume them.
+doAction gained a close callback so success paths release modals
+properly.
+
+**Commits:** 5dfe72d9 (B7), 1670a282 (B10), 96f6d3f9 (B11), 2b19570c
+(B12), cafcca11 (B13+B14). Prefix (bugs)website:admin.
+
+**Test counts:** admin-utils.test.ts 40 -> 57; full website suite
+623/623 (39 files); drift 0.
+
+**Process notes (shared worktree with a concurrent committer):**
+- 5dfe72d9 initially SWEPT the other agent's staged files (shared index!)
+  — repaired via soft-reset + restore --staged; all later commits use
+  git commit -- <paths> pathspec form.
+- The other agent's 279e28d7 swept my B11 test-file changes into its
+  commit (content intact, attribution mixed).
+- AbortSignal.timeout is NATIVE — vitest fake timers do not control it;
+  timeout tests use real timers with 50ms budgets.
+
+**Remaining risks / follow-ups (future slices):**
+- renderTenants stale-response race (fast page clicks: older response can
+  overwrite newer) — needs an abort-on-supersede pattern.
+- statusPill renders raw enum text ('grace_period') — cosmetic i18n gap.
+- No URL state: tab/search/page lost on refresh (feature, not bug).
+- worker.ts + dashboard.js are the concurrent agent's hot files — the
+  hunt deliberately stayed out of them.

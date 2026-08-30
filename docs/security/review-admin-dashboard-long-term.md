@@ -158,7 +158,7 @@ The admin login page (`login.html`) is always dark. The dashboard has a theme to
 | 2 | **HIGH** | MOCK fallback masks failures (C4) | Show error banner when API fails; keep MOCK only as last-resort skeleton | ✅ Resolved — MOCK object removed; API errors render a retry/error state (Phase 1) |
 | 3 | **HIGH** | Tenants list has no pagination (C3) | Add page controls + pass `?page=` / `?perPage=` to the API | ✅ Resolved — pagination controls + `?page=`/`?perPage=`/`?search=` (Phase 2) |
 | 4 | **HIGH** | Monolithic admin.js (H1) | Split into testable modules (stats.js, tenants.js, charts.js) or move to a build step | ✅ Resolved — pure helpers extracted into `admin-utils.js` (charts, formatting, cards, API auth, i18n) with unit tests |
-| 5 | **HIGH** | Zero tests (H2) | Add unit tests for chart rendering, helpers, and API mock fallback | ✅ Resolved — 40 unit tests in `src/__tests__/admin-utils.test.ts` (+14 worker auth-gate tests); both suites now execute in CI via the `website-tests` gate. The 2026-08-30 bug hunt added 16 of those tests and fixed 6 real bugs (see §8.1) |
+| 5 | **HIGH** | Zero tests (H2) | Add unit tests for chart rendering, helpers, and API mock fallback | ✅ Resolved — 57 unit tests in `src/__tests__/admin-utils.test.ts` (+14 worker auth-gate tests); both suites now execute in CI via the `website-tests` gate. The 2026-08-30 bug hunt added 33 of those tests and fixed 12 real bugs (see §8.1) |
 | 6 | **HIGH** | No i18n (H3) | Extract strings to an i18n structure; at minimum, add English `.ftl` keys for future localization | ✅ Resolved — `STRINGS` key-value table + `t()` helper; all admin/dashboard/login strings extracted |
 | 7 | **HIGH** | Shared session cookie (H4) | Restrict `Domain` to individual subdomains or use a dedicated auth domain | ✅ Resolved — cookie scoped to `admin.ozpos.my.id` / `dashboard.ozpos.my.id` (not the parent domain) |
 | 8 | **MEDIUM** | No loading/error states for charts (M1) | Guard `svgChart` against empty/NaN data; add per-chart error states | ✅ Resolved — `svgChart` / `svgDonut` guard empty/NaN/zero data |
@@ -223,7 +223,7 @@ merge history (`git log -S` + merge-ancestry), and a local test run:
 - **L1 corrected to OPEN**, **L3 marked won't-fix/by-design** — see §5.
 - Test count corrected: **24**, not "25+".
 
-### 8.1 Bug hunt (2026-08-30, TDD) — 6 bugs found & fixed
+### 8.1 Bug hunt (2026-08-30, TDD) — 12 bugs found & fixed
 
 A focused hunt over `admin.js`/`admin-utils.js` against the Go server's
 actual JSON shapes found six real bugs — none caught by the pre-existing
@@ -242,3 +242,20 @@ Commits `b238540b`, `ac7ed317`, `27af049f`, `c18a3e00`, `de489a16`
 (prefix `(bugs)website:admin`). Suite 24→40 tests; full website suite
 566/566. Known residuals logged in `JOURNAL.md` (lockout-countdown timer
 race, `escHandler` listener leak, per-request `/__oz/session` fetch).
+
+**Round 2** (same day) hunted those residuals and the login flow — six
+more bugs, all fixed with tests (suite 40→57, full website 623/623):
+
+| # | Sev | Bug | Fix |
+|---|-----|-----|-----|
+| B7 | P1 | `showLockoutCountdown` spawned a new `setInterval` per 429 without clearing the previous — the shorter stale timer re-enabled the button **early** during a longer lockout; the survivor zombie-rewrote the restored label | `startLockoutCountdown` keeps one tracked timer per button |
+| B10 | P2 | `fetchFxRate` awaited an un-timed fetch — firewalled FX API hung the whole dashboard render | `fetchFxRate(fetchImpl, timeoutMs)` with `AbortSignal.timeout` |
+| B11 | P2 | both modal builders leaked the document ESC handler on every non-ESC close (button/backdrop) — stale handlers kept reacting to later ESCs | `mountModal(root, box)` — one idempotent `close()` owns all paths |
+| B12 | P1 | `api()` awaited two un-timed fetches per call (session + license API) — a hung connection froze every tab forever, no error state | `fetchWithTimeout` on both calls (default 15s) |
+| B13 | P2 | `exchangeForCode` navigated to `/?code=undefined` on a code-less 200 — silent login loop | `exchangeUrlFrom(body)` validates + surfaces `login.exchangeFailed` |
+| B14 | P3 | `setAuthMode` overwrote the lockout countdown label on tab switch — disabled button labelled "Send Verification Code" | label writes skipped while `isLockoutActive(btn)` |
+
+Round-2 commits: `5dfe72d9`, `1670a282`, `96f6d3f9`, `2b19570c`,
+`cafcca11`. Remaining residuals (stale-response race in `renderTenants`,
+raw-enum `statusPill` text, no URL state for tab/search/page) logged in
+`JOURNAL.md`.
