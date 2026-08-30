@@ -205,7 +205,11 @@ export default {
       const codeParam = url.searchParams.get('code');
       if (codeParam) {
         url.searchParams.delete('code');
-        const cleanUrl = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
+        // B24: the redirect path is forced single-slash — '//evil.com' or
+        // '/\evil.com' would otherwise resolve as a protocol-relative
+        // OPEN REDIRECT (both 302s below use this URL raw).
+        const safePath = '/' + url.pathname.replace(/^[/\\]+/, '');
+        const cleanUrl = safePath + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
         const apiUrl = (env.LICENSE_API_URL ?? 'https://license.ozpos.my.id') + '/api/v1/web/exchange-consume';
         try {
           const res = await fetch(apiUrl, {
@@ -231,12 +235,16 @@ export default {
         } catch {
           // Exchange failed — fall through to redirect to login below.
         }
-        // Code invalid or exchange failed — redirect to login so the user
-        // re-authenticates (never leaves them on a broken state).
-        const loginUrl = hostname === 'admin.ozpos.my.id'
-          ? `https://${MARKETING_HOST}/admin/login`
-          : `https://${MARKETING_HOST}/en/login?redirect=${encodeURIComponent(cleanUrl)}`;
-        return new Response(null, { status: 302, headers: { Location: loginUrl } });
+        // Code invalid or exchange failed — send the browser back through
+        // the login flow. B24 fix: the old code 302'd to the MARKETING
+        // host's /admin/login — but login.js computes API='' for any
+        // *.ozpos.my.id host and POSTs relative /api/v1/... calls, and
+        // the proxy is gated to DASHBOARD_HOSTS. On the marketing host
+        // those calls 404: the user was stranded on a dead login form.
+        // Redirect to the clean URL on THIS host instead — the no-session
+        // gate below serves the login page locally (with the proxy), and
+        // the original destination survives the re-login round-trip.
+        return new Response(null, { status: 302, headers: { Location: cleanUrl } });
       }
 
       // Step 1b: The dashboard SPA calls /__oz/session to obtain the JWT

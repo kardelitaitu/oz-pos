@@ -220,7 +220,53 @@ describe('Cloudflare Worker — worker.ts', () => {
 
     expect(res.status).toBe(302);
     const location = res.headers.get('Location') ?? '';
-    expect(location).toContain('https://ozpos.my.id');
-    expect(location).toContain('login');
+    // B24 correction: the old assertion pinned the redirect to the
+    // MARKETING host — but its login form is broken there (see next test).
+    // The failure must stay on the admin host: the no-session gate serves
+    // the login page on admin.ozpos.my.id where the /api/v1/ proxy lives.
+    expect(location).not.toContain('https://ozpos.my.id');
+    expect(location).toBe('/settings');
+  });
+
+  it('B24: exchange failure must not bounce to the proxy-less marketing host', async () => {
+    // https://ozpos.my.id/admin/login loads, but login.js computes
+    // API='' for any *.ozpos.my.id host and POSTs relative /api/v1/... —
+    // the proxy is gated to DASHBOARD_HOSTS, so on the marketing host
+    // those calls 404 and the form cannot submit. A user whose code
+    // expired was stranded on a dead login page.
+    global.fetch = vi.fn().mockResolvedValue({
+      status: 401,
+      ok: false,
+      json: async () => ({ error: 'invalid code' }),
+    });
+
+    const req = new Request('https://admin.ozpos.my.id/reports?code=expired');
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(302);
+    const location = res.headers.get('Location') ?? '';
+    // Relative → same admin host; the gate then serves login locally.
+    expect(location.startsWith('/')).toBe(true);
+    expect(location).toBe('/reports');
+    // And after re-login the destination is reachable: the clean URL is
+    // what the gate's login flow will return to.
+  });
+
+  it('B24b: protocol-relative exchange paths are pinned to the admin host', async () => {
+    // The success 302 used url.pathname raw: /?code=x at '//evil.com'
+    // made Location '//evil.com/' — a protocol-relative OPEN REDIRECT on
+    // the admin host (and the failure path inherited it). The path is
+    // now forced single-slash.
+    global.fetch = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: async () => ({ token: 't.jwt' }),
+    });
+
+    const req = new Request('https://admin.ozpos.my.id//evil.com/?code=valid');
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('/evil.com/'); // same-origin
   });
 });
