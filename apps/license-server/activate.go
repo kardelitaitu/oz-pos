@@ -304,6 +304,145 @@ func registerMachine(app core.App, machineID, tenantID string, checkOwnership bo
 	return false, nil
 }
 
+// handleReactivation serves the re-activation case: the key is already
+// activated by this email's tenant, so the email + key pair is sufficient
+// proof of ownership and the existing signed subscription is returned
+// WITHOUT requiring the api_key.
+//
+// Returns (handled, err) — handled=true when a response was written (the
+// caller must return err), false when the key is not in the activated state
+// and the caller should continue with the other key-status branches.
+//
+// LSE-11 phase A: a caller on email + key alone (a reinstall that lost the
+// key) gets the existing signed subscription — enough to run the POS — but
+// NOT a rotated api_key. The management credential now requires inbox proof:
+// the client requests a code (POST /api/v1/license/recover) and re-sends
+// activation with "recovery_code". Knowing only email + key therefore no
+// longer yields the tenant's renew/status credential.
+//
+// LSE-11 phase B (retained as defense in depth): actual rotations are
+// throttled to one per tenant per 24h and the owner is emailed on every
+// rotation.
+func handleReactivation(
+	app core.App,
+	e *core.RequestEvent,
+	req ActivateRequest,
+	tenant *core.Record,
+	keyRecord *core.Record,
+	keyStatus string,
+	activatedBy string,
+) (handled bool, err error) {
+	if !(keyStatus == "activated" && activatedBy == tenant.Id) {
+		return false, nil
+	}
+
+	// Find existing ACTIVE subscription. Use FindRecordsByFilter
+	// with explicit status='active' filter and order by -starts_at
+	// to get the latest. FindFirstRecordByData without a status
+	// filter would return an expired subscription for renewed
+	// tenants (SQLite returns in insertion order), breaking
+	// re-activation for any tenant who has ever renewed.
+	subs, err := app.FindRecordsByFilter(
+		"subscriptions",
+		"tenant_id = {:tenant_id} && status = 'active'",
+		"-starts_at", 1, 0,
+		map[string]any{"tenant_id": tenant.Id},
+	)
+	if err != nil || len(subs) == 0 {
+		return true, e.JSON(http.StatusInternalServerError, map[string]any{
+			"error": "failed to find active subscription for reused key",
+		})
+	}
+	subRecord := subs[0]
+
+	log.Printf("Re-activation: key=%q already activated by tenant=%q (email=%q), returning existing subscription",
+		req.Key, tenant.Id, req.Email)
+
+	// ── Machine count enforcement on re-activation ─────────
+	// Without this check, a Free-tier key holder could install
+	// on unlimited machines by repeatedly re-activating with the
+	// correct email+key pair. Use the ACTIVE SUBSCRIPTION's tier
+	// (not the key's tier) so that a tenant who downgraded via
+	// renewal is correctly subject to the lower tier's limits.
+	rTier := subRecord.GetString("tier_key")
+	rMax := maxMachinesForTier(rTier)
+	if msg := machineLimitExceeded(app, tenant.Id, req.MachineID, rTier, rMax); msg != "" {
+		return true, e.JSON(http.StatusConflict, map[string]any{
+			"error": msg,
+		})
+	}
+
+	// ── Register / update machine ──────────────────────────
+	// The key is already activated by this tenant (proven above),
+	// so ownership is assumed — no conflict check needed.
+	if _, saveErr := registerMachine(app, req.MachineID, tenant.Id, false); saveErr != nil {
+		log.Printf("H1 audit: machine registration failed on re-activation (id=%q tenant_id=%q): %v",
+			req.MachineID, tenant.Id, saveErr)
+	}
+
+	resp := map[string]any{
+		"signed_payload": subRecord.GetString("signed_payload"),
+		"signature":      subRecord.GetString("signature"),
+		"tenant_id":      tenant.Id,
+	}
+
+	// The stored api_key is a one-way bcrypt hash and can never
+	// be re-emitted. A caller who proved they hold the current
+	// key (email + key bound to this tenant AND a matching
+	// api_key) needs no re-emit.
+	if !verifyAPIKey(tenant.GetString("api_key"), req.APIKey) {
+		if req.RecoveryCode == "" {
+			resp["api_key_rotation"] = map[string]any{
+				"status": "recovery_required",
+			}
+		} else {
+			storedHash, codeOK := webOtpStore.takeCode(req.Email)
+			if !codeOK || !constantTimeHashEq(storedHash, hashOtpCode(req.RecoveryCode)) {
+				return true, e.JSON(http.StatusUnauthorized, map[string]any{
+					"error": "invalid or expired recovery code. Request a new code via POST /api/v1/license/recover.",
+				})
+			}
+			if !apiRotationLimiter.allow(tenant.Id) {
+				remaining := apiRotationLimiter.remainingSeconds(tenant.Id)
+				log.Printf("LSE-11: api_key rotation throttled for tenant %q (retry in %ds)", tenant.Id, remaining)
+				return true, e.JSON(http.StatusTooManyRequests, map[string]any{
+					"error":       "license management key was recently rotated. Check your email — if this wasn't you, contact support. Try again later.",
+					"retry_after": remaining,
+				})
+			}
+			newAPIKey := generateAPIKey()
+			apiKeyHash, apiKeyLookup, hashErr := hashAPIKey(newAPIKey)
+			if hashErr != nil {
+				log.Printf("Re-activation api_key rotation failed for tenant %q: %v", tenant.Id, hashErr)
+				return true, e.JSON(http.StatusInternalServerError, map[string]any{
+					"error": "failed to rotate api_key",
+				})
+			}
+			tenant.Set("api_key", apiKeyHash)
+			tenant.Set("api_key_lookup", apiKeyLookup)
+			if saveErr := app.Save(tenant); saveErr != nil {
+				log.Printf("Re-activation api_key rotation save failed for tenant %q: %v", tenant.Id, saveErr)
+				return true, e.JSON(http.StatusInternalServerError, map[string]any{
+					"error": "failed to rotate api_key",
+				})
+			}
+			// Notify the owner (best-effort, non-fatal). Send only
+			// after the save succeeded so we never email a rotation
+			// that didn't happen.
+			if noticeErr := sendAPIKeyRotationNotice(tenant.GetString("email")); noticeErr != nil {
+				log.Printf("LSE-11: rotation notice email failed for tenant %q: %v", tenant.Id, noticeErr)
+			}
+			resp["api_key"] = newAPIKey
+		}
+	}
+
+	// Clear any accumulated failure tracking for this key
+	// since the activation is valid.
+	keyFailTracker.clearKey(req.Key)
+
+	return true, e.JSON(http.StatusOK, resp)
+}
+
 func handleActivate(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		// Cap request body at 64KB to prevent OOM via oversized JSON payloads (M4 audit).
@@ -527,125 +666,8 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			// matches this email's tenant, return the existing subscription
 			// WITHOUT requiring the api_key. The email + key pair is sufficient
 			// proof that the caller owns this activation.
-			if keyStatus == "activated" && activatedBy == tenant.Id {
-				// Find existing ACTIVE subscription. Use FindRecordsByFilter
-				// with explicit status='active' filter and order by -starts_at
-				// to get the latest. FindFirstRecordByData without a status
-				// filter would return an expired subscription for renewed
-				// tenants (SQLite returns in insertion order), breaking
-				// re-activation for any tenant who has ever renewed.
-				subs, err := app.FindRecordsByFilter(
-					"subscriptions",
-					"tenant_id = {:tenant_id} && status = 'active'",
-					"-starts_at", 1, 0,
-					map[string]any{"tenant_id": tenant.Id},
-				)
-				if err != nil || len(subs) == 0 {
-					return e.JSON(http.StatusInternalServerError, map[string]any{
-						"error": "failed to find active subscription for reused key",
-					})
-				}
-				subRecord := subs[0]
-
-				log.Printf("Re-activation: key=%q already activated by tenant=%q (email=%q), returning existing subscription",
-					req.Key, tenant.Id, req.Email)
-
-				// ── Machine count enforcement on re-activation ─────────
-				// Without this check, a Free-tier key holder could install
-				// on unlimited machines by repeatedly re-activating with the
-				// correct email+key pair. Use the ACTIVE SUBSCRIPTION's tier
-				// (not the key's tier) so that a tenant who downgraded via
-				// renewal is correctly subject to the lower tier's limits.
-				rTier := subRecord.GetString("tier_key")
-				rMax := maxMachinesForTier(rTier)
-				if msg := machineLimitExceeded(app, tenant.Id, req.MachineID, rTier, rMax); msg != "" {
-					return e.JSON(http.StatusConflict, map[string]any{
-						"error": msg,
-					})
-				}
-
-				// ── Register / update machine ──────────────────────────
-				// The key is already activated by this tenant (proven above),
-				// so ownership is assumed — no conflict check needed.
-				if _, saveErr := registerMachine(app, req.MachineID, tenant.Id, false); saveErr != nil {
-					log.Printf("H1 audit: machine registration failed on re-activation (id=%q tenant_id=%q): %v",
-						req.MachineID, tenant.Id, saveErr)
-				}
-
-				resp := map[string]any{
-					"signed_payload": subRecord.GetString("signed_payload"),
-					"signature":      subRecord.GetString("signature"),
-					"tenant_id":      tenant.Id,
-				}
-
-				// The stored api_key is a one-way bcrypt hash and can never
-				// be re-emitted. A caller who proved they hold the current
-				// key (email + key bound to this tenant AND a matching
-				// api_key) needs no re-emit.
-				//
-				// LSE-11 phase A: a caller on email + key alone (a reinstall
-				// that lost the key) gets the existing signed subscription —
-				// enough to run the POS — but NOT a rotated api_key. The
-				// management credential now requires inbox proof: the client
-				// requests a code (POST /api/v1/license/recover) and re-sends
-				// activation with "recovery_code". Knowing only email + key
-				// therefore no longer yields the tenant's renew/status
-				// credential.
-				//
-				// LSE-11 phase B (retained as defense in depth): actual
-				// rotations are throttled to one per tenant per 24h and the
-				// owner is emailed on every rotation.
-				if !verifyAPIKey(tenant.GetString("api_key"), req.APIKey) {
-					if req.RecoveryCode == "" {
-						resp["api_key_rotation"] = map[string]any{
-							"status": "recovery_required",
-						}
-					} else {
-						storedHash, codeOK := webOtpStore.takeCode(req.Email)
-						if !codeOK || !constantTimeHashEq(storedHash, hashOtpCode(req.RecoveryCode)) {
-							return e.JSON(http.StatusUnauthorized, map[string]any{
-								"error": "invalid or expired recovery code. Request a new code via POST /api/v1/license/recover.",
-							})
-						}
-						if !apiRotationLimiter.allow(tenant.Id) {
-							remaining := apiRotationLimiter.remainingSeconds(tenant.Id)
-							log.Printf("LSE-11: api_key rotation throttled for tenant %q (retry in %ds)", tenant.Id, remaining)
-							return e.JSON(http.StatusTooManyRequests, map[string]any{
-								"error":       "license management key was recently rotated. Check your email — if this wasn't you, contact support. Try again later.",
-								"retry_after": remaining,
-							})
-						}
-						newAPIKey := generateAPIKey()
-						apiKeyHash, apiKeyLookup, hashErr := hashAPIKey(newAPIKey)
-						if hashErr != nil {
-							log.Printf("Re-activation api_key rotation failed for tenant %q: %v", tenant.Id, hashErr)
-							return e.JSON(http.StatusInternalServerError, map[string]any{
-								"error": "failed to rotate api_key",
-							})
-						}
-						tenant.Set("api_key", apiKeyHash)
-						tenant.Set("api_key_lookup", apiKeyLookup)
-						if saveErr := app.Save(tenant); saveErr != nil {
-							log.Printf("Re-activation api_key rotation save failed for tenant %q: %v", tenant.Id, saveErr)
-							return e.JSON(http.StatusInternalServerError, map[string]any{
-								"error": "failed to rotate api_key",
-							})
-						}
-						// Notify the owner (best-effort, non-fatal). Send only
-						// after the save succeeded so we never email a rotation
-						// that didn't happen.
-						if noticeErr := sendAPIKeyRotationNotice(tenant.GetString("email")); noticeErr != nil {
-							log.Printf("LSE-11: rotation notice email failed for tenant %q: %v", tenant.Id, noticeErr)
-						}
-						resp["api_key"] = newAPIKey
-					}
-				}
-
-				// Clear any accumulated failure tracking for this key
-				// since the activation is valid.
-				keyFailTracker.clearKey(req.Key)
-
-				return e.JSON(http.StatusOK, resp)
+			if handled, err := handleReactivation(app, e, req, tenant, keyRecord, keyStatus, activatedBy); handled {
+				return err
 			}
 
 			// ── Key activated by a different tenant ───────────────
