@@ -147,16 +147,31 @@ pub mod redis_cache {
         ttl_seconds: u64,
     }
 
+    /// Longest we will wait for a Redis connection.
+    ///
+    /// Both users of this live on paths where blocking for the OS TCP
+    /// default is worse than failing and degrading: `connect()` runs
+    /// during terminal startup against the user-editable `redis.url`
+    /// setting, and the pub/sub listener must keep polling its shutdown
+    /// channel. Shared so the two cannot drift apart.
+    const CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
     impl RedisCache {
         /// Connect to a Redis instance at the given URL.
+        ///
+        /// The attempt is bounded by [`CONNECT_TIMEOUT`]. An
+        /// unreachable-but-non-refusing host (firewalled, VLAN ACL,
+        /// reassigned DHCP address) would otherwise stall the caller for
+        /// the OS TCP connect default — measured ~21s on Windows, up to
+        /// ~2min on Linux — before `create_cache` could fall back.
         ///
         /// # Errors
         ///
         /// Returns a `RedisError` when the URL is invalid or the
-        /// connection cannot be established.
+        /// connection cannot be established within [`CONNECT_TIMEOUT`].
         pub fn connect(url: &str, ttl_seconds: u64) -> Result<Self, redis::RedisError> {
             let client = redis::Client::open(url)?;
-            let conn = client.get_connection()?;
+            let conn = client.get_connection_with_timeout(CONNECT_TIMEOUT)?;
             Ok(Self {
                 client,
                 conn: Mutex::new(conn),
@@ -186,19 +201,19 @@ pub mod redis_cache {
             // `redis::Client` is `Clone` (wraps an Arc internally), so we can cheaply
             // share it with the spawned thread.
             std::thread::spawn(move || {
-                // Connect with a 5-second timeout so the shutdown signal can be
-                // checked regularly even when no messages arrive.
-                let mut conn =
-                    match client.get_connection_with_timeout(std::time::Duration::from_secs(5)) {
-                        Ok(c) => c,
-                        Err(e) => {
-                            tracing::error!(
-                                error = %e,
-                                "failed to connect for inventory pub/sub"
-                            );
-                            return;
-                        }
-                    };
+                // Connect with a bounded timeout so the shutdown signal can
+                // be checked regularly even when no messages arrive, and so
+                // a dead Redis cannot strand this thread in connect.
+                let mut conn = match client.get_connection_with_timeout(CONNECT_TIMEOUT) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::error!(
+                            error = %e,
+                            "failed to connect for inventory pub/sub"
+                        );
+                        return;
+                    }
+                };
 
                 // Set read timeout on the TCP stream so `get_message()` unblocks.
                 let _ = conn.set_read_timeout(Some(std::time::Duration::from_secs(5)));
@@ -442,6 +457,10 @@ pub fn create_cache(redis_url: &str, ttl_seconds: u64) -> Arc<dyn Cache> {
 #[cfg(test)]
 #[path = "cache_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "cache_create_tests.rs"]
+mod create_tests;
 
 #[cfg(test)]
 #[path = "cache_pubsub_tests.rs"]
