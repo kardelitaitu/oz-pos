@@ -5,8 +5,9 @@
 ## Global Rules
 
 - Maintain documentation integrity. Preserve all existing comments and docstrings unless explicitly modified.
-- Never switch local branches unless explicitly asked by the user.
-- Never create new branches unless explicitly asked by the user.
+- **Never create new branches unless asked specifically by the user.** Always work directly on the currently active branch.
+- **Never switch local branches unless explicitly asked by the user.**
+- **Always commit changes using the format `<type>(<area>): <description>`** (e.g., `feat(sales): add gift card tender`, `fix(ui): resolve modal overflow`, `perf(ci): optimize path filters`).
 
 ## Quick Setup
 
@@ -107,9 +108,18 @@ npm ci --no-audit --no-fund
 - Front-end components must have a corresponding test in `ui/src/__tests__/`.
 
 ### Git & Branch Policy
-- Branch naming: `feat/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`, `test/<name>`, `refactor/<name>`.
-- **Always make a local commit after each major modification.** Whenever a logical task, feature step, or significant code change is completed and verified locally, commit it before moving on to the next task. The commit message must accurately and comprehensively explain what was changed across all committed files.
+- **Never create new branches unless asked specifically by the user.** Always work directly on the branch provided.
+- Branch naming (when explicitly requested by the user): `feat/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`, `test/<name>`, `refactor/<name>`.
+- **Commit Format Requirement:** Every commit message MUST strictly follow the conventional format:
+  ```
+  <type>(<area>): <description>
 
+  [optional body explaining changes, rationale, or issue references]
+  ```
+  - **`type`** must be one of: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`, `perf`, `ci`, `audit`.
+  - **`area`** indicates the domain, crate, or component (e.g. `sales`, `admin`, `website`, `ci`, `core`, `desktop-client`, `ui`, `licensing`).
+  - **`description`** is an imperative, concise description of the modification.
+- **Always make a local commit after each major modification.** Whenever a logical task, feature step, or significant code change is completed and verified locally, commit it before moving on to the next task. The commit message must accurately and comprehensively explain what was changed across all committed files.
 - **Never run `git push` without an explicit, direct order from the user.** Even after committing code or completing verification, always wait for the user to explicitly instruct you to push before executing any `git push` command.
 - All PRs must pass the CI pipeline (lint, test, build) before merging.
 
