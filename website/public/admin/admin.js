@@ -24,18 +24,15 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       const opts = { headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } };
       if (body) { opts.method = 'POST'; opts.body = body; }
       const res = await fetch(API + path, opts);
-      if (res.status === 401 || res.status === 403) {
+      if (isAuthDenied(res.status)) {
         document.getElementById('content').innerHTML =
           '<div class="card" style="text-align:center;padding:2rem">' +
-          '<h2 style="margin:0 0 .5rem;color:var(--bad)">Access denied</h2>' +
-          '<p class="empty">Your session is not authorized for the admin panel. ' +
-          'If you are the admin, please <a href="/__oz/logout" style="color:var(--accent)">sign in again</a>.</p>' +
+          '<h2 style="margin:0 0 .5rem;color:var(--bad)">' + t('auth.accessDenied') + '</h2>' +
+          '<p class="empty">' + t('auth.signInAgain') + '</p>' +
           '</div>';
         // Throw so callers don't overwrite the access-denied screen with a
         // generic error state (the fetch was fine; auth is the problem).
-        const err = new Error(path + ' (auth denied)');
-        err.authDenied = true;
-        throw err;
+        throw authDeniedError(path);
       }
       if (!res.ok) throw new Error(path + ' (' + res.status + ')');
       return res.json();
