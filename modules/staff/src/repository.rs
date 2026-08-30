@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-staff slice A: repository verified)
+crate: modules-staff | status: SAFE | lint: CLEAN
+findings: clean parameterized user/role queries
+next: none | perf: N/A
+*/
 //! Staff Repository — database persistence for users and roles.
 
 use crate::error::StaffError;

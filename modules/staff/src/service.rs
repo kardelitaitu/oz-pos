@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-staff slice A: service verified)
+crate: modules-staff | status: SAFE | lint: CLEAN
+findings: clean thin service facade
+next: none | perf: N/A
+*/
 //! Staff Service — user and role business workflows.
 
 use crate::error::StaffError;

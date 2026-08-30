@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-staff slice A: error verified)
+crate: modules-staff | status: SAFE | lint: CLEAN
+findings: clean thiserror staff error taxonomy
+next: none | perf: N/A
+*/
 //! Error type for the staff domain.
 
 use thiserror::Error;

@@ -1226,6 +1226,28 @@ layer).
 
 ---
 
+## 16. modules/staff — users, roles, RBAC delegation
+
+Baseline: ~724 production lines. Slice A — all 5 files (models.rs 433:
+production 1–197 fully read; repository/service/error verified; lib's
+prior remediation stamp (STAFF-01..13, remediated) replaced per
+campaign convention).
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| MSL-6 | ℹ️ INFO | modules/staff/src/models.rs:137 | Stale doc on `builtin_roles::STAFF` claims "Manager-level access minus settings", but the authoritative preset in platform-core's rbac catalog is **checkout-only** (40+ negative assertions). Docs-only drift; no code path uses the comment. | Update the doc comment in the fix-order phase. |
+
+models.rs otherwise delegates authorization to platform-core's rbac with
+fail-closed malformed-JSON semantics (an unparsable grant list authorizes
+nothing — test-pinned); repository/service/error clean.
+
+> **modules-staff COMPLETE** — 5 production files, ~724 lines. One INFO
+> (MSL-6). Campaign proceeds to modules/reporting.
+
+---
+
+---
+
 ---
 
 ---

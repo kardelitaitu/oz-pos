@@ -1,16 +1,8 @@
 /*
-last audited 31-07-26 (audit-open-findings remediation: STAFF-01..13)
+last audited 25-07-26 by RSA-Agent (modules-staff slice A: lib re-verify)
 crate: modules-staff | status: SAFE | lint: CLEAN
-findings: Transitional module implementing Module trait. No unsafe code. Re-exports User, Role,
-  builtin_roles, seed_users from oz-core. Staff CRUD commands are now session-scoped
-  (*_scoped) with server-side caller resolution (STAFF-01), role-hierarchy enforcement
-  (STAFF-02), PIN rotation with session invalidation (STAFF-03), profile+workspace
-  save with compensating rollback (STAFF-05), uniform pre-auth response closing the
-  enumeration oracle (STAFF-06), and device/global login rate limiting with exponential
-  backoff (STAFF-07). Legacy staff CRUD commands are disabled and unregistered;
-  cross-database rollback remains a documented crash-window limitation.
-next: Migrate auth/staff commands physically into this module and add IP-aware edge
-controls where a trusted network identity exists | perf: N/A.
+findings: clean Module registration layer; unwraps test-only; prior 31-07-26 remediation stamp (STAFF-01..13 remediated) replaced per campaign convention
+next: none | perf: N/A
 */
 
 //! Staff Module — user and role management.

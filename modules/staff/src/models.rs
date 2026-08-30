@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-staff slice A: models deep read)
+crate: modules-staff | status: SAFE | lint: CLEAN
+findings: MSL-6 INFO — stale doc on builtin_roles::STAFF claims Manager-minus-settings while the authoritative preset (platform-core rbac) is checkout-only (40+ negative assertions); docs-only drift, no code path. Otherwise exemplary: has_permission/permission_keys delegate to platform-core rbac with fail-closed malformed-JSON semantics (empty list authorizes nothing, test-pinned), UserId UUID v7
+next: fix STAFF doc comment in fix-order phase | perf: N/A
+*/
 //! Staff & Role domain models.
 
 use platform_core::rbac::{AuthorizationError, has_permission};
