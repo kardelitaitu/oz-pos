@@ -101,11 +101,11 @@ Key items:
 
 ## Money — Frontend (`32-money-frontend.md` — PARTIALLY REMEDIATED)
 
-**Status:** 3 findings closed, **1 open (deferred to Phase 5)**.
+**Status:** all 3 findings closed.
 
 - **FRONTEND-01** — PaymentModal charge-amount row inflates by base exponent (P1, FIXED)
 - **FRONTEND-02** — usePosState silently mixes currencies in the subtotal (P1, FIXED)
-- **FRONTEND-03** — IPC boundary drops line currency (P2, **DEFERRED to Phase 5 — open, needs backend change**)
+- ~~**FRONTEND-03** — IPC boundary drops line currency (P2, **DEFERRED to Phase 5 — open, needs backend change**)~~ — **CLOSED 2026-08-30**, commit `fc8eae22`: `AddLineArgs.unit_price_currency` (optional, wire-compatible) added on desktop + tablet; commands build the line in the wire currency so `Cart::add_line`'s (previously dead) mismatch check rejects cross-currency lines; invalid ISO codes fail closed. PaymentModal sends `line.unit_price.currency` on both sale paths. Pinned by tablet e2e (EUR line into USD cart → Err) + desktop serde-shape/helper tests + UI contract tests. **Follow-up (same class, not covered):** `CartLineData` in `complete_sale_with_resolved_shortfalls*` args still carries `unitPriceMinor` without currency.
 
 ---
 
