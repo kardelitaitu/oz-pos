@@ -1119,4 +1119,172 @@ mod tests {
             assert!(!is_sensitive(key), "{} must NOT be sensitive", key);
         }
     }
+
+    // ── Deeper edge cases ──────────────────────────────────────────
+
+    #[test]
+    fn validate_grant_empty_string_rejected() {
+        assert!(validate_grant("", false).is_err());
+    }
+
+    #[test]
+    fn validate_grant_whitespace_rejected() {
+        assert!(validate_grant(" sales:void ", false).is_err());
+        assert!(validate_grant(" *", false).is_err());
+        assert!(validate_grant("* ", false).is_err());
+    }
+
+    #[test]
+    fn validate_grant_unknown_domain_wildcard_rejected() {
+        assert!(validate_grant("unknown:*", false).is_err());
+    }
+
+    #[test]
+    fn validate_grant_space_before_asterisk_rejected() {
+        // "sales: *" is NOT a valid domain wildcard — space before asterisk.
+        assert!(validate_grant("sales: *", false).is_err());
+    }
+
+    #[test]
+    fn validate_grant_exact_sensitive_key_allowed() {
+        // Explicit grants of sensitive keys are the sanctioned way.
+        assert!(validate_grant(permissions::STAFF_DELETE, false).is_ok());
+        assert!(validate_grant(permissions::GIFTCARDS_ISSUE, false).is_ok());
+        assert!(validate_grant(permissions::SECURITY_MANAGE, false).is_ok());
+        assert!(validate_grant(permissions::DATA_EXPORT, false).is_ok());
+    }
+
+    #[test]
+    fn validate_grants_with_duplicates_all_pass() {
+        // Duplicate valid grants should all pass validation.
+        let grants = vec![
+            permissions::SALES_PROCESS.to_string(),
+            permissions::SALES_PROCESS.to_string(),
+            permissions::SALES_PROCESS.to_string(),
+        ];
+        assert!(validate_grants(&grants, false).is_ok());
+    }
+
+    #[test]
+    fn validate_grants_all_invalid_returns_all_errors() {
+        let grants = vec!["bad:one".into(), "bad:two".into(), "bad:three".into()];
+        let errs = validate_grants(&grants, false).unwrap_err();
+        assert_eq!(errs.len(), 3);
+    }
+
+    #[test]
+    fn lookup_empty_string_returns_none() {
+        assert!(lookup("").is_none());
+    }
+
+    #[test]
+    fn lookup_global_wildcard_returns_none() {
+        // "*" is not a registered key — it's a special token.
+        assert!(lookup("*").is_none());
+    }
+
+    #[test]
+    fn is_registered_global_wildcard_false() {
+        assert!(!is_registered("*"));
+    }
+
+    #[test]
+    fn is_registered_empty_string_false() {
+        assert!(!is_registered(""));
+    }
+
+    #[test]
+    fn registry_error_unknown_key_debug() {
+        let err = RegistryError::UnknownKey("test".into());
+        let debug = format!("{err:?}");
+        assert!(debug.contains("UnknownKey"));
+        assert!(debug.contains("test"));
+    }
+
+    #[test]
+    fn registry_error_sensitive_wildcard_debug() {
+        let err = RegistryError::SensitiveUnderWildcard("sales:*".into(), "sales:void".into());
+        let debug = format!("{err:?}");
+        assert!(debug.contains("SensitiveUnderWildcard"));
+    }
+
+    #[test]
+    fn registry_error_global_wildcard_debug() {
+        let err = RegistryError::GlobalWildcardDenied;
+        let debug = format!("{err:?}");
+        assert!(debug.contains("GlobalWildcardDenied"));
+    }
+
+    #[test]
+    fn every_family_has_at_least_one_key() {
+        // Every family present in the registry must have at least one key.
+        for family in families() {
+            let count = REGISTRY.iter().filter(|e| e.family == family).count();
+            assert!(count > 0, "family '{}' has no keys", family);
+        }
+    }
+
+    #[test]
+    fn family_count_matches_unique_families() {
+        let families = families();
+        // Should have at least 15 distinct families.
+        assert!(
+            families.len() >= 15,
+            "expected >= 15 families, got {}",
+            families.len()
+        );
+    }
+
+    #[test]
+    fn validate_grant_exact_non_sensitive_key_allowed() {
+        // Non-sensitive exact keys are always allowed.
+        assert!(validate_grant(permissions::SALES_PROCESS, false).is_ok());
+        assert!(validate_grant(permissions::PRODUCTS_READ, false).is_ok());
+        assert!(validate_grant(permissions::KDS_VIEW, false).is_ok());
+    }
+
+    #[test]
+    fn validate_grant_operational_family_wildcard_allowed() {
+        // Families with no sensitive keys should allow wildcards.
+        for family in ["products", "tables", "kds", "promotions", "discounts"] {
+            let wildcard = format!("{family}:*");
+            assert!(
+                validate_grant(&wildcard, false).is_ok(),
+                "operational wildcard {wildcard} should be allowed"
+            );
+        }
+    }
+
+    #[test]
+    fn sensitive_family_wildcard_rejected() {
+        // Families with sensitive keys must reject wildcards.
+        for family in [
+            "sales",
+            "staff",
+            "payments",
+            "reports",
+            "audit",
+            "giftcards",
+            "security",
+            "data",
+        ] {
+            let wildcard = format!("{family}:*");
+            assert!(
+                validate_grant(&wildcard, false).is_err(),
+                "sensitive family wildcard {wildcard} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn registry_is_send_and_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<PermissionEntry>();
+    }
+
+    #[test]
+    fn registry_error_is_send_and_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<RegistryError>();
+    }
 }

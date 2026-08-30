@@ -1529,4 +1529,165 @@ mod tests {
             }
         }
     }
+
+    // ── Deeper edge cases ──────────────────────────────────────────
+
+    #[test]
+    fn has_permission_empty_required_string() {
+        // Empty required string has no colon, so domain = "".
+        // Should only match "" (exact) or ":*" (domain wildcard for empty domain).
+        assert!(!has_permission(&["sales:void".into()], ""));
+        assert!(has_permission(&["*".into()], ""));
+    }
+
+    #[test]
+    fn has_permission_whitespace_in_granted_not_matched() {
+        // Leading/trailing whitespace in granted strings should NOT match.
+        assert!(!has_permission(&[" sales:void ".into()], "sales:void"));
+        assert!(!has_permission(&["* ".into()], "sales:void"));
+        assert!(!has_permission(&[" *".into()], "sales:void"));
+    }
+
+    #[test]
+    fn has_permission_multiple_wildcards_all_match() {
+        // Multiple wildcards in granted set — all should match.
+        let granted = vec!["*".into(), "sales:*".into(), "sales:void".into()];
+        assert!(has_permission(&granted, "sales:void"));
+        assert!(has_permission(&granted, "anything:here"));
+    }
+
+    #[test]
+    fn has_permission_domain_wildcard_and_exact_both_match() {
+        // Both domain wildcard and exact match present — should still work.
+        let granted = vec!["sales:*".into(), "sales:void".into()];
+        assert!(has_permission(&granted, "sales:void"));
+        assert!(has_permission(&granted, "sales:process"));
+    }
+
+    #[test]
+    fn role_authorize_with_global_wildcard() {
+        let role = Role::new("role-owner", "Owner").with_permissions_json("[\"*\"]");
+        assert!(role.authorize("anything:here").is_ok());
+        assert!(role.authorize("sales:void").is_ok());
+        assert!(role.authorize("settings:edit").is_ok());
+    }
+
+    #[test]
+    fn role_authorize_with_empty_permissions() {
+        let role = Role::new("role-empty", "Empty").with_permissions_json("[]");
+        assert!(role.authorize("sales:process").is_err());
+        assert!(role.authorize("*").is_err());
+    }
+
+    #[test]
+    fn role_has_permission_with_empty_string_required() {
+        let role = Role::new("role-test", "Test").with_permissions_json("[\"sales:void\"]");
+        // Empty string has no colon, so domain = "". No match.
+        assert!(!role.has_permission(""));
+    }
+
+    #[test]
+    fn role_preset_permissions_json_no_special_chars() {
+        // Ensure no permission strings contain characters that would
+        // break JSON serialization (quotes, backslashes, etc.).
+        for preset in ROLE_PRESETS {
+            for perm in preset.permissions {
+                assert!(
+                    !perm.contains('"'),
+                    "permission '{perm}' contains double quote"
+                );
+                assert!(
+                    !perm.contains('\\'),
+                    "permission '{perm}' contains backslash"
+                );
+                assert!(!perm.contains('\n'), "permission '{perm}' contains newline");
+            }
+        }
+    }
+
+    #[test]
+    fn role_preset_owner_has_only_global_wildcard() {
+        // Owner should have exactly ["*"] — no other permissions.
+        let owner = ROLE_PRESETS
+            .iter()
+            .find(|p| p.id == builtin_roles::OWNER)
+            .expect("owner preset");
+        assert_eq!(owner.permissions, &["*"]);
+    }
+
+    #[test]
+    fn role_preset_all_ids_start_with_role() {
+        // All built-in role IDs must start with "role-" prefix.
+        for preset in ROLE_PRESETS {
+            assert!(
+                preset.id.starts_with("role-"),
+                "role ID '{}' must start with 'role-'",
+                preset.id
+            );
+        }
+    }
+
+    #[test]
+    fn role_preset_names_are_title_case() {
+        // All built-in role names should be human-readable title case.
+        for preset in ROLE_PRESETS {
+            let name = preset.name;
+            assert!(!name.is_empty(), "role name must not be empty");
+            assert!(
+                name.chars().next().unwrap().is_uppercase(),
+                "role name '{}' should start with uppercase",
+                name
+            );
+        }
+    }
+
+    #[test]
+    fn all_enforced_no_duplicate_domains() {
+        // Each permission should have a unique domain:action pair.
+        use std::collections::HashSet;
+        let mut seen = HashSet::new();
+        for &p in ALL_ENFORCED {
+            assert!(seen.insert(p), "duplicate in ALL_ENFORCED: {p}");
+        }
+    }
+
+    #[test]
+    fn has_permission_case_sensitive() {
+        // Permission matching is case-sensitive.
+        assert!(!has_permission(&["Sales:Void".into()], "sales:void"));
+        assert!(!has_permission(&["sales:void".into()], "Sales:Void"));
+        assert!(has_permission(&["SALES:VOID".into()], "SALES:VOID"));
+    }
+
+    #[test]
+    fn role_serde_json_field_names() {
+        let role = Role::new("role-test", "Test")
+            .with_description("A test role")
+            .with_permissions_json("[\"sales:void\"]");
+        let json = serde_json::to_value(&role).unwrap();
+        assert_eq!(json["id"], "role-test");
+        assert_eq!(json["name"], "Test");
+        assert_eq!(json["description"], "A test role");
+        assert!(json["permissions"].is_string());
+    }
+
+    #[test]
+    fn authorization_error_is_send_and_sync() {
+        // AuthorizationError must be Send + Sync for use across threads.
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<AuthorizationError>();
+    }
+
+    #[test]
+    fn role_is_send_and_sync() {
+        // Role must be Send + Sync for use across threads.
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<Role>();
+    }
+
+    #[test]
+    fn permission_is_send_and_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<Permission>();
+    }
 }
