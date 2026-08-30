@@ -1,0 +1,138 @@
+---
+export function getStaticPaths() {
+  return [{ params: { locale: 'en' } }, { params: { locale: 'id' } }];
+}
+import Base from '../../layouts/Base.astro';
+import { t, dict } from '../../i18n';
+
+const locale = Astro.currentLocale ?? 'en';
+const pageTitle = `OZ-POS — ${t(locale, 'nav.tdd')}`;
+const tddData = dict(locale).tdd as {
+  title: string;
+  subtitle: string;
+  description: string;
+  phases: { title: string; description: string }[];
+  goldenRules: { rule: string; why: string }[];
+  tools: { name: string; description: string }[];
+  layers: { layer: string; location: string; convention: string }[];
+};
+
+const phaseIcons = [
+  // 1. Analyze — magnifying glass
+  `<svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>`,
+  // 2. Find Weaknesses — target
+  `<svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`,
+  // 3. Red — x circle
+  `<svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>`,
+  // 4. Green — check circle
+  `<svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>`,
+  // 5. Refactor — refresh
+  `<svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>`,
+  // 6. Verify — shield
+  `<svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>`,
+  // 7. Commit — git branch
+  `<svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>`,
+];
+---
+
+<Base title={pageTitle} description={t(locale, 'pageDesc.tdd')}>
+  <section class="mx-auto max-w-4xl px-4 py-16">
+    <!-- Header -->
+    <div data-reveal class="text-center">
+      <h1 class="text-4xl font-bold">{tddData.title}</h1>
+      <p class="mt-3 text-xl text-muted max-w-2xl mx-auto">{tddData.subtitle}</p>
+      <p class="mt-4 text-[15px] leading-relaxed text-muted/80 max-w-3xl mx-auto">{tddData.description}</p>
+    </div>
+
+    <!-- The 7-Phase Loop -->
+    <div data-reveal class="mt-16">
+      <h2 class="text-2xl font-bold text-center mb-10">The 7-Phase Loop</h2>
+      <div class="space-y-6">
+        {
+          tddData.phases.map((phase, i) => (
+            <div class="group relative flex gap-5 rounded-xl border border-ink/10 bg-surface/60 p-6 transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
+              {/* Phase number + icon */}
+              <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary transition-all duration-300 group-hover:bg-primary group-hover:text-white group-hover:shadow-md group-hover:shadow-primary/20">
+                <span class="text-sm font-bold">{i + 1}</span>
+              </div>
+              <div>
+                <h3 class="text-lg font-bold text-ink">{phase.title}</h3>
+                <p class="mt-1 text-[15px] leading-relaxed text-muted">{phase.description}</p>
+              </div>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+
+    <!-- Golden Rules -->
+    <div data-reveal class="mt-20">
+      <h2 class="text-2xl font-bold text-center mb-10">Golden Rules</h2>
+      <div class="grid gap-6 sm:grid-cols-2">
+        {
+          tddData.goldenRules.map((r) => (
+            <article class="rounded-xl border border-ink/10 bg-surface/60 p-6">
+              <h3 class="font-semibold text-ink">{r.rule}</h3>
+              <p class="mt-2 text-sm text-muted leading-relaxed">{r.why}</p>
+            </article>
+          ))
+        }
+      </div>
+    </div>
+
+    <!-- TDD Tooling -->
+    <div data-reveal class="mt-20">
+      <h2 class="text-2xl font-bold text-center mb-4">Fast TDD Loop Tooling</h2>
+      <p class="text-center text-muted mb-10 max-w-2xl mx-auto">
+        The workspace ships dedicated scripts so Red → Green → Refactor iterations are seconds long, not minutes.
+      </p>
+      <div class="grid gap-6 sm:grid-cols-2">
+        {
+          tddData.tools.map((tool) => (
+            <div class="rounded-xl border border-ink/10 bg-surface/60 p-6">
+              <code class="text-sm font-bold text-primary bg-primary/10 px-2 py-1 rounded">{tool.name}</code>
+              <p class="mt-3 text-[15px] text-muted leading-relaxed">{tool.description}</p>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+
+    <!-- Per-Layer Conventions -->
+    <div data-reveal class="mt-20">
+      <h2 class="text-2xl font-bold text-center mb-10">Per-Layer Testing Conventions</h2>
+      <div class="overflow-x-auto rounded-xl border border-ink/10 bg-surface/60">
+        <table class="w-full min-w-[640px] border-collapse text-left text-sm">
+          <thead>
+            <tr class="border-b border-ink/10 bg-ink/5">
+              <th scope="col" class="px-6 py-4 font-semibold text-ink">Layer</th>
+              <th scope="col" class="px-6 py-4 font-semibold text-ink">Test Location</th>
+              <th scope="col" class="px-6 py-4 font-semibold text-ink">Convention</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-ink/5">
+            {
+              tddData.layers.map((l) => (
+                <tr class="hover:bg-ink/[0.02]">
+                  <td class="px-6 py-4 font-medium text-ink">{l.layer}</td>
+                  <td class="px-6 py-4 text-muted">{l.location}</td>
+                  <td class="px-6 py-4 text-muted">{l.convention}</td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <div data-reveal class="mt-16 text-center">
+      <a
+        href="/en/docs/"
+        class="rounded-md bg-primary px-6 py-3 font-semibold text-white transition-all duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] hover:opacity-90 hover:scale-[1.03] active:scale-[0.97]"
+      >
+        Read the Full Docs →
+      </a>
+    </div>
+  </section>
+</Base>

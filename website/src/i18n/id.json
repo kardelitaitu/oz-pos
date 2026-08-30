@@ -15,7 +15,8 @@
     "theme": "Ganti tema",
     "language": "Bahasa",
     "homeAria": "Beranda OZ-POS",
-    "mainNav": "Navigasi utama"
+    "mainNav": "Navigasi utama",
+    "tdd": "TDD"
   },
   "pageDesc": {
     "features": "Kasir offline-first: penjualan, shift, dan stok yang tetap berjalan tanpa koneksi sama sekali.",
@@ -26,7 +27,8 @@
     "account": "Lisensi, langganan, dan informasi penagihan OZ-POS Anda.",
     "privacy": "Bagaimana OZ-POS mengumpulkan, menggunakan, dan melindungi data Anda.",
     "terms": "Ketentuan yang mengatur penggunaan OZ-POS Anda.",
-    "signup": "Buat akun OZ-POS Anda — buat kata sandi dan verifikasi email."
+    "signup": "Buat akun OZ-POS Anda — buat kata sandi dan verifikasi email.",
+    "tdd": "Bagaimana OZ-POS menggunakan test-driven development untuk menghasilkan perangkat lunak yang andal."
   },
   "support": {
     "title": "Dukungan",
@@ -556,6 +558,40 @@
         "Pembayaran native QRIS yang sudah dipakai pelanggan Anda."
       ]
     }
+  },
+  "tdd": {
+    "title": "Test-Driven Development di OZ-POS",
+    "subtitle": "Setiap perbaikan bug, fitur, dan refactor dimulai dengan test yang gagal.",
+    "description": "OZ-POS mengikuti alur kerja TDD 7 fase yang disiplin yang membuat bug dapat direproduksi sebelum diperbaiki, menjaga setiap perbaikan tercatat dalam regression test, dan menghasilkan commit yang kecil, dapat ditinjau, dan terdokumentasi dengan baik.",
+    "phases": [
+      { "title": "Analisis", "description": "Baca kode yang relevan dan pemanggilnya, catat apa yang belum diuji, dan pilih potongan yang paling kecil dan berharga — satu perilaku, satu jalur error, satu invariant." },
+      { "title": "Temukan Kelemahan", "description": "Temukan masalah konkret dengan bukti: test yang gagal, log, temuan audit, atau komentar code review. Reproduksi kelemahan dalam test sebelum menyentuh kode." },
+      { "title": "Red (Merah)", "description": "Tulis test yang paling kecil dan gagal yang mengekspresikan perilaku yang diinginkan. Pastikan test gagal karena alasan yang tepat — assertion, bukan error kompilasi." },
+      { "title": "Green (Hijau)", "description": "Tulis kode minimal yang membuat test pass. Tanpa polesan berlebih, tanpa generalisasi spekulatif. Ikuti konvensi layer: Money dalam i64 minor units, transaksi rusqlite, error thiserror." },
+      { "title": "Refactor", "description": "Bersihkan dengan safety net aktif. Hapus duplikasi, rename untuk kejelasan, ekstrak helper. Test harus tetap green. Jalankan cargo fmt." },
+      { "title": "Verifikasi", "description": "Konfirmasi perbaikan dan tidak ada regresi, terfokus pada area yang diubah. Gunakan test-tdd.sh, test-changed.sh, clippy, dan fmt. check.sh hanya sebelum push." },
+      { "title": "Commit", "description": "Kecil, fokus, terdeskripsi dengan baik saat konteks masih segar. Conventional Commits, satu perilaku per commit, dengan journal entry yang mencatat alasannya." }
+    ],
+    "goldenRules": [
+      { "rule": "Test first. Jangan pernah menulis kode implementasi tanpa test yang gagal.", "why": "Test adalah spesifikasi. Tanpa Red terlebih dahulu, Green tidak membuktikan apa-apa." },
+      { "rule": "Pilih potongan paling kecil yang berharga.", "why": "Siklus satu perilaku itu cepat, dapat ditinjau, dan dapat dibiseksi. Perubahan besar adalah banyak siklus TDD kecil." },
+      { "rule": "Setiap perbaikan harus menyertakan regression test.", "why": "Test adalah satu-satunya catatan tahan lama dari bug. Tanpa test, tanpa perbaikan." },
+      { "rule": "Bukti mengalahkan asumsi.", "why": "Test yang gagal, baris log, atau temuan audit adalah bukti. Saya rasa ini lambat bukan bukti." },
+      { "rule": "Jurnal, dokumen, dan commit saat konteks masih segar.", "why": "Anda yang 20 menit lalu tahu mengapa kode ini seperti sekarang. Catat sebelum hilang." },
+      { "rule": "Jangan pernah git push.", "why": "Skill ini berakhir di commit. Yang push adalah manusia." }
+    ],
+    "tools": [
+      { "name": "test-tdd.sh", "description": "Loop cepat untuk satu crate. Mode watch menjalankan ulang test setiap perubahan .rs menggunakan profile.tdd." },
+      { "name": "test-changed.sh", "description": "Menjalankan test hanya untuk crate yang file-nya berubah vs origin/main. Menangkap regresi dengan cepat." },
+      { "name": "test-ui-changed.sh", "description": "vitest --changed, hanya test UI yang terpengaruh oleh file yang diubah." },
+      { "name": "cargo nextest", "description": "Test runner paralel dengan automatic fail-fast, retries, dan output terstruktur." }
+    ],
+    "layers": [
+      { "layer": "Crate Rust", "location": "mod tests di bawah setiap module", "convention": "Setiap module baru perlu minimal 1 unit test. Test boleh menggunakan unwrap dengan bebas. Test DB menggunakan transaksi dan assert atomicitas." },
+      { "layer": "Komponen React", "location": "ui/src/__tests__, satu file test per komponen", "convention": "Gunakan id localized, assert pada output yang dirender, bukan detail implementasi." },
+      { "layer": "Perintah Tauri", "location": "Test modul perintah + contract test", "convention": "Contract test mengunci bentuk IPC wire antara Rust dan TypeScript." },
+      { "layer": "Driver HAL", "location": "crates/oz-hal/src/drivers/mock.rs", "convention": "Setiap driver perlu mock wajib untuk testing. CI gagal tanpanya." }
+    ]
   },
   "enterpriseTrial": {
     "title": "Trial Enterprise Mandiri",

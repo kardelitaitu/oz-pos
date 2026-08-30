@@ -15,7 +15,8 @@
     "theme": "Toggle theme",
     "language": "Language",
     "homeAria": "OZ-POS home",
-    "mainNav": "Main navigation"
+    "mainNav": "Main navigation",
+    "tdd": "TDD"
   },
   "pageDesc": {
     "features": "Offline-first point of sale: sales, shifts, and stock that keep working with zero connectivity.",
@@ -26,7 +27,8 @@
     "account": "Your OZ-POS license, subscription, and billing information.",
     "privacy": "How OZ-POS collects, uses, and protects your data.",
     "terms": "The terms that govern your use of OZ-POS.",
-    "signup": "Create your OZ-POS account — set a password and verify your email."
+    "signup": "Create your OZ-POS account — set a password and verify your email.",
+    "tdd": "How OZ-POS uses test-driven development to ship reliable software."
   },
   "support": {
     "title": "Support",
@@ -556,6 +558,40 @@
         "QRIS-native payments your customers already use."
       ]
     }
+  },
+  "tdd": {
+    "title": "Test-Driven Development at OZ-POS",
+    "subtitle": "Every bug fix, feature, and refactor starts with a failing test.",
+    "description": "OZ-POS follows a disciplined 7-phase TDD workflow that makes bugs reproducible before they are fixed, keeps every fix attached to a regression test, and produces small, reviewable, well-documented commits.",
+    "phases": [
+      { "title": "Analyze", "description": "Read the relevant code and its callers, note what is untested, and pick the smallest valuable slice — one behavior, one error path, one invariant." },
+      { "title": "Find Weaknesses", "description": "Spot concrete problems with evidence: failing tests, logs, audit findings, or code review comments. Reproduce the weakness in a test before touching any code." },
+      { "title": "Red", "description": "Write the smallest failing test that expresses the desired behavior. Confirm it fails for the right reason — the assertion, not a compile error." },
+      { "title": "Green", "description": "Write the minimal code that makes the test pass. No gold-plating, no speculative generality. Follow the layer conventions: Money in i64 minor units, rusqlite transactions, thiserror errors." },
+      { "title": "Refactor", "description": "Clean up with the safety net on. Remove duplication, rename for clarity, extract helpers. The test must stay green. Run cargo fmt." },
+      { "title": "Verify", "description": "Confirm the fix and no regressions, scoped to the changed area. Use test-tdd.sh, test-changed.sh, clippy, and fmt. Full check.sh only before push." },
+      { "title": "Commit", "description": "Small, focused, well-described while context is fresh. Conventional Commits, one behavior per commit, with a journal entry recording the why." }
+    ],
+    "goldenRules": [
+      { "rule": "Test first. Never write implementation code without a failing test in flight.", "why": "The test is the specification. Without Red first, Green proves nothing." },
+      { "rule": "Pick the smallest valuable slice.", "why": "A one-behavior cycle is fast, reviewable, and bisectable. Big changes are many small TDD cycles." },
+      { "rule": "Every fix ships with its regression test.", "why": "The test is the only durable record of the bug. No test, no fix." },
+      { "rule": "Evidence over assertion.", "why": "A failing test, a log line, or an audit entry is evidence. I think this is slow is not." },
+      { "rule": "Journal, docs, and commit while context is fresh.", "why": "The 20-minute-old-you knows why the code is the way it is. Record it before it evaporates." },
+      { "rule": "Never git push.", "why": "The skill ends at commit. The human pushes." }
+    ],
+    "tools": [
+      { "name": "test-tdd.sh", "description": "Fast loop for one crate. Watch mode re-runs tests on every .rs change using the profile.tdd speed profile." },
+      { "name": "test-changed.sh", "description": "Runs tests only for crates whose files changed vs origin/main. Catches regressions fast." },
+      { "name": "test-ui-changed.sh", "description": "vitest --changed, only UI tests affected by changed files." },
+      { "name": "cargo nextest", "description": "Parallel test runner with automatic fail-fast, retries, and structured output." }
+    ],
+    "layers": [
+      { "layer": "Rust crate", "location": "mod tests at the bottom of each module", "convention": "Every new module needs at least 1 unit test. Tests may use unwrap freely. DB tests use transactions and assert atomicity." },
+      { "layer": "React component", "location": "ui/src/__tests__, one test file per component", "convention": "Use localized ids, assert on rendered output, not implementation details." },
+      { "layer": "Tauri command", "location": "Command module tests + contract tests", "convention": "Contract tests pin the IPC wire shape between Rust and TypeScript." },
+      { "layer": "HAL driver", "location": "crates/oz-hal/src/drivers/mock.rs", "convention": "Every driver needs a mandatory mock for testing. CI fails without it." }
+    ]
   },
   "enterpriseTrial": {
     "title": "Enterprise Self-Serve Trial",
