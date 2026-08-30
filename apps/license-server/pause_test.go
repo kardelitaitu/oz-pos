@@ -295,3 +295,127 @@ func TestPauseResume_RateLimited(t *testing.T) {
 		t.Fatalf("resume: expected 429 once the IP budget is exhausted, got %d: %s", rec2.Code, rec2.Body.String())
 	}
 }
+
+// ── LSE-15: pausing must freeze the paid period, not consume it ──────
+
+// TestResumeSubscription_ExtendsExpiryByPausedDuration pins the LSE-15
+// fix: an early manual resume extends expires_at by the ACTUAL paused
+// duration and re-signs the payload (the old code only flipped the
+// status — the customer silently lost the paused months despite the doc
+// comment claiming "resets the billing cycle").
+func TestResumeSubscription_ExtendsExpiryByPausedDuration(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	tenantID := "lse15tenant0001" // 15 chars
+	apiKey := "oz_lse15resume01"
+	seedTenant(t, app, tenantID, apiKey, "active")
+	seedSubscriptionForPause(t, app, tenantID, "plus", "paused")
+
+	// Simulate a pause that started 10 days ago out of a 3-month window.
+	sub, err := app.FindFirstRecordByFilter("subscriptions",
+		"tenant_id = {:tid}", map[string]any{"tid": tenantID})
+	if err != nil {
+		t.Fatalf("find seeded sub: %v", err)
+	}
+	sub.Set("paused_at", time.Now().UTC().Add(-10*24*time.Hour))
+	sub.Set("paused_until", time.Now().UTC().AddDate(0, 3, 0))
+	if err := app.Save(sub); err != nil {
+		t.Fatalf("set pause timestamps: %v", err)
+	}
+	originalExpiry := sub.GetDateTime("expires_at").Time()
+	originalSignature := sub.GetString("signature")
+
+	body := servePost(t, se, "/api/v1/license/resume", "Bearer "+apiKey, nil, "")
+	if body.Code != 200 {
+		t.Fatalf("expected 200 for resume, got %d: %s", body.Code, body.Body.String())
+	}
+
+	resumed, err := app.FindFirstRecordByFilter("subscriptions",
+		"tenant_id = {:tid} && status = 'active'", map[string]any{"tid": tenantID})
+	if err != nil {
+		t.Fatalf("subscription not active after resume: %v", err)
+	}
+
+	newExpiry := resumed.GetDateTime("expires_at").Time()
+	want := originalExpiry.Add(10 * 24 * time.Hour)
+	diff := newExpiry.Sub(want)
+	if diff < -2*time.Minute || diff > 2*time.Minute {
+		t.Errorf("expires_at should be extended by exactly the 10 paused days: got %v, want %v (diff %v)",
+			newExpiry, want, diff)
+	}
+
+	// grace_until must be recomputed from the new expiry.
+	wantGrace := calculateGraceUntil(newExpiry)
+	graceDiff := resumed.GetDateTime("grace_until").Time().Sub(wantGrace)
+	if graceDiff < -2*time.Minute || graceDiff > 2*time.Minute {
+		t.Errorf("grace_until not recomputed: got %v, want %v",
+			resumed.GetDateTime("grace_until").Time(), wantGrace)
+	}
+
+	// The payload must have been RE-SIGNED, not left as the seeded stub.
+	if resumed.GetString("signature") == originalSignature {
+		t.Error("signature was not renewed on resume — payload still stale")
+	}
+	if resumed.GetString("signature") == "" || resumed.GetString("signed_payload") == "" {
+		t.Error("signed_payload/signature must be set after resume")
+	}
+
+	// The response carries the fresh signed payload for the device.
+	var resp map[string]any
+	if err := json.Unmarshal(body.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("parse response: %v", err)
+	}
+	if resp["signed_payload"] == nil || resp["signature"] == nil {
+		t.Error("resume response must include signed_payload and signature (device offline sync)")
+	}
+}
+
+// TestAutoResumeScanner_ResumesPastPauseWindow pins the scanner side of
+// LSE-15: a subscription whose paused_until passed with no resume call is
+// resumed by the scanner with the PLANNED pause length credited (not the
+// extra time the record sat unresumed).
+func TestAutoResumeScanner_ResumesPastPauseWindow(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	tenantID := "lse15scantest01" // 15 chars
+	apiKey := "oz_lse15scan001"
+	seedTenant(t, app, tenantID, apiKey, "active")
+	seedSubscriptionForPause(t, app, tenantID, "pro", "paused")
+
+	sub, err := app.FindFirstRecordByFilter("subscriptions",
+		"tenant_id = {:tid}", map[string]any{"tid": tenantID})
+	if err != nil {
+		t.Fatalf("find seeded sub: %v", err)
+	}
+	// Pause started 100 days ago, planned for 90 days → ended 10 days ago.
+	sub.Set("paused_at", time.Now().UTC().Add(-100*24*time.Hour))
+	sub.Set("paused_until", time.Now().UTC().Add(-10*24*time.Hour))
+	if err := app.Save(sub); err != nil {
+		t.Fatalf("set pause timestamps: %v", err)
+	}
+	originalExpiry := sub.GetDateTime("expires_at").Time()
+
+	runAutoResumeScanner(app)
+
+	resumed, err := app.FindFirstRecordByFilter("subscriptions",
+		"tenant_id = {:tid} && status = 'active'", map[string]any{"tid": tenantID})
+	if err != nil {
+		t.Fatalf("scanner did not resume the subscription: %v", err)
+	}
+
+	// Extension = planned pause (90 days), NOT the elapsed 100 days.
+	want := originalExpiry.Add(90 * 24 * time.Hour)
+	diff := resumed.GetDateTime("expires_at").Time().Sub(want)
+	if diff < -2*time.Minute || diff > 2*time.Minute {
+		t.Errorf("expires_at should be extended by the planned 90 pause days: got %v, want %v (diff %v)",
+			resumed.GetDateTime("expires_at").Time(), want, diff)
+	}
+	if !resumed.GetDateTime("paused_until").IsZero() {
+		t.Error("paused_until should be cleared after auto-resume")
+	}
+	_ = se
+}

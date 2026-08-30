@@ -320,6 +320,12 @@ func main() {
 		}
 		go startTrialEmailScheduler(app)
 
+		// ── Auto-resume scanner (LSE-15) ───────────────────────────
+		// Daily scan that resumes paused subscriptions whose pause window
+		// has passed — extending expires_at and re-signing the payload,
+		// exactly like a manual /resume call.
+		go startAutoResumeScanner(app)
+
 		// ── Admin password rotation reminder (ADR #42 security) ────
 		// Emails the superuser when the admin password is older than 120
 		// days, repeating every 30 days until changed. The hook stamps

@@ -116,6 +116,10 @@ func buildLicenseRecoveryEmail(from, to, code string) []byte {
 //   - 400: malformed body.
 func handleLicenseRecover(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
+		// Cap request body at 16KB — same bound as the other public
+		// endpoints (webMaxBodyBytes); the payload is two short strings.
+		e.Request.Body = http.MaxBytesReader(e.Response, e.Request.Body, 16*1024)
+
 		var body struct {
 			Email string `json:"email"`
 			Key   string `json:"key"`

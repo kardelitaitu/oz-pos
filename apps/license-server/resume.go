@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"time"
@@ -11,10 +12,13 @@ import (
 // handleResume returns an HTTP handler that resumes a paused subscription.
 //
 // Resume subscription (C3.3):
-// - Finds the paused subscription for the tenant
-// - Sets status = "active", clears paused_at and paused_until
-// - Resets the billing cycle from now
-// - The subscription continues until the next renewal date
+//   - Finds the paused subscription for this tenant
+//   - Extends expires_at (+ grace_until) by the paused duration and re-signs
+//     the payload (LSE-15): pausing freezes the paid period instead of
+//     consuming it, and the device's offline-verified payload stays in sync
+//     with the server record
+//   - Sets status = "active", clears paused_at and paused_until
+//   - Returns the fresh signed_payload + signature like renew does
 func handleResume(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		// Cap request body at 64KB to prevent OOM via oversized JSON payloads (M4 audit).
@@ -53,32 +57,134 @@ func handleResume(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
-		// Check if the pause has expired (auto-resume)
-		pausedUntil := sub.GetDateTime("paused_until").Time()
-		now := time.Now().UTC()
-		if !pausedUntil.IsZero() && now.After(pausedUntil) {
-			// Pause expired, auto-resume
-			log.Printf("resume: subscription %s pause expired at %s, auto-resuming",
-				sub.Id, pausedUntil.Format(time.RFC3339))
-		}
-
-		// Resume the subscription
-		sub.Set("status", "active")
-		sub.Set("paused_at", nil)
-		sub.Set("paused_until", nil)
-
-		if err := app.Save(sub); err != nil {
-			log.Printf("resume: failed to save subscription %s: %v", sub.Id, err)
+		// ── LSE-15: extend the billing window by the paused duration ──
+		// The pause is supposed to freeze the paid period, not consume it.
+		// Shared with the auto-resume scanner below.
+		payloadStr, signature, _, err := resumeSubscription(app, sub, time.Now().UTC())
+		if err != nil {
+			log.Printf("resume: failed to resume subscription %s: %v", sub.Id, err)
 			return e.JSON(http.StatusInternalServerError, map[string]any{
 				"error": "failed to resume subscription",
 			})
 		}
 
-		log.Printf("resume: subscription %s resumed", sub.Id)
-
+		// Return the fresh signed payload so the device's offline-verified
+		// copy updates on the same call (same contract as renew).
 		return e.JSON(http.StatusOK, map[string]any{
-			"status":   "active",
-			"tier_key": sub.GetString("tier_key"),
+			"status":         "active",
+			"tier_key":       sub.GetString("tier_key"),
+			"signed_payload": payloadStr,
+			"signature":      signature,
 		})
 	}
+}
+
+// resumeSubscription ends a pause (LSE-15): extends expires_at + grace_until
+// by the time actually spent paused, capped at the planned pause end, then
+// re-signs the payload — exactly like renew does — and saves the record.
+// Pausing freezes the paid period instead of consuming it, and the device's
+// offline-verified payload stays in sync with the server record.
+//
+// Used by handleResume (early manual resume) and runAutoResumeScanner
+// (paused_until passed with no resume call).
+func resumeSubscription(app core.App, sub *core.Record, now time.Time) (payloadStr, signature string, newExpiresAt time.Time, err error) {
+	pausedAt := sub.GetDateTime("paused_at").Time()
+	pausedUntil := sub.GetDateTime("paused_until").Time()
+	oldExpiresAt := sub.GetDateTime("expires_at").Time()
+
+	// Credit the time actually spent paused, capped at the planned pause
+	// end: an early manual resume gets exactly the elapsed pause back; a
+	// late/auto resume (paused_until already past) gets the PLANNED pause
+	// length, not the extra time the record sat unresumed afterwards.
+	extension := time.Duration(0)
+	if !pausedAt.IsZero() {
+		end := now
+		if !pausedUntil.IsZero() && pausedUntil.Before(now) {
+			end = pausedUntil
+		}
+		if end.After(pausedAt) {
+			extension = end.Sub(pausedAt)
+		}
+	}
+	newExpiresAt = oldExpiresAt.Add(extension)
+	newGraceUntil := calculateGraceUntil(newExpiresAt)
+
+	// Quota fields come from the paused subscription row itself so the
+	// re-signed payload matches the DB exactly.
+	var allowedTypes []string
+	if err := json.Unmarshal([]byte(sub.GetString("allowed_types")), &allowedTypes); err != nil {
+		allowedTypes = []string{}
+	}
+	resumed := SubscriptionPayload{
+		TenantID:        sub.GetString("tenant_id"),
+		TierKey:         sub.GetString("tier_key"),
+		Status:          "active",
+		MaxStores:       sub.GetInt("max_stores"),
+		MaxPOSInstances: sub.GetInt("max_pos_instances"),
+		AllowedTypes:    allowedTypes,
+		StartsAt:        sub.GetDateTime("starts_at").Time().Format(time.RFC3339),
+		ExpiresAt:       newExpiresAt.Format(time.RFC3339),
+		GraceUntil:      newGraceUntil.Format(time.RFC3339),
+		IssuedAt:        now.Format(time.RFC3339),
+	}
+	payloadStr, signature, err = signSubscription(resumed)
+	if err != nil {
+		return "", "", time.Time{}, err
+	}
+
+	sub.Set("status", "active")
+	sub.Set("paused_at", nil)
+	sub.Set("paused_until", nil)
+	sub.Set("expires_at", resumed.ExpiresAt)
+	sub.Set("grace_until", resumed.GraceUntil)
+	sub.Set("signed_payload", payloadStr)
+	sub.Set("signature", signature)
+
+	if err := app.Save(sub); err != nil {
+		return "", "", time.Time{}, err
+	}
+
+	log.Printf("resume: subscription %s resumed — expires_at extended by %s to %s",
+		sub.Id, extension.Round(time.Minute), newExpiresAt.Format(time.RFC3339))
+	return payloadStr, signature, newExpiresAt, nil
+}
+
+// ── Auto-resume scanner (LSE-15) ─────────────────────────────────────
+
+// startAutoResumeScanner runs a daily scan that resumes paused
+// subscriptions whose paused_until has passed. Without it the auto-resume
+// promise in pause.go was only honored lazily when the device called
+// /resume — a paused subscription nobody resumed sat in limbo with a
+// stale, never-extended billing window.
+func startAutoResumeScanner(app core.App) {
+	runAutoResumeScanner(app)
+	ticker := time.NewTicker(24 * time.Hour)
+	for range ticker.C {
+		runAutoResumeScanner(app)
+	}
+}
+
+func runAutoResumeScanner(app core.App) {
+	subs, err := app.FindRecordsByFilter("subscriptions",
+		"status = 'paused' && paused_until != '' && paused_until < {:now}",
+		"-starts_at", 0, 0,
+		map[string]any{"now": time.Now().UTC().Format(time.RFC3339)})
+	if err != nil {
+		log.Printf("auto-resume-scanner: failed to query paused subscriptions: %v", err)
+		return
+	}
+	if len(subs) == 0 {
+		return
+	}
+
+	log.Printf("auto-resume-scanner: resuming %d subscription(s) past their pause window", len(subs))
+	resumed := 0
+	for _, sub := range subs {
+		if _, _, _, err := resumeSubscription(app, sub, time.Now().UTC()); err != nil {
+			log.Printf("auto-resume-scanner: failed to resume subscription %s: %v", sub.Id, err)
+			continue
+		}
+		resumed++
+	}
+	log.Printf("auto-resume-scanner: scan complete — %d resumed", resumed)
 }
