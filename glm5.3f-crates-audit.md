@@ -1923,3 +1923,15 @@ A `status: NEEDS-FIX` stamp sweep across all production sources surfaced six LOW
 | auth.rs stamp | ✅ status field bumped to SAFE (DC-3 was already fixed; only the status field was stale). |
 
 Post-fix verification: clippy had already passed workspace-wide; the six touched suites all green (modules-sales 44, modules-reporting 26, modules-loyalty 39, oz-lua 65, oz-cloud-server 222 total). The only remaining tracked item is the TLS/noise-PSK LAN-transport upgrade — scope note: the LAN protocol's client side (KDS device app) lives outside this repository, so the upgrade requires coordinated client+server work and cannot be landed unilaterally without breaking deployed clients; it stays tracked as future work.
+### 43. DC-1 full fix — noise-psk-v1 LAN transport (30-08-26)
+
+The last tracked item (TLS/noise-PSK upgrade from DC-1's threat model) is now implemented server-side as a dual-stack transport so deployed KDS clients keep working:
+
+- **Transport selection:** when a PSK is configured, the first stream byte picks the protocol — `'{'` = legacy cleartext JSON hello (unchanged wire format, deprecated), `0x01` = noise-psk-v1. Loopback binds without a PSK keep the original passive-connect behavior.
+- **noise-psk-v1:** `Noise_XXpsk3_25519_ChaChaPoly_SHA256` via the `snow` crate (0.10). The PSK is mixed into message 3 and never crosses the wire; the responder static key is derived deterministically from the PSK (domain-separated SHA-256), so no key file is persisted. All messages (handshake and transport) are framed with a 4-byte big-endian length prefix; in transport mode each frame carries exactly one JSON event (the frame boundary replaces the newline), including discovery request/response and heartbeats.
+- **Session plumbing:** `PeerTx` write abstraction keeps the plain path byte-identical to the old behavior while noise peers receive encrypted frames; offline-buffer replay, discovery, and heartbeats all work over both transports.
+- **Discovery advertisement:** `KdsDiscoverResponse` now carries `transports` (`["noise-psk-v1", "legacy-psk-v1"]`) so future clients can detect support.
+- **Tests (27 lan_server tests total, 5 new):** noise handshake + encrypted-event round-trip via a reference initiator, wrong-PSK drop (no plaintext ever written), unknown-selector drop, legacy hello accept, legacy hello reject. Full oz-pos-app lib suite: 1,185 passed.
+- **Scope note:** the KDS client side lives outside this repo; until clients adopt noise-psk-v1 the legacy path remains accepted (deprecated). Logged as the only follow-up.
+
+Also in this session: workspace consolidated — the `oz-pos-033` worktree was removed and the primary checkout now runs branch `0.0.33` directly (single clean tree). Plus two F-026 boundary-contract integration tests landed for modules/sales and modules/inventory (6 tests each, mirroring the tax vertical).
