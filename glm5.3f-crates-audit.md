@@ -1191,6 +1191,26 @@ facade).
 
 ---
 
+## 14. modules/tax — rates, rounding, inclusive/exclusive
+
+Baseline: ~605 production lines. Slice A — all 5 files (models.rs 316:
+production 1–117 fully read; repository/service/error verified; lib's
+old 19-07 stamp replaced).
+
+**No new findings — exemplary.** TAX-05 integer-only rounding with
+`HalfUp` as the jurisdiction-defensible default (legacy `Truncate`
+documented for backward compatibility, overflow-checked division,
+rejection tests); TAX-03 soft-delete honoured at the module boundary with
+a cross-layer parity test (`tests/boundary_contract.rs`); basis-point
+math throughout.
+
+> **modules-tax COMPLETE** — 5 production files, ~605 lines, zero new
+> finding IDs. Campaign proceeds to modules/settings.
+
+---
+
+---
+
 ---
 
 ---

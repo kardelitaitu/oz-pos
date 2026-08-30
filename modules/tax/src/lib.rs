@@ -1,9 +1,8 @@
 /*
-last audited 19-07-26 by RSA-Agent
+last audited 25-07-26 by RSA-Agent (modules-tax slice A: lib re-verify)
 crate: modules-tax | status: SAFE | lint: CLEAN
-findings: Transitional module implementing Module trait. No unsafe code. Re-exports TaxRate from
-  oz-core. 8 unit tests pass.
-next: Migrate tax commands into this module | perf: N/A.
+findings: clean Module registration layer; unwraps test-only; previous 19-07 stamp replaced per campaign convention
+next: none | perf: N/A
 */
 
 //! Tax Module — tax rate configuration and management.

@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-tax slice A: models deep read)
+crate: modules-tax | status: SAFE | lint: CLEAN
+findings: exemplary — TAX-05 integer-only rounding with HalfUp default (jurisdiction-defensible) and legacy Truncate documented for backward compat; overflow-checked divide; bps math with rejection tests
+next: none | perf: N/A
+*/
 //! Tax domain models.
 
 use serde::{Deserialize, Serialize};

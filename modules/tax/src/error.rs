@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-tax slice A: error verified)
+crate: modules-tax | status: SAFE | lint: CLEAN
+findings: clean thiserror tax error taxonomy
+next: none | perf: N/A
+*/
 //! Error type for the tax domain.
 
 use thiserror::Error;
