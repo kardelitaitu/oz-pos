@@ -79,7 +79,9 @@
     var xLabels = '';
     data.forEach(function (d, i) {
       if (i % 2 === 0 || i === data.length - 1) {
-        xLabels += '<text x="' + x(i) + '" y="' + (py + ph + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="9">' + d.month.slice(5) + '</text>';
+        // B5 fix: the M1 guard protected values but not labels — a row
+        // without month threw on .slice and killed the whole dashboard.
+        xLabels += '<text x="' + x(i) + '" y="' + (py + ph + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="9">' + escapeHtml(d.month ? String(d.month).slice(5) : '') + '</text>';
       }
     });
     return '<svg viewBox="0 0 ' + w + ' ' + h + '" class="chart-svg">' + fills + paths + yLabels + xLabels + '</svg>';
@@ -108,7 +110,17 @@
       var x2 = cx + r * Math.cos(end), y2 = cy + r * Math.sin(end);
       var large = ang > 180 ? 1 : 0;
       var c = colors && colors[i] ? colors[i] : colorList[i % colorList.length];
-      slices += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + r + ' ' + r + ' 0 ' + large + ' 1 ' + x2 + ' ' + y2 + ' Z" fill="' + c + '" stroke="var(--bg)" stroke-width="2"/>';
+      if (ang >= 360) {
+        // B4 fix: a single arc with start == end point draws NOTHING per
+        // the SVG spec — a 100% slice (all tenants on one tier, the common
+        // early state) rendered as an empty ring while the legend claimed
+        // 100%. A full circle needs two arcs; split at the halfway angle.
+        var mid = start + Math.PI;
+        var xm = cx + r * Math.cos(mid), ym = cy + r * Math.sin(mid);
+        slices += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + r + ' ' + r + ' 0 0 1 ' + xm + ' ' + ym + ' A ' + r + ' ' + r + ' 0 0 1 ' + x1 + ' ' + y1 + ' Z" fill="' + c + '" stroke="var(--bg)" stroke-width="2"/>';
+      } else {
+        slices += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + r + ' ' + r + ' 0 ' + large + ' 1 ' + x2 + ' ' + y2 + ' Z" fill="' + c + '" stroke="var(--bg)" stroke-width="2"/>';
+      }
       acc += ang;
     });
     var legend = '';

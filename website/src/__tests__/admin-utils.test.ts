@@ -68,6 +68,21 @@ describe('admin-utils svgChart', () => {
     expect(svg).toContain('01');
     expect(svg).toContain('02');
   });
+
+  it('does not crash when a row is missing the month label (B5)', () => {
+    // The M1 guard protects VALUES (NaN filtering) but the x-axis label
+    // code did d.month.slice(5) unguarded — one row without a month
+    // (new bucket shape, partial API payload) threw TypeError and killed
+    // the whole dashboard render, not just the chart.
+    const data = [
+      { month: '2026-01', idr: 100 },
+      { idr: 200 },
+      { month: null, idr: 300 },
+    ];
+    const svg = utils.svgChart('id', data, ['idr']);
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('01');
+  });
 });
 
 describe('admin-utils svgDonut', () => {
@@ -287,5 +302,26 @@ describe('admin-utils svgBarChart (B3: churn chart read the wrong field)', () =>
     const svg = utils.svgBarChart('x', [{ count: 1 }, { count: 1, month: '2026-<b>' }], { valueKey: 'count' });
     expect(svg).not.toContain('<b>');
     expect(svg).toContain('&lt;b&gt;');
+  });
+});
+
+describe('admin-utils svgDonut single-slice (B4: invisible 100% donut)', () => {
+  it('renders a visible full circle when one entry holds 100%', () => {
+    // Common early deployment state: every tenant on one tier (or one
+    // payment provider). A single SVG arc whose start point equals its end
+    // point draws NOTHING (spec behavior) — the donut looked empty while
+    // the legend claimed 100%. The full circle must be split into arcs.
+    const { svg } = utils.svgDonut('id', [{ tier: 'free', count: 5 }], 'tier', 'count');
+    expect(svg).toContain('<svg');
+    const arcs = svg.match(/ A /g) || [];
+    expect(arcs.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('multi-slice donuts keep one arc per slice', () => {
+    const { svg } = utils.svgDonut('id', [
+      { tier: 'free', count: 5 },
+      { tier: 'pro', count: 5 },
+    ], 'tier', 'count');
+    expect((svg.match(/ A /g) || []).length).toBe(2);
   });
 });
