@@ -312,6 +312,7 @@ fn render_text_multibyte_name_panics_on_byte_slice() {
     let result = std::panic::catch_unwind(|| {
         let mut bundle = minimal_bundle();
         bundle.top_products = vec![TopProductRow {
+            currency: "USD".into(),
             product_id: "p1".into(),
             sku: "COFFEE".into(),
             name: name.to_string(),
@@ -341,6 +342,7 @@ fn render_text_ascii_name_truncates_correctly() {
     let name = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"; // 26 bytes
     let mut bundle = minimal_bundle();
     bundle.top_products = vec![TopProductRow {
+        currency: "USD".into(),
         product_id: "p1".into(),
         sku: "SKU".into(),
         name: name.to_string(),
@@ -363,6 +365,7 @@ fn render_text_short_name_not_truncated() {
     let name = "Latte"; // 5 bytes
     let mut bundle = minimal_bundle();
     bundle.top_products = vec![TopProductRow {
+        currency: "USD".into(),
         product_id: "p1".into(),
         sku: "SKU".into(),
         name: name.to_string(),
@@ -617,12 +620,14 @@ fn report_email_hourly_heatmap_html() {
     let mut bundle = minimal_bundle();
     bundle.hourly_heatmap = vec![
         HourlyHeatmapRow {
+            currency: "USD".into(),
             day_of_week: 1,
             hour: 9,
             total_minor: 5000,
             sale_count: 10,
         },
         HourlyHeatmapRow {
+            currency: "USD".into(),
             day_of_week: 1,
             hour: 12,
             total_minor: 8000,
@@ -640,12 +645,14 @@ fn report_email_hourly_heatmap_text() {
     let mut bundle = minimal_bundle();
     bundle.hourly_heatmap = vec![
         HourlyHeatmapRow {
+            currency: "USD".into(),
             day_of_week: 1,
             hour: 9,
             total_minor: 5000,
             sale_count: 10,
         },
         HourlyHeatmapRow {
+            currency: "USD".into(),
             day_of_week: 1,
             hour: 12,
             total_minor: 8000,
@@ -664,6 +671,7 @@ fn report_email_hourly_heatmap_text() {
 fn report_email_category_breakdown_html() {
     let mut bundle = minimal_bundle();
     bundle.category_breakdown = vec![CategoryBreakdownRow {
+        currency: "USD".into(),
         category_id: Some("cat-1".into()),
         category_name: "Drinks".into(),
         total_minor: 10000,
@@ -680,6 +688,7 @@ fn report_email_category_breakdown_html() {
 fn report_email_category_breakdown_text() {
     let mut bundle = minimal_bundle();
     bundle.category_breakdown = vec![CategoryBreakdownRow {
+        currency: "USD".into(),
         category_id: Some("cat-1".into()),
         category_name: "Drinks".into(),
         total_minor: 10000,
@@ -754,6 +763,7 @@ fn report_email_html_escapes_store_name() {
 fn report_email_unicode_category_name() {
     let mut bundle = minimal_bundle();
     bundle.category_breakdown = vec![CategoryBreakdownRow {
+        currency: "USD".into(),
         category_id: Some("cat-1".into()),
         category_name: "Minuman ☕".into(),
         total_minor: 5000,
@@ -833,6 +843,7 @@ fn report_email_multiple_top_products() {
     let mut bundle = minimal_bundle();
     bundle.top_products = vec![
         TopProductRow {
+            currency: "USD".into(),
             product_id: "p1".into(),
             sku: "COFFEE".into(),
             name: "Coffee".into(),
@@ -843,6 +854,7 @@ fn report_email_multiple_top_products() {
             gross_margin_percent: 42.9,
         },
         TopProductRow {
+            currency: "USD".into(),
             product_id: "p2".into(),
             sku: "BAGEL".into(),
             name: "Bagel".into(),

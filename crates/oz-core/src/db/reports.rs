@@ -101,6 +101,9 @@ pub struct RefundsSummaryRow {
 /// Top product ranking.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct TopProductRow {
+    /// ISO-4217 currency code (REP-06: rows are per product AND currency —
+    /// minor units must never be summed across currencies).
+    pub currency: String,
     /// Product unique identifier.
     pub product_id: String,
     /// Product SKU.
@@ -123,6 +126,8 @@ pub struct TopProductRow {
 /// Hourly sales heatmap entry.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct HourlyHeatmapRow {
+    /// ISO-4217 currency code (REP-06: one row per cell AND currency).
+    pub currency: String,
     /// Day of week (0=Sunday, 1=Monday, ...).
     pub day_of_week: i64,
     /// Hour of day (0–23).
@@ -188,6 +193,9 @@ pub struct StockAlertEvent {
 /// Category sales breakdown.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct CategoryBreakdownRow {
+    /// ISO-4217 currency code (REP-06: one row per category AND currency;
+    /// `percentage` normalizes within the currency).
+    pub currency: String,
     /// Category id (None for uncategorised products).
     pub category_id: Option<String>,
     /// Category display name.
@@ -203,6 +211,8 @@ pub struct CategoryBreakdownRow {
 /// Sales revenue split by payment method for a date range.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct PaymentMethodRow {
+    /// ISO-4217 currency code (REP-06: one row per method AND currency).
+    pub currency: String,
     /// Payment method key (`cash`, `card`, `qris`, `ewallet`, … or `other`).
     pub payment_method: String,
     /// Total revenue in minor units.
@@ -214,6 +224,9 @@ pub struct PaymentMethodRow {
 /// Voided-sale totals for a date range.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct VoidedSummaryRow {
+    /// ISO-4217 currency code (REP-06: one row per currency; the old
+    /// single-row shape summed void totals across currencies).
+    pub currency: String,
     /// Number of voided sales.
     pub void_count: i64,
     /// Sum of the voided sales' totals in minor units.
@@ -543,6 +556,7 @@ impl Store<'_> {
         };
         let mut stmt = self.conn.prepare(&format!(
             "SELECT p.id AS product_id, p.sku, p.name,
+                    sl.currency AS currency,
                     SUM(sl.qty) AS total_qty,
                     SUM(sl.line_minor) AS total_minor,
                     SUM(COALESCE(sl.cost_minor, p.cost_minor, 0) * sl.qty) AS cogs_minor,
@@ -551,7 +565,7 @@ impl Store<'_> {
              JOIN sales s ON sl.sale_id = s.id
              JOIN products p ON sl.sku = p.sku
              WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
-             GROUP BY p.id
+             GROUP BY p.id, sl.currency
              ORDER BY {order_clause}, p.sku
              LIMIT ?3"
         ))?;
@@ -560,6 +574,7 @@ impl Store<'_> {
             let cogs_minor = row.get::<_, i64>("cogs_minor")?;
             let gross_profit_minor = row.get::<_, i64>("gross_profit_minor")?;
             Ok(TopProductRow {
+                currency: row.get("currency")?,
                 product_id: row.get("product_id")?,
                 sku: row.get("sku")?,
                 name: row.get("name")?,
@@ -586,15 +601,17 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT CAST(strftime('%w', created_at) AS INTEGER) AS day_of_week,
                     CAST(strftime('%H', created_at) AS INTEGER) AS hour,
+                    currency,
                     SUM(total_minor) AS total_minor,
                     COUNT(*) AS sale_count
              FROM sales
              WHERE status = 'completed' AND DATE(created_at) BETWEEN ?1 AND ?2
-             GROUP BY day_of_week, hour
+             GROUP BY day_of_week, hour, currency
              ORDER BY day_of_week, hour",
         )?;
         let rows = stmt.query_map(params![start_date, end_date], |row| {
             Ok(HourlyHeatmapRow {
+                currency: row.get("currency")?,
                 day_of_week: row.get("day_of_week")?,
                 hour: row.get("hour")?,
                 total_minor: row.get("total_minor")?,
@@ -765,6 +782,7 @@ impl Store<'_> {
     ) -> Result<Vec<CategoryBreakdownRow>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT p.category_id, COALESCE(c.name, 'Uncategorised') AS category_name,
+                    sl.currency AS currency,
                     SUM(sl.line_minor) AS total_minor,
                     COUNT(DISTINCT s.id) AS sale_count
              FROM sale_lines sl
@@ -772,12 +790,13 @@ impl Store<'_> {
              JOIN products p ON sl.sku = p.sku
              LEFT JOIN categories c ON p.category_id = c.id
              WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
-             GROUP BY p.category_id
-             ORDER BY total_minor DESC",
+             GROUP BY p.category_id, sl.currency
+             ORDER BY sl.currency, total_minor DESC",
         )?;
         let mut rows: Vec<CategoryBreakdownRow> = stmt
             .query_map(params![start_date, end_date], |row| {
                 Ok(CategoryBreakdownRow {
+                    currency: row.get("currency")?,
                     category_id: row.get("category_id")?,
                     category_name: row.get("category_name")?,
                     total_minor: row.get("total_minor")?,
@@ -787,10 +806,16 @@ impl Store<'_> {
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
-        let grand_total: f64 = rows.iter().map(|r| r.total_minor as f64).sum();
-        if grand_total > 0.0 {
-            for row in &mut rows {
-                row.percentage = (row.total_minor as f64 / grand_total) * 100.0;
+        // REP-06: percentages normalize WITHIN each currency — a share of
+        // the grand total summed across currencies is meaningless.
+        let mut totals: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+        for row in &rows {
+            *totals.entry(row.currency.clone()).or_insert(0) += row.total_minor;
+        }
+        for row in &mut rows {
+            let grand = totals.get(&row.currency).copied().unwrap_or(0);
+            if grand > 0 {
+                row.percentage = (row.total_minor as f64 / grand as f64) * 100.0;
             }
         }
 
@@ -805,15 +830,17 @@ impl Store<'_> {
     ) -> Result<Vec<PaymentMethodRow>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT COALESCE(payment_method, 'other') AS payment_method,
+                    currency,
                     SUM(total_minor) AS total_minor,
                     COUNT(*) AS sale_count
              FROM sales
              WHERE status = 'completed' AND DATE(created_at) BETWEEN ?1 AND ?2
-             GROUP BY payment_method
-             ORDER BY total_minor DESC",
+             GROUP BY payment_method, currency
+             ORDER BY currency, total_minor DESC",
         )?;
         let rows = stmt.query_map(params![start_date, end_date], |row| {
             Ok(PaymentMethodRow {
+                currency: row.get("currency")?,
                 payment_method: row.get("payment_method")?,
                 total_minor: row.get("total_minor")?,
                 sale_count: row.get("sale_count")?,
@@ -822,26 +849,29 @@ impl Store<'_> {
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
-    /// Voided-sale totals for a date range.
+    /// Voided-sale totals for a date range, one row per currency (REP-06).
     pub fn voided_sales_summary(
         &self,
         start_date: &str,
         end_date: &str,
-    ) -> Result<VoidedSummaryRow, CoreError> {
-        let row = self.conn.query_row(
-            "SELECT COUNT(*) AS void_count,
+    ) -> Result<Vec<VoidedSummaryRow>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT currency,
+                    COUNT(*) AS void_count,
                     COALESCE(SUM(total_minor), 0) AS void_total_minor
              FROM sales
-             WHERE status = 'voided' AND DATE(created_at) BETWEEN ?1 AND ?2",
-            params![start_date, end_date],
-            |row| {
-                Ok(VoidedSummaryRow {
-                    void_count: row.get("void_count")?,
-                    void_total_minor: row.get("void_total_minor")?,
-                })
-            },
+             WHERE status = 'voided' AND DATE(created_at) BETWEEN ?1 AND ?2
+             GROUP BY currency
+             ORDER BY currency",
         )?;
-        Ok(row)
+        let rows = stmt.query_map(params![start_date, end_date], |row| {
+            Ok(VoidedSummaryRow {
+                currency: row.get("currency")?,
+                void_count: row.get("void_count")?,
+                void_total_minor: row.get("void_total_minor")?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     /// Top product lines found on voided sales for a date range.

@@ -1221,21 +1221,22 @@ fn voided_sales_summary_counts_and_totals() {
             ('c1', 900,  'USD', 1, 'completed', '2026-07-12T09:00:00Z');",
     )
     .unwrap();
-    let row = store(&conn)
+    // REP-06: per-currency rows (single currency → one row).
+    let rows = store(&conn)
         .voided_sales_summary("2026-07-01", "2026-07-31")
         .unwrap();
-    assert_eq!(row.void_count, 2);
-    assert_eq!(row.void_total_minor, 3500);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].void_count, 2);
+    assert_eq!(rows[0].void_total_minor, 3500);
 }
 
 #[test]
 fn voided_sales_summary_empty() {
     let conn = fresh();
-    let row = store(&conn)
+    let rows = store(&conn)
         .voided_sales_summary("2000-01-01", "2099-12-31")
         .unwrap();
-    assert_eq!(row.void_count, 0);
-    assert_eq!(row.void_total_minor, 0);
+    assert!(rows.is_empty());
 }
 
 // ── Voided items ───────────────────────────────────────────────
@@ -1724,4 +1725,241 @@ fn refunds_summary_respects_date_range() {
         rows.is_empty(),
         "refunds outside the window must not appear"
     );
+}
+
+// ── REP-06: per-currency report aggregation ────────────────────
+//
+// top_products, hourly_heatmap, category_breakdown,
+// payment_method_breakdown and voided_sales_summary summed minor
+// units across currencies into one number (the REP-02 class bug
+// below the revenue trends). Each must aggregate per currency.
+
+fn seed_sale_with_line(
+    conn: &Connection,
+    sale_id: &str,
+    sku: &str,
+    currency: &str,
+    line_minor: i64,
+    method: &str,
+    status: &str,
+    date: &str,
+) {
+    conn.execute(
+        "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method, created_at)
+         VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6)",
+        params![sale_id, line_minor, currency, status, method, format!("{date}T10:00:00Z")],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position)
+         VALUES (?1, ?2, ?3, 1, ?4, ?4, ?5, 0)",
+        params![format!("sl-{sale_id}"), sale_id, sku, line_minor, currency],
+    )
+    .unwrap();
+}
+
+#[test]
+fn top_products_separates_currencies() {
+    let conn = fresh();
+    let s = store(&conn);
+    s.create_product("LATTE", "Latte", price(350), None, None, 100, None)
+        .unwrap();
+    seed_sale_with_line(
+        &conn,
+        "tp-usd",
+        "LATTE",
+        "USD",
+        700,
+        "cash",
+        "completed",
+        "2026-07-10",
+    );
+    seed_sale_with_line(
+        &conn,
+        "tp-idr",
+        "LATTE",
+        "IDR",
+        115500,
+        "cash",
+        "completed",
+        "2026-07-10",
+    );
+    let rows = s
+        .top_products("2026-07-01", "2026-07-31", 10, "revenue")
+        .unwrap();
+    assert_eq!(rows.len(), 2, "one row per (product, currency)");
+    let usd_row = rows.iter().find(|r| r.currency == "USD").unwrap();
+    assert_eq!(usd_row.total_minor, 700);
+    assert_eq!(usd_row.total_qty, 1);
+    let idr_row = rows.iter().find(|r| r.currency == "IDR").unwrap();
+    assert_eq!(idr_row.total_minor, 115500);
+}
+
+#[test]
+fn hourly_heatmap_separates_currencies() {
+    let conn = fresh();
+    seed_sale_with_line(
+        &conn,
+        "hm-usd",
+        "COFFEE",
+        "USD",
+        1000,
+        "cash",
+        "completed",
+        "2026-07-10",
+    );
+    seed_sale_with_line(
+        &conn,
+        "hm-idr",
+        "COFFEE",
+        "IDR",
+        165000,
+        "cash",
+        "completed",
+        "2026-07-10",
+    );
+    let rows = store(&conn)
+        .hourly_heatmap("2026-07-01", "2026-07-31")
+        .unwrap();
+    assert_eq!(rows.len(), 2);
+    for row in &rows {
+        assert_eq!(row.hour, 10);
+    }
+    let usd_row = rows.iter().find(|r| r.currency == "USD").unwrap();
+    assert_eq!(usd_row.total_minor, 1000);
+    let idr_row = rows.iter().find(|r| r.currency == "IDR").unwrap();
+    assert_eq!(idr_row.total_minor, 165000);
+}
+
+#[test]
+fn category_breakdown_percentages_are_per_currency() {
+    let conn = fresh();
+    let s = store(&conn);
+    s.create_category("cat-1", "Beverages", "#fff", "").unwrap();
+    s.create_category("cat-2", "Bakery", "#eee", "").unwrap();
+    s.create_product("P1", "One", price(100), Some("cat-1"), None, 100, None)
+        .unwrap();
+    s.create_product("P2", "Two", price(100), Some("cat-2"), None, 100, None)
+        .unwrap();
+    s.create_product("P3", "Three", price(100), Some("cat-1"), None, 100, None)
+        .unwrap();
+    seed_sale_with_line(
+        &conn,
+        "cb-1",
+        "P1",
+        "USD",
+        1000,
+        "cash",
+        "completed",
+        "2026-07-10",
+    );
+    seed_sale_with_line(
+        &conn,
+        "cb-2",
+        "P2",
+        "USD",
+        300,
+        "cash",
+        "completed",
+        "2026-07-10",
+    );
+    seed_sale_with_line(
+        &conn,
+        "cb-3",
+        "P3",
+        "IDR",
+        165000,
+        "cash",
+        "completed",
+        "2026-07-10",
+    );
+    let rows = s.category_breakdown("2026-07-01", "2026-07-31").unwrap();
+    assert_eq!(rows.len(), 3, "one row per (category, currency)");
+    let usd_rows: Vec<_> = rows.iter().filter(|r| r.currency == "USD").collect();
+    let idr_rows: Vec<_> = rows.iter().filter(|r| r.currency == "IDR").collect();
+    assert_eq!(usd_rows.len(), 2);
+    assert_eq!(idr_rows.len(), 1);
+    // Percentages normalize WITHIN the currency, never across.
+    let usd_pct_sum: f64 = usd_rows.iter().map(|r| r.percentage).sum();
+    assert!(
+        (usd_pct_sum - 100.0).abs() < 0.001,
+        "USD percentages must sum to 100, got {usd_pct_sum}"
+    );
+    let bev_usd = usd_rows
+        .iter()
+        .find(|r| r.category_id == Some("cat-1".into()))
+        .unwrap_or(&usd_rows[0]);
+    let _ = bev_usd;
+    assert!((idr_rows[0].percentage - 100.0).abs() < f64::EPSILON);
+}
+
+#[test]
+fn payment_method_breakdown_separates_currencies() {
+    let conn = fresh();
+    seed_sale_with_line(
+        &conn,
+        "pm-1",
+        "COFFEE",
+        "USD",
+        1000,
+        "cash",
+        "completed",
+        "2026-07-10",
+    );
+    seed_sale_with_line(
+        &conn,
+        "pm-2",
+        "COFFEE",
+        "IDR",
+        165000,
+        "cash",
+        "completed",
+        "2026-07-10",
+    );
+    seed_sale_with_line(
+        &conn,
+        "pm-3",
+        "COFFEE",
+        "IDR",
+        50000,
+        "qris",
+        "completed",
+        "2026-07-10",
+    );
+    let rows = store(&conn)
+        .payment_method_breakdown("2026-07-01", "2026-07-31")
+        .unwrap();
+    assert_eq!(rows.len(), 3, "cash appears once per currency");
+    let cash_usd = rows
+        .iter()
+        .find(|r| r.payment_method == "cash" && r.currency == "USD")
+        .unwrap();
+    assert_eq!(cash_usd.total_minor, 1000);
+    let cash_idr = rows
+        .iter()
+        .find(|r| r.payment_method == "cash" && r.currency == "IDR")
+        .unwrap();
+    assert_eq!(cash_idr.total_minor, 165000);
+}
+
+#[test]
+fn voided_sales_summary_groups_by_currency() {
+    let conn = fresh();
+    conn.execute_batch(
+        "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at) VALUES
+            ('v-usd-1', 1000,   'USD', 1, 'voided', '2026-07-10T09:00:00Z'),
+            ('v-usd-2', 500,    'USD', 1, 'voided', '2026-07-11T09:00:00Z'),
+            ('v-idr-1', 165000, 'IDR', 1, 'voided', '2026-07-11T09:00:00Z');",
+    )
+    .unwrap();
+    let rows = store(&conn)
+        .voided_sales_summary("2026-07-01", "2026-07-31")
+        .unwrap();
+    assert_eq!(rows.len(), 2);
+    let usd_row = rows.iter().find(|r| r.currency == "USD").unwrap();
+    assert_eq!(usd_row.void_count, 2);
+    assert_eq!(usd_row.void_total_minor, 1500);
+    let idr_row = rows.iter().find(|r| r.currency == "IDR").unwrap();
+    assert_eq!(idr_row.void_count, 1);
+    assert_eq!(idr_row.void_total_minor, 165000);
 }

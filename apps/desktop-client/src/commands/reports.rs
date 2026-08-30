@@ -442,7 +442,7 @@ pub async fn get_voided_sales_summary_scoped(
     start_date: String,
     end_date: String,
     state: State<'_, AppState>,
-) -> Result<VoidedSummaryRow, AppError> {
+) -> Result<Vec<VoidedSummaryRow>, AppError> {
     let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
     let db = conn
         .lock()
