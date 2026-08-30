@@ -1,9 +1,19 @@
 # ADR #42: Website Admin Dashboard & User Dashboard (Subdomain Architecture)
 
-**Status:** Draft — Domain provisioning + auth gate + password rotation complete (2026-08-28)  
+**Status:** Partially Implemented — subdomain routing + auth gate + password rotation + dashboard/admin SPAs complete (2026-08-28); invoice history and webhook delivery log remain future work (see §5 Open Questions)  
 **Date:** 2026-08-28  
 **Author:** Architecture Team & OZ-POS Contributors  
 **Tags:** website, dashboard, admin, subdomain, auth, license-server, billing, tenant-management, password-rotation
+
+> **Deviation (2026-08-28):** the customer dashboard subdomain
+> `dashboard.ozpos.my.id` is **not** a separate SPA. The Worker redirects it
+> (302) to the fully-featured account portal on the marketing host
+> (`ozpos.my.id/en/account/`), eliminating the cookie-isolation problem and
+> the fragile vanilla-JS duplicate of `AccountView.tsx` (§5 Question 2 was
+> answered as "redirect, not duplicate"). The admin subdomain
+> (`admin.ozpos.my.id`) serves the real admin SPA from `website/public/admin/`
+> per the ADR. Invoice/payment history (§2.3 Billing) remains future work —
+> the account portal shows license/subscription state only.
 
 ---
 

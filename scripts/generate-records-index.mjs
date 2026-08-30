@@ -49,6 +49,7 @@ const AREA_KEYWORDS = [
   ['release', ['release', 'ci', 'docker', 'updater', 'migration', 'deploy', 'vps']],
   ['database', ['database', 'migration', 'db-', 'sql']],
   ['observability', ['logging', 'error-handling', 'observability', 'diagnostics']],
+  ['website', ['website', 'dashboard', 'admin-dashboard', 'user-dashboard', 'subdomain']],
   ['general', []],
 ];
 
@@ -147,6 +148,8 @@ const ADR_NUMBERS = {
   '2026-08-11-adr38-retail-row-context-menu-browser-images.md': 38,
   '2026-08-18-adr39-midtrans-subscription-payments.md': 39,
   '2026-08-20-adr40-multi-terminal-peer-model.md': 40,
+  '2026-08-28-adr41-app-lifecycle-device-onboarding-topology-home-gating.md': 41,
+  '2026-08-28-adr42-website-admin-and-user-dashboard.md': 42,
 };
 
 const md = (p) => p.replace(/\\/g, '/');
@@ -208,18 +211,20 @@ if (existsSync(observabilityDir)) {
 }
 
 // ── scattered docs list (kept explicit — they have no folder pattern) ──────
+// 2026-08-31 audit: the standalone audit reports moved from docs/ root to
+// docs/archived/ (retirement pass). Update the list here when one moves.
 const scattered = [
-  'docs/2026-07-28-retail-pos-theming-audit.md',
-  'docs/2026-07-29-retail-pos-ux-audit.md',
-  'docs/code-quality-2026-07-20.md',
-  'docs/database-optimization-2026-07-20.md',
-  'docs/dev-experience-2026-07-20.md',
-  'docs/dev-mock-state-audit.md',
-  'docs/ui-state-audit-2026-07-20.md',
-  'docs/modal-audit-checklist.md',
-  'docs/TODO-shadow-audit.md',
-  'docs/plan-product-images-review.md',
-  'docs/design-exceptions.md',
+  'docs/archived/2026-07-28-retail-pos-theming-audit.md',
+  'docs/archived/2026-07-29-retail-pos-ux-audit.md',
+  'docs/archived/code-quality-2026-07-20.md',
+  'docs/archived/database-optimization-2026-07-20.md',
+  'docs/archived/dev-experience-2026-07-20.md',
+  'docs/archived/dev-mock-state-audit.md',
+  'docs/archived/ui-state-audit-2026-07-20.md',
+  'docs/archived/modal-audit-checklist.md',
+  'docs/archived/TODO-shadow-audit.md',
+  'docs/archived/plan-product-images-review.md',
+  'docs/archived/design-exceptions.md',
 ].filter((p) => existsSync(join(ROOT, p))).map((p) => readRecord(join(ROOT, p)));
 
 // ── emit ───────────────────────────────────────────────────────────────────

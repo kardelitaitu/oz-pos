@@ -45,7 +45,8 @@ Unified registry for architectural decisions (ADRs), audits, verifications, and 
 | 38 | products | [ADR #38: Retail POS Row Context Menu — View Product Images in Browser](../decisions/2026-08-11-adr38-retail-row-context-menu-browser-images.md) | Implemented (2026-08-12) |
 | 39 | subscription | [ADR #39: Midtrans QRIS Subscription Payments (Phase 2)](../decisions/2026-08-18-adr39-midtrans-subscription-payments.md) | Approved — implementation tracked in `TODO.md` C3.1 |
 | 40 | topology | [ADR #40: Multi-Terminal Peer Model](../decisions/2026-08-20-adr40-multi-terminal-peer-model.md) | Implemented (2026-08-20) |
-| 41 | lifecycle / gating | [ADR #41: App Lifecycle, Device Onboarding, Dynamic Topology Workspaces, and Two-Layer Gated Home (Tier & RBAC)](../decisions/2026-08-28-adr41-app-lifecycle-device-onboarding-topology-home-gating.md) | Accepted (2026-08-28) |
+| 41 | topology | [ADR #41: App Lifecycle, Device Onboarding, Dynamic Topology Workspaces, and Two-Layer Gated Home Experience (Tier & RBAC)](../decisions/2026-08-28-adr41-app-lifecycle-device-onboarding-topology-home-gating.md) | Accepted (2026-08-28) |
+| 42 | website | [ADR #42: Website Admin Dashboard & User Dashboard (Subdomain Architecture)](../decisions/2026-08-28-adr42-website-admin-and-user-dashboard.md) | Partially Implemented — subdomain routing + auth gate + password rotation + dashboard/admin SPAs complete (2026-08-28); invoice history and webhook delivery log remain future work (see §5 Open Questions) |
 
 ### Research Notes
 
@@ -84,17 +85,17 @@ The per-sector audit reports were consolidated into [**Audit Open Findings**](./
 
 ## Scattered Audit Reports (`docs/`)
 
-- **theming** — [Retail POS Theming Audit — 2026-07-28](../2026-07-28-retail-pos-theming-audit.md)
-- **ui** — [Retail POS UX Audit — 2026-07-29](../2026-07-29-retail-pos-ux-audit.md)
-- **quality** — [Code Quality Audit — 0.0.14](../code-quality-2026-07-20.md)
-- **database** — [Database Optimization Audit — 2026-07-20](../database-optimization-2026-07-20.md)
-- **quality** — [Developer Experience Audit — 2026-07-20](../dev-experience-2026-07-20.md)
-- **ui** — [Dev-Mock Reload-State Audit](../dev-mock-state-audit.md)
-- **ui** — [UI State Audit — 0.0.14](../ui-state-audit-2026-07-20.md)
-- **ui** — [Modal & Overlay Audit Checklist](../modal-audit-checklist.md)
-- **theming** — [Shadow Banding Audit — Task List](../TODO-shadow-audit.md)
-- **products** — [Product Image Storage Plan - Review Summary](../plan-product-images-review.md)
-- **general** — [OZ-POS Design Exceptions Register](../design-exceptions.md)
+- **theming** — [Retail POS Theming Audit — 2026-07-28](../archived/2026-07-28-retail-pos-theming-audit.md)
+- **ui** — [Retail POS UX Audit — 2026-07-29](../archived/2026-07-29-retail-pos-ux-audit.md)
+- **quality** — [Code Quality Audit — 0.0.14](../archived/code-quality-2026-07-20.md)
+- **database** — [Database Optimization Audit — 2026-07-20](../archived/database-optimization-2026-07-20.md)
+- **quality** — [Developer Experience Audit — 2026-07-20](../archived/dev-experience-2026-07-20.md)
+- **ui** — [Dev-Mock Reload-State Audit](../archived/dev-mock-state-audit.md)
+- **ui** — [UI State Audit — 0.0.14](../archived/ui-state-audit-2026-07-20.md)
+- **ui** — [Modal & Overlay Audit Checklist](../archived/modal-audit-checklist.md)
+- **theming** — [Shadow Banding Audit — Task List](../archived/TODO-shadow-audit.md)
+- **products** — [Product Image Storage Plan - Review Summary](../archived/plan-product-images-review.md)
+- **general** — [OZ-POS Design Exceptions Register](../archived/design-exceptions.md)
 
 ## System Analysis / Observability (`docs/observability/`)
 
