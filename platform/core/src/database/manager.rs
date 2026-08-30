@@ -1,4 +1,10 @@
 //! Store-scoped database manager (ADR #4 Phase 2).
+/*
+last audited 25-07-26 by RSA-Agent (platform-core slice E: database manager deep read)
+crate: platform-core | status: SAFE | lint: CLEAN
+findings: clean — cache-guard-held check-then-insert (TOCTOU-safe, documented), idempotent migration recovery on open (partial-failure tested), FK/WAL pragmas, per-store isolation tests; PC-1 INFO: store_db_path interpolates store_id into the filename without sanitization (data_dir.join(format!()) line 161) — snapshot-imported ids could path-traverse file creation; ids are UUID-minted in normal flows
+next: sanitize/validate store ids before path join (PC-1) | perf: cached Arc connections
+*/
 //!
 //! Manages per-store SQLite database files alongside the global
 //! database. Each store gets its own `store-<id>.sqlite` file with

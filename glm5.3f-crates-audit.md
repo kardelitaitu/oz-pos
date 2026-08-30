@@ -919,6 +919,24 @@ transaction no-op is the documented rationale), the caller's prior setting
 is restored even on failure, and a restore error never masks the original.
 Rollback is last-migration-only, preventing out-of-order reverts.
 
+### Slice E — database/manager.rs (370), database/pool.rs (181),
+terminal_profile.rs (388), error.rs (67), lib.rs — **platform-core COMPLETE**
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| PC-1 | ℹ️ INFO | platform/core/src/database/manager.rs:161, terminal_profile.rs:173 | `store_db_path` and the terminal-profile writer interpolate ids into filesystem paths without sanitization (`data_dir.join(format!("store-{id}.sqlite"))`, `{terminal_id}.json`). Ids are UUID-minted in normal flows, but snapshot-imported ids could path-traverse file creation on the local desktop. | Validate ids against a UUID/slug charset before any path join. |
+
+`manager.rs` holds the cache guard across the check-then-insert span
+(documented TOCTOU-safe) and recovers from partial creation via idempotent
+migration runs; `pool.rs` is the correct single-connection SQLite wrapper
+with WAL/FK pragmas; `error.rs`/`lib.rs` are taxonomy/re-exports.
+
+> **platform-core COMPLETE** — 12 production files, ~5.7k lines, all read
+> or structurally verified and stamped. One INFO (PC-1). Campaign proceeds
+> to platform/kernel, platform/startup, platform/sync.
+
+---
+
 ---
 
 ---

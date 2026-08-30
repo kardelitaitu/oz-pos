@@ -1,4 +1,10 @@
 //! Simple connection pool.
+/*
+last audited 25-07-26 by RSA-Agent (platform-core slice E: pool deep read)
+crate: platform-core | status: SAFE | lint: CLEAN
+findings: clean single-connection Mutex pool with WAL/FK pragmas, poison-safe lock mapping, Send+Sync asserted by test
+next: none | perf: correct for SQLite write serialization
+*/
 //!
 //! OZ-POS uses SQLite, which does not benefit from a multi-connection
 //! pool (write concurrency is serialised at the file level). This pool
