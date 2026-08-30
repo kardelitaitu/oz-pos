@@ -1,5 +1,5 @@
 /*
-last audited 25-07-26 by RSA-Agent (oz-core slice B2: sales deep read)
+last audited 25-07-26 by RSA-Agent (oz-core slice B2: sales deep read; CLI-1 support 25-07-26: new tx-aware create_sale_in_tx + shared validate_sale_money/insert_sale_with_lines helpers)
 crate: oz-core | status: SAFE | lint: CLEAN
 findings: money paths exemplary (MONEY-01..04 + TAX-02..06 in-line, checked arithmetic at every IPC boundary, explicit rounding modes, TAX-06 exclusive-total correction); COR-7 MEDIUM: complete_sale_deduction inserts payment splits WITHOUT the idempotency_key column it carries — bypasses create_payments dedup persistence; COR-8 LOW: void_sale comment claims optimistic concurrency but UPDATE has no version CAS (WHERE id only); COR-9 INFO: receipt-barcode lookup swallows DB errors via .ok(); COR-10 INFO: PartialStockResult travels inside Validation.message JSON (documented tradeoff)
 next: persist idempotency_key on the sale-path payment insert (COR-7); add version CAS to void_sale (COR-8) | perf: batch SKU lookup avoids N+1; popularity recompute outside tx
@@ -241,7 +241,106 @@ fn stock_at_locations(
         })
         .collect()
 }
+/// Validate the non-negative money/qty class guarded by MONEY-06/MONEY-07
+/// (shared by `create_sale` and `create_sale_in_tx`).
+fn validate_sale_money(sale: &Sale) -> Result<(), CoreError> {
+    for line in &sale.lines {
+        if line.qty < 0 {
+            return Err(CoreError::Validation {
+                field: "qty",
+                message: format!("sale line quantity must be positive, got {}", line.qty),
+            });
+        }
+        if line.line_total.minor_units < 0 {
+            return Err(CoreError::Validation {
+                field: "line_total",
+                message: format!(
+                    "sale line total must be non-negative, got {}",
+                    line.line_total.minor_units
+                ),
+            });
+        }
+        if line.tax_amount.minor_units < 0 {
+            return Err(CoreError::Validation {
+                field: "tax_amount",
+                message: format!(
+                    "sale line tax must be non-negative, got {}",
+                    line.tax_amount.minor_units
+                ),
+            });
+        }
+    }
+    if sale.total.minor_units < 0 {
+        return Err(CoreError::Validation {
+            field: "total",
+            message: format!(
+                "sale total must be non-negative, got {}",
+                sale.total.minor_units
+            ),
+        });
+    }
+    if sale.subtotal.minor_units < 0 {
+        return Err(CoreError::Validation {
+            field: "subtotal",
+            message: format!(
+                "sale subtotal must be non-negative, got {}",
+                sale.subtotal.minor_units
+            ),
+        });
+    }
+    if sale.tax_total.minor_units < 0 {
+        return Err(CoreError::Validation {
+            field: "tax_total",
+            message: format!(
+                "sale tax total must be non-negative, got {}",
+                sale.tax_total.minor_units
+            ),
+        });
+    }
+    if let Some(tendered) = sale.tendered_minor
+        && tendered < 0
+    {
+        return Err(CoreError::Validation {
+            field: "tendered_minor",
+            message: format!("tendered amount must be non-negative, got {tendered}"),
+        });
+    }
+    Ok(())
+}
 
+/// Insert the sale row plus its line rows inside the caller's transaction
+/// (shared by `create_sale` and `create_sale_in_tx`).
+fn insert_sale_with_lines(
+    tx: &rusqlite::Transaction<'_>,
+    sale: &Sale,
+    cur_str: &str,
+    status_str: &str,
+) -> Result<(), CoreError> {
+    tx.execute(
+        "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method, tendered_minor,
+                            discount_percent, discount_label, user_id, created_at, updated_at,
+                            subtotal_minor, tax_total_minor, customer_id, version, tenant_id,
+                            base_currency, base_total_minor, tender_rate_millionths,
+                            tip_minor, service_charge_minor)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, 'default',
+                 ?16, ?17, ?18, ?19, ?20)",
+        params![
+            sale.id, sale.total.minor_units, cur_str, sale.line_count,
+            status_str, sale.payment_method, sale.tendered_minor,
+            sale.discount_percent, sale.discount_label, sale.user_id,
+            sale.created_at, sale.updated_at,
+            sale.subtotal.minor_units, sale.tax_total.minor_units,
+            sale.customer_id,
+            sale.base_currency, sale.base_total_minor, sale.tender_rate_millionths,
+            sale.tip_minor, sale.service_charge_minor,
+        ],
+    )?;
+
+    for line in &sale.lines {
+        insert_sale_line(tx, line)?;
+    }
+    Ok(())
+}
 impl Store<'_> {
     /// Complete a sale with location-aware stock deduction (ADR-19 §6).
     ///
@@ -1241,67 +1340,7 @@ impl Store<'_> {
         // Reject the same negative money/qty class MONEY-06 guards on the
         // complete_sale* entry points, or a hostile import writes negative
         // ledger rows. Zero-total (free) sales with empty lines stay legal.
-        for line in &sale.lines {
-            if line.qty < 0 {
-                return Err(CoreError::Validation {
-                    field: "qty",
-                    message: format!("sale line quantity must be positive, got {}", line.qty),
-                });
-            }
-            if line.line_total.minor_units < 0 {
-                return Err(CoreError::Validation {
-                    field: "line_total",
-                    message: format!(
-                        "sale line total must be non-negative, got {}",
-                        line.line_total.minor_units
-                    ),
-                });
-            }
-            if line.tax_amount.minor_units < 0 {
-                return Err(CoreError::Validation {
-                    field: "tax_amount",
-                    message: format!(
-                        "sale line tax must be non-negative, got {}",
-                        line.tax_amount.minor_units
-                    ),
-                });
-            }
-        }
-        if sale.total.minor_units < 0 {
-            return Err(CoreError::Validation {
-                field: "total",
-                message: format!(
-                    "sale total must be non-negative, got {}",
-                    sale.total.minor_units
-                ),
-            });
-        }
-        if sale.subtotal.minor_units < 0 {
-            return Err(CoreError::Validation {
-                field: "subtotal",
-                message: format!(
-                    "sale subtotal must be non-negative, got {}",
-                    sale.subtotal.minor_units
-                ),
-            });
-        }
-        if sale.tax_total.minor_units < 0 {
-            return Err(CoreError::Validation {
-                field: "tax_total",
-                message: format!(
-                    "sale tax total must be non-negative, got {}",
-                    sale.tax_total.minor_units
-                ),
-            });
-        }
-        if let Some(tendered) = sale.tendered_minor
-            && tendered < 0
-        {
-            return Err(CoreError::Validation {
-                field: "tendered_minor",
-                message: format!("tendered amount must be non-negative, got {tendered}"),
-            });
-        }
+        validate_sale_money(sale)?;
 
         let cur_str = std::str::from_utf8(&sale.currency.0).map_err(|e| CoreError::Validation {
             field: "currency",
@@ -1311,32 +1350,39 @@ impl Store<'_> {
 
         let tx = self.conn.unchecked_transaction()?;
 
-        tx.execute(
-            "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method, tendered_minor,
-                                discount_percent, discount_label, user_id, created_at, updated_at,
-                                subtotal_minor, tax_total_minor, customer_id, version, tenant_id,
-                                base_currency, base_total_minor, tender_rate_millionths,
-                                tip_minor, service_charge_minor)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, 'default',
-                     ?16, ?17, ?18, ?19, ?20)",
-            params![
-                sale.id, sale.total.minor_units, cur_str, sale.line_count,
-                status_str, sale.payment_method, sale.tendered_minor,
-                sale.discount_percent, sale.discount_label, sale.user_id,
-                sale.created_at, sale.updated_at,
-                sale.subtotal.minor_units, sale.tax_total.minor_units,
-                sale.customer_id,
-                sale.base_currency, sale.base_total_minor, sale.tender_rate_millionths,
-                sale.tip_minor, sale.service_charge_minor,
-            ],
-        )?;
-
-        for line in &sale.lines {
-            insert_sale_line(&tx, line)?;
-        }
+        insert_sale_with_lines(&tx, sale, cur_str, status_str)?;
 
         tx.commit()?;
         Ok(())
+    }
+
+    /// Tx-aware variant of [`Self::create_sale`] for callers already inside
+    /// a transaction (CLI `.ozpkg` import — CLI-1 fix).
+    ///
+    /// The caller's transaction wraps the sale insert plus its line rows,
+    /// so a multi-type import commits atomically and the pre-fix nested
+    /// "cannot start a transaction within a transaction" failure is
+    /// impossible.
+    ///
+    /// # Invariant
+    ///
+    /// `tx` must be an open transaction on the same connection this `Store`
+    /// wraps. (`self` is not dereferenced — it exists so the method stays on
+    /// the Store facade alongside `create_sale`.)
+    pub fn create_sale_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        sale: &Sale,
+    ) -> Result<(), CoreError> {
+        validate_sale_money(sale)?;
+
+        let cur_str = std::str::from_utf8(&sale.currency.0).map_err(|e| CoreError::Validation {
+            field: "currency",
+            message: format!("invalid UTF-8 in currency bytes: {e}"),
+        })?;
+        let status_str = sale.status.as_stored_str();
+
+        insert_sale_with_lines(tx, sale, cur_str, status_str)
     }
 
     /// List all sales ordered by creation date (most recent first), without line items.

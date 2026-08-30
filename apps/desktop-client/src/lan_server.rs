@@ -1,8 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent (desktop-client slice A: lan_server deep read)
-crate: desktop-client | status: NEEDS-FIX | lint: CLEAN
-findings: DC-1 MED — PSK auth sends the shared key in CLEARTEXT over TCP (newline JSON) and compares it with plain string equality (line 263), so any LAN observer can sniff the PSK on first connect and impersonate a peer; the forwarder elsewhere uses constant-time HMAC verify; proposed: document PSK as LAN discovery-filtering only or upgrade to TLS/noise-PSK, and use a constant-time compare meanwhile. DC-2 INFO — per-peer offline buffer is unbounded across connect/disconnect cycles (drop-oldest cap proposed). Otherwise solid: handshake runs inside the spawned task (accept-loop DoS-safe), bounded broadcast channel with lagged-peer handling, safe 127.0.0.1 default with PSK required for external bind, heartbeat/replay design documented
-next: DC-1 in fix-order phase | perf: N/A
+last audited 25-07-26 by RSA-Agent (desktop-client slice A: lan_server deep read; DC-1 FIXED 25-07-26)
+crate: desktop-client | status: SAFE | lint: CLEAN
+findings: DC-1 FIXED (mitigation) — the PSK handshake compare is now constant-time (psk_matches hashes both inputs with HMAC-SHA256 and compares digests via verify_slice; string == short-circuited on the first differing byte). Threat-model note added to the helper doc: the PSK still travels in cleartext in the hello JSON, so this handshake remains LAN discovery-filtering, not transport security — TLS/noise-PSK upgrade is tracked as future work. DC-2 INFO unchanged — per-peer offline buffer is unbounded across connect/disconnect cycles (drop-oldest cap proposed). Otherwise solid: handshake inside the spawned task (accept-loop DoS-safe), bounded broadcast with lagged-peer handling, safe 127.0.0.1 default with PSK required for external bind, heartbeat/replay design documented
+next: TLS/noise-PSK upgrade (future work); DC-2 drop-oldest cap (INFO) | perf: N/A
 */
 //! LAN event forwarder — a lightweight TCP server that broadcasts domain
 //! events to KDS tablet peers on the local network.
@@ -53,6 +53,35 @@ const HEARTBEAT_INTERVAL_SECS: u64 = 5;
 
 /// Timeout for the PSK handshake (seconds).
 const PSK_HANDSHAKE_TIMEOUT_SECS: u64 = 5;
+
+/// Constant-time equality for PSK comparison (DC-1 fix).
+///
+/// Both inputs are hashed with HMAC-SHA256 under a fixed local key and the
+/// digests are compared with `verify_slice` (constant-time). String `==`
+/// short-circuits on the first differing byte, leaking the matching-prefix
+/// length of the secret through response timing. Length differences are
+/// also absorbed because both sides collapse to equal-length digests.
+///
+/// # Threat-model note (DC-1)
+///
+/// The PSK still travels **in cleartext** inside the hello JSON, so a LAN
+/// observer who sees the first connect learns the key — this handshake is
+/// LAN discovery-filtering, not transport security. Upgrading to TLS (or a
+/// noise-PSK handshake where the key never crosses the wire) is the real
+/// fix and is tracked as future work.
+fn psk_matches(provided: &str, expected: &str) -> bool {
+    use hmac::{Hmac, Mac};
+    type HmacSha256 = hmac::Hmac<sha2::Sha256>;
+    let mut mac_provided =
+        HmacSha256::new_from_slice(b"oz-lan-psk-compare").expect("fixed key length is valid");
+    mac_provided.update(provided.as_bytes());
+    let mut mac_expected =
+        HmacSha256::new_from_slice(b"oz-lan-psk-compare").expect("fixed key length is valid");
+    mac_expected.update(expected.as_bytes());
+    mac_provided
+        .verify_slice(&mac_expected.finalize().into_bytes())
+        .is_ok()
+}
 
 /// First message a peer must send when PSK is configured.
 #[derive(Debug, Deserialize)]
@@ -266,7 +295,10 @@ async fn handle_peer(
             Ok(Ok(_)) => {
                 let hello: Result<HelloMsg, _> = serde_json::from_str(line.trim());
                 match hello {
-                    Ok(msg) if msg.op == "hello" && msg.psk == **expected_psk => {
+                    // DC-1 fix: constant-time comparison (see `psk_matches`)
+                    // instead of plain string equality, which short-circuits
+                    // on the first differing byte.
+                    Ok(msg) if msg.op == "hello" && psk_matches(&msg.psk, expected_psk) => {
                         tracing::debug!(peer = %peer_addr, "LAN PSK handshake accepted");
                     }
                     _ => {

@@ -14,8 +14,20 @@ fn template_parameter_text() {
 fn template_parameter_currency() {
     let p = TemplateParameter::currency("IDR", 50000);
     assert_eq!(p.param_type, "currency");
+    // N-1: code and amount are carried on the struct, not stubbed.
+    assert_eq!(p.currency_code.as_deref(), Some("IDR"));
+    assert_eq!(p.amount_1000, Some(50_000_000));
     let json = serde_json::to_value(&p).unwrap();
     assert_eq!(json["type"], "currency");
+    assert_eq!(json["currency_code"], "IDR");
+    assert_eq!(json["amount_1000"], 50_000_000);
+}
+
+#[test]
+fn template_parameter_text_has_no_currency_fields() {
+    let p = TemplateParameter::text("Coffee");
+    assert_eq!(p.currency_code, None);
+    assert_eq!(p.amount_1000, None);
 }
 
 #[test]

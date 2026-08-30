@@ -1,8 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent (oz-notification slice A: whatsapp deep read)
-crate: oz-notification | status: NEEDS-FIX | lint: CLEAN
-findings: N-1 MED — currency template parameters are stubbed: the WhatsApp mapping hardcodes code IDR and amount_1000: 0, so TemplateParameter::currency carries no amount or currency code (struct has only param_type + text) and Meta renders the fallback text instead of a formatted currency bubble; doc example TemplateParameter::currency("IDR", 50000) does not match the struct. Proposed: extend TemplateParameter with code/amount fields and map them. N-2 INFO — 429 handling hardcodes retry_after_seconds: 60 (ignores Retry-After header) and validate_phone doc says at least 10 digits while code accepts 7. HMAC webhook verification is correct (hmac crate verify_slice, constant-time; hex decode surfaced)
-next: N-1 in fix-order phase | perf: N/A
+last audited 25-07-26 by RSA-Agent (oz-notification slice A: whatsapp deep read; N-1 + N-2 FIXED 25-07-26)
+crate: oz-notification | status: SAFE | lint: CLEAN
+findings: N-1 FIXED — the currency template arm now maps the real code and amount_1000 carried on TemplateParameter (new currency_code/amount_1000 fields; currency() converts minor units to the API 1/1000 scale) instead of the hardcoded IDR/0 stub. N-2 FIXED — 429 handling honours the Retry-After header (captured before the body consumes the response; falls back to 60s) and validate_phone's doc now matches the 7-digit minimum. Mock client and handler call sites unchanged (currency constructor keeps its signature)
+next: none | perf: N/A
 */
 //! WhatsApp Cloud API client implementation.
 //!
@@ -109,7 +109,8 @@ impl WhatsAppClient {
                 "phone number must be in international format (e.g., +6281234567890): {to}"
             )));
         }
-        // Must have at least 10 digits after the +
+        // Must have at least 7 digits after the + (shortest valid country
+        // numbering plans); the doc comment previously claimed 10.
         let digits: String = to.chars().filter(|c| c.is_ascii_digit()).collect();
         if digits.len() < 7 {
             return Err(NotificationError::InvalidPhoneNumber(format!(
@@ -163,14 +164,22 @@ impl NotificationClient for WhatsAppClient {
                             "type": "text",
                             "text": p.text.as_deref().unwrap_or("")
                         }),
-                        "currency" => serde_json::json!({
-                            "type": "currency",
-                            "currency": {
-                                "fallback_value": p.text.as_deref().unwrap_or(""),
-                                "code": "IDR",
-                                "amount_1000": 0
-                            }
-                        }),
+                        // N-1 fix: map the real currency code and amount
+                        // (1/1000 scale per the Cloud API) instead of the
+                        // previous hardcoded "IDR"/0 stub that made Meta
+                        // render the fallback text for every currency.
+                        "currency" => {
+                            let code = p.currency_code.as_deref().unwrap_or("IDR");
+                            let amount_1000 = p.amount_1000.unwrap_or(0);
+                            serde_json::json!({
+                                "type": "currency",
+                                "currency": {
+                                    "fallback_value": p.text.as_deref().unwrap_or(""),
+                                    "code": code,
+                                    "amount_1000": amount_1000
+                                }
+                            })
+                        }
                         _ => serde_json::json!({
                             "type": "text",
                             "text": p.text.as_deref().unwrap_or("")
@@ -203,6 +212,12 @@ impl NotificationClient for WhatsAppClient {
             .await?;
 
         let status = response.status();
+        // N-2 fix: capture Retry-After before the body consumes the response.
+        let retry_after_header = response
+            .headers()
+            .get(reqwest::header::RETRY_AFTER)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.trim().parse::<u64>().ok());
         let body: serde_json::Value = response.json().await.unwrap_or_default();
 
         if status.is_success() {
@@ -211,8 +226,11 @@ impl NotificationClient for WhatsAppClient {
             let error = body["error"]["message"].as_str().unwrap_or("unknown error");
 
             if status.as_u16() == 429 {
+                // N-2 fix: honour the server-supplied Retry-After header
+                // when present instead of hardcoding 60 seconds; fall back
+                // to 60 when the header is missing or unparseable.
                 Err(NotificationError::RateLimited {
-                    retry_after_seconds: 60,
+                    retry_after_seconds: retry_after_header.unwrap_or(60),
                     message: error.to_string(),
                 })
             } else if body["error"]["code"].as_i64() == Some(100) {

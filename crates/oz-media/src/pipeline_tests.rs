@@ -6,7 +6,7 @@ use std::io::Cursor;
 
 use image::RgbImage;
 
-use super::{MediaPipeline, content_hash};
+use super::{MediaLimits, MediaPipeline, content_hash};
 use crate::compress::Quality;
 use crate::crop::CropMode;
 use crate::storage::LocalStorage;
@@ -106,4 +106,58 @@ fn content_hash_is_stable_sha256() {
 #[test]
 fn content_hash_differs_for_diff_inputs() {
     assert_ne!(content_hash(b"a"), content_hash(b"b"));
+}
+
+// ── M-1: decompression-bomb dimension guards ──────────────────────
+
+#[test]
+fn transform_rejects_dimensions_over_max_side() {
+    let storage = LocalStorage::new("/tmp/media");
+    // 400x300 source vs a tiny max_side: the header probe must reject
+    // before any decode allocates a pixel buffer.
+    let limits = MediaLimits {
+        max_side: 100,
+        ..MediaLimits::default()
+    };
+    let pipeline = MediaPipeline::with_limits(storage, limits);
+    let err = pipeline
+        .transform(
+            "bomb.png",
+            &source_image(),
+            CropMode::TrimBorders,
+            ImageFormat::Jpeg,
+            Quality::Medium,
+            &[],
+        )
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("max_side"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn transform_rejects_pixel_count_over_max_pixels() {
+    let storage = LocalStorage::new("/tmp/media");
+    // 400x300 = 120_000 pixels vs a 50_000 cap: sides are fine, the total
+    // pixel budget is not.
+    let limits = MediaLimits {
+        max_pixels: 50_000,
+        ..MediaLimits::default()
+    };
+    let pipeline = MediaPipeline::with_limits(storage, limits);
+    let err = pipeline
+        .transform(
+            "bomb.png",
+            &source_image(),
+            CropMode::TrimBorders,
+            ImageFormat::Jpeg,
+            Quality::Medium,
+            &[],
+        )
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("max_pixels"),
+        "unexpected error: {err}"
+    );
 }

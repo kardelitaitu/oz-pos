@@ -1,8 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent (oz-cli slice A: commands deep read)
-crate: oz-cli | status: NEEDS-FIX | lint: CLEAN
-findings: CLI-1 MED (run_import_ozpkg:1128 sale import calls store.create_sale inside an unchecked_transaction - oz-core Store writes are tx-wrapped per F-022, so the nested transaction attempt should fail with cannot-start-transaction-within-transaction and roll back sale imports; proposed: raw-sale upsert via tx like the other types or a tx-aware Store method) | CLI-2 MED (init-db:175 seeds admin with pin_hash hashed_pin_placeholder - never verifies under argon2 so first-run admin is locked out unless a bootstrap flow sets a real hash; proposed: seed a real hash of a documented default PIN or force PIN setup on first launch) | CLI-3 LOW (run_user_create:622 accepts a raw pin-hash string from argv with no format check; proposed: validate argon2 PHC format) | CLI-4 INFO (run_restore:826 copies a backup over the live DB file while WAL/SHM sidecars may exist, risking a torn restore; proposed: checkpoint/remove sidecars or use the backup API) | CLI-5 INFO (commands.rs is 1220 lines, over the 1000-line project limit; proposed: split per command family). Otherwise clean: parameterized SQL, single-tx import for other types, recoverable currency UTF-8 handling per RUST-07, Argon2id + AES-256-GCM export path, dry-run support
-next: CLI-1/CLI-2 in fix-order phase | perf: N/A
+last audited 25-07-26 by RSA-Agent (oz-cli slice A: commands deep read; CLI-1 + CLI-2 FIXED 25-07-26)
+crate: oz-cli | status: SAFE | lint: CLEAN
+findings: CLI-1 FIXED — run_import_ozpkg sale imports now use the new tx-aware Store::create_sale_in_tx (the previous store.create_sale opened a nested transaction inside the import transaction and failed with cannot-start-a-transaction-within-a-transaction, rolling back sale imports). CLI-2 FIXED — init-db seeds the admin user with a real argon2 hash of the documented default PIN 1234 (never-verifying hashed_pin_placeholder locked the first-run admin out) and prints a change-it-now warning. CLI-3 LOW unchanged (raw --pin-hash accepted without PHC-format check); CLI-4 INFO unchanged (restore torn-restore risk); CLI-5 INFO unchanged (file length). Otherwise clean: parameterized SQL, single-tx import for other types, recoverable currency UTF-8 handling per RUST-07, Argon2id + AES-256-GCM export path, dry-run support
+next: CLI-3/4/5 (LOW/INFO) | perf: N/A
 */
 //! Command implementations for the `oz` CLI.
 
@@ -176,11 +176,20 @@ pub(crate) fn run_init_db(conn: &Connection, args: &InitDbArgs) -> Result<()> {
 
     // --- Admin User ---
     eprintln!("  seeding admin user...");
+    // CLI-2 fix: seed a REAL argon2 hash of a documented default PIN
+    // ("1234") instead of the never-verifying "hashed_pin_placeholder"
+    // string that locked the first-run admin out of PIN-gated flows. The
+    // operator is told to change the PIN immediately (hashing takes ~100ms
+    // — acceptable one-time init cost).
+    let default_admin_pin = "1234";
+    let admin_pin_hash = oz_core::auth::hash_pin(default_admin_pin)
+        .map_err(|e| anyhow::anyhow!("hashing default admin PIN: {e}"))?;
     conn.execute(
         "INSERT OR IGNORE INTO users (id, username, pin_hash, display_name, role_id) VALUES (?1, ?2, ?3, ?4, ?5)",
-        rusqlite::params!["user-admin", "admin", "hashed_pin_placeholder", "Admin", "role-owner"],
+        rusqlite::params!["user-admin", "admin", admin_pin_hash, "Admin", "role-owner"],
     )
     .context("seeding admin user")?;
+    eprintln!("  NOTE: default admin PIN is '1234' — change it immediately after first login.");
 
     eprintln!("database initialised successfully");
     Ok(())
@@ -1135,7 +1144,11 @@ pub(crate) fn run_import_ozpkg(
                     )
                     .is_ok();
                 if !exists {
-                    store.create_sale(&sale)?;
+                    // CLI-1 fix: use the tx-aware variant — the previous
+                    // `store.create_sale` opened a nested transaction on the
+                    // same connection ("cannot start a transaction within a
+                    // transaction") and rolled the whole import back.
+                    store.create_sale_in_tx(&tx, &sale)?;
                 }
                 total += 1;
             }

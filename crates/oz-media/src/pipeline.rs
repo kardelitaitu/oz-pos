@@ -1,8 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent (oz-media slice A: pipeline deep read)
-crate: oz-media | status: NEEDS-FIX | lint: CLEAN
-findings: M-1 MED — MediaLimits.max_pixels (40 MP) and max_side (8192) are declared and documented as decompression-bomb guards but are NEVER enforced in transform(); only max_input_bytes is checked before decode, so the bomb defense relies solely on the image crate default allocation cap and absurd-dimension images pass. Proposed: header-only dimension probe (image::image_dimensions) before full decode enforcing both caps. M-2 INFO — the pipeline decodes the same bytes 3+ times per run (auto_crop decode, original_dims re-decode of re-encoded bytes, per-thumbnail decode inside generate_thumbnail); batch into one decode pass when performance matters. Storage stub returns NotImplemented everywhere; promotion note: enforce key sanitization (no path separators/dotdot) when LocalStorage lands
-next: M-1 in fix-order phase | perf: M-2 double decode
+last audited 25-07-26 by RSA-Agent (oz-media slice A: pipeline deep read; M-1 FIXED 25-07-26)
+crate: oz-media | status: SAFE | lint: CLEAN
+findings: M-1 FIXED — transform() now probes image dimensions header-only (ImageReader::into_dimensions, no pixel allocation) BEFORE any decode and enforces BOTH MediaLimits.max_side and max_pixels, closing the decompression-bomb gap (previously only max_input_bytes was checked). 2 new guard tests use shrunken limits so no large allocations happen in tests (26 tests pass). M-2 INFO unchanged — pipeline still decodes the same bytes 3+ times per run (single decode pass when perf matters). Storage stub returns NotImplemented everywhere; promotion note: enforce key sanitization (no path separators/dotdot) when LocalStorage lands
+next: M-2 INFO | perf: decode once when perf matters
 */
 //! Media pipeline orchestrator.
 //!
@@ -123,6 +123,33 @@ impl<S: MediaStorage> MediaPipeline<S> {
                 "input exceeds {} bytes",
                 self.limits.max_input_bytes
             )));
+        }
+
+        // M-1 fix: enforce the decompression-bomb dimension caps BEFORE any
+        // full decode. `max_input_bytes` alone left dimension bombs to the
+        // image crate's default allocation cap; this header-only probe
+        // (`ImageReader::into_dimensions` reads no pixel data) rejects
+        // oversized frames without allocating the pixel buffer.
+        {
+            let cursor = std::io::Cursor::new(input_bytes);
+            let (width, height) = image::ImageReader::new(cursor)
+                .with_guessed_format()
+                .map_err(|e| MediaError::InvalidImage(format!("reading format: {e}")))?
+                .into_dimensions()
+                .map_err(|e| MediaError::InvalidImage(format!("reading dimensions: {e}")))?;
+            if width > self.limits.max_side || height > self.limits.max_side {
+                return Err(MediaError::InvalidDimensions(format!(
+                    "image dimensions {width}x{height} exceed max_side {}",
+                    self.limits.max_side
+                )));
+            }
+            let pixels = width as u64 * height as u64;
+            if pixels > self.limits.max_pixels {
+                return Err(MediaError::InvalidDimensions(format!(
+                    "image has {pixels} pixels, exceeding max_pixels {}",
+                    self.limits.max_pixels
+                )));
+            }
         }
 
         // 1. Crop (normalise the frame first — cheap when no crop needed).

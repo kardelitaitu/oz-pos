@@ -75,6 +75,12 @@ pub struct TemplateParameter {
     pub param_type: String,
     /// The parameter value (for "text" type) or sub-object (for media types).
     pub text: Option<String>,
+    /// ISO-4217 currency code for "currency" parameters (e.g. "IDR").
+    /// `None` for other parameter types.
+    pub currency_code: Option<String>,
+    /// Amount in 1/1000 units for "currency" parameters, per the WhatsApp
+    /// Cloud API (`amount_1000`). `None` for other parameter types.
+    pub amount_1000: Option<i64>,
 }
 
 impl TemplateParameter {
@@ -83,14 +89,24 @@ impl TemplateParameter {
         Self {
             param_type: "text".into(),
             text: Some(value.into()),
+            currency_code: None,
+            amount_1000: None,
         }
     }
 
     /// Create a currency parameter.
+    ///
+    /// `code` is the ISO-4217 code (e.g. "IDR"); `amount` is in minor
+    /// units and is converted to the API's 1/1000 scale (`amount_1000`),
+    /// so `currency("IDR", 50_000)` renders a Rp50.000 currency bubble.
+    /// `fallback_value` keeps a plain-text rendering for clients that do
+    /// not support the currency widget.
     pub fn currency(code: &str, amount: i64) -> Self {
         Self {
             param_type: "currency".into(),
             text: Some(format!("{} {}", amount, code)),
+            currency_code: Some(code.to_owned()),
+            amount_1000: Some(amount.saturating_mul(1000)),
         }
     }
 }

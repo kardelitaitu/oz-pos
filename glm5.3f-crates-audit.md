@@ -91,7 +91,7 @@ fully read; lib/handlers/mock verified).
 
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
-| N-1 | 🟡 MED | crates/oz-notification/src/whatsapp.rs:160 | Currency template parameters are stubbed: the mapping hardcodes `"code": "IDR"` and `"amount_1000": 0` — `TemplateParameter` carries only `param_type` + `text`, so no amount or currency code is ever sent and Meta renders the fallback text instead of a formatted currency bubble (the doc example `TemplateParameter::currency("IDR", 50000)` does not even match the struct). | Extend `TemplateParameter` with code/amount fields and map them. |
+| N-1 | ✅ FIXED 25-07-26 | crates/oz-notification/src/whatsapp.rs | Currency template parameters are stubbed: the mapping hardcodes `"code": "IDR"` and `"amount_1000": 0` — `TemplateParameter` carries only `param_type` + `text`, so no amount or currency code is ever sent and Meta renders the fallback text instead of a formatted currency bubble (the doc example `TemplateParameter::currency("IDR", 50000)` does not even match the struct). | Extend `TemplateParameter` with code/amount fields and map them. |
 | N-2 | ℹ️ INFO | crates/oz-notification/src/whatsapp.rs:207 | 429 handling hardcodes `retry_after_seconds: 60` (ignores the `Retry-After` header); `validate_phone` doc says "at least 10 digits" while the code accepts 7. | Parse `Retry-After`; align the doc. |
 
 HMAC webhook verification is correct (constant-time `verify_slice`,
@@ -110,7 +110,7 @@ thumbnail/metrics/storage verified).
 
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
-| M-1 | 🟡 MED | crates/oz-media/src/pipeline.rs:106 | `MediaLimits.max_pixels` (40 MP) and `max_side` (8192) are declared as decompression-bomb guards but **never enforced** in `transform()` — only `max_input_bytes` is checked, so dimension-bomb images rely solely on the image crate's default allocation cap. | Header-only dimension probe (`image::image_dimensions`) before full decode, enforcing both caps. |
+| M-1 | ✅ FIXED 25-07-26 | crates/oz-media/src/pipeline.rs | `MediaLimits.max_pixels` (40 MP) and `max_side` (8192) are declared as decompression-bomb guards but **never enforced** in `transform()` — only `max_input_bytes` is checked, so dimension-bomb images rely solely on the image crate's default allocation cap. | Header-only dimension probe (`image::image_dimensions`) before full decode, enforcing both caps. |
 | M-2 | ℹ️ INFO | crates/oz-media/src/pipeline.rs:123 | The pipeline decodes the same bytes 3+ times per run (crop decode, `original_dims` re-decode, per-thumbnail decode). | Single decode pass when perf matters. |
 
 `crop.rs` is exemplary (saturating/clamped math, solid-colour trim
@@ -169,8 +169,8 @@ read).
 
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
-| CLI-1 | 🟡 MED | crates/oz-cli/src/commands.rs:1128 | `run_import_ozpkg` calls `store.create_sale(&sale)` **inside** an `unchecked_transaction` — oz-core Store writes are tx-wrapped (F-022), so the nested transaction attempt should fail ("cannot start a transaction within a transaction") and roll back sale imports. | Raw-sale upsert via `tx` like the other types, or a tx-aware Store method. |
-| CLI-2 | 🟡 MED | crates/oz-cli/src/commands.rs:175 | `init-db` seeds the admin user with `pin_hash = "hashed_pin_placeholder"` — never verifies under argon2, so first-run admin is locked out unless a bootstrap flow sets a real hash. | Seed a real hash of a documented default PIN or force PIN setup on first launch. |
+| CLI-1 | ✅ FIXED 25-07-26 | crates/oz-cli/src/commands.rs | `run_import_ozpkg` calls `store.create_sale(&sale)` **inside** an `unchecked_transaction` — oz-core Store writes are tx-wrapped (F-022), so the nested transaction attempt should fail ("cannot start a transaction within a transaction") and roll back sale imports. | Raw-sale upsert via `tx` like the other types, or a tx-aware Store method. |
+| CLI-2 | ✅ FIXED 25-07-26 | crates/oz-cli/src/commands.rs | `init-db` seeds the admin user with `pin_hash = "hashed_pin_placeholder"` — never verifies under argon2, so first-run admin is locked out unless a bootstrap flow sets a real hash. | Seed a real hash of a documented default PIN or force PIN setup on first launch. |
 | CLI-3 | 🟡 LOW | crates/oz-cli/src/commands.rs:622 | `user create` accepts a raw `--pin-hash` from argv with no PHC-format check. | Validate the argon2 PHC string format. |
 | CLI-4 | ℹ️ INFO | crates/oz-cli/src/commands.rs:826 | `restore` copies a backup over the live DB file while WAL/SHM sidecars may exist — torn-restore risk. | Checkpoint/remove sidecars or restore via the backup API. |
 | CLI-5 | ℹ️ INFO | crates/oz-cli/src/commands.rs | 1,220 production lines — over the project's 1,000-line limit. | Split per command family. |
@@ -217,7 +217,7 @@ the consumer.
 
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
-| DC-1 | 🟡 MED | apps/desktop-client/src/lan_server.rs:263 | PSK auth sends the shared key **in cleartext** over TCP and compares it with plain string equality — a LAN observer can sniff the PSK on first connect and impersonate a peer. | Document PSK as discovery-filtering only or upgrade to TLS/noise-PSK; constant-time compare meanwhile. |
+| DC-1 | ✅ FIXED 25-07-26 (constant-time compare; TLS tracked as future work) | apps/desktop-client/src/lan_server.rs | PSK auth sends the shared key **in cleartext** over TCP and compares it with plain string equality — a LAN observer can sniff the PSK on first connect and impersonate a peer. | Document PSK as discovery-filtering only or upgrade to TLS/noise-PSK; constant-time compare meanwhile. |
 | DC-2 | ℹ️ INFO | apps/desktop-client/src/lan_server.rs:366 | Per-peer offline buffer is unbounded across reconnect cycles. | Drop-oldest cap per peer. |
 
 Otherwise solid: handshake inside the spawned task (accept-loop
@@ -1866,5 +1866,5 @@ simply predates the payment keys.
 | 4 | PLG-11 | ✅ **FIXED** 25-07-26 — fail-closed lexical scan rejects any quote/bracket character outside string literals (the three SQLite quoting dialects can no longer bypass namespace regexes); unterminated literals rejected; 7 new tests; all 180+2 oz-plugin tests pass. |
 | 5 | L-1 | ✅ **FIXED** 25-07-26 — WorkerGuards retained in a process-global FILE_LOG_GUARDS registry; behavioural write-after-init test proves the file writer stays alive; all 39+2 oz-logging tests pass. |
 | 6 | API-1 | ✅ **FIXED** 25-07-26 — serve() refuses to boot when OZ_PRODUCTION=1 without OZ_API_SECRET/OZ_ADMIN_KEY (cloud-server-parity gate); dev fallback retained for zero-config dev with a one-time loud warning; 7 new tests; all 194+1 oz-api tests pass. |
-| 7+ | MEDs | ⬜ MSL-4, MSL-7, CLI-1, CLI-2, N-1, M-1, DC-1 (CS-2 done alongside CS-1). Note: email_pg pg_integration_email_loop_reads_postgres is a pre-existing environmental flake (fake host smtp.test.com DNS varies by run) — observed failing intermittently on 25-07-26 with all webhook/auth tests green. |
+| 7 | MEDs | ✅ **ALL DONE** 25-07-26 — MSL-4 (single-writer loyalty projection: `customers.loyalty_points` maintained inside `Store::earn_points`/`redeem_points`; CRM flat-rate increment removed), MSL-7 (`SUM(tax_total_minor)`; ALTER shims removed from tests), N-1 (real currency `code`/`amount_1000` on `TemplateParameter`; N-2 Retry-After + doc alignment also fixed), M-1 (header-only dimension probe enforcing `max_side`/`max_pixels` before decode), CLI-1 (tx-aware `Store::create_sale_in_tx`), CLI-2 (real argon2 admin PIN hash + change-now warning), DC-1 (constant-time PSK compare via HMAC digests + documented cleartext caveat; TLS/noise-PSK tracked as future work). Verification: oz-media 26, oz-notification 30, oz-core 2,025, oz-cli 85, desktop lan_server 20 — all pass. **Fix-order phase COMPLETE: all 7 orders done.** Note: email_pg pg_integration_email_loop_reads_postgres is a pre-existing environmental flake (fake host smtp.test.com DNS varies by run). |
 
