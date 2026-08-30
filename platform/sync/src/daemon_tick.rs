@@ -71,6 +71,85 @@ async fn push_retry_after_auth_refresh(
     }
 }
 
+/// ADR #11: persist a server-migration redirect so the next cycle connects to
+/// the new server. Best-effort (a failure just keeps the old URL for one more
+/// cycle).
+async fn persist_migration_url(db: &DbConnection, new_url: &str) {
+    let db = db.clone();
+    let url = new_url.to_owned();
+    let _ = tokio::task::spawn_blocking(move || {
+        let conn = db.blocking_lock();
+        let store = Store::new(&conn);
+        let _ = Settings::set_sync_server_url(store.conn(), &url);
+    })
+    .await;
+    tracing::info!(new_url = %new_url, "server migrated — local config updated");
+}
+
+/// Recover from an expired pull anchor: fetch a full snapshot, import it, and
+/// reset the pull state. Returns the error message to record in daemon status
+/// (None when the snapshot was imported cleanly).
+async fn recover_expired_anchor(
+    db: &DbConnection,
+    transport: &SyncTransport,
+    oldest_available: Option<String>,
+) -> Option<String> {
+    tracing::warn!(
+        oldest_available = ?oldest_available,
+        "sync anchor expired — fetching snapshot to recover"
+    );
+    match transport.fetch_snapshot().await {
+        Ok(snapshot) => {
+            let db_clone = db.clone();
+            let anchor = oldest_available.clone();
+            let recovery = tokio::task::spawn_blocking(move || {
+                let conn = db_clone.blocking_lock();
+                let store = Store::new(&conn);
+                let imported = import_snapshot(&store, &snapshot)?;
+                store.set_sync_pull_state(anchor.as_deref(), None)?;
+                Ok::<usize, SyncError>(imported)
+            })
+            .await;
+            match recovery {
+                Ok(Ok(imported)) => {
+                    tracing::info!(imported, "snapshot imported after daemon anchor expiry");
+                    None
+                }
+                Ok(Err(e)) => Some(format!("snapshot recovery failed: {e}")),
+                Err(e) => Some(format!("snapshot recovery panicked: {e}")),
+            }
+        }
+        Err(e) => {
+            if let SyncError::ServerMigrated { new_url } = &e {
+                persist_migration_url(db, new_url).await;
+            }
+            Some(format!("snapshot recovery fetch failed: {e}"))
+        }
+    }
+}
+
+/// Handle a non-anchor pull failure: persist a server-migration redirect and
+/// refresh the API key on 401 so the next cycle pulls with fresh credentials.
+/// No in-tick pull retry — the pull apply block is anchor/quarantine-sensitive,
+/// so a retry would duplicate ~150 lines of application logic; recovery one
+/// cycle later is automatic. Returns the error message to record in daemon
+/// status.
+async fn handle_pull_error(db: &DbConnection, cfg: &SyncConfig, e: SyncError) -> Option<String> {
+    if let SyncError::ServerMigrated { new_url } = &e {
+        persist_migration_url(db, new_url).await;
+    }
+    if let SyncError::AuthExpired = e {
+        tracing::warn!("pull rejected (401) — refreshing API key for next cycle");
+        if refresh_persisted_api_key(db, &cfg.server_url).await {
+            Some("pull rejected (401); key refreshed — will retry next cycle".into())
+        } else {
+            Some("pull rejected (401) and token refresh failed".into())
+        }
+    } else {
+        Some(format!("pull phase: {e}"))
+    }
+}
+
 pub(super) async fn run_tick(
     db: &DbConnection,
     daemon_status: &Arc<RwLock<DaemonStatus>>,
@@ -136,15 +215,7 @@ pub(super) async fn run_tick(
                         // ADR #11: If the server migrated, update the local
                         // URL so the next cycle connects to the new server.
                         if let SyncError::ServerMigrated { new_url } = &e {
-                            let db = db.clone();
-                            let url = new_url.clone();
-                            let _ = tokio::task::spawn_blocking(move || {
-                                let conn = db.blocking_lock();
-                                let store = Store::new(&conn);
-                                let _ = Settings::set_sync_server_url(store.conn(), &url);
-                            })
-                            .await;
-                            tracing::info!(new_url = %new_url, "server migrated — local config updated");
+                            persist_migration_url(db, new_url).await;
                         }
                         // ADR sync-auth-hardening P1/P4: stale auth — refresh
                         // the key once and retry the push batch exactly once.
@@ -250,99 +321,14 @@ pub(super) async fn run_tick(
                     }
                     Err(SyncError::AnchorExpired { oldest_available }) => {
                         pulled = 0;
-                        tracing::warn!(
-                            oldest_available = ?oldest_available,
-                            "sync anchor expired — fetching snapshot to recover"
-                        );
-                        match transport.fetch_snapshot().await {
-                            Ok(snapshot) => {
-                                let db_clone = db.clone();
-                                let anchor = oldest_available.clone();
-                                let recovery = tokio::task::spawn_blocking(move || {
-                                    let conn = db_clone.blocking_lock();
-                                    let store = Store::new(&conn);
-                                    let imported = import_snapshot(&store, &snapshot)?;
-                                    store.set_sync_pull_state(anchor.as_deref(), None)?;
-                                    Ok::<usize, SyncError>(imported)
-                                })
-                                .await;
-                                match recovery {
-                                    Ok(Ok(imported)) => {
-                                        tracing::info!(
-                                            imported,
-                                            "snapshot imported after daemon anchor expiry"
-                                        );
-                                    }
-                                    Ok(Err(e)) => {
-                                        if sync_error.is_none() {
-                                            sync_error =
-                                                Some(format!("snapshot recovery failed: {e}"));
-                                        }
-                                    }
-                                    Err(e) => {
-                                        if sync_error.is_none() {
-                                            sync_error =
-                                                Some(format!("snapshot recovery panicked: {e}"));
-                                        }
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                if let SyncError::ServerMigrated { new_url } = &e {
-                                    let db = db.clone();
-                                    let url = new_url.clone();
-                                    let _ = tokio::task::spawn_blocking(move || {
-                                        let conn = db.blocking_lock();
-                                        let store = Store::new(&conn);
-                                        let _ = Settings::set_sync_server_url(store.conn(), &url);
-                                    })
-                                    .await;
-                                    tracing::info!(new_url = %new_url, "server migrated — local config updated");
-                                }
-                                if sync_error.is_none() {
-                                    sync_error =
-                                        Some(format!("snapshot recovery fetch failed: {e}"));
-                                }
-                            }
+                        if sync_error.is_none() {
+                            sync_error = recover_expired_anchor(db, &transport, oldest_available).await;
                         }
                     }
                     Err(e) => {
                         pulled = 0;
-                        // ADR #11: Handle server migration redirect.
-                        if let SyncError::ServerMigrated { new_url } = &e {
-                            let db = db.clone();
-                            let url = new_url.clone();
-                            let _ = tokio::task::spawn_blocking(move || {
-                                let conn = db.blocking_lock();
-                                let store = Store::new(&conn);
-                                let _ = Settings::set_sync_server_url(store.conn(), &url);
-                            })
-                            .await;
-                            tracing::info!(new_url = %new_url, "server migrated — local config updated");
-                        }
-                        // ADR sync-auth-hardening P1: stale auth — refresh
-                        // the key once so the next cycle (60–120 s) pulls
-                        // with fresh credentials. No in-tick pull retry: the
-                        // pull apply block is anchor/quarantine-sensitive, so
-                        // a retry would duplicate ~150 lines of application
-                        // logic; recovery one cycle later is automatic.
-                        if let SyncError::AuthExpired = e {
-                            tracing::warn!(
-                                "pull rejected (401) — refreshing API key for next cycle"
-                            );
-                            if sync_error.is_none() {
-                                if refresh_persisted_api_key(db, &cfg.server_url).await {
-                                    sync_error = Some(
-                                            "pull rejected (401); key refreshed — will retry next cycle"
-                                                .into(),
-                                        );
-                                } else {
-                                    sync_error =
-                                        Some("pull rejected (401) and token refresh failed".into());
-                                }
-                            }
-                        } else if sync_error.is_none() {
-                            sync_error = Some(format!("pull phase: {e}"));
+                        if sync_error.is_none() {
+                            sync_error = handle_pull_error(db, cfg, e).await;
                         }
                     }
                 }
