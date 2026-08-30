@@ -1,4 +1,4 @@
-const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'https://license.ozpos.my.id';
+    const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'https://license.ozpos.my.id';
     let currentTab = 'dashboard';
 
     // ── FX rate (live from open.er-api.com, fallback to 16000) ───
@@ -41,14 +41,21 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
     // svgChart, svgDonut are defined in admin-utils.js (loaded first).
 
     // ── Dashboard tab ────────────────────────────────────────────────
+    // P3 fix (review): renderDashboard had no sequence guard — a slow stats
+    // response landing after the user switched tabs overwrote the tenants/
+    // health view. Same last-click-wins pattern as renderTenants (B15).
+    const dashboardGuard = createSeqGuard();
     async function renderDashboard() {
       const c = document.getElementById('content');
+      const seq = dashboardGuard.next();
       c.innerHTML = '<div class="skeleton" style="height:8rem"></div>';
 
       // Load real stats; on failure show an error state (no MOCK fallback).
       let stats = null;
       let loadError = null;
       try { stats = await api('/api/v1/admin/stats'); } catch (err) { loadError = err; }
+      // A newer render superseded this one while we awaited — drop out.
+      if (!dashboardGuard.isCurrent(seq)) { return; }
       if (!stats) {
         // api() already rendered an "Access denied" screen for 401/403 —
         // don't overwrite it with a generic error. Only show the retry UI
@@ -73,6 +80,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       if (m.kpis.fxRate) { fxRate = m.kpis.fxRate; fxLive = !!m.kpis.fxLive; fxUpdatedAt = m.kpis.fxUpdatedAt || ''; }
       else {
         const fx = await fetchFxRate();
+        if (!dashboardGuard.isCurrent(seq)) { return; } // superseded mid-fx-fetch
         if (fx.live) { fxRate = fx.rate; fxLive = true; fxUpdatedAt = fx.updatedAt; }
         else { fxLive = false; }
       }
@@ -189,12 +197,11 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
 // kpiC, tableCard are defined in admin-utils.js (loaded first).
 
     // ── Tab switching ──────────────────────────────────────────────
+    // B38: use setNavActive so aria-current moves with .nav-active — the
+    // screen reader must know which admin section is open.
     document.querySelectorAll('.nav-btn').forEach(tab => {
       tab.addEventListener('click', () => {
-        // INVARIANT (B1/B2 class): never name a param `t` — it shadows the
-        // i18n t() helper. Renamed defensively; body must not call t().
-        document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('nav-active'));
-        tab.classList.add('nav-active');
+        setNavActive(document.querySelectorAll('.nav-btn'), tab);
         currentTab = tab.dataset.tab;
         if (currentTab === 'dashboard') renderDashboard();
         if (currentTab === 'tenants') renderTenants();
@@ -336,6 +343,11 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       box.appendChild(el('h3', null, t('tenant.changeTier')));
       const p = el('p', 'small'); p.style.marginBottom = '.6rem'; p.textContent = t('tenant.currentTier') + ((data.subscription && data.subscription.tierKey) || 'none');
       box.appendChild(p);
+      // Tier override dropdown — hardcoded to non-free plans (server-side
+      // upgradeable tiers only; 'free' is excluded because a free tenant
+      // gets a tier-override when they subscribe, not via admin override).
+      // Keep this list in sync with the server's ValidTiers if new tiers
+      // are added (see LSE-8 tier-override handler).
       const select = el('select', 'input'); ['plus','pro','premium','enterprise'].forEach(tier => { const opt = el('option', null, tier); if (tier === (data.subscription && data.subscription.tierKey)) opt.selected = true; select.appendChild(opt); });
       box.appendChild(select);
       const reason = el('input', 'input'); reason.placeholder = t('tenant.reasonOverride'); reason.style.cssText = 'margin-top:.5rem;' + reason.style.cssText; box.appendChild(reason);

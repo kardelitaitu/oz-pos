@@ -335,47 +335,28 @@
     return !!(btn && btn._ozLockoutTimer);
   }
 
-  // startCountdown / stopCountdown / countdownActive — generic per-node
-  // countdown timer. B18 fix: login.js startOtpCooldown kept the resend
-  // cooldown in a module global. Switching auth mode (setAuthMode) hid the
-  // cooldown <span> without clearing the timer; switching back to OTP mode
-  // skipped showing it, so a live 60s cooldown ran invisibly and the user
-  // hit a 429 on the next resend. Timer is now stored on the DOM node
-  // (_ozCdTimer) so visibility can follow countdownActive(node) and
-  // stopCountdown() can tear it down from anywhere.
+  // setNavActive moves the active-tab marker across the top-nav buttons,
+  // keeping the CSS class (visual) and aria-current (assistive tech) in
+  // sync. B38: the old code only toggled .nav-active, so a screen reader
+  // had no way to know which admin section was open. `btns` is any
+  // iterable of buttons (NodeList/array); a null/undefined active button
+  // clears every marker defensively (callers may re-render mid-click).
   /**
-   * @param {HTMLElement|null} node
-   * @param {number} seconds
-   * @param {function(number): string} fmt
-   * @param {function(): void} onEnd
+   * @param {ArrayLike<HTMLElement>} btns
+   * @param {HTMLElement|null|undefined} activeBtn
    */
-  function startCountdown(node, seconds, fmt, onEnd) {
-    if (!node) return;
-    if (node._ozCdTimer) clearInterval(node._ozCdTimer);
-    var remaining = seconds;
-    node.textContent = fmt(remaining);
-    node._ozCdTimer = setInterval(function () {
-      remaining -= 1;
-      if (remaining <= 0) {
-        clearInterval(node._ozCdTimer);
-        node._ozCdTimer = null;
-        onEnd();
-        return;
-      }
-      node.textContent = fmt(remaining);
-    }, 1000);
-  }
-
-  function stopCountdown(node) {
-    if (!node) return;
-    if (node._ozCdTimer) {
-      clearInterval(node._ozCdTimer);
-      node._ozCdTimer = null;
+  function setNavActive(btns, activeBtn) {
+    // Array.prototype.forEach.call (not btns.forEach) so an old WebView
+    // NodeList — which may lack forEach — still works (B20 class: this
+    // admin targets legacy embedded browsers).
+    Array.prototype.forEach.call(btns, function (btn) {
+      btn.classList.remove('nav-active');
+      btn.removeAttribute('aria-current');
+    });
+    if (activeBtn) {
+      activeBtn.classList.add('nav-active');
+      activeBtn.setAttribute('aria-current', 'page');
     }
-  }
-
-  function countdownActive(node) {
-    return !!(node && node._ozCdTimer);
   }
 
   // busyWrap — single-flight async guard for action buttons (B19).
@@ -508,6 +489,12 @@
   // switch and the user walked into a 429. The handle now lives on the
   // node (same pattern as startLockoutCountdown), so visibility can
   // follow countdownActive(node).
+  /**
+   * @param {HTMLElement|null} node
+   * @param {number} seconds
+   * @param {function(number): string} fmt
+   * @param {function(): void} [onEnd]
+   */
   function startCountdown(node, seconds, fmt, onEnd) {
     if (!node) return;
     if (node._ozCdTimer) clearInterval(node._ozCdTimer);
@@ -525,10 +512,17 @@
     }, 1000);
   }
 
+  /**
+   * @param {HTMLElement|null} node
+   */
   function stopCountdown(node) {
     if (node && node._ozCdTimer) { clearInterval(node._ozCdTimer); node._ozCdTimer = null; }
   }
 
+  /**
+   * @param {HTMLElement|null} node
+   * @returns {boolean}
+   */
   function countdownActive(node) {
     return !!(node && node._ozCdTimer);
   }
@@ -887,6 +881,7 @@
     fetchWithTimeout: fetchWithTimeout,
     exchangeUrlFrom: exchangeUrlFrom,
     isLockoutActive: isLockoutActive,
+    setNavActive: setNavActive,
     statusLabel: statusLabel,
     createSeqGuard: createSeqGuard,
     t: t,
