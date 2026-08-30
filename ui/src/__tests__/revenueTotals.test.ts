@@ -27,3 +27,32 @@ describe('sumRevenueByCurrency', () => {
     expect(sumRevenueByCurrency([])).toEqual([]);
   });
 });
+
+// ── REP-04: refund netting totals ────────────────────────────────
+import { sumNetRevenueByCurrency } from '@/features/reports/revenueTotals';
+
+describe('sumNetRevenueByCurrency', () => {
+  it('sums refunds and net per currency without crossing currencies', () => {
+    const totals = sumNetRevenueByCurrency([
+      { currency: 'USD', refund_minor: 300, net_revenue_minor: 700 },
+      { currency: 'USD', refund_minor: 100, net_revenue_minor: 400 },
+      { currency: 'IDR', refund_minor: 50000, net_revenue_minor: 115000 },
+    ]);
+    expect(totals).toEqual([
+      { currency: 'USD', refund_minor: 400, net_revenue_minor: 1100 },
+      { currency: 'IDR', refund_minor: 50000, net_revenue_minor: 115000 },
+    ]);
+  });
+
+  it('keeps negative net visible (refund-only period)', () => {
+    const totals = sumNetRevenueByCurrency([
+      { currency: 'USD', refund_minor: 400, net_revenue_minor: -400 },
+    ]);
+    expect(totals[0]).toEqual({ currency: 'USD', refund_minor: 400, net_revenue_minor: -400 });
+  });
+
+  it('treats rows without the REP-04 fields as zero', () => {
+    const totals = sumNetRevenueByCurrency([{ currency: 'USD' }]);
+    expect(totals).toEqual([{ currency: 'USD', refund_minor: 0, net_revenue_minor: 0 }]);
+  });
+});

@@ -29,6 +29,8 @@ sales-report-revenue-label = Revenue (minor units)
 sales-report-total-revenue = Total
 sales-report-total-orders = Orders
 sales-report-total-gross-profit = Gross Profit
+sales-report-total-refunds = Refunds
+sales-report-total-net-revenue = Net Revenue
 sales-report-category-breakdown = By Category
 sales-report-top-products = Top Products
 sales-report-rank = #
@@ -137,9 +139,10 @@ vi.mock('@/components/Button', () => ({
 vi.mock('@/features/reports/SalesReportScreen.css', () => ({}));
 
 // ── Test helpers ──────────────────────────────────────────────
-function buildDailyRevenue(overrides: Partial<{ date: string; total_minor: number; currency: string; sale_count: number; cogs_minor: number; gross_profit_minor: number; gross_margin_percent: number }> = {}) {
+function buildDailyRevenue(overrides: Partial<{ date: string; total_minor: number; currency: string; sale_count: number; cogs_minor: number; gross_profit_minor: number; gross_margin_percent: number; refund_minor: number; net_revenue_minor: number }> = {}) {
   const total_minor = overrides.total_minor ?? 150000;
   const cogs_minor = overrides.cogs_minor ?? 60000;
+  const refund_minor = overrides.refund_minor ?? 0;
   return {
     date: overrides.date ?? '2026-07-01',
     total_minor,
@@ -148,6 +151,8 @@ function buildDailyRevenue(overrides: Partial<{ date: string; total_minor: numbe
     cogs_minor,
     gross_profit_minor: overrides.gross_profit_minor ?? total_minor - cogs_minor,
     gross_margin_percent: overrides.gross_margin_percent ?? 60,
+    refund_minor,
+    net_revenue_minor: overrides.net_revenue_minor ?? total_minor - refund_minor,
   };
 }
 
@@ -399,6 +404,33 @@ describe('SalesReportScreen', () => {
       // Margin % = 210000 / 350000 = 60%
       expect(screen.getByText(/\(60\.0%\)/)).toBeTruthy();
     });
+  });
+
+  it('shows refunds and net revenue totals when the period has refunds (REP-04)', async () => {
+    mockGetDailyRevenue.mockResolvedValue([
+      buildDailyRevenue({ total_minor: 100000, cogs_minor: 0, refund_minor: 30000 }),
+    ]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      // Refund 30000 → $300.00; net = 100000 − 30000 = $700.00.
+      expect(screen.getByText(/Refunds/)).toBeTruthy();
+      expect(screen.getByText(/\$300\.00/)).toBeTruthy();
+      expect(screen.getByText(/Net Revenue/)).toBeTruthy();
+      expect(screen.getByText(/\$700\.00/)).toBeTruthy();
+    });
+  });
+
+  it('hides the refunds row when the period has no refunds (REP-04)', async () => {
+    resolveDefaultData();
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('bar-chart')).toBeTruthy();
+    });
+    expect(screen.queryByText(/Refunds/)).toBeNull();
+    expect(screen.queryByText(/Net Revenue/)).toBeNull();
   });
 
   it('shows gross profit total in weekly view too (HPP exposure)', async () => {

@@ -180,3 +180,7 @@ dashboard-export-col-date = Tanggal
 dashboard-export-col-revenue = Pendapatan
 dashboard-export-col-profit = Laba Kotor
 dashboard-export-col-orders = Pesanan
+
+# Sales report — REP-04 refund netting
+sales-report-total-refunds = Refund:
+sales-report-total-net-revenue = Pendapatan Bersih:

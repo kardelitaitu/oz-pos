@@ -12,6 +12,10 @@ export interface DailyRevenueRow {
   gross_profit_minor: number;
   /** Gross margin as a percentage of revenue. */
   gross_margin_percent: number;
+  /** Refunds processed on this date, minor units, same currency (REP-04). */
+  refund_minor?: number;
+  /** Net revenue: gross − refunds; negative on refund-only days (REP-04). */
+  net_revenue_minor?: number;
 }
 
 /** Weekly revenue aggregate for a date range. */
@@ -26,6 +30,10 @@ export interface WeeklyRevenueRow {
   gross_profit_minor: number;
   /** Gross margin as a percentage of revenue. */
   gross_margin_percent: number;
+  /** Refunds processed in this week, minor units, same currency (REP-04). */
+  refund_minor?: number;
+  /** Net revenue: gross − refunds (REP-04). */
+  net_revenue_minor?: number;
 }
 
 /** Monthly revenue aggregate for a date range. */
@@ -40,6 +48,10 @@ export interface MonthlyRevenueRow {
   gross_profit_minor: number;
   /** Gross margin as a percentage of revenue. */
   gross_margin_percent: number;
+  /** Refunds processed in this month, minor units, same currency (REP-04). */
+  refund_minor?: number;
+  /** Net revenue: gross − refunds (REP-04). */
+  net_revenue_minor?: number;
 }
 
 /** Top-selling product within a date range. */

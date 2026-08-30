@@ -40,7 +40,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { minorUnitExponent } from '@/types/domain';
-import { sumGrossProfitByCurrency, sumRevenueByCurrency } from './revenueTotals';
+import { sumGrossProfitByCurrency, sumNetRevenueByCurrency, sumRevenueByCurrency } from './revenueTotals';
 import './SalesReportScreen.css';
 
 const PIE_COLORS = [
@@ -591,6 +591,23 @@ export default function SalesReportScreen() {
                   </span>
                 </span>
               </span>
+            );
+          })()}
+          {/* REP-04: refunds netted into net revenue for the period */}
+          {(revenueData ?? []).length > 0 && (() => {
+            const netTotals = sumNetRevenueByCurrency(revenueData);
+            if (!netTotals.some((t) => t.refund_minor > 0)) return null;
+            return (
+              <>
+                <span>
+                  <Localized id="sales-report-total-refunds">Refunds</Localized>:{' '}
+                  {netTotals.map((t) => fmtCurrency(t.refund_minor, t.currency, numLocale)).join(' · ')}
+                </span>
+                <span>
+                  <Localized id="sales-report-total-net-revenue">Net Revenue</Localized>:{' '}
+                  {netTotals.map((t) => fmtCurrency(t.net_revenue_minor, t.currency, numLocale)).join(' · ')}
+                </span>
+              </>
             );
           })()}
         </div>
