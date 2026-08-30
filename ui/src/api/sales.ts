@@ -194,6 +194,16 @@ export interface CompleteSaleWithResolvedShortfallsArgs {
   discountLabel?: string;
   /** Cashier-resolved shortfalls: per-SKU allocation to specific locations. */
   resolutions: ResolvedShortfall[];
+  /** CUR-02: tip collected at checkout (backend defaults to 0 when absent). */
+  tipMinor?: number;
+  /** CUR-02: service charge collected at checkout (defaults to 0). */
+  serviceChargeMinor?: number;
+  /** CUR-02: original sale currency when multi-currency checkout is used. */
+  baseCurrency?: string;
+  /** CUR-02: original sale total in `baseCurrency` minor units. */
+  baseTotalMinor?: number;
+  /** CUR-02: fixed-point rate (millionths) `baseCurrency → sale currency`. */
+  tenderRateMillionths?: number;
 }
 
 /** Complete a sale with cashier-resolved shortfalls (split fulfillment).

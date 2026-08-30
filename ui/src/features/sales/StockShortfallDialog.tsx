@@ -32,6 +32,17 @@ export interface StockShortfallDialogProps {
   discountPercent: number;
   /** Discount label. */
   discountLabel?: string | null;
+  /** CUR-02: tip collected at checkout (FRONTEND-04 — forwarded so the
+   *  retry records what the customer actually paid; backend defaults 0). */
+  tipMinor?: number;
+  /** CUR-02: service charge collected at checkout. */
+  serviceChargeMinor?: number;
+  /** CUR-02: original sale currency when multi-currency checkout is used. */
+  baseCurrency?: string;
+  /** CUR-02: original sale total in `baseCurrency` minor units. */
+  baseTotalMinor?: number;
+  /** CUR-02: fixed-point rate (millionths) `baseCurrency → sale currency`. */
+  tenderRateMillionths?: number;
   /** Called when the sale completes successfully after resolution. */
   onComplete: () => void;
   /** Called when the cashier cancels the sale. */
@@ -68,6 +79,11 @@ export default function StockShortfallDialog({
   serialNumbers,
   discountPercent,
   discountLabel,
+  tipMinor,
+  serviceChargeMinor,
+  baseCurrency,
+  baseTotalMinor,
+  tenderRateMillionths,
   onComplete,
   onCancel,
 }: StockShortfallDialogProps) {
@@ -218,6 +234,14 @@ export default function StockShortfallDialog({
         currency,
         discountPercent,
         ...(discountLabel ? { discountLabel } : {}),
+        // FRONTEND-04: forward the CUR-02 tender snapshot collected at
+        // checkout. Without these the backend records tip/service as 0 and
+        // loses the base-currency audit trail on the retry sale.
+        ...(tipMinor != null ? { tipMinor } : {}),
+        ...(serviceChargeMinor != null ? { serviceChargeMinor } : {}),
+        ...(baseCurrency != null ? { baseCurrency } : {}),
+        ...(baseTotalMinor != null ? { baseTotalMinor } : {}),
+        ...(tenderRateMillionths != null ? { tenderRateMillionths } : {}),
         resolutions: resolvedShortfalls,
       };
 
@@ -246,6 +270,11 @@ export default function StockShortfallDialog({
     currency,
     discountPercent,
     discountLabel,
+    tipMinor,
+    serviceChargeMinor,
+    baseCurrency,
+    baseTotalMinor,
+    tenderRateMillionths,
     onComplete,
     l10n,
   ]);

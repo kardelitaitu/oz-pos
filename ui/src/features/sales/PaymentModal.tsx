@@ -482,6 +482,26 @@ export default function PaymentModal({
     return Math.round(num * 10 ** chargeExponent);
   }, [tendered, cartCurrency, tenderedMinor, total.currency]);
 
+  // CUR-02: snapshot of what the customer actually paid — tip/service are
+  // always sent; base-currency fields appear only when the charge
+  // currency differs from the sale's base currency. Shared by the QRIS
+  // path, the main path, and the FRONTEND-04 shortfall retry so all three
+  // settle with identical tender metadata.
+  const tenderSnapshot = useMemo(
+    () => ({
+      tipMinor,
+      serviceChargeMinor,
+      ...(cartCurrency !== total.currency && effectiveRateInfo
+        ? {
+            baseCurrency: total.currency,
+            baseTotalMinor: total.minor_units,
+            tenderRateMillionths: Math.round(effectiveRateInfo.rate * 1_000_000),
+          }
+        : {}),
+    }),
+    [tipMinor, serviceChargeMinor, cartCurrency, total.currency, total.minor_units, effectiveRateInfo],
+  );
+
   const { sufficient, change } = useMemo(() => {
     if (method !== 'cash') return { sufficient: true, change: null };
     if (tenderedMinorInCartCurrency < effectiveTotalInCartCurrency) return { sufficient: false, change: null };
@@ -573,17 +593,7 @@ export default function PaymentModal({
         : undefined;
       // CUR-02: snapshot the base currency / total / rate for the QRIS
       // settlement payload too. Tip/service always sent.
-      const qrisTenderMetadata = {
-        tipMinor,
-        serviceChargeMinor,
-        ...(cartCurrency !== total.currency && effectiveRateInfo
-          ? {
-              baseCurrency: total.currency,
-              baseTotalMinor: total.minor_units,
-              tenderRateMillionths: Math.round(effectiveRateInfo.rate * 1_000_000),
-            }
-          : {}),
-      };
+      // FRONTEND-04: shared tenderSnapshot memo (see component scope).
       const saleResult = sessionToken
         ? await completeSaleScoped(sessionToken, {
             cartId,
@@ -600,7 +610,7 @@ export default function PaymentModal({
                 gatewayResponse: 'QRIS payment confirmed',
               },
             ],
-            ...(qrisTenderMetadata ? qrisTenderMetadata : {}),
+            ...tenderSnapshot,
           } as CompleteSaleScopedArgs)
         : await completeSale({
             cartId,
@@ -618,7 +628,7 @@ export default function PaymentModal({
                 gatewayResponse: 'QRIS payment confirmed',
               },
             ],
-            ...(qrisTenderMetadata ? qrisTenderMetadata : {}),
+            ...tenderSnapshot,
           });
 
       try {
@@ -714,7 +724,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [lineItems, discountPercent, discountLabel, userId, sessionToken, qrReference, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, classifyError, addToast, cartCurrency, lineItemsInCartCurrency, effectiveTotalInCartCurrency]);
+  }, [lineItems, discountPercent, discountLabel, userId, sessionToken, qrReference, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, classifyError, addToast, cartCurrency, lineItemsInCartCurrency, effectiveTotalInCartCurrency, tenderSnapshot]);
 
   const addSplit = useCallback(() => {
     setSplits((prev) => [
@@ -860,17 +870,7 @@ export default function PaymentModal({
       // audit/refund/reconciliation. Omitted entirely for single-currency
       // sales (the common case). Tip and service charge are always sent so
       // the backend records what the customer actually paid.
-      const tenderMetadata = {
-        tipMinor,
-        serviceChargeMinor,
-        ...(cartCurrency !== total.currency && effectiveRateInfo
-          ? {
-              baseCurrency: total.currency,
-              baseTotalMinor: total.minor_units,
-              tenderRateMillionths: Math.round(effectiveRateInfo.rate * 1_000_000),
-            }
-          : {}),
-      };
+      // FRONTEND-04: shared tenderSnapshot memo (see component scope).
 
       const saleResult = sessionToken
         ? await completeSaleScoped(sessionToken, {
@@ -881,7 +881,7 @@ export default function PaymentModal({
             ...(paymentSplits ? { paymentSplits } : {}),
             ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
             ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
-            ...(tenderMetadata ? tenderMetadata : {}),
+            ...tenderSnapshot,
           } as CompleteSaleScopedArgs)
         : await completeSale({
             cartId,
@@ -892,7 +892,7 @@ export default function PaymentModal({
             ...(paymentSplits ? { paymentSplits } : {}),
             ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
             ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
-            ...(tenderMetadata ? tenderMetadata : {}),
+            ...tenderSnapshot,
           });
 
       // ADR-20: Finalize the pending sale (transitions 'pending' → 'completed')
@@ -1011,7 +1011,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [method, customerName, lineItems, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, sessionToken, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, addToast, classifyError, cartCurrency, effectiveTotalInCartCurrency, lineItemsInCartCurrency, tenderedMinorInCartCurrency, total.currency, total.minor_units]);
+  }, [method, customerName, lineItems, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, sessionToken, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, addToast, classifyError, cartCurrency, effectiveTotalInCartCurrency, lineItemsInCartCurrency, tenderedMinorInCartCurrency, total.currency, total.minor_units, tenderSnapshot]);
 
   useEffect(() => {
     if (!done) return;
@@ -1094,7 +1094,12 @@ export default function PaymentModal({
       {shortfallResult && (
         <StockShortfallDialog
           shortfallResult={shortfallResult}
-          cartLines={lineItems.map((l) => ({
+          // FRONTEND-04: the retry must settle in the SAME currency the
+          // first command used (cartCurrency, with converted lines) — not
+          // the base currency — and forward the CUR-02 tender snapshot
+          // (tip/service + base fields when converted) so the second
+          // command records what the customer actually paid.
+          cartLines={lineItemsInCartCurrency.map((l) => ({
             sku: l.sku,
             qty: l.qty,
             unitPriceMinor: l.unit_price.minor_units,
@@ -1102,10 +1107,11 @@ export default function PaymentModal({
             // backend can enforce it on reconstruction.
             unitPriceCurrency: l.unit_price.currency,
           }))}
-          totalMinor={total.minor_units}
-          currency={total.currency}
+          totalMinor={effectiveTotalInCartCurrency}
+          currency={cartCurrency}
+          {...tenderSnapshot}
           paymentMethod={splitMode ? 'split' : method === 'other' ? otherLabel.trim() || 'OTHER' : method.toUpperCase()}
-          tenderedMinor={method === 'cash' && !splitMode ? Number(tenderedMinor) : null}
+          tenderedMinor={method === 'cash' && !splitMode ? tenderedMinorInCartCurrency : null}
           paymentSplits={paymentSplitsFromState() ?? null}
           customerId={selectedCustomer?.id ?? null}
           customerName={customerName.trim() || null}

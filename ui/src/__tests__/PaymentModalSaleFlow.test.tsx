@@ -4,7 +4,7 @@
 // complete_sale → get_sale → print_sales_receipt). These tests are
 // the heaviest in PaymentModal (~2-3s each) due to IPC round-trips.
 // Extracted to enable parallel execution with fast rendering tests.
-// 6 tests.
+// 7 tests.
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
@@ -230,6 +230,8 @@ describe('PaymentModal — shortfall resolution', () => {
         lineItems={[lineItem()]}
         total={usd(700)}
         userId="test-user-id"
+        tipMinor={150}
+        serviceChargeMinor={70}
         onComplete={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -249,6 +251,8 @@ describe('PaymentModal — shortfall resolution', () => {
     // FRONTEND-03 follow-up: the reconstructed lines sent to the second
     // command must carry their own currency so the backend can enforce it
     // instead of silently re-stamping the sale currency.
+    // FRONTEND-04: tip/service-charge collected at checkout must survive
+    // the shortfall retry — the backend defaults them to 0 when absent.
     await userEvent.click(screen.getByText('Confirm & Continue'));
     await waitFor(() => {
       const calls = invokeMock.mock.calls as unknown as Array<[string, unknown]>;
@@ -258,15 +262,108 @@ describe('PaymentModal — shortfall resolution', () => {
       expect(secondCmd).toBeDefined();
       expect(secondCmd?.[1]).toMatchObject({
         args: {
+          currency: 'USD',
           lines: [{ sku: 'COFFEE', qty: 2, unitPriceMinor: 350, unitPriceCurrency: 'USD' }],
+          tipMinor: 150,
+          serviceChargeMinor: 70,
+        },
+      });
+    });
+  });
+
+  // ── FRONTEND-04: multi-currency shortfall retry keeps the charge currency ──
+  it('settles a shortfall retry in the charge currency with the CUR-02 tender snapshot', async () => {
+    const shortfallPayload = {
+      requiresResolution: true,
+      shortfalls: [
+        {
+          sku: 'COFFEE',
+          productName: 'Coffee',
+          requestedQty: 5,
+          primaryQtyAvailable: 2,
+          deficit: 3,
+          primaryLocationId: 'main',
+          alternatives: [
+            { locationId: 'alt-1', locationName: 'Warehouse', qtyAvailable: 10 },
+          ],
+        },
+      ],
+    };
+
+    invokeMock.mockImplementation((cmd: string): Promise<unknown> => {
+      if (cmd === 'get_enabled_features') {
+        return Promise.resolve({ features: ['multi-currency'] });
+      }
+      if (cmd === 'list_currencies' || cmd === 'list_currencies_scoped') {
+        return Promise.resolve([
+          { code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' },
+          { code: 'IDR', name: 'Indonesian Rupiah', minor_exponent: 0, symbol: 'Rp' },
+        ]);
+      }
+      if (cmd === 'list_exchange_rates' || cmd === 'list_exchange_rates_scoped') {
+        return Promise.resolve([]);
+      }
+      if (cmd === 'get_default_currency' || cmd === 'get_default_currency_scoped') {
+        return Promise.resolve('USD');
+      }
+      if (cmd === 'get_latest_exchange_rate_scoped') {
+        // 16500 USD→IDR in fixed-point millionths.
+        return Promise.resolve({ rate_millionths: 16_500_000_000 });
+      }
+      if (cmd === 'complete_sale_scoped') {
+        // sessionToken prop is set below → the modal settles via the
+        // scoped command; reject it with the PartialStockResult payload.
+        return Promise.reject(new Error(JSON.stringify(shortfallPayload)));
+      }
+      return defaultInvokeImpl(cmd) as Promise<unknown>;
+    });
+
+    await renderWithFluent(
+      <PaymentModal
+        open
+        sessionToken="mock-token"
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await userEvent.selectOptions(screen.getByLabelText('Select charge currency'), 'IDR');
+    await userEvent.click(screen.getByLabelText(/Card/));
+    await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Insufficient Stock')).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByText('Confirm & Continue'));
+
+    // The first command settled in IDR (charge currency); the retry must
+    // settle in the SAME currency with the SAME converted lines, plus the
+    // CUR-02 snapshot (base currency/total/rate) — not silently fall back
+    // to USD base amounts. IDR exponent is 0: 350¢ × 16500 = 57750 IDR.
+    await waitFor(() => {
+      const calls = invokeMock.mock.calls as unknown as Array<[string, unknown]>;
+      const secondCmd = calls.find(
+        ([cmd]) => cmd === 'complete_sale_with_resolved_shortfalls_scoped',
+      );
+      expect(secondCmd).toBeDefined();
+      expect(secondCmd?.[1]).toMatchObject({
+        args: {
+          currency: 'IDR',
+          totalMinor: 115500,
+          lines: [{ sku: 'COFFEE', qty: 2, unitPriceMinor: 57750, unitPriceCurrency: 'IDR' }],
+          baseCurrency: 'USD',
+          baseTotalMinor: 700,
+          tenderRateMillionths: 16_500_000_000,
         },
       });
     });
   });
 
   // ── FRONTEND-03: line currency crosses the IPC boundary ──────────
-  it('sends the line currency on add_line so the backend can enforce it', async () => {
-    await renderWithFluent(
+  it('sends the line currency on add_line so the backend can enforce it', async () => {    await renderWithFluent(
       <PaymentModal
         open
         lineItems={[lineItem()]}
