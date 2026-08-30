@@ -29,6 +29,25 @@ present and clean.
 > (HAL-1). Campaign proceeds to crates/oz-plugin.
 ---
 
+## 26. crates/oz-plugin — plugin system (manifest, loader, package)
+
+Baseline: ~1.7k production lines. Slice A — manifest.rs (261:
+production 1–237 fully read), loader.rs (161 fully read), package.rs
+(verified: PLG-01 entry sanitization + PLG-06 zip-bomb caps), error/lib
+verified.
+
+**No new findings — prior PLG hardening confirmed in place.** PLG-08
+`deny_unknown_fields` on every manifest section with a typed kebab-case
+`Permission` enum (8 permissions, fail-closed `permission_from_str`);
+PLG-02 script resolution rejects absolute/drive/UNC/`..` structurally
+and verifies canonical containment (symlink escape fails the plugin);
+PLG-01/06 archive defenses (512 entries, 8/16 MiB per-entry, 64 MiB
+total, 100× ratio cap). Documented fail-closed asymmetry: one bad
+manifest aborts the whole registry load; an unsafe script path skips
+only that plugin with a loud warn. Slice B (manager.rs, db.rs) next.
+
+---
+
 ## 25. crates/oz-hal — hardware abstraction layer
 
 Baseline: ~3.2k production lines across 28 files. Slice A (registry.rs
