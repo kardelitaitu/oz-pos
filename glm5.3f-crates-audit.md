@@ -771,6 +771,29 @@ a read-only transaction) and compares SHA-256 digests in SQL rather than
 process-memory secrets; all SQL is parameterized; `PgError` maps cleanly
 to 409/404/400/500.
 
+### Slice C — route handlers: products (303), sales (227), users (122) fully
+read; plans/terminals/tax_rates/categories/health verified structurally
+(admin-key gating confirmed at plans.rs:94 and terminals.rs:105 via targeted
+grep; handlers total ~600 further lines)
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| API-4 | 🟡 LOW-MED | oz-api/src/routes/users.rs:69–118 | `POST /api/v1/users` requires **any** valid JWT but no privilege check — a leaked label or terminal-scoped token can create a user with `role-owner` and then obtain owner sessions. | Gate on admin-minted tokens or an owner-scope claim; keep the endpoint out of general terminal tokens. |
+
+**Slice C notes:** sales accept client-supplied unit prices (the automation
+API contract — any valid token can book sales at arbitrary prices; INFO).
+products/users stamp `tenant_id` via a follow-up UPDATE with a documented
+warn-only degrade on the SQLite path. Plans and terminal registration are
+confirmed admin-key-gated. All handlers use typed error→HTTP mapping with
+no leaked internals.
+
+> **oz-api complete** (lib, auth, pg, 12 route files — all read or
+> structurally verified with targeted gate checks). Findings: API-1
+> (🟠 dev-secret fallback), API-2/3 (ℹ️), API-4 (🟡 user-creation
+> privilege gap). Campaign proceeds to crates/oz-foundation.
+
+---
+
 ---
 
 ---

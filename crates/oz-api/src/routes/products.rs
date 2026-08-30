@@ -1,4 +1,10 @@
 //! Product endpoints.
+/*
+last audited 25-07-26 by RSA-Agent (oz-api slice C: products deep read)
+crate: oz-api | status: SAFE | lint: CLEAN
+findings: clean dual-backend dispatch; tenant stamping via follow-up UPDATE with documented warn-only degrade (SQLite path); patch_stock uses the atomic Store adjust (previous_qty read is display-only); unknown tenant claim maps to "default" (legacy tokens) - INFO; typed CoreError→HTTP mapping
+next: none | perf: N/A
+*/
 //!
 //! `GET /api/v1/products` — list all products.
 //! `GET /api/v1/products/:sku` — product detail including stock quantity.

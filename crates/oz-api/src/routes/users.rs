@@ -1,4 +1,10 @@
 //! User endpoints.
+/*
+last audited 25-07-26 by RSA-Agent (oz-api slice C: users deep read)
+crate: oz-api | status: SAFE | lint: CLEAN
+findings: API-4 LOW-MED: POST /api/v1/users is JWT-protected but performs NO privilege check — any valid token (label/terminal-scoped) can create a user with any role_id including role-owner, then obtain owner sessions; propose requiring admin-key minted tokens or an owner-scope claim; accepts caller-computed pin_hash (documented contract); SQLite path stamps tenant_id in a follow-up UPDATE (documented non-atomic degrade, same as products)
+next: privilege-gate user creation (API-4) | perf: N/A
+*/
 //!
 //! `POST /api/v1/users` — create a new user.
 
