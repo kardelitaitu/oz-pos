@@ -1895,3 +1895,16 @@ simply predates the payment keys.
 One regression found and fixed during the sweep: the full UI run exposed that `api-small-modules-contract.test.ts` still asserted the pre-UI-1 `get_setting` gateway behaviour (the earlier UI-1 fix updated `gateway.test.ts` but missed this second contract file) — the two tests now assert the `gateway_status` contract. All other gates were green on the first pass.
 
 **Campaign status: CLOSED.** All 32 targets audited; every code-level finding (HIGH, MED, LOW, INFO) fixed across 20+ commits on `0.0.33`; the TLS/noise-PSK LAN-transport upgrade remains the sole tracked future-work item (architecture-level, see DC-1's threat-model note).
+### 41. Skill-drift guard post-campaign pass (25-07-26)
+
+Per the project's skill-drift-guard convention (run after changes to `oz-*` crates, `apps/desktop-client/`, or `ui/`), the drift detection script was executed against the campaign's results plus a targeted manual pass on the convention-level surfaces the automation cannot judge:
+
+- **Automated checks (paths, crate inventory, dep versions, cross-references, Fluent ids, audit-date format):** "No drift detected. All skills are in sync with the code."
+- **Manual convention pass:** the campaign's structural changes introduce no skill contradictions —
+  - `ui/src/api/tauri.ts` (UI-2) strengthens the documented "components never call `invoke()` directly; all access goes through `ui/src/api/`" rule (`tauri-ipc` rule 3, `ui-components` rule 5) rather than drifting it;
+  - `crates/oz-cli/src/commands/` split (CLI-5) is internal structure below the granularity any skill documents (`project-scaffold` still accurately describes `crates/oz-cli` and its role);
+  - the new `argon2` (oz-cli) and `hmac` (oz-api) dependencies are crate deps, not workspace crates — no crate-inventory drift;
+  - command conventions (`apps/desktop-client/src/commands/<feature>.rs`, lib.rs registration) were preserved by every fix.
+- **Audit stamps:** every file touched by a fix carries the updated `last audited` stamp with its finding resolution, matching the project's stamp format.
+
+No skill patches were required. Campaign remains CLOSED; TLS/noise-PSK upgrade is the sole tracked future-work item.
