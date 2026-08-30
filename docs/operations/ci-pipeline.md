@@ -179,7 +179,7 @@ Comprehensive pre-push gate mirroring CI. Runs:
 1. Add entry to `scripts/gates.json` with `id`, `label`, `status`, `runners`, and `ci` mapping
 2. Add the gate declaration to `scripts/check.sh` and/or `scripts/check-ui.mjs`
 3. Add the corresponding job to the appropriate workflow (`.github/workflows/*.yml`)
-4. Update this document (`docs/ci-pipeline.md`) — the Job Matrix and Pre-Merge Validation Gates tables
+4. Update this document (`docs/operations/ci-pipeline.md`) — the Job Matrix and Pre-Merge Validation Gates tables
 5. Run `python3 scripts/verify-ci-docs-drift.py` locally to verify
 
 ---
