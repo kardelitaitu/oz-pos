@@ -1092,6 +1092,26 @@ the composite `(created_at, id)` cursor derives from the last *kept* row
 transaction; and the users snapshot query excludes `pin_hash` (SYNC-06
 PG parity).
 
+### Slice G — pg_daemon.rs (1,478: production 1–680 fully read; tests
+682+) — **platform-sync COMPLETE**
+
+**No new findings — exemplary.** Full parity with the SQLite daemon:
+durable anchor advanced only after the page *and* the ADR #6 stock-summary
+rebuild succeed, SYNC-09 mid-pull rewind detection under one lock hold,
+the shared ADR #21 conflict service, and SYNC-10 settings re-emit after
+commit. The anchor tracks `created_at` (never the remote's possibly-NULL
+`synced_at`), `recover_pg_snapshot` imports *before* resetting the anchor
+with both orderings test-pinned, the tenant falls back
+license-setting → queue-tenant → default, `require_tls` is fail-closed,
+and a documented fix makes the pull phase run every enabled cycle
+(previously unreachable on push-idle cycles, starving relay terminals).
+
+> **platform-sync COMPLETE** — 8 production files, ~9.9k lines, all read
+> or verified and stamped; zero new finding IDs. Campaign proceeds to
+> modules/* (sales first), then the remaining crates.
+
+---
+
 ---
 
 ---

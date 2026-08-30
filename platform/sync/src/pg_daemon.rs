@@ -1,5 +1,11 @@
 //! PostgreSQL Sync Daemon — background task that periodically pushes pending
 //! offline mutations directly to a remote PostgreSQL database.
+/*
+last audited 25-07-26 by RSA-Agent (platform-sync slice G: pg_daemon deep read)
+crate: platform-sync | status: SAFE | lint: CLEAN
+findings: exemplary — full SYNC-01/02/09/10 parity with the SQLite daemon: durable anchor advanced only after the page plus the ADR #6 stock_summary rebuild succeed, SYNC-09 mid-pull rewind detection under one lock hold, shared ADR #21 conflict service, SYNC-10 settings re-emit after commit; documented pull-every-cycle fix (pull was previously unreachable on push-idle cycles, starving relay terminals); anchor anchored on created_at never synced_at (documented NULL-stamp rationale); recover_pg_snapshot imports BEFORE resetting the anchor (test-pinned both orderings); tenant fallback chain (license setting, then queue tenant, then default); require_tls fail-closed; per-phase panic capture into status
+next: none | perf: blocking DB phases in spawn_blocking
+*/
 //!
 //! Operates similarly to [`crate::daemon::SyncDaemon`] but uses a
 //! [`PgTransport`] instead of HTTP transport. Configuration is read from
