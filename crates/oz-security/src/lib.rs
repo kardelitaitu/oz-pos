@@ -2,7 +2,8 @@
 last audited 25-07-26 by RSA-Agent
 crate: oz-security | status: SAFE | lint: CLEAN
 findings: Keyring trait + InMemoryKeyring + platform dispatch re-verified; default rotate_key is non-atomic get->archive->write (SEC-4); secrets returned as String without zeroize (SEC-6); 82 unit + 6 doc tests pass
-next: none this pass | perf: N/A
+fixed 2026-07-25 (glm-5.3 review P2 pass): SEC-4 default rotate_key restaged to park-the-new-key -> archive-current -> promote (only destructive op is the final swap; failed promote preserves current + archives pre-rotation current, leftover -staging slots are overwritten next rotation); SEC-6 partially addressed — raw entropy buffer zeroized after encode and hex key held in Zeroizing (full SecretString keyring surface deferred: OS credential stores copy secrets internally, so the residual exposure is out of process control); 83 unit + 6 doc tests pass
+next: SEC-6 residual — SecretString for the Keyring get/set surface | perf: N/A
 */
 
 //! Encryption, secrets, and PCI-DSS helpers for OZ-POS.
@@ -37,6 +38,7 @@ pub mod windows;
 
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
+use zeroize::{Zeroize, Zeroizing};
 
 pub use error::SecurityError;
 
@@ -104,22 +106,57 @@ pub trait Keyring {
     /// Uses `get_secret` and `set_secret` for key storage, so
     /// implementors do NOT need to override this unless they need
     /// atomic lock-and-rotate (e.g. [`InMemoryKeyring`]).
+    ///
+    /// # SEC-4: staged rotation ordering
+    ///
+    /// OS credential stores have no transaction primitive, so the write
+    /// order is staged so that the *only* destructive operation is the
+    /// final pointer swap:
+    ///
+    /// 1. park the fresh key (and timestamp) in `{name}-staging` slots
+    /// 2. archive the current key to `{name}-prev`
+    /// 3. promote staging → current, then write the timestamp
+    /// 4. best-effort cleanup of the staging slots
+    ///
+    /// A failure before step 3 leaves the current key and the previous
+    /// archive untouched — a later rotation simply overwrites any
+    /// leftover staging slots. Previously the archive step ran first, so
+    /// a failure between archive and swap clobbered `{name}-prev` while
+    /// the current key was still the old one.
     fn rotate_key(&self, name: &str) -> Result<RotationInfo, SecurityError> {
         let mut key_bytes = [0u8; 32];
         rand::thread_rng()
             .try_fill_bytes(&mut key_bytes)
             .map_err(|e| SecurityError::KeyGenerationFailed(format!("rng error: {e}")))?;
 
-        let hex_key = hex::encode(key_bytes);
+        // SEC-6: scrub the raw entropy buffer as soon as it is encoded,
+        // and keep the encoded form in a zeroizing allocation so it does
+        // not linger past the rotation.
+        let hex_key = Zeroizing::new(hex::encode(&key_bytes));
+        key_bytes.zeroize();
         let now = chrono::Utc::now().to_rfc3339();
 
-        // Archive existing key as prev
+        let staging = format!("{name}-staging");
+        let prev = format!("{name}-prev");
+        let created_at = format!("{name}-created-at");
+
+        // 1. Park the fresh key in staging — nothing user-visible changed.
+        self.set_secret(&staging, &hex_key)?;
+        self.set_secret(&format!("{staging}-created-at"), &now)?;
+
+        // 2. Archive the current key (if any). Failures here leave the
+        //    current key and the previous archive untouched.
         if let Some(existing) = self.get_secret(name)? {
-            self.set_secret(&format!("{name}-prev"), &existing)?;
+            self.set_secret(&prev, &existing)?;
         }
 
+        // 3. Promote staging → current. The only destructive write.
         self.set_secret(name, &hex_key)?;
-        self.set_secret(&format!("{name}-created-at"), &now)?;
+        self.set_secret(&created_at, &now)?;
+
+        // 4. Best-effort cleanup of the staging slots.
+        let _ = self.delete_secret(&staging);
+        let _ = self.delete_secret(&format!("{staging}-created-at"));
 
         Ok(RotationInfo {
             key_name: name.to_owned(),
@@ -209,7 +246,9 @@ impl Keyring for InMemoryKeyring {
             .try_fill_bytes(&mut key_bytes)
             .map_err(|e| SecurityError::KeyGenerationFailed(format!("rng error: {e}")))?;
 
-        let hex_key = hex::encode(key_bytes);
+        // SEC-6: scrub the raw entropy buffer after encoding.
+        let hex_key = Zeroizing::new(hex::encode(&key_bytes));
+        key_bytes.zeroize();
         let now = chrono::Utc::now().to_rfc3339();
 
         let mut map = self
@@ -222,7 +261,7 @@ impl Keyring for InMemoryKeyring {
             map.insert(format!("{name}-prev"), existing);
         }
 
-        map.insert(name.to_owned(), hex_key);
+        map.insert(name.to_owned(), hex_key.to_string());
         map.insert(format!("{name}-created-at"), now.clone());
 
         Ok(RotationInfo {

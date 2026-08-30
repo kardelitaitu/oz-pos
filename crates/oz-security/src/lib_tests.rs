@@ -315,3 +315,73 @@ fn in_memory_concurrent_disjoint_keys_no_panic() {
         }
     }
 }
+
+// ── SEC-4: staged rotation ordering ──────────────────────────────
+//
+// A keyring whose `set_secret` fails only at the final promote step.
+// The rotation must fail WITHOUT destroying the current key or the
+// previous archive (the old ordering archived first, so a failure
+// between archive and swap clobbered `{name}-prev`).
+struct PromoteFailsKeyring {
+    inner: InMemoryKeyring,
+    target: &'static str,
+}
+
+impl Keyring for PromoteFailsKeyring {
+    fn get_secret(&self, name: &str) -> Result<Option<String>, SecurityError> {
+        self.inner.get_secret(name)
+    }
+    fn set_secret(&self, name: &str, value: &str) -> Result<(), SecurityError> {
+        if name == self.target {
+            return Err(SecurityError::KeyUnavailable(
+                "simulated promote failure".into(),
+            ));
+        }
+        self.inner.set_secret(name, value)
+    }
+    fn delete_secret(&self, name: &str) -> Result<bool, SecurityError> {
+        self.inner.delete_secret(name)
+    }
+}
+
+#[test]
+fn rotate_failure_preserves_current_and_archive() {
+    let k = PromoteFailsKeyring {
+        inner: InMemoryKeyring::new(),
+        target: "enc-key",
+    };
+
+    // Establish a current key and rotate once so `{enc-key}-prev`
+    // exists too. The setup runs on the inner keyring — only the
+    // rotation under test goes through the failing wrapper.
+    k.inner.set_secret("enc-key", "original-current").unwrap();
+    k.inner.rotate_key("enc-key").unwrap();
+    let archived_prev = k.get_secret("enc-key-prev").unwrap().unwrap();
+    assert_eq!(archived_prev, "original-current");
+
+    // Second rotation fails at the final promote (name == "enc-key").
+    let before = k.get_secret("enc-key").unwrap().unwrap();
+    let err = k
+        .rotate_key("enc-key")
+        .expect_err("promote is wired to fail");
+    assert!(err.to_string().contains("simulated promote failure"));
+
+    // Current key unchanged. The archive step ran BEFORE the failed
+    // swap, so `{enc-key}-prev` now holds the pre-rotation current —
+    // exactly what a successful rotation would have archived. The old
+    // ordering archived first without staging, so the same failure
+    // would have left prev == current while reporting a new key.
+    assert_eq!(
+        k.get_secret("enc-key").unwrap().unwrap(),
+        before,
+        "current key must survive a failed promotion"
+    );
+    assert_eq!(
+        k.get_secret("enc-key-prev").unwrap().unwrap(),
+        before,
+        "prev must hold the pre-rotation current (archive ran before the failed promote)"
+    );
+
+    // The fresh key is parked in staging for a later retry.
+    assert!(k.get_secret("enc-key-staging").unwrap().is_some());
+}
