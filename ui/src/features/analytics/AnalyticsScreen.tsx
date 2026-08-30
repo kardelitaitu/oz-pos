@@ -22,6 +22,7 @@ import Tooltip from '@/frontend/shell/Tooltip';
 import { AnalyticsCardContent, ExportCsvButton } from './AnalyticsCardContent';
 import { analyticsDataCache, clearAnalyticsCache, cardQueryKey } from './analytics-cache';
 import { useToastManager } from './useToastManager';
+import { useCardLayout } from './useCardLayout';
 import {
   CARD_PAYLOAD_VALIDATORS,
   buildHeatmapCells,
@@ -251,7 +252,7 @@ function shortCacheLabel(key: string): string {
 
 // ── Card definitions ─────────────────────────────────────────────────
 
-interface AnalyticsCard {
+export interface AnalyticsCard {
   key: string;
   /** `null` = appears in both workspaces */
   workspace: WorkspaceView | null;
@@ -362,13 +363,11 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const [menuCardId, setMenuCardId] = useState<string | null>(null);
   /** Viewport anchor for the portaled per-card options menu. */
   const [menuAnchor, setMenuAnchor] = useState<{ bottom: number; right: number } | null>(null);
-  const [collapsedCards, setCollapsedCards] = useState<Set<string>>(new Set());
   const [zoomPopover, setZoomPopover] = useState(false);
   const [showCacheMetrics, setShowCacheMetrics] = useState(false);
   const [compare, setCompare] = useState(false);
   const [, setMetricsTick] = useState(0);
   const paletteInputRef = useRef<HTMLInputElement | null>(null);
-  const [cardOrder, setCardOrder] = useState<string[]>([]);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
   const [, setRecalcTick] = useState(0);
@@ -497,78 +496,22 @@ const [paletteOpen, setPaletteOpen] = useState(false);
 
   const cardId = useCallback((c: AnalyticsCard) => `${c.key}-${c.workspace ?? 'shared'}`, []);
 
-  const orderStorageKey = useMemo(() => `oz-analytics-card-order-${workspaceView}`, [workspaceView]);
-  const defaultOrder = useMemo(() => ANALYTICS_CARDS.map(cardId), [cardId]);
-
-  // Load the saved card order per workspace; merge any new cards at the end
-  useEffect(() => {
-    let order = defaultOrder;
-    try {
-      const saved = localStorage.getItem(orderStorageKey);
-      if (saved) {
-        const parsed = JSON.parse(saved) as string[];
-        const known = new Set(defaultOrder);
-        const filtered = parsed.filter((id) => known.has(id));
-        order = [...filtered, ...defaultOrder.filter((id) => !filtered.includes(id))];
-      }
-    } catch {
-      /* corrupt storage — fall back to default order */
-    }
-    setCardOrder(order);
-  }, [workspaceView, defaultOrder, orderStorageKey]);
-
-  const persistOrder = (order: string[]) => {
-    setCardOrder(order);
-    try {
-      localStorage.setItem(orderStorageKey, JSON.stringify(order));
-    } catch {
-      /* storage unavailable — keep in-memory order */
-    }
-  };
-
-  const reorderCard = (from: string, to: string) => {
-    if (from === to) return;
-    const order = [...cardOrder];
-    const i = order.indexOf(from);
-    const j = order.indexOf(to);
-    if (i < 0 || j < 0) return;
-    order.splice(i, 1);
-    order.splice(j, 0, from);
-    persistOrder(order);
-    showToast(l10n.getString('analytics-toast-layout-saved'));
-  };
-
-  const moveCard = (id: string, dir: 'up' | 'down' | 'top' | 'bottom') => {
-    const order = [...cardOrder];
-    const i = order.indexOf(id);
-    if (i < 0) return;
-    if (dir === 'up' && i > 0) {
-      order.splice(i, 1);
-      order.splice(i - 1, 0, id);
-    } else if (dir === 'down' && i < order.length - 1) {
-      order.splice(i, 1);
-      order.splice(i + 1, 0, id);
-    } else if (dir === 'top' && i > 0) {
-      order.splice(i, 1);
-      order.unshift(id);
-    } else if (dir === 'bottom' && i < order.length - 1) {
-      order.splice(i, 1);
-      order.push(id);
-    } else {
-      return;
-    }
-    persistOrder(order);
-    showToast(l10n.getString('analytics-toast-layout-saved'));
-  };
-
-  const toggleCardCollapsed = (id: string) => {
-    setCollapsedCards((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+  const {
+    cardOrder,
+    collapsedCards,
+    toggleCardCollapsed,
+    reorderCard,
+    moveCard,
+    resetLayout,
+    isDefaultOrder,
+  } = useCardLayout(
+    workspaceView,
+    cardId,
+    ANALYTICS_CARDS,
+    showToast,
+    l10n.getString('analytics-toast-layout-saved'),
+    l10n.getString('analytics-toast-layout-reset'),
+  );
 
   /** Close the per-card options menu and restore focus to its trigger. */
   const closeCardMenu = useCallback(() => {
@@ -657,18 +600,6 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   useEffect(() => () => {
     if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
   }, []);
-
-  const isDefaultOrder = JSON.stringify(cardOrder) === JSON.stringify(defaultOrder);
-
-  const resetLayout = () => {
-    try {
-      localStorage.removeItem(orderStorageKey);
-    } catch {
-      /* storage unavailable */
-    }
-    setCardOrder(defaultOrder);
-    showToast(l10n.getString('analytics-toast-layout-reset'));
-  };
 
   // ── Command palette (Ctrl/Cmd+K) ──────────────────────────────
 
