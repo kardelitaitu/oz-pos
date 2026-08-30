@@ -56,9 +56,9 @@ Key open items:
 Key open items:
 - ~~**CUR-02** — PaymentModal displays converted currency but settles the base currency amount~~ — **VERIFIED FIXED 2026-08-30**: tender snapshot (base currency / base total / fixed-point rate) flows PaymentModal → `complete_sale*` args → `Sale` → SQLite (`20260821_tender_currency.sql`) and is now also persisted to the cloud (`pg::create_sale`, commit bc8bb29c — the PG INSERT had silently dropped all five tender/tip/service columns that `pg::get_sale` reads).
 - **CUR-04** — PaymentModal chooses the first matching rate without selecting the effective historical rate — **partially addressed**: `PaymentModal.tsx:266` now asks the backend for the latest rate when a session store is active; historical-effective-rate selection at settlement still open.
-- **CUR-05** — Exchange-rate input and effective-date validation is incomplete
-- **CUR-06** — Default-currency command scope
-- **CUR-09/10/11** — Locale/theme gaps, missing delete confirmation, bounded/latest-rate APIs, end-to-end coverage
+- ~~**CUR-05** — Exchange-rate input and effective-date validation is incomplete~~ — **VERIFIED FIXED 2026-08-30** (see Currency section: validators on both clients + UI gating + `type="date"`; registry entry was stale).
+- ~~**CUR-06** — Default-currency command scope~~ — **CLOSED 2026-08-30**, commit `aa1f831f` (backend scoping existed; `ExchangeRateScreen` was the un-migrated UI consumer — now routes through `*_scoped` APIs).
+- ~~**CUR-10** — missing delete confirmation~~ — **VERIFIED FIXED 2026-08-30** (`ConfirmDialog` before delete, pinned by tests). **CUR-09/CUR-11** remain open (locale/theme gaps; bounded-rate API + e2e coverage).
 - Currency exponent-aware settlement rounding and a lossless string/decimal IPC representation for values beyond JavaScript's safe integer range
 
 ---
@@ -110,14 +110,16 @@ Key items:
 
 ---
 
-## Currency — Exchange & Settlement (`34-currency-exchange.md` — PARTIALLY REMEDIATED)
+## Currency — Exchange & Settlement (`34-currency-exchange.md` — MOSTLY REMEDIATED)
 
-**Status:** CUR-03, CUR-04, CUR-08 closed (P0/P1/P2); **CUR-02, CUR-05-remaining, CUR-06, CUR-09, CUR-10, CUR-11 remain open**.
+**Status:** CUR-02/03/04/05/06/08/10 closed; **CUR-09, CUR-11 remain open** (locale/theme gaps; bounded-rate API + e2e coverage).
 
 - ~~**CUR-02** (P0) — PaymentModal displays converted currency but settles the base currency amount (multi-currency settlement)~~ — **CLOSED 2026-08-30** (see Currency section: local snapshot verified in code; cloud persistence gap in `pg::create_sale` fixed, commit bc8bb29c, pinned by the PG roundtrip test).
-- **CUR-05** (remaining) — exchange-rate input / effective-date validation residuals
-- **CUR-06** — default-currency command scope
-- **CUR-09/10/11** — locale/theme gaps, missing delete confirmation, bounded/latest-rate APIs
+- ~~**CUR-05** (remaining) — exchange-rate input / effective-date validation residuals~~ — **VERIFIED FIXED 2026-08-30** (registry was stale): `validate_create_rate_args` on desktop AND tablet (shared by legacy + scoped paths) rejects non-positive rates, same-currency pairs, non-ISO-4217 codes, and malformed `YYYY-MM-DD` effective dates; UI side `ExchangeRateScreen` gates Save on the same conditions incl. the millionths round-trip (`Number.isSafeInteger`), and the date field is `type="date"` (browser-enforced format). Pinned by `exchange_rates_tests.rs` (zero/negative, same-pair, non-ISO, malformed-date, valid-input).
+- ~~**CUR-06** — default-currency command scope~~ — **CLOSED 2026-08-30**, commit `aa1f831f`: backend scoped variants (`get/set_default_currency_scoped`, rate commands) already enforced `SETTINGS_READ`/`SETTINGS_EDIT` + store resolution with ISO validation on set; the residual was the UI — `ExchangeRateScreen` still called the legacy global-DB APIs for list/create/delete. Now routes through the `*_scoped` wrappers whenever a workspace session exists. Pinned by 3 new tests (token passthrough + legacy-not-called).
+- ~~**CUR-10** — missing delete confirmation~~ — **VERIFIED FIXED 2026-08-30**: `ExchangeRateScreen` renders a `ConfirmDialog` (`currency-delete-confirm`, danger variant) before `deleteExchangeRate`; pinned by the delete tests.
+- **CUR-09** — locale/theme gaps (unverified; low value, left open)
+- **CUR-11** — bounded/latest-rate APIs + e2e coverage (`get_latest_exchange_rate_scoped` exists since CUR-04; bounded list + Playwright coverage still open)
 
 ---
 

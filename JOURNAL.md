@@ -7287,3 +7287,38 @@ drift 0.
 
 **Commits:** 324e138b (B42+B43), 2f1171e3 (B39-B41), e82845f1 (B38 net +
 CI type fix).
+
+## 2026-08-30 — TDD cycle: CUR-06 scoped currency-config UI (CUR-05/10 stale-registry closures)
+
+**Problem:** after closing FRONTEND-04, the sweep moved to the Currency
+registry items. Evidence discipline paid off again: CUR-05 (rate input /
+effective-date validation) and CUR-10 (delete confirmation) were already
+FIXED in code — validators shared by legacy+scoped paths on both clients,
+UI gating incl. the millionths safe-integer round-trip, `type="date"`,
+and a ConfirmDialog on delete. The registry called them open.
+
+**Real finding (CUR-06 residual):** the scoped backend commands and the
+scoped frontend wrappers both existed, but `ExchangeRateScreen` — the
+rate-management WRITE screen — was never migrated: list/create/delete
+all hit the legacy GLOBAL-database commands, so in multi-store
+deployments editing a rate on one store mutated every store's
+configuration. `CurrencyContext` has the same non-scoped read plus a
+deeper gap (loads once on mount, never reloads on session change) —
+recorded, deliberately out of this slice.
+
+**Red/Green:** 3 new tests (session token set → scoped list/create/delete
+called with token, legacy NOT called) failed cleanly against the
+non-scoped screen; conditional `sessionToken ? *_scoped : legacy` wiring
+in load/handleSave/confirmDelete (+dep arrays) → 15/15. Existing 12
+legacy-path tests untouched (sessionToken '' → fallback branch).
+
+**Verification:** typecheck clean, touchTargetSizing (renders the screen)
+green, all four pre-commit gates pass.
+
+**Concurrency note:** one `edit` call hit a transient Win32 EIO
+(concurrent file access) — verified the write had NOT landed, retried
+identically, applied. Also: first docs-commit attempt died on a stale
+`index.lock` + PowerShell apostrophe mangling in `-m`; retried with a
+quote-free message after confirming the lock cleared.
+
+**Commits:** aa1f831f (fix + tests), docs commit alongside this entry.
