@@ -6759,3 +6759,58 @@ properly.
 - No URL state: tab/search/page lost on refresh (feature, not bug).
 - worker.ts + dashboard.js are the concurrent agent's hot files — the
   hunt deliberately stayed out of them.
+
+## 2026-08-30 — Admin bug hunt round 3: races, labels, double-submit (B15-B19)
+
+**Problem:** Third loop. Four more real bugs fixed, one candidate
+investigated and dropped as unreachable (suite 57 -> 70):
+
+1. **B15** renderTenants had no notion of which request was newest —
+   click page 2 then page 3: page 2's late response replaced page 3's
+   rows while the header said 'Page 3' (last-ARRIVAL-wins). Fixed with
+   createSeqGuard(): superseded responses discarded on success AND error
+   paths.
+2. **B16** the server status enum leaked raw into the UI ('grace_period'
+   pills + detail modal) while everything else goes through STRINGS.
+   statusLabel() maps the PocketBase SelectField values; unknown values
+   fall back to the raw string, never a missing-key placeholder.
+3. **B17 (DROPPED)** suspected detail-modal race — traced unreachable:
+   the loading overlay blocks all interaction (no close/backdrop/ESC
+   handlers on it), so two detail fetches cannot overlap. Documented in
+   the B18 commit message.
+4. **B18** OTP resend cooldown went INVISIBLE after a tab switch:
+   setAuthMode('password') hid the element but the module-global timer
+   kept running; switching back never re-showed it — user clicked 'Send
+   Code' mid-cooldown and ate a 429. startCountdown/stopCountdown/
+   countdownActive (B7 pattern generalized to text nodes); setAuthMode
+   re-shows while active.
+5. **B19** tenant modal action buttons had no double-click guard —
+   Renew POSTs +365 days per call, double-click = +730 days. busyWrap
+   single-flight wrapper on all four buttons.
+
+**Concurrent-agent collision (notable):** while drafting B19, the other
+session had ALREADY written its own busyWrap into the working tree
+(uncommitted, '(B19)' label by coincidence — it reads my hunt commits).
+I adopted THEIR implementation over my draft (closure-flag guard is
+safer than my btn.disabled entry check, which would misfire on
+lockout-disabled buttons), wired it in admin.js, and committed helper +
+wiring + my spec tests together (fc184c30) so HEAD stays coherent;
+attribution recorded in the commit message.
+
+**Also verified clean this round:** chart zero-guards (donut total<=0,
+bar maxS>0), no MOCK fallback in renderDashboard (error state by
+design), escapeHtml non-string-safe, retry-stats button wired,
+login.html autocomplete attrs (email/current-password/one-time-code),
+SPA is English-only by design (hardcoded nav labels consistent, not a
+bug).
+
+**Commits:** bb73e268 (B15+B16), d3017b63 (B18), fc184c30 (B19).
+
+**Test counts:** admin-utils.test.ts 57 -> 70; full website suite
+636/636 (39 files); drift 0.
+
+**Remaining residuals (future slices):**
+- fetchFxRate called per dashboard render (no cache) — minor perf.
+- flash() toasts stack on rapid actions — cosmetic.
+- No URL state for tab/search/page — feature, not bug.
+- worker.ts/dashboard.js remain the concurrent agent's hot files.

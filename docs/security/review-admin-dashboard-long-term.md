@@ -158,7 +158,7 @@ The admin login page (`login.html`) is always dark. The dashboard has a theme to
 | 2 | **HIGH** | MOCK fallback masks failures (C4) | Show error banner when API fails; keep MOCK only as last-resort skeleton | ✅ Resolved — MOCK object removed; API errors render a retry/error state (Phase 1) |
 | 3 | **HIGH** | Tenants list has no pagination (C3) | Add page controls + pass `?page=` / `?perPage=` to the API | ✅ Resolved — pagination controls + `?page=`/`?perPage=`/`?search=` (Phase 2) |
 | 4 | **HIGH** | Monolithic admin.js (H1) | Split into testable modules (stats.js, tenants.js, charts.js) or move to a build step | ✅ Resolved — pure helpers extracted into `admin-utils.js` (charts, formatting, cards, API auth, i18n) with unit tests |
-| 5 | **HIGH** | Zero tests (H2) | Add unit tests for chart rendering, helpers, and API mock fallback | ✅ Resolved — 57 unit tests in `src/__tests__/admin-utils.test.ts` (+14 worker auth-gate tests); both suites now execute in CI via the `website-tests` gate. The 2026-08-30 bug hunt added 33 of those tests and fixed 12 real bugs (see §8.1) |
+| 5 | **HIGH** | Zero tests (H2) | Add unit tests for chart rendering, helpers, and API mock fallback | ✅ Resolved — 70 unit tests in `src/__tests__/admin-utils.test.ts` (+14 worker auth-gate tests); both suites now execute in CI via the `website-tests` gate. The 2026-08-30 bug hunt added 46 of those tests and fixed 16 real bugs (see §8.1) |
 | 6 | **HIGH** | No i18n (H3) | Extract strings to an i18n structure; at minimum, add English `.ftl` keys for future localization | ✅ Resolved — `STRINGS` key-value table + `t()` helper; all admin/dashboard/login strings extracted |
 | 7 | **HIGH** | Shared session cookie (H4) | Restrict `Domain` to individual subdomains or use a dedicated auth domain | ✅ Resolved — cookie scoped to `admin.ozpos.my.id` / `dashboard.ozpos.my.id` (not the parent domain) |
 | 8 | **MEDIUM** | No loading/error states for charts (M1) | Guard `svgChart` against empty/NaN data; add per-chart error states | ✅ Resolved — `svgChart` / `svgDonut` guard empty/NaN/zero data |
@@ -223,7 +223,7 @@ merge history (`git log -S` + merge-ancestry), and a local test run:
 - **L1 corrected to OPEN**, **L3 marked won't-fix/by-design** — see §5.
 - Test count corrected: **24**, not "25+".
 
-### 8.1 Bug hunt (2026-08-30, TDD) — 12 bugs found & fixed
+### 8.1 Bug hunt (2026-08-30, TDD) — 16 bugs found & fixed
 
 A focused hunt over `admin.js`/`admin-utils.js` against the Go server's
 actual JSON shapes found six real bugs — none caught by the pre-existing
@@ -259,3 +259,20 @@ Round-2 commits: `5dfe72d9`, `1670a282`, `96f6d3f9`, `2b19570c`,
 `cafcca11`. Remaining residuals (stale-response race in `renderTenants`,
 raw-enum `statusPill` text, no URL state for tab/search/page) logged in
 `JOURNAL.md`.
+
+**Round 3** (same day) closed those residuals and hunted the modal
+action paths — four more bugs, one candidate dropped as unreachable
+(suite 57→70, full website 636/636):
+
+| # | Sev | Bug | Fix |
+|---|-----|-----|-----|
+| B15 | P2 | `renderTenants` let a slow page-2 response overwrite page 3 (last-arrival-wins) — rows and pagination header disagreed | `createSeqGuard()`: superseded responses discarded on success + error paths |
+| B16 | P3 | server status enum leaked raw into pills and the detail modal (`grace_period`) | `statusLabel()` maps the enum via STRINGS; unknown → raw fallback |
+| B18 | P2 | OTP resend cooldown went invisible after a tab switch (timer ran on, element hidden) — user clicked into a 429 blind | `startCountdown`/`stopCountdown`/`countdownActive` on the node; `setAuthMode` re-shows while active |
+| B19 | P1 | tenant modal actions had no double-click guard — Renew POSTed +365 days per click, double-click = +730 | `busyWrap` single-flight wrapper on all four buttons |
+
+B17 (detail-modal fetch race) was investigated and **dropped**: the
+loading overlay blocks all interaction, so two detail fetches cannot
+overlap. Round-3 commits: `bb73e268`, `d3017b63`, `fc184c30`. The B19
+helper was independently written by the concurrent agent session and
+adopted (attribution in the commit message).
