@@ -9,7 +9,7 @@
 | Job ID | Blocks Merge | Workflow | Notes |
 |--------|--------------|----------|-------|
 | `rust-fmt` | ✅ Required | ci.yml | `cargo fmt --all -- --check` |
-| `go` | ✅ Required | ci.yml | `gofmt` + `go vet` on license-server |
+| `go` | ✅ Required | ci.yml | `gofmt` + `go vet` + `go test -short` on license-server |
 | `unified-healthcheck` | ✅ Required | ci.yml | POSIX sh healthcheck script test |
 | `rust-panic-inventory` | ✅ Required | ci.yml | Scan production unwrap/expect |
 | `rust-money-format` | ✅ Required | ci.yml | No hardcoded exp-2 money formatting |
@@ -83,6 +83,7 @@
 | Nightly flaky detection | `flaky-detect` (nightly.yml) | Advisory (step) | — |
 | Nightly flaky registry | `flaky-quarantine-registry` (nightly.yml) | Required | — |
 | Nightly benchmarks | `benchmarks` (nightly.yml) | Required | — |
+| Nightly license-server full Go tests | `license-server-test` (nightly.yml) | Required | — |
 
 ---
 
