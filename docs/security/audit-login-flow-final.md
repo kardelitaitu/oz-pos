@@ -32,7 +32,7 @@ Log out → /__oz/logout → cookie expired (Max-Age=0) → 302 to same subdomai
 | 4 | No inline `onclick`/event handlers in either login page (strict CSP) | ✅ |
 | 5 | Login endpoints through proxy: `/login`, `/request-otp`, `/verify-otp` | ✅ 401/200/processed |
 | 6 | Exchange endpoints: `/exchange-issue` (401 no auth), `/exchange-consume` (400 bad code) | ✅ |
-| 7 | Session cookie: HttpOnly + Secure + SameSite=Lax + Domain=.ozpos.my.id | ✅ |
+| 7 | Session cookie: HttpOnly + Secure + SameSite=Lax + Domain=subdomain-scoped (H4 — admin.ozpos.my.id / dashboard.ozpos.my.id, not the parent `.ozpos.my.id`) | ✅ |
 | 8 | Logout expires cookie (`Max-Age=0`) via `/__oz/logout` | ✅ |
 | 9 | Logout redirects to **same subdomain** (`admin.ozpos.my.id/` / `dashboard.ozpos.my.id/`) | ✅ |
 | 10 | `/__oz/session` has NO `Access-Control-Allow-Origin` (token not readable cross-origin) | ✅ |
