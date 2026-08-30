@@ -4,6 +4,10 @@ crate: modules-currency | status: SAFE | lint: CLEAN
 findings: Implements Module trait, exchange-rate domain model, repository, and error type.
   Re-exports Currency from foundation and ExchangeRateRow from models. No unsafe code.
 next: Migrate currency/exchange-rate callers from oz-core Store to CurrencyRepository.
+fixed 2026-07-25 (glm-5.3 review P2 pass): F-022 — repository write paths (create/upsert/delete
+  exchange rate) now run inside transactions (INSERT + read-back SELECT share one consistent
+  commit; delete wrapped per the never-write-outside-a-transaction rule); all five production
+  files' inline test mods moved to sibling *_tests.rs per AGENTS.md. 84 unit tests green.
 */
 
 //! Currency/Exchange Module — ISO-4217 currencies and exchange rates.
@@ -104,103 +108,5 @@ impl Module for CurrencyModule {
 // ── Tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use platform_kernel::Kernel;
-
-    #[test]
-    fn currency_module_id() {
-        let module = CurrencyModule::new();
-        assert_eq!(module.id(), "currency");
-    }
-
-    #[test]
-    fn currency_module_lifecycle() {
-        let mut kernel = Kernel::new();
-        kernel.register(Box::new(CurrencyModule::new())).unwrap();
-        assert!(kernel.is_registered("currency"));
-        assert_eq!(kernel.module_count(), 1);
-
-        kernel.load_all().unwrap();
-        assert!(kernel.is_loaded());
-
-        kernel.start_all().unwrap();
-        assert!(kernel.is_started());
-
-        kernel.stop_all().unwrap();
-        assert!(!kernel.is_loaded());
-        assert!(!kernel.is_started());
-    }
-
-    #[test]
-    fn currency_module_duplicate_registration_fails() {
-        let mut kernel = Kernel::new();
-        kernel.register(Box::new(CurrencyModule::new())).unwrap();
-        let err = kernel.register(Box::new(CurrencyModule::new()));
-        assert!(err.is_err());
-    }
-
-    #[test]
-    fn currency_module_on_load_succeeds() {
-        let mut module = CurrencyModule::new();
-        assert!(module.on_load().is_ok());
-    }
-
-    #[test]
-    fn currency_module_on_start_succeeds() {
-        let mut module = CurrencyModule::new();
-        assert!(module.on_start().is_ok());
-    }
-
-    #[test]
-    fn currency_module_on_stop_succeeds() {
-        let mut module = CurrencyModule::new();
-        assert!(module.on_stop().is_ok());
-    }
-
-    #[test]
-    fn currency_module_full_lifecycle_with_kernel() {
-        let mut kernel = Kernel::new();
-        kernel.register(Box::new(CurrencyModule::new())).unwrap();
-
-        // load → start → stop
-        kernel.load_all().unwrap();
-        kernel.start_all().unwrap();
-        kernel.stop_all().unwrap();
-
-        // Module is still registered after stop
-        assert!(kernel.is_registered("currency"));
-    }
-
-    #[test]
-    fn multiple_modules_can_coexist() {
-        let mut kernel = Kernel::new();
-        kernel.register(Box::new(CurrencyModule::new())).unwrap();
-        kernel.register(Box::new(OtherModule)).unwrap();
-
-        // Verify both are registered
-        assert!(kernel.is_registered("currency"));
-        assert!(kernel.is_registered("other"));
-        assert_eq!(kernel.module_count(), 2);
-    }
-
-    /// Minimal module for coexistence test.
-    #[derive(Debug)]
-    struct OtherModule;
-
-    impl Module for OtherModule {
-        fn id(&self) -> &'static str {
-            "other"
-        }
-
-        fn on_load(&mut self) -> ModuleResult {
-            Ok(())
-        }
-        fn on_start(&mut self) -> ModuleResult {
-            Ok(())
-        }
-        fn on_stop(&mut self) -> ModuleResult {
-            Ok(())
-        }
-    }
-}
+#[path = "lib_tests.rs"]
+mod tests;
