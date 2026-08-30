@@ -6585,3 +6585,66 @@ voids (correct: status guards + stock restore), gift cards + loyalty
 (correct: atomic conditional update + idempotency), promotions/discounts
 (correct: audited MONEY-AUDIT-2 percentage math, capped fixed discount),
 shifts (this fix: cash-refund reconciliation).
+
+## 2026-08-30 — TDD cycle: money-correctness sweep (refund guards + CUR-02 cloud gap + dead PG harness)
+
+**Problem:** Priority-1 bug hunt on the multi-currency settlement path
+(audit-open-findings triage). Three confirmed weaknesses, one of them a
+test-infrastructure bug that had silently zeroed cloud money-path coverage:
+
+1. COR-26 (crates/oz-core/src/db/refunds.rs): create_refund read the sale
+   currency and discarded it (`let _ = sale_currency`), trusting callers'
+   checked_add fold. The per-currency over-refund SUM meant the same sale
+   could be refunded once PER CURRENCY against the wrong unit.
+2. COR-25 (same file): the over-refund guard ran OUTSIDE the transaction
+   and read the cumulative SUM with `.unwrap_or(0)` — any read failure
+   (corruption, i64 SUM overflow decoded as float, I/O) silently became
+   "no refunds yet" and the money guard passed. Reproduced: two
+   i64::MAX/2+1 refund rows + a third refund of 1 minor unit was ACCEPTED.
+3. CUR-02 cloud gap (crates/oz-api/src/pg.rs): pg::create_sale INSERTed 16
+   of the 21 columns get_sale reads — base_currency, base_total_minor,
+   tender_rate_millionths, tip_minor, service_charge_minor were dropped,
+   so the desktop PaymentModal's CUR-02 tender snapshot never reached
+   cloud reconciliation.
+4. DEAD PG HARNESS (crates/oz-api/src/pg_tests.rs + sync_store_tests.rs):
+   throwaway_test_pool interpolated uuid::now_v7() Display (with hyphens)
+   into an UNQUOTED CREATE DATABASE identifier -> server syntax error ->
+   helper returned None -> every throwaway-DB test printed "skipped" and
+   reported PASS. The REST roundtrip, RLS non-owner, concurrent-adjust and
+   all sync-store PG tests had NOT executed since the harness landed. The
+   Slice-C Red test was only possible after repairing this.
+
+**Solution:** TDD Red->Green per slice, one commit each:
+- a53feaea fix(core): COR-26 — create_refund rejects refund currency !=
+  sale currency (CoreError::CurrencyMismatch); regression test
+  create_refund_rejects_currency_mismatch.
+- 8f01a5d0 fix(core): COR-25 — guard moved inside the tx, SUM read errors
+  propagate (fail closed); regression test
+  over_refund_guard_fails_closed_when_cumulative_sum_unreadable.
+- a022b4fb test(pg): .simple() hex names for throwaway DBs; RLS test
+  probe connections retargeted at the throwaway db_url (they had drifted
+  to the base DB, which no longer carries a schema).
+- bc8bb29c fix(api): CUR-02 — pg::create_sale persists the five columns;
+  roundtrip assertion pinned on a tender sale (IDR base, rate 16.5,
+  tip+service).
+- cd99bf3e chore: cleared three pre-existing clippy -D warnings lints that
+  blocked the crate gates (not from this session's hunks).
+
+**Verification:** oz-core 2511/2511; oz-api 198/198 with ZERO skips (PG
+container oz-pg-test-15432 live — first real execution of these tests in
+months); oz-cloud-server 224/224 zero skips; fmt --all --check clean;
+clippy -D warnings clean on oz-core/oz-api/oz-cloud-server.
+
+**Remaining risks / follow-ups (future slices):**
+- The registry (docs/records/audit-open-findings.md) is materially stale:
+  LOY-02, REP-02, CUR-02 (local) verified FIXED this sweep; CUR-05/06/09-
+  11, CRM-02..11, STAFF residuals, LOAD-01..05, TOP-01..08 still need
+  verify-or-fix triage.
+- FRONTEND-03 (IPC drops line currency; addLine sends unitPriceMinor with
+  no currency) remains deferred to Phase 5 — needs a backend contract
+  change; also the JS-safe-integer wire format for IDR-scale amounts.
+- CI without a PG service still skips these tests by design; the skip is
+  still quiet (PASS). Consider a CI job that fails when OZ_TEST_PG_URL is
+  set but CREATE DATABASE fails, to prevent a silent-harness regression.
+- Refund callers (desktop+tablet) already fold with Money::zero(sale
+  .currency); the new store-level guard makes that belt-and-braces.

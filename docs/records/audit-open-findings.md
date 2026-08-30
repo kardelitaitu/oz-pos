@@ -29,7 +29,7 @@ Key open items:
 **Status:** LOY-01 remediated; **remaining findings require follow-up**.
 
 Key open items:
-- **LOY-02** — Earning points is not idempotent by sale
+- ~~**LOY-02** — Earning points is not idempotent by sale~~ — **VERIFIED FIXED 2026-08-30**: migration 128 enforces a unique earn/redeem projection index (`crates/oz-core/src/db/loyalty_tests.rs:556`).
 - **LOY-03** — No refund or void compensation path for earned points
 - **LOY-04** — Tier updates accept invalid business values
 - **LOY-05** — Load failures are silently presented as stale or empty data
@@ -41,7 +41,7 @@ Key open items:
 **Status:** security boundary and limit validation implemented; **financial/reporting UX findings remain open**.
 
 Key open items:
-- **REP-02** — Revenue UI combines different currencies into one displayed total
+- ~~**REP-02** — Revenue UI combines different currencies into one displayed total~~ — **VERIFIED FIXED 2026-08-30**: per-currency summing in `ui/src/features/reports/revenueTotals.ts` + DashboardScreen/SalesReportScreen tests.
 - **REP-03** — Date boundaries have no store-timezone contract or input validation
 - **REP-04** — Report queries do not show explicit refund/void/net-sales treatment
 - **REP-05** — Current product/category joins can erase or rewrite historical sales attribution
@@ -54,8 +54,8 @@ Key open items:
 **Status:** IPC fixed-point contract aligned; **settlement, command scoping, and remaining UX/validation findings require follow-up**.
 
 Key open items:
-- **CUR-02** — PaymentModal displays converted currency but settles the base currency amount
-- **CUR-04** — PaymentModal chooses the first matching rate without selecting the effective historical rate
+- ~~**CUR-02** — PaymentModal displays converted currency but settles the base currency amount~~ — **VERIFIED FIXED 2026-08-30**: tender snapshot (base currency / base total / fixed-point rate) flows PaymentModal → `complete_sale*` args → `Sale` → SQLite (`20260821_tender_currency.sql`) and is now also persisted to the cloud (`pg::create_sale`, commit bc8bb29c — the PG INSERT had silently dropped all five tender/tip/service columns that `pg::get_sale` reads).
+- **CUR-04** — PaymentModal chooses the first matching rate without selecting the effective historical rate — **partially addressed**: `PaymentModal.tsx:266` now asks the backend for the latest rate when a session store is active; historical-effective-rate selection at settlement still open.
 - **CUR-05** — Exchange-rate input and effective-date validation is incomplete
 - **CUR-06** — Default-currency command scope
 - **CUR-09/10/11** — Locale/theme gaps, missing delete confirmation, bounded/latest-rate APIs, end-to-end coverage
@@ -113,10 +113,28 @@ Key items:
 
 **Status:** CUR-03, CUR-04, CUR-08 closed (P0/P1/P2); **CUR-02, CUR-05-remaining, CUR-06, CUR-09, CUR-10, CUR-11 remain open**.
 
-- **CUR-02** (P0) — PaymentModal displays converted currency but settles the base currency amount (multi-currency settlement)
+- ~~**CUR-02** (P0) — PaymentModal displays converted currency but settles the base currency amount (multi-currency settlement)~~ — **CLOSED 2026-08-30** (see Currency section: local snapshot verified in code; cloud persistence gap in `pg::create_sale` fixed, commit bc8bb29c, pinned by the PG roundtrip test).
 - **CUR-05** (remaining) — exchange-rate input / effective-date validation residuals
 - **CUR-06** — default-currency command scope
 - **CUR-09/10/11** — locale/theme gaps, missing delete confirmation, bounded/latest-rate APIs
+
+---
+
+## Refund guards — `create_refund` (rust-auditor COR-25/COR-26 — CLOSED 2026-08-30)
+
+- ~~**COR-25** (MEDIUM) — over-refund guard ran outside the transaction and read the cumulative refunded SUM with `.unwrap_or(0)`: a read error read as "zero refunds" and the money guard failed OPEN~~ — fixed: guard inside the tx, SUM errors propagate (`crates/oz-core/src/db/refunds.rs`, commit 8f01a5d0; regression test `over_refund_guard_fails_closed_when_cumulative_sum_unreadable`).
+- ~~**COR-26** (LOW) — refund currency never compared to the sale currency~~ — fixed: `create_refund` rejects a mismatch with `CoreError::CurrencyMismatch` (commit a53feaea; regression test `create_refund_rejects_currency_mismatch`).
+
+## PG integration harness — silently-skipped tests (CLOSED 2026-08-30)
+
+`throwaway_test_pool` built DB names from UUID `Display` (hyphens) inside an
+unquoted `CREATE DATABASE` identifier → server syntax error → every
+throwaway-DB PG test (REST roundtrip, RLS non-owner, concurrent adjust,
+sync-store) printed "skipped" and reported PASS — cloud money-path coverage
+was silently zero. Fixed with `.simple()` hex names + probe connections
+retargeted to the throwaway DB (commit a022b4fb). **Verified live: oz-api
+198/198 and oz-cloud-server 224/224 with ZERO skips.** Residual risk: on
+machines/CI without PG the skip is still quiet (PASS) by design.
 
 ---
 
