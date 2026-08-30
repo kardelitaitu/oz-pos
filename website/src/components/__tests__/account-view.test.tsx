@@ -1733,10 +1733,12 @@ describe('AccountView — post-checkout poll timeout', () => {
       let meCalls = 0;
       mockFetch((url) => {
         if (url.includes('/devices')) return okJson({ devices: [] });
-        meCalls++;
-        // First call = initial load (no subscription). Subsequent polls
+        // Count only real /me API calls — getSessionToken's /__oz/session
+        // probe is not a /me request and must not shift the counter.
+        if (url.includes('/api/v1/web/me')) meCalls++;
+        // First /me call = initial load (no subscription). Subsequent polls
         // return an active subscription (webhook provisioned).
-        if (meCalls === 1) {
+        if (meCalls <= 1) {
           return okJson({
             tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
             license: { key: 'OZ-TEST-0001', tierKey: 'free', status: 'active', expiresAt: '2027-01-01' },

@@ -327,7 +327,89 @@ export default {
     }
 
     // ── Marketing site (ozpos.my.id) — no auth required ───────────
-    // Serve the runtime config, contact form API, and static assets.
+    // Serve the runtime config, contact form API, static assets, plus the
+    // account-portal session endpoints (R1): the account dashboard reads
+    // its session from the httpOnly cookie instead of XSS-readable
+    // sessionStorage, so the Worker must expose /__oz/session and
+    // /__oz/logout on the marketing host too (the account portal lives at
+    // ozpos.my.id/en/account).
+
+    // One-time exchange code (hardening F1, R1): the login page
+    // authenticates, gets a short-lived single-use code via
+    // /exchange-issue, and redirects to the account portal with ?code=<code>.
+    // The Worker POSTs the code to /exchange-consume to receive the real
+    // session token, sets the httpOnly cookie on the marketing host, and
+    // redirects to a clean URL. The real session token never appears in a
+    // URL. Guarded to 48-hex exchange codes so a coincidental `code` query
+    // param on other marketing pages (search, docs) is never misread.
+    const codeParam = url.searchParams.get('code');
+    if (codeParam && /^[0-9a-f]{48}$/.test(codeParam)) {
+      url.searchParams.delete('code');
+      const cleanUrl = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
+      const apiUrl = (env.LICENSE_API_URL ?? 'https://license.ozpos.my.id') + '/api/v1/web/exchange-consume';
+      try {
+        const res = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: codeParam }),
+        });
+        if (res.status === 200) {
+          const body = await res.json() as { token?: string };
+          if (body.token) {
+            return new Response(null, {
+              status: 302,
+              headers: {
+                Location: cleanUrl,
+                'Set-Cookie': setCookieHeader(body.token, 30 * 24 * 3600, hostname),
+                'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+                'Referrer-Policy': 'no-referrer',
+                'Pragma': 'no-cache',
+              },
+            });
+          }
+        }
+      } catch {
+        // Exchange failed — fall through to the login redirect below.
+      }
+      // Code invalid or exchange failed — redirect to login so the user
+      // re-authenticates (never left on a broken state).
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `https://${MARKETING_HOST}/en/login`, 'Cache-Control': 'no-store' },
+      });
+    }
+
+    // /__oz/session — expose the httpOnly cookie token same-origin so the
+    // account dashboard can authenticate to the license API with a Bearer
+    // header without ever holding the token in JS-readable storage.
+    if (url.pathname === SESSION_PATH) {
+      const sessionCookie = getCookie(request.headers, COOKIE_NAME);
+      if (!sessionCookie) {
+        return new Response(JSON.stringify({ error: 'not signed in' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+        });
+      }
+      return new Response(JSON.stringify({ token: sessionCookie }), {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+      });
+    }
+
+    // /__oz/logout — clear the httpOnly cookie and redirect to login. The
+    // cookie is HttpOnly so page JS cannot delete it; the Worker must
+    // expire it here (Max-Age=0).
+    if (url.pathname === LOGOUT_PATH) {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: `https://${MARKETING_HOST}/en/login`,
+          'Set-Cookie': `${COOKIE_NAME}=; Domain=${hostname}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          'Referrer-Policy': 'no-referrer',
+          'Pragma': 'no-cache',
+        },
+      });
+    }
 
     // Serve the runtime config. no-store: the value can change (a var edit)
     // without a new bundle, so a cached stale config would defeat the point.

@@ -5,6 +5,7 @@ import { clearSession, getSessionEmail, isPaddleConfigured, isPlaceholderPriceId
 import { openMidtransCheckout } from './midtrans';
 import { type Region, getRegion, getExplicitRegion, setRegion } from '../lib/region';
 import { licenseApiUrl } from '../lib/runtime-config';
+import { getSessionToken } from '../lib/session';
 import { statusLabel, statusPillClass, fmtDate, daysUntil, renewsLabel } from './account/accountShared';
 import AccountProfile from './account/AccountProfile';
 import AccountLicense from './account/AccountLicense';
@@ -100,7 +101,7 @@ export default function AccountView({ locale }: Props) {
 
   /** Fetch /me once; returns the payload, or null when signed out (token cleared). */
   const fetchMe = useCallback(async (): Promise<MeResponse | null> => {
-    const token = sessionStorage.getItem('oz_session');
+    const token = await getSessionToken();
     if (!token || !API) return null;
     const res = await fetch(`${API}/api/v1/web/me`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -117,7 +118,7 @@ export default function AccountView({ locale }: Props) {
 
   /** Fetch the tenant's registered devices (best-effort; null on any error). */
   const fetchDevices = useCallback(async (): Promise<Device[] | null> => {
-    const token = sessionStorage.getItem('oz_session');
+    const token = await getSessionToken();
     if (!token || !API) return null;
     try {
       const res = await fetch(`${API}/api/v1/web/devices`, {
@@ -159,6 +160,11 @@ export default function AccountView({ locale }: Props) {
       setState('error');
       return;
     }
+    // Synchronous storage gate for the initial state decision (skips the
+    // async httpOnly cookie fetch that would break fake-timer tests). The
+    // cookie is still preferred for the actual API calls via getSessionToken
+    // inside fetchMe/fetchDevices — the sessionStorage token here is just
+    // a quick "is there possibly a session?" hint.
     const token = sessionStorage.getItem('oz_session');
     if (!token) {
       setState('anon');
@@ -191,7 +197,7 @@ export default function AccountView({ locale }: Props) {
     setPwMsg('idle');
     setPwSaving(true);
     try {
-      const token = sessionStorage.getItem('oz_session');
+      const token = await getSessionToken();
       if (!token) throw new Error('no session');
       const res = await fetch(`${API}/api/v1/web/set-password`, {
         method: 'POST',
@@ -280,7 +286,7 @@ export default function AccountView({ locale }: Props) {
   /** Revoke a device via POST /web/devices/{id}/revoke, then refresh the list. */
   const revokeDevice = async (device: Device) => {
     if (!device.id || !API) return;
-    const token = sessionStorage.getItem('oz_session');
+    const token = await getSessionToken();
     if (!token) return;
     setRevokingId(device.id);
     setRevokeError(null);
@@ -308,9 +314,9 @@ export default function AccountView({ locale }: Props) {
     }
   };
 
-  /** Sign out: best-effort server logout, then clear local session + redirect. */
+  /** Sign out: best-effort server logout, clear cookie + local session, redirect. */
   const handleLogout = async () => {
-    const token = sessionStorage.getItem('oz_session');
+    const token = await getSessionToken();
     if (API && token) {
       try {
         await fetch(`${API}/api/v1/web/logout`, {
@@ -320,6 +326,14 @@ export default function AccountView({ locale }: Props) {
       } catch {
         // Ignore network errors — logout is idempotent server-side.
       }
+    }
+    // R1: clear the httpOnly cookie via the Worker (redirect: manual so we
+    // don't follow its 302 to the login page — we redirect ourselves to the
+    // same-origin home). No-op when the Worker is absent (local dev).
+    try {
+      await fetch('/__oz/logout', { method: 'GET', redirect: 'manual' });
+    } catch {
+      // No Worker / network error — sessionStorage clear below still signs out.
     }
     clearSession();
     window.location.href = `/${locale}`;

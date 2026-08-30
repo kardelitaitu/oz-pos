@@ -119,6 +119,32 @@ export default function AuthForm({ locale }: Props) {
       }
     }
     const target = next && next.startsWith('/') && !next.startsWith('//') ? next : `/${locale}/account`;
+    // R1: exchange the token so the Worker sets the httpOnly cookie on the
+    // marketing host. The Worker catches ?code= on any path, consumes it,
+    // sets the cookie, and redirects to a clean URL — the real session
+    // token never appears in a URL. Falls back to a direct redirect
+    // (sessionStorage) when the exchange fails or the Worker is absent.
+    if (token) {
+      try {
+        const res = await fetch(`${API}/api/v1/web/exchange-issue`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const body = await res.json() as { code?: string };
+          if (body.code) {
+            const u = new URL(target, window.location.origin);
+            u.searchParams.set('code', body.code);
+            window.location.href = u.toString();
+            return;
+          }
+        }
+      } catch {
+        // Exchange failed — fall through to the direct redirect below.
+        // sessionStorage still has the token; the account page uses it as
+        // fallback (/__oz/session is a no-Worker dev path).
+      }
+    }
     window.location.href = target;
   };
 

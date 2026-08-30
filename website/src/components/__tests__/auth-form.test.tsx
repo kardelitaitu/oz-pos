@@ -581,7 +581,10 @@ describe('AuthForm — open redirect guard', () => {
   it('blocks ?redirect= to a non-dashboard host (host allowlist)', async () => {
     // The hostname allowlist (dashboard/admin.ozpos.my.id) is the
     // open-redirect guard for the dashboard gate — an external host must
-    // fall through to the plain next/account handling.
+    // fall through to the plain next/account handling. R1 (httpOnly cookie
+    // migration): the account-portal target still exchanges the token for a
+    // one-time code so the Worker can set the session cookie — but the
+    // redirect must NEVER leave the same origin.
     let exchangeCalled = false;
     mockFetch((url) => {
       if (url.includes('verify-otp')) return okJson({ token: 'tok-dash-003' });
@@ -610,9 +613,12 @@ describe('AuthForm — open redirect guard', () => {
       await act(async () => {
         await new Promise((r) => setTimeout(r, 30));
       });
-      // Never called the exchange, never redirected to the evil host.
-      expect(exchangeCalled).toBe(false);
-      expect(capturedHref).toBe('/en/account');
+      // The open-redirect guard holds: never redirected to the evil host.
+      expect(capturedHref).not.toContain('evil.example.com');
+      expect(capturedHref.startsWith('/')).toBe(true);
+      // R1: the account-portal exchange now runs (so the Worker can set the
+      // httpOnly cookie) — the target is same-origin, never the evil host.
+      expect(exchangeCalled).toBe(true);
     } finally {
       act(() => root.unmount());
       container.remove();

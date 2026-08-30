@@ -269,4 +269,95 @@ describe('Cloudflare Worker — worker.ts', () => {
     expect(res.status).toBe(302);
     expect(res.headers.get('Location')).toBe('/evil.com/'); // same-origin
   });
+
+  // ── R1: account-portal httpOnly cookie on the marketing host ────────
+
+  it('R1: serves /__oz/session on the marketing host from the cookie', async () => {
+    const req = new Request('https://ozpos.my.id/__oz/session', {
+      headers: { Cookie: 'oz_session=cookie.jwt.token' },
+    });
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { token: string };
+    expect(body.token).toBe('cookie.jwt.token');
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+  });
+
+  it('R1: returns 401 from /__oz/session on the marketing host without a cookie', async () => {
+    const req = new Request('https://ozpos.my.id/__oz/session');
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(401);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('not signed in');
+  });
+
+  it('R1: /__oz/logout clears the cookie and redirects to marketing login', async () => {
+    const req = new Request('https://ozpos.my.id/__oz/logout', {
+      headers: { Cookie: 'oz_session=stale.jwt.token' },
+    });
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('https://ozpos.my.id/en/login');
+    const setCookie = res.headers.get('Set-Cookie');
+    expect(setCookie).toContain('oz_session=;');
+    expect(setCookie).toContain('Max-Age=0');
+    expect(setCookie).toContain('HttpOnly');
+  });
+
+  it('R1: exchanges a 48-hex code for a cookie on the marketing host', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: async () => ({ token: 'exchanged.cookie.token' }),
+    });
+
+    // A 48-hex one-time code (exchange codes are 48 hex chars).
+    const code = 'a'.repeat(48);
+    const req = new Request(`https://ozpos.my.id/en/account?code=${code}&theme=dark`);
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(302);
+    // Code stripped, other params kept, same-origin account path.
+    expect(res.headers.get('Location')).toBe('/en/account?theme=dark');
+    const setCookie = res.headers.get('Set-Cookie');
+    expect(setCookie).toContain('oz_session=exchanged.cookie.token');
+    expect(setCookie).toContain('HttpOnly');
+    expect(setCookie).toContain('Secure');
+    // The exchange must hit the license server, not the static assets.
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://license.test.ozpos.my.id/api/v1/web/exchange-consume',
+      expect.objectContaining({ method: 'POST' })
+    );
+  });
+
+  it('R1: ignores a short non-exchange code param on the marketing host', async () => {
+    // A coincidental `code` query param (e.g. campaign tracking) must not
+    // be treated as an exchange code — the page loads normally.
+    global.fetch = vi.fn();
+
+    const req = new Request('https://ozpos.my.id/en/support?code=abc123');
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(200);
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(mockEnv.ASSETS.fetch).toHaveBeenCalled();
+  });
+
+  it('R1: redirects to marketing login when the exchange code is invalid', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      status: 401,
+      ok: false,
+      json: async () => ({ error: 'invalid code' }),
+    });
+
+    const code = 'b'.repeat(48);
+    const req = new Request(`https://ozpos.my.id/en/account?code=${code}`);
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('https://ozpos.my.id/en/login');
+  });
 });
