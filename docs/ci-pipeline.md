@@ -49,6 +49,7 @@
 | Rust fmt | `rust-fmt` | Required | `check.sh` (cargo fmt) |
 | Clippy | `rust-clippy` | Required | `check.sh` (clippy) |
 | Rust tests | `rust-test-fast` | Required | `check.sh` (test workspace, test doctests) |
+| Go (license-server) | `go` | Required | `check.sh` (go fmt, go vet, go test (short)) |
 | Architecture boundaries | `architecture-boundaries` | Required | `check.sh` (architecture boundaries) |
 | No raw params (ADR #7 Phase 4) | — | Required | `check.sh` (no-raw-params) |
 | No hardcoded money format | `rust-money-format` | Required | `check.sh` (hardcoded-money-format) |
