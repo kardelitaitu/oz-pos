@@ -325,6 +325,12 @@
   // hit a 429 on the next resend. Timer is now stored on the DOM node
   // (_ozCdTimer) so visibility can follow countdownActive(node) and
   // stopCountdown() can tear it down from anywhere.
+  /**
+   * @param {HTMLElement|null} node
+   * @param {number} seconds
+   * @param {function(number): string} fmt
+   * @param {function(): void} onEnd
+   */
   function startCountdown(node, seconds, fmt, onEnd) {
     if (!node) return;
     if (node._ozCdTimer) clearInterval(node._ozCdTimer);
@@ -509,6 +515,12 @@
   // shorter retry_after expired first) and zombie-rewrote the restored
   // label afterwards. The handle now lives on the button, so a new
   // countdown always supersedes the previous one.
+  /**
+   * @param {HTMLElement|null} btn
+   * @param {number} seconds
+   * @param {function(number): string} fmt
+   * @param {function(): string} restore
+   */
   function startLockoutCountdown(btn, seconds, fmt, restore) {
     if (!btn) return;
     if (btn._ozLockoutTimer) clearInterval(btn._ozLockoutTimer);
@@ -528,12 +540,42 @@
     }, 1000);
   }
 
+  /**
+   * @typedef {Object} AdminKpis
+   * @property {number} mrrUsd
+   * @property {number} totalUsers
+   * @property {number} arpuUsd
+   * @property {number} fxRate
+   * @property {number} activeUsers
+   * @property {number} totalSubscribers
+   * @property {number} activeDevices
+   * @property {number} trialToPaidRate
+   */
+
+  /**
+   * @typedef {Object} AdminStats
+   * @property {Array} revenueTrend
+   * @property {Array} subscriberGrowth
+   * @property {Array} tierDistribution
+   * @property {Array} providerSplit
+   * @property {Array} signupsPerMonth
+   * @property {Array} churnPerMonth
+   * @property {Array} topSubscribers
+   * @property {Array} recentSignups
+   * @property {Array} expiringSoon
+   * @property {AdminKpis} kpis
+   */
+
   // normalizeStats guarantees the shapes renderDashboard expects. admin.js
   // dereferenced m.revenueTrend.forEach / m.kpis.mrrUsd BEFORE the chart
   // guards ran, so a partial stats payload (older server build, truncated
   // response) threw a bare TypeError and the dashboard rendered nothing.
   // Non-object input is tolerated; numeric KPIs are coerced (null/undefined
   // -> 0, numeric strings -> number) so fmtUsd/fmtIdr never see NaN text.
+  /**
+   * @param {any} raw
+   * @returns {AdminStats}
+   */
   function normalizeStats(raw) {
     var m = (raw && typeof raw === 'object') ? raw : {};
     var arr = function (v) { return Array.isArray(v) ? v : []; };

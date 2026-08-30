@@ -12,7 +12,7 @@ const paddleMock = vi.hoisted(() => ({
   isPaddleConfigured: vi.fn(() => true),
   isPlaceholderPriceId: vi.fn(() => false),
   openPaddleCheckout: vi.fn(),
-  getSessionEmail: vi.fn(async () => 'user@example.com'),
+  getSessionEmail: vi.fn<() => Promise<string | null>>(async () => 'user@example.com'),
 }));
 
 const midtransMock = vi.hoisted(() => ({

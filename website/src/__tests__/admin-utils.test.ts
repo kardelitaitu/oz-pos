@@ -820,12 +820,12 @@ describe('admin-utils setAuthMode (B21: tab switch mid-submit corrupts the other
       <div id="password-group"></div><div id="otp-group" class="hidden"></div>
       <button id="login-btn"></button><div id="otp-cooldown" class="hidden"></div>`;
     return {
-      tabOtp: document.getElementById('tab-otp'),
-      tabPwd: document.getElementById('tab-password'),
-      pwdGroup: document.getElementById('password-group'),
-      otpGroup: document.getElementById('otp-group'),
-      loginBtn: document.getElementById('login-btn'),
-      cd: document.getElementById('otp-cooldown'),
+      tabOtp: document.getElementById('tab-otp')!,
+      tabPwd: document.getElementById('tab-password')!,
+      pwdGroup: document.getElementById('password-group')!,
+      otpGroup: document.getElementById('otp-group')!,
+      loginBtn: document.getElementById('login-btn')!,
+      cd: document.getElementById('otp-cooldown')!,
     };
   };
 
