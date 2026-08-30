@@ -18,6 +18,11 @@
 //! # Security properties
 //!
 //! - Password is never stored — only the Argon2id salt is in the header.
+//!   Because that salt is public, an empty password is not a weak key but
+//!   no key: the file's own header lets anyone derive it. Export therefore
+//!   REFUSES an empty or whitespace-only password (B50). Import
+//!   deliberately still accepts one — archives written before that check
+//!   must stay restorable.
 //! - AES-256-GCM provides authenticated encryption (integrity +
 //!   secrecy). Since format v2 the header block is bound in as
 //!   additional authenticated data, so its fields cannot be rewritten

@@ -7782,3 +7782,60 @@ asserted: the admin hunt's B1-B45 range and this one overlap agents (B38 was a
 concurrent agent's find, B17/B23/B26 were dropped after evidence), so a summed
 figure across them would not be honest. Full crate green: 2239 passed / 0 failed
 with --features cache-redis; 40/40 cache tests without it.
+
+## 2026-08-31 — round G: the empty-password backup, and a test that disagreed with me (B50)
+
+**B50 (P3, fc7d7941).** export_ozpkg("") returned Ok. The key is
+Argon2id(password, salt) and the salt sits in the PLAINTEXT header because
+the importer needs it - so an empty password is not a weak key, it is no
+key: anyone holding the file derives it with nothing to guess. No layer
+checked it: clap's #[arg(short, long)] password: String requires the arg to
+be PRESENT, not non-empty, so --password "" passes; run_export_ozpkg and
+data.rs pass the string through; export_ozpkg had no validation.
+
+Severity kept honest by checking who is exposed: the desktop UI already
+requires >= 8 chars (DataManagementScreen.tsx:280) plus a confirm field, so
+an operator clicking Export cannot produce such a file. The gap is the CLI
+and any future caller. P3 defense-in-depth, not live exposure - still worth
+fixing, because a crypto-critical precondition enforced only in a React
+component is enforced in the wrong place.
+
+**The round's real finding was not the bug.** Running the full suite after
+the guard failed another agent's test: ozpkg_tests.rs::empty_password_allowed
+(018972d5), asserting export_ozpkg("") succeeds "(though not recommended)".
+An intentional, explicitly-encoded OPPOSITE position, not an oversight. Two
+ways this goes badly: silently overwrite their test, or back down because a
+test disagrees. Resolved on evidence instead - no doc or setting anywhere
+describes an empty password as a mode, and the UI has required >= 8 chars
+throughout, so what that test pinned was the API accident rather than a
+product contract. Renamed to empty_password_is_refused_at_export with the
+reversal and its reasoning written into the test, so the next reader sees the
+contract changed and why.
+
+The half of their test that still mattered was preserved, not deleted:
+import tolerance for "" (my import_does_not_refuse_an_empty_password) and a
+genuine round-trip with a real password (now round-tripping a 1-char
+password plus a wrong-password-must-fail check). Note what could NOT be
+preserved: their test proved an empty-password round-trip end to end, and
+once export refuses "" no public API can create such a file to import. That
+population is now only archives already on disk, which is exactly why the
+import side stays permissive.
+
+**Same asymmetry as B47, deliberately.** Refusing on import would brick
+existing backups; refusing on export prevents creating more. Both fixes
+choose "stop the bleeding, keep the wound drainable".
+
+Red was self-documenting: expect_err dumped the produced file and its first
+bytes decode to {"version":2,"store_name":"Kopi Senja",...,"salt":"b975ff89..."}
+- an empty-password backup with its salt in the clear. Switched those
+assertions to .err().expect(..) so a future failure reports a size instead of
+leaking a plaintext header into CI logs.
+
+**Also:** the crate sat uncompilable for ~12 minutes on another agent's
+REP-06 currency refactor (reports.rs rows gained a currency field, fixtures
+not yet updated). Used a background poll that retries until the build clears
+and then runs the target tests, rather than idle-polling or committing
+unverified work.
+
+**Totals this area:** B46-B50 = 5 bugs. 42/42 ozpkg tests, 2247/2247 whole
+crate, rustfmt clean.
