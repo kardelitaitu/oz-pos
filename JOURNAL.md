@@ -7204,3 +7204,86 @@ survived in the worktree both times. Lesson: on this tree, commit a
 verified slice within MINUTES; every minute uncommitted is exposure.
 
 **Commits:** 0e5e8bf9 (fix + tests), docs commit alongside this entry.
+
+## 2026-08-31 — Admin bug hunt round 9: enterprise admin surface + login a11y/robustness (B39-B43)
+
+**Problem:** Ninth loop. Two surfaces: the Go admin endpoints I had not
+opened (enterprise approval codes) and the login page's remaining
+robustness/a11y gaps. Five bugs fixed (B39-B43); B38 went to the
+concurrent agent mid-round and my tests became its regression net.
+
+**Findings — Go (324e138b):**
+
+1. **B42** (P3) handleGenerateEnterpriseCode only checked len(code) < 8
+   while the schema caps code Max:64, email Max:254, prospect_name
+   Max:256 — oversized fields reached Save and failed PocketBase field
+   validation, surfacing a 500 for plainly bad input (B30 class). Red
+   printed the exact leaks: 'code: Must be no more than 64
+   character(s).' Pre-checks now mirror the caps, counting RUNES because
+   PB validates with len([]rune(value)) — a byte-count guard would let a
+   multi-byte payload slip through and leak the 500 again.
+2. **B43** (P3) the schema carries created_by for attribution; the
+   handler never set it, so every privileged enterprise code was minted
+   anonymously. Now labelled from the authenticating credential via a
+   new adminIdentity helper (admin_key or the admin tenant's email).
+
+**Clean audits (Go):** generateApprovalCode uses crypto/rand (not
+math/rand) — entropy source sound; handleListEnterpriseCodes is
+parameterized, status-filtered, bounded at 100, RFC3339 dates;
+authenticateAdmin (their LSE-9 rewrite) correctly requires admin key or
+admin-tenant session.
+
+**Findings — website (2f1171e3):**
+
+3. **B39** (P2) startLockoutCountdown/startCountdown took seconds straight
+   from body.retry_after. Garbage made the decrement NaN forever —
+   NaN <= 0 is false, so the end branch never ran: the login button
+   stayed disabled until a page reload. Both coerce now; invalid means
+   'already over'. A numeric-string control test proves real countdowns
+   still work.
+4. **B40** (P3) setAuthMode toggled .active but never aria-selected —
+   after switching modes a screen reader still reported the ORIGINAL tab
+   as selected (WCAG 4.8.2).
+5. **B41** (P2) tableCard indexed row fields directly — a null row or
+   non-array headers threw and killed the whole view (B36 class, found
+   by extending the round-8 fuzz mindset to the remaining helpers).
+
+**B38 — theirs, not mine:** setNavActive + index.html aria-current +
+admin.js wiring landed in their 235815d7 while I was blocked on the same
+dirty file. I verified their semantics matched my three tests, kept the
+tests as the net instead of duplicating the fix, and said so in the
+commit message.
+
+**Self-caught regression (e82845f1):** my round-8 commit 60a8c542 broke
+the astro-check gate — getAttribute on possibly-null getElementById
+(expect().not.toBeNull() does not narrow) plus an untyped
+querySelectorAll NodeListOf<Element> vs ArrayLike<HTMLElement>: 4
+errors, so 'cd website && npm run check' (website.yml:75) would have
+failed on my work. Vitest never notices — esbuild strips types without
+checking. Lesson: the website gate is npm run check, not npm test.
+
+**Work-loss incident:** my uncommitted round-9 test edits were destroyed
+mid-round — the concurrent agent's flow included a reset + stash
+(stash@{0} 'WIP on 0.0.33: 235815d7'). Recovered by extracting ONLY my
+two files with 'git checkout stash@{0} -- <paths>' (+130 lines, purely
+additions, verified by diff) and leaving the stash intact because it
+also holds another agent's ui/ and crates/ work. Confirmed the restore
+was correct by re-running: B38's 3 tests flipped to pass (their helper
+had landed), B39-B41 stayed Red for the right reasons.
+
+**Residuals (logged, not fixed):** uniqueness pre-check at
+FindFirstRecordByData then Save is a real TOCTOU — the unique index
+exists, so a true concurrent duplicate yields 500 instead of 409; needs
+a concurrency test to pin, low probability. Response returns raw
+req.Email while the stored value is normalized (cosmetic). code[:4]
+byte-slice could split a multi-byte rune in the log line (cosmetic).
+Generated codes carry 32 bits of entropy — acceptable for one-time,
+rate-limited admin-minted codes.
+
+**Test counts:** license-server +2 (new enterprise_admin_test.go);
+website +9 (B38 net 3, B39 3, B40 2, B41 1); full website 691/691
+(42 files); astro check 0 errors; license-server package PASS (123s);
+drift 0.
+
+**Commits:** 324e138b (B42+B43), 2f1171e3 (B39-B41), e82845f1 (B38 net +
+CI type fix).

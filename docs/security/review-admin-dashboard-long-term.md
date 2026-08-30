@@ -158,7 +158,7 @@ The admin login page (`login.html`) is always dark. The dashboard has a theme to
 | 2 | **HIGH** | MOCK fallback masks failures (C4) | Show error banner when API fails; keep MOCK only as last-resort skeleton | ✅ Resolved — MOCK object removed; API errors render a retry/error state (Phase 1) |
 | 3 | **HIGH** | Tenants list has no pagination (C3) | Add page controls + pass `?page=` / `?perPage=` to the API | ✅ Resolved — pagination controls + `?page=`/`?perPage=`/`?search=` (Phase 2) |
 | 4 | **HIGH** | Monolithic admin.js (H1) | Split into testable modules (stats.js, tenants.js, charts.js) or move to a build step | ✅ Resolved — pure helpers extracted into `admin-utils.js` (charts, formatting, cards, API auth, i18n) with unit tests |
-| 5 | **HIGH** | Zero tests (H2) | Add unit tests for chart rendering, helpers, and API mock fallback | ✅ Resolved — 94 unit tests across `admin-utils.test.ts` (88) and `admin-a11y.test.ts` (6), +19 in `worker.test.ts`, +7 Go tests in `admin_stats_test.go`/`admin_dashboard_test.go`; all suites execute in CI via the `website-tests` gate. The 2026-08-30 bug hunt added 72 of the website tests and fixed 33 real bugs (see §8.1) |
+| 5 | **HIGH** | Zero tests (H2) | Add unit tests for chart rendering, helpers, and API mock fallback | ✅ Resolved — 103 unit tests across `admin-utils.test.ts` (94, incl. a seeded property fuzz) and `admin-a11y.test.ts` (9), +19 in `worker.test.ts`, +9 Go tests in `admin_stats_test.go`/`admin_dashboard_test.go`/`enterprise_admin_test.go`; all suites execute in CI via the `website-tests` gate. The 2026-08-30→31 bug hunt added 81 of the website tests and fixed 38 real bugs (see §8.1) |
 | 6 | **HIGH** | No i18n (H3) | Extract strings to an i18n structure; at minimum, add English `.ftl` keys for future localization | ✅ Resolved — `STRINGS` key-value table + `t()` helper; all admin/dashboard/login strings extracted |
 | 7 | **HIGH** | Shared session cookie (H4) | Restrict `Domain` to individual subdomains or use a dedicated auth domain | ✅ Resolved — cookie scoped to `admin.ozpos.my.id` / `dashboard.ozpos.my.id` (not the parent domain) |
 | 8 | **MEDIUM** | No loading/error states for charts (M1) | Guard `svgChart` against empty/NaN data; add per-chart error states | ✅ Resolved — `svgChart` / `svgDonut` guard empty/NaN/zero data |
@@ -223,7 +223,7 @@ merge history (`git log -S` + merge-ancestry), and a local test run:
 - **L1 corrected to OPEN**, **L3 marked won't-fix/by-design** — see §5.
 - Test count corrected: **24**, not "25+".
 
-### 8.1 Bug hunt (2026-08-30, TDD) — 33 bugs found & fixed
+### 8.1 Bug hunt (2026-08-30 → 08-31, TDD) — 38 bugs found & fixed
 
 A focused hunt over `admin.js`/`admin-utils.js` against the Go server's
 actual JSON shapes found six real bugs — none caught by the pre-existing
@@ -372,3 +372,36 @@ across normalizeStats/charts/tenant builders. B36/B37 are the hunt's
 first P1s since B24 — single malformed array elements taking down
 whole views, previously only hypothesized (B4's partial-payload class)
 and now proven reachable through the element level.
+
+**Round 9** (2026-08-31) opened the last un-read Go admin file (the
+enterprise approval-code endpoints) and finished the login page's
+robustness/a11y gaps:
+
+| # | Sev | Bug | Fix |
+|---|-----|-----|-----|
+| B39 | P2 | `startLockoutCountdown`/`startCountdown` took `seconds` straight from `body.retry_after` — a garbage value made the decrement NaN forever (`NaN <= 0` is false), so the end branch never ran and the **login button stayed disabled until a page reload** | coerce to a finite integer; invalid/non-positive means "already over" (restore button / fire `onEnd`); numeric-string control test proves real countdowns still run |
+| B40 | P3 | `setAuthMode` toggled the visual `.active` class but never `aria-selected` — after switching credential modes a screen reader still reported the *original* tab as selected (WCAG 4.8.2) | both branches keep `aria-selected` in sync with the class |
+| B41 | P2 | `tableCard` indexed row fields directly — a null row or non-array headers threw and killed the whole view (B36 class, found by extending the fuzz to the remaining helpers) | containers validated, malformed rows skipped |
+| B42 | P3 | `handleGenerateEnterpriseCode` checked only `len(code) < 8` while the schema caps `code` 64 / `email` 254 / `prospect_name` 256 — oversized input reached Save and failed PocketBase validation, surfacing a **500 for bad client input** (B30 class); Red leaked `code: Must be no more than 64 character(s).` | rune-count pre-checks mirroring the caps (PB validates with `len([]rune(value))`, so a byte-count guard would let a multi-byte payload slip through and leak the 500 again) |
+| B43 | P3 | the schema carries `created_by` for attribution; the handler never set it — every privileged enterprise code was minted **anonymously**, no audit trail | `adminIdentity` helper labels the authenticating credential (`admin_key` or the admin tenant's email); mint log carries it too |
+
+Round-9 commits: `324e138b` (B42+B43), `2f1171e3` (B39–B41),
+`e82845f1` (B38 net + CI type fix). **B38** (nav `aria-current`) was
+fixed by the concurrent agent in `235815d7` while I was blocked on the
+same dirty file; my three tests were kept as its regression net rather
+than duplicating the fix.
+**Clean audits this round:** `generateApprovalCode` uses `crypto/rand`
+(not `math/rand`) — entropy sound; `handleListEnterpriseCodes` is
+parameterized, bounded, RFC3339-dated; `authenticateAdmin` (their LSE-9
+rewrite) correctly requires admin key or admin-tenant session.
+**Residuals logged, not fixed:** the uniqueness pre-check → `Save` is a
+genuine TOCTOU (the unique index exists, so a true concurrent duplicate
+yields 500 not 409 — needs a concurrency test to pin); response returns
+raw `req.Email` while the stored value is normalized; `code[:4]` could
+split a multi-byte rune in a log line; generated codes carry 32 bits of
+entropy (acceptable for one-time, rate-limited admin-minted codes).
+**Self-caught regression:** round 8's `60a8c542` broke the `astro check`
+gate (possibly-null `getElementById` results + untyped
+`querySelectorAll` → 4 errors; `npm run check` at `website.yml:75` would
+have failed). Vitest can't see it — esbuild strips types without
+checking. The website gate is `npm run check`, not `npm test`.
