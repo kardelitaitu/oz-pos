@@ -1379,6 +1379,25 @@ MSL-10 (pin serialization) should be fixed when the types move.
 
 > **modules-giftcards COMPLETE** — 2 production files, ~112 lines, zero
 > new finding IDs. Campaign proceeds to modules/kitchen.
+
+---
+
+## 24. modules/kitchen — stub (KDS tickets, prep routing)
+
+Baseline: ~116 production lines. Slice A — both files read (lib.rs 90
+fully read; error.rs verified).
+
+**No new findings.** A documented stub with the most thorough promotion
+notes of the stub set: `order.fired` event subscription (tickets created
+by event rather than direct call), SLA timer lifecycle pinned to
+`on_start`/`on_stop` (a stopped module leaves no live timer), the
+existing `oz_core::features` disable guard coupling called out for
+redirection on promotion, and `kitchen-display`/`table-management` flags
+depending on `restaurant`.
+
+> **modules-kitchen COMPLETE** — 2 production files, ~116 lines, zero
+> new finding IDs. **All 14 modules/* crates are now audited.** Campaign
+> proceeds to crates/oz-hal.
 ---
 
 ---

@@ -1,8 +1,8 @@
 /*
-stub module — created as part of the growable-workspace plan
+last audited 25-07-26 by RSA-Agent (modules-kitchen slice A: lib deep read)
 crate: modules-kitchen | status: SAFE | lint: CLEAN
-findings: No-op Module implementation. No unsafe code, no DB access yet.
-next: Own KDS ticket state and subscribe to order.fired on the event bus.
+findings: clean documented STUB — kernel registration + sales/terminal dependencies; promotion path covers ticket tables, order.fired event subscription (tickets created by event, not direct call), and the SLA timer lifecycle (spawned in on_start, cancelled in on_stop so a stopped module leaves no live timer); documents existing runtime coupling (oz_core features disable guard for kitchen-display while KDS tickets are open) that should consult this module on promotion; kitchen-display and table-management flags depend on restaurant; sibling tests per convention
+next: none (promote KDS ticket state when built) | perf: N/A
 */
 
 //! Kitchen Module — order firing, KDS tickets, and prep routing.

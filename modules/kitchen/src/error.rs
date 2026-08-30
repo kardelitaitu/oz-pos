@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-kitchen slice A: error verified)
+crate: modules-kitchen | status: SAFE | lint: CLEAN
+findings: clean thiserror kitchen error taxonomy (stub)
+next: none | perf: N/A
+*/
 //! Error type for the kitchen domain.
 //!
 //! Mirrors the shape used by the other module crates (`Db`, `NotFound`,
