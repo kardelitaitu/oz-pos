@@ -1287,4 +1287,114 @@ mod tests {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<RegistryError>();
     }
+
+    // ── Drift-prevention hardening tests ─────────────────────────────
+
+    /// Every permission granted by every built-in preset must be registered
+    /// in the registry AND listed in ALL_ENFORCED. This catches:
+    /// - Migration drift: new constant added but not registered
+    /// - Preset drift: preset grants a key that doesn't exist
+    ///
+    /// Skips `"*"` (global wildcard — not a registered permission key).
+    #[test]
+    fn every_preset_permission_is_registered_and_enforced() {
+        for preset in crate::rbac::ROLE_PRESETS {
+            for &perm in preset.permissions {
+                if perm == "*" {
+                    continue; // global wildcard — special token, not a registered key
+                }
+                assert!(
+                    is_registered(perm),
+                    "preset '{}' grants '{}' which is not registered — add it to REGISTRY",
+                    preset.id,
+                    perm
+                );
+                assert!(
+                    ALL_ENFORCED.contains(&perm),
+                    "preset '{}' grants '{}' which is not in ALL_ENFORCED",
+                    preset.id,
+                    perm
+                );
+            }
+        }
+    }
+
+    /// Every ALL_ENFORCED constant must be granted by at least one built-in
+    /// preset, OR be a known owner-only exception. This catches orphaned
+    /// constants that exist in code but no role actually uses them.
+    #[test]
+    fn every_enforced_key_is_granted_by_at_least_one_preset() {
+        // Known owner-only exceptions: irreversible org actions deliberately
+        // kept out of all presets (ADR #35 D4).
+        // Keys deliberately not granted by any preset: owner-only irreversible
+        // actions (ADR #35 D4) or features not yet assigned to a role.
+        let unpreseted_exceptions: &[&str] = &[
+            permissions::STAFF_DELETE,
+            permissions::TERMINALS_READ,
+            permissions::PURCHASING_VIEW,
+            permissions::PURCHASING_MANAGE,
+            permissions::GIFTCARDS_ISSUE,
+            permissions::GIFTCARDS_REDEEM,
+            permissions::GIFTCARDS_MANAGE,
+            permissions::SECURITY_MANAGE,
+            permissions::SYNC_MANAGE,
+            permissions::DATA_EXPORT,
+        ];
+
+        // Collect all permissions granted by any preset.
+        let mut all_preset_perms = std::collections::HashSet::new();
+        for preset in crate::rbac::ROLE_PRESETS {
+            for &perm in preset.permissions {
+                all_preset_perms.insert(perm);
+            }
+        }
+        for &key in ALL_ENFORCED {
+            if unpreseted_exceptions.contains(&key) {
+                continue;
+            }
+            assert!(
+                all_preset_perms.contains(key),
+                "ALL_ENFORCED key '{key}' is not granted by any preset — \
+                 either add it to a preset, mark it owner-only, or remove it from ALL_ENFORCED"
+            );
+        }
+    }
+
+    /// Every registry entry's family must have at least one non-sensitive key,
+    /// OR be a known all-sensitive family. A family with ONLY sensitive keys
+    /// means the family wildcard is always rejected — which is correct for
+    /// security-sensitive domains like data export.
+    #[test]
+    fn every_family_has_operational_key() {
+        // Known all-sensitive families: every key in these families is
+        // sensitive by design (ADR #35 D2). Family wildcards are rejected.
+        let all_sensitive_families: &[&str] = &["data", "security"];
+
+        for family in families() {
+            if all_sensitive_families.contains(&family) {
+                continue;
+            }
+            let has_operational = REGISTRY.iter().any(|e| e.family == family && !e.sensitive);
+            assert!(
+                has_operational,
+                "family '{}' has NO operational (non-sensitive) keys — \
+                 family wildcards will always be rejected",
+                family
+            );
+        }
+    }
+
+    /// Registry size must exactly match ALL_ENFORCED count.
+    /// Previously we tested >= but exact match prevents silent additions
+    /// to one list without the other.
+    #[test]
+    fn registry_and_enforced_counts_match_exactly() {
+        assert_eq!(
+            REGISTRY.len(),
+            ALL_ENFORCED.len(),
+            "REGISTRY has {} entries but ALL_ENFORCED has {} — they must stay in sync",
+            REGISTRY.len(),
+            ALL_ENFORCED.len()
+        );
+    }
 }
