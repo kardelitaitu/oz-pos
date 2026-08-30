@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { t } from '../../i18n';
 import { statusLabel, statusPillClass, fmtDate } from './accountShared';
 
@@ -56,17 +56,33 @@ export default function AccountLicense({ locale, tenantStatus, license }: Props)
   );
 }
 
-/** Copy-key button with a transient success label. */
+/** Copy-key button with a transient success label. Falls back to
+ * execCommand('copy') when navigator.clipboard is unavailable (plain HTTP,
+ * local dev), and only shows "Copied!" on actual success. */
 function CopyKeyButton({ locale, licenseKey }: { locale: string; licenseKey: string }) {
   const [copiedKey, setCopiedKey] = useState(false);
+  const timerRef = useRef<number | null>(null);
+
+  const copy = () => {
+    copyTextToClipboard(licenseKey).then((ok) => {
+      if (!ok) return;
+      setCopiedKey(true);
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => setCopiedKey(false), 2500);
+    });
+  };
+
+  // Cleanup the timer on unmount so it never sets state on a dead component.
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    };
+  }, []);
+
   return (
     <button
       type="button"
-      onClick={() => {
-        void navigator.clipboard?.writeText(licenseKey);
-        setCopiedKey(true);
-        setTimeout(() => setCopiedKey(false), 2500);
-      }}
+      onClick={copy}
       className="inline-flex items-center gap-1 rounded border border-ink/15 bg-surface px-2 py-1 text-xs font-medium text-ink transition hover:bg-ink/5"
       aria-label={t(locale, 'account.copyKey')}
     >
@@ -77,4 +93,40 @@ function CopyKeyButton({ locale, licenseKey }: { locale: string; licenseKey: str
       )}
     </button>
   );
+}
+
+/** Copy text to the clipboard with a fallback for browsers without
+ *  navigator.clipboard (plain HTTP, local dev, older WebViews).
+ *  Returns true when the copy was attempted (success is best-effort for
+ *  the execCommand path, which has no reliable success signal). */
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // navigator.clipboard.writeText rejects when permission is denied —
+    // fall through to the execCommand path.
+  }
+  // execCommand fallback (P4): create a temporary textarea, select it, copy.
+  // This is synchronous and works in older browsers / local dev.
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    // execCommand returns false when the command is unavailable or denied.
+    // When true it still may not have actually written (permissions), but
+    // this is the best signal we have.
+    return ok;
+  } catch {
+    return false;
+  }
 }
