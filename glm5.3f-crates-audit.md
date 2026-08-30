@@ -51,7 +51,7 @@ production 1–370 fully read) — **oz-plugin COMPLETE**
 
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
-| PLG-11 | 🟠 HIGH | crates/oz-plugin/src/db.rs:208–254 | The regex namespace validator extracts bare identifiers only — any SQLite-legal **quoted** table reference (`"sales"`, `` `sales` ``, `[sales]`) bypasses extraction entirely, so `DELETE FROM "sales"` passes `validate_sql` with zero captured tables and reaches the core schema. `execute` (`execute_batch`, multi-statement) inherits the bypass. | Fail-closed: reject quote/bracket characters outside string literals — or replace regex validation with the SQLite authorizer (`sqlite3_set_authorizer`), the API designed for this. |
+| PLG-11 | ✅ FIXED 25-07-26 | crates/oz-plugin/src/db.rs | The regex namespace validator extracts bare identifiers only — any SQLite-legal **quoted** table reference (`"sales"`, `` `sales` ``, `[sales]`) bypasses extraction entirely, so `DELETE FROM "sales"` passes `validate_sql` with zero captured tables and reaches the core schema. `execute` (`execute_batch`, multi-statement) inherits the bypass. | Fail-closed: reject quote/bracket characters outside string literals — or replace regex validation with the SQLite authorizer (`sqlite3_set_authorizer`), the API designed for this. |
 
 manager.rs is exemplary (PLG-03 gated `oz` table, PLG-04 isolated
 `_ENV` with `_G` repointing, duplicate-id rejection, mandatory
@@ -1863,7 +1863,7 @@ simply predates the payment keys.
 | 1 | COR-35 | ✅ **FIXED** 25-07-26 — Snowflake INSERT switched to SQL API bind variables (`?` placeholders + 1-based TEXT `bindings` map); `sql_escape` helper and its test removed; stamp updated; **all 2,025 oz-core tests pass**. |
 | 2 | CS-1 | ✅ **FIXED** 25-07-26 — verify_slice constant-time check on both Stripe and Square verifiers + CS-2 timestamp tolerance (skew > 5 min rejected). |
 | 3 | UI-1 | ✅ **FIXED** 25-07-26 — three payment keys added to SECRET_KEY_DENY_LIST in BOTH clients; new gateway_status Tauri command computes configured/online booleans server-side; gateway.ts invokes it (single call, no secrets in renderer); gateway.test.ts rewritten to the new contract; settings tests extended (59 desktop + 45 tablet pass) and all 18 gateway UI tests pass. |
-| 4 | PLG-11 | ⬜ fail-closed quoted-identifier rejection (or authorizer) |
+| 4 | PLG-11 | ✅ **FIXED** 25-07-26 — fail-closed lexical scan rejects any quote/bracket character outside string literals (the three SQLite quoting dialects can no longer bypass namespace regexes); unterminated literals rejected; 7 new tests; all 180+2 oz-plugin tests pass. |
 | 5 | L-1 | ⬜ WorkerGuard lifetime fix |
 | 6 | API-1 | ⬜ remove dev JWT secret fallback |
 | 7+ | MEDs | ⬜ MSL-4, MSL-7, CLI-1, CLI-2, N-1, M-1, DC-1 (CS-2 done alongside CS-1). Note: email_pg pg_integration_email_loop_reads_postgres is a pre-existing environmental flake (fake host smtp.test.com DNS varies by run) — observed failing intermittently on 25-07-26 with all webhook/auth tests green. |

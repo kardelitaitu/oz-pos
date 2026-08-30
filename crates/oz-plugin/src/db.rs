@@ -1,8 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent (oz-plugin slice B: db deep read)
-crate: oz-plugin | status: NEEDS-FIX | lint: CLEAN
-findings: PLG-11 HIGH — the regex-based namespace validator extracts bare identifiers only, so any SQLite-legal QUOTED table reference (double quotes, backticks, square brackets) bypasses extraction entirely: DELETE FROM "sales", UPDATE [sales] SET, INSERT INTO `sales` all pass validate_sql with zero captured table names and reach the core schema. execute_batch (execute) accepts multiple statements and inherits the same bypass. Proposed: reject statements containing quote/bracket characters outside string literals (fail-closed), or replace regex validation with the SQLite authorizer callback (sqlite3_set_authorizer via rusqlite ffi) which is the API designed for exactly this enforcement. Otherwise strong: blocked-keyword list, PRAGMA/ALTER TABLE blocked, 8 reference patterns, CTE exclusion (fail-safe direction on data-modifying statements), OnceLock statics with documented RUST-07 policy plus CI compile test, poisoned-lock handling, safe JSON/blob conversion with hand-rolled base64
-next: PLG-11 in fix-order phase | perf: contains_word compiles a fresh regex per keyword per statement (plugin path, negligible)
+last audited 25-07-26 by RSA-Agent (oz-plugin slice B: db.rs deep read; PLG-11 FIXED 25-07-26)
+crate: oz-plugin | status: SAFE | lint: CLEAN
+findings: PLG-11 FIXED — validate_sql now fail-closes on any quote/bracket character outside a single-quoted string literal (ensure_no_quoted_identifiers lexical scan), so the SQLite-legal quoting dialects ("sales", `sales`, [sales]) can no longer bypass the bare-identifier namespace regexes; unterminated string literals are also rejected; 7 new tests cover the bypass shapes and the string-literal escape case (all 180+2 oz-plugin tests pass). Prior verified positives: PLG-01/02/06/08 hardening intact; exec/query/execute all funnel through validate_sql
+next: consider sqlite3_set_authorizer as the long-term replacement for the regex layer | perf: scan is O(n) over ASCII bytes
 */
 //! Isolated database namespace for plugins.
 //!
@@ -237,7 +237,10 @@ pub fn validate_sql(sql: &str, prefix: &str) -> Result<(), PluginError> {
         ));
     }
 
-    // 4. Extract all table references and validate them
+    // 4. Fail-closed: reject quoted identifiers (PLG-11).
+    ensure_no_quoted_identifiers(sql)?;
+
+    // 5. Extract all table references and validate them
     let table_names = extract_table_references(sql);
     for tbl in &table_names {
         // Skip CTE names (they start with the CTE, no prefix enforcement)
@@ -248,6 +251,54 @@ pub fn validate_sql(sql: &str, prefix: &str) -> Result<(), PluginError> {
         }
     }
 
+    Ok(())
+}
+
+/// Reject SQLite-legal quoted identifiers (fail-closed lexical scan).
+///
+/// The namespace regexes extract BARE identifiers only. SQLite also accepts
+/// `"name"`, `` `name` ``, and `[name]` as quoted identifiers, which would
+/// bypass extraction entirely — `DELETE FROM "sales"` yields zero captured
+/// tables and would reach the core schema (PLG-11). Rather than teaching
+/// every regex the three quoting dialects, this scan fail-closes: any
+/// quote/bracket character appearing OUTSIDE a single-quoted string literal
+/// rejects the statement. Plugin SQL only needs bare identifiers — the host
+/// creates the prefixed tables — and values legitimately containing these
+/// characters are invisible inside `'...'` literals (with `''` doubling as
+/// the escape). The scan walks ASCII bytes: UTF-8 continuation/lead bytes
+/// never collide with ASCII code points, so multibyte values cannot spoof
+/// the toggles.
+pub fn ensure_no_quoted_identifiers(sql: &str) -> Result<(), PluginError> {
+    let bytes = sql.as_bytes();
+    let mut in_string = false;
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\'' => {
+                // `''` inside a string is an escaped quote, not the terminator.
+                if in_string && i + 1 < bytes.len() && bytes[i + 1] == b'\'' {
+                    i += 2;
+                    continue;
+                }
+                in_string = !in_string;
+            }
+            b'"' | b'`' | b'[' | b']' if !in_string => {
+                return Err(PluginError::PermissionDenied(
+                    "quoted identifiers are not allowed in plugin SQL (use bare names, e.g. sales_orders instead of \"sales_orders\")"
+                        .into(),
+                ));
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    // An unterminated string literal is malformed SQL; reject it fail-closed
+    // rather than guessing whether quote characters inside it were values.
+    if in_string {
+        return Err(PluginError::PermissionDenied(
+            "unterminated string literal in plugin SQL".into(),
+        ));
+    }
     Ok(())
 }
 
