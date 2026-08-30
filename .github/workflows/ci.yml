@@ -58,6 +58,13 @@ jobs:
           fi
       - name: Run go vet
         run: cd apps/license-server && go vet ./...
+      - name: Run Go tests (short mode)
+        # The full license-server suite is ~82s; -short skips the slowest
+        # Midtrans webhook integration tests (each carries a load-bearing
+        # 1.1s sleep for second-precision expiry assertions) so quick CI
+        # stays fast while the full suite still runs in pre-merge builds.
+        # gofmt + vet gate formatting/types; tests gate behavior.
+        run: cd apps/license-server && go test -short ./...
   # Unified image healthcheck script test — exercises the SMTP sender-identity
   # gate counter logic in apps/unified/healthcheck.sh against a fake-wget
   # harness (apps/unified/test-healthcheck.sh). Pure POSIX sh, no toolchain.
