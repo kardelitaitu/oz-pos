@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (platform-startup slice B: metrics verified)
+crate: platform-startup | status: SAFE | lint: CLEAN
+findings: clean metrics feature-gated bootstrap
+next: none | perf: N/A
+*/
 //! Optional Prometheus metrics HTTP endpoint.
 //!
 //! When the `metrics` feature is enabled, starts a lightweight

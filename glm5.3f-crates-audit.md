@@ -983,6 +983,23 @@ poison-safe lock mapping and structured logs; sale completions are
 enqueued at `SyncPriority::Critical` per P-2. One pattern note: the
 1,219-line `event_handlers.rs` carries inline tests (COR-33 family).
 
+### Slice B — rate_sync.rs (405: production 1–317 fully read, tests 319+),
+console.rs + metrics.rs verified — **platform-startup COMPLETE**
+
+**No new findings — exemplary.** The exchange-rate daemon re-reads its
+settings every tick (configuration changes need no restart), converts
+API `f64` rates to `i64` millionths via documented fixed-point rounding
+with a bounded-range safety rationale, applies RUST-07 poison recovery on
+both DB phases, isolates blocking work in `spawn_blocking` with join-error
+handling, shuts down through a watch channel, and records per-rate upsert
+failures without aborting the cycle.
+
+> **platform-startup COMPLETE** — 5 production files, ~1.8k lines, all read
+> or verified and stamped; zero new finding IDs. Campaign proceeds to
+> platform/sync.
+
+---
+
 ---
 
 ---

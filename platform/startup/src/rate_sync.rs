@@ -1,4 +1,10 @@
 //! Exchange rate auto-sync daemon.
+/*
+last audited 25-07-26 by RSA-Agent (platform-startup slice B: rate_sync deep read)
+crate: platform-startup | status: SAFE | lint: CLEAN
+findings: exemplary — Frankfurter fetch with per-phase error capture into status; f64 rate to i64 millionths via documented fixed-point rounding with bounded-range safety rationale; RUST-07 poison recovery on both DB phases; spawn_blocking isolation with join-error handling; watch-channel graceful shutdown; per-rate upsert failure warns and continues; settings re-read per tick (no restart needed)
+next: none | perf: blocking DB work off the async runtime
+*/
 //!
 //! A background task that periodically fetches exchange rates from the
 //! Frankfurter public API (`https://api.frankfurter.app`) and stores them
