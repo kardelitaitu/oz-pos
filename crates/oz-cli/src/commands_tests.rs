@@ -1,3 +1,4 @@
+use super::user::validate_phc_pin_hash;
 use super::*;
 use rusqlite::{Connection, params};
 
