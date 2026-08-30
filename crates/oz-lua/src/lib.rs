@@ -1,7 +1,8 @@
 /*
-last audited 24-07-26 by Antigravity
-crate: oz-lua | status: SAFE | lint: CLEAN
-findings: Migrated from rlua to mlua 0.9. Native memory limit (10 MiB) now enforced via set_memory_limit. All tests passing.
+last audited 25-07-26 by RSA-Agent (oz-lua slice A: lib deep read)
+crate: oz-lua | status: NEEDS-FIX | lint: CLEAN
+findings: LUA-2 LOW — legacy global-hook path: parse_discount_result returns percent unvalidated; the only 0-100 range check lives on the oz.apply_discount binding path (P0-5 in oz-plugin manager), so a legacy apply_discount hook returning percent 5000 would flow through apply_discount_in_env unchecked (defense-in-depth gap at the parse site). LUA-3 INFO — detect_overwrites never fires: its warn condition counts duplicate occurrences in the INPUT name list (always 1 for unique names), not actual VM overwrites; the overwrite check is a no-op as written. Sandbox hardening otherwise exemplary: io/loadfile/dofile/require/package/debug/rawget/rawset/rawequal/rawlen/collectgarbage/module/load removed, os reduced to date/time/clock, 10 MiB memory limit, 100K instruction hook, deny(unsafe_code) with documented Send/Sync rationale, MONEY-05 float hand-off documented with regression test
+next: validate percent at parse site; fix or remove detect_overwrites | perf: N/A
 */
 
 //! Embedded Lua scripting runtime for OZ-POS.

@@ -63,6 +63,27 @@ MONEY-05 float hand-off, documented mlua drop-order).
 
 ---
 
+## 27. crates/oz-lua — Lua scripting runtime
+
+Baseline: ~680 production lines. Slice A — all 3 files (lib.rs 503:
+production 1–460 fully read; bridge/error verified; the prior
+2026-07-24 Antigravity stamp replaced per convention).
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| LUA-2 | 🟡 LOW | crates/oz-lua/src/lib.rs:425 | Legacy global-hook path: `parse_discount_result` returns `percent` unvalidated — the only 0–100 check lives on the `oz.apply_discount` binding path (P0-5), so a legacy `apply_discount` hook returning an out-of-range percent flows through `apply_discount_in_env` unchecked. | Validate percent at the parse site (defense-in-depth). |
+| LUA-3 | ℹ️ INFO | crates/oz-lua/src/lib.rs:255 | `detect_overwrites` never fires: its warn condition counts duplicate occurrences in the *input* name list (always 1 for unique names), not actual VM overwrites. | Fix the condition (snapshot globals before/after each script) or remove the dead check. |
+
+Sandbox hardening otherwise exemplary: dangerous globals removed, `os`
+reduced to date/time/clock, 10 MiB memory limit, 100K-instruction hook,
+`deny(unsafe_code)` with documented Send/Sync rationale, MONEY-05 float
+hand-off documented with a regression test.
+
+> **oz-lua COMPLETE** — 3 production files, ~680 lines, one LOW + one
+> INFO. Campaign proceeds to crates/oz-notification.
+
+---
+
 ## 25. crates/oz-hal — hardware abstraction layer
 
 Baseline: ~3.2k production lines across 28 files. Slice A (registry.rs

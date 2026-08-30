@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-lua slice A: error verified)
+crate: oz-lua | status: SAFE | lint: CLEAN
+findings: clean thiserror Lua error taxonomy
+next: none | perf: N/A
+*/
 //! Error type for the `oz-lua` runtime.
 
 use thiserror::Error;
