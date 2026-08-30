@@ -208,10 +208,13 @@ describe('useCloudSync', () => {
 
       // Auth token via the secure set_setting channel
       // (backward-compat with the legacy settings DB key).
+      // F-007: routed through the settings api wrapper, which sends the
+      // Tauri-expected camelCase `userId` (the old inline call sent
+      // `user_id`, which the backend never received).
       expect(mocks.invoke).toHaveBeenCalledWith('set_setting', {
         key: 'sync.auth_token',
         value: 'my-token',
-        user_id: 'user-1',
+        userId: 'user-1',
       });
     });
 

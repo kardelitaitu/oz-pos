@@ -3,7 +3,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { getVersion } from '@tauri-apps/api/app';
 import type { Update } from '@tauri-apps/plugin-updater';
 import { createBackup } from '@/api/data';
-import { getSetting } from '@/api/settings';
+import { getSetting, setSetting } from '@/api/settings';
 import { plainErrorMessage } from '@/utils/app-error';
 import './UpdateBanner.css';
 
@@ -201,14 +201,14 @@ export default function UpdateBanner() {
   }, [updateInstance, versionBlocked, currentVersion]);// ── Helpers (module-level, no component state dependency) ─────────
 
 /**
- * Persist an updater setting via unscoped invoke.
- * The scoped variant requires a session token which isn't available
- * in this context (the banner renders before login in some routes).
+ * Persist an updater setting through the settings API layer (F-007).
+ * The unscoped command is used deliberately: the scoped variant requires
+ * a session token which isn't available in this context (the banner
+ * renders before login in some routes).
  */
 async function persistUpdaterSetting(key: string, value: string): Promise<void> {
   try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('set_setting', { key, value, userId: 'system_updater' });
+    await setSetting(key, value, 'system_updater');
   } catch {
     // Non-critical — backup already done; settings persistence is best-effort.
   }

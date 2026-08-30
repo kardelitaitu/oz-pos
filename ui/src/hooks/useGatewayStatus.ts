@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { getSetting } from '@/api/settings';
 
 /** Describes a payment gateway's connection state. */
 export interface GatewayStatus {
@@ -20,7 +20,7 @@ export function useGatewayStatus(): GatewayStatus {
 
     async function check() {
       try {
-        const key: string | null = await invoke('get_setting', { key: 'stripe.api_key' });
+        const key: string | null = await getSetting('stripe.api_key');
         if (!cancelled) {
           const configured = key !== null && key !== '';
           setStatus({ name: 'Stripe', configured, online: configured });

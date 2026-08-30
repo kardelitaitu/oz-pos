@@ -13,7 +13,7 @@
 //! sheet can share one source of truth.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { getSetting, setSetting } from '@/api/settings';
 import {
   pendingSyncCount,
   syncPull,
@@ -159,7 +159,7 @@ export function useCloudSync(deps: UseCloudSyncDeps): UseCloudSyncReturn {
     let cancelled = false;
     (async () => {
       try {
-        const tok: string | null = await invoke('get_setting', { key: IPC_TOKEN_KEY });
+        const tok: string | null = await getSetting(IPC_TOKEN_KEY);
         if (!cancelled && tok) setToken(tok);
       } catch {
         /* IPC may not be available yet; load still completes so the UI un-blocks */
@@ -332,7 +332,7 @@ export function useCloudSync(deps: UseCloudSyncDeps): UseCloudSyncReturn {
       // via the Settings page (which now also writes here).
       if (token.trim()) {
         try {
-          await invoke('set_setting', { key: IPC_TOKEN_KEY, value: token, user_id: userId });
+          await setSetting(IPC_TOKEN_KEY, token, userId);
         } catch {
           /* settings DB unavailable */
         }

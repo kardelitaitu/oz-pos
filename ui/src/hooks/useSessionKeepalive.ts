@@ -13,7 +13,7 @@
 //! not this heartbeat — which is best-effort by design.
 
 import { useEffect, useRef } from 'react';
-import { loggedInvoke } from '@/utils/logged-invoke';
+import { sessionKeepalive } from '@/api/staff';
 
 /** How often to extend the session TTL while the screen is visible. */
 const KEEPALIVE_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
@@ -38,7 +38,7 @@ export function useSessionKeepalive(sessionToken: string | null | undefined): vo
       const token = tokenRef.current;
       if (cancelled || !token) return;
       try {
-        await loggedInvoke('session_keepalive', { sessionToken: token });
+        await sessionKeepalive(token);
       } catch {
         // Best-effort heartbeat: a dead session is reported by the
         // command that actually fails, not by this background ping.
