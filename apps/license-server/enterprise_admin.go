@@ -34,34 +34,18 @@ type GenerateCodeResponse struct {
 // handleGenerateEnterpriseCode returns an HTTP handler for creating enterprise
 // trial approval codes (admin-only).
 //
-// Requires Authorization: Bearer <admin_api_key> header. In production,
-// the admin key should be validated against a known admin set. For now,
-// any valid tenant API key is accepted (the admin panel authenticates
-// separately).
+// Requires Authorization: Bearer <admin_key> (OZ_ADMIN_KEY) or a web session
+// belonging to the admin tenant (OZ_ADMIN_EMAIL) — the same gate as the
+// admin dashboard endpoints. LSE-9 fix: this previously accepted ANY valid
+// tenant api_key, letting any activated customer mint approval codes.
 //
 // POST /api/v1/admin/enterprise-codes
 func handleGenerateEnterpriseCode(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		// ── Authenticate ──────────────────────────────────────
-		authHeader := e.Request.Header.Get("Authorization")
-		if !strings.HasPrefix(authHeader, bearerPrefix) {
+		if !authenticateAdmin(app, e) {
 			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "Authorization: Bearer <api_key> header required",
-			})
-		}
-		apiKey := strings.TrimSpace(strings.TrimPrefix(authHeader, bearerPrefix))
-		if apiKey == "" {
-			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "api_key must not be empty",
-			})
-		}
-
-		// Verify the API key belongs to a valid tenant
-		lookup := apiKeyLookup(apiKey)
-		_, err := app.FindFirstRecordByData("tenants", "api_key_lookup", lookup)
-		if err != nil {
-			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "invalid api_key",
+				"error": "Authorization: Bearer <admin_key> header required",
 			})
 		}
 
@@ -131,29 +115,16 @@ func handleGenerateEnterpriseCode(app core.App) func(e *core.RequestEvent) error
 func handleListEnterpriseCodes(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		// ── Authenticate ──────────────────────────────────────
-		authHeader := e.Request.Header.Get("Authorization")
-		if !strings.HasPrefix(authHeader, bearerPrefix) {
+		if !authenticateAdmin(app, e) {
 			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "Authorization: Bearer <api_key> header required",
-			})
-		}
-		apiKey := strings.TrimSpace(strings.TrimPrefix(authHeader, bearerPrefix))
-		if apiKey == "" {
-			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "api_key must not be empty",
-			})
-		}
-		lookup := apiKeyLookup(apiKey)
-		_, err := app.FindFirstRecordByData("tenants", "api_key_lookup", lookup)
-		if err != nil {
-			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "invalid api_key",
+				"error": "Authorization: Bearer <admin_key> header required",
 			})
 		}
 
 		// ── List codes (optionally filtered by status) ─────────
 		statusFilter := e.Request.URL.Query().Get("status")
 		var records []*core.Record
+		var err error
 		if statusFilter != "" {
 			records, err = app.FindRecordsByFilter("enterprise_approvals",
 				"status = {:status}", "-created", 100, 0,

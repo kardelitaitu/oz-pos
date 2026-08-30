@@ -27,6 +27,11 @@ func seedApprovalCode(t *testing.T, app *tests.TestApp, code, email, status stri
 
 func seedAdminTenant(t *testing.T, app *tests.TestApp, email, apiKey string) {
 	t.Helper()
+	// LSE-9: admin endpoints no longer accept any valid tenant api_key —
+	// they require OZ_ADMIN_KEY (or an admin-tenant web session). Tests
+	// that seed an "admin tenant" authorize via the bearer key, so seeding
+	// also arms the env with the SAME key the test will present.
+	t.Setenv("OZ_ADMIN_KEY", apiKey)
 	tenantColl, _ := app.FindCollectionByNameOrId("tenants")
 	tenant := core.NewRecord(tenantColl)
 	tenant.Set("email", email)

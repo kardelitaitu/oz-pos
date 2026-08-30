@@ -17,6 +17,7 @@ package main
 //	GET  /api/v1/admin/health             — server + DB health
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -38,6 +39,8 @@ const adminDashboardVersion = "0.0.33"
 
 // adminKeyOK validates the Authorization: Bearer <admin_key> header.
 // Reads the key from OZ_ADMIN_KEY env; a missing env or wrong key is 401.
+// LSE-8: the comparison is constant-time — every other secret comparison
+// in this service (api_keys, OTP codes, webhook signatures) already was.
 func adminKeyOK(e *core.RequestEvent) bool {
 	authHeader := e.Request.Header.Get("Authorization")
 	if !strings.HasPrefix(authHeader, bearerPrefix) {
@@ -45,7 +48,10 @@ func adminKeyOK(e *core.RequestEvent) bool {
 	}
 	provided := strings.TrimSpace(strings.TrimPrefix(authHeader, bearerPrefix))
 	expected := strings.TrimSpace(os.Getenv("OZ_ADMIN_KEY"))
-	return expected != "" && provided == expected
+	if expected == "" || provided == "" || len(provided) != len(expected) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
 }
 
 // adminAuth is the middleware wrapper for admin endpoints: returns a 401

@@ -377,7 +377,7 @@ func TestGenerateCode_InvalidApiKey(t *testing.T) {
 		URL:             "/api/v1/admin/enterprise-codes",
 		Headers:         map[string]string{"Authorization": "Bearer notarealapikey0000"},
 		ExpectedStatus:  401,
-		ExpectedContent: []string{"invalid api_key"},
+		ExpectedContent: []string{"header required"},
 	})
 }
 
@@ -424,5 +424,39 @@ func TestListLicenseAddons_Unauthorized(t *testing.T) {
 		URL:             "/api/v1/admin/license-addons?key=OZ-ANYTHING",
 		ExpectedStatus:  401,
 		ExpectedContent: []string{"header required"},
+	})
+}
+
+// ── LSE-9 regression tests ────────────────────────────────────
+//
+// The admin gate previously accepted ANY valid tenant api_key, letting an
+// activated customer mint enterprise approval codes and mutate add-ons.
+// A valid tenant key that is NOT the admin key must now be rejected.
+
+func TestAddLicenseAddon_TenantKeyRejected(t *testing.T) {
+	runScenario(t, &tests.ApiScenario{
+		Method:          "POST",
+		URL:             "/api/v1/admin/license-addons",
+		Body:            strings.NewReader(`{"license_key": "OZ-ADDON-LSE9", "addon_id": "advanced_analytics"}`),
+		Headers:         map[string]string{"Authorization": "Bearer regularTenantKey001"},
+		ExpectedStatus:  401,
+		ExpectedContent: []string{"header required"},
+		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+			seedLicenseKeyWithAddons(t.(*testing.T), app, "OZ-ADDON-LSE9", "plus", "[]")
+			seedTenant(t.(*testing.T), app, "lse9tenant00001", "regularTenantKey001", "active")
+		},
+	})
+}
+
+func TestGenerateCode_TenantKeyRejected(t *testing.T) {
+	runScenario(t, &tests.ApiScenario{
+		Method:          "POST",
+		URL:             "/api/v1/admin/enterprise-codes",
+		Headers:         map[string]string{"Authorization": "Bearer regularTenantKey002"},
+		ExpectedStatus:  401,
+		ExpectedContent: []string{"header required"},
+		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+			seedTenant(t.(*testing.T), app, "lse9tenant00002", "regularTenantKey002", "active")
+		},
 	})
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -219,17 +220,34 @@ func parseAddonsFromRecord(rec *core.Record) []string {
 	return addons
 }
 
-// authenticateAdmin checks that the request has a valid Bearer token.
+// authenticateAdmin reports whether the request is authorized for the
+// admin-only addon endpoints: either the OZ_ADMIN_KEY bearer secret, or a
+// web session belonging to the admin tenant (OZ_ADMIN_EMAIL, defaulting to
+// defaultAdminEmail). It writes NO response — callers reply 401 themselves.
+//
+// LSE-9 fix: this gate previously accepted ANY valid tenant api_key (the
+// old doc comment called it an interim measure) — any activated customer
+// could mint enterprise approval codes or mutate add-ons on any license
+// key. It now mirrors adminAuth's semantics minus the response writing.
 func authenticateAdmin(app core.App, e *core.RequestEvent) bool {
-	authHeader := e.Request.Header.Get("Authorization")
-	if !strings.HasPrefix(authHeader, bearerPrefix) {
+	if adminKeyOK(e) {
+		return true
+	}
+	token, err := extractBearerToken(e)
+	if err != nil {
 		return false
 	}
-	apiKey := strings.TrimSpace(strings.TrimPrefix(authHeader, bearerPrefix))
-	if apiKey == "" {
+	tenantID := webOtpStore.getSession(hashWebToken(token))
+	if tenantID == "" {
 		return false
 	}
-	lookup := apiKeyLookup(apiKey)
-	_, err := app.FindFirstRecordByData("tenants", "api_key_lookup", lookup)
-	return err == nil
+	tenant, err := app.FindRecordById("tenants", tenantID)
+	if err != nil {
+		return false
+	}
+	adminEmail := strings.TrimSpace(os.Getenv("OZ_ADMIN_EMAIL"))
+	if adminEmail == "" {
+		adminEmail = defaultAdminEmail
+	}
+	return strings.EqualFold(tenant.GetString("email"), adminEmail)
 }
