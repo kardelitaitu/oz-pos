@@ -16,7 +16,10 @@
 #     oz-pos-unified:latest
 #
 # Sync defaults to SQLite at /data/oz-pos.db; set DATABASE_URL to switch
-# to the managed Postgres addon (see unify-auth-and-sync.md).
+# to the managed Postgres addon (see unify-auth-and-sync.md and the
+# runbook §8 env table — free on Northflank, the production target).
+# The default below is the free-tier SQLite shape; both sync SQLite and
+# PocketBase's pb_data live under the single /data volume (DOCKER-11).
 
 # ── Stage 1: Go license server (static build) ────────────────────────
 # DOCKER-02: base images pinned to immutable digests (refreshed 2026-08-17 to

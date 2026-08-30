@@ -445,6 +445,17 @@ longer exists — migrating that data requires a PocketBase backup → restore
 > fallback, no open token mint). Without `OZ_PRODUCTION`, the service runs
 > in dev mode: `/api/v1/tokens` mints freely.
 
+> **Scaling beyond the free tier:** the unified image defaults to SQLite
+> (sync `/data/oz-pos.db` + PocketBase `/data/pb_data/`), which is fine for
+> the target 200–400 terminals. When you approach that ceiling — or observe
+> SQLite lock contention in production (`SQLITE_BUSY` in the logs, sync
+> latency growing) — enable the **free Northflank PostgreSQL addon** and set
+> `DATABASE_URL` (see the env table above). The managed PG addon eliminates
+> the single-writer lock and is the documented production target (see
+> `docs/operations/unify-auth-and-sync.md` §Phase 3.5 for the full cutover,
+> including the RLS migration). Keep the `/data` volume either way — PocketBase
+> stays on SQLite under `/data/pb_data`.
+
 ### Verification checklist (post-deploy)
 
 ```bash
