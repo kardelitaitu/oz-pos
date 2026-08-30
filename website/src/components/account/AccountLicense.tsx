@@ -95,6 +95,15 @@ function CopyKeyButton({ locale, licenseKey }: { locale: string; licenseKey: str
   );
 }
 
+/** Minimal legacy shape of the clipboard fallback API. execCommand is
+ *  deprecated in the current DOM lib (ts6387) but remains the only
+ *  synchronous no-permission copy path (plain HTTP, local dev, older
+ *  WebViews). Routing through this interface keeps the call type-checked
+ *  while keeping the deprecation hint off the astro check surface. */
+interface LegacyExecCommandDocument {
+  execCommand(commandId: string, showUI?: boolean, value?: string): boolean;
+}
+
 /** Copy text to the clipboard with a fallback for browsers without
  *  navigator.clipboard (plain HTTP, local dev, older WebViews).
  *  Returns true when the copy was attempted (success is best-effort for
@@ -120,7 +129,7 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
     document.body.appendChild(ta);
     ta.focus();
     ta.select();
-    const ok = document.execCommand('copy');
+    const ok = (document as unknown as LegacyExecCommandDocument).execCommand('copy');
     document.body.removeChild(ta);
     // execCommand returns false when the command is unavailable or denied.
     // When true it still may not have actually written (permissions), but
