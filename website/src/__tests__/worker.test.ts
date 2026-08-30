@@ -189,4 +189,45 @@ describe('Cloudflare Worker — worker.ts', () => {
     // The remaining query params should be preserved
     expect(res.headers.get('Location')).toBe('/settings?theme=dark');
   });
+
+  it('exchanges a one-time code for a session cookie and strips the code param', async () => {
+    // Hardening F1: the login page redirects here with ?code=<code>. The
+    // Worker POSTs the code to /exchange-consume, sets the httpOnly cookie,
+    // and redirects to a clean URL (the real token never appears in a URL).
+    global.fetch = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: async () => ({ token: 'exchanged.jwt.token' }),
+    });
+
+    const req = new Request('https://dashboard.ozpos.my.id/settings?code=shortlived&theme=dark');
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(302);
+    // The code param must be stripped from the final URL; other params kept.
+    expect(res.headers.get('Location')).toBe('/settings?theme=dark');
+    // The httpOnly cookie carries the exchanged token.
+    const setCookie = res.headers.get('Set-Cookie');
+    expect(setCookie).toContain('oz_session=exchanged.jwt.token');
+    expect(setCookie).toContain('HttpOnly');
+    expect(setCookie).toContain('Secure');
+  });
+
+  it('redirects to the marketing login when the one-time code is invalid', async () => {
+    // The exchange fails (invalid/expired code) → redirect to login so the
+    // user re-authenticates — never left on a broken state.
+    global.fetch = vi.fn().mockResolvedValue({
+      status: 401,
+      ok: false,
+      json: async () => ({ error: 'invalid code' }),
+    });
+
+    const req = new Request('https://dashboard.ozpos.my.id/settings?code=stale');
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(302);
+    const location = res.headers.get('Location') ?? '';
+    expect(location).toContain('https://ozpos.my.id/en/login');
+    expect(location).toContain('redirect=');
+  });
 });
