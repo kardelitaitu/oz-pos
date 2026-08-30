@@ -276,7 +276,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         // ALWAYS fell through to "Failed to load tenant detail". The kv
         // mapping now lives in admin-utils.tenantDetailRows (unit-tested).
         const tenant = data.tenant || {};
-        const m = el('div', 'modal-back'), box = el('div', 'modal');
+        const box = el('div', 'modal');
         box.setAttribute('role', 'dialog');
         box.setAttribute('aria-modal', 'true');
         box.appendChild(el('h3', null, t('tenant.title') + (tenant.email || '')));
@@ -292,30 +292,31 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         tenantDetailRows(data).forEach(pair => addRow(pair[0], pair[1]));
         box.appendChild(kv);
         const actions = el('div', null); actions.style.cssText = 'display:flex;gap:.4rem;margin-top:.8rem;flex-wrap:wrap';
-        if (tenant.status === 'active') { const revoke = el('button', 'btn btn-sm btn-bad', t('tenant.revoke')); revoke.addEventListener('click', () => doAction(id,'revoke',t('tenant.revoked'))); actions.appendChild(revoke); }
-        if (tenant.status !== 'active') { const activate = el('button', 'btn btn-sm btn-ok', t('tenant.activate')); activate.addEventListener('click', () => doAction(id,'activate',t('tenant.activated'))); actions.appendChild(activate); }
-        const renew = el('button', 'btn btn-sm', t('tenant.renew365')); renew.addEventListener('click', () => doAction(id,'renew',t('tenant.renewed'),'{"days":365}')); actions.appendChild(renew);
+        if (tenant.status === 'active') { const revoke = el('button', 'btn btn-sm btn-bad', t('tenant.revoke')); revoke.addEventListener('click', () => doAction(id,'revoke',t('tenant.revoked'),undefined,closeModal)); actions.appendChild(revoke); }
+        if (tenant.status !== 'active') { const activate = el('button', 'btn btn-sm btn-ok', t('tenant.activate')); activate.addEventListener('click', () => doAction(id,'activate',t('tenant.activated'),undefined,closeModal)); actions.appendChild(activate); }
+        const renew = el('button', 'btn btn-sm', t('tenant.renew365')); renew.addEventListener('click', () => doAction(id,'renew',t('tenant.renewed'),'{"days":365}',closeModal)); actions.appendChild(renew);
         const upgrade = el('button', 'btn btn-sm btn-warn', t('tenant.upgrade')); upgrade.addEventListener('click', () => upgradePrompt(id,data)); actions.appendChild(upgrade);
         box.appendChild(actions);
-        const close = el('button', 'btn btn-ghost', t('tenant.close')); close.style.cssText = 'margin-top:.8rem;width:100%'; close.addEventListener('click', () => { modal.innerHTML = ''; }); box.appendChild(close);
-        m.appendChild(box); modal.appendChild(m);
-        m.addEventListener('click', e => { if (e.target === m) { modal.innerHTML = ''; } });
-        // ESC key closes the modal (a11y #16)
-        const escHandler = e => { if (e.key === 'Escape') { modal.innerHTML = ''; document.removeEventListener('keydown', escHandler); } };
-        document.addEventListener('keydown', escHandler);
+        // B11: mountModal owns the backdrop/ESC/close wiring and always
+        // detaches the keydown listener — the old inline blocks leaked one
+        // listener per non-ESC close, and each stale handler kept reacting
+        // to later ESC presses.
+        const closeModal = mountModal(modal, box);
+        const closeBtn = el('button', 'btn btn-ghost', t('tenant.close')); closeBtn.style.cssText = 'margin-top:.8rem;width:100%'; closeBtn.addEventListener('click', closeModal); box.appendChild(closeBtn);
       } catch (err) {
         if (err && err.authDenied) { modal.innerHTML = ''; return; }
         modal.innerHTML = '<div class="modal-back"><div class="modal"><p class="empty">' + t('common.failedToLoadTenantDetail') + '</p></div></div>';
       }
     }
 
-    async function doAction(id, action, label, body) {
+    async function doAction(id, action, label, body, close) {
       const modal = document.getElementById('modal-root');
-      try { await api('/api/v1/admin/tenants/' + id + '/' + action, body); modal.innerHTML = ''; flash(label + t('common.successfully')); renderTenants(); } catch { flash(label + t('common.failed')); }
+      try { await api('/api/v1/admin/tenants/' + id + '/' + action, body); if (close) { close(); } else { modal.innerHTML = ''; } flash(label + t('common.successfully')); renderTenants(); } catch { flash(label + t('common.failed')); }
     }
 
     function upgradePrompt(id, data) {
-      const modal = document.getElementById('modal-root'), m = el('div', 'modal-back'), box = el('div', 'modal');
+      const modal = document.getElementById('modal-root');
+      const box = el('div', 'modal');
       box.setAttribute('role', 'dialog');
       box.setAttribute('aria-modal', 'true');
       box.appendChild(el('h3', null, t('tenant.changeTier')));
@@ -325,13 +326,10 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       box.appendChild(select);
       const reason = el('input', 'input'); reason.placeholder = t('tenant.reasonOverride'); reason.style.cssText = 'margin-top:.5rem;' + reason.style.cssText; box.appendChild(reason);
       const act = el('div', 'modal-actions');
-      const cancel = el('button', 'btn btn-ghost', t('tenant.cancel')); cancel.addEventListener('click', () => { modal.innerHTML = ''; }); act.appendChild(cancel);
-      const save = el('button', 'btn', t('tenant.save')); save.addEventListener('click', async () => { await doAction(id,'tier-override',t('tenant.tierChanged'),JSON.stringify({tier_key:select.value,reason:reason.value||'admin override'})); }); act.appendChild(save);
-      box.appendChild(act); m.appendChild(box); modal.appendChild(m);
-      m.addEventListener('click', e => { if (e.target === m) { modal.innerHTML = ''; } });
-      // ESC key closes the modal (a11y #16)
-      const escHandler = e => { if (e.key === 'Escape') { modal.innerHTML = ''; document.removeEventListener('keydown', escHandler); } };
-      document.addEventListener('keydown', escHandler);
+      const closeModal = mountModal(modal, box);
+      const cancel = el('button', 'btn btn-ghost', t('tenant.cancel')); cancel.addEventListener('click', closeModal); act.appendChild(cancel);
+      const save = el('button', 'btn', t('tenant.save')); save.addEventListener('click', async () => { await doAction(id,'tier-override',t('tenant.tierChanged'),JSON.stringify({tier_key:select.value,reason:reason.value||'admin override'}),closeModal); }); act.appendChild(save);
+      box.appendChild(act);
     }
 
     // ── Health tab ──────────────────────────────────────────────────

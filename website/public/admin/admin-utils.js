@@ -262,6 +262,34 @@
     return { rate: null, updatedAt: '', live: false };
   }
 
+  // mountModal wires the shared modal mechanics: backdrop + dialog box,
+  // backdrop-click close, ESC close, and a returned close() for buttons.
+  // Extracted from the duplicated blocks in admin.js showTenantDetail /
+  // upgradePrompt so the listener lifecycle is unit-testable.
+  // B11 fix: the original only detached the keydown handler on the ESC
+  // path — closing via the button or backdrop left it attached, so every
+  // such open leaked one listener that kept reacting to later ESCs
+  // (clearing whatever modal was open then, and double-firing). One
+  // idempotent close() now serves all three paths and always detaches.
+  function mountModal(modalRoot, box) {
+    var m = el('div', 'modal-back');
+    m.appendChild(box);
+    var open = true;
+    function close() {
+      if (!open) return;
+      open = false;
+      // Only clear the root while our backdrop is still mounted — a
+      // stacked modal (upgrade over detail) may already have replaced it.
+      if (m.parentNode === modalRoot) modalRoot.innerHTML = '';
+      document.removeEventListener('keydown', escHandler);
+    }
+    function escHandler(e) { if (e.key === 'Escape') close(); }
+    m.addEventListener('click', function (e) { if (e.target === m) close(); });
+    document.addEventListener('keydown', escHandler);
+    modalRoot.appendChild(m);
+    return close;
+  }
+
   // startLockoutCountdown drives the login button's 429 lockout label.
   // Extracted from login.js showLockoutCountdown so the timer semantics
   // are unit-testable (login.js has DOM boot side effects).
@@ -510,6 +538,7 @@
     normalizeStats: normalizeStats,
     startLockoutCountdown: startLockoutCountdown,
     fetchFxRate: fetchFxRate,
+    mountModal: mountModal,
     t: t,
     STRINGS: STRINGS,
     isAuthDenied: isAuthDenied,
