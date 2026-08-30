@@ -17,6 +17,20 @@ import (
 // - The subscription continues until the next renewal date
 func handleResume(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
+		// Cap request body at 64KB to prevent OOM via oversized JSON payloads (M4 audit).
+		e.Request.Body = http.MaxBytesReader(e.Response, e.Request.Body, 64*1024)
+
+		// ── Rate limit: shared persisted per-IP token bucket (5/hr) ──
+		// pause/resume were the only findTenantByAPIKey (bcrypt) endpoints
+		// without the bucket — an unauthenticated client could hammer them
+		// for cheap CPU exhaustion. Applied before auth, mirroring
+		// status.go ordering (LSE-16).
+		if !ipRateLimiter.allow(e.RealIP()) {
+			return e.JSON(http.StatusTooManyRequests, map[string]any{
+				"error": "rate limit exceeded, try again later",
+			})
+		}
+
 		// Authenticate via Bearer token
 		apiKey, err := extractAPIKey(e.Request.Header.Get("Authorization"))
 		if err != nil {

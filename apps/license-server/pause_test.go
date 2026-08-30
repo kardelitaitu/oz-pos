@@ -2,6 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -245,5 +248,50 @@ func TestPauseSubscription_AuthRequired(t *testing.T) {
 	body := servePost(t, se, "/api/v1/license/pause", "", nil, `{"pause_months":1}`)
 	if body.Code != 401 {
 		t.Fatalf("expected 401 for missing auth, got %d: %s", body.Code, body.Body.String())
+	}
+}
+
+// ── LSE-16: pause/resume share the per-IP bucket ───────────────────
+// They were the only findTenantByAPIKey (bcrypt) endpoints without the
+// persisted IP budget — an unauthenticated client could hammer them for
+// cheap CPU exhaustion. The limiter fires after body validation (pause)
+// / before auth (resume), so a well-formed request from an exhausted IP
+// answers 429 instead of reaching bcrypt.
+
+func TestPauseResume_RateLimited(t *testing.T) {
+	resetRateLimiters()
+	_, se := setupDirectApp(t)
+
+	testIP := "10.99.99.93"
+	for i := 0; i < ipRateLimiter.maxPerHr; i++ {
+		ipRateLimiter.allow(testIP)
+	}
+
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+
+	// Pause: well-formed body + garbage bearer → 429 (limiter precedes
+	// the bcrypt lookup).
+	req := httptest.NewRequest("POST", "/api/v1/license/pause",
+		strings.NewReader(`{"pause_months":2}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer oz_notarealkey0000")
+	req.RemoteAddr = testIP + ":1234"
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("pause: expected 429 once the IP budget is exhausted, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Resume: same exhausted IP → 429.
+	req2 := httptest.NewRequest("POST", "/api/v1/license/resume", nil)
+	req2.Header.Set("Authorization", "Bearer oz_notarealkey0000")
+	req2.RemoteAddr = testIP + ":1234"
+	rec2 := httptest.NewRecorder()
+	mux.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusTooManyRequests {
+		t.Fatalf("resume: expected 429 once the IP budget is exhausted, got %d: %s", rec2.Code, rec2.Body.String())
 	}
 }
