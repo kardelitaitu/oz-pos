@@ -8323,3 +8323,91 @@ half (renames/moves retroactively relabeling history) needs sale-line
 snapshot columns + backfill + sync parity — recorded as a design
 follow-up, not smuggled in. Red-first (0 vs 1 rows; 3000 vs 4000);
 reports 72/72, email 69/69. Commit cd4bdaa8.
+
+## 2026-08-31 — round M: fixed PAY-2 twice, then discovered nothing calls it
+
+Went to close the item I had called load-bearing. Shipped two fixes. Then
+checked whether either changed anything for a real user, and the answer was
+no - which reframes both rounds L and M.
+
+**Square (85b97f1d).** authorize() built idempotency_key as a fresh
+Uuid::now_v7() per call while the caller had supplied one on PaymentRequest
+and the driver threw it away. Square cannot recognise a retry, so a
+re-submitted charge is a second charge.
+
+**Stripe (788407e5).** Same defect, different mechanism - Stripe dedups on
+the Idempotency-Key HEADER and the driver never sent one. The tell that this
+was an oversight rather than a decision: parse_error already mapped Stripe's
+idempotency_error code to PaymentError::Duplicate. The driver had handling
+for a duplicate-key rejection it could never receive.
+
+Two policy decisions carried across both drivers, each pinned by tests:
+  - Blank is ABSENT, not a key. Some("") sent verbatim puts every caller who
+    leaves the field empty into ONE shared key, and after the first charge
+    the gateway rejects each subsequent one as a conflict. The mechanism
+    meant to stop double charges becomes a way to refuse legitimate payments.
+  - No length clamp. Truncating maps two distinct keys onto one, and a
+    collision here silently drops a real charge as a duplicate. A loud API
+    rejection beats that. The exact Stripe/Square limits are not in this repo
+    and web lookup was unavailable, so inventing a constant was the wrong
+    move - verified nothing, guessed nothing.
+  - Justified asymmetry: Square must mint a UUID when no key is supplied
+    because its key is a required body field. Stripe must NOT, because a
+    per-call key dedups nothing and is behaviourally identical to no header.
+    A test pins the absence so a future sweep cannot "improve" it.
+
+**Then the check that mattered.** Both clients depend on oz-payment. Both use
+exactly one thing from it: drivers::edc. Neither constructs a PaymentRequest.
+Nothing outside the crate calls authorize - the only .authorize( hits in the
+workspace are RBAC role checks sharing the verb. So all three HTTP gateway
+drivers have no production caller.
+
+Two sentences produced my error, and only one of them was mine:
+  - lib.rs asserted "the cashier flow uses the trait". False today. An
+    integrator-shaped claim in a module doc is precisely what makes a reader
+    grade a latent defect as a live outage.
+  - The crate stamp called these the "live drivers". I read it, believed it,
+    and escalated across two rounds on top of it.
+
+Severity corrected in both places (28492d99), with the knock-on stated:
+  - Round L claimed the COR-31 sweep mattered most on user-facing payment
+    paths. False for the drivers. The three sites round L did fix -
+    sync_pull, whatsapp, rate_sync - are all genuinely wired, so that work
+    stands on its own.
+  - Round M double-charge reasoning is accurate about the code and
+    prospective about the product: it needs a caller before it can bite.
+
+The EDC path the clients do use is wired to MockEdcTerminal in success mode.
+That looked like a headline finding and was not: state.rs:181-187 says
+plainly it is a placeholder until hardware support lands. Checked before
+writing it up and it survived the check, same as the resolve_session
+non-finding in round J.
+
+**Refunds stay broken in both drivers and it is now precisely characterised:**
+refund(transaction_id, amount) takes no PaymentRequest, so there is no caller
+key to forward. Minting a fresh one dedups nothing; deriving one from
+transaction_id alone would collide two genuinely different partial refunds of
+the same payment into one. Needs a PaymentProcessor trait change across every
+driver - recorded as next, not half-solved in a driver.
+
+**Round L release condition retracted.** It said to bound the payment clients
+"once every request carries a caller-supplied key". Unsatisfiable as written:
+idempotency_key is Option, so no driver-side change can guarantee it.
+Releasing COR-31 needs a caller policy or an explicit decision that a hang is
+worse than a possible double charge.
+
+**TDD staging, and a grep lesson.** The Square extraction shipped first as a
+pure refactor with the parameter named _request and the old behavior intact,
+so the Red was a real assertion failure against the bug rather than a compile
+error about a missing function. Stripe tests went to wiremock rather than a
+pure function so they cover the wiring, not just the policy - three compile
+attempts to get wiremock's header API right (no .header(), headers is
+HeaderName/HeaderValue not String/Vec, no .as_str()), settled by copying the
+accessor the repo's own tests already use instead of guessing further. And two
+of four post() call sites were missed by grepping self.post( because capture
+and void are written self newline .post( - the compiler found them, not the
+grep.
+
+**Totals this area:** B46-B55, PAY-2 closed for charges in two drivers,
+COR-31 closed for all wired paths, COR-5 closed, API-4 gated. oz-payment 256
+tests across all targets.
