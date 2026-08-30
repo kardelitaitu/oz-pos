@@ -128,17 +128,25 @@ Browser → admin.ozpos.my.id
 
 The admin dashboard heavily uses `style.cssText`, `style="..."` in SVG strings, and `innerHTML` with inline styles. This forces `style-src 'self' 'unsafe-inline'` in the CSP. While acceptable for an admin tool, it prevents achieving a fully strict CSP.
 
+**Status (2026-08-30 re-review): OPEN — was overclaimed as resolved.** `worker.ts` still ships `style-src 'self' 'unsafe-inline'` and `admin.js` still uses ~12 `style="..."` + 7 `cssText`. Note the real CSP dependency is narrower than the finding implies: `style-src` gates only `style=""` *attributes* and `<style>` elements — CSSOM writes (`el.style.cssText`, `el.style.x = …`) are **not** gated. So the fix is to move the ~14 `style="..."` occurrences (mostly SVG chart markup) to presentation attributes (`fill=`/`stroke=`) or classes, then tighten CSP to `style-src 'self'`. The `cssText`/`.style.x` uses can stay.
+
 ### L2 — No `alt` / `aria-label` on SVG Icons
 
 The KPI icons and chart SVGs have no `aria-hidden="true"` (or it's on the SVG itself but not on the container). Minor for screen readers.
+
+**Status (2026-08-30 re-review): ✅ Resolved (#75).** KPI icons carry `aria-label`s; decorative SVGs are `aria-hidden`.
 
 ### L3 — `theme.js` Loaded Synchronously in `<head>`
 
 The theme script blocks rendering. For a 1KB file it's negligible, but it's a pattern to note.
 
+**Status (2026-08-30 re-review): ✅ Won't fix — by design.** Synchronous `<head>` execution is the *correct* anti-FOUC pattern for a theme script (1.3 KB); `defer`/`async` would reintroduce the theme flash it prevents.
+
 ### L4 — Login Page Has No Theme Switcher
 
 The admin login page (`login.html`) is always dark. The dashboard has a theme toggle, but the login page doesn't — creates a flash of dark on redirect.
+
+**Status (2026-08-30 re-review): ✅ Resolved (#75).** Sun/moon toggle + `theme.js` on both admin and dashboard login pages.
 
 ---
 
@@ -150,7 +158,7 @@ The admin login page (`login.html`) is always dark. The dashboard has a theme to
 | 2 | **HIGH** | MOCK fallback masks failures (C4) | Show error banner when API fails; keep MOCK only as last-resort skeleton | ✅ Resolved — MOCK object removed; API errors render a retry/error state (Phase 1) |
 | 3 | **HIGH** | Tenants list has no pagination (C3) | Add page controls + pass `?page=` / `?perPage=` to the API | ✅ Resolved — pagination controls + `?page=`/`?perPage=`/`?search=` (Phase 2) |
 | 4 | **HIGH** | Monolithic admin.js (H1) | Split into testable modules (stats.js, tenants.js, charts.js) or move to a build step | ✅ Resolved — pure helpers extracted into `admin-utils.js` (charts, formatting, cards, API auth, i18n) with unit tests |
-| 5 | **HIGH** | Zero tests (H2) | Add unit tests for chart rendering, helpers, and API mock fallback | ✅ Resolved — 25+ unit tests in `src/__tests__/admin-utils.test.ts` |
+| 5 | **HIGH** | Zero tests (H2) | Add unit tests for chart rendering, helpers, and API mock fallback | ✅ Resolved — 24 unit tests in `src/__tests__/admin-utils.test.ts` (+14 worker auth-gate tests); both suites now execute in CI via the `website-tests` gate |
 | 6 | **HIGH** | No i18n (H3) | Extract strings to an i18n structure; at minimum, add English `.ftl` keys for future localization | ✅ Resolved — `STRINGS` key-value table + `t()` helper; all admin/dashboard/login strings extracted |
 | 7 | **HIGH** | Shared session cookie (H4) | Restrict `Domain` to individual subdomains or use a dedicated auth domain | ✅ Resolved — cookie scoped to `admin.ozpos.my.id` / `dashboard.ozpos.my.id` (not the parent domain) |
 | 8 | **MEDIUM** | No loading/error states for charts (M1) | Guard `svgChart` against empty/NaN data; add per-chart error states | ✅ Resolved — `svgChart` / `svgDonut` guard empty/NaN/zero data |
@@ -164,7 +172,7 @@ The admin login page (`login.html`) is always dark. The dashboard has a theme to
 
 ## 7. Phase Plan
 
-_Status as of the hardening pass (PRs #64–#86): items 1–13 and 15 are done; 14 and 16 remain open._
+_Status as of the re-verification pass (PRs #64–#89): items 1–13 and 15 are done; 14 remains open. Item 16 has two landed slices (#88: focus-visible, skip links, modal dialog + ESC; #89: upgrade-prompt dialog + login skip links) — the full keyboard/focus audit remains open._
 
 ### Phase 1 (immediate — hours) ✅
 1. ✅ Fix stored XSS (C1, C2) — replace `innerHTML` with `textContent` in `showTenantDetail` + `upgradePrompt`
@@ -188,4 +196,29 @@ _Status as of the hardening pass (PRs #64–#86): items 1–13 and 15 are done; 
 13. ✅ Restrict session cookie domain (H4) — cookie scoped to each dashboard subdomain
 14. ☐ Move admin dashboard to a build step (Vite/Rollup) for TypeScript, module resolution, and tree-shaking — **open**: not required while the dashboard stays a plain-vanilla static SPA
 15. ✅ Add theme.js to the login page (L4) — sun/moon toggle on both admin and dashboard login pages
-16. ☐ Accessibility pass (ARIA, keyboard navigation, focus management) — **open**: KPI icons have aria-labels and SVGs use aria-hidden, but a full keyboard/focus audit remains
+16. ◐ Accessibility pass (ARIA, keyboard navigation, focus management) — #75 (KPI aria-labels), #88 (focus-visible, skip links, modal + ESC), #89 (upgrade-prompt dialog, login skip links) landed; full keyboard/focus audit remains open
+
+---
+
+## 8. Re-verification addendum (2026-08-30)
+
+Independent re-review of every claim above against the code on `main`,
+merge history (`git log -S` + merge-ancestry), and a local test run:
+
+- **All 13 recommendation-table resolutions verified in code** — cookie
+  scoping (`Domain=${hostname}`), `?token=` removal, chart guards,
+  backend `?search=` (+ `regexp.QuoteMeta`), FX server cache (1 h TTL),
+  pagination, MOCK removal, safe kv-grid, `STRINGS`/`t()` on all four
+  pages, theme toggles on both logins.
+- **True PR attribution** (an earlier summary table misfiled several):
+  M1/M2/M4/M5/M6 and C1–C4 all landed in **#60** (Phase 1+2 hardening);
+  H4 in **#68**; M3 in **#74**; H1/H2 in #69/#70/#72; H3 in #71/#73/#76/#77;
+  L2/L4 in **#75**. #67 (license-suite speed) and #78 (timezone-fragile
+  fixtures) resolve none of the M findings.
+- **H2 enforcement gap closed**: the 24 admin-utils tests + 14 worker
+  tests existed but **no CI workflow executed them** (`astro check` only
+  type-checks). Now gated end-to-end: `website-tests` registered in
+  `scripts/gates.json`, `npm test` step in `website.yml` (fail-fast,
+  before the portal build), `website test` step in `scripts/check.sh`.
+- **L1 corrected to OPEN**, **L3 marked won't-fix/by-design** — see §5.
+- Test count corrected: **24**, not "25+".

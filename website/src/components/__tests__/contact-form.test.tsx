@@ -5,9 +5,12 @@ import { createRoot, type Root } from 'react-dom/client';
 
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
-/** Set a React-controlled input value via the native setter so React picks it up. */
-function setNativeValue(el: HTMLInputElement, value: string): void {
-  const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+/** Set a React-controlled input/textarea value via the native setter so React picks it up. */
+function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {
+  const proto = el instanceof HTMLTextAreaElement
+    ? HTMLTextAreaElement.prototype
+    : HTMLInputElement.prototype;
+  const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')!.set!;
   nativeSetter.call(el, value);
   el.dispatchEvent(new Event('input', { bubbles: true }));
 }
@@ -32,10 +35,10 @@ function getInputByName(container: HTMLElement, name: string): HTMLInputElement 
   return container.querySelector(`input[name="${name}"], textarea[name="${name}"], input[type="${name}"], input[type="${name}"]`) as HTMLInputElement;
 }
 
-function getInputByPlaceholder(container: HTMLElement, placeholder: string): HTMLInputElement {
+function getInputByPlaceholder(container: HTMLElement, placeholder: string): HTMLInputElement | HTMLTextAreaElement {
   const inputs = container.querySelectorAll('input, textarea');
   for (const input of inputs) {
-    if (input.getAttribute('placeholder')?.includes(placeholder)) return input as HTMLInputElement;
+    if (input.getAttribute('placeholder')?.includes(placeholder)) return input as HTMLInputElement | HTMLTextAreaElement;
   }
   throw new Error(`Input with placeholder containing "${placeholder}" not found`);
 }
@@ -83,18 +86,16 @@ describe('ContactForm', () => {
     try {
       const nameInput = getInputByPlaceholder(container, 'Your name');
       const emailInput = getInputByPlaceholder(container, 'you@example.com');
-      const messageInput = container.querySelector('textarea') as HTMLTextAreaElement;
+      const messageInput = getInputByPlaceholder(container, 'How can we help?');
 
       await act(async () => {
-        setNativeValue(nameInput, 'Test User');
+        setNativeValue(nameInput as HTMLInputElement, 'Test User');
       });
       await act(async () => {
-        setNativeValue(emailInput, 'test@example.com');
+        setNativeValue(emailInput as HTMLInputElement, 'test@example.com');
       });
       await act(async () => {
-        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
-        nativeSetter.call(messageInput, 'Hello, I need help with something specific.');
-        messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+        setNativeValue(messageInput as HTMLTextAreaElement, 'Hello, I need help with something specific.');
       });
 
       await act(async () => {
@@ -144,12 +145,9 @@ describe('ContactForm', () => {
       const emailInput = getInputByPlaceholder(container, 'you@example');
       const messageInput = getInputByPlaceholder(container, 'How can we help?');
       await act(async () => {
-        setNativeValue(nameInput, 'Bob');
-        setNativeValue(emailInput, 'bob@example.com');
-        // message is a <textarea> — use the textarea native setter.
-        const taSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
-        taSetter.call(messageInput, 'My printer stopped working.');
-        messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+        setNativeValue(nameInput as HTMLInputElement, 'Bob');
+        setNativeValue(emailInput as HTMLInputElement, 'bob@example.com');
+        setNativeValue(messageInput as HTMLTextAreaElement, 'My printer stopped working.');
       });
       await act(async () => {
         const form = container.querySelector('form') as HTMLFormElement;
@@ -184,13 +182,11 @@ describe('ContactForm', () => {
       // Fill in required fields so the form can submit.
       const nameInput = getInputByPlaceholder(container, 'Your name');
       const emailInput = getInputByPlaceholder(container, 'you@example.com');
-      const messageInput = container.querySelector('textarea') as HTMLTextAreaElement;
+      const messageInput = getInputByPlaceholder(container, 'How can we help?');
       await act(async () => {
-        setNativeValue(nameInput, 'Bot Name');
-        setNativeValue(emailInput, 'bot@spam.com');
-        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
-        nativeSetter.call(messageInput, 'Buy cheap watches now!!!');
-        messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+        setNativeValue(nameInput as HTMLInputElement, 'Bot Name');
+        setNativeValue(emailInput as HTMLInputElement, 'bot@spam.com');
+        setNativeValue(messageInput as HTMLTextAreaElement, 'Buy cheap watches now!!!');
       });
 
       await act(async () => {
@@ -269,14 +265,12 @@ describe('ContactForm', () => {
     try {
       const nameInput = getInputByPlaceholder(container, 'Your name');
       const emailInput = getInputByPlaceholder(container, 'you@example.com');
-      const messageInput = container.querySelector('textarea') as HTMLTextAreaElement;
+      const messageInput = getInputByPlaceholder(container, 'How can we help?');
 
       await act(async () => {
-        setNativeValue(nameInput, '  Padded Name  ');
-        setNativeValue(emailInput, '  USER@EXAMPLE.COM  ');
-        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
-        nativeSetter.call(messageInput, '   Padded message body.   ');
-        messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+        setNativeValue(nameInput as HTMLInputElement, '  Padded Name  ');
+        setNativeValue(emailInput as HTMLInputElement, '  USER@EXAMPLE.COM  ');
+        setNativeValue(messageInput as HTMLTextAreaElement, '   Padded message body.   ');
       });
 
       await act(async () => {
