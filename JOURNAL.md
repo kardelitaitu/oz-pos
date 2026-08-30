@@ -8308,3 +8308,18 @@ ships unverified and says so in its commit message.
 **Totals this area:** B46-B55, COR-31 closed for non-payment paths and
 corrected, COR-5 closed, API-4 gated. oz-core 2321, oz-api 201,
 oz-notification 30, oz-payment clean.
+
+## 2026-08-31 — REP-05 (erase half): deleted products vanished from reports
+
+`top_products` + `category_breakdown` INNER JOINed `products` — deleting
+a product silently erased its historical sales: top-products totals
+stopped reconciling with revenue and the category pie claimed 100% while
+a quarter of revenue was missing. A pre-existing test PINNED the bug
+("deleted products should not appear") — flipped to assert inclusion.
+Both queries LEFT JOIN now; deleted products surface under their stored
+sku (COALESCE id/name) and bucket into the existing Uncategorised slice;
+grouping moved p.id → sl.sku so NULL rows can't collapse. The rewrite
+half (renames/moves retroactively relabeling history) needs sale-line
+snapshot columns + backfill + sync parity — recorded as a design
+follow-up, not smuggled in. Red-first (0 vs 1 rows; 3000 vs 4000);
+reports 72/72, email 69/69. Commit cd4bdaa8.
