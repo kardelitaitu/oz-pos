@@ -112,7 +112,24 @@ impl RateSyncDaemon {
             s.last_error = None;
         }
 
-        let http_client = reqwest::Client::new();
+        // COR-31: was a bare Client::new(), which has no timeout. In a
+        // daemon this is worse than a hang in a request path, not better:
+        // run_tick never returns, the loop never reaches the next tick, and
+        // daemon_status.running stays true — so rate sync silently stops
+        // updating while still reporting itself healthy. Small JSON GETs to
+        // a rates API, so 10s connect / 30s total, matching the convention
+        // used elsewhere for non-bulk calls.
+        let http_client = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|e| {
+                tracing::error!(
+                    error = %e,
+                    "could not build bounded HTTP client for rate sync; ticks are unbounded"
+                );
+                reqwest::Client::new()
+            });
         let interval = self.interval;
 
         tokio::spawn(async move {

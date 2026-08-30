@@ -167,7 +167,20 @@ pub async fn fetch_snapshot_from_server(config: &SyncConfig) -> Result<Snapshot,
         "{}/api/sync/snapshot",
         config.server_url.trim_end_matches('/')
     );
-    let mut request = reqwest::Client::new()
+    // COR-31: this was a bare Client::new(), which has no timeout at all —
+    // an unreachable or stalled server parked the sync loop here forever,
+    // with no error surfaced and no progress. The sync_client.rs stamp
+    // suggested 60s; 120s is used instead because reqwest's timeout also
+    // covers the body read, and a snapshot is a bulk payload — the same
+    // reasoning behind HTTP_REQUEST_TIMEOUT on the export path. The goal is
+    // to turn an unbounded hang into a reported failure, not to be tight:
+    // a timeout short enough to cut off a legitimate large pull on a slow
+    // shop link would trade one outage for another.
+    let mut request = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .map_err(|e| SyncHttpError::Network(format!("http client: {e}")))?
         .get(&url)
         .header("Accept", "application/json");
 

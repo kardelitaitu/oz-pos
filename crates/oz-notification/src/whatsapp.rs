@@ -26,6 +26,35 @@ use crate::{
 
 type HmacSha256 = Hmac<Sha256>;
 
+/// Build the bounded HTTP client used for every Meta Graph call.
+///
+/// COR-31: both constructors used a bare `reqwest::Client::new()`, which has
+/// no timeout of any kind. A Meta endpoint that accepts the TCP connection
+/// and then never answers parks the send forever — the caller is awaiting
+/// `send()`, so the queued notification neither completes nor fails, and the
+/// only symptom is a message that silently never arrives.
+///
+/// 10s connect / 30s total. This is a small JSON POST to a well-known API,
+/// not a bulk transfer, so it follows the 30s convention already used by
+/// `sync_client.rs` rather than the 120s budget the export path needs.
+fn http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        // The builder only fails if the TLS backend cannot initialise,
+        // which is fatal for any HTTPS use anyway. Falling back to
+        // Client::new() would quietly restore the unbounded hang, so it is
+        // logged rather than swallowed.
+        .unwrap_or_else(|e| {
+            tracing::error!(
+                error = %e,
+                "could not build bounded HTTP client for WhatsApp; requests are unbounded"
+            );
+            reqwest::Client::new()
+        })
+}
+
 /// WhatsApp Cloud API client for sending messages via the Meta Graph API.
 ///
 /// # Example
@@ -60,7 +89,7 @@ impl WhatsAppClient {
             phone_number_id: phone_number_id.into(),
             access_token: access_token.into(),
             app_secret: None,
-            http_client: reqwest::Client::new(),
+            http_client: http_client(),
             base_url: "https://graph.facebook.com/v21.0".into(),
         }
     }
@@ -84,7 +113,7 @@ impl WhatsAppClient {
             phone_number_id,
             access_token,
             app_secret,
-            http_client: reqwest::Client::new(),
+            http_client: http_client(),
             base_url: "https://graph.facebook.com/v21.0".into(),
         })
     }
