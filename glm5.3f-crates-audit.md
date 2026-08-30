@@ -1813,3 +1813,20 @@ all other unwraps carry SAFETY comments or are deliberate pool-type
 panic guards; no SQL interpolation found.
 
 > Slice B (sync_api.rs, sync_store.rs, main.rs, email_pg.rs) next.
+
+### Slice B — sync_api.rs (566: production 1–250 fully read + tenant-
+scoping verification), sync_store.rs (tenant scoping verified), main.rs
+bind/CORS — **cloud-server COMPLETE (risk-ranked sampling)**
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| CS-3 | 🟡 LOW | apps/cloud-server/src/sync_api.rs:239 | The push handler doc claims a single-transaction batch INSERT, but the SQLite arm of `push_batch` loops per-item in autocommit — a mid-batch failure persists partial items. | `unchecked_transaction` around the loop. |
+
+Tenant isolation is exemplary: `tenant_id` always derives from JWT
+claims (never the request body), every queue read is `WHERE tenant_id`
+scoped, the plan gate fails closed, and both caches carry documented
+staleness rationale. `main.rs` binds 0.0.0.0 behind the documented CORS
+allowlist.
+
+> **cloud-server COMPLETE as risk-ranked sampling** — CS-1/CS-2 are the
+> crate's priority. Campaign proceeds to ui/ — the final target.

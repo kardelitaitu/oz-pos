@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (cloud-server slice B: sync_store verified)
+crate: cloud-server | status: NEEDS-FIX | lint: CLEAN
+findings: all queue reads tenant-scoped in SQL (WHERE tenant_id = ?1); push per-item outcomes with duplicate detection; see CS-3 on sync_api for the missing batch transaction in the SQLite arm
+next: CS-3 | perf: N/A
+*/
 //! Sync data-store abstraction for the cloud server's sync function.
 //!
 //! This is the foundation of Phase 1.2 in `unify-auth-and-sync.md`: the

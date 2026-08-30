@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (cloud-server slice B: sync_api deep read)
+crate: cloud-server | status: NEEDS-FIX | lint: CLEAN
+findings: CS-3 LOW — push_handler doc claims the batch INSERT runs in a single transaction, but the SQLite arm of sync_store push_batch loops per-item in autocommit (no BEGIN/COMMIT), so a mid-batch failure persists partial items; proposed: unchecked_transaction around the loop to match the documented contract. Otherwise exemplary: tenant_id always from JWT claims (never request body, spoofing prevention documented), plan middleware fail-closed, per-tenant rate limiting, TTL caches for snapshot and tenant count with documented staleness rationale, index-order-preserving outcome reassembly, optional UUID-validation skip documented as a measured perf lever
+next: CS-3 in fix-order phase | perf: batch transaction also fixes per-item autocommit latency
+*/
 //! Sync API — server-side handlers for the offline-sync push/pull protocol.
 //!
 //! These endpoints mirror the client-side [`platform_sync::transport`] types:
