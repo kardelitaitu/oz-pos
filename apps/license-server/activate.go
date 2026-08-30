@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -52,6 +53,62 @@ type ActivateRequest struct {
 	// When a license key is already activated by the same email's tenant,
 	// the api_key is NOT required — the email + key pair is sufficient proof.
 	APIKey string `json:"api_key,omitempty"`
+}
+
+// apiRotationLimiter caps api_key rotations per tenant (LSE-11 phase B):
+// at most one rotation per 24h, in-memory (a restart forgets it — the
+// rotation cooldown is a throttle, not a security boundary; phase A's
+// recovery-code gate is the boundary). Swept by windowSweepLoop.
+var apiRotationLimiter = &windowLimiter{
+	entries: make(map[string]*windowEntry),
+	limit:   1,
+	window:  24 * time.Hour,
+}
+
+// sendAPIKeyRotationNotice is a package-level var so tests can stub it.
+// Production impl: net/smtp. Best-effort — callers log failures and never
+// block the rotation on it.
+var sendAPIKeyRotationNotice = sendAPIKeyRotationNoticeSMTP
+
+// sendAPIKeyRotationNoticeSMTP emails the tenant that their license
+// management key (api_key) was just rotated, so a rotation forced by
+// someone other than the owner becomes a visible, actionable event
+// (LSE-11 phase B). Config is read per call (OZ_SMTP_*), values never
+// echoed; failures are returned, never fatal.
+func sendAPIKeyRotationNoticeSMTP(to string) error {
+	host := strings.TrimSpace(os.Getenv("OZ_SMTP_HOST"))
+	if host == "" {
+		return fmt.Errorf("OZ_SMTP_HOST is not configured")
+	}
+	port := strings.TrimSpace(os.Getenv("OZ_SMTP_PORT"))
+	if port == "" {
+		port = "587"
+	}
+	user := os.Getenv("OZ_SMTP_USER")
+	password := os.Getenv("OZ_SMTP_PASSWORD")
+	from := strings.TrimSpace(os.Getenv("OZ_SMTP_FROM"))
+	if from == "" {
+		from = "no-reply@ozpos.my.id"
+	}
+
+	subject := "Your OZ-POS license key was re-activated"
+	body := "Your OZ-POS license was just re-activated with your email and " +
+		"license key, which rotated your license management key.\n\n" +
+		"If this was you (for example a reinstall), no action is needed.\n" +
+		"If you did NOT re-activate just now, someone else may hold your " +
+		"license key: sign in at https://ozpos.my.id/en/login/ to review " +
+		"your devices, revoke unknown machines, and contact support.\n"
+
+	var sb strings.Builder
+	sb.WriteString("From: OZ-POS <" + from + ">\r\n")
+	sb.WriteString("To: " + to + "\r\n")
+	sb.WriteString("Subject: " + subject + "\r\n")
+	sb.WriteString("MIME-Version: 1.0\r\n")
+	sb.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
+	sb.WriteString("Date: " + time.Now().UTC().Format(time.RFC1123Z) + "\r\n")
+	sb.WriteString("\r\n")
+	sb.WriteString(body)
+	return sendMailSMTP(host, port, user, password, from, []string{to}, []byte(sb.String()))
 }
 
 // trialSegmentation maps an activation request's trial_vertical to the
@@ -486,7 +543,21 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				// on email + key alone (e.g. a reinstall that lost the key)
 				// gets a freshly rotated key so renew/status access is still
 				// recoverable without storing plaintext at rest.
+				//
+				// LSE-11 phase B: rotation is throttled to at most one per
+				// tenant per 24h and every rotation emails the owner, so a
+				// rotation forced by someone who merely knows email + key
+				// is bounded and immediately visible to the victim instead
+				// of a silent, unlimited ping-pong.
 				if !verifyAPIKey(tenant.GetString("api_key"), req.APIKey) {
+					if !apiRotationLimiter.allow(tenant.Id) {
+						remaining := apiRotationLimiter.remainingSeconds(tenant.Id)
+						log.Printf("LSE-11: api_key rotation throttled for tenant %q (retry in %ds)", tenant.Id, remaining)
+						return e.JSON(http.StatusTooManyRequests, map[string]any{
+							"error":       "license management key was recently rotated. Check your email — if this wasn't you, contact support. Try again later.",
+							"retry_after": remaining,
+						})
+					}
 					newAPIKey := generateAPIKey()
 					apiKeyHash, apiKeyLookup, hashErr := hashAPIKey(newAPIKey)
 					if hashErr != nil {
@@ -502,6 +573,12 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 						return e.JSON(http.StatusInternalServerError, map[string]any{
 							"error": "failed to rotate api_key",
 						})
+					}
+					// Notify the owner (best-effort, non-fatal). Send only
+					// after the save succeeded so we never email a rotation
+					// that didn't happen.
+					if noticeErr := sendAPIKeyRotationNotice(tenant.GetString("email")); noticeErr != nil {
+						log.Printf("LSE-11: rotation notice email failed for tenant %q: %v", tenant.Id, noticeErr)
 					}
 					resp["api_key"] = newAPIKey
 				}

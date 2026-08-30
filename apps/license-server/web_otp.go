@@ -218,6 +218,24 @@ func (wl *windowLimiter) allow(key string) bool {
 	return true
 }
 
+// remainingSeconds reports how long until the key's current window closes
+// (0 when there is no active window). Read-only: it does not consume
+// budget. Used by callers that must tell a client how long a cooldown
+// (e.g. the LSE-11 api_key rotation cap) still lasts.
+func (wl *windowLimiter) remainingSeconds(key string) int {
+	wl.mu.Lock()
+	defer wl.mu.Unlock()
+	e, ok := wl.entries[key]
+	if !ok {
+		return 0
+	}
+	rem := wl.window - time.Since(e.start)
+	if rem < 0 {
+		return 0
+	}
+	return int(rem.Seconds() + 0.999)
+}
+
 // sweep drops entries whose window has fully passed.
 func (wl *windowLimiter) sweep() {
 	wl.mu.Lock()
@@ -239,6 +257,7 @@ func windowSweepLoop() {
 		otpRequestLimiter.sweep()
 		otpVerifyLimiter.sweep()
 		otpIPLimiter.sweep()
+		apiRotationLimiter.sweep()
 		webLoginLimiter.sweep()
 		webRegisterLimiter.sweep()
 		webResetRequestLimiter.sweep()

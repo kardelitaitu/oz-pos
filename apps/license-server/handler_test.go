@@ -3707,6 +3707,37 @@ func TestActivateHandler_Lifecycle(t *testing.T) {
 		}
 	})
 
+	// ── Step 2c: LSE-11 phase B — rotation cooldown ──────────────
+	// Step 2 just consumed this tenant's one rotation for the 24h window,
+	// so a THIRD re-activation without api_key must be throttled: 429 with
+	// a retry_after, and no api_key re-emitted.
+	t.Run("step2c_rotation_cooldown", func(t *testing.T) {
+		resetRateLimiters() // isolate from the IP bucket; assert the LSE-11 cooldown only
+		body := strings.NewReader(fmt.Sprintf(`{
+			"key": "%s",
+			"email": "%s",
+			"machine_id": "%s"
+		}`, key1, email, "lifecycmac002c"))
+		req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusTooManyRequests {
+			t.Fatalf("expected 429 (rotation cooldown), got %d: %s", rec.Code, rec.Body.String())
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to parse cooldown response: %v", err)
+		}
+		if _, ok := resp["retry_after"]; !ok {
+			t.Error("expected retry_after in cooldown response")
+		}
+		if _, ok := resp["api_key"]; ok {
+			t.Error("api_key must NOT be re-emitted while the rotation cooldown is active")
+		}
+	})
+
 	// ── Step 3: re-activate with wrong email ────────────────────
 	// Should be rejected with 401 "invalid or already used license key".
 	t.Run("step3_wrong_email_rejected", func(t *testing.T) {
@@ -3737,6 +3768,7 @@ func TestActivateHandler_Lifecycle(t *testing.T) {
 	// ── Step 4: new key on existing tenant WITHOUT api_key ─────
 	// Should be rejected with 401 "api_key required" (H1 gate).
 	t.Run("step4_new_key_no_api_key_rejected", func(t *testing.T) {
+		resetRateLimiters()
 		body := strings.NewReader(fmt.Sprintf(`{
 			"key": "%s",
 			"email": "%s",
