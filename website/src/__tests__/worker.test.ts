@@ -111,17 +111,18 @@ describe('Cloudflare Worker — worker.ts', () => {
     expect(mockEnv.ASSETS.fetch).toHaveBeenCalled();
   });
 
-  it('sets cookie from ?token= param and redirects to clean URL', async () => {
+  it('no longer sets a session cookie from a deprecated ?token= param (M3)', async () => {
+    // The ?token= fallback was removed (Phase 3 item 12); the one-time
+    // exchange-code flow (?code=) is the only token handoff. A ?token=
+    // request without a session cookie must NOT mint a cookie — it falls
+    // through to the login page.
     const req = new Request('https://dashboard.ozpos.my.id/dashboard?token=my.jwt.token');
     const res = await worker.fetch(req, mockEnv);
 
-    expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toBe('/dashboard');
-    const setCookie = res.headers.get('Set-Cookie');
-    expect(setCookie).toContain('oz_session=my.jwt.token');
-    expect(setCookie).toContain('HttpOnly');
-    expect(setCookie).toContain('Secure');
-    expect(setCookie).toContain('Domain=dashboard.ozpos.my.id');
+    expect(res.headers.get('Set-Cookie')).toBeNull();
+    // No session cookie → serve the dedicated login page (not a redirect
+    // that would carry the token in the URL).
+    expect(res.status).toBe(200);
   });
 
   it('clears the httpOnly cookie on /__oz/logout and redirects to login', async () => {
@@ -179,14 +180,5 @@ describe('Cloudflare Worker — worker.ts', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { token: string };
     expect(body.token).toBe('my.jwt.token');
-  });
-
-  it('removes token param from URL after setting cookie', async () => {
-    const req = new Request('https://dashboard.ozpos.my.id/settings?token=abc.def&theme=dark');
-    const res = await worker.fetch(req, mockEnv);
-
-    expect(res.status).toBe(302);
-    // The remaining query params should be preserved
-    expect(res.headers.get('Location')).toBe('/settings?theme=dark');
   });
 });
