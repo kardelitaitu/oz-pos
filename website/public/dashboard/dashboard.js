@@ -50,9 +50,19 @@ function statusPill(status) {
 }
 
 async function api(path) {
-  const token = (await (await fetch('/__oz/session')).json()).token;
+  let token = null;
+  try {
+    const sessionRes = await fetch('/__oz/session');
+    if (!sessionRes.ok) { window.location.href = '/__oz/logout'; return null; }
+    const sessionData = await sessionRes.json();
+    token = sessionData.token;
+  } catch {
+    window.location.href = '/__oz/logout';
+    return null;
+  }
+  if (!token) { window.location.href = '/__oz/logout'; return null; }
   const res = await fetch(API + path, { headers: { Authorization: 'Bearer ' + token } });
-  if (res.status === 401) { window.location.href = '/en/login?redirect=/'; return null; }
+  if (res.status === 401) { window.location.href = '/__oz/logout'; return null; }
   if (!res.ok) throw new Error(path + ' failed (' + res.status + ')');
   return res.json();
 }

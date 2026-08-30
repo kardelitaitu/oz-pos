@@ -128,6 +128,12 @@ export default {
         return new Response(res.body, { status: res.status, headers: respHeaders });
       }
 
+      // ── Redirect marketing auth pages to the marketing host (fixes 404s) ──
+      if (url.pathname.startsWith('/en/login') || url.pathname.startsWith('/id/login')) {
+        const target = `https://${MARKETING_HOST}${url.pathname}${url.search}`;
+        return new Response(null, { status: 302, headers: { Location: target } });
+      }
+
       const sessionCookie = getCookie(request.headers, COOKIE_NAME);
 
       // Step 1: One-time exchange code (hardening F1). The login page
