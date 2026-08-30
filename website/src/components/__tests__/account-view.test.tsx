@@ -1253,8 +1253,8 @@ describe('AccountView — renewal countdown', () => {
     // Build expiry at local midnight +10 days so the calendar-day countdown
     // is deterministic regardless of the test machine's timezone.
     const future = new Date();
-    future.setDate(future.getDate() + 10);
-    future.setHours(0, 0, 0, 0);
+    future.setUTCDate(future.getUTCDate() + 10);
+    future.setUTCHours(0, 0, 0, 0);
     const expectedDays = 10;
     mockFetch(() => okJson({
       tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
@@ -1274,8 +1274,8 @@ describe('AccountView — renewal countdown', () => {
   it('shows renews badge with danger color when < 7 days', async () => {
     sessionStorage.setItem('oz_session', 'tok-renew-urgent');
     const soon = new Date();
-    soon.setDate(soon.getDate() + 3);
-    soon.setHours(0, 0, 0, 0);
+    soon.setUTCDate(soon.getUTCDate() + 3);
+    soon.setUTCHours(0, 0, 0, 0);
     const expectedDays = 3;
     mockFetch(() => okJson({
       tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
@@ -1364,8 +1364,8 @@ describe('AccountView — renewal countdown', () => {
     // carries the muted class — not the warning class.
     sessionStorage.setItem('oz_session', 'tok-renew-muted');
     const far = new Date();
-    far.setDate(far.getDate() + 45);
-    far.setHours(0, 0, 0, 0);
+    far.setUTCDate(far.getUTCDate() + 45);
+    far.setUTCHours(0, 0, 0, 0);
     mockFetch(() => okJson({
       tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
       license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
@@ -1389,7 +1389,7 @@ describe('AccountView — renewal countdown', () => {
     // d === 0 (expires today) is < 7 → danger. This boundary was untested.
     sessionStorage.setItem('oz_session', 'tok-renew-today');
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setUTCHours(0, 0, 0, 0);
     mockFetch(() => okJson({
       tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
       license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },

@@ -67,16 +67,18 @@ describe('daysUntil invariants', () => {
   });
 
   it('returns 1 for tomorrow', () => {
+    // Build tomorrow at UTC midnight so the calendar-day count is
+    // deterministic on any machine (daysUntil counts UTC dates).
     const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    tomorrow.setUTCHours(0, 0, 0, 0);
     expect(daysUntil(tomorrow.toISOString())).toBe(1);
   });
 
   it('returns a negative number for a past date', () => {
     const past = new Date();
-    past.setDate(past.getDate() - 10);
-    past.setHours(0, 0, 0, 0);
+    past.setUTCDate(past.getUTCDate() - 10);
+    past.setUTCHours(0, 0, 0, 0);
     const result = daysUntil(past.toISOString());
     expect(result).toBeLessThan(0);
   });
