@@ -258,6 +258,46 @@ async fn insert_pg_batch(
     Ok(())
 }
 
+/// Decode one Postgres cell as a normalized [`Cell`] by probing the runtime
+/// type in the same order `read_sqlite_rows` emits them (int → real → text →
+/// blob). Extracted from the read loop so the type-sniffing chain is a
+/// flat, independently testable function.
+fn decode_pg_cell(row: &tokio_postgres::Row, i: usize, col: &str, table: &str) -> Result<Cell, String> {
+    if let Ok(Some(i)) = row.try_get::<_, Option<i64>>(i) {
+        return Ok(Cell::Int(i));
+    }
+    if row.try_get::<_, Option<i64>>(i).is_ok() {
+        return Ok(Cell::Null);
+    }
+    if let Ok(Some(f)) = row.try_get::<_, Option<f64>>(i) {
+        return Ok(Cell::Real(f));
+    }
+    if row.try_get::<_, Option<f64>>(i).is_ok() {
+        return Ok(Cell::Null);
+    }
+    if let Ok(Some(t)) = row.try_get::<_, Option<String>>(i) {
+        return Ok(Cell::Text(t));
+    }
+    if row.try_get::<_, Option<String>>(i).is_ok() {
+        return Ok(Cell::Null);
+    }
+    if let Ok(Some(b)) = row.try_get::<_, Option<Vec<u8>>>(i) {
+        return Ok(Cell::Blob(b));
+    }
+    if row.try_get::<_, Option<Vec<u8>>>(i).is_ok() {
+        return Ok(Cell::Null);
+    }
+    // Every probe failed — the value has a type none of the four probes can
+    // decode (e.g. an array or a custom domain). Surface the raw driver error.
+    Err(format!(
+        "decode {table}.{col}: {}",
+        row.try_get::<_, Option<Vec<u8>>>(i)
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_else(|| "unrecognized value type".to_string())
+    ))
+}
+
 /// Read every row of a Postgres table (same column order) as normalized
 /// cells — mirrors [`read_sqlite_rows`] so checksums compare directly.
 async fn read_pg_rows(pool: &Pool, table: &str, columns: &[String]) -> Result<Vec<Row>, String> {
@@ -276,36 +316,7 @@ async fn read_pg_rows(pool: &Pool, table: &str, columns: &[String]) -> Result<Ve
     for row in rows {
         let mut cells = Vec::with_capacity(columns.len());
         for (i, col) in columns.iter().enumerate() {
-            let v = row.try_get::<_, Option<i64>>(i);
-            match v {
-                Ok(Some(i)) => cells.push(Cell::Int(i)),
-                Ok(None) => cells.push(Cell::Null),
-                Err(_) => {
-                    // Not an integer column — try f64, then text, then blob.
-                    let vf = row.try_get::<_, Option<f64>>(i);
-                    match vf {
-                        Ok(Some(f)) => cells.push(Cell::Real(f)),
-                        Ok(None) => cells.push(Cell::Null),
-                        Err(_) => {
-                            let vt = row.try_get::<_, Option<String>>(i);
-                            match vt {
-                                Ok(Some(t)) => cells.push(Cell::Text(t)),
-                                Ok(None) => cells.push(Cell::Null),
-                                Err(_) => {
-                                    let vb = row.try_get::<_, Option<Vec<u8>>>(i);
-                                    match vb {
-                                        Ok(Some(b)) => cells.push(Cell::Blob(b)),
-                                        Ok(None) => cells.push(Cell::Null),
-                                        Err(e) => {
-                                            return Err(format!("decode {table}.{col}: {e}"));
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            cells.push(decode_pg_cell(&row, i, col, table)?);
         }
         out.push(Row { cells });
     }
