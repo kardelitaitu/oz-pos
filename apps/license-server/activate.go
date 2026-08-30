@@ -304,6 +304,61 @@ func registerMachine(app core.App, machineID, tenantID string, checkOwnership bo
 	return false, nil
 }
 
+// rotateAPIKey performs the full api_key rotation lifecycle: verify the
+// recovery code (inbox proof), enforce the per-tenant 24h throttle, mint and
+// persist the new key, and notify the owner. Returns (handled, err,
+// newAPIKey):
+//
+//   - handled=true → a response was written (401/429/500); the caller must
+//     return err.
+//   - newAPIKey non-empty → rotation succeeded; the caller should include it
+//     in the response (the stored value is a bcrypt hash, so the plaintext
+//     is only available here, at mint time).
+//
+// The owner notification is best-effort (non-fatal) and runs only AFTER the
+// save succeeded so we never email a rotation that didn't happen.
+func rotateAPIKey(
+	app core.App,
+	e *core.RequestEvent,
+	req ActivateRequest,
+	tenant *core.Record,
+) (handled bool, err error, newAPIKey string) {
+	storedHash, codeOK := webOtpStore.takeCode(req.Email)
+	if !codeOK || !constantTimeHashEq(storedHash, hashOtpCode(req.RecoveryCode)) {
+		return true, e.JSON(http.StatusUnauthorized, map[string]any{
+			"error": "invalid or expired recovery code. Request a new code via POST /api/v1/license/recover.",
+		}), ""
+	}
+	if !apiRotationLimiter.allow(tenant.Id) {
+		remaining := apiRotationLimiter.remainingSeconds(tenant.Id)
+		log.Printf("LSE-11: api_key rotation throttled for tenant %q (retry in %ds)", tenant.Id, remaining)
+		return true, e.JSON(http.StatusTooManyRequests, map[string]any{
+			"error":       "license management key was recently rotated. Check your email — if this wasn't you, contact support. Try again later.",
+			"retry_after": remaining,
+		}), ""
+	}
+	newAPIKey = generateAPIKey()
+	apiKeyHash, apiKeyLookup, hashErr := hashAPIKey(newAPIKey)
+	if hashErr != nil {
+		log.Printf("Re-activation api_key rotation failed for tenant %q: %v", tenant.Id, hashErr)
+		return true, e.JSON(http.StatusInternalServerError, map[string]any{
+			"error": "failed to rotate api_key",
+		}), ""
+	}
+	tenant.Set("api_key", apiKeyHash)
+	tenant.Set("api_key_lookup", apiKeyLookup)
+	if saveErr := app.Save(tenant); saveErr != nil {
+		log.Printf("Re-activation api_key rotation save failed for tenant %q: %v", tenant.Id, saveErr)
+		return true, e.JSON(http.StatusInternalServerError, map[string]any{
+			"error": "failed to rotate api_key",
+		}), ""
+	}
+	if noticeErr := sendAPIKeyRotationNotice(tenant.GetString("email")); noticeErr != nil {
+		log.Printf("LSE-11: rotation notice email failed for tenant %q: %v", tenant.Id, noticeErr)
+	}
+	return false, nil, newAPIKey
+}
+
 // handleReactivation serves the re-activation case: the key is already
 // activated by this email's tenant, so the email + key pair is sufficient
 // proof of ownership and the existing signed subscription is returned
@@ -322,7 +377,9 @@ func registerMachine(app core.App, machineID, tenantID string, checkOwnership bo
 //
 // LSE-11 phase B (retained as defense in depth): actual rotations are
 // throttled to one per tenant per 24h and the owner is emailed on every
-// rotation.
+// rotation. The recovery-code verification, rotation throttle, key
+// generation, persistence, and owner notification are extracted to
+// rotateAPIKey so the api_key rotation lifecycle is independently testable.
 func handleReactivation(
 	app core.App,
 	e *core.RequestEvent,
@@ -396,43 +453,11 @@ func handleReactivation(
 				"status": "recovery_required",
 			}
 		} else {
-			storedHash, codeOK := webOtpStore.takeCode(req.Email)
-			if !codeOK || !constantTimeHashEq(storedHash, hashOtpCode(req.RecoveryCode)) {
-				return true, e.JSON(http.StatusUnauthorized, map[string]any{
-					"error": "invalid or expired recovery code. Request a new code via POST /api/v1/license/recover.",
-				})
+			if handled, err, newKey := rotateAPIKey(app, e, req, tenant); handled {
+				return true, err
+			} else if newKey != "" {
+				resp["api_key"] = newKey
 			}
-			if !apiRotationLimiter.allow(tenant.Id) {
-				remaining := apiRotationLimiter.remainingSeconds(tenant.Id)
-				log.Printf("LSE-11: api_key rotation throttled for tenant %q (retry in %ds)", tenant.Id, remaining)
-				return true, e.JSON(http.StatusTooManyRequests, map[string]any{
-					"error":       "license management key was recently rotated. Check your email — if this wasn't you, contact support. Try again later.",
-					"retry_after": remaining,
-				})
-			}
-			newAPIKey := generateAPIKey()
-			apiKeyHash, apiKeyLookup, hashErr := hashAPIKey(newAPIKey)
-			if hashErr != nil {
-				log.Printf("Re-activation api_key rotation failed for tenant %q: %v", tenant.Id, hashErr)
-				return true, e.JSON(http.StatusInternalServerError, map[string]any{
-					"error": "failed to rotate api_key",
-				})
-			}
-			tenant.Set("api_key", apiKeyHash)
-			tenant.Set("api_key_lookup", apiKeyLookup)
-			if saveErr := app.Save(tenant); saveErr != nil {
-				log.Printf("Re-activation api_key rotation save failed for tenant %q: %v", tenant.Id, saveErr)
-				return true, e.JSON(http.StatusInternalServerError, map[string]any{
-					"error": "failed to rotate api_key",
-				})
-			}
-			// Notify the owner (best-effort, non-fatal). Send only
-			// after the save succeeded so we never email a rotation
-			// that didn't happen.
-			if noticeErr := sendAPIKeyRotationNotice(tenant.GetString("email")); noticeErr != nil {
-				log.Printf("LSE-11: rotation notice email failed for tenant %q: %v", tenant.Id, noticeErr)
-			}
-			resp["api_key"] = newAPIKey
 		}
 	}
 
