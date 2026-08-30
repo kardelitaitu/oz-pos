@@ -7946,3 +7946,39 @@ have been doubly dead.
 
 **Totals this area:** B46-B52 plus COR-31-in-module. 19/19 cloud_destination,
 2260/2260 whole crate.
+
+## 2026-08-31 — TDD cycle: REP-06 per-currency report aggregation
+
+**Problem:** the REP-04 sweep exposed the same cross-currency SUM class
+still live in five report queries below the revenue trends:
+top_products, hourly_heatmap, category_breakdown,
+payment_method_breakdown, voided_sales_summary. Wrong totals, wrong
+rankings, wrong margins — invisible in single-currency stores, which is
+exactly why multi-currency licensing would ship it broken.
+
+**Solution:** all five GROUP BY currency and carry a `currency` field;
+category percentages normalize WITHIN each currency (HashMap of
+per-currency grand totals); voided summary became Vec-per-currency
+(commands updated; serde flows the rest). UI: top-products formats each
+row in its own currency; heatmap cells aggregate currency rows (orders
+sum, intensity tracks the display currency, aria-labels list every
+amount — the old `.find()` silently showed only the first currency);
+dead `heatmapGrid` deleted; refunds analytics card + CSV per currency
+(new `analytics-csv-col-currency` key). Same-file multi-edit batching
+works when the read cache is fresh — five DTO edits landed in one
+message.
+
+**Red/Green:** 5 core tests + 2 UI render tests; 2 voided tests
+rewritten for the Vec API; 5 fixture sites updated (currency is
+required on the TS interfaces — fixtures must mirror real payloads;
+one AnalyticsScreen CSV test caught by the suite, not by typecheck,
+because its mock was loosely typed).
+
+**Verification:** core report 153/153, email 69/69, desktop reports
+commands 46/46, both clients `cargo check` clean, typecheck clean,
+UI 253/253 across six suites.
+
+**Commits:** 38b456bd (core+commands), 3f9ced5c (UI), docs alongside
+this entry. Open follow-ups recorded: category pie cross-currency slice
+areas (visual decision), cloud email_pg parity (old shapes + no REP-04
+netting).
