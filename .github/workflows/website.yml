@@ -73,6 +73,13 @@ jobs:
       # browser at build only — never shipped to the client.
       - run: cd website && npx playwright install --with-deps chromium
       - run: cd website && npm run check
+      # Review follow-up (H2): `astro check` only type-checks the vitest
+      # suites — it never executes them. Run the admin/dashboard SPA helper
+      # tests + worker auth-gate tests here (vitest/jsdom already installed
+      # by npm ci; ~1s) so a regression fails BEFORE the ~5-min portal
+      # build. Gate: scripts/gates.json → "website-tests".
+      - name: Website unit tests
+        run: cd website && npm test
       # ── Docs portal build ────────────────────────────────────────────
       # Build the full portal (mdBook hub + cargo doc + TypeDoc) so the
       # docs hub renders all 4 cards and the internal-link audit validates

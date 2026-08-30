@@ -197,6 +197,21 @@ else
     echo -e "${YELLOW}⚠ UI checks skipped (npm not found or ui/package-lock.json missing)${NC}"
 fi
 
+# ── Website (mirrors CI website.yml `check` job — auto-detected) ─────────
+# Review follow-up (H2): the admin/dashboard SPA helpers (admin-utils.js)
+# and the worker auth gate have vitest suites that previously ran nowhere
+# but a manual `npm test`. Gate: scripts/gates.json → "website-tests".
+if command -v npm &>/dev/null && [ -f website/package-lock.json ]; then
+    cd website
+    if [ ! -d node_modules ]; then
+        step "website npm ci" "cd website; npm ci --no-audit --no-fund" npm ci --no-audit --no-fund
+    fi
+    step "website test" "cd website; npm test" npm test
+    cd ..
+else
+    echo -e "${YELLOW}⚠ Website checks skipped (npm not found or website/package-lock.json missing)${NC}"
+fi
+
 # ── Plugin guide / API parity (PLG-10 tail; Rust-side, always runs) ─────
 step "plugin-guide parity" "python3 scripts/verify-plugin-guide-parity.py" python3 scripts/verify-plugin-guide-parity.py
 
