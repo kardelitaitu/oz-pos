@@ -1883,3 +1883,15 @@ simply predates the payment keys.
 |---|---|
 | M-2 | ✅ FIXED — `transform()` decodes the source once into a `DynamicImage`; new `auto_crop_img`/`compress_img`/`thumbnail_img` stage variants operate on in-memory frames (byte-level public APIs unchanged, incl. the `compress` WebP pass-through contract). Pre-fix flow re-encoded each stage to JPEG and re-decoded it in the next (1 crop + 1 compress + 1 dims + 2 per preset); now exactly 1 full decode + 1 encode per variant. oz-media 26 tests pass; desktop (consumer) compiles clean. |
 | Backlog | Only the TLS/noise-PSK LAN-transport upgrade remains (architecture-level, tracked as future work in DC-1's threat-model note). Every code-level finding from the 32-target audit is now fixed. |
+### 40. Final verification sweep (25-07-26) — campaign closed
+
+| Gate | Result |
+|---|---|
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | ✅ 0 warnings across the workspace |
+| `cargo test --workspace` | ✅ 7,365 passed, 0 failed |
+| `ui` vitest suite (`npm run test`) | ✅ 7,084 passed, 16 skipped, 0 failed |
+| `ui` typecheck (`npm run typecheck`) | ✅ clean |
+
+One regression found and fixed during the sweep: the full UI run exposed that `api-small-modules-contract.test.ts` still asserted the pre-UI-1 `get_setting` gateway behaviour (the earlier UI-1 fix updated `gateway.test.ts` but missed this second contract file) — the two tests now assert the `gateway_status` contract. All other gates were green on the first pass.
+
+**Campaign status: CLOSED.** All 32 targets audited; every code-level finding (HIGH, MED, LOW, INFO) fixed across 20+ commits on `0.0.33`; the TLS/noise-PSK LAN-transport upgrade remains the sole tracked future-work item (architecture-level, see DC-1's threat-model note).
