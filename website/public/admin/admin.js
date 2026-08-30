@@ -340,6 +340,8 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
 
     function upgradePrompt(id, data) {
       const modal = document.getElementById('modal-root'), m = el('div', 'modal-back'), box = el('div', 'modal');
+      box.setAttribute('role', 'dialog');
+      box.setAttribute('aria-modal', 'true');
       box.appendChild(el('h3', null, t('tenant.changeTier')));
       const p = el('p', 'small'); p.style.marginBottom = '.6rem'; p.textContent = t('tenant.currentTier') + ((data.subscription && data.subscription.tierKey) || 'none');
       box.appendChild(p);
@@ -351,6 +353,9 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       const save = el('button', 'btn', t('tenant.save')); save.addEventListener('click', async () => { await doAction(id,'tier-override',t('tenant.tierChanged'),JSON.stringify({tier_key:select.value,reason:reason.value||'admin override'})); }); act.appendChild(save);
       box.appendChild(act); m.appendChild(box); modal.appendChild(m);
       m.addEventListener('click', e => { if (e.target === m) { modal.innerHTML = ''; } });
+      // ESC key closes the modal (a11y #16)
+      const escHandler = e => { if (e.key === 'Escape') { modal.innerHTML = ''; document.removeEventListener('keydown', escHandler); } };
+      document.addEventListener('keydown', escHandler);
     }
 
     // ── Health tab ──────────────────────────────────────────────────
