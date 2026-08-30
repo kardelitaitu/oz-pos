@@ -2,7 +2,7 @@
 last audited 25-07-26 by RSA-Agent (oz-media slice A: verified)
 crate: oz-media | status: SAFE | lint: CLEAN
 findings: clean — no unwrap/panic/unsafe; sibling tests per convention
-next: none | perf: N/A
+next: none | perf: M-2 support 25-07-26 — added the DynamicImage-taking variant (thumbnail_img / auto_crop_img) so the pipeline runs a single decode; byte-level API and behavior unchanged
 */
 //! Thumbnail generation.
 //!
@@ -39,14 +39,39 @@ pub fn generate_thumbnail(
     image_data: &[u8],
     max_dimensions: ImageDimensions,
 ) -> Result<(Vec<u8>, ImageDimensions), MediaError> {
+    let img = image::load_from_memory(image_data)
+        .map_err(|e| MediaError::InvalidImage(format!("decode: {e}")))?;
+
+    let (thumb, dims) = thumbnail_img(&img, max_dimensions)?;
+    let rgb = thumb.to_rgb8();
+
+    let mut out = Vec::new();
+    rgb.write_to(&mut Cursor::new(&mut out), image::ImageFormat::Jpeg)
+        .map_err(|e| MediaError::InvalidImage(format!("encode: {e}")))?;
+
+    Ok((out, dims))
+}
+
+/// Generate a thumbnail from an already-decoded image (M-2: lets the
+/// pipeline resize without a re-decode round-trip per preset).
+///
+/// Returns the resized frame and its dimensions — the caller chooses the
+/// encoding. Scale math and validation are identical to
+/// [`generate_thumbnail`].
+///
+/// # Errors
+///
+/// [`MediaError::InvalidDimensions`] if `max_dimensions` or the source is
+/// degenerate (zero width or height).
+pub fn thumbnail_img(
+    img: &image::DynamicImage,
+    max_dimensions: ImageDimensions,
+) -> Result<(image::DynamicImage, ImageDimensions), MediaError> {
     if max_dimensions.width == 0 || max_dimensions.height == 0 {
         return Err(MediaError::InvalidDimensions(
             "max dimensions must be positive".into(),
         ));
     }
-
-    let img = image::load_from_memory(image_data)
-        .map_err(|e| MediaError::InvalidImage(format!("decode: {e}")))?;
 
     let (w, h) = (img.width(), img.height());
     if w == 0 || h == 0 {
@@ -66,13 +91,8 @@ pub fn generate_thumbnail(
     // filter; CatmullRom is sharper but slower. Triangle is the standard
     // trade-off for thumbnails.
     let thumb = img.resize(new_w, new_h, FilterType::Triangle);
-    let rgb = thumb.to_rgb8();
 
-    let mut out = Vec::new();
-    rgb.write_to(&mut Cursor::new(&mut out), image::ImageFormat::Jpeg)
-        .map_err(|e| MediaError::InvalidImage(format!("encode: {e}")))?;
-
-    Ok((out, ImageDimensions::new(new_w, new_h)))
+    Ok((thumb, ImageDimensions::new(new_w, new_h)))
 }
 
 /// A named thumbnail size preset, so callers don't hard-code pixel

@@ -2,7 +2,7 @@
 last audited 25-07-26 by RSA-Agent (oz-media slice A: crop deep read)
 crate: oz-media | status: SAFE | lint: CLEAN
 findings: exemplary — decode errors surfaced, zero-size source rejected, saturating/clamped crop math, solid-colour trim guard returns the original frame, Smart bias documented as heuristic fallback
-next: none | perf: N/A
+next: none | perf: M-2 support 25-07-26 — added the DynamicImage-taking variant (thumbnail_img / auto_crop_img) so the pipeline runs a single decode; byte-level API and behavior unchanged
 */
 //! Auto image crop.
 //!
@@ -51,6 +51,31 @@ pub fn auto_crop(
     let img = image::load_from_memory(image_data)
         .map_err(|e| MediaError::InvalidImage(format!("decode: {e}")))?;
 
+    let cropped = auto_crop_img(img, mode, target)?;
+    let (cw, ch) = (cropped.width(), cropped.height());
+    let rgb = cropped.to_rgb8();
+    let mut out = Vec::new();
+    rgb.write_to(&mut Cursor::new(&mut out), image::ImageFormat::Jpeg)
+        .map_err(|e| MediaError::InvalidImage(format!("encode: {e}")))?;
+
+    Ok((out, ImageDimensions::new(cw, ch)))
+}
+
+/// Crop an already-decoded image (M-2: lets the pipeline run a single
+/// full decode instead of re-decoding per stage).
+///
+/// The result is the cropped frame as a `DynamicImage` — the caller
+/// chooses the encoding. The zero-size guard and the mode handling are
+/// identical to [`auto_crop`].
+///
+/// # Errors
+///
+/// [`MediaError::InvalidDimensions`] if the source or target is degenerate.
+pub fn auto_crop_img(
+    img: image::DynamicImage,
+    mode: CropMode,
+    target: Option<ImageDimensions>,
+) -> Result<image::DynamicImage, MediaError> {
     let (w, h) = (img.width(), img.height());
     if w == 0 || h == 0 {
         return Err(MediaError::InvalidDimensions(
@@ -77,13 +102,7 @@ pub fn auto_crop(
         }
     };
 
-    let (cw, ch) = (cropped.width(), cropped.height());
-    let rgb = cropped.to_rgb8();
-    let mut out = Vec::new();
-    rgb.write_to(&mut Cursor::new(&mut out), image::ImageFormat::Jpeg)
-        .map_err(|e| MediaError::InvalidImage(format!("encode: {e}")))?;
-
-    Ok((out, ImageDimensions::new(cw, ch)))
+    Ok(cropped)
 }
 
 /// Crop `img` to the target aspect ratio centred at `vertical_bias`

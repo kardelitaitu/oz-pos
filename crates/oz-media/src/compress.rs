@@ -51,9 +51,32 @@ pub fn compress(
     target_format: ImageFormat,
     quality: Quality,
 ) -> Result<Vec<u8>, MediaError> {
+    // WebP keeps the byte-level pass-through contract (documented below
+    // and asserted by `webp_passthrough_keeps_source`); no decode needed.
+    if target_format == ImageFormat::WebP {
+        return Ok(image_data.to_vec());
+    }
+
     let img = image::load_from_memory(image_data)
         .map_err(|e| MediaError::InvalidImage(format!("decode: {e}")))?;
 
+    compress_img(&img, target_format, quality)
+}
+
+/// Compress an already-decoded image (M-2: lets the pipeline encode
+/// without a re-decode round-trip per stage).
+///
+/// JPEG and PNG are supported as output; WebP is encoded losslessly (the
+/// `image` crate has no quality knob for WebP encoding).
+///
+/// # Errors
+///
+/// [`MediaError::InvalidImage`] if encoding fails.
+pub fn compress_img(
+    img: &image::DynamicImage,
+    target_format: ImageFormat,
+    quality: Quality,
+) -> Result<Vec<u8>, MediaError> {
     let mut out = Vec::new();
     match target_format {
         ImageFormat::Jpeg => {
@@ -75,8 +98,19 @@ pub fn compress(
         }
         ImageFormat::WebP => {
             // The `image` crate's WebP encoder has no quality parameter;
-            // keep the source bytes unchanged (still a valid WebP file).
-            return Ok(image_data.to_vec());
+            // lossless keeps the frame valid and pixel-exact. The 0.25
+            // encoder takes raw frames, so hand it the RGBA buffer.
+            let rgba = img.to_rgba8();
+            let (width, height) = rgba.dimensions();
+            let mut cursor = Cursor::new(&mut out);
+            let enc = image::codecs::webp::WebPEncoder::new_lossless(&mut cursor);
+            enc.encode(
+                rgba.as_raw(),
+                width,
+                height,
+                image::ExtendedColorType::Rgba8,
+            )
+            .map_err(|e| MediaError::InvalidImage(format!("webp encode: {e}")))?;
         }
     }
 
