@@ -115,7 +115,7 @@ The `AnalyticsBundle` JSON format already maps cleanly to BigQuery's `NEWLINE_DE
 
 ## References
 - `crates/oz-core/src/export/mod.rs` — AnalyticsBundle, ExportConfig, ReportScheduleConfig
-- `docs/decisions/2026-07-10-subscription-tier-entitlement.md` — Feature gating for premium add-ons
+- `docs/decisions/archived/2026-07-10-subscription-tier-entitlement.md` — Feature gating for premium add-ons
 - `docker-compose.yml` — Redis job queue for async export tasks
 
 > last audited 09-08-26 by buffy

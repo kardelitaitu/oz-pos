@@ -14,7 +14,7 @@ Unified registry for architectural decisions (ADRs), audits, verifications, and 
 | 2 | module-system | [ADR #2: Event Bus Design](../decisions/2026-02-01-event-bus-design.md) | Implemented (2026-07-15) |
 | 3 | ui | [ADR #3: Frontend Restructure](../decisions/2026-03-01-frontend-restructure.md) | Implemented (2026-07-15) |
 | 4 | architecture | [ADR #4: Store-First Tenancy & Workspace Type/Instance Architecture](../decisions/2026-07-10-workspace-type-instance-design.md) | Implemented (2026-07-10) |
-| 5 | subscription | [ADR #5: Subscription Tier & Entitlement Architecture](../decisions/2026-07-10-subscription-tier-entitlement.md) | Superseded (2026-07-10) — tier lineup & quotas superseded by `subscription-tiers.md` (FINAL, approved 2026-08-17) |
+| 5 | subscription | [ADR #5: Subscription Tier & Entitlement Architecture](../decisions/archived/2026-07-10-subscription-tier-entitlement.md) | Archived — Superseded (2026-07-10) — tier lineup & quotas superseded by `subscription-tiers.md` (FINAL, approved 2026-08-17) |
 | 6 | sync | [ADR #6: CRDT Delta Ledger & Offline Sync](../decisions/2026-07-10-crdt-delta-ledger-offline-sync.md) | Implemented (2026-07-15) |
 | 7 | architecture | [ADR #7: Data Scope Guard & Query Enforcement](../decisions/2026-07-10-data-scope-guard.md) | Implemented (2026-07-10) |
 | 8 | module-system | [ADR #8: Scoped Real-Time Event Bus](../decisions/2026-07-10-scoped-event-bus.md) | Implemented (2026-07-10) |
@@ -31,7 +31,7 @@ Unified registry for architectural decisions (ADRs), audits, verifications, and 
 | 20 | payments | [ADR #20: Payment-Capture Ordering — Stock Reservation Before Payment Capture](../decisions/2026-07-19-payment-capture-ordering.md) | Implemented (2026-07-19) (see [status](./2026-07-19-payment-capture-ordering.status.md)) |
 | 21 | sync | [ADR #21: Sync Conflict Resolution Strategy](../decisions/2026-07-20-sync-conflict-resolution-strategy.md) | Approved — Phase 1 implemented (2026-07-20; re-audited 2026-08-08 by docs-auditor) |
 | 22 | topology | [ADR #22: Visual Node-Based Store & Workspace Topology Builder](../decisions/2026-07-20-node-based-store-topology-builder.md) | Implemented (2026-07-22) — Amended (2026-07-23) |
-| 23 | subscription | [ADR #23: Free Trial Lifecycle & License Activation Workflow](../decisions/2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md) | Re-scoped — superseded by subscription-tiers.md §4 (FINAL, approved 2026-08-17) |
+| 23 | subscription | [ADR #23: Free Trial Lifecycle & License Activation Workflow](../decisions/archived/2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md) | Archived — Re-scoped — superseded by subscription-tiers.md §4 (FINAL, approved 2026-08-17) |
 | 30 | module-system | [ADR #30: Domain Module Extraction & oz-core Decomposition](../decisions/2026-07-24-domain-module-extraction.md) | Accepted — Phase 4 (Currency) Complete (2026-07-25) |
 | 31 | module-system | [ADR #31: Decentralized UI Feature Module Registration](../decisions/2026-07-24-decentralized-ui-module-registration.md) | Accepted (2026-07-24) |
 | 32 | database | [ADR #32: DB Layer Extraction (R2) & Platform File Split (R5)](../decisions/2026-07-25-db-extraction-and-platform-split.md) | Proposed |

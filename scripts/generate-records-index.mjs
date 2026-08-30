@@ -176,20 +176,32 @@ const audits = [];
 const observability = [];
 
 if (existsSync(decisionsDir)) {
-  for (const f of readdirSync(decisionsDir).filter((f) => f.endsWith('.md'))) {
-    if (f === 'README.md' || f.endsWith('.status.md')) continue;
-    const rec = readRecord(join(decisionsDir, f));
-    const num = ADR_NUMBERS[f];
-    if (num) {
-      const statusFile = join(decisionsDir, f.replace(/\.md$/, '.status.md'));
-      const statusLink = existsSync(statusFile)
-        ? `${rec.status} (see [status](./${f.replace(/\.md$/, '.status.md')}))`
-        : rec.status;
-      numbered.push({ ...rec, num, status: statusLink });
-    } else if (f.includes('research')) {
-      research.push(rec);
-    } else {
-      phases.push(rec);
+  // Scan the base directory AND the archived/ subdirectory (superseded /
+  // re-scoped ADRs live there). Archived ADRs keep their number and title
+  // but get an "Archived — " status prefix so the index shows their state.
+  const scans = [['', false], ['archived', true]];
+  for (const [sub, isArchived] of scans) {
+    const dir = join(decisionsDir, sub);
+    if (!existsSync(dir)) continue;
+    for (const f of readdirSync(dir).filter((f) => f.endsWith('.md'))) {
+      if (f === 'README.md' || f.endsWith('.status.md')) continue;
+      const rec = readRecord(join(dir, f));
+      const num = ADR_NUMBERS[f];
+      if (num) {
+        const statusFile = join(dir, f.replace(/\.md$/, '.status.md'));
+        const statusLink = existsSync(statusFile)
+          ? `${rec.status} (see [status](./${sub ? sub + '/' : ''}${f.replace(/\.md$/, '.status.md')}))`
+          : rec.status;
+        numbered.push({
+          ...rec,
+          num,
+          status: isArchived ? `Archived — ${statusLink}` : statusLink,
+        });
+      } else if (f.includes('research')) {
+        research.push(rec);
+      } else {
+        phases.push(rec);
+      }
     }
   }
 }

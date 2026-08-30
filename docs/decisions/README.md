@@ -18,7 +18,7 @@ implementation-status walkthrough.
 | 2 | [Event Bus Design](./2026-02-01-event-bus-design.md) | — |
 | 3 | [Frontend Restructure](./2026-03-01-frontend-restructure.md) | — |
 | 4 | [Store-First Tenancy & Workspace Type/Instance Architecture](./2026-07-10-workspace-type-instance-design.md) | — |
-| 5 | [Subscription Tier & Entitlement Architecture](./2026-07-10-subscription-tier-entitlement.md) | — |
+| 5 | [Subscription Tier & Entitlement Architecture](./archived/2026-07-10-subscription-tier-entitlement.md) | — |
 | 6 | [CRDT Delta Ledger & Offline Sync](./2026-07-10-crdt-delta-ledger-offline-sync.md) | — |
 | 7 | [Data Scope Guard & Query Enforcement](./2026-07-10-data-scope-guard.md) | — |
 | 8 | [Scoped Real-Time Event Bus](./2026-07-10-scoped-event-bus.md) | — |
@@ -35,7 +35,7 @@ implementation-status walkthrough.
 | 20 | [Payment-Capture Ordering — Stock Reservation Before Payment Capture](./2026-07-19-payment-capture-ordering.md) | Implemented (see [status](./2026-07-19-payment-capture-ordering.status.md)) |
 | 21 | [Sync Conflict Resolution Strategy](./2026-07-20-sync-conflict-resolution-strategy.md) | — |
 | 22 | [Visual Node-Based Store & Workspace Topology Builder](./2026-07-20-node-based-store-topology-builder.md) | — |
-| 23 | [Free Trial Lifecycle & License Activation Workflow](./2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md) | — |
+| 23 | [Free Trial Lifecycle & License Activation Workflow](./archived/2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md) | — |
 | 30 | [Domain Module Extraction & oz-core Decomposition](./2026-07-24-domain-module-extraction.md) | — |
 | 43 | [React-only UI Decision](./2026-07-24-react-only-decision.md) | — |
 | 31 | [Decentralized UI Feature Module Registration](./2026-07-24-decentralized-ui-module-registration.md) | — |
@@ -89,9 +89,9 @@ authoritative record.
 
 | ADR | Title | Status | Deviations from Original Design |
 |-----|-------|--------|--------------------------------|
-| [#5](./2026-07-10-subscription-tier-entitlement.md) | Subscription Tier & Entitlement Architecture | Superseded for tier lineup/quotas by `subscription-tiers.md`; mechanism still valid | Tier lineup updated to Free · Plus · Pro · Premium · Enterprise (ADR #5 had Free / Pro / Premium / Enterprise). Quota values migrated in `subscription.rs` (C0.1). |
+| [#5](./archived/2026-07-10-subscription-tier-entitlement.md) | Subscription Tier & Entitlement Architecture | Superseded for tier lineup/quotas by `subscription-tiers.md`; mechanism still valid | Tier lineup updated to Free · Plus · Pro · Premium · Enterprise (ADR #5 had Free / Pro / Premium / Enterprise). Quota values migrated in `subscription.rs` (C0.1). |
 | [#9](./2026-07-10-license-server.md) | License Server Architecture (PocketBase on Northflank) | Implemented (2026-07-15) | **Dev 1:** `/status` changed from `GET /{tenant_id}` to `POST` with `Authorization: Bearer` auth (avoids leaking api_key in URLs). **Dev 2:** `trial_registrations` schema updated with `tenant_id` relation and `macos`/`unknown` platform values. |
-| [#23](./2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md) | Free Trial Lifecycle & License Activation Workflow | Re-scoped by `subscription-tiers.md` §4 | **Dev 1:** Segmented trials shipped (14-day Plus general / 14-day Pro restaurant-cafe / 30-day Pro enterprise-referral). **Dev 2:** Paddle `custom_data` contract documented (`email` + `bundle` + `phone`; vertical not carried). **Dev 3:** Hardware-fingerprint trial lock shipped end-to-end (`trial_registrations` + `POST /license/trial` + `enforceTrialLock` + client `get_hardware_fingerprint`). |
+| [#23](./archived/2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md) | Free Trial Lifecycle & License Activation Workflow | Re-scoped by `subscription-tiers.md` §4 | **Dev 1:** Segmented trials shipped (14-day Plus general / 14-day Pro restaurant-cafe / 30-day Pro enterprise-referral). **Dev 2:** Paddle `custom_data` contract documented (`email` + `bundle` + `phone`; vertical not carried). **Dev 3:** Hardware-fingerprint trial lock shipped end-to-end (`trial_registrations` + `POST /license/trial` + `enforceTrialLock` + client `get_hardware_fingerprint`). |
 | [#39](./2026-08-18-adr39-midtrans-subscription-payments.md) | Midtrans QRIS Subscription Payments (Phase 2) | Implemented (2026-08-18) | **Dev 1:** Signature is plain SHA-512 (not HMAC-SHA512). **Dev 2:** Midtrans custom-field contract documented (`custom_field1` tier, `custom_field2` email, `custom_field3` period, `custom_field4` bundle). **Dev 3:** `custom_field3` period cross-checked against price map. **Dev 4:** Amount-authoritative tier resolution (amount → map lookup is primary; custom_field1 cross-checked). **Dev 5:** Failed-payment grace via `calculateGraceUntil`. **Dev 6:** Dedup by `transaction_id` only. **Dev 7:** Subscription-notification canonical string not implemented (falls through default branch). **Dev 8:** Webhook-minted key activation fast-path in `activate.go`. |
 
 > The `subscription-tiers.md` source-of-truth spec (§4 trial strategy, §3

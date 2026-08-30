@@ -11,7 +11,7 @@ status: Re-scoped — superseded by subscription-tiers.md §4 (FINAL, approved 2
 - **Author**: Technical Architecture & Security Team
 - **Related Documents**:
   - `docs/decisions/2026-07-10-license-server.md` (ADR #9: License Server Architecture)
-  - `docs/decisions/2026-07-10-subscription-tier-entitlement.md` (ADR #5: Tier Entitlements)
+  - `docs/decisions/archived/2026-07-10-subscription-tier-entitlement.md` (ADR #5: Tier Entitlements)
   - `docs/specs/hardware-fingerprint-trial-lock.md` (`SPEC-2026-TRIAL-LOCK`: Anti-Abuse Trial Lock)
   - `subscription-tiers.md` §4 (trial & conversion strategy — the replacement)
 
