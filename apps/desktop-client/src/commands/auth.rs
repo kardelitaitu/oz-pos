@@ -1,8 +1,8 @@
 /*
 last audited 25-07-26 by RSA-Agent (desktop-client slice B: auth deep read)
 crate: desktop-client | status: NEEDS-FIX | lint: CLEAN
-findings: DC-3 LOW — verify_pin command (destructive-op gate for void/topology Apply) verifies against the argon2 hash with NO rate limiting, unlike staff_login's STAFF-07 limiter; a compromised renderer can brute-force a 4-digit staff PIN in minutes within a valid session; proposed: route verify_pin through record_login_attempt_scoped per-account limits. Otherwise exemplary: STAFF-06 uniform pre-auth (no enumeration oracle) with randomized 50-200ms delay; STAFF-07 layered persistent rate limiting (3/10/30 per 60s + exponential backoff); verify_pin fails closed on malformed/placeholder hashes; picker-ticket identity binding with user_id match; server-side instance-access authorization; deterministic LRU session eviction with lazy prune; keepalive validates before refresh
-next: DC-3 in fix-order phase | perf: N/A
+findings: DC-3 FIXED — verify_pin now records attempts through the persistent per-account limiter (record_login_attempt_scoped, 5/60s per account + global 60/60s, same flow as staff_login: clear on success, failures stay counted), closing the in-session 4-digit PIN brute-force window; verification failure semantics unchanged (Ok(false) on bad PIN). Otherwise exemplary: STAFF-06 uniform pre-auth (no enumeration oracle) with randomized 50-200ms delay; STAFF-07 layered persistent rate limiting (3/10/30 per 60s + exponential backoff); verify_pin fails closed on malformed/placeholder hashes; picker-ticket identity binding with user_id match; server-side instance-access authorization; deterministic LRU session eviction with lazy prune; keepalive validates before refresh
+next: none | perf: N/A
 */
 //! Staff authentication commands — login, logout, session verification.
 //!
@@ -573,6 +573,14 @@ pub async fn session_keepalive(
 /// Used by destructive operations (topology Apply, void, etc.) to
 /// confirm the operator's identity before committing. The PIN is
 /// compared against the hash stored in the global identity DB.
+///
+/// DC-3 fix: confirmation attempts are gated by the same persistent
+/// per-account limiter as `staff_login` (STAFF-07). The session proves
+/// prior authentication, but without a limiter a compromised renderer
+/// could brute-force a 4-digit staff PIN at full speed inside a valid
+/// session. The budget is looser than login (5/60s per account) because
+/// the caller is already authenticated; successful verification clears
+/// the counter.
 #[tauri::command]
 pub async fn verify_pin(
     state: State<'_, AppState>,
@@ -582,11 +590,39 @@ pub async fn verify_pin(
     let session = state.resolve_session(&session_token)?;
     let db = state.db.lock().await;
     let store = Store::new(&db);
+
+    // Record the attempt up front (same flow as staff_login: the counter
+    // is cleared on success, failures stay counted).
+    if let Err(retry_after) = store.record_login_attempt_scoped(
+        &session.user_id,
+        None,
+        oz_core::db::staff::LoginLimits {
+            max_attempts: 5,         // per-account max
+            window_secs: 60,         // window secs
+            device_max_attempts: 10, // per-device max (no device dimension here)
+            global_max_attempts: 60, // global max
+            max_backoff_secs: 3600,  // max backoff secs
+        },
+    )? {
+        tracing::warn!(
+            user_id = %session.user_id,
+            retry_after,
+            "verify_pin rate limit exceeded"
+        );
+        return Err(AppError::Invalid(format!(
+            "Too many attempts. Try again in {retry_after}s."
+        )));
+    }
+
     let user = store
         .get_user(&session.user_id)?
         .ok_or_else(|| AppError::Invalid("user not found".into()))?;
     let valid = oz_core::auth::verify_pin(&pin, &user.pin_hash)
         .map_err(|e| AppError::Internal(format!("PIN verification failed: {e}")))?;
+    if valid {
+        // PIN correct — clear the limiter for this account.
+        store.clear_login_attempts(&session.user_id)?;
+    }
     Ok(valid)
 }
 

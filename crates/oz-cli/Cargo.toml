@@ -33,6 +33,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
 rand = { workspace = true }
+argon2 = { workspace = true }
 uuid = { workspace = true }
 csv = "1.4.0"
 

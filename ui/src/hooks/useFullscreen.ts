@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getCurrentWindow } from '@/api/tauri';
 
 function isTauri(): boolean {
   try {

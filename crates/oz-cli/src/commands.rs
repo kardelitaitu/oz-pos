@@ -1,7 +1,7 @@
 /*
 last audited 25-07-26 by RSA-Agent (oz-cli slice A: commands deep read; CLI-1 + CLI-2 FIXED 25-07-26)
 crate: oz-cli | status: SAFE | lint: CLEAN
-findings: CLI-1 FIXED — run_import_ozpkg sale imports now use the new tx-aware Store::create_sale_in_tx (the previous store.create_sale opened a nested transaction inside the import transaction and failed with cannot-start-a-transaction-within-a-transaction, rolling back sale imports). CLI-2 FIXED — init-db seeds the admin user with a real argon2 hash of the documented default PIN 1234 (never-verifying hashed_pin_placeholder locked the first-run admin out) and prints a change-it-now warning. CLI-3 LOW unchanged (raw --pin-hash accepted without PHC-format check); CLI-4 INFO unchanged (restore torn-restore risk); CLI-5 INFO unchanged (file length). Otherwise clean: parameterized SQL, single-tx import for other types, recoverable currency UTF-8 handling per RUST-07, Argon2id + AES-256-GCM export path, dry-run support
+findings: CLI-1 FIXED — run_import_ozpkg sale imports now use the new tx-aware Store::create_sale_in_tx (the previous store.create_sale opened a nested transaction inside the import transaction and failed with cannot-start-a-transaction-within-a-transaction, rolling back sale imports). CLI-2 FIXED — init-db seeds the admin user with a real argon2 hash of the documented default PIN 1234 (never-verifying hashed_pin_placeholder locked the first-run admin out) and prints a change-it-now warning. CLI-3 FIXED — run_user_create validates the --pin-hash argument as an argon2 PHC string (argon2 PHC parse + algorithm check, new argon2 workspace dep; placeholder/garbage/foreign-algorithm values are rejected up front); CLI-4 INFO unchanged (restore torn-restore risk); CLI-5 INFO unchanged (file length). Otherwise clean: parameterized SQL, single-tx import for other types, recoverable currency UTF-8 handling per RUST-07, Argon2id + AES-256-GCM export path, dry-run support
 next: CLI-3/4/5 (LOW/INFO) | perf: N/A
 */
 //! Command implementations for the `oz` CLI.
@@ -634,6 +634,24 @@ pub(crate) fn run_user_get(store: &Store<'_>, id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Validate that a `--pin-hash` argument is a well-formed argon2 PHC
+/// string (CLI-3 fix).
+///
+/// A typo'd or non-PHC value would otherwise be stored verbatim and can
+/// never verify — `verify_pin` treats unparseable hashes as a clean
+/// mismatch — silently locking the new user out. Fail closed at the CLI
+/// boundary instead.
+fn validate_phc_pin_hash(pin_hash: &str) -> Result<()> {
+    use argon2::password_hash::PasswordHash;
+    let parsed = PasswordHash::new(pin_hash)
+        .map_err(|e| anyhow::anyhow!("--pin-hash is not a valid PHC string: {e}"))?;
+    let alg = parsed.algorithm.as_str();
+    if !alg.starts_with("argon2") {
+        anyhow::bail!("--pin-hash must be an argon2 hash (got algorithm '{alg}')");
+    }
+    Ok(())
+}
+
 pub(crate) fn run_user_create(
     store: &Store<'_>,
     username: &str,
@@ -641,6 +659,11 @@ pub(crate) fn run_user_create(
     display_name: &str,
     role_id: &str,
 ) -> Result<()> {
+    // CLI-3 fix: a typo'd or non-PHC `--pin-hash` value would be stored
+    // verbatim and can never verify (verify_pin treats unparseable hashes
+    // as a clean mismatch), silently locking the new user out. Validate the
+    // argon2 PHC envelope up front with a fail-closed check.
+    validate_phc_pin_hash(pin_hash)?;
     let u = store
         .create_user(username, pin_hash, display_name, role_id)
         .map_err(|e| match &e {

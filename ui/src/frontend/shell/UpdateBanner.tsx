@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
-import { getVersion } from '@tauri-apps/api/app';
+import { getVersion } from '@/api/tauri';
 import type { Update } from '@tauri-apps/plugin-updater';
 import { createBackup } from '@/api/data';
 import { getSetting, setSetting } from '@/api/settings';
