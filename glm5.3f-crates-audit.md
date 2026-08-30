@@ -1360,6 +1360,25 @@ cart-before-tax evaluation matching `foundation::Cart` ordering), a
 
 > **modules-promotions COMPLETE** — 2 production files, ~109 lines, zero
 > new finding IDs. Campaign proceeds to modules/giftcards.
+
+---
+
+## 23. modules/giftcards — stub (stored-value instruments)
+
+Baseline: ~112 production lines. Slice A — both files read (lib.rs 86
+fully read; error.rs verified).
+
+**No new findings.** A documented stub whose stated purpose is correcting
+misplaced ownership: the `GiftCard*` types live in `modules/loyalty`
+(a different vertical) and move here on promotion with a one-release
+re-export. The promotion path already documents the invariant that
+matters — issuance/redemption inside a single transaction so a partial
+redeem can never leave a card debited without a matching sale line —
+plus the `gift-cards` feature flag and a `sales` dependency. Cross-ref:
+MSL-10 (pin serialization) should be fixed when the types move.
+
+> **modules-giftcards COMPLETE** — 2 production files, ~112 lines, zero
+> new finding IDs. Campaign proceeds to modules/kitchen.
 ---
 
 ---
