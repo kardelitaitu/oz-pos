@@ -223,7 +223,7 @@ merge history (`git log -S` + merge-ancestry), and a local test run:
 - **L1 corrected to OPEN**, **L3 marked won't-fix/by-design** — see §5.
 - Test count corrected: **24**, not "25+".
 
-### 8.1 Bug hunt (2026-08-30, TDD) — 19 bugs found & fixed
+### 8.1 Bug hunt (2026-08-30, TDD) — 21 bugs found & fixed
 
 A focused hunt over `admin.js`/`admin-utils.js` against the Go server's
 actual JSON shapes found six real bugs — none caught by the pre-existing
@@ -290,3 +290,21 @@ fixes — three more, including one self-inflicted regression
 Round-4 commits: `70d5d869`, `aa808a93`, `d183645e`. Lesson recorded:
 timeout/abort primitives are themselves compatibility surfaces — a
 hardening fix can regress more than the bug it cures.
+
+**Round 5** (same day) completed full end-to-end coverage of the admin
+area — every SPA file plus the worker's admin auth gate — and found two
+bugs in the one-time-code exchange (worker suite 17→19, full website
+644/644):
+
+| # | Sev | Bug | Fix |
+|---|-----|-----|-----|
+| B24 | P1 | exchange-code failure on `admin.ozpos.my.id` 302'd to the MARKETING host's `/admin/login` — which has no `/api/v1/` proxy (gated to `DASHBOARD_HOSTS`), so login.js's relative POSTs 404: a dead login form, user stranded | redirect to the clean URL on the same host; the no-session gate serves login locally and the destination survives re-login |
+| B24b | P1 | the exchange SUCCESS 302 used `url.pathname` raw — `/?code=x` at path `//evil.com` produced `Location: //evil.com/`: a protocol-relative **open redirect** on the admin host | path forced single-slash (`/^[/\\]+/`) before reuse |
+
+Round-5 commit: `d3085d8e`. The pre-existing worker test asserted the
+marketing bounce — it pinned the bug and was corrected with a note.
+B23 (innerHTML+= breaking SVG viewBox) was investigated and dropped:
+the HTML parser's SVG attribute adjustment fixes camelCase attrs.
+**Coverage is now complete**: admin.js, login.js, admin-utils.js,
+theme.js, index.html, login.html, and the worker admin gate have each
+been read end-to-end during the hunt.

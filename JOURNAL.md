@@ -6860,3 +6860,48 @@ admin-dashboard.test.ts edits pass against all my rewires (642 green).
 stacking, no URL state (feature), session-token fetch per api() call
 (caching risks stale tokens after rotation — needs worker-side contract
 review first).
+
+## 2026-08-30 — Admin bug hunt round 5: full-coverage sweep + worker exchange flow (B24)
+
+**Problem:** Fifth loop. Completed the coverage of the admin SPA (every
+file now read end-to-end across the hunt) and extended into the worker's
+admin auth surface — the last piece of the website>admin area. Two bugs
+fixed, one hypothesis dropped (worker suite 17 -> 19; admin-utils
+unchanged at 76):
+
+1. **B24** exchange-code FAILURE on admin.ozpos.my.id 302'd to
+   https://ozpos.my.id/admin/login — the marketing host has NO /api/v1/
+   proxy (gated to DASHBOARD_HOSTS), and login.js computes API='' for
+   any *.ozpos.my.id host -> relative POSTs 404 -> user stranded on a
+   login form that cannot submit. Now redirects to the clean URL on the
+   SAME host; the no-session gate serves login locally and the original
+   destination survives the round-trip. The pre-existing worker test
+   ASSERTED the marketing bounce — it pinned the bug; corrected.
+2. **B24b** (found while fixing B24): the exchange SUCCESS 302 used
+   url.pathname raw — /?code=x at path '//evil.com' produced Location:
+   '//evil.com/' — a protocol-relative OPEN REDIRECT on the admin host.
+   Path now forced single-slash via /^[/\\\\]+/.
+
+**B23 dropped:** suspected innerHTML+= on chart cards breaking SVG
+viewBox — wrong: the HTML parser's SVG attribute adjustment fixes
+camelCase attrs during foreign-content parsing. Verified by reading the
+spec path, no test churn.
+
+**Full-coverage clean bill (all files now swept end-to-end):**
+admin.js (383 lines), login.js (297), admin-utils.js, theme.js,
+index.html, login.html, worker.ts admin gate (session/logout/exchange/
+proxy/rewrites). Cookie set/clear domains match (exact host both sides).
+/__oz/session echoes the cookie unvalidated — backend validates, SPA
+shows access-denied on 401; acceptable.
+
+**Commits:** d3085d8e (B24+B24b).
+
+**Test counts:** worker.test.ts 17 -> 19; admin-utils 76; full website
+644/644 (39 files); drift 0.
+
+**Hunt status:** the website>admin area is now EXHAUSTED — 21 bugs fixed
+across 5 rounds (B1-B6, B7+B10-B14, B15-B16+B18-B19, B20-B22, B24+B24b),
+3 candidates investigated-and-dropped with evidence (B17 unreachable,
+B23 parser fixes it, B8/B9 never existed as separate findings). Remaining
+logged residuals are perf/cosmetic (FX fetch cache, flash stacking,
+session-token caching, URL state = feature).
