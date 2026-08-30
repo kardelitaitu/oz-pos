@@ -196,7 +196,7 @@ fn update_changes_all_fields() {
 
     p.name = "All Updated".into();
     p.description = "New desc".into();
-    p.promo_type = "fixed".into();
+    p.promo_type = "fixed_amount".into();
     p.value_minor = 500;
     p.min_qty = Some(2);
     p.trigger_sku = Some("SKU-TRIGGER".into());
@@ -211,7 +211,7 @@ fn update_changes_all_fields() {
     let found = store.get_promotion("all").unwrap().unwrap();
     assert_eq!(found.name, "All Updated");
     assert_eq!(found.description, "New desc");
-    assert_eq!(found.promo_type, "fixed");
+    assert_eq!(found.promo_type, "fixed_amount");
     assert_eq!(found.value_minor, 500);
     assert_eq!(found.min_qty, Some(2));
     assert_eq!(found.trigger_sku, Some("SKU-TRIGGER".to_owned()));
@@ -409,4 +409,93 @@ fn record_application_negative_discount_rejected() {
     };
     let err = store.record_promotion_application(&app).unwrap_err();
     assert!(matches!(err, CoreError::Validation { field, .. } if field == "discount_minor"));
+}
+
+// ── Validation hardening (PROMO-8) ──────────────────────────────────
+
+#[test]
+fn create_rejects_percentage_value_over_100() {
+    let store = setup();
+    let mut p = test_promo("v-over");
+    p.value_minor = 150;
+    let err = store.create_promotion(&p).unwrap_err();
+    assert!(matches!(err, CoreError::Validation { field, .. } if field == "value_minor"));
+    assert!(store.get_promotion("v-over").unwrap().is_none());
+}
+
+#[test]
+fn create_rejects_percentage_value_zero() {
+    let store = setup();
+    let mut p = test_promo("v-zero");
+    p.value_minor = 0;
+    let err = store.create_promotion(&p).unwrap_err();
+    assert!(matches!(err, CoreError::Validation { field, .. } if field == "value_minor"));
+}
+
+#[test]
+fn create_rejects_buy_x_get_y_without_trigger_sku() {
+    let store = setup();
+    let mut p = test_promo("v-bxgy");
+    p.promo_type = "buy_x_get_y".into();
+    p.trigger_sku = None;
+    let err = store.create_promotion(&p).unwrap_err();
+    assert!(matches!(err, CoreError::Validation { field, .. } if field == "trigger_sku"));
+}
+
+#[test]
+fn create_rejects_buy_x_get_y_non_positive_quantities() {
+    let store = setup();
+    let mut p = test_promo("v-bxgy-qty");
+    p.promo_type = "buy_x_get_y".into();
+    p.trigger_sku = Some("COFFEE".into());
+    p.min_qty = Some(0);
+    p.reward_qty = Some(1);
+    let err = store.create_promotion(&p).unwrap_err();
+    assert!(matches!(err, CoreError::Validation { field, .. } if field == "min_qty"));
+
+    p.min_qty = Some(2);
+    p.reward_qty = Some(-3);
+    let err = store.create_promotion(&p).unwrap_err();
+    assert!(matches!(err, CoreError::Validation { field, .. } if field == "reward_qty"));
+}
+
+#[test]
+fn create_accepts_valid_buy_x_get_y() {
+    let store = setup();
+    let mut p = test_promo("v-bxgy-ok");
+    p.promo_type = "buy_x_get_y".into();
+    p.value_minor = 100;
+    p.trigger_sku = Some("COFFEE".into());
+    p.reward_sku = Some("COOKIE".into());
+    p.min_qty = Some(2);
+    p.reward_qty = Some(1);
+    store.create_promotion(&p).unwrap();
+    assert!(store.get_promotion("v-bxgy-ok").unwrap().is_some());
+}
+
+#[test]
+fn create_accepts_fixed_amount_any_non_negative_value() {
+    let store = setup();
+    let mut p = test_promo("v-fixed");
+    p.promo_type = "fixed_amount".into();
+    p.value_minor = 0; // fixed discount may be zero or any amount
+    store.create_promotion(&p).unwrap();
+    let mut p2 = test_promo("v-fixed-big");
+    p2.promo_type = "fixed_amount".into();
+    p2.value_minor = 999_999;
+    store.create_promotion(&p2).unwrap();
+}
+
+#[test]
+fn update_rejects_invalid_value_even_when_name_valid() {
+    // COR-12 asymmetry: update used to validate only the name.
+    let store = setup();
+    let mut p = test_promo("v-upd");
+    store.create_promotion(&p).unwrap();
+    p.value_minor = 500; // percentage percent out of range
+    let err = store.update_promotion(&p).unwrap_err();
+    assert!(matches!(err, CoreError::Validation { field, .. } if field == "value_minor"));
+    // The stored row is untouched.
+    let stored = store.get_promotion("v-upd").unwrap().unwrap();
+    assert_eq!(stored.value_minor, 10);
 }

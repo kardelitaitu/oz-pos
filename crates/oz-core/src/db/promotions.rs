@@ -13,6 +13,88 @@ use crate::{Promotion, PromotionApplication};
 
 use super::Store;
 
+/// Validate a promotion before it reaches the database (create and
+/// update — the previous create-only, name-only asymmetry was COR-12
+/// class). Rules (PROMO-8):
+/// - `name` must not be blank; `promo_type` must parse as a
+///   [`PromotionType`]
+/// - `value_minor` must not be negative; for `percentage` and
+///   `buy_x_get_y` it is a percent and must be `1..=100`
+/// - `min_order_minor` must not be negative
+/// - `buy_x_get_y` requires a non-empty `trigger_sku` and, when set,
+///   `min_qty >= 1` and `reward_qty >= 1`
+fn validate_promotion(promo: &Promotion) -> Result<(), CoreError> {
+    if promo.name.trim().is_empty() {
+        return Err(CoreError::Validation {
+            field: "name",
+            message: "promotion name must not be empty".into(),
+        });
+    }
+    let promo_type = crate::PromotionType::from_str(promo.promo_type.trim()).ok_or_else(|| {
+        CoreError::Validation {
+            field: "promo_type",
+            message: "invalid promotion type".into(),
+        }
+    })?;
+    if promo.value_minor < 0 {
+        return Err(CoreError::Validation {
+            field: "value_minor",
+            message: "value_minor must not be negative".into(),
+        });
+    }
+    if promo.min_order_minor < 0 {
+        return Err(CoreError::Validation {
+            field: "min_order_minor",
+            message: "min_order_minor must not be negative".into(),
+        });
+    }
+    match promo_type {
+        crate::PromotionType::Percentage | crate::PromotionType::BuyXGetY => {
+            if promo.value_minor < 1 || promo.value_minor > 100 {
+                return Err(CoreError::Validation {
+                    field: "value_minor",
+                    message: format!(
+                        "{} value_minor is a percent and must be between 1 and 100",
+                        promo_type.as_str()
+                    ),
+                });
+            }
+        }
+        crate::PromotionType::FixedAmount => {}
+    }
+    if promo_type == crate::PromotionType::BuyXGetY {
+        if promo
+            .trigger_sku
+            .as_deref()
+            .unwrap_or_default()
+            .trim()
+            .is_empty()
+        {
+            return Err(CoreError::Validation {
+                field: "trigger_sku",
+                message: "buy_x_get_y promotion requires a trigger_sku".into(),
+            });
+        }
+        if let Some(min_qty) = promo.min_qty {
+            if min_qty < 1 {
+                return Err(CoreError::Validation {
+                    field: "min_qty",
+                    message: "buy_x_get_y min_qty must be at least 1".into(),
+                });
+            }
+        }
+        if let Some(reward_qty) = promo.reward_qty {
+            if reward_qty < 1 {
+                return Err(CoreError::Validation {
+                    field: "reward_qty",
+                    message: "buy_x_get_y reward_qty must be at least 1".into(),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
 impl Store<'_> {
     /// List all promotions, ordered by name.
     pub fn list_promotions(&self) -> Result<Vec<Promotion>, CoreError> {
@@ -48,32 +130,7 @@ impl Store<'_> {
 
     /// Insert a new promotion.
     pub fn create_promotion(&self, promo: &Promotion) -> Result<Promotion, CoreError> {
-        if promo.name.trim().is_empty() {
-            return Err(CoreError::Validation {
-                field: "name",
-                message: "promotion name must not be empty".into(),
-            });
-        }
-        if promo.promo_type.trim().is_empty()
-            || crate::PromotionType::from_str(promo.promo_type.trim()).is_none()
-        {
-            return Err(CoreError::Validation {
-                field: "promo_type",
-                message: "invalid promotion type".into(),
-            });
-        }
-        if promo.value_minor < 0 {
-            return Err(CoreError::Validation {
-                field: "value_minor",
-                message: "value_minor must not be negative".into(),
-            });
-        }
-        if promo.min_order_minor < 0 {
-            return Err(CoreError::Validation {
-                field: "min_order_minor",
-                message: "min_order_minor must not be negative".into(),
-            });
-        }
+        validate_promotion(promo)?;
         self.conn.execute(
             "INSERT INTO promotions (id, name, description, promo_type, value_minor,
                                      min_qty, trigger_sku, reward_sku, reward_qty,
@@ -104,12 +161,7 @@ impl Store<'_> {
 
     /// Update an existing promotion by id.
     pub fn update_promotion(&self, promo: &Promotion) -> Result<Promotion, CoreError> {
-        if promo.name.trim().is_empty() {
-            return Err(CoreError::Validation {
-                field: "name",
-                message: "promotion name must not be empty".into(),
-            });
-        }
+        validate_promotion(promo)?;
         let rows = self.conn.execute(
             "UPDATE promotions
              SET name = ?1, description = ?2, promo_type = ?3, value_minor = ?4,
