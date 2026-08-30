@@ -457,6 +457,49 @@
     return !!(node && node._ozCdTimer);
   }
 
+  // setAuthMode applies the login form's OTP/password tab state.
+  // Extracted from login.js so the mode-switch guards are unit-testable.
+  // B21 fix: the tab buttons called it unconditionally — clicking the
+  // other tab while a login request was in flight flipped currentMode,
+  // and the response handler then wrote the WRONG mode's button label
+  // (and could start the OTP cooldown on the password tab). opts
+  // .isSubmitting() lets the caller veto the flip mid-submit; the
+  // function returns whether it applied so login.js can gate currentMode.
+  function setAuthMode(mode, els, opts) {
+    els = els || {};
+    if (opts && typeof opts.isSubmitting === 'function' && opts.isSubmitting()) return false;
+    var tabOtp = els.tabOtp, tabPwd = els.tabPwd, pwdGroup = els.pwdGroup,
+        otpGroup = els.otpGroup, loginBtn = els.loginBtn, cd = els.cd;
+    if (mode === 'otp') {
+      if (tabOtp) tabOtp.classList.add('active');
+      if (tabPwd) tabPwd.classList.remove('active');
+      if (pwdGroup) pwdGroup.classList.add('hidden');
+      // B18: the resend cooldown is enforced server-side and its countdown
+      // keeps running across a tab switch — re-show it when returning.
+      if (cd && countdownActive(cd)) cd.classList.remove('hidden');
+      var isCodeActive = otpGroup && !otpGroup.classList.contains('hidden');
+      // B14: never overwrite an active lockout countdown label.
+      if (loginBtn && !isLockoutActive(loginBtn)) {
+        if (isCodeActive) {
+          loginBtn.textContent = t('login.verifyCode');
+        } else {
+          if (otpGroup) otpGroup.classList.add('hidden');
+          loginBtn.textContent = t('login.sendCode');
+        }
+      } else if (!isCodeActive && otpGroup) {
+        otpGroup.classList.add('hidden');
+      }
+    } else {
+      if (tabOtp) tabOtp.classList.remove('active');
+      if (tabPwd) tabPwd.classList.add('active');
+      if (pwdGroup) pwdGroup.classList.remove('hidden');
+      if (otpGroup) otpGroup.classList.add('hidden');
+      if (cd) cd.classList.add('hidden');
+      if (loginBtn && !isLockoutActive(loginBtn)) loginBtn.textContent = t('login.signInPassword');
+    }
+    return true;
+  }
+
   // startLockoutCountdown drives the login button's 429 lockout label.
   // Extracted from login.js showLockoutCountdown so the timer semantics
   // are unit-testable (login.js has DOM boot side effects).
@@ -717,6 +760,7 @@
     startCountdown: startCountdown,
     stopCountdown: stopCountdown,
     countdownActive: countdownActive,
+    setAuthMode: setAuthMode,
     busyWrap: busyWrap,
     fetchFxRate: fetchFxRate,
     mountModal: mountModal,

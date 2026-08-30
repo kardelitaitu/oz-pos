@@ -51,47 +51,24 @@ function setLoading(l, msg) {
 }
 
 function setAuthMode(mode) {
+  // B21 fix: the mode logic now lives in admin-utils.setAuthMode
+  // (unit-tested), with an in-flight veto — clicking the other tab while
+  // a login request is pending used to flip currentMode under the
+  // response handler, which then wrote the wrong mode's button label and
+  // could start the OTP cooldown on the password tab. A refused flip
+  // leaves the form exactly as it was until the request settles.
+  const els = {
+    tabOtp: document.getElementById('tab-otp'),
+    tabPwd: document.getElementById('tab-password'),
+    pwdGroup: document.getElementById('password-group'),
+    otpGroup: document.getElementById('otp-group'),
+    loginBtn: document.getElementById('login-btn'),
+    cd: document.getElementById('otp-cooldown'),
+  };
+  if (!window.AdminUtils.setAuthMode(mode, els, { isSubmitting: () => isSubmitting })) return;
   currentMode = mode;
   hideError();
   hideSuccess();
-
-  const tabOtp = document.getElementById('tab-otp');
-  const tabPwd = document.getElementById('tab-password');
-  const pwdGroup = document.getElementById('password-group');
-  const otpGroup = document.getElementById('otp-group');
-  const loginBtn = document.getElementById('login-btn');
-  const cd = document.getElementById('otp-cooldown');
-
-  if (mode === 'otp') {
-    if (tabOtp) tabOtp.classList.add('active');
-    if (tabPwd) tabPwd.classList.remove('active');
-    if (pwdGroup) pwdGroup.classList.add('hidden');
-    // B18: the resend cooldown is enforced server-side and its countdown
-    // keeps running across a tab switch — re-show it when returning.
-    if (cd && countdownActive(cd)) cd.classList.remove('hidden');
-    
-    // Check if code was already sent
-    const isCodeActive = otpGroup && !otpGroup.classList.contains('hidden');
-    // B14 fix: never overwrite an active lockout countdown label — the
-    // button stays disabled and the timer owns its text until it ends.
-    if (loginBtn && !isLockoutActive(loginBtn)) {
-      if (isCodeActive) {
-        loginBtn.textContent = t('login.verifyCode');
-      } else {
-        if (otpGroup) otpGroup.classList.add('hidden');
-        loginBtn.textContent = t('login.sendCode');
-      }
-    } else if (!isCodeActive && otpGroup) {
-      otpGroup.classList.add('hidden');
-    }
-  } else {
-    if (tabOtp) tabOtp.classList.remove('active');
-    if (tabPwd) tabPwd.classList.add('active');
-    if (pwdGroup) pwdGroup.classList.remove('hidden');
-    if (otpGroup) otpGroup.classList.add('hidden');
-    if (cd) cd.classList.add('hidden');
-    if (loginBtn && !isLockoutActive(loginBtn)) loginBtn.textContent = t('login.signInPassword');
-  }
 }
 
 function startOtpCooldown(seconds = 60) {

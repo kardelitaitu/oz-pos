@@ -805,3 +805,60 @@ describe('admin-utils AbortSignal.timeout availability (B20: regression from B10
     expect(typeof AbortSignal.timeout).toBe('function');
   });
 });
+
+describe('admin-utils setAuthMode (B21: tab switch mid-submit corrupts the other mode)', () => {
+  // login.js tab buttons call setAuthMode unconditionally. Clicking
+  // Password while an OTP request is in flight flips currentMode; when
+  // the response lands, the completion path writes the OTP-mode label
+  // onto the password tab's button ("Send Verification Code" with a
+  // password field showing) and can even start the OTP cooldown while
+  // the user is on the password tab. setAuthMode must refuse mode flips
+  // while a submit is in flight.
+  const buildLoginDom = () => {
+    document.body.innerHTML = `
+      <button id="tab-otp"></button><button id="tab-password"></button>
+      <div id="password-group"></div><div id="otp-group" class="hidden"></div>
+      <button id="login-btn"></button><div id="otp-cooldown" class="hidden"></div>`;
+    return {
+      tabOtp: document.getElementById('tab-otp'),
+      tabPwd: document.getElementById('tab-password'),
+      pwdGroup: document.getElementById('password-group'),
+      otpGroup: document.getElementById('otp-group'),
+      loginBtn: document.getElementById('login-btn'),
+      cd: document.getElementById('otp-cooldown'),
+    };
+  };
+
+  it('switches modes normally when not submitting', () => {
+    const d = buildLoginDom();
+    utils.setAuthMode('password', d, { isSubmitting: () => false });
+    expect(d.pwdGroup.classList.contains('hidden')).toBe(false);
+    expect(d.tabPwd.classList.contains('active')).toBe(true);
+    expect(d.loginBtn.textContent).toBe('Sign In with Password');
+  });
+
+  it('refuses the flip while a submit is in flight', () => {
+    const d = buildLoginDom();
+    utils.setAuthMode('otp', d, { isSubmitting: () => false }); // baseline
+    const pwdLabel = 'Sign In with Password';
+    utils.setAuthMode('password', d, { isSubmitting: () => true });
+    // Nothing changed: still OTP mode.
+    expect(d.tabOtp.classList.contains('active')).toBe(true);
+    expect(d.pwdGroup.classList.contains('hidden')).toBe(true);
+    expect(d.loginBtn.textContent).not.toBe(pwdLabel);
+  });
+
+  it('still re-shows an active cooldown when not submitting', () => {
+    vi.useFakeTimers();
+    try {
+      const d = buildLoginDom();
+      utils.setAuthMode('otp', d, { isSubmitting: () => false });
+      utils.startCountdown(d.cd, 30, (s) => `in ${s}`, () => {});
+      d.cd.classList.add('hidden'); // pretend a password switch hid it
+      utils.setAuthMode('otp', d, { isSubmitting: () => false });
+      expect(d.cd.classList.contains('hidden')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
