@@ -122,6 +122,26 @@ must add storage-key sanitization.
 
 ---
 
+## 30. crates/oz-reporting — analytics (margin, menu engineering, daily)
+
+Baseline: ~630 production lines. Slice A — all 6 files (margin.rs 108
+and menu_engineering.rs 210 fully read; daily_summary/metrics/error/lib
+verified).
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| R-1 | ℹ️ INFO | crates/oz-reporting/src/menu_engineering.rs:133 | `merge_same_product_rows` keeps the first-seen unit price/cost (the revenue-descending SQL order's first row — not the mode), so merged `margin_per_unit` can misrepresent the product. | Derive unit price as `total_revenue / total_volume`, or document the heuristic. |
+| R-2 | ℹ️ INFO | crates/oz-reporting/src/daily_summary.rs:79 | All reporting predicates wrap `DATE(s.created_at)` — non-sargable, full scans on large sales tables. | Sargable range predicates (`created_at >= start AND < end+1d`) when volume grows. |
+
+Cost-snapshot semantics are exemplary: `COALESCE(sl.cost_minor,
+p.cost_minor, 0)` prefers the checkout-time snapshot (migration 135)
+with documented fallbacks for legacy/deleted products.
+
+> **oz-reporting COMPLETE** — 6 production files, ~630 lines, two INFO.
+> Campaign proceeds to crates/oz-logging.
+
+---
+
 ## 25. crates/oz-hal — hardware abstraction layer
 
 Baseline: ~3.2k production lines across 28 files. Slice A (registry.rs
