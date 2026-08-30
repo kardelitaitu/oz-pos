@@ -32,6 +32,12 @@ pub enum PaymentError {
     #[error("invalid card: {0}")]
     InvalidCard(String),
 
+    /// The payment instrument expired before settlement (PAY-8: an unpaid
+    /// QRIS QR past its validity window — previously mis-mapped to
+    /// `InvalidCard`, which reads as a card problem to the UI).
+    #[error("payment expired: {0}")]
+    Expired(String),
+
     /// The transaction is a duplicate of a previously processed transaction.
     #[error("duplicate transaction: {0}")]
     Duplicate(String),

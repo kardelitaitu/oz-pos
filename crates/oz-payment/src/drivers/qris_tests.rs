@@ -37,12 +37,6 @@ fn qris_base_url_custom_endpoint() {
 }
 
 #[test]
-fn qris_default_constructs() {
-    let proc = QrisPaymentProcessor::default();
-    assert!(!proc.sandbox);
-}
-
-#[test]
 fn qris_from_env_missing_key() {
     let result = QrisPaymentProcessor::from_env();
     match std::env::var("MIDTRANS_SERVER_KEY") {

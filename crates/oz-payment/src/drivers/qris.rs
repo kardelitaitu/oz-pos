@@ -4,6 +4,7 @@ crate: oz-payment | status: SAFE | lint: CLEAN
 findings: PAY-1 HIGH parse_amount unwrap_or(0) zeroes Midtrans "14500.00"-format amounts (authorize/capture/refund/receipt); PAY-2 fresh order_id per call defeats Midtrans idempotency on retry; PAY-3 refund ignores partial amount; PAY-6 sale() returns SCAN_QR protocol string in message, success = QR-issued not settled (60s poll vs 300s QR validity); PAY-7 Default constructs empty-key processor; PAY-8 expire mapped to InvalidCard
 next: fix amount parsing (PAY-1), honor idempotency (PAY-2), partial refund (PAY-3) | perf: poll loop sleeps between attempts, early-exits on settled status
 fixed 2026-07-25 (glm-5.3 review P1 pass): PAY-1 parse_amount now returns Result — decimal "14500.00" forms parse 1:1 into exp-0 IDR minor units (inverse of to_amount_string), non-zero fractions and malformed input are InvalidResponse instead of silent zeros (refund refund_amount included); PAY-2 order_id_for() reuses PaymentRequest.idempotency_key (charset-filtered, Midtrans 50-char cap) with fresh fallback when absent
+fixed 2026-07-25 (glm-5.3 review P2 pass): PAY-3 refund now honors Some(amount) — partial refunds submit the amount in whole IDR minor units, non-IDR rejected pre-flight, None keeps full-refund null; PAY-6 sale/capture docs now state the honest two-phase contract (success = QR issued; capture polls ~60s per call vs 300s QR validity, re-enter on Timeout); PAY-7 Default (empty-key processor) removed — construct via new/from_env/sandbox_from_env; PAY-8 expire maps to the new PaymentError::Expired instead of InvalidCard
 */
 //! QRIS payment processor — implements [`PaymentProcessor`] using the
 //! Midtrans REST API for Indonesian QRIS (Quick Response Code Indonesian
@@ -20,7 +21,10 @@ fixed 2026-07-25 (glm-5.3 review P1 pass): PAY-1 parse_amount now returns Result
 //!    `payment_type: "qris"` and returns a `transaction_id`.
 //! 2. **`capture`** — Polls the transaction status until `settlement`
 //!    or `expire`.
-//! 3. **`sale`** — Overridden to authorize + poll immediately (single call).
+//! 3. **`sale`** — Charges the QR and returns it immediately
+//!    (`SCAN_QR|<order_id>[|<qr_url>]` in `message`); `success: true`
+//!    means the QR was **issued**, not settled. The UI displays the QR
+//!    and calls `capture` to poll for settlement.
 //! 4. **`refund`** — Submits a refund via the Midtrans Refund API.
 //! 5. **`void`** — Cancels a pending transaction via the Cancel API.
 //!
@@ -447,7 +451,15 @@ impl QrisPaymentProcessor {
                         }));
                     }
                     "expire" => {
-                        return Err(PaymentError::InvalidCard(tx.status_message.clone()));
+                        // PAY-8: expiry is not a card problem — the customer
+                        // never completed payment before the QR validity
+                        // window closed. Surface it as `Expired` so the UI
+                        // can offer "regenerate QR" instead of "check card".
+                        return Err(PaymentError::Expired(if tx.status_message.is_empty() {
+                            format!("QRIS transaction {} expired", tx.order_id)
+                        } else {
+                            tx.status_message.clone()
+                        }));
                     }
                     _ => {
                         // Still pending — keep polling.
@@ -501,6 +513,13 @@ impl PaymentProcessor for QrisPaymentProcessor {
     }
 
     /// Poll for settlement of a QRIS transaction.
+    ///
+    /// Polls at most [`MAX_POLL_ATTEMPTS`] × [`POLL_INTERVAL_MS`] (≈60 s)
+    /// per call — a per-call budget, deliberately shorter than the QR's
+    /// full [`QRIS_EXPIRY_SECS`] (300 s) validity so one IPC call never
+    /// blocks for the whole window. On [`PaymentError::Timeout`] the QR
+    /// is still alive: callers should re-enter `capture` with the same
+    /// order id until it settles or [`PaymentError::Expired`] arrives.
     async fn capture(&self, transaction_id: &str) -> Result<PaymentResult, PaymentError> {
         let tx = self.poll_status(transaction_id).await?;
 
@@ -519,6 +538,16 @@ impl PaymentProcessor for QrisPaymentProcessor {
     }
 
     /// Execute a complete QRIS sale: charge + poll for settlement.
+    ///
+    /// # Two-phase contract (PAY-6)
+    ///
+    /// `sale` only **issues** the QR — `success: true` means Midtrans
+    /// accepted the charge and a QR exists, NOT that money moved. The
+    /// QR string is returned in `message` as
+    /// `SCAN_QR|<order_id>[|<qr_url>]` for the UI to render; the UI then
+    /// calls [`PaymentProcessor::capture`] with the returned
+    /// `transaction_id` to poll for settlement (see `capture` for the
+    /// per-call poll budget vs. the 300 s QR validity window).
     async fn sale(&self, request: &PaymentRequest) -> Result<PaymentResult, PaymentError> {
         let order_id = Self::order_id_for(request);
         let charge = self.charge_qris(request, &order_id).await?;
@@ -553,14 +582,34 @@ impl PaymentProcessor for QrisPaymentProcessor {
     }
 
     /// Refund a settled QRIS transaction.
+    ///
+    /// With `amount: None` this is a full refund (Midtrans `amount: null`).
+    /// With `Some(amount)` a partial refund is submitted — the amount is
+    /// sent as whole IDR minor units (for IDR the minor unit IS the
+    /// Rupiah, mirroring `to_amount_string`'s inverse). Non-IDR amounts
+    /// are rejected before any network call (PAY-3: the amount parameter
+    /// used to be ignored entirely, turning every partial refund into a
+    /// full refund).
     async fn refund(
         &self,
         transaction_id: &str,
-        _amount: Option<Money>,
+        amount: Option<Money>,
     ) -> Result<PaymentResult, PaymentError> {
+        let refund_amount = match amount {
+            None => serde_json::json!(null),
+            Some(m) => {
+                if m.currency != Currency(*b"IDR") {
+                    return Err(PaymentError::Unsupported(format!(
+                        "QRIS refunds support IDR only, got {}",
+                        m.currency
+                    )));
+                }
+                serde_json::json!(m.minor_units)
+            }
+        };
         let refund_body = serde_json::json!({
             "refund_key": format!("refund-{}-{}", transaction_id, uuid::Uuid::now_v7()),
-            "amount": null, // full refund
+            "amount": refund_amount,
             "reason": "requested_by_merchant"
         });
 
@@ -669,12 +718,6 @@ impl PaymentProcessor for QrisPaymentProcessor {
 
     fn device_info(&self) -> DeviceInfo {
         DeviceInfo::new("Midtrans", "QRIS", "cloud")
-    }
-}
-
-impl Default for QrisPaymentProcessor {
-    fn default() -> Self {
-        Self::new("", false)
     }
 }
 

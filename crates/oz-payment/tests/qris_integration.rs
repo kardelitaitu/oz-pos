@@ -17,7 +17,7 @@ use oz_payment::drivers::qris::QrisPaymentProcessor;
 use oz_payment::types::{PaymentMethod, PaymentRequest};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
-    matchers::{method, path},
+    matchers::{body_partial_json, method, path},
 };
 
 /// Helper: construct an IDR currency.
@@ -280,6 +280,68 @@ async fn refund_happy_path() {
     let result = proc.refund("order-refund", None).await.unwrap();
     assert!(result.success);
     assert_eq!(result.amount_charged.minor_units, 25000);
+}
+
+// PAY-3: a partial refund must carry the requested amount to Midtrans
+// (the driver used to ignore the parameter entirely, refunding in full).
+#[tokio::test]
+async fn refund_partial_amount_is_sent() {
+    let mock_server = MockServer::start().await;
+
+    let expected = Mock::given(method("POST"))
+        .and(path("/order-partial/refund"))
+        // partial-JSON: the body also carries a random `refund_key`.
+        .and(body_partial_json(serde_json::json!({
+            "amount": 7500,
+            "reason": "requested_by_merchant"
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "transaction_id": "txn_partial_001",
+            "refund_amount": "7500.00",
+            "status_code": "200",
+            "status_message": "Success, refund transaction is created"
+        })))
+        .expect(1)
+        .mount_as_scoped(&mock_server)
+        .await;
+
+    let proc = QrisPaymentProcessor::new_with_endpoint(MOCK_SERVER_KEY, &mock_server.uri(), false);
+
+    let result = proc
+        .refund(
+            "order-partial",
+            Some(Money {
+                minor_units: 7500,
+                currency: idr(),
+            }),
+        )
+        .await
+        .unwrap();
+    assert!(result.success);
+    // The echoed refund_amount parses 1:1 for exp-0 IDR (PAY-1).
+    assert_eq!(result.amount_charged.minor_units, 7500);
+    // Dropping the scoped guard asserts the expect(1) hit count.
+    drop(expected);
+}
+
+// PAY-3: non-IDR partial refunds are rejected before any network call.
+#[tokio::test]
+async fn refund_rejects_non_idr_amount() {
+    let mock_server = MockServer::start().await;
+
+    let proc = QrisPaymentProcessor::new_with_endpoint(MOCK_SERVER_KEY, &mock_server.uri(), false);
+
+    let err = proc
+        .refund(
+            "order-usd",
+            Some(Money {
+                minor_units: 100,
+                currency: Currency(*b"USD"),
+            }),
+        )
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("IDR"), "got: {err}");
 }
 
 #[tokio::test]
