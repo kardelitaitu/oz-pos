@@ -125,6 +125,37 @@ describe('AccountView — not signed in', () => {
   });
 });
 
+// ── Cookie-only session (R1 httpOnly cookie, no sessionStorage) ────────
+
+describe('AccountView — cookie-only session (R1)', () => {
+  it('loads the dashboard when the session exists only in the httpOnly cookie (P2)', async () => {
+    // Regression: the initial-state gate used to require a sessionStorage
+    // token, so a session living ONLY in the Worker's httpOnly cookie (e.g.
+    // sessionStorage cleared by another tab) showed "You're not signed in"
+    // instead of the dashboard.
+    sessionStorage.clear();
+    mockFetch((url) => {
+      if (url === '/__oz/session') return okJson({ token: 'cookie.token' });
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'cookie@test.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-COOKIE', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      // Dashboard loaded — NOT the anon prompt.
+      assertNoText(container, "You're not signed in.");
+      assertText(container, 'License');
+      assertText(container, 'cookie@test.com');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
 // ── Not configured state ──────────────────────────────────────────────
 
 describe('AccountView — not configured', () => {
