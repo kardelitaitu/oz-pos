@@ -15,20 +15,9 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
     }
 
     // ── Helpers ──────────────────────────────────────────────────────
-    function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
-    // Escape HTML entities for any API-sourced string interpolated into
-    // innerHTML (defense-in-depth — donut legend labels, chart text).
-    function escapeHtml(s) {
-      return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-    }
-    function fmtIdr(val) { return 'Rp ' + Math.round(val).toLocaleString('id-ID'); }
-    function fmtUsd(val) { return '$' + Number(val).toFixed(2); }
-
-    function statusPill(status) {
-      const map = { active:['pill-ok'], unused:['pill-muted'], grace_period:['pill-warn'], expired:['pill-bad'], revoked:['pill-bad'], paused:['pill-warn'], free:['pill-muted'], plus:['pill-ok'], pro:['pill-warn'], premium:['pill-ok'], enterprise:['pill-ok'] };
-      const cls = (map[status] || ['pill-muted'])[0];
-      return el('span', 'pill ' + cls, status || '—');
-    }
+    // el, escapeHtml, fmtIdr, fmtUsd, statusPill, svgChart, svgDonut are
+    // defined in admin-utils.js (loaded first) so they're unit-testable.
+    // admin-utils.js sets these as globals for backward compatibility.
 
     async function api(path, body) {
       const token = (await (await fetch('/__oz/session')).json()).token;
@@ -53,71 +42,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
     }
 
     // ── SVG chart helpers ────────────────────────────────────────────
-    function svgChart(id, data, series, opts) {
-      // Guard against empty / NaN data (M1) — render a flat baseline
-      // instead of a broken SVG (Math.max(...[]) === -Infinity).
-      if (!data || !Array.isArray(data) || data.length === 0) {
-        return '<div class="chart-empty">No data</div>';
-      }
-      const vals = data.map(d => series.map(s => Number(d[s]))).flat().filter(Number.isFinite);
-      if (vals.length === 0) {
-        return '<div class="chart-empty">No data</div>';
-      }
-      const w = 600, h = 180, px = 40, py = 20, pw = w - px, ph = h - py - 20;
-      const max = Math.max(...vals);
-      const min = 0;
-      const rng = max - min || 1;
-      const x = (i) => px + (i / (data.length - 1 || 1)) * pw;
-      const y = (v) => py + ph - ((v - min) / rng) * ph;
-      const colors = { usd: '#147efb', idr: '#22c55e', count: '#147efb', mrr: '#147efb' };
-      let paths = '', fills = '';
-      series.forEach(s => {
-        const pts = data.map((d,i) => `${x(i)},${y(Number(d[s]) || 0)}`).join(' L ');
-        paths += `<path d="M ${pts}" stroke="${colors[s]||'#147efb'}" stroke-width="2" fill="none" class="chart-line"/>`;
-        if (opts && opts.area) {
-          const base = `${x(0)},${py+ph} L ${pts} L ${x(data.length-1)},${py+ph} Z`;
-          fills += `<path d="${base}" fill="${colors[s]||'#147efb'}" opacity=".08"/>`;
-        }
-      });
-      // Y axis labels
-      let yLabels = '';
-      for (let i = 0; i <= 4; i++) { const v = min + (rng / 4) * i; yLabels += `<text x="${px-5}" y="${y(v)+3}" text-anchor="end" fill="var(--muted)" font-size="10">${opts?.fmt ? opts.fmt(v) : Math.round(v)}</text>`; }
-      // X axis labels (every 2nd)
-      let xLabels = '';
-      data.forEach((d,i) => { if (i % 2 === 0 || i === data.length-1) { xLabels += `<text x="${x(i)}" y="${py+ph+15}" text-anchor="middle" fill="var(--muted)" font-size="9">${d.month.slice(5)}</text>`; } });
-      return `<svg viewBox="0 0 ${w} ${h}" class="chart-svg">${fills}${paths}${yLabels}${xLabels}</svg>`;
-    }
-
-    function svgDonut(id, data, labelKey, valueKey, colors) {
-      // Guard against empty / zero-total data (M1).
-      if (!data || !Array.isArray(data) || data.length === 0) {
-        return { svg: '<div class="chart-empty">No data</div>', legend: '' };
-      }
-      const total = data.reduce((s,d) => s + (Number(d[valueKey]) || 0), 0);
-      if (total <= 0) {
-        return { svg: '<div class="chart-empty">No data</div>', legend: '' };
-      }
-      let acc = 0;
-      let slices = '';
-      const cx = 80, cy = 80, r = 60;
-      const colorList = ['#147efb','#22c55e','#e879f9','#fb923c','#22d3ee','#f59e0b'];
-      data.forEach((d,i) => {
-        const pct = (Number(d[valueKey]) || 0) / total;
-        const ang = pct * 360;
-        const start = (acc / 360) * 2 * Math.PI - Math.PI/2;
-        const end = ((acc + ang) / 360) * 2 * Math.PI - Math.PI/2;
-        const x1 = cx + r * Math.cos(start), y1 = cy + r * Math.sin(start);
-        const x2 = cx + r * Math.cos(end), y2 = cy + r * Math.sin(end);
-        const large = ang > 180 ? 1 : 0;
-        const c = colors && colors[i] ? colors[i] : colorList[i % colorList.length];
-        slices += `<path d="M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z" fill="${c}" stroke="var(--bg)" stroke-width="2"/>`;
-        acc += ang;
-      });
-      // Legend
-      let legend = '';
-      data.forEach((d,i) => { const c = colors && colors[i] ? colors[i] : colorList[i % colorList.length]; legend += `<div class="donut-legend-item"><span class="donut-swatch" style="background:${c}"></span><span class="donut-label">${escapeHtml(d[labelKey])}</span> <span class="donut-pct">${Math.round(pct*100)}%</span></div>`; });
-      return { svg: `<svg viewBox="0 0 160 160">${slices}</svg>`, legend };
-    }
+    // svgChart, svgDonut are defined in admin-utils.js (loaded first).
 
     // ── Dashboard tab ────────────────────────────────────────────────
     async function renderDashboard() {
