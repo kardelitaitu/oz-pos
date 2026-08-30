@@ -1,8 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent
+last audited 31-08-26 by TDD-Agent (round M; PAY-2 closed for charges when the caller supplies a key)
 crate: oz-payment | status: SAFE | lint: CLEAN
-findings: capture_method manual correctly maps authorize/capture model; PAY-2 no Idempotency-Key header sent; PAY-3 refund(_amount) ignores partial amount (always full refund); PAY-4 classifier sends most card_error declines to InvalidCard (message.contains("card") heuristic; "card_error => Declined" arm nearly unreachable); no confirm step — card-not-present intents stay requires_payment_method unless confirmed elsewhere
-next: Idempotency-Key header, partial refund, fix decline classification. COR-31 HELD DELIBERATELY — this driver has no HTTP timeout at all (Client::builder with no .timeout, and no request-level timeout either), and it must NOT be added before PAY-2 lands: a timeout leaves the charge outcome UNKNOWN, and with no Idempotency-Key header a retry is a second real charge. Bound the client only once every request carries a caller-supplied key. | perf: N/A
+findings: capture_method manual correctly maps authorize/capture model; PAY-2 FIXED for authorize — idempotency_key_for() forwards PaymentRequest.idempotency_key as the Idempotency-Key header, verbatim, or omits the header when absent or blank (blank must not be sent: Some("") would put every caller who leaves the field empty into one shared key and Stripe would reject each later charge as a conflict). The tell that this was an oversight rather than a decision: parse_error already mapped Stripe's idempotency_error code to PaymentError::Duplicate, so the driver handled a duplicate-key rejection it could never receive. PAY-2 STILL OPEN for refund — refund(transaction_id, amount) takes no PaymentRequest, so there is no caller key; minting a fresh one dedups nothing and deriving one from transaction_id alone would collide two genuinely different partial refunds of the same payment into one. Needs a PaymentProcessor trait change. capture/void send no key and do not need one: re-capturing or re-cancelling is a Stripe error response, not a second state change. PAY-3 refund(_amount) ignores partial amount (always full refund); PAY-4 classifier sends most card_error declines to InvalidCard (message.contains("card") heuristic; "card_error => Declined" arm nearly unreachable); no confirm step — card-not-present intents stay requires_payment_method unless confirmed elsewhere
+next: Idempotency-Key on refunds (trait change), partial refund, fix decline classification. COR-31 STILL HELD, and round L's release condition was written unsatisfiably: it said to bound the client "once every request carries a caller-supplied key", but idempotency_key is Option on PaymentRequest, so no driver-side change can ever guarantee that. Releasing the hold needs a CALLER policy (desktop/tablet always populate it) or a decision that a hang is worse than a possible double charge — not another edit in this file. | perf: N/A
 */
 //! Stripe payment processor — implements [`PaymentProcessor`] using the
 //! Stripe REST API directly via `reqwest`.
@@ -217,17 +217,45 @@ impl StripePaymentProcessor {
         })
     }
 
+    /// The `Idempotency-Key` to send for a charge request, if any.
+    ///
+    /// PAY-2: Stripe dedups on this header, and the driver never sent one —
+    /// while `parse_error` already maps Stripe's `idempotency_error` code to
+    /// [`PaymentError::Duplicate`]. The rejection handling for a duplicate
+    /// key existed with no key ever sent to trigger it.
+    ///
+    /// Returns `None` for an absent OR blank key. Blank must not be sent:
+    /// `Some("")` would put every caller who leaves the field empty into one
+    /// shared key, and Stripe would reject each charge after the first as a
+    /// conflict — turning the double-charge guard into a way to refuse
+    /// legitimate payments. The value is forwarded verbatim, never clamped:
+    /// truncating maps two distinct keys onto one and silently drops a
+    /// charge, which is worse than a loud rejection from Stripe.
+    fn idempotency_key_for(request: &PaymentRequest) -> Option<&str> {
+        let key = request.idempotency_key.as_deref()?;
+        if key.trim().is_empty() {
+            None
+        } else {
+            Some(key)
+        }
+    }
+
     /// Perform an HTTP POST to the Stripe API and return (status, body).
+    ///
+    /// `idempotency_key` is sent as the `Idempotency-Key` header when
+    /// present; see [`Self::idempotency_key_for`].
     async fn post(
         &self,
         path: &str,
         form: Vec<(&str, &str)>,
+        idempotency_key: Option<&str>,
     ) -> Result<(u16, String), PaymentError> {
         let url = format!("{}{}", self.api_base, path);
-        let resp = self
-            .client
-            .post(&url)
-            .form(&form)
+        let mut request = self.client.post(&url).form(&form);
+        if let Some(key) = idempotency_key {
+            request = request.header("Idempotency-Key", key);
+        }
+        let resp = request
             .send()
             .await
             .map_err(|e| PaymentError::Network(e.to_string()))?;
@@ -344,7 +372,9 @@ impl PaymentProcessor for StripePaymentProcessor {
             form.push(("description", desc.as_str()));
         }
 
-        let (status, body) = self.post("/payment_intents", form).await?;
+        let (status, body) = self
+            .post("/payment_intents", form, Self::idempotency_key_for(request))
+            .await?;
         if !(200..300).contains(&status) {
             return Err(Self::parse_error(status, &body));
         }
@@ -362,10 +392,14 @@ impl PaymentProcessor for StripePaymentProcessor {
     }
 
     async fn capture(&self, transaction_id: &str) -> Result<PaymentResult, PaymentError> {
+        // No key: capture takes only a transaction_id, and it is safe to
+        // leave — capturing an already-captured intent is a Stripe error
+        // response, not a second charge.
         let (status, body) = self
             .post(
                 &format!("/payment_intents/{}/capture", transaction_id),
                 vec![],
+                None,
             )
             .await?;
         if !(200..300).contains(&status) {
@@ -390,7 +424,14 @@ impl PaymentProcessor for StripePaymentProcessor {
         _amount: Option<Money>,
     ) -> Result<PaymentResult, PaymentError> {
         let form = vec![("payment_intent", transaction_id)];
-        let (status, body) = self.post("/refunds", form).await?;
+        // No idempotency key: refund(transaction_id, amount) takes no
+        // PaymentRequest, so there is no caller key to forward. Minting one
+        // here would be worse than nothing — a fresh key per call dedups
+        // nothing, and a stable one derived from transaction_id alone would
+        // make two genuinely different partial refunds of the same payment
+        // collide into one. Needs a PaymentProcessor trait change; recorded
+        // in the module stamp rather than half-solved.
+        let (status, body) = self.post("/refunds", form, None).await?;
         if !(200..300).contains(&status) {
             return Err(Self::parse_error(status, &body));
         }
@@ -408,10 +449,13 @@ impl PaymentProcessor for StripePaymentProcessor {
     }
 
     async fn void(&self, transaction_id: &str) -> Result<PaymentResult, PaymentError> {
+        // No key: cancelling an already-cancelled intent is a Stripe error,
+        // not a second state change, so a retry cannot double-apply.
         let (status, body) = self
             .post(
                 &format!("/payment_intents/{}/cancel", transaction_id),
                 vec![],
+                None,
             )
             .await?;
         if !(200..300).contains(&status) {
