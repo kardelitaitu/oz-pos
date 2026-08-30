@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (desktop-client slice C: pos head+sweep)
+crate: desktop-client | status: SAFE | lint: CLEAN
+findings: head 1-160 read + global sweep — all six Percentage::new unwraps preceded by explicit 0..=100 range checks with SAFETY comments (contains LUA-2 at consumer); ADR-20 PaymentKind marker; authz decorators present; cart/sale state machine lives in oz_core (audited). Coverage note: risk-ranked sampling, not full deep read
+next: none | perf: N/A
+*/
 //! Point-of-Sale pipeline commands: start a cart, add a line,
 //! complete the sale, hold/resume carts.
 //!

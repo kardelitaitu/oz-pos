@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (desktop-client slice C: lib verified)
+crate: desktop-client | status: SAFE | lint: CLEAN
+findings: clean — Tauri builder with plugin registrations, documented invoke_handler ordering convention, test-only Windows manifest link_section with full documentation; no unsafe in production paths
+next: none | perf: N/A
+*/
 //! Tauri v2 application entry point.
 //!
 //! Wires the [`AppState`] (DB connection, driver registry, config) into the

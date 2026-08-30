@@ -1,4 +1,9 @@
 /*
+last audited 25-07-26 by RSA-Agent (desktop-client slice C: state verified)
+crate: desktop-client | status: SAFE | lint: CLEAN
+findings: DB connection with foreign_keys ON + WAL (documented); kernel Drop with bounded lock-retry; test-only in-memory mock constructor. Prior C-2 stamp notes preserved: unsafe env::set_var removed, terminal_id typed field, M-4 logging, M-5 plugin task handle; next: SQLCipher; perf note: Arc-clones on checkout hot path
+next: SQLCipher (carried) | perf: Arc-clones on checkout hot path (carried)
+*//*
 last audited 12-07-27 by C-2 env-var fix
 crate: oz-pos-app | status: SAFE (C-2 resolved; M-4, M-5 fixed) | lint: CLEAN
 findings: unsafe env::set_var removed; terminal_id typed field added; Drop bounded retry applied; M-4 logging; M-5 plugin task handle | next: SQLCipher | perf: Arc-clones on checkout hot path
