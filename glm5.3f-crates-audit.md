@@ -889,6 +889,26 @@ settlement, role management, staff deletion, bulk export) are structurally
 ung&shy;r&shy;antable through family wildcards, the global `*` is reserved
 for the Owner seed, and duplicate keys are invariant-tested.
 
+### Slice C — settings/raw.rs (281) + settings/typed.rs (634) fully read;
+settings/keys.rs (153) + mod.rs verified — **no new finding IDs**
+
+`raw.rs` implements the DB-08 delta-ledger concurrency contract exactly as
+documented: the UNIQUE `(key, terminal_id, version)` index turns
+concurrent allocations into a constraint collision, standalone writers
+retry under `BEGIN IMMEDIATE` (bounded, 32 attempts), nested callers use a
+savepoint with lingering-savepoint logging, and delta loss is documented
+non-fatal with a sync reconstruction path. `typed.rs` **narrows the
+earlier COR-17/30-family note**: the sync API key, terminal secret, and PG
+password are transparently **encrypted at rest** via `oz_crypto` (SMTP
+password likewise via `encrypt_smtp_at_rest`), so the "secrets plaintext"
+note now applies only to gift-card PINs (COR-17) and terminal secrets in
+`oz-core`'s own `terminals` table — not the platform settings store. One
+INFO: a decrypt failure silently falls back to the raw value instead of
+surfacing an error, so a corrupted ciphertext yields garbage without an
+alert.
+
+---
+
 ---
 
 ---
