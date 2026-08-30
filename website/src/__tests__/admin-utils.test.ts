@@ -249,12 +249,13 @@ describe('admin-utils tenantDetailRows (B2: t() shadowing regression)', () => {
   it('builds the 8 key/value rows without crashing', () => {
     const rows = utils.tenantDetailRows(data);
     expect(rows.length).toBe(8);
-    expect(rows[0]).toEqual(['Status', 'active']);
+    // B16 superseded the raw-enum expectation: status rows carry labels.
+    expect(rows[0]).toEqual(['Status', 'Active']);
     expect(rows[1]).toEqual(['Email verified', '✓']);
     expect(rows[2]).toEqual(['Created', '2026-08-01']);
     expect(rows[3]).toEqual(['License key', 'OZ-KEY']);
     expect(rows[4]).toEqual(['Tier', 'pro']);
-    expect(rows[5]).toEqual(['Subscription status', 'active']);
+    expect(rows[5]).toEqual(['Subscription status', 'Active']);
     expect(rows[6]).toEqual(['Expires', '2027-08-01']);
     expect(rows[7]).toEqual(['Devices', 2]);
   });
@@ -594,5 +595,64 @@ describe('admin-utils exchangeUrlFrom + isLockoutActive (B13/B14: login flow)', 
   it('isLockoutActive tolerates a missing button', () => {
     expect(utils.isLockoutActive(null)).toBe(false);
     expect(utils.isLockoutActive(undefined)).toBe(false);
+  });
+});
+
+describe('admin-utils statusPill labels (B16: raw enum text in the UI)', () => {
+  // The server's status enum (handler_test.go SelectField values) leaked
+  // straight into the UI: pills and the detail modal showed 'grace_period'
+  // while every other label in the admin SPA is i18n'd via STRINGS.
+  it('renders human labels for the server status enum', () => {
+    expect(utils.statusPill('grace_period').textContent).toBe('Grace Period');
+    expect(utils.statusPill('active').textContent).toBe('Active');
+    expect(utils.statusPill('revoked').textContent).toBe('Revoked');
+    expect(utils.statusPill('paused').textContent).toBe('Paused');
+    expect(utils.statusPill('expired').textContent).toBe('Expired');
+  });
+
+  it('keeps the class mapping intact', () => {
+    expect(utils.statusPill('grace_period').className).toContain('pill-warn');
+    expect(utils.statusPill('active').className).toContain('pill-ok');
+    expect(utils.statusPill('revoked').className).toContain('pill-bad');
+  });
+
+  it('unknown status falls back to the raw value, never a missing-key string', () => {
+    expect(utils.statusPill('weird_state').textContent).toBe('weird_state');
+    expect(utils.statusPill('').textContent).toBe('—');
+  });
+
+  it('detail modal rows use the same labels', () => {
+    const rows = utils.tenantDetailRows({ tenant: { status: 'grace_period' } });
+    expect(rows[0][1]).toBe('Grace Period');
+  });
+});
+
+describe('admin-utils createSeqGuard (B15: stale list responses overwrote newer ones)', () => {
+  // renderTenants awaited api() without tracking which request was
+  // newest: click page 2 then quickly page 3 — if page 2's response
+  // arrived last it replaced page 3's rows while the pagination header
+  // still said "Page 3 of N". Last-arrival-wins instead of last-click-wins.
+  it('next() increases and isCurrent() accepts only the newest id', () => {
+    const g = utils.createSeqGuard();
+    const a = g.next();
+    const b = g.next();
+    expect(b).toBeGreaterThan(a);
+    expect(g.isCurrent(b)).toBe(true);
+    expect(g.isCurrent(a)).toBe(false);
+  });
+
+  it('out-of-order responses: only the newest request renders', async () => {
+    const g = utils.createSeqGuard();
+    const rendered: number[] = [];
+    const fetchPage = async (page: number, delay: number) => {
+      const s = g.next();
+      await new Promise((r) => setTimeout(r, delay));
+      if (!g.isCurrent(s)) return;
+      rendered.push(page);
+    };
+    // Page 2 (slow) requested first, page 3 (fast) second: page 2 must
+    // be discarded even though it arrives after page 3 rendered.
+    await Promise.all([fetchPage(2, 60), fetchPage(3, 5)]);
+    expect(rendered).toEqual([3]);
   });
 });

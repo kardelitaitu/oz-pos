@@ -38,10 +38,32 @@
   function fmtIdr(val) { return 'Rp ' + Math.round(val).toLocaleString('id-ID'); }
   function fmtUsd(val) { return '$' + Number(val).toFixed(2); }
 
+  // statusLabel maps the server's status enum to a human label (B16).
+  // Unknown values fall back to the raw string — never to a missing-key
+  // placeholder, so a new server-side status still shows something real.
+  function statusLabel(status) {
+    if (status === undefined || status === null || status === '') return '—';
+    var key = 'status.' + status;
+    return STRINGS[key] !== undefined ? STRINGS[key] : status;
+  }
+
   function statusPill(status) {
     var map = { active: ['pill-ok'], unused: ['pill-muted'], grace_period: ['pill-warn'], expired: ['pill-bad'], revoked: ['pill-bad'], paused: ['pill-warn'], free: ['pill-muted'], plus: ['pill-ok'], pro: ['pill-warn'], premium: ['pill-ok'], enterprise: ['pill-ok'] };
     var cls = (map[status] || ['pill-muted'])[0];
-    return el('span', 'pill ' + cls, status || '—');
+    return el('span', 'pill ' + cls, statusLabel(status));
+  }
+
+  // createSeqGuard tracks the newest of N overlapping async requests so
+  // superseded responses can be discarded (B15: renderTenants let a slow
+  // page-2 response overwrite page 3 — last-arrival-wins, not
+  // last-click-wins). next() stamps a request; isCurrent(id) is true only
+  // for the most recent stamp.
+  function createSeqGuard() {
+    var n = 0;
+    return {
+      next: function () { n += 1; return n; },
+      isCurrent: function (id) { return id === n; },
+    };
   }
 
   // svgChart renders a multi-series line chart as an SVG string. Pure:
@@ -202,12 +224,12 @@
   function tenantDetailRows(data) {
     var tenant = data.tenant || {}, lic = data.license || {}, sub = data.subscription || {}, devices = data.devices || [];
     return [
-      [t('th.status'), tenant.status === undefined || tenant.status === null ? '—' : tenant.status],
+      [t('th.status'), statusLabel(tenant.status)],
       [t('th.emailVerified'), tenant.emailVerified ? '✓' : '○'],
       [t('th.created'), tenant.created ? tenant.created.slice(0, 10) : '—'],
       [t('th.licenseKey'), lic.key || '—'],
       [t('th.tier'), sub.tierKey || lic.tierKey || '—'],
-      [t('th.subscriptionStatus'), sub.status || '—'],
+      [t('th.subscriptionStatus'), statusLabel(sub.status)],
       [t('th.expires'), sub.expiresAt || '—'],
       [t('th.devices'), devices.length],
     ];
@@ -505,6 +527,15 @@
     'login.accessDeniedOrigin': 'Access denied: origin not allowed',
     'login.couldNotConnect': 'Could not connect to authentication server',
     'login.exchangeFailed': 'Sign-in succeeded but the session handoff failed. Please try again.',
+    // B16: human labels for the server status enum (PocketBase
+    // SelectField values: active/expired/grace_period/revoked/paused,
+    // plus 'unused' for license keys). Unknown values fall back to raw.
+    'status.active': 'Active',
+    'status.expired': 'Expired',
+    'status.grace_period': 'Grace Period',
+    'status.revoked': 'Revoked',
+    'status.paused': 'Paused',
+    'status.unused': 'Unused',
     'login.resendPrompt': 'Did not receive code? Click below to resend.',
     'login.signingIn': 'Signing in…',
     'login.resendIn': 'Resend code in ',
@@ -578,6 +609,8 @@
     fetchWithTimeout: fetchWithTimeout,
     exchangeUrlFrom: exchangeUrlFrom,
     isLockoutActive: isLockoutActive,
+    statusLabel: statusLabel,
+    createSeqGuard: createSeqGuard,
     t: t,
     STRINGS: STRINGS,
     isAuthDenied: isAuthDenied,

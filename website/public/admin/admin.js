@@ -206,16 +206,22 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
     let tenantsPerPage = 25;
     let tenantsTotal = 0;
     let tenantsSearch = '';
+    // B15: sequence guard — a slow response for a superseded page/search
+    // must not overwrite the newer view (last-click-wins, not
+    // last-arrival-wins).
+    const tenantsGuard = createSeqGuard();
 
     async function renderTenants() {
       const c = document.getElementById('content');
+      const seq = tenantsGuard.next();
       c.innerHTML = '<div class="card"><p class="empty">' + t('common.loadingTenants') + '</p></div>';
       let data;
       try {
         const qs = '?page=' + tenantsPage + '&perPage=' + tenantsPerPage +
           (tenantsSearch ? '&search=' + encodeURIComponent(tenantsSearch) : '');
         data = await api('/api/v1/admin/tenants' + qs);
-      } catch (err) { if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">' + t('common.failedToLoadTenants') + '</p></div>'; return; }
+      } catch (err) { if (!tenantsGuard.isCurrent(seq)) { return; } if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">' + t('common.failedToLoadTenants') + '</p></div>'; return; }
+      if (!tenantsGuard.isCurrent(seq)) { return; } // a newer request superseded this one
       tenants = data.tenants || [];
       tenantsTotal = data.total || 0;
 
