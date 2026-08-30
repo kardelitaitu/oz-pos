@@ -153,6 +153,51 @@ fn create_refund_rejects_over_refund() {
     );
 }
 
+/// COR-26: the persistence guard must not trust its callers. A refund whose
+/// currency differs from the sale's recorded currency must be rejected at
+/// `create_refund` — otherwise the over-refund guard (which sums refunds
+/// `WHERE currency = <refund currency>`) can be bypassed by refunding the
+/// same sale once per currency, and cross-currency minor-unit amounts are
+/// compared against the wrong unit entirely.
+#[test]
+fn create_refund_rejects_currency_mismatch() {
+    let conn = fresh();
+    seed_completed_sale(&conn);
+    let s = store(&conn);
+
+    let eur: Currency = "EUR".parse().unwrap();
+    let line = RefundLine::new(
+        "ref-sl-1",
+        "COFFEE",
+        2,
+        Money {
+            minor_units: 350,
+            currency: eur,
+        },
+        Money {
+            minor_units: 700,
+            currency: eur,
+        },
+    );
+    let refund = Refund::new(
+        "ref-sale-1",
+        Money {
+            minor_units: 700,
+            currency: eur,
+        },
+        "wrong currency",
+        "",
+        "user-1",
+        vec![line],
+    );
+
+    let err = s.create_refund(&refund).unwrap_err();
+    assert!(
+        matches!(err, CoreError::CurrencyMismatch(..)),
+        "a refund in a currency other than the sale's must be rejected, got: {err:?}"
+    );
+}
+
 #[test]
 fn multiple_partial_refunds() {
     let conn = fresh();

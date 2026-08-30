@@ -58,6 +58,18 @@ impl Store<'_> {
             }
             Err(e) => return Err(CoreError::Db(e)),
         };
+        // COR-26: the refund must be denominated in the sale's own currency.
+        // The per-currency SUM below only bounds refunds that share the
+        // sale's unit; a foreign-currency refund would compare minor units
+        // against the wrong total (and could be repeated once per currency
+        // to bypass the guard). Enforced here so no caller has to be
+        // trusted to have folded with `Money::zero(sale.currency)`.
+        if cur_str != sale_currency {
+            return Err(CoreError::CurrencyMismatch(
+                sale_currency,
+                cur_str.to_owned(),
+            ));
+        }
         let already_refunded: i64 = self
             .conn
             .query_row(
@@ -84,8 +96,6 @@ impl Store<'_> {
                 ),
             });
         }
-        let _ = sale_currency; // currency mismatch handled by caller's checked_add
-
         let tx = self.conn.unchecked_transaction()?;
 
         // ── 1. Persist refund + lines ──────────────────────────────
