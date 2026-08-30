@@ -1020,6 +1020,25 @@ import. One organizational note: production items sit *after* the test
 module (COR-33 family; the file carries a
 `clippy::items_after_test_module` allow for it).
 
+### Slice B — queue.rs (1,661: production 1–615 covered — 190–459 deep
+read, CRUD head and deprecated legacy tail verified structurally; tests
+617+)
+
+**No new finding IDs.** The replay-safety core is exactly as specified:
+quarantine gate → receipt-existence check → domain mutation → receipt
+insert, all inside one transaction (a crash rolls back both mutation and
+receipt; a replay after commit is a no-op). The failure path drops the
+transaction before recording the failure (retry budget 3 → dead-letter),
+CRDT delta payloads merge both halves, SYNC-10 settings changes write the
+value row plus a non-fatal versioned delta, `finalize_sale` is
+idempotent, and unsupported actions fail closed. `apply_push_conflict`
+delegates to the single shared SYNC-02 resolver; the deprecated
+non-atomic `apply_remote` remains only as a legacy mirror. Minor note:
+pull-item product payloads tolerate empty `sku`/`name` via `unwrap_or`
+(server-trusted; only the snapshot path gets RUST-04 validation).
+
+---
+
 ---
 
 ---

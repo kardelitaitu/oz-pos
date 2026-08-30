@@ -1,4 +1,10 @@
 //! Sync Queue — local change log for offline-first replication.
+/*
+last audited 25-07-26 by RSA-Agent (platform-sync slice B: queue deep read)
+crate: platform-sync | status: SAFE | lint: CLEAN
+findings: exemplary — apply_remote_atomic_full runs quarantine gate, receipt-exists check, domain mutation, and receipt insert in ONE transaction (crash-safe replay protection); failure path drops the tx then records the failure with retry budget 3 for dead-lettering; CRDT delta merge arms for stock payloads; SYNC-10 settings with non-fatal delta write (savepoint-safe inside caller tx); finalize_sale idempotent pending-to-completed only; unsupported actions fail closed; apply_push_conflict is the single SYNC-02 shared resolver entry; apply_remote is the deprecated non-atomic legacy mirror. Minor note: pull-item product payloads take unwrap_or empty-string for sku and name (server-trusted; snapshot path is RUST-04 validated but pull items are not)
+next: consider payload validation parity for pull items | perf: prepared upserts
+*/
 //!
 //! Wraps the `oz_core` offline queue Store methods into a clean interface
 //! with additional tracking for conflict resolution and last-sync timing.
