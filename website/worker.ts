@@ -10,9 +10,10 @@
  *   Dashboard subdomains check for an httpOnly `oz_session` cookie. If missing:
  *     1. User is redirected to https://ozpos.my.id/login?redirect=<original_url>
  *     2. After login, AuthForm.tsx redirects to the dashboard subdomain with
- *        ?token=<jwt> in the URL
- *     3. This worker catches the ?token= param, sets the httpOnly cookie,
- *        and redirects to the clean URL (no token in URL)
+ *        a one-time exchange code (?code=)
+ *     3. This worker catches the ?code= param, exchanges it for a session
+ *        token at the license server, sets the httpOnly cookie, and redirects
+ *        to the clean URL (token never appears in a URL)
  *     4. Subsequent requests carry the cookie
  *
  * The site used to be an assets-only Worker, which forced every backend-URL
@@ -60,9 +61,14 @@ function getCookie(headers: Headers, name: string): string | null {
   return null;
 }
 
-/** Build a Set-Cookie header string for the oz_session token. */
-function setCookieHeader(token: string, maxAge: number): string {
-  return `${COOKIE_NAME}=${token}; Domain=.ozpos.my.id; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
+/** Build a Set-Cookie header string for the oz_session token.
+ *
+ * H4 (hardening): the cookie is scoped to the specific dashboard subdomain
+ * (admin.ozpos.my.id or dashboard.ozpos.my.id) instead of the parent
+ * `.ozpos.my.id`, so it is never sent to the marketing site or other
+ * subdomains — no cross-subdomain session exposure. */
+function setCookieHeader(token: string, maxAge: number, domain: string): string {
+  return `${COOKIE_NAME}=${token}; Domain=${domain}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 }
 
 /**
@@ -148,7 +154,7 @@ export default {
                 status: 302,
                 headers: {
                   Location: cleanUrl,
-                  'Set-Cookie': setCookieHeader(body.token, 30 * 24 * 3600),
+                  'Set-Cookie': setCookieHeader(body.token, 30 * 24 * 3600, hostname),
                   'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
                   'Referrer-Policy': 'no-referrer',
                   'Pragma': 'no-cache',
@@ -165,25 +171,6 @@ export default {
           ? `https://${MARKETING_HOST}/admin/login`
           : `https://${MARKETING_HOST}/en/login?redirect=${encodeURIComponent(cleanUrl)}`;
         return new Response(null, { status: 302, headers: { Location: loginUrl } });
-      }
-
-      // Step 1a: Fallback — direct ?token= set (deprecated; replaced by the
-      // one-time exchange code in Step 1). Kept for backward compatibility
-      // while the old login pages transition.
-      const tokenParam = url.searchParams.get('token');
-      if (tokenParam) {
-        url.searchParams.delete('token');
-        const cleanUrl = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
-        return new Response(null, {
-          status: 302,
-          headers: {
-            Location: cleanUrl,
-            'Set-Cookie': setCookieHeader(tokenParam, 30 * 24 * 3600),
-            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-            'Referrer-Policy': 'no-referrer',
-            'Pragma': 'no-cache',
-          },
-        });
       }
 
       // Step 1b: The dashboard SPA calls /__oz/session to obtain the JWT
@@ -220,7 +207,7 @@ export default {
           status: 302,
           headers: {
             Location: loginUrl,
-            'Set-Cookie': `${COOKIE_NAME}=; Domain=.ozpos.my.id; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
+            'Set-Cookie': `${COOKIE_NAME}=; Domain=${hostname}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
             'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
             'Referrer-Policy': 'no-referrer',
             'Pragma': 'no-cache',

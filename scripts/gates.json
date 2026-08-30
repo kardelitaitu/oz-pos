@@ -44,6 +44,13 @@
       "ci": { "workflow": "ci.yml", "job": "rust-fmt" }
     },
     {
+      "id": "go",
+      "label": "Go (license-server)",
+      "status": "required",
+      "runners": { "check.sh": ["go fmt", "go vet", "go test (short)"] },
+      "ci": { "workflow": "ci.yml", "job": "go" }
+    },
+    {
       "id": "rust-clippy",
       "label": "Clippy",
       "status": "required",

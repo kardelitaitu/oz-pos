@@ -108,6 +108,19 @@ else
     echo -e "${YELLOW}⚠ panic-inventory skipped (python3 not found)${NC}"
 fi
 
+# ── Go: license-server (mirrors CI `go` job — auto-detected) ────────────
+# The license-server is a Go service (auth, licensing, webhooks, revenue).
+# CI gates on gofmt + go vet + `go test -short`; the local gate mirrors
+# that so a push can't pass locally then fail CI. Only the -short suite
+# runs here (the full suite runs nightly in CI).
+if command -v go &>/dev/null && [ -f apps/license-server/go.mod ]; then
+    step "go fmt" "gofmt -l apps/license-server" gofmt -l apps/license-server
+    step "go vet" "go -C apps/license-server vet ./..." go -C apps/license-server vet ./...
+    step "go test (short)" "go -C apps/license-server test -short ./..." go -C apps/license-server test -short ./...
+else
+    echo -e "${YELLOW}⚠ Go license-server checks skipped (go not found or apps/license-server missing)${NC}"
+fi
+
 # ── UI (mirrors CI `ui` job — auto-detected) ──────────────────────────────
 # Windows can retain esbuild.exe briefly after a Vite/test process exits,
 # causing npm ci's node_modules cleanup to fail with EPERM. Retry once after

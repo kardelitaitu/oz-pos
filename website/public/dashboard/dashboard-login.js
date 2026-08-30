@@ -55,17 +55,17 @@ function setAuthMode(mode) {
     const codeVal = document.getElementById('otp-code') ? document.getElementById('otp-code').value.trim() : '';
     const isCodeActive = otpGroup && !otpGroup.classList.contains('hidden');
     if (isCodeActive && codeVal) {
-      if (loginBtn) loginBtn.textContent = 'Verify Code & Sign In';
+      if (loginBtn) loginBtn.textContent = t('login.verifyCode');
     } else {
       if (otpGroup) otpGroup.classList.add('hidden');
-      if (loginBtn) loginBtn.textContent = 'Send Verification Code';
+      if (loginBtn) loginBtn.textContent = t('login.sendCode');
     }
   } else {
     if (tabOtp) tabOtp.classList.remove('active');
     if (tabPwd) tabPwd.classList.add('active');
     if (pwdGroup) pwdGroup.classList.remove('hidden');
     if (otpGroup) otpGroup.classList.add('hidden');
-    if (loginBtn) loginBtn.textContent = 'Sign In';
+    if (loginBtn) loginBtn.textContent = t('login.signIn');
   }
 }
 
@@ -75,7 +75,7 @@ function startOtpCooldown(seconds) {
   if (!cd) return;
   cd.classList.remove('hidden');
   let remaining = seconds;
-  cd.textContent = `Resend code in ${remaining}s`;
+  cd.textContent = t('login.resendIn') + remaining + t('login.seconds');
   if (otpTimer) clearInterval(otpTimer);
   otpTimer = setInterval(() => {
     remaining--;
@@ -84,7 +84,7 @@ function startOtpCooldown(seconds) {
       cd.classList.add('hidden');
       if (btn) btn.disabled = false;
     } else {
-      cd.textContent = `Resend code in ${remaining}s`;
+      cd.textContent = t('login.resendIn') + remaining + t('login.seconds');
     }
   }, 1000);
 }
@@ -108,7 +108,7 @@ async function handleLogin() {
   try {
     const email = document.getElementById('email').value.trim();
     if (!email) {
-      showError('Please enter your email address');
+      showError(t('login.enterEmail'));
       document.getElementById('email').focus();
       return;
     }
@@ -119,7 +119,7 @@ async function handleLogin() {
 
       if (!isCodePromptVisible) {
         // Step 1: Request OTP code
-        setLoading(true, 'Sending verification code…');
+        setLoading(true, t('login.sendingCode'));
         try {
           const res = await fetch(API + '/api/v1/web/request-otp', {
             method: 'POST',
@@ -129,8 +129,8 @@ async function handleLogin() {
           const body = await res.json();
           if (res.status === 200) {
             otpGroup.classList.remove('hidden');
-            document.getElementById('login-btn').textContent = 'Verify Code & Sign In';
-            showSuccess('✓ Verification code sent! Please check your email inbox (and spam folder).');
+            document.getElementById('login-btn').textContent = t('login.verifyCode');
+            showSuccess(t('login.codeSent'));
             startOtpCooldown(60);
             setLoading(false);
             return;
@@ -141,18 +141,18 @@ async function handleLogin() {
             return;
           }
           if (res.status === 403) {
-            showError(body.error || 'Access denied: origin not allowed');
+            showError(body.error || t('login.accessDeniedOrigin'));
             setLoading(false);
             return;
           }
           if (res.status === 503) {
-            showError('Email delivery is not configured on server');
+            showError(t('login.emailDeliveryNotConfigured'));
             setLoading(false);
             return;
           }
-          showError(body.error || 'Failed to send verification code');
+          showError(body.error || t('login.failedToSendCode'));
         } catch (err) {
-          showError('Could not connect to authentication server');
+          showError(t('login.couldNotConnect'));
         }
         setLoading(false);
         return;
@@ -161,11 +161,11 @@ async function handleLogin() {
       // Step 2: Verify OTP code
       const code = document.getElementById('otp-code').value.trim();
       if (!code) {
-        showError('Please enter the 6-digit code from your email');
+        showError(t('login.enterCode'));
         document.getElementById('otp-code').focus();
         return;
       }
-      setLoading(true, 'Verifying code…');
+      setLoading(true, t('login.verifyingCode'));
       try {
         const res = await fetch(API + '/api/v1/web/verify-otp', {
           method: 'POST',
@@ -174,7 +174,7 @@ async function handleLogin() {
         });
         const body = await res.json();
         if (res.status === 200 && body.token) {
-          showSuccess('✓ Code verified! Signing in…');
+          showSuccess(t('login.codeVerified'));
           await exchangeForCode(body.token);
           return;
         }
@@ -184,13 +184,13 @@ async function handleLogin() {
           return;
         }
         if (res.status === 403) {
-          showError(body.error || 'Access denied: origin not allowed');
+          showError(body.error || t('login.accessDeniedOrigin'));
           setLoading(false);
           return;
         }
-        showError(body.error || 'Invalid or expired code');
+        showError(body.error || t('login.invalidOrExpiredCodeShort'));
       } catch (err) {
-        showError('Could not connect to authentication server');
+        showError(t('login.couldNotConnect'));
       }
       setLoading(false);
       return;
@@ -199,11 +199,11 @@ async function handleLogin() {
     // Password mode
     const password = document.getElementById('password').value;
     if (!password) {
-      showError('Please enter your password');
+      showError(t('login.enterPassword'));
       document.getElementById('password').focus();
       return;
     }
-    setLoading(true, 'Signing in…');
+    setLoading(true, t('login.signingIn'));
     try {
       const res = await fetch(API + '/api/v1/web/login', {
         method: 'POST',
@@ -212,7 +212,7 @@ async function handleLogin() {
       });
       const body = await res.json();
       if (res.status === 200 && body.token) {
-        showSuccess('✓ Signing in…');
+        showSuccess(t('login.signingInNow'));
         await exchangeForCode(body.token);
         return;
       }
@@ -222,13 +222,13 @@ async function handleLogin() {
         return;
       }
       if (res.status === 403) {
-        showError(body.error || 'Access denied: origin not allowed');
+        showError(body.error || t('login.accessDeniedOrigin'));
         setLoading(false);
         return;
       }
-      showError(body.error || 'Invalid email or password');
+      showError(body.error || t('login.invalidEmailOrPassword'));
     } catch (err) {
-      showError('Could not connect to authentication server');
+      showError(t('login.couldNotConnect'));
     }
     setLoading(false);
   } finally {
@@ -242,16 +242,16 @@ function showLockoutCountdown(seconds) {
   if (!btn) return;
   btn.disabled = true;
   let remaining = seconds;
-  btn.textContent = `Try again in ${remaining}s`;
+  btn.textContent = t('login.tryAgainIn') + remaining + t('login.seconds');
   const timer = setInterval(() => {
     remaining--;
     if (remaining <= 0) {
       clearInterval(timer);
       btn.disabled = false;
-      btn.textContent = currentMode === 'otp' ? 'Send Verification Code' : 'Sign In';
+      btn.textContent = currentMode === 'otp' ? t('login.sendCode') : t('login.signIn');
       return;
     }
-    btn.textContent = `Try again in ${remaining}s`;
+    btn.textContent = t('login.tryAgainIn') + remaining + t('login.seconds');
   }, 1000);
 }
 
@@ -264,6 +264,14 @@ const tabOtp = document.getElementById('tab-otp');
 const tabPwd = document.getElementById('tab-password');
 if (tabOtp) tabOtp.addEventListener('click', () => setAuthMode('otp'));
 if (tabPwd) tabPwd.addEventListener('click', () => setAuthMode('password'));
+
+// Theme toggle (theme.js is loaded in <head>)
+const themeToggle = document.getElementById('theme-toggle');
+if (themeToggle) {
+  themeToggle.addEventListener('click', () => {
+    if (window.__ozDashboardTheme) { window.__ozDashboardTheme.toggle(); }
+  });
+}
 
 // Initialize default mode
 setAuthMode('otp');
