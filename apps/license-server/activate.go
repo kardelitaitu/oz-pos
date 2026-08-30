@@ -275,6 +275,35 @@ func machineLimitExceeded(app core.App, tenantID, machineID, tier string, max in
 	)
 }
 
+// registerMachine upserts the tenant_machines record for an activation:
+// creates it (with first_seen_at) when absent, else updates last_seen_at.
+//
+// With `checkOwnership` true it returns conflict=true when the machine is
+// already registered to a DIFFERENT tenant (the caller must answer 409).
+// A save failure is returned as an error so the caller can log its own
+// audit line — registration is non-fatal either way (the subscription is
+// already valid).
+func registerMachine(app core.App, machineID, tenantID string, checkOwnership bool) (conflict bool, err error) {
+	machineColl, macErr := app.FindCollectionByNameOrId("tenant_machines")
+	if macErr != nil {
+		return false, nil
+	}
+	machine, macErr := app.FindRecordById("tenant_machines", machineID)
+	if macErr != nil {
+		machine = core.NewRecord(machineColl)
+		machine.Set("id", machineID)
+		machine.Set("tenant_id", tenantID)
+		machine.Set("first_seen_at", time.Now().UTC())
+	} else if checkOwnership && machine.GetString("tenant_id") != tenantID {
+		return true, nil
+	}
+	machine.Set("last_seen_at", time.Now().UTC())
+	if err := app.Save(machine); err != nil {
+		return false, err
+	}
+	return false, nil
+}
+
 func handleActivate(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		// Cap request body at 64KB to prevent OOM via oversized JSON payloads (M4 audit).
@@ -536,20 +565,11 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				}
 
 				// ── Register / update machine ──────────────────────────
-				machineColl, macErr := app.FindCollectionByNameOrId("tenant_machines")
-				if macErr == nil {
-					machine, macErr := app.FindRecordById("tenant_machines", req.MachineID)
-					if macErr != nil {
-						machine = core.NewRecord(machineColl)
-						machine.Set("id", req.MachineID)
-						machine.Set("tenant_id", tenant.Id)
-						machine.Set("first_seen_at", time.Now().UTC())
-					}
-					machine.Set("last_seen_at", time.Now().UTC())
-					if saveErr := app.Save(machine); saveErr != nil {
-						log.Printf("H1 audit: machine registration failed on re-activation (id=%q tenant_id=%q): %v",
-							req.MachineID, tenant.Id, saveErr)
-					}
+				// The key is already activated by this tenant (proven above),
+				// so ownership is assumed — no conflict check needed.
+				if _, saveErr := registerMachine(app, req.MachineID, tenant.Id, false); saveErr != nil {
+					log.Printf("H1 audit: machine registration failed on re-activation (id=%q tenant_id=%q): %v",
+						req.MachineID, tenant.Id, saveErr)
 				}
 
 				resp := map[string]any{
@@ -756,25 +776,14 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		// ── Register machine (non-fatal: subscription is already valid) ──
-		machineColl, err := app.FindCollectionByNameOrId("tenant_machines")
-		if err == nil {
-			machine, err := app.FindRecordById("tenant_machines", req.MachineID)
-			if err != nil {
-				machine = core.NewRecord(machineColl)
-				machine.Set("id", req.MachineID)
-				machine.Set("tenant_id", tenantID)
-				machine.Set("first_seen_at", time.Now().UTC())
-			} else {
-				if machine.GetString("tenant_id") != tenantID {
-					return e.JSON(http.StatusConflict, map[string]any{
-						"error": "machine already registered to a different tenant",
-					})
-				}
-			}
-			machine.Set("last_seen_at", time.Now().UTC())
-			if err := app.Save(machine); err != nil {
-				log.Printf("H1 audit: machine registration failed (id=%q tenant_id=%q): %v", req.MachineID, tenantID, err)
-			}
+		conflict, saveErr := registerMachine(app, req.MachineID, tenantID, true)
+		if conflict {
+			return e.JSON(http.StatusConflict, map[string]any{
+				"error": "machine already registered to a different tenant",
+			})
+		}
+		if saveErr != nil {
+			log.Printf("H1 audit: machine registration failed (id=%q tenant_id=%q): %v", req.MachineID, tenantID, saveErr)
 		}
 
 		// ── Webhook-issued key: reuse the Paddle-created subscription ──
