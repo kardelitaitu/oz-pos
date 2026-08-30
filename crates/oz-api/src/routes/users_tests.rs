@@ -196,3 +196,106 @@ fn create_user_request_owner_role() {
     assert_eq!(req.username, "owner");
     assert_eq!(req.role_id, "role-owner");
 }
+
+// ── API-4: terminal-scoped tokens must not mint users ──────────
+
+/// A token minted through the terminal client-credentials path
+/// (ADR sync-auth-hardening P3). `terminal_id: None` means admin-minted or
+/// legacy; `Some` means a specific registered device holds it.
+fn terminal_claims(tenant_id: &str, terminal_id: &str) -> ApiTokenClaims {
+    ApiTokenClaims {
+        sub: "terminal-device".into(),
+        jti: "jti-term".into(),
+        exp: 9999999999,
+        iat: 1000000000,
+        tenant_id: Some(tenant_id.to_owned()),
+        terminal_id: Some(terminal_id.to_owned()),
+    }
+}
+
+#[tokio::test]
+async fn a_terminal_scoped_token_cannot_create_a_user() {
+    // API-4: any valid token could POST /api/v1/users with any role_id,
+    // including role-owner. A POS terminal is a device in the shop - if it
+    // is rooted or its client_secret is lifted from storage, that is a
+    // single credential between a tampered till and an owner session over
+    // the tenant's whole dataset.
+    let app_state = state();
+    {
+        let db = app_state.db.lock().await;
+        seed_role(&db, "role-owner");
+    }
+
+    let response = create_user(
+        State(app_state.clone()),
+        Extension(terminal_claims("tenant-1", "term-7")),
+        Json(CreateUserRequest {
+            username: "intruder".into(),
+            pin_hash: "hash123".into(),
+            display_name: "Intruder".into(),
+            role_id: "role-owner".into(),
+        }),
+    )
+    .await
+    .into_response();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::FORBIDDEN,
+        "a device-scoped token must not be able to create users"
+    );
+
+    let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(
+        json["error"], "insufficient_scope",
+        "the body must say why, got: {json}"
+    );
+
+    // And nothing was written: a 403 that still created the row would be
+    // the worst possible outcome, since the caller could learn it worked
+    // from a later login attempt.
+    let db = app_state.db.lock().await;
+    let count: i64 = db
+        .query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(count, 0, "a rejected request must not persist a user");
+}
+
+#[tokio::test]
+async fn the_scope_check_runs_before_the_store_is_touched() {
+    // Ordering matters. With an unseeded role, a request that reaches the
+    // store fails with a FK/validation error - so if the handler returned
+    // 403 here we know the gate ran first. If it ever returns 400/409/500,
+    // the gate has moved behind the write and the device token is back in
+    // play for every valid role_id.
+    let app_state = state();
+    let response = create_user(
+        State(app_state),
+        Extension(terminal_claims("tenant-1", "term-7")),
+        Json(body()),
+    )
+    .await
+    .into_response();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn an_admin_minted_token_still_creates_users() {
+    // The boundary, from the other side: the fix must not break the token
+    // type that is actually meant to manage users. Same body, same state,
+    // terminal_id None.
+    let app_state = state();
+    {
+        let db = app_state.db.lock().await;
+        seed_role(&db, "role-staff");
+    }
+    let response = create_user(State(app_state), Extension(claims(None)), Json(body()))
+        .await
+        .into_response();
+    assert_eq!(
+        response.status(),
+        StatusCode::CREATED,
+        "admin-minted tokens must keep working"
+    );
+}

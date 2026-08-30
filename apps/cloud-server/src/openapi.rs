@@ -730,7 +730,7 @@ fn build_paths() -> Value {
             "post": {
                 "tags": ["Users"],
                 "summary": "Create a new user account",
-                "description": "Creates a staff user with a PIN hash and role assignment. Requires seeded roles (role-staff, role-manager, role-owner).",
+                "description": "Creates a staff user with a PIN hash and role assignment. Requires seeded roles (role-staff, role-manager, role-owner). Requires an admin-minted token: a token scoped to a registered terminal is rejected with 403, since user management is an admin-tier operation.",
                 "operationId": "createUser",
                 "security": [{ "bearerAuth": [] }],
                 "requestBody": {
@@ -739,7 +739,8 @@ fn build_paths() -> Value {
                 },
                 "responses": {
                     "201": { "description": "User created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserResponse" } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token is scoped to a registered terminal and may not manage users", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
         },
