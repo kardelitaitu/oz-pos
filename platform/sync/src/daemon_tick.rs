@@ -15,6 +15,7 @@
 use super::*;
 use crate::transport::SyncTransport;
 use crate::{SyncError, import_snapshot};
+use oz_core::offline::OfflineQueueItem;
 
 /// Run a single sync tick: read → send → apply.
 ///
@@ -204,172 +205,18 @@ pub(super) async fn run_tick(
                             // after each applied settings item.
                             let settings_sink = settings_sink.clone();
                             let outcome = tokio::task::spawn_blocking(move || {
-                                    let conn = db_clone.blocking_lock();
-                                    let store = Store::new(&conn);
-                                    let queue = SyncQueue::new();
-                                    let mut has_stock_movements = false;
-                                    let mut all_applied = true;
-                                    let mut quarantined_item = false;
-                                    let mut retryable_failure = false;
-                                    // SYNC-01: captured so anchor-persistence
-                                    // failures surface in the daemon status
-                                    // (returned from the closure below) instead of
-                                    // being silently swallowed by tracing only.
-                                    let mut anchor_error: Option<String> = None;
-                                    for item in &items {
-                                        if item.action == "stock.movement" {
-                                            has_stock_movements = true;
-                                        }
-                                        // SYNC-01: the domain mutation and its
-                                        // idempotency receipt commit together. A
-                                        // crash before commit rolls back both, so
-                                        // replay is safe rather than duplicating a
-                                        // committed stock mutation with a missing
-                                        // receipt.
-                                        match queue.apply_remote_atomic_full(&store, item) {
-                                            Ok(outcome) => {
-                                                // SYNC-10: a settings change
-                                                // applied from a remote
-                                                // terminal is re-emitted as
-                                                // `SettingsUpdated` so the UI
-                                                // refetches. The tx committed
-                                                // inside apply_remote_atomic_full
-                                                // before this runs.
-                                                if let Some((key, terminal_id)) =
-                                                    outcome.settings_change
-                                                {
-                                                    let event = SettingsUpdated {
-                                                        changed_keys: vec![key],
-                                                        terminal_id,
-                                                    };
-                                                    settings_sink(&event);
-                                                }
-                                                if !outcome.applied
-                                                    && store
-                                                        .is_remote_failure_dead_lettered(&item.id)
-                                                        .unwrap_or(false)
-                                                {
-                                                    quarantined_item = true;
-                                                    tracing::error!(
-                                                        item_id = %item.id,
-                                                        action = %item.action,
-                                                        "remote item remains quarantined; advancing page anchor"
-                                                    );
-                                                }
-                                            }
-                                            Err(e) => {
-                                                let dead_lettered = store
-                                                    .is_remote_failure_dead_lettered(&item.id)
-                                                    .unwrap_or(false);
-                                                if dead_lettered {
-                                                    quarantined_item = true;
-                                                    tracing::error!(
-                                                        item_id = %item.id,
-                                                        action = %item.action,
-                                                        error = %e,
-                                                        "remote item quarantined after repeated failures; advancing page anchor"
-                                                    );
-                                                } else {
-                                                    all_applied = false;
-                                                    retryable_failure = true;
-                                                    tracing::error!(
-                                                        item_id = %item.id,
-                                                        action = %item.action,
-                                                        error = %e,
-                                                        "failed to atomically apply remote item; retaining page anchor for retry"
-                                                    );
-                                                }
-                                            }
-                                        }
-                                    }
-                                    // ADR #6: Rebuild the materialized stock_summary
-                                    // cache before advancing the pull anchor. If the
-                                    // rebuild fails, the old anchor is retained so a
-                                    // retry can restore the derived state as well.
-                                    let summary_rebuilt = if has_stock_movements {
-                                        match store.rebuild_stock_summary() {
-                                            Ok(_) => true,
-                                            Err(e) => {
-                                                tracing::error!(
-                                                    error = %e,
-                                                    "failed to rebuild stock summary after sync pull"
-                                                );
-                                                anchor_error = Some(format!(
-                                                    "rebuild stock summary after sync pull: {e}"
-                                                ));
-                                                false
-                                            }
-                                        }
-                                    } else {
-                                        true
-                                    };
-                                    // SYNC-01: advance the pull anchor ONLY after
-                                    // the whole page and its derived stock cache
-                                    // applied successfully. A crash mid-pull leaves
-                                    // the old anchor so the ledger absorbs replay.
-                                    if all_applied && !retryable_failure && summary_rebuilt {
-                                        // SYNC-09: re-read the DURABLE pull state
-                                        // before advancing. An operator rewind
-                                        // (`requeue_remote_failure` sets since = NULL
-                                        // to force a full re-pull) can land while this
-                                        // page was in flight; blindly writing new_since
-                                        // would clobber it and the requeued item would
-                                        // never be re-fetched. Skip the advance when
-                                        // the durable (since, cursor) no longer matches
-                                        // what this tick captured — a full-state
-                                        // comparison, not just the Some→None rewind
-                                        // signature, so a concurrent writer moving the
-                                        // anchor (forward or back) can never be
-                                        // overwritten with our now-stale value. The
-                                        // re-read and the write below share the same
-                                        // `blocking_lock()` hold, so no rewind can
-                                        // interleave between them.
-                                        let durable = store
-                                            .get_sync_pull_state()
-                                            .unwrap_or_default();
-                                        let rewound = durable.since.as_deref()
-                                            != prev_since.as_deref()
-                                            || durable.cursor.as_deref()
-                                                != prev_cursor.as_deref();
-                                        if rewound {
-                                            tracing::warn!(
-                                                "operator rewind detected mid-pull — retaining rewound anchor for full re-pull"
-                                            );
-                                        } else {
-                                            let new_since = items
-                                                .iter()
-                                                .map(|i| i.created_at.clone())
-                                                .max()
-                                                .or(prev_since);
-                                            if let Err(e) = store.set_sync_pull_state(
-                                                new_since.as_deref(),
-                                                next_cursor.as_deref(),
-                                            ) {
-                                                tracing::error!(
-                                                    error = %e,
-                                                    "failed to persist sync pull anchor"
-                                                );
-                                                anchor_error = Some(format!(
-                                                    "persist sync pull anchor: {e}"
-                                                ));
-                                            }
-                                        }
-                                    }
-                                    // Keep quarantine visible in daemon status even
-                                    // though the page is allowed to advance after
-                                    // the configured retry budget is exhausted.
-                                    if quarantined_item && anchor_error.is_none() {
-                                        anchor_error = Some(
-                                            "one or more remote items were dead-lettered"
-                                                .to_owned(),
-                                        );
-                                    }
-                                    // Return the anchor-persistence/quarantine error
-                                    // so the caller surfaces the recovery action in
-                                    // daemon status and logs.
-                                    anchor_error
-                                })
-                                .await;
+                                let conn = db_clone.blocking_lock();
+                                let store = Store::new(&conn);
+                                apply_pulled_page(
+                                    &store,
+                                    &items,
+                                    prev_since.as_deref(),
+                                    prev_cursor.as_deref(),
+                                    next_cursor.as_deref(),
+                                    &settings_sink,
+                                )
+                            })
+                            .await;
                             // SYNC-01: propagate both spawn_blocking panics AND
                             // anchor-persistence failures into sync_error so the
                             // daemon status/backoff reflect them.
@@ -519,4 +366,160 @@ pub(super) async fn run_tick(
     } else {
         tracing::info!(pushed, "sync cycle completed");
     }
+}
+
+/// Apply a pulled page atomically, rebuild the stock summary, and advance the
+/// durable pull anchor (SYNC-01 / ADR #6 / SYNC-09).
+///
+/// This is the SQLite daemon's analogue of `pg_daemon::apply_pulled_page` —
+/// the same item-application loop (with the SYNC-10 settings sink), extended
+/// with the responsibilities that live only on the SQLite path:
+///   - ADR #6: rebuild `stock_summary` after any `stock.movement` item
+///   - SYNC-09: re-read the durable pull state before advancing so an
+///     operator rewind mid-pull is never clobbered
+///   - SYNC-01: persist the new (since, cursor) anchor only when the whole
+///     page applied cleanly and no rewind intervened
+///
+/// Returns `Some(message)` when the page must be surfaced as an anchor /
+/// quarantine error in daemon status (persist failure, dead-lettered item, or
+/// stock rebuild failure); `None` when the page applied cleanly. The caller
+/// runs this inside `spawn_blocking` (blocking DB work).
+fn apply_pulled_page(
+    store: &Store<'_>,
+    page: &[OfflineQueueItem],
+    prev_since: Option<&str>,
+    prev_cursor: Option<&str>,
+    next_cursor: Option<&str>,
+    settings_sink: &SettingsChangedSink,
+) -> Option<String> {
+    let queue = SyncQueue::new();
+    let mut has_stock_movements = false;
+    let mut all_applied = true;
+    let mut quarantined_item = false;
+    let mut retryable_failure = false;
+    // SYNC-01: captured so anchor-persistence failures surface in the daemon
+    // status (returned from this function) instead of being silently
+    // swallowed by tracing only.
+    let mut anchor_error: Option<String> = None;
+    for item in page {
+        if item.action == "stock.movement" {
+            has_stock_movements = true;
+        }
+        // SYNC-01: the domain mutation and its idempotency receipt commit
+        // together. A crash before commit rolls back both, so replay is safe
+        // rather than duplicating a committed stock mutation with a missing
+        // receipt.
+        match queue.apply_remote_atomic_full(store, item) {
+            Ok(outcome) => {
+                // SYNC-10: a settings change applied from a remote terminal is
+                // re-emitted as `SettingsUpdated` so the UI refetches. The tx
+                // committed inside apply_remote_atomic_full before this runs.
+                if let Some((key, terminal_id)) = outcome.settings_change {
+                    let event = SettingsUpdated {
+                        changed_keys: vec![key],
+                        terminal_id,
+                    };
+                    settings_sink(&event);
+                }
+                if !outcome.applied
+                    && store
+                        .is_remote_failure_dead_lettered(&item.id)
+                        .unwrap_or(false)
+                {
+                    quarantined_item = true;
+                    tracing::error!(
+                        item_id = %item.id,
+                        action = %item.action,
+                        "remote item remains quarantined; advancing page anchor"
+                    );
+                }
+            }
+            Err(e) => {
+                let dead_lettered = store
+                    .is_remote_failure_dead_lettered(&item.id)
+                    .unwrap_or(false);
+                if dead_lettered {
+                    quarantined_item = true;
+                    tracing::error!(
+                        item_id = %item.id,
+                        action = %item.action,
+                        error = %e,
+                        "remote item quarantined after repeated failures; advancing page anchor"
+                    );
+                } else {
+                    all_applied = false;
+                    retryable_failure = true;
+                    tracing::error!(
+                        item_id = %item.id,
+                        action = %item.action,
+                        error = %e,
+                        "failed to atomically apply remote item; retaining page anchor for retry"
+                    );
+                }
+            }
+        }
+    }
+    // ADR #6: Rebuild the materialized stock_summary cache before advancing
+    // the pull anchor. If the rebuild fails, the old anchor is retained so a
+    // retry can restore the derived state as well.
+    let summary_rebuilt = if has_stock_movements {
+        match store.rebuild_stock_summary() {
+            Ok(_) => true,
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    "failed to rebuild stock summary after sync pull"
+                );
+                anchor_error = Some(format!("rebuild stock summary after sync pull: {e}"));
+                false
+            }
+        }
+    } else {
+        true
+    };
+    // SYNC-01: advance the pull anchor ONLY after the whole page and its
+    // derived stock cache applied successfully. A crash mid-pull leaves the
+    // old anchor so the ledger absorbs replay.
+    if all_applied && !retryable_failure && summary_rebuilt {
+        // SYNC-09: re-read the DURABLE pull state before advancing. An
+        // operator rewind (`requeue_remote_failure` sets since = NULL to
+        // force a full re-pull) can land while this page was in flight;
+        // blindly writing new_since would clobber it and the requeued item
+        // would never be re-fetched. Skip the advance when the durable
+        // (since, cursor) no longer matches what this tick captured — a
+        // full-state comparison, not just the Some→None rewind signature, so
+        // a concurrent writer moving the anchor (forward or back) can never
+        // be overwritten with our now-stale value. The re-read and the write
+        // below share the same `blocking_lock()` hold, so no rewind can
+        // interleave between them.
+        let durable = store.get_sync_pull_state().unwrap_or_default();
+        let rewound =
+            durable.since.as_deref() != prev_since || durable.cursor.as_deref() != prev_cursor;
+        if rewound {
+            tracing::warn!(
+                "operator rewind detected mid-pull — retaining rewound anchor for full re-pull"
+            );
+        } else {
+            let new_since = page
+                .iter()
+                .map(|i| i.created_at.clone())
+                .max()
+                .or_else(|| prev_since.map(str::to_owned));
+            if let Err(e) = store.set_sync_pull_state(new_since.as_deref(), next_cursor) {
+                tracing::error!(
+                    error = %e,
+                    "failed to persist sync pull anchor"
+                );
+                anchor_error = Some(format!("persist sync pull anchor: {e}"));
+            }
+        }
+    }
+    // Keep quarantine visible in daemon status even though the page is
+    // allowed to advance after the configured retry budget is exhausted.
+    if quarantined_item && anchor_error.is_none() {
+        anchor_error = Some("one or more remote items were dead-lettered".to_owned());
+    }
+    // Return the anchor-persistence/quarantine error so the caller surfaces
+    // the recovery action in daemon status and logs.
+    anchor_error
 }
