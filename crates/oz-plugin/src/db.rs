@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-plugin slice B: db deep read)
+crate: oz-plugin | status: NEEDS-FIX | lint: CLEAN
+findings: PLG-11 HIGH — the regex-based namespace validator extracts bare identifiers only, so any SQLite-legal QUOTED table reference (double quotes, backticks, square brackets) bypasses extraction entirely: DELETE FROM "sales", UPDATE [sales] SET, INSERT INTO `sales` all pass validate_sql with zero captured table names and reach the core schema. execute_batch (execute) accepts multiple statements and inherits the same bypass. Proposed: reject statements containing quote/bracket characters outside string literals (fail-closed), or replace regex validation with the SQLite authorizer callback (sqlite3_set_authorizer via rusqlite ffi) which is the API designed for exactly this enforcement. Otherwise strong: blocked-keyword list, PRAGMA/ALTER TABLE blocked, 8 reference patterns, CTE exclusion (fail-safe direction on data-modifying statements), OnceLock statics with documented RUST-07 policy plus CI compile test, poisoned-lock handling, safe JSON/blob conversion with hand-rolled base64
+next: PLG-11 in fix-order phase | perf: contains_word compiles a fresh regex per keyword per statement (plugin path, negligible)
+*/
 //! Isolated database namespace for plugins.
 //!
 //! Every SQL statement executed by a plugin is validated to ensure all

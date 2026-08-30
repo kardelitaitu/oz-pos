@@ -46,6 +46,21 @@ total, 100× ratio cap). Documented fail-closed asymmetry: one bad
 manifest aborts the whole registry load; an unsafe script path skips
 only that plugin with a loud warn. Slice B (manager.rs, db.rs) next.
 
+### Slice B — manager.rs (520: production 1–482 fully read), db.rs (416:
+production 1–370 fully read) — **oz-plugin COMPLETE**
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| PLG-11 | 🟠 HIGH | crates/oz-plugin/src/db.rs:208–254 | The regex namespace validator extracts bare identifiers only — any SQLite-legal **quoted** table reference (`"sales"`, `` `sales` ``, `[sales]`) bypasses extraction entirely, so `DELETE FROM "sales"` passes `validate_sql` with zero captured tables and reaches the core schema. `execute` (`execute_batch`, multi-statement) inherits the bypass. | Fail-closed: reject quote/bracket characters outside string literals — or replace regex validation with the SQLite authorizer (`sqlite3_set_authorizer`), the API designed for this. |
+
+manager.rs is exemplary (PLG-03 gated `oz` table, PLG-04 isolated
+`_ENV` with `_G` repointing, duplicate-id rejection, mandatory
+permission opt-in, deterministic ordering, P0-5 discount range,
+MONEY-05 float hand-off, documented mlua drop-order).
+
+> **oz-plugin COMPLETE** — 7 production files, ~1.7k lines, one HIGH
+> (PLG-11). Campaign proceeds to crates/oz-lua.
+
 ---
 
 ## 25. crates/oz-hal — hardware abstraction layer

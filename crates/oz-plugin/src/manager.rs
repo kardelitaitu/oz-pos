@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-plugin slice B: manager deep read)
+crate: oz-plugin | status: SAFE | lint: CLEAN
+findings: exemplary — PLG-03 capability-gated oz table (ungranted bindings absent, fail fast); PLG-04 per-plugin isolated _ENV with __index chaining and _G repointed at the plugin env (no global leak); duplicate-id rejection; mandatory at-least-one-permission opt-in; deterministic id-sorted ordering; P0-5 discount range 0-100; MONEY-05 documented float hand-off avoiding Lua 5.4 integer wrap; mlua RegistryKey drop-before-VM field ordering documented against use-after-free; poisoned locks degrade benignly (fail-safe for discount queue)
+next: none | perf: hooks resolved per event via cloned refs
+*/
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
