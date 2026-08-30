@@ -155,7 +155,7 @@ describe('admin-utils API auth helpers (H1)', () => {
   });
 
   it('authDeniedError marks the error with authDenied + path', () => {
-    const err = utils.authDeniedError('/api/v1/admin/stats');
+    const err = utils.authDeniedError('/api/v1/admin/stats') as Error & { authDenied?: boolean };
     expect(err.message).toContain('/api/v1/admin/stats');
     expect(err.authDenied).toBe(true);
   });

@@ -14,7 +14,7 @@ import { createRoot, type Root } from 'react-dom/client';
 
 const paddle = vi.hoisted(() => ({
   openPaddleCheckout: vi.fn(),
-  getSessionEmail: vi.fn(async () => 'test@example.com'),
+  getSessionEmail: vi.fn(async () => 'test@example.com' as string | null),
   clearSession: vi.fn(() => {
     sessionStorage.removeItem('oz_session');
     sessionStorage.removeItem('oz_email');
