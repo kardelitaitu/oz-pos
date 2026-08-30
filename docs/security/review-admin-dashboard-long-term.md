@@ -158,7 +158,7 @@ The admin login page (`login.html`) is always dark. The dashboard has a theme to
 | 2 | **HIGH** | MOCK fallback masks failures (C4) | Show error banner when API fails; keep MOCK only as last-resort skeleton | ✅ Resolved — MOCK object removed; API errors render a retry/error state (Phase 1) |
 | 3 | **HIGH** | Tenants list has no pagination (C3) | Add page controls + pass `?page=` / `?perPage=` to the API | ✅ Resolved — pagination controls + `?page=`/`?perPage=`/`?search=` (Phase 2) |
 | 4 | **HIGH** | Monolithic admin.js (H1) | Split into testable modules (stats.js, tenants.js, charts.js) or move to a build step | ✅ Resolved — pure helpers extracted into `admin-utils.js` (charts, formatting, cards, API auth, i18n) with unit tests |
-| 5 | **HIGH** | Zero tests (H2) | Add unit tests for chart rendering, helpers, and API mock fallback | ✅ Resolved — 85 unit tests in `src/__tests__/admin-utils.test.ts` (+19 in `worker.test.ts`); both suites now execute in CI via the `website-tests` gate. The 2026-08-30 bug hunt added 63 of those tests and fixed 24 real bugs (see §8.1) |
+| 5 | **HIGH** | Zero tests (H2) | Add unit tests for chart rendering, helpers, and API mock fallback | ✅ Resolved — 94 unit tests across `admin-utils.test.ts` (88) and `admin-a11y.test.ts` (6), +19 in `worker.test.ts`, +7 Go tests in `admin_stats_test.go`/`admin_dashboard_test.go`; all suites execute in CI via the `website-tests` gate. The 2026-08-30 bug hunt added 72 of the website tests and fixed 33 real bugs (see §8.1) |
 | 6 | **HIGH** | No i18n (H3) | Extract strings to an i18n structure; at minimum, add English `.ftl` keys for future localization | ✅ Resolved — `STRINGS` key-value table + `t()` helper; all admin/dashboard/login strings extracted |
 | 7 | **HIGH** | Shared session cookie (H4) | Restrict `Domain` to individual subdomains or use a dedicated auth domain | ✅ Resolved — cookie scoped to `admin.ozpos.my.id` / `dashboard.ozpos.my.id` (not the parent domain) |
 | 8 | **MEDIUM** | No loading/error states for charts (M1) | Guard `svgChart` against empty/NaN data; add per-chart error states | ✅ Resolved — `svgChart` / `svgDonut` guard empty/NaN/zero data |
@@ -223,7 +223,7 @@ merge history (`git log -S` + merge-ancestry), and a local test run:
 - **L1 corrected to OPEN**, **L3 marked won't-fix/by-design** — see §5.
 - Test count corrected: **24**, not "25+".
 
-### 8.1 Bug hunt (2026-08-30, TDD) — 28 bugs found & fixed
+### 8.1 Bug hunt (2026-08-30, TDD) — 33 bugs found & fixed
 
 A focused hunt over `admin.js`/`admin-utils.js` against the Go server's
 actual JSON shapes found six real bugs — none caught by the pre-existing
@@ -353,3 +353,22 @@ LSE-9 landed mid-round — `addon_admin` `authenticateAdmin` previously
 accepted ANY valid tenant api_key as admin (P0 priv-esc: any customer
 could mint enterprise approval codes / mutate add-ons); fixed in their
 `fix(licensing)` slice alongside LSE-8 (constant-time `adminKeyOK`).
+
+**Round 8** (same day) closed the a11y announcement family and ran a
+deterministic property fuzz over the render pipeline — the fuzz found
+three real crash/corruption paths on its first run:
+
+| # | Sev | Bug | Fix |
+|---|-----|-----|-----|
+| B33 | P3 | login `#error-msg`/`#success-msg` had no ARIA role — login errors/success silent to screen readers (WCAG 4.1.3); tabs half-wired (`role=tab` without `aria-controls`, groups without `role=tabpanel`) | `role=alert`/`role=status` + full tab/panel wiring; markup contract tests parse the real HTML |
+| B34 | P3 | `flash()` appended a bare div — every action toast AT-silent | extracted to `admin-utils.flashMessage` with `role=alert`; admin.js delegates |
+| B35 | P2 | `normalizeStats` coerced only the old 7 KPI keys — `fxRate`/`mrrIdr`/`lifetimeUsd`/`lifetimeIdr` could render "Rp NaN" (B4 class) | full numeric set coerced finite; string/bool keys pass through |
+| B36 | P1 | a null row inside any stats array crashed svgChart/svgBarChart/svgDonut — whole-dashboard render death from one truncated element | object-row filter in all three builders |
+| B37 | P1 | non-string truthy `created` threw in `tenantRow` — the tenants `forEach` aborted and the ENTIRE table vanished | `String()` before slice; `devices` guarded to array |
+
+Round-8 commits: `60a8c542` (B33+B34), `74b79da0` (B35–B37).
+Fuzz: seeded LCG (reproducible), 20-value hostile pool, 500 iterations
+across normalizeStats/charts/tenant builders. B36/B37 are the hunt's
+first P1s since B24 — single malformed array elements taking down
+whole views, previously only hypothesized (B4's partial-payload class)
+and now proven reachable through the element level.

@@ -7057,3 +7057,46 @@ Commit fc8eae22: 8 files, +253/−23, zero foreign hunks.
 `complete_sale_with_resolved_shortfalls*` still carries `unitPriceMinor`
 without currency; `RefundLineArg` already carries `currency` (precedent
 for the fix shape).
+
+## 2026-08-30 — Admin bug hunt round 8: a11y announcements + property fuzz (B33-B37)
+
+**Problem:** Eighth loop — the two remaining goal-list slices: status
+announcements (the a11y family B27/B28 started) and a property-style
+fuzz of the render pipeline. Five bugs fixed (B33-B37); the fuzz alone
+found three real crash/corruption paths.
+
+**Findings:**
+
+1. **B33** (60a8c542) login.html #error-msg/#success-msg had no ARIA
+   role — login errors and success were silent to screen readers
+   (WCAG 4.1.3); tabs were half-wired (role=tab without aria-controls,
+   groups without role=tabpanel/aria-labelledby). Markup fixed +
+   contract tests parse the real HTML file (DOMParser + readFileSync).
+2. **B34** (60a8c542) admin.js flash() appended a bare div — every
+   Renew/Revoke/Activate toast was AT-silent. Extracted to
+   admin-utils.flashMessage(container, msg, ttlMs) with role=alert
+   (testable via the UMD pattern); admin.js delegates.
+3. **B35** (74b79da0, fuzz) normalizeStats copied every kpi key raw and
+   coerced only the old 7-key list — fxRate/mrrIdr/lifetimeUsd/
+   lifetimeIdr could reach cards as NaN/Infinity ("Rp NaN", B4 class).
+   Full numeric set coerced; fxUpdatedAt/fxLive pass through by design.
+4. **B36** (74b79da0, fuzz) null rows inside stats arrays crashed
+   svgChart/svgBarChart/svgDonut ("Cannot read properties of null") —
+   whole-dashboard render death from one truncated element. All three
+   filter to object rows first.
+5. **B37** (74b79da0, fuzz) created.slice(0,10) on a non-string truthy
+   value threw inside tenantRow — the tenants forEach aborted and the
+   ENTIRE table vanished. String() first; devices guarded to array.
+
+**Fuzz design:** deterministic seeded LCG (reproducible), 20-value
+weird-payload pool (null/NaN/Infinity/objects/functions/Date), 300
+normalizeStats iterations + 100 chart + 100 tenant-builder. Red showed
+the exact TypeErrors; the first assertion draft over-reached ("every
+kpi value finite") — corrected to the numeric-key contract since
+fxUpdatedAt is legitimately a string. One test-side signature slip
+(svgDonut 5-arg) caught by running Red, not review.
+
+**Test counts:** admin-utils 85 -> 88; new admin-a11y.test.ts 6; full
+website 668/668 (40 files); drift 0.
+
+**Commits:** 60a8c542 (B33+B34), 74b79da0 (B35-B37).
