@@ -136,6 +136,13 @@ describe('admin-utils i18n (H3)', () => {
     expect(utils.STRINGS).toBeDefined();
     expect(Object.keys(utils.STRINGS).length).toBeGreaterThan(60);
   });
+
+  it('covers the login page strings (admin + dashboard share the table)', () => {
+    expect(utils.t('login.sendCode')).toBe('Send Verification Code');
+    expect(utils.t('login.enterEmail')).toBe('Please enter your email address');
+    expect(utils.t('login.couldNotConnect')).toBe('Could not connect to authentication server');
+    expect(utils.t('login.resendIn')).toBe('Resend code in ');
+  });
 });
 
 describe('admin-utils API auth helpers (H1)', () => {
