@@ -150,6 +150,86 @@ describe('useAuth hook', () => {
     await harness.unmount();
   });
 
+  it('surfaces the CORS error message on 403', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: 'origin rejected' }),
+    });
+
+    const harness = await renderHookHarness(() => useAuth({ locale: 'en' }));
+
+    let success = true;
+    await act(async () => {
+      success = await harness.current.requestOtp('cors@example.com');
+    });
+
+    expect(success).toBe(false);
+    expect(harness.current.error).toContain('Request blocked by the server');
+    await harness.unmount();
+  });
+
+  it('surfaces the SMTP error message on 503', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({ error: 'mail relay down' }),
+    });
+
+    const harness = await renderHookHarness(() => useAuth({ locale: 'en' }));
+
+    let success = true;
+    await act(async () => {
+      success = await harness.current.requestOtp('smtp@example.com');
+    });
+
+    expect(success).toBe(false);
+    expect(harness.current.error).toContain('Email delivery is not configured');
+    await harness.unmount();
+  });
+
+  it('appends the server error message to the fallback on other failures', async () => {
+    // Non-429/403/503 failure with a server-provided error string: the
+    // localized fallback is shown with the server detail appended.
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: 'invalid email format' }),
+    });
+
+    const harness = await renderHookHarness(() => useAuth({ locale: 'en' }));
+
+    let success = true;
+    await act(async () => {
+      success = await harness.current.requestOtp('bad@');
+    });
+
+    expect(success).toBe(false);
+    expect(harness.current.error).toContain("Couldn't send the code");
+    expect(harness.current.error).toContain('invalid email format');
+    await harness.unmount();
+  });
+
+  it('falls back to the localized message when the server sends no error detail', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: '' }),
+    });
+
+    const harness = await renderHookHarness(() => useAuth({ locale: 'en' }));
+
+    let success = true;
+    await act(async () => {
+      success = await harness.current.requestOtp('silent@example.com');
+    });
+
+    expect(success).toBe(false);
+    // No server detail — the localized fallback alone is shown, no "()".
+    expect(harness.current.error).toBe("Couldn't send the code. Please try again later.");
+    await harness.unmount();
+  });
+
   it('handles full password reset flow with verification code', async () => {
     global.fetch = vi
       .fn()
