@@ -437,3 +437,145 @@ async fn offline_buffer_caps_are_per_peer_not_global() {
     );
     assert_eq!(map.len(), 2);
 }
+
+// ── noise-psk-v1 transport (DC-1 full fix) ──────────────────────────
+
+/// Spawn `handle_peer` in PSK (external-bind) mode and connect a client.
+async fn spawn_psk_peer(
+    psk: &str,
+) -> (
+    tokio::task::JoinHandle<()>,
+    TcpStream,
+    broadcast::Sender<String>,
+) {
+    let (tx, rx) = broadcast::channel(16);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let buffer = Arc::new(Mutex::new(HashMap::new()));
+    let expected = Some(Arc::new(psk.to_string()));
+    let server_handle = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        handle_peer(
+            stream,
+            "noise-test-peer".into(),
+            rx,
+            buffer,
+            vec![],
+            expected,
+            None,
+        )
+        .await;
+    });
+    let client = TcpStream::connect(addr).await.unwrap();
+    (server_handle, client, tx)
+}
+
+/// Drive the initiator (KDS client) side of `Noise_XXpsk3` over
+/// `client`: magic byte, msg1 `-> e`, msg2 `<- e ee s es`, msg3
+/// `-> s es psk3`, then switch to transport mode. This is the
+/// reference sequence the module doc points at.
+async fn noise_initiator(client: &mut TcpStream, psk: &str) -> snow::TransportState {
+    // Transport selector: `handle_peer` reads this first byte to pick
+    // noise-psk-v1 over the legacy cleartext hello.
+    tokio::io::AsyncWriteExt::write_all(client, &[NOISE_MAGIC_BYTE])
+        .await
+        .unwrap();
+    let params: snow::params::NoiseParams = NOISE_PATTERN.parse().unwrap();
+    let static_secret = noise_static_secret(psk);
+    let psk_bytes = noise_psk_bytes(psk);
+    let mut hs = snow::Builder::new(params)
+        .local_private_key(&static_secret)
+        .unwrap()
+        .psk(3, &psk_bytes)
+        .unwrap()
+        .build_initiator()
+        .unwrap();
+    let mut buf = vec![0u8; NOISE_MAX_FRAME];
+    let n = hs.write_message(&[], &mut buf).unwrap();
+    write_frame(client, &buf[..n]).await.unwrap();
+    let msg2 = read_frame(client).await.unwrap();
+    let mut pt = vec![0u8; msg2.len()];
+    hs.read_message(&msg2, &mut pt).unwrap();
+    let n = hs.write_message(&[], &mut buf).unwrap();
+    write_frame(client, &buf[..n]).await.unwrap();
+    hs.into_transport_mode().unwrap()
+}
+
+#[tokio::test]
+async fn noise_peer_handshakes_and_receives_encrypted_event() {
+    let (server_handle, mut client, tx) = spawn_psk_peer("s3cret").await;
+    let mut transport = noise_initiator(&mut client, "s3cret").await;
+
+    tx.send("{\"event\":\"noise\"}".into()).unwrap();
+    drop(tx);
+
+    let ct = read_frame(&mut client).await.unwrap();
+    let mut pt = vec![0u8; ct.len()];
+    let n = transport.read_message(&ct, &mut pt).unwrap();
+    assert_eq!(
+        std::str::from_utf8(&pt[..n]).unwrap(),
+        "{\"event\":\"noise\"}"
+    );
+    server_handle.await.unwrap();
+}
+
+#[tokio::test]
+async fn noise_handshake_with_wrong_psk_is_dropped() {
+    let (server_handle, mut client, _tx) = spawn_psk_peer("s3cret").await;
+    // msg1/msg2 carry no PSK evidence; the psk3 MAC check in msg3 is
+    // what authenticates the initiator, so the client side completes
+    // locally but the responder must reject and close without ever
+    // writing an event frame.
+    let _transport = noise_initiator(&mut client, "wrong-psk").await;
+    let mut buf = Vec::new();
+    tokio::io::AsyncReadExt::read_to_end(&mut client, &mut buf)
+        .await
+        .unwrap();
+    assert!(buf.is_empty(), "wrong-PSK peer must receive nothing");
+    server_handle.await.unwrap();
+}
+
+#[tokio::test]
+async fn unknown_transport_selector_byte_is_dropped() {
+    let (server_handle, mut client, _tx) = spawn_psk_peer("s3cret").await;
+    tokio::io::AsyncWriteExt::write_all(&mut client, &[0x2a])
+        .await
+        .unwrap();
+    let mut buf = Vec::new();
+    tokio::io::AsyncReadExt::read_to_end(&mut client, &mut buf)
+        .await
+        .unwrap();
+    assert!(buf.is_empty());
+    server_handle.await.unwrap();
+}
+
+#[tokio::test]
+async fn legacy_hello_with_correct_psk_receives_event() {
+    let (server_handle, mut client, tx) = spawn_psk_peer("s3cret").await;
+    tokio::io::AsyncWriteExt::write_all(&mut client, b"{\"op\":\"hello\",\"psk\":\"s3cret\"}\n")
+        .await
+        .unwrap();
+    tx.send("{\"event\":\"legacy\"}".into()).unwrap();
+    drop(tx);
+
+    let mut buf = Vec::new();
+    tokio::io::AsyncReadExt::read_to_end(&mut client, &mut buf)
+        .await
+        .unwrap();
+    assert!(String::from_utf8_lossy(&buf).contains("{\"event\":\"legacy\"}"));
+    server_handle.await.unwrap();
+}
+
+#[tokio::test]
+async fn legacy_hello_with_wrong_psk_is_dropped() {
+    let (server_handle, mut client, _tx) = spawn_psk_peer("s3cret").await;
+    tokio::io::AsyncWriteExt::write_all(&mut client, b"{\"op\":\"hello\",\"psk\":\"nope\"}\n")
+        .await
+        .unwrap();
+    let mut buf = Vec::new();
+    tokio::io::AsyncReadExt::read_to_end(&mut client, &mut buf)
+        .await
+        .unwrap();
+    assert!(buf.is_empty(), "bad-hello peer must receive nothing");
+    server_handle.await.unwrap();
+}
