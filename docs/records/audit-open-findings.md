@@ -72,7 +72,7 @@ Key open items:
 
 Key residual items:
 - **STAFF-13 (partially)** — Security-focused command tests and wiring tests cover session binding, two-store identity, role hierarchy, PIN rotation/invalidation, rate limits… (remaining coverage gaps documented in the deleted report)
-- Deactivate/Restore flow: no confirmation dialog, no per-row pending state, backend does not prevent self/last-owner deactivation — recommendation: confirm with staff name + consequences, disable while pending, prevent self/last-owner deactivation in backend
+- ~~Deactivate/Restore flow: … backend does not prevent self/last-owner deactivation~~ — **backend half VERIFIED FIXED 2026-08-30** (registry stale): `enforce_role_assignment_policy` on BOTH clients' scoped commands blocks self-role change, self-deactivation (STAFF-10), and deactivate/demote of the last active Owner (STAFF-02), plus Owner-only promotion; legacy unscoped staff commands are hard-disabled. Branch-pinning tests added (`d45d1119`: each guard exercised in isolation with exact-message asserts — the pre-existing last-owner test was satisfied by either branch). **Remaining (UI, open):** no confirmation dialog, no per-row pending state. **Coverage gap noted:** the tablet's duplicated policy copy has NO command-level tests (tablet test infra lacks a scoped-state helper — worth a small harness slice).
 
 ---
 
