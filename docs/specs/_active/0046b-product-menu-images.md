@@ -85,17 +85,25 @@ One IPC command, `products_register_image(product_id, bytes)`:
 
 - Row-level product sync already carries `version`; adding `image_hash` is a
   free rider — **the hash syncs like any column**.
-- Bytes live in **Cloudflare R2** (deploy already targets Cloudflare —
-  `scripts/wrangler-deploy.sh`, `public/_headers`). Cloud object key:
-  `images/{tenant_id}/{product_id}.{hash8}.webp`.
-- New worker/oz-api surface (admin-key-gated, same tier as catalog writes):
-  - `PUT /api/v1/products/{id}/image` (desktop upload, ≤ 32 KB body)
+- **Byte store: the Northflank persistent volume** (decided — not R2, not PG
+  `bytea`). The unified cloud image already declares `VOLUME ["/data"]` with
+  `OZ_DB_PATH=/data/oz-pos.db`; image files live beside the DB at
+  `OZ_IMAGE_DIR` (default `/data/images` in prod, `./data/images` in dev).
+  Capacity math: 6 GB volume, ~16 KB per image ⇒ **≈ 350k product images**
+  before the DB ever matters; P4 adds a bytes-used metric with a soft alert
+  at 4 GB.
+- oz-api serves the bytes itself — **no new component**:
+  - `PUT /api/v1/products/{id}/image` (admin-key gate, same tier as catalog
+    writes per API-4/G-1; ≤ 32 KB body; writes `{product_id}.{hash8}.webp`
+    via temp + rename **on the same volume** so the rename is atomic)
   - `GET /api/v1/products/{id}/image?hash=…` (tablet download; immutable,
-    `Cache-Control: max-age=31536000, immutable` — hashes are keys)
+    `Cache-Control: max-age=31536000, immutable` — hashes are keys; unknown
+    hash ⇒ 404, no directory traversal — id and hash are validated against
+    the same grammar the desktop ingest uses)
 - Tablet pull: a tiny **download manager** in the tablet's Rust shell — on
-  catalog apply, for each product with `image_hash` and no local file, queue a
-  background GET (bounded concurrency 3, LRU eviction of the images dir at a
-  configurable budget, default **64 MB** ≈ 3–6 k products). Offline-first
+  catalog apply, for each product with `image_hash` and no local file, queue
+  a background GET (bounded concurrency 3, LRU eviction of the images dir at
+  a configurable budget, default **64 MB** ≈ 3–6 k products). Offline-first
   holds: missing image degrades to the existing colored-initial tile.
 
 ### 3.5 UI: virtualize or the pixel RAM wins anyway
@@ -120,7 +128,7 @@ One IPC command, `products_register_image(product_id, bytes)`:
 |---|---|---|
 | **P1 — storage spine** | `image_hash` column (sqlite+pg migrations, models, repository, `products_register_image` command with sniff/limits/transcode/atomic-write/txn, unit tests incl. malformed-magic + oversized rejection) | `oz-core` (migrations, db/products), `desktop-client/src/commands`, tauri.conf `assetProtocol` |
 | **P2 — UI tiles** | `FixedSizeGrid` on POS + `<img convertFileSrc>` with hash-keyed URLs, miss→initial tile fallback, a11y (alt text from product name, aria-busy on load) | `ui/src/features/retail`, `restaurant`, shared `ProductThumb` component |
-| **P3 — cloud sync** | R2 bucket + worker routes (upload/download, admin-key gate per API-4/G-1 pattern), tablet download manager + LRU, sync tests (hash rider, immutable ETag) | `gateway`/worker, `oz-api`, tablet-client Rust |
+| **P3 — cloud sync** | oz-api image routes on the Northflank volume (upload/download, admin-key gate per API-4/G-1 pattern, `OZ_IMAGE_DIR`), tablet download manager + LRU, sync tests (hash rider, immutable Cache-Control) | `oz-api`, `Dockerfile.unified` volume note, tablet-client Rust |
 | **P4 — hygiene** | startup GC sweep, metrics (bytes dir, hit/miss latency), e2e on the E2E suite, docs (`docs/guides`), i18n strings for the editor UI (en+id FTL) | `desktop-client`, `ui`, docs |
 
 **Est. budget:** P1–P2 make a fully local (single-device) feature — shippable
