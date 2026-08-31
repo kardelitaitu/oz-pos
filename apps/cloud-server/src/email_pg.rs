@@ -852,20 +852,28 @@ async fn top_products_pg(
     let sql = format!(
         // REP-06: include currency so rows are grouped per-product AND
         // per-currency; minor units must never be summed across currencies.
-        "SELECT p.id AS product_id, p.sku, p.name,
+        // REP-05: LEFT JOIN products — a product deleted after a sale must
+        // not erase that sale's revenue from the email report. Grouping is
+        // driven by sl.sku (deleted rows have NULL p.id and would otherwise
+        // collapse into one NULL group); the product columns are grouped
+        // too — PG forbids nesting aggregates, so the per-row cost
+        // fallback cannot wrap MAX().
+        "SELECT COALESCE(p.id, 'deleted:' || sl.sku) AS product_id,
+                sl.sku,
+                COALESCE(p.name, sl.sku) AS name,
                 SUM(sl.qty)::bigint AS total_qty,
                 SUM(sl.line_minor)::bigint AS total_minor,
-                SUM(COALESCE(sl.cost_minor, p.cost_minor, 0) * sl.qty)::bigint AS cogs_minor,
-                (SUM(sl.line_minor) - SUM(COALESCE(sl.cost_minor, p.cost_minor, 0) * sl.qty))::bigint AS gross_profit_minor,
+                SUM(sl.qty * COALESCE(sl.cost_minor, p.cost_minor, 0))::bigint AS cogs_minor,
+                (SUM(sl.line_minor) - SUM(sl.qty * COALESCE(sl.cost_minor, p.cost_minor, 0)))::bigint AS gross_profit_minor,
                 s.currency
          FROM sale_lines sl
          JOIN sales s ON sl.sale_id = s.id
-         JOIN products p ON p.sku = sl.sku AND p.tenant_id = s.tenant_id
+         LEFT JOIN products p ON p.sku = sl.sku AND p.tenant_id = s.tenant_id
          WHERE s.status = 'completed'
            AND s.tenant_id = $4
            AND s.created_at::date BETWEEN $1 AND $2
-         GROUP BY p.id, p.sku, p.name, s.currency
-         ORDER BY {order_clause}, p.sku
+         GROUP BY sl.sku, s.currency, p.id, p.name, p.cost_minor
+         ORDER BY {order_clause}, sl.sku
          LIMIT $3"
     );
     let rows = tx
@@ -966,7 +974,7 @@ async fn category_breakdown_pg(
                     s.currency
              FROM sale_lines sl
              JOIN sales s ON sl.sale_id = s.id
-             JOIN products p ON p.sku = sl.sku AND p.tenant_id = s.tenant_id
+             LEFT JOIN products p ON p.sku = sl.sku AND p.tenant_id = s.tenant_id
              LEFT JOIN categories c ON p.category_id = c.id
              WHERE s.status = 'completed'
                AND s.tenant_id = $3
