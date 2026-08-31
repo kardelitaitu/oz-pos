@@ -9099,8 +9099,10 @@ does not restart itself.
 ## 2026-08-31 — round T: repairing the four discoveries, one by one
 
 The previous round's "notable discoveries" became this round's work order:
-repair carefully, one by one. All four landed; three needed code, one was a
-sweep that came back clean.
+repair carefully, one by one. Outcome: two needed code (the REST surface,
+the .env hardening), one was a sweep that came back clean, and one had
+already been fixed upstream by the foreign owner mid-round — verified, not
+blindly trusted.
 
 **1. Rate REST gap (the big one).** The exchange-rate commands were IPC +
 dev-mock only — `crates/oz-api` had no rate endpoints at all, so web
@@ -9134,6 +9136,19 @@ file carries a multi-line PEM value; a naive line checker false-positives on
 it) wired as a pre-flight in `run-e2e.mjs`, so the next poisoned line fails
 fast with every offender numbered instead of dying inside compose with one
 terse message.
+
+**4. Foreign breakage — resolved upstream, verified here.** The unused
+`total` in tablet `pos.rs` (from 192c5bc6) and the nine PaymentModal suite
+failures were both fixed by the PROMO-3 owner's own follow-up commit
+`100dcdef` while this round was in flight. Verification, not assumption:
+fresh `cargo check` on the touched file → zero warnings; `cargo clippy -p
+oz-pos-tablet -p oz-api --all-targets` → clean (the pre-push gate this
+discovery threatened); payment family (PaymentModal, EdgeCases, SaleFlow,
+StockShortfallDialog, GiftCardPayment) → 99/99 green, including the nine
+that were red at baseline. The lesson the discovery taught stands anyway —
+foreign half-finished commits can carry the tree red for hours — but the
+right repair for someone else's in-flight work is verification at the gate,
+not a competing fix.
 
 **Incident worth recording: uncommitted work evaporates in this tree.**
 Mid-repair, `pg.rs` reverted to its pre-edit size under a foreign git
