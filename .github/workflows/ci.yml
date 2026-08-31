@@ -165,6 +165,22 @@ jobs:
       - name: Verify no hardcoded exp-2 money formatting
         run: python3 scripts/verify-no-hardcoded-money-format.py
 
+  # ── Migration column-type lint (LOYALTY-01 / MONEY-01 class guard) ──
+  # REAL/DOUBLE PRECISION columns silently corrupt exact-decimal values
+  # (the 1.4 tier multiplier stored as 1.3999999999999999111 earned 31
+  # points where the owner meant 32). New float columns need a justified
+  # whitelist entry in the script; stale exemptions also fail. Mirrored
+  # as a staged-only pre-commit gate in .githooks/pre-commit.
+  migration-column-types:
+    name: Migration Column Types
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Verify no unwhitelisted float columns in migrations
+        run: python3 scripts/verify-migration-column-types.py
+
   # ── Architecture boundary checker (P1 pilot) ───────────────────────
   # Static-only enforcement: existing transitional findings are tracked in
   # the expiring baseline; new, expired, or stale findings block CI.

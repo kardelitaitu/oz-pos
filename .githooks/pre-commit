@@ -174,6 +174,24 @@ if [ -f scripts/dedupe-ftl.py ]; then
     fi
 fi
 
+# ── Migration column-type lint ──────────────────────────────────────
+# REAL/DOUBLE PRECISION columns silently corrupt exact-decimal values
+# (LOYALTY-01: the 1.4 tier multiplier stored as 1.3999999999999999111
+# made a $22.50 sale earn 31 points instead of 32; MONEY-01 same class).
+# New float columns require a justified whitelist entry in the script.
+# Runs only when the commit stages files under crates/oz-core/migrations/
+# (the script re-derives the staged set itself, ~50ms). CI runs the full
+# scan in complement (.github/workflows/ci.yml # migration-column-types).
+if [ -f scripts/verify-migration-column-types.py ]; then
+    STAGED_MIG=$(git diff --cached --name-only --diff-filter=ACM -- 'crates/oz-core/migrations/*.sql' || true)
+    if [ -n "$STAGED_MIG" ]; then
+        if ! "$PYTHON" scripts/verify-migration-column-types.py --staged-only; then
+            echo "error: migration column-type lint failed — exact-decimal values must be fixed-point integers (*_minor, *_millionths). See message above." >&2
+            exit 1
+        fi
+    fi
+fi
+
 # ── Go gate: apps/license-server ──────────────────────────────────────
 # gofmt (auto-fix + re-stage, mirroring the cargo fmt step above) and
 # `go vet ./...` (hard fail) for the Go license server. Runs only when
