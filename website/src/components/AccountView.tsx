@@ -470,6 +470,7 @@ export default function AccountView({ locale }: Props) {
       {tenant && (
         <AccountPassword
           locale={locale}
+          email={tenant.email}
           pw={pw}
           pwConfirm={pwConfirm}
           msg={pwMsg}

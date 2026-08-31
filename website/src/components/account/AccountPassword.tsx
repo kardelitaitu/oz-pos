@@ -12,6 +12,12 @@ export type PasswordMsg = 'idle' | 'saved' | 'error';
 
 interface Props {
   locale: string;
+  /** The signed-in account email — embedded as a hidden readonly field so
+      Chrome's accessibility heuristics and password managers can associate
+      the new password with the account (the form has no visible username
+      field, which would otherwise trigger the "Password forms should have
+      username fields" console warning). */
+  email: string;
   pw: string;
   pwConfirm: string;
   msg: PasswordMsg;
@@ -21,7 +27,7 @@ interface Props {
   onSave: (pw: string) => void;
 }
 
-export default function AccountPassword({ locale, pw, pwConfirm, msg, saving, onPwChange, onPwConfirmChange, onSave }: Props) {
+export default function AccountPassword({ locale, email, pw, pwConfirm, msg, saving, onPwChange, onPwConfirmChange, onSave }: Props) {
   return (
     <section className="rounded-xl border border-ink/10 bg-surface/40 p-6 shadow-sm" aria-label={t(locale, 'account.password')}>
       <h2 className="text-lg font-semibold">{t(locale, 'account.password')}</h2>
@@ -33,6 +39,18 @@ export default function AccountPassword({ locale, pw, pwConfirm, msg, saving, on
         }}
         className="mt-4 space-y-3"
       >
+        {/* Hidden username context for password managers + the browser's
+            accessibility heuristic — never shown, never edited. */}
+        <input
+          type="email"
+          name="email"
+          value={email}
+          readOnly
+          autoComplete="username"
+          className="hidden"
+          aria-hidden="true"
+          tabIndex={-1}
+        />
         <PasswordField
           locale={locale}
           id="account-password"
