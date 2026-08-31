@@ -263,7 +263,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
   - Backup status panel: last backup timestamp + size, one-click create backup button with loading state
   - All flows wired to real Tauri IPC commands (`get_backup_status`, `create_backup`, `export_data`, `import_preview`, `import_data`)
   - Accessible tabbed layout with ARIA roles, full dark-mode compatible CSS
-- [x] **Feature Toggle screen** (Settings → Features) — master on/off panel for all 32 flags post-setup
+- [x] **Feature Toggle screen** (Settings → Features) — master on/off panel for all 39 flags post-setup
   - `list_all_features` + `set_feature` IPC commands with automatic dependency resolution
   - Grouped by category with toggle switches, dependency info, and toast notifications
   - Route: Features (lightning bolt icon sidebar nav, always visible)
