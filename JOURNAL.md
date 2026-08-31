@@ -9006,3 +9006,44 @@ My gates on the combined tree: oz-core promotion subset 132/132, parity OK
 tracker), my 6 UI suites 36/36, cargo check both shells clean. Remaining:
 commit the Rust preview side once pos.rs ownership frees up, then the
 dev-mock E2E pass of preview → complete with a BXGY selection.
+
+## 2026-08-31 — check-watch round 3: oz-cloud-server red on macro recursion limit
+
+Round 3 (11:49:51) - FAILING CRATES: oz-cloud-server
+
+    apps\cloud-server\src\openapi.rs:515:5: error: recursion limit reached
+    while expanding `$crate::json_internal...`
+
+Cause: build_paths() at openapi.rs:515 is a single json!({...}) literal running
+roughly 500 lines of nested object (openapi.rs is 1012 lines total, 3 json!
+sites). serde_json's json! expands recursively per nesting level, so the crate
+hits the default recursion_limit of 128.
+
+Not my edit: openapi.rs is dirty and the owner is building this generator right
+now.
+
+Immediate unblock, if wanted - cloud-server is a BIN crate rooted at
+apps/cloud-server/src/main.rs, so the attribute goes there as an inner attribute
+at the very top, before the module doc comment's first item:
+
+    #![recursion_limit = "512"]
+
+The better fix for a literal this size is structural: split build_paths() by
+OpenAPI tag (paths_health(), paths_sales(), paths_sync(), ...) each returning a
+small json! and merge them. That keeps expansion shallow, compiles faster, and
+stops the limit from being re-hit every time someone adds endpoints. Raising the
+limit trades a fast error for slower compilation and a bigger stack during
+macro expansion.
+
+Also still open, unchanged and correctly untouched: three #[must_use] warnings
+for into_response() in crates/oz-api/src/routes/exchange_rates_tests.rs (now at
+lines 75/119/211 - they shifted as the owner edits the file, which confirms it is
+live). That file is UNTRACKED, so there is no git history to recover a bad edit
+from; it stays alone.
+
+Cadence note: round 3 started 11:49:51, about five minutes late, because my own
+28-crate sweep was holding the cargo lock. The sweep was also redundant - with
+the tree green, --workspace --all-targets already covers every member, and the
+sweep only had value while a failing crate halted the build. Killed it. Lesson:
+do not run long cargo work alongside the watcher; the lock serialises it and the
+watcher is the thing the objective depends on.
