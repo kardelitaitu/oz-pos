@@ -70,6 +70,28 @@ describe('tier shape invariants', () => {
     }
   });
 
+  it('the six main paid prices use real Paddle ids — no placeholders, no legacy sandbox ids', () => {
+    // The catalogued Paddle prices (2026-08-31) replace the pri_placeholder_*
+    // ids on the main Plus/Pro/Premium × monthly/yearly grid. A placeholder
+    // or legacy (pri_01m05…) id here would either degrade checkout to the
+    // mailto fallback or charge the superseded $19/$49 amounts.
+    const LEGACY_IDS = ['pri_01m05gdnqp30xze6db73qcracp', 'pri_01m05gdpk4hmnm0k8e6vxm8cec'];
+    for (const tierKey of PAID_TIERS) {
+      for (const period of PERIODS) {
+        const en = enPricing.find((t) => t.tierKey === tierKey)!;
+        const id = idPricing.find((t) => t.tierKey === tierKey)!;
+        for (const tier of [en, id]) {
+          const pid = tier.prices[period].priceId;
+          expect(pid, `${tierKey} ${period} price id present`).toBeTruthy();
+          expect(pid!.startsWith('pri_placeholder_'), `${tierKey} ${period} not placeholder`).toBe(false);
+          expect(LEGACY_IDS.includes(pid!), `${tierKey} ${period} not a legacy sandbox id`).toBe(false);
+          // Real Paddle ids share the `pro_` prefix in this catalog.
+          expect(pid!.startsWith('pro_'), `${tierKey} ${period} uses the pro_ prefix`).toBe(true);
+        }
+      }
+    }
+  });
+
   it('enterprise has no price id (contact-sales only)', () => {
     for (const locale of LOCALES) {
       const ent = (locale === 'en' ? enPricing : idPricing).find((t) => t.tierKey === 'enterprise');

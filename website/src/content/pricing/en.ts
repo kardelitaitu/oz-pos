@@ -8,14 +8,12 @@ import type { FeatureRow, PricingTier } from './types';
 // DEFAULT selection on the pricing page — marketed as "2 months free", never
 // as a percentage discount.
 //
-// Paddle: the six real prices (Plus/Pro/Premium × monthly/yearly) do not
-// exist yet — PADDLE_PRICE_TIERS still maps only the two legacy sandbox
-// prices (pro = pri_01m05gdnqp30xze6db73qcracp $19/mo, premium =
-// pri_01m05gdpk4hmnm0k8e6vxm8cec $49/mo), which this lineup supersedes. Until
-// the new catalog is live, paid tiers carry placeholder ids
-// (pri_placeholder_…) so checkout degrades to the mailto fallback instead of
-// charging the old (wrong) amounts. Swap in the six real price ids once the
-// catalog lands (see apps/license-server PADDLE_PRICE_TIERS).
+// Paddle: the six real prices (Plus/Pro/Premium × monthly/yearly) are now
+// catalogued from the Paddle dashboard. The IDs are shared by both locales
+// (Paddle has no IDR billing currency — the id locale only differs in the
+// displayed Rp amount). The bundle option (restaurant_starter) and the Pro
+// A/B variant still use placeholder ids until those Paddle prices are
+// created — checkout degrades to the mailto fallback for them.
 export const pricing: PricingTier[] = [
   {
     id: 'free',
@@ -45,8 +43,8 @@ export const pricing: PricingTier[] = [
     description: 'The entry plan for single-store shops ready to grow.',
     cta: 'Choose Plus',
     prices: {
-      monthly: { price: '$4.99', period: '/month', priceId: 'pri_placeholder_plus_monthly_usd' },
-      yearly: { price: '$49.99', period: '/year', priceId: 'pri_placeholder_plus_yearly_usd' },
+      monthly: { price: '$4.99', period: '/month', priceId: 'pro_01m1amcb41qkbr7zzd1kxa3qnd' },
+      yearly: { price: '$49.99', period: '/year', priceId: 'pro_01m1amdj2swb3q21r2mwcy3krh' },
     },
     bundle: {
       id: 'restaurant_starter',
@@ -77,12 +75,14 @@ export const pricing: PricingTier[] = [
     prices: {
       monthly: {
         price: '$9.99', period: '/month',
-        priceId: 'pri_placeholder_pro_monthly_usd',
-        // C4.1: A/B variant — $7.99 vs $9.99 (controlled by ?ab=pro_price + env)
+        priceId: 'pro_01m1amdwp700jp6183k9zjsgaz',
+        // C4.1: A/B variant — $7.99 vs $9.99 (controlled by ?ab=pro_price + env).
+        // The variant price is NOT created on Paddle yet — placeholder keeps
+        // the variant checkout on the mailto fallback.
         variantPriceId: 'pri_pro_monthly_usd_variant_799',
         variantPrice: '$7.99',
       },
-      yearly: { price: '$99.99', period: '/year', priceId: 'pri_placeholder_pro_yearly_usd' },
+      yearly: { price: '$99.99', period: '/year', priceId: 'pro_01m1ame8ckw8vzjnf8y4q15mww' },
     },
     features: [
       { label: '2 stores', included: true },
@@ -101,8 +101,8 @@ export const pricing: PricingTier[] = [
     description: 'For multi-store chains — whitelabel, loyalty, and automation.',
     cta: 'Choose Premium',
     prices: {
-      monthly: { price: '$39.99', period: '/month', priceId: 'pri_placeholder_premium_monthly_usd' },
-      yearly: { price: '$399.99', period: '/year', priceId: 'pri_placeholder_premium_yearly_usd' },
+      monthly: { price: '$39.99', period: '/month', priceId: 'pro_01m1amema8yj6w5mfm8wx8jwhm' },
+      yearly: { price: '$399.99', period: '/year', priceId: 'pro_01m1amf0vpbyfndg5rkvxvyqj4' },
     },
     features: [
       { label: '5 stores', included: true },

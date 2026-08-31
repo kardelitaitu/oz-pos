@@ -325,7 +325,7 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 | `apps/license-server/pb_schema.json` | Schema select values | free, plus, pro, premium, enterprise |
 | `apps/license-server/renew.go` | Offline renewal expiry | free +100y, plus/pro/premium +1y, enterprise +3y |
 | `website/src/content/pricing/{en,id}.ts` | Live pricing pages | **DONE (2026-08-17)** — free/plus/pro/premium/enterprise, new USD & IDR prices, annual default + "2 months free", ⭐ Pro badge, full §3 matrix |
-| `apps/license-server` `PADDLE_PRICE_TIERS` (env) | Live billing map | 2 prices today: `pri_…racp:pro`, `pri_…8cec:premium` — **needs 6 once D2 lands** (monthly + yearly × Plus/Pro/Premium) |
+| `apps/license-server` `PADDLE_PRICE_TIERS` (env) | Live billing map | **DONE (2026-08-31)** — all six sandbox prices catalogued (Plus/Pro/Premium × monthly/yearly, see `docs/operations/go-live-checklist.md`); bundle + Pro A/B variant still placeholder |
 | `apps/license-server` `MIDTRANS_PRICE_TIERS` (env) | Midtrans billing map | Fixed IDR amounts mapped to tier + period + optional bundle; cross-checked against webhook `gross_amount` and `custom_field1`–`custom_field4` (ADR #39 Dev 2–4) |
 
 ---
