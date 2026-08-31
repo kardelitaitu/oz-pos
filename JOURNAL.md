@@ -8932,3 +8932,32 @@ recur, so the desktop half of B53 may be executable after all.
 **Totals:** COR-7 now has its DB read side, its collision test, and its command
 layer written; the command layer is staged in the working tree awaiting a clean
 pos.rs.
+
+## 2026-08-31 — check-watch round 1: oz-api is red, one mechanical cause
+
+Running a workspace check every 10 minutes to help unblock other agents.
+Round 1 (11:24) - FAILING CRATES: oz-api, 9 errors, all the same class:
+
+    the trait bound `&str: ToStatement` is not satisfied
+
+Sites: pg.rs 669/671/674, 697/699/702, 1489/1491/1497.
+
+Cause is mechanical, not a typing problem. The call reads
+
+    .query(&("{PRODUCT_SELECT} WHERE p.tenant_id = $1 ..."), &[&tenant_id])
+
+so the argument is `&&str`. tokio_postgres implements ToStatement for `str` and
+`String`, never for `&str`, hence the bound failure. The `{PRODUCT_SELECT}`
+placeholder shows what was meant: the `format!` name was dropped, leaving `&(`
+where `&format!(` belongs. Same at 1491 with `{EXCHANGE_RATE_COLS}`.
+
+Not fixed by me: pg.rs is dirty and the owner is actively iterating in it - the
+error class changed between 11:21 (unclosed delimiter at 1445) and 11:24 (these
+nine), which is someone mid-edit. Editing their file would be the clobber this
+repo has already lost work to twice.
+
+Tooling note: the watcher initially filtered on "^error", which misses every
+diagnostic emitted by --message-format short because those lines begin with the
+file path. Fixed to match ": error" plus a crate rollup from the "could not
+compile" summaries. warnings=0 above is not a clean tree - compilation stopped
+at oz-api, so later crates were never reached.
