@@ -503,4 +503,80 @@ describe('StockShortfallDialog', () => {
     };
     expect(argsPayload.resolutions).toHaveLength(2);
   });
+
+  // ── Checkout attempt id (COR-7 replay guard) ─────────────────────────
+  //
+  // This dialog is a *retry* of the submission that produced the shortfall, so
+  // it must forward the caller's attempt id unchanged. Nothing else in the
+  // payload ties the two calls together — the dialog synthesises a fresh
+  // `resolved-${Date.now()}` cartId on every submit — so if the id were
+  // re-minted here, a first submission that committed but lost its response
+  // would be replayed as a second, independent sale.
+
+  describe('checkout attempt id', () => {
+    it('forwards the attempt id of the submission that produced the shortfall', async () => {
+      mockCompleteSaleWithResolvedShortfalls.mockResolvedValueOnce({
+        saleId: 'sale-1',
+        total: null,
+        lineCount: 1,
+      });
+
+      await renderWithFluent(
+        <StockShortfallDialog {...defaultProps} attemptId="attempt-abc" />,
+      );
+      await userEvent.click(screen.getByText('Confirm & Continue'));
+
+      await waitFor(() => {
+        expect(mockCompleteSaleWithResolvedShortfalls).toHaveBeenCalledTimes(1);
+      });
+      const payload = mockCompleteSaleWithResolvedShortfalls.mock.calls[0]![1] as {
+        attemptId?: string;
+      };
+      expect(payload.attemptId).toBe('attempt-abc');
+    });
+
+    it('sends the SAME attempt id on a retry after a failed submit', async () => {
+      mockCompleteSaleWithResolvedShortfalls
+        .mockRejectedValueOnce(new Error('Network failure'))
+        .mockResolvedValueOnce({ saleId: 'sale-1', total: null, lineCount: 1 });
+
+      await renderWithFluent(
+        <StockShortfallDialog {...defaultProps} attemptId="attempt-abc" />,
+      );
+      await userEvent.click(screen.getByText('Confirm & Continue'));
+      await waitFor(() => {
+        expect(mockCompleteSaleWithResolvedShortfalls).toHaveBeenCalledTimes(1);
+      });
+
+      await userEvent.click(screen.getByText('Confirm & Continue'));
+      await waitFor(() => {
+        expect(mockCompleteSaleWithResolvedShortfalls).toHaveBeenCalledTimes(2);
+      });
+
+      const ids = mockCompleteSaleWithResolvedShortfalls.mock.calls.map(
+        (c) => (c[1] as { attemptId?: string }).attemptId,
+      );
+      expect(ids).toEqual(['attempt-abc', 'attempt-abc']);
+    });
+
+    it('omits attemptId entirely when the caller has none', async () => {
+      mockCompleteSaleWithResolvedShortfalls.mockResolvedValueOnce({
+        saleId: 'sale-1',
+        total: null,
+        lineCount: 1,
+      });
+
+      await renderWithFluent(<StockShortfallDialog {...defaultProps} />);
+      await userEvent.click(screen.getByText('Confirm & Continue'));
+
+      await waitFor(() => {
+        expect(mockCompleteSaleWithResolvedShortfalls).toHaveBeenCalledTimes(1);
+      });
+      const payload = mockCompleteSaleWithResolvedShortfalls.mock.calls[0]![1] as Record<string, unknown>;
+      // Absent, not null: the backend treats a missing key as "no guard
+      // requested", and an explicit null would sit in the same column that
+      // already holds NULL rows which SQLite considers mutually distinct.
+      expect('attemptId' in payload).toBe(false);
+    });
+  });
 });

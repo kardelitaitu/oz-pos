@@ -132,6 +132,22 @@ export interface CompleteSaleScopedArgs {
   tipMinor?: number;
   /** Service-charge amount in minor units collected at checkout (default 0). */
   serviceChargeMinor?: number;
+  /**
+   * Identifies one checkout *attempt*, so the backend can make completion
+   * idempotent. Minted once when the payment modal mounts and reused by every
+   * submission of that attempt — including the shortfall-resolution retry and
+   * any re-tap after a response was lost.
+   *
+   * A replay then returns the receipt that was already created instead of
+   * ringing up a second sale.
+   *
+   * It must NOT be generated per call: a fresh id on every submission dedups
+   * nothing, because the two requests that represent the same sale would
+   * carry different keys. Equally, it must not outlive the attempt — an id
+   * reused across two different sales would make the second one collide with
+   * the first and block a legitimate sale.
+   */
+  attemptId?: string;
 }
 
 export const completeSaleScoped = (sessionToken: string, args: CompleteSaleScopedArgs): Promise<CompleteSaleResult> =>
@@ -192,6 +208,15 @@ export interface CompleteSaleWithResolvedShortfallsArgs {
   baseTotalMinor?: number;
   /** CUR-02: fixed-point rate (millionths) `baseCurrency → sale currency`. */
   tenderRateMillionths?: number;
+  /**
+   * The SAME value the original `complete_sale_scoped` submission carried.
+   *
+   * This call is a retry of that attempt after the cashier resolved a stock
+   * shortfall, so reusing the id is the whole point: if the first submission
+   * actually committed and only its response was lost, a fresh id here would
+   * let the backend ring up a second sale. See CompleteSaleScopedArgs.attemptId.
+   */
+  attemptId?: string;
 }
 
 /** Complete a sale with cashier-resolved shortfalls (split fulfillment).

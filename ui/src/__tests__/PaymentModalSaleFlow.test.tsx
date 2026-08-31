@@ -392,4 +392,70 @@ describe('PaymentModal — shortfall resolution', () => {
       });
     });
   });
+
+  // ── Checkout attempt id (COR-7 replay guard) ───────────────────────────
+  //
+  // The id is minted once per mount, and one mount is one checkout attempt:
+  // RetailPosScreen renders PaymentModal conditionally (`if (showPayment &&
+  // total)`), so it unmounts between sales. Every submission of a single
+  // attempt reuses its id (the dialog-level tests cover the retry), while the
+  // next customer's sale must get a fresh one. That second property is what
+  // keeps a till trading — an id that outlived its attempt would make a
+  // legitimate new sale collide with the previous one and be rejected.
+
+  describe('checkout attempt id', () => {
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+    const attemptIds = () =>
+      (invokeMock.mock.calls as unknown[][])
+        .filter((c) => c[0] === 'complete_sale_scoped')
+        .map((c) => (c[1] as { args?: { attemptId?: string } } | undefined)?.args?.attemptId);
+
+    const mount = () =>
+      renderInAct(
+        withFluent(
+          <ToastProvider>
+            <PaymentModal
+              open
+              lineItems={[lineItem()]}
+              total={usd(700)}
+              userId="test-user-id"
+              onComplete={vi.fn()}
+              onClose={vi.fn()}
+            />
+          </ToastProvider>,
+          salesFtl,
+        ),
+      );
+
+    const completeOnce = async () => {
+      await userEvent.type(screen.getByLabelText(/amount tendered/i), '10');
+      await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
+      await waitFor(() => expect(attemptIds().length).toBeGreaterThan(0));
+    };
+
+    it('sends a UUID attempt id with the completion request', async () => {
+      await mount();
+      await completeOnce();
+
+      expect(attemptIds()[0]).toMatch(UUID_RE);
+    });
+
+    it('mints a fresh attempt id on a new mount so the next sale is not blocked', async () => {
+      const first = await mount();
+      await completeOnce();
+      const firstId = attemptIds()[0];
+      first.unmount();
+      invokeMock.mockClear();
+
+      const second = await mount();
+      await completeOnce();
+      const secondId = attemptIds()[0];
+      second.unmount();
+
+      expect(firstId).toMatch(UUID_RE);
+      expect(secondId).toMatch(UUID_RE);
+      expect(secondId).not.toBe(firstId);
+    });
+  });
 });

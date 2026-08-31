@@ -138,6 +138,27 @@ export default function PaymentModal({
   const panelRef = useRef<HTMLDivElement>(null);
   const customerSearchPanelRef = useRef<HTMLDivElement>(null);
 
+  // One id per checkout *attempt*, so the backend can make completion
+  // idempotent: a replay returns the receipt that already exists instead of
+  // ringing up a second sale.
+  //
+  // Mount-scoped is the right lifetime here, and it is load-bearing rather
+  // than convenient — RetailPosScreen renders this component conditionally
+  // (`if (showPayment && total)`), so it unmounts between sales. Every
+  // submission of one attempt carries the same value: the first tap, the
+  // shortfall-resolution retry (the dialog renders inside this tree, so the
+  // component stays mounted across it), and any re-tap after a lost response.
+  // The next customer's sale gets a fresh id because it gets a fresh mount.
+  //
+  // Lazy init, not `useRef(crypto.randomUUID())`: the eager form evaluates on
+  // every render and discards the result, which reads as a bug waiting to be
+  // "fixed" by moving it into state — and re-minting per render would silently
+  // defeat the whole mechanism.
+  const attemptIdRef = useRef<string | null>(null);
+  if (attemptIdRef.current === null) {
+    attemptIdRef.current = crypto.randomUUID();
+  }
+
   const MS_200 = animDuration(200);
 
   // ── Error classification ───────────────────────────────────────
@@ -828,6 +849,7 @@ export default function PaymentModal({
             ...(paymentSplits ? { paymentSplits } : {}),
             ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
             ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
+            attemptId: attemptIdRef.current ?? undefined,
             ...tenderSnapshot,
           } as CompleteSaleScopedArgs);
 
@@ -1052,6 +1074,11 @@ export default function PaymentModal({
           customerId={selectedCustomer?.id ?? null}
           customerName={customerName.trim() || null}
           serialNumbers={serialNumberArgsFromState() ?? null}
+          // The retry of THIS attempt, so it must carry the attempt's id —
+          // not a fresh one. If the first submission committed and only its
+          // response was lost, a new id here would let the backend ring up a
+          // second sale, which is the exact case the guard exists for.
+          attemptId={attemptIdRef.current ?? undefined}
           discountPercent={discountPercent}
           discountLabel={discountLabel ?? null}
           onComplete={() => {

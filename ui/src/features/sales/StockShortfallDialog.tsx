@@ -28,6 +28,14 @@ export interface StockShortfallDialogProps {
   customerName?: string | null;
   /** Serial numbers (if track_serial products). */
   serialNumbers?: SerialNumberArg[] | null;
+  /**
+   * The checkout attempt id of the submission that produced this shortfall.
+   * Must be forwarded unchanged: this dialog retries that same attempt, and
+   * the backend's replay guard keys on it. Note the retry cannot derive one —
+   * it synthesises a fresh `resolved-${Date.now()}` cartId on every submit, so
+   * nothing carried over from the first attempt identifies it as a replay.
+   */
+  attemptId?: string;
   /** Discount percentage. */
   discountPercent: number;
   /** Discount label. */
@@ -77,6 +85,7 @@ export default function StockShortfallDialog({
   customerId = null,
   customerName,
   serialNumbers,
+  attemptId,
   discountPercent,
   discountLabel,
   tipMinor,
@@ -229,6 +238,7 @@ export default function StockShortfallDialog({
         ...(customerName ? { customerName } : {}),
         ...(paymentSplits ? { paymentSplits } : {}),
         ...(serialNumbers ? { serialNumbers } : {}),
+        ...(attemptId ? { attemptId } : {}),
         lines: cartLines,
         totalMinor,
         currency,
@@ -265,6 +275,7 @@ export default function StockShortfallDialog({
     customerName,
     paymentSplits,
     serialNumbers,
+    attemptId,
     cartLines,
     totalMinor,
     currency,
