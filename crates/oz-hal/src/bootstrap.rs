@@ -185,6 +185,16 @@ pub struct HardwareConfig {
     pub drawers: Vec<DrawerConfig>,
     /// Card-payment terminals.
     pub terminals: Vec<TerminalConfig>,
+    /// Bind every barcode scanner enumeration finds, under its
+    /// hardware-derived id.
+    ///
+    /// The one entry that is not a device the operator named, and the one
+    /// that does not need naming: the UI lists registered scanner ids and
+    /// `useBarcodeScanner.ts` auto-detects by taking the first, so a
+    /// discovery id round-trips correctly where `printer("default")` never
+    /// would. Off by default so `apply_config` stays explicit about what it
+    /// binds; `config_from_profile` turns it on. Enumeration opens no port.
+    pub autodetect_scanners: bool,
 }
 
 impl HardwareConfig {
@@ -194,7 +204,11 @@ impl HardwareConfig {
         Self::default()
     }
 
-    /// `true` when there is nothing to register.
+    /// `true` when the operator named no device.
+    ///
+    /// Deliberately ignores [`Self::autodetect_scanners`]: that is a
+    /// behaviour, not a configured device, and enumeration may legitimately
+    /// find nothing.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.printers.is_empty()
@@ -203,7 +217,7 @@ impl HardwareConfig {
             && self.terminals.is_empty()
     }
 
-    /// Total number of configured devices.
+    /// Total number of devices the operator configured.
     #[must_use]
     pub fn len(&self) -> usize {
         self.printers.len() + self.displays.len() + self.drawers.len() + self.terminals.len()
@@ -376,6 +390,16 @@ pub async fn apply_config(registry: &DriverRegistry, config: &HardwareConfig) ->
                 report.registered.push(key);
             }
             _ => report.skipped.push(key),
+        }
+    }
+
+    if config.autodetect_scanners {
+        // Enumerate and bind every attached scanner. Reported per device so
+        // the startup log says what the register actually picked up rather
+        // than a bare "autodetect ran" — the whole reason this campaign
+        // started was a registry whose contents nobody could see.
+        for id in registry.discover_scanners().await {
+            report.registered.push(id);
         }
     }
 

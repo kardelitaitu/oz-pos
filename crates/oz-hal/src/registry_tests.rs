@@ -216,3 +216,102 @@ async fn discover_never_registers_a_card_terminal() {
         "discover() must not auto-register EDC terminals"
     );
 }
+
+// ── id ordering ──────────────────────────────────────────────────────
+
+fn mock_scanner(model: &str) -> Arc<dyn BarcodeScanner> {
+    Arc::new(MockBarcodeScanner::with_info(DeviceInfo::new(
+        "test", model, model,
+    )))
+}
+
+#[tokio::test]
+async fn scanner_ids_come_back_sorted_whatever_order_they_went_in() {
+    // useBarcodeScanner.ts auto-detects with scanners[0]. Under HashMap
+    // iteration that element is arbitrary, so two restarts of the same
+    // register with the same hardware could drive a different device.
+    let reg = DriverRegistry::default();
+    for id in ["zulu", "alpha", "mike"] {
+        reg.register_scanner(id, mock_scanner(id)).await;
+    }
+    assert_eq!(
+        reg.scanner_ids().await,
+        vec!["alpha".to_string(), "mike".into(), "zulu".into()]
+    );
+}
+
+#[tokio::test]
+async fn the_id_ordering_is_stable_across_repeated_calls() {
+    let reg = DriverRegistry::default();
+    for id in ["b", "d", "a", "c"] {
+        reg.register_printer(id, Arc::new(MockReceiptPrinter::new()))
+            .await;
+    }
+    let first = reg.printer_ids().await;
+    for _ in 0..8 {
+        assert_eq!(reg.printer_ids().await, first, "ordering must not drift");
+    }
+}
+
+#[tokio::test]
+async fn every_category_lists_its_ids_in_order() {
+    // One rule for all six views, so no caller has to know which of them
+    // happens to be sorted today.
+    let reg = DriverRegistry::default();
+    for id in ["s2", "s1"] {
+        reg.register_scanner(id, mock_scanner(id)).await;
+        reg.register_printer(id, Arc::new(MockReceiptPrinter::new()))
+            .await;
+        reg.register_cash_drawer(id, Arc::new(MockCashDrawer::new()))
+            .await;
+    }
+    for listed in [
+        reg.scanner_ids().await,
+        reg.printer_ids().await,
+        reg.drawer_ids().await,
+        reg.display_ids().await,
+        reg.scale_ids().await,
+        reg.terminal_ids().await,
+    ] {
+        let mut sorted = listed.clone();
+        sorted.sort();
+        assert_eq!(listed, sorted, "{listed:?} is not sorted");
+    }
+}
+
+// ── discover_scanners ────────────────────────────────────────────────
+
+#[tokio::test]
+async fn discover_scanners_registers_only_scanners() {
+    // The startup path binds scanners by enumeration while printers,
+    // drawers and displays stay config-driven. If this ever registers a
+    // printer it has silently become discover(), and printer("default")
+    // would still be empty.
+    let reg = DriverRegistry::default();
+    reg.discover_scanners().await;
+    assert!(
+        reg.printer_ids().await.is_empty(),
+        "scanner autodetect must not bind printers"
+    );
+    assert!(reg.drawer_ids().await.is_empty());
+    assert!(reg.display_ids().await.is_empty());
+    assert!(reg.terminal_ids().await.is_empty());
+}
+
+#[tokio::test]
+async fn discovered_scanner_ids_are_the_ones_the_registry_holds() {
+    // The returned list is what the bootstrap reports, so it must agree with
+    // what a later lookup can actually find. Depends on no attached device:
+    // on a machine with no scanner both sides are simply empty.
+    let reg = DriverRegistry::default();
+    let found = reg.discover_scanners().await;
+    assert_eq!(found, reg.scanner_ids().await);
+    assert!(
+        found.windows(2).all(|w| w[0] <= w[1]),
+        "returned ids must be sorted: {found:?}"
+    );
+    for id in &found {
+        assert!(id.starts_with("scanner:"), "unexpected id {id}");
+        assert!(reg.scanner(id).await.is_some(), "{id} must resolve");
+    }
+}

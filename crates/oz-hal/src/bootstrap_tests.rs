@@ -366,15 +366,20 @@ async fn usb_printer_enumerates_and_never_faults_on_an_empty_bus() {
 
 #[test]
 fn report_display_names_the_counts() {
+    // The sample reason is one the bootstrap can still actually produce;
+    // it used to quote the serial-printer rejection, which no longer exists.
     let report = BootstrapReport {
         registered: vec!["printer:default".into()],
         skipped: vec![],
-        rejected: vec![("printer:kitchen".into(), "no serial printer driver".into())],
+        rejected: vec![(
+            "terminal:t-1".into(),
+            "no HAL terminal driver for wired + tcp".into(),
+        )],
     };
     let text = report.to_string();
     assert!(text.contains("1 registered"), "{text}");
     assert!(text.contains("1 rejected"), "{text}");
-    assert!(text.contains("no serial printer driver"), "{text}");
+    assert!(text.contains("no HAL terminal driver"), "{text}");
 }
 
 #[test]
@@ -389,10 +394,75 @@ fn config_len_counts_every_category() {
         }],
         drawers: vec![],
         terminals: vec![],
+        autodetect_scanners: true,
     };
     assert_eq!(cfg.len(), 2);
     assert!(!cfg.is_empty());
+    // Autodetect is a behaviour, not a device the operator named: it must
+    // not count toward len() or flip is_empty(), or "nothing configured"
+    // would read as "two devices set up" on a fresh install.
+    assert_eq!(cfg.len(), 2, "autodetect adds no device count");
     assert!(HardwareConfig::empty().is_empty());
+    assert!(
+        !HardwareConfig::empty().autodetect_scanners,
+        "default must not enumerate; config_from_profile opts in"
+    );
+}
+
+#[tokio::test]
+async fn autodetect_off_registers_no_scanner() {
+    // The opt-out has to be real, or "I configured no scanners" would still
+    // bind whatever was attached.
+    let reg = DriverRegistry::default();
+    let report = apply_config(&reg, &HardwareConfig::empty()).await;
+    assert!(report.ok());
+    assert!(
+        reg.scanner_ids().await.is_empty(),
+        "an empty config must not enumerate"
+    );
+}
+
+#[tokio::test]
+async fn autodetect_binds_scanners_and_reports_exactly_those() {
+    // What the bootstrap reports must be what a lookup can find, and it must
+    // be scanners only — a printer bound here would never be reached, since
+    // the receipt path asks for "default".
+    let reg = DriverRegistry::default();
+    let cfg = HardwareConfig {
+        autodetect_scanners: true,
+        ..HardwareConfig::empty()
+    };
+    let report = apply_config(&reg, &cfg).await;
+    assert!(report.ok(), "no attached scanner is not a fault");
+    assert!(
+        report.rejected.is_empty(),
+        "autodetect must not reject anything: {:?}",
+        report.rejected
+    );
+    assert_eq!(report.registered, reg.scanner_ids().await);
+    assert!(reg.printer_ids().await.is_empty());
+    assert!(reg.drawer_ids().await.is_empty());
+}
+
+#[tokio::test]
+async fn autodetect_leaves_a_configured_printer_on_default_reachable() {
+    // The whole point of splitting the two mechanisms: enumeration must not
+    // disturb the id the receipt path actually looks up.
+    let reg = DriverRegistry::default();
+    let cfg = HardwareConfig {
+        printers: vec![printer(
+            "default",
+            Connection::Serial {
+                port: "COM9".into(),
+                baud: 9600,
+            },
+        )],
+        autodetect_scanners: true,
+        ..HardwareConfig::empty()
+    };
+    let report = apply_config(&reg, &cfg).await;
+    assert!(report.registered.contains(&"printer:default".to_string()));
+    assert!(reg.printer("default").await.is_some());
 }
 
 #[allow(dead_code)]

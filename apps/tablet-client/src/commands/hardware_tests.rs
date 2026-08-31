@@ -210,3 +210,53 @@ fn a_scanner_with_no_out_endpoint_still_deserialises() {
     let info: UsbDeviceInfo = serde_json::from_str(json).expect("null endpoint_out is fine");
     assert!(info.endpoint_out.is_none());
 }
+
+// ── scanner preference ───────────────────────────────────────────────
+
+fn scanner_ids(list: &[&str]) -> Vec<ScannerInfo> {
+    list.iter()
+        .map(|id| ScannerInfo { id: (*id).into() })
+        .collect()
+}
+
+fn ordered(scanners: &[ScannerInfo]) -> Vec<&str> {
+    scanners.iter().map(|s| s.id.as_str()).collect()
+}
+
+#[test]
+fn the_saved_scanner_is_moved_to_the_front_for_the_autodetect() {
+    // useBarcodeScanner.ts takes scanners[0]; this is the only place the
+    // saved scanner_device_id can influence which device that is.
+    let got = prefer_first(
+        scanner_ids(&["scanner:a", "scanner:b", "scanner:c"]),
+        "scanner:c",
+    );
+    assert_eq!(ordered(&got), ["scanner:c", "scanner:a", "scanner:b"]);
+}
+
+#[test]
+fn moving_the_preferred_scanner_keeps_the_rest_in_order() {
+    let got = prefer_first(scanner_ids(&["a", "b", "c", "d"]), "c");
+    assert_eq!(ordered(&got), ["c", "a", "b", "d"]);
+}
+
+#[test]
+fn an_unset_preference_leaves_discovery_order_alone() {
+    // Settings::get_scanner_device_id returns "" when never written.
+    let got = prefer_first(scanner_ids(&["b", "a"]), "");
+    assert_eq!(ordered(&got), ["b", "a"]);
+}
+
+#[test]
+fn a_preference_naming_an_absent_scanner_changes_nothing() {
+    let got = prefer_first(scanner_ids(&["a", "b"]), "scanner:gone");
+    assert_eq!(ordered(&got), ["a", "b"]);
+}
+
+#[test]
+fn both_shells_order_scanners_the_same_way() {
+    // The desktop and tablet each carry a copy of this helper, so a device
+    // picked on one terminal must be the same device on the other.
+    let got = prefer_first(scanner_ids(&["x", "y", "z"]), "y");
+    assert_eq!(ordered(&got), ["y", "x", "z"]);
+}

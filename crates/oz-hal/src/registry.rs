@@ -82,12 +82,12 @@ impl DriverRegistry {
     /// Snapshot of registered scanner ids (for the setup wizard's "what's
     /// plugged in?" view).
     pub async fn scanner_ids(&self) -> Vec<String> {
-        self.scanners.read().await.keys().cloned().collect()
+        sorted_keys(&*self.scanners.read().await)
     }
 
     /// Snapshot of registered printer ids.
     pub async fn printer_ids(&self) -> Vec<String> {
-        self.printers.read().await.keys().cloned().collect()
+        sorted_keys(&*self.printers.read().await)
     }
 
     /// Register a customer display under `id`. Overwrites any previous
@@ -103,12 +103,12 @@ impl DriverRegistry {
 
     /// Snapshot of registered cash drawer ids.
     pub async fn drawer_ids(&self) -> Vec<String> {
-        self.drawers.read().await.keys().cloned().collect()
+        sorted_keys(&*self.drawers.read().await)
     }
 
     /// Snapshot of registered customer display ids.
     pub async fn display_ids(&self) -> Vec<String> {
-        self.displays.read().await.keys().cloned().collect()
+        sorted_keys(&*self.displays.read().await)
     }
 
     /// Register a weight scale under `id`. Overwrites any previous
@@ -124,7 +124,7 @@ impl DriverRegistry {
 
     /// Snapshot of registered scale ids.
     pub async fn scale_ids(&self) -> Vec<String> {
-        self.scales.read().await.keys().cloned().collect()
+        sorted_keys(&*self.scales.read().await)
     }
 
     /// Register an EDC card-payment terminal under `id`. Overwrites any
@@ -140,7 +140,7 @@ impl DriverRegistry {
 
     /// Snapshot of registered EDC terminal ids.
     pub async fn terminal_ids(&self) -> Vec<String> {
-        self.terminals.read().await.keys().cloned().collect()
+        sorted_keys(&*self.terminals.read().await)
     }
 
     /// Register a wired EDC terminal under the given id. The setup wizard
@@ -174,10 +174,22 @@ impl DriverRegistry {
         self.register_terminal(id, terminal).await;
     }
 
-    /// Discover and register available hardware. Failure of one driver
-    /// does not abort the rest. Probes USB HID scanners, serial scanners,
-    /// and USB receipt printers, then registers them all.
-    pub async fn discover(&self) {
+    /// Discover and register barcode scanners, returning their ids.
+    ///
+    /// Scanners are the one device class an operator never names. The UI
+    /// lists the registered ids and `useBarcodeScanner.ts` auto-detects by
+    /// taking the first, so a hardware-derived id is the correct key here:
+    /// it round-trips through the same call that produced it. Every other
+    /// category in [`Self::discover`] is bound by configuration instead,
+    /// because a command hardcodes its lookup string (`printer("default")`,
+    /// `printer("kitchen")`) and a discovery-minted id can never satisfy it.
+    ///
+    /// Enumerates only — `discover_all()` opens no port and each driver
+    /// connects on first use — so calling this at startup touches no
+    /// hardware.
+    pub async fn discover_scanners(&self) -> Vec<String> {
+        let mut found = Vec::new();
+
         // --- USB HID barcode scanners ---
         for scanner in crate::drivers::usb_scanner::UsbHidBarcodeScanner::discover_all() {
             let info = scanner.device_info();
@@ -187,6 +199,7 @@ impl DriverRegistry {
                 format!("scanner:usb:{}", info.serial)
             };
             self.register_scanner(&id, Arc::new(scanner)).await;
+            found.push(id);
         }
 
         // --- Serial barcode scanners ---
@@ -195,7 +208,26 @@ impl DriverRegistry {
             // Serial port name is used as the identity key.
             let id = format!("scanner:serial:{}", info.serial);
             self.register_scanner(&id, Arc::new(scanner)).await;
+            found.push(id);
         }
+
+        // --- Bluetooth (SPP) barcode scanners ---
+        for scanner in crate::drivers::bt_scanner::BtBarcodeScanner::discover_all() {
+            let info = scanner.device_info();
+            let id = format!("scanner:bt:{}", info.serial);
+            self.register_scanner(&id, Arc::new(scanner)).await;
+            found.push(id);
+        }
+
+        found.sort();
+        found
+    }
+
+    /// Discover and register available hardware. Failure of one driver
+    /// does not abort the rest. Probes USB HID scanners, serial scanners,
+    /// and USB receipt printers, then registers them all.
+    pub async fn discover(&self) {
+        self.discover_scanners().await;
 
         // --- USB receipt printers (and companion cash drawers) ---
         for printer in crate::drivers::usb_printer::UsbReceiptPrinter::discover_all() {
@@ -211,13 +243,6 @@ impl DriverRegistry {
             let drawer_id = format!("drawer:kick:{}", id);
             let drawer = Arc::new(PrinterKickCashDrawer::new_pin2(printer_arc));
             self.register_cash_drawer(&drawer_id, drawer).await;
-        }
-
-        // --- Bluetooth (SPP) barcode scanners ---
-        for scanner in crate::drivers::bt_scanner::BtBarcodeScanner::discover_all() {
-            let info = scanner.device_info();
-            let id = format!("scanner:bt:{}", info.serial);
-            self.register_scanner(&id, Arc::new(scanner)).await;
         }
 
         // --- Serial customer-facing pole displays ---
@@ -337,6 +362,22 @@ impl DriverRegistry {
         ));
         self.register_cash_drawer(id, drawer).await;
     }
+}
+
+/// Sorted snapshot of a category's keys.
+///
+/// Sorted rather than `HashMap` order because these lists are handed
+/// straight to the UI, and `ui/src/features/sales/useBarcodeScanner.ts`
+/// auto-detects with `scanners[0]?.id`. Under `HashMap` iteration that
+/// "first" is arbitrary and can change between two restarts of the same
+/// register with the same hardware — the picker would silently follow a
+/// different device. A stable order makes the choice reproducible; it does
+/// not make it *meaningful*, which is what the configured-device preference
+/// in `list_scanners_scoped` is for.
+fn sorted_keys<T>(map: &HashMap<String, T>) -> Vec<String> {
+    let mut keys: Vec<String> = map.keys().cloned().collect();
+    keys.sort();
+    keys
 }
 
 #[cfg(test)]

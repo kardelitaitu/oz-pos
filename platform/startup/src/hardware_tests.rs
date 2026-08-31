@@ -38,6 +38,33 @@ fn put_profile(conn: &Connection, terminal_id: &str, json: &str) {
 // ── config_from_profile ──────────────────────────────────────────────
 
 #[test]
+fn every_profile_turns_scanner_autodetect_on() {
+    // Barcode input depends on it: start_scanner_scoped looks the device up
+    // by id and useBarcodeScanner.ts auto-detects with scanners[0], so with
+    // nothing registering scanners both clients silently lose scanning.
+    // Tested on an empty profile too — a first run has no printer configured
+    // and must still see its scanner.
+    for json in ["{}", r#"{"printer_connection":"disabled"}"#] {
+        let cfg = config_from_profile(&profile(json));
+        assert!(
+            cfg.autodetect_scanners,
+            "profile {json} must still enumerate scanners"
+        );
+    }
+}
+
+#[test]
+fn autodetect_is_not_reported_as_a_configured_device() {
+    // A fresh install enumerates but has configured nothing; if the flag
+    // counted, the startup log would claim hardware the operator never set
+    // up and is_empty() would never be true.
+    let cfg = config_from_profile(&profile("{}"));
+    assert!(cfg.is_empty(), "an empty profile configures no device");
+    assert_eq!(cfg.len(), 0);
+    assert!(cfg.autodetect_scanners);
+}
+
+#[test]
 fn a_network_printer_becomes_the_id_the_receipt_path_looks_up() {
     let cfg = config_from_profile(&profile(
         r#"{"printer_connection":"network","printer_device_path":"10.0.0.5:9100"}"#,
@@ -221,13 +248,39 @@ fn a_missing_table_does_not_panic_either() {
 
 // ── register_hardware ────────────────────────────────────────────────
 
+/// Report entries for devices the operator named.
+///
+/// Scanner ids come from enumeration, so they depend on what happens to be
+/// plugged into the machine running the test — asserting a total count here
+/// would pass on a bare CI box and fail on a developer's desk. Every
+/// assertion about "what the profile configured" filters through this.
+fn configured(registered: &[String]) -> Vec<String> {
+    registered
+        .iter()
+        .filter(|id| !id.starts_with("scanner:"))
+        .cloned()
+        .collect()
+}
+
+fn scanner_entries(registered: &[String]) -> Vec<String> {
+    registered
+        .iter()
+        .filter(|id| id.starts_with("scanner:"))
+        .cloned()
+        .collect()
+}
+
 #[tokio::test]
 async fn register_hardware_makes_the_default_printer_resolvable() {
     let registry = DriverRegistry::default();
     let prof = profile(r#"{"printer_connection":"network","printer_device_path":"10.0.0.5:9100"}"#);
     let report = register_hardware(&registry, &prof).await;
     assert!(report.ok(), "{report}");
-    assert_eq!(report.registered_count(), 1);
+    assert_eq!(
+        configured(&report.registered),
+        [format!("printer:{MAIN_PRINTER_ID}")],
+        "the report keys entries as \"<category>:<id>\""
+    );
     assert!(
         registry.printer(MAIN_PRINTER_ID).await.is_some(),
         "the whole point: this lookup used to always return None"
@@ -239,8 +292,28 @@ async fn an_unconfigured_profile_registers_nothing_and_reports_no_failure() {
     let registry = DriverRegistry::default();
     let report = register_hardware(&registry, &profile("{}")).await;
     assert!(report.ok());
-    assert_eq!(report.registered_count(), 0);
+    assert!(configured(&report.registered).is_empty(), "{report}");
     assert!(registry.printer_ids().await.is_empty());
+}
+
+#[tokio::test]
+async fn register_hardware_enumerates_scanners_even_with_no_profile() {
+    // The reason barcode input was dead: nothing ever registered a scanner,
+    // and the UI auto-detects with scanners[0]. Asserted as an equality
+    // rather than a count so it holds with or without a scanner attached.
+    let registry = DriverRegistry::default();
+    let report = register_hardware(&registry, &profile("{}")).await;
+    assert_eq!(
+        scanner_entries(&report.registered),
+        registry.scanner_ids().await,
+        "the report and the registry must agree on what was found"
+    );
+    for id in scanner_entries(&report.registered) {
+        assert!(
+            registry.scanner(&id).await.is_some(),
+            "{id} reported but not bound"
+        );
+    }
 }
 
 // ── register_card_terminals ──────────────────────────────────────────

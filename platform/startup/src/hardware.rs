@@ -1,7 +1,7 @@
 /*
 last audited 31-08-26 by DSH-Agent (hardware bootstrap, new)
 crate: platform-startup | status: SAFE | lint: CLEAN
-findings: the missing write side of the HAL registry. Both clients built an empty DriverRegistry and nothing ever registered into it, so every hardware command resolved None while the setup wizard could still list devices. Reads the profile the UI already saves; adds no new configuration surface. Deliberately does not wire scanners (nothing looks a scanner up by id - both clients only call scanner_ids() to populate the wizard) or scales (drivers/scale.rs is a stub whose read_weight always fails, so registering one would turn the weight command's clean Ok(None) into an error on every poll; TerminalProfile also records a device path where HidWeightScale wants a vendor/product pair). Card terminals now come from edc_terminals via register_card_terminals; a wired row gets DEFAULT_BAUD because the table records no baud column.
+findings: the missing write side of the HAL registry. Both clients built an empty DriverRegistry and nothing ever registered into it, so every hardware command resolved None while the setup wizard could still list devices. Reads the profile the UI already saves; adds no new configuration surface. Scanners are registered by enumeration (autodetect_scanners), not from the profile: start_scanner_scoped does look a scanner up by id and useBarcodeScanner.ts auto-detects with scanners[0], so an earlier note here claiming "nothing looks a scanner up by id" was wrong and left barcode input dead in both clients. Scales stay unwired (drivers/scale.rs is a stub whose read_weight always fails, so registering one would turn the weight command's clean Ok(None) into an error on every poll; TerminalProfile also records a device path where HidWeightScale wants a vendor/product pair). Card terminals now come from edc_terminals via register_card_terminals; a wired row gets DEFAULT_BAUD because the table records no baud column.. Card terminals now come from edc_terminals via register_card_terminals; a wired row gets DEFAULT_BAUD because the table records no baud column.
 next: implement HID POS reads in drivers/scale.rs before wiring any scale; baud_rate + is_default columns on edc_terminals | perf: one indexed profile read, one ordered terminal read
 */
 //! Startup hardware registration — the missing write side of the HAL registry.
@@ -62,7 +62,7 @@ fn configured_info(kind: &str, address: &str) -> DeviceInfo {
 /// |---|---|
 /// | `printer_connection` + `printer_device_path` | printer under [`MAIN_PRINTER_ID`] |
 /// | `kitchen_printer_connection` + path | printer under [`KITCHEN_PRINTER_ID`] |
-/// | `scanner_*` | nothing — no code looks a scanner up by id |
+/// | `scanner_*` | nothing directly — the stored id cannot build a driver, which needs a `SerialPortInfo` from enumeration. Scanners are registered by autodetect instead; see [`HardwareConfig::autodetect_scanners`] |
 /// | `scale_*` | nothing — see [`HardwareConfig`] docs |
 ///
 /// A `"disabled"`, `"none"` or `"auto"` connection yields no entry rather
@@ -96,6 +96,11 @@ pub fn config_from_profile(profile: &TerminalProfile) -> HardwareConfig {
 
     HardwareConfig {
         printers,
+        // Scanners are the exception to "the operator names the device":
+        // the UI auto-detects with scanners[0] and never asks, and a
+        // discovery-minted id round-trips through the same call that listed
+        // it. See HardwareConfig::autodetect_scanners.
+        autodetect_scanners: true,
         ..HardwareConfig::default()
     }
 }

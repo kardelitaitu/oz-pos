@@ -416,7 +416,27 @@ pub async fn print_receipt_scoped(
     Ok(PrintReceiptResult { printed_lines: n })
 }
 
-/// List all registered barcode scanners (scoped).
+/// Move the preferred scanner to the front, leaving the rest in order.
+///
+/// A no-op when `preferred` is empty or matches nothing, which is the
+/// common case: nothing in the UI writes `scanner_device_id` today.
+fn prefer_first(mut scanners: Vec<ScannerInfo>, preferred: &str) -> Vec<ScannerInfo> {
+    if preferred.is_empty() {
+        return scanners;
+    }
+    if let Some(pos) = scanners.iter().position(|s| s.id == preferred) {
+        let chosen = scanners.remove(pos);
+        scanners.insert(0, chosen);
+    }
+    scanners
+}
+
+/// List all registered barcode scanners (scoped), preference-ordered.
+///
+/// `useBarcodeScanner.ts` auto-detects by taking element 0 and never asks
+/// the operator, so fronting the saved `scanner_device_id` is the only way
+/// that setting has any effect. Unset reads as an empty string and leaves
+/// discovery's order alone.
 #[tauri::command]
 pub async fn list_scanners_scoped(
     session_token: String,
@@ -424,7 +444,14 @@ pub async fn list_scanners_scoped(
 ) -> Result<Vec<ScannerInfo>, AppError> {
     state.resolve_scope(&session_token)?;
     let ids = state.registry.scanner_ids().await;
-    Ok(ids.into_iter().map(|id| ScannerInfo { id }).collect())
+    let preferred = {
+        let conn = state.db.lock().await;
+        oz_core::Settings::get_scanner_device_id(&conn).unwrap_or_default()
+    }; // guard dropped: Connection is !Send
+    Ok(prefer_first(
+        ids.into_iter().map(|id| ScannerInfo { id }).collect(),
+        &preferred,
+    ))
 }
 
 /// Start a barcode scanner (scoped).

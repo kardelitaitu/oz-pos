@@ -532,6 +532,22 @@ pub async fn print_sales_receipt_scoped(
     Ok(PrintSalesReceiptResult { printed: true })
 }
 
+/// Move the preferred scanner to the front, leaving the rest in order.
+///
+/// Mirrors the desktop helper: the UI auto-detects with `scanners[0]`, so
+/// the saved device must come first or the setting does nothing. A no-op
+/// when `preferred` is empty or matches nothing.
+fn prefer_first(mut scanners: Vec<ScannerInfo>, preferred: &str) -> Vec<ScannerInfo> {
+    if preferred.is_empty() {
+        return scanners;
+    }
+    if let Some(pos) = scanners.iter().position(|s| s.id == preferred) {
+        let chosen = scanners.remove(pos);
+        scanners.insert(0, chosen);
+    }
+    scanners
+}
+
 /// Session-scoped variant of `list_scanners`.
 #[allow(clippy::needless_borrow, dropping_references)]
 #[command]
@@ -541,7 +557,14 @@ pub async fn list_scanners_scoped(
 ) -> Result<Vec<ScannerInfo>, AppError> {
     let _session = state.resolve_session(&session_token)?;
     let ids = state.registry.scanner_ids().await;
-    Ok(ids.into_iter().map(|id| ScannerInfo { id }).collect())
+    let preferred = {
+        let conn = state.db.lock().await;
+        oz_core::Settings::get_scanner_device_id(&conn).unwrap_or_default()
+    }; // guard dropped: Connection is !Send
+    Ok(prefer_first(
+        ids.into_iter().map(|id| ScannerInfo { id }).collect(),
+        &preferred,
+    ))
 }
 
 /// Session-scoped variant of `start_scanner`.
