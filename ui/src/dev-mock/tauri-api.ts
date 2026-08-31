@@ -933,6 +933,94 @@ function saveMockCart(): void {
 }
 let cartState: { lines: CartLine[] } = loadMockCart();
 
+// ── Mock promotions + checkout-preview helpers (PROMO-3) ──────────
+// Single source for both the list handlers and the checkout preview so
+// E2E preview → complete totals stay coherent.
+interface MockPromotion {
+  id: string;
+  name: string;
+  description: string;
+  promo_type: 'percentage' | 'fixed_amount' | 'buy_x_get_y';
+  value_minor: number;
+  min_qty: number | null;
+  trigger_sku: string | null;
+  reward_sku: string | null;
+  reward_qty: number | null;
+  starts_at: string;
+  ends_at: string | null;
+  min_order_minor: number;
+  category_id: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+const mockPromotion = (p: Partial<MockPromotion> & { id: string; name: string }): MockPromotion => ({
+  description: '',
+  promo_type: 'percentage',
+  value_minor: 0,
+  min_qty: null,
+  trigger_sku: null,
+  reward_sku: null,
+  reward_qty: null,
+  starts_at: new Date().toISOString(),
+  ends_at: null,
+  min_order_minor: 0,
+  category_id: null,
+  active: true,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  ...p,
+});
+
+const MOCK_PROMOTIONS: MockPromotion[] = [
+  mockPromotion({ id: 'promo-1', name: 'Buy 1 Get 1', description: 'Free croissant with any latte', promo_type: 'buy_x_get_y', trigger_sku: 'LATTE', reward_sku: 'CROISS', min_qty: 1, reward_qty: 1 }),
+  mockPromotion({ id: 'promo-2', name: 'Happy Hour 15%', description: '15% off the whole order', promo_type: 'percentage', value_minor: 15 }),
+  mockPromotion({ id: 'promo-3', name: 'VIP 5000 Off', description: '5000 minor units off', promo_type: 'fixed_amount', value_minor: 5000, min_order_minor: 20000 }),
+];
+
+/**
+ * Engine-mirror the checkout promotion math for the dev mock: percentage
+ * of the remaining total, fixed amount capped at the remaining total,
+ * same-SKU BXGY groups (floor(qty / (min+reward)) × reward free units).
+ * The production backend is the money authority; this exists so the E2E
+ * preview → complete totals are coherent.
+ */
+function applyMockPromotionDiscounts(
+  promotionIds: string[],
+  baseTotalMinor: number,
+): { totalMinor: number; discounts: { promotionId: string; discountMinor: number; description: string }[] } {
+  let remaining = baseTotalMinor;
+  const discounts: { promotionId: string; discountMinor: number; description: string }[] = [];
+  for (const pid of promotionIds) {
+    const promo = MOCK_PROMOTIONS.find((p) => p.id === pid);
+    if (!promo || remaining <= 0) continue;
+    if (remaining < promo.min_order_minor) continue;
+    let d = 0;
+    if (promo.promo_type === 'percentage') {
+      d = Math.floor((remaining * promo.value_minor) / 100);
+    } else if (promo.promo_type === 'fixed_amount') {
+      d = Math.min(promo.value_minor, remaining);
+    } else if (promo.promo_type === 'buy_x_get_y' && promo.trigger_sku) {
+      const line = cartState.lines.find((l) => l.sku === promo.trigger_sku);
+      if (line) {
+        const minQty = promo.min_qty ?? 1;
+        const rewardQty = promo.reward_qty ?? 1;
+        const applicable = Math.floor(line.qty / (minQty + rewardQty)) * rewardQty;
+        d = applicable * line.price.minor_units;
+      }
+    }
+    d = Math.min(d, remaining);
+    if (d <= 0) continue;
+    remaining -= d;
+    discounts.push({ promotionId: pid, discountMinor: d, description: `${promo.name}: ${d} off` });
+  }
+  return { totalMinor: remaining, discounts };
+}
+
+/** Applications recorded per completed sale id (get_sale_promotions). */
+const mockSalePromotions: Record<string, { id: string; promotion_id: string; sale_id: string; discount_minor: number; description: string; created_at: string }[]> = {};
+
 // ── Held carts (persisted so hold/resume previews mirror SQLite) ──
 interface MockHeldCart {
   id: string;
@@ -1975,8 +2063,22 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     saveMockCart();
     return { saleId, total: { minor_units: minorTotal, currency }, lineCount };
   },
-  'complete_sale_scoped': () => {
-    const minorTotal = cartState.lines.reduce((sum, l) => sum + l.price.minor_units * l.qty, 0);
+  'preview_promoted_total_scoped': (args) => {
+    // PROMO-3: engine-mirrored preview over the mock cart (no mutation).
+    const raw = (args as { args?: { promotionIds?: string[] } })?.args ?? (args as { promotionIds?: string[] });
+    const ids = raw?.promotionIds ?? [];
+    const baseTotal = cartState.lines.reduce((sum, l) => sum + l.price.minor_units * l.qty, 0);
+    const { totalMinor, discounts } = applyMockPromotionDiscounts(ids, baseTotal);
+    return { baseTotalMinor: baseTotal, totalMinor, discounts };
+  },
+
+  'complete_sale_scoped': (args) => {
+    // PROMO-3: honor promotionIds so E2E preview → complete totals match.
+    const raw = (args as { args?: { promotionIds?: string[] } })?.args ?? (args as { promotionIds?: string[] });
+    const ids = raw?.promotionIds ?? [];
+    const baseTotal = cartState.lines.reduce((sum, l) => sum + l.price.minor_units * l.qty, 0);
+    const { totalMinor: promotedTotal, discounts } = applyMockPromotionDiscounts(ids, baseTotal);
+    const minorTotal = promotedTotal;
     const lineCount = cartState.lines.length;
     const currency = cartState.lines[0]?.price.currency ?? 'IDR';
     const saleId = `mock-sale-${Date.now()}`;
@@ -1987,7 +2089,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     });
     saleDetails[saleId] = {
       id: saleId, total: { minor_units: minorTotal, currency },
-      subtotal: { minor_units: minorTotal, currency },
+      subtotal: { minor_units: baseTotal, currency },
       taxTotal: { minor_units: 0, currency }, lineCount, status: 'Completed',
       paymentMethod: 'cash', tenderedMinor: minorTotal + 500, userId: 'admin-1', createdAt: now,
       lines: cartState.lines.map((l, i) => ({
@@ -1996,6 +2098,11 @@ const handlers: Record<string, (args: unknown) => unknown> = {
         tax_amount: null, tax_rate_id: null,
       })),
     };
+    mockSalePromotions[saleId] = discounts.map((d) => ({
+      id: `mock-app-${saleId}-${d.promotionId}`, promotion_id: d.promotionId,
+      sale_id: saleId, discount_minor: d.discountMinor, description: d.description,
+      created_at: now,
+    }));
     pushKdsOrderFromCart(cartState.lines, 'store-1');
     // Persist the completed sale and the now-empty cart so a reload keeps
     // history and doesn't resurrect the just-completed cart.
@@ -2470,22 +2577,8 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // PROMOTIONS
   // ═══════════════════════════════════════════════════════════════
 
-    'list_promotions': () => [{ id: 'promo-2', name: 'Happy Hour 15%', description: '15% off the whole order', promo_type: 'percentage', value_minor: 15, min_qty: null, trigger_sku: null, reward_sku: null, reward_qty: null, starts_at: new Date().toISOString(), ends_at: null, min_order_minor: 0, category_id: null, active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },{ id: 'promo-3', name: 'VIP 5000 Off', description: '5000 minor units off', promo_type: 'fixed_amount', value_minor: 5000, min_qty: null, trigger_sku: null, reward_sku: null, reward_qty: null, starts_at: new Date().toISOString(), ends_at: null, min_order_minor: 20000, category_id: null, active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-    {
-      id: 'promo-1', name: 'Buy 1 Get 1', description: 'Free croissant with any latte', promo_type: 'buy_x_get_y',
-      value_minor: 0, min_qty: 1, trigger_sku: 'LATTE', reward_sku: 'CROISS', reward_qty: 1,
-      starts_at: new Date().toISOString(), ends_at: null, min_order_minor: 0, category_id: null,
-      active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-    },
-  ],
-    'list_promotions_scoped': () => [{ id: 'promo-2', name: 'Happy Hour 15%', description: '15% off the whole order', promo_type: 'percentage', value_minor: 15, min_qty: null, trigger_sku: null, reward_sku: null, reward_qty: null, starts_at: new Date().toISOString(), ends_at: null, min_order_minor: 0, category_id: null, active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },{ id: 'promo-3', name: 'VIP 5000 Off', description: '5000 minor units off', promo_type: 'fixed_amount', value_minor: 5000, min_qty: null, trigger_sku: null, reward_sku: null, reward_qty: null, starts_at: new Date().toISOString(), ends_at: null, min_order_minor: 20000, category_id: null, active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-    {
-      id: 'promo-1', name: 'Buy 1 Get 1', description: 'Free croissant with any latte', promo_type: 'buy_x_get_y',
-      value_minor: 0, min_qty: 1, trigger_sku: 'LATTE', reward_sku: 'CROISS', reward_qty: 1,
-      starts_at: new Date().toISOString(), ends_at: null, min_order_minor: 0, category_id: null,
-      active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-    },
-  ],
+  'list_promotions': () => MOCK_PROMOTIONS,
+  'list_promotions_scoped': () => MOCK_PROMOTIONS,
   'get_promotion': () => null,
   'get_promotion_scoped': () => null,
   'create_promotion': () => null,
@@ -2496,8 +2589,14 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'delete_promotion_scoped': () => null,
   'apply_promotion': () => null,
   'apply_promotion_scoped': () => null,
-  'get_sale_promotions': () => [],
-  'get_sale_promotions_scoped': () => [],
+  'get_sale_promotions': (args) => {
+    const raw = (args as { args?: { saleId?: string } })?.args ?? (args as { saleId?: string });
+    return mockSalePromotions[raw?.saleId ?? ''] ?? [];
+  },
+  'get_sale_promotions_scoped': (args) => {
+    const raw = (args as { args?: { saleId?: string } })?.args ?? (args as { saleId?: string });
+    return mockSalePromotions[raw?.saleId ?? ''] ?? [];
+  },
 
   // ═══════════════════════════════════════════════════════════════
   // PURCHASING / SUPPLIERS

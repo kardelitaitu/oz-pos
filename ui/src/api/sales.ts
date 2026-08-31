@@ -76,6 +76,14 @@ export interface CompleteSaleArgs {
   tipMinor?: number;
   /** Service-charge amount in minor units collected at checkout (default 0). */
   serviceChargeMinor?: number;
+  /**
+   * PROMO-3 checkout integration: promotions to engine-apply against the
+   * post-tax sale. Each reduces the payable total (stacking); the application
+   * rows persist inside the checkout transaction and payment splits are
+   * validated against the reduced total. Use `previewPromotedTotalScoped` to
+   * compute split amounts before invoking.
+   */
+  promotionIds?: string[];
 }
 
 /** Result of completing a sale. */
@@ -148,10 +156,51 @@ export interface CompleteSaleScopedArgs {
    * the first and block a legitimate sale.
    */
   attemptId?: string;
+  /**
+   * PROMO-3 checkout integration: promotions to engine-apply against the
+   * post-tax sale (see `CompleteSaleArgs.promotionIds`).
+   */
+  promotionIds?: string[];
 }
 
 export const completeSaleScoped = (sessionToken: string, args: CompleteSaleScopedArgs): Promise<CompleteSaleResult> =>
   loggedInvoke<CompleteSaleResult>('complete_sale_scoped', { sessionToken, args });
+
+/** PROMO-3: one promotion's discount in the checkout preview. */
+export interface PromotionDiscountPreview {
+  promotionId: string;
+  discountMinor: number;
+  description: string;
+}
+
+/** Arguments for previewing the promotion-reduced payable of a cart. */
+export interface PreviewPromotedTotalArgs {
+  cartId: string;
+  /** Promotions to preview, in application order (they stack). */
+  promotionIds: string[];
+}
+
+/** Result of previewing the promotion-reduced payable of a cart. */
+export interface PreviewPromotedTotalResult {
+  /** Cart total after cart discount + tax, before promotions. */
+  baseTotalMinor: number;
+  /** Final payable after promotions — what payment splits must cover. */
+  totalMinor: number;
+  /** Per-promotion discounts in application order. */
+  discounts: PromotionDiscountPreview[];
+}
+
+/**
+ * PROMO-3 checkout integration: preview the promotion-reduced payable for a
+ * cart without consuming it. The checkout call re-validates splits against
+ * the freshly computed total, so if the cart changed between preview and
+ * completion the backend rejects and the caller re-previews.
+ */
+export const previewPromotedTotalScoped = (
+  sessionToken: string,
+  args: PreviewPromotedTotalArgs
+): Promise<PreviewPromotedTotalResult> =>
+  loggedInvoke<PreviewPromotedTotalResult>('preview_promoted_total_scoped', { sessionToken, args });
 
 // ── Shortfall Resolution — complete_sale_with_resolved_shortfalls ──
 
@@ -217,6 +266,12 @@ export interface CompleteSaleWithResolvedShortfallsArgs {
    * let the backend ring up a second sale. See CompleteSaleScopedArgs.attemptId.
    */
   attemptId?: string;
+  /**
+   * The same promotion list the original `complete_sale_scoped` submission
+   * carried, in the same order — the retry must re-apply identical discounts
+   * (see CompleteSaleScopedArgs.promotionIds).
+   */
+  promotionIds?: string[];
 }
 
 /** Complete a sale with cashier-resolved shortfalls (split fulfillment).

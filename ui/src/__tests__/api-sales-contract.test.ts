@@ -10,6 +10,7 @@ import {
   startSaleScoped,
   addLineScoped,
   completeSaleScoped,
+  previewPromotedTotalScoped,
   holdCartScoped,
   voidSaleScoped,
   processRefundScoped,
@@ -49,6 +50,20 @@ describe('sales.ts API contract', () => {
     mockInvoke.mockResolvedValue({ saleId: 's1' });
     await completeSaleScoped('tok', { cartId: 'c1' as CartId, paymentMethod: 'card', tenderedMinor: 5000 });
     expect(mockInvoke).toHaveBeenCalledWith('complete_sale_scoped', { sessionToken: 'tok', args: { cartId: 'c1', paymentMethod: 'card', tenderedMinor: 5000 } });
+  });
+
+  // PROMO-3: promotionIds must cross the IPC boundary on checkout attempts
+  it('completeSaleScoped passes promotionIds through to the backend', async () => {
+    mockInvoke.mockResolvedValue({ saleId: 's1' });
+    await completeSaleScoped('tok', { cartId: 'c1' as CartId, paymentMethod: 'cash', tenderedMinor: 5000, promotionIds: ['promo-2'] });
+    expect(mockInvoke).toHaveBeenCalledWith('complete_sale_scoped', { sessionToken: 'tok', args: { cartId: 'c1', paymentMethod: 'cash', tenderedMinor: 5000, promotionIds: ['promo-2'] } });
+  });
+
+  // PROMO-3: the preview command drives split construction before checkout
+  it('previewPromotedTotalScoped calls correct command', async () => {
+    mockInvoke.mockResolvedValue({ baseTotalMinor: 50000, totalMinor: 42500, discounts: [{ promotionId: 'promo-2', discountMinor: 7500, description: 'Happy Hour 15%: 7500 off' }] });
+    await previewPromotedTotalScoped('tok', { cartId: 'c1', promotionIds: ['promo-2'] });
+    expect(mockInvoke).toHaveBeenCalledWith('preview_promoted_total_scoped', { sessionToken: 'tok', args: { cartId: 'c1', promotionIds: ['promo-2'] } });
   });
 
   it('holdCartScoped calls correct command', async () => {
