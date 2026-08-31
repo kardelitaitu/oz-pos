@@ -103,6 +103,7 @@ export function createRetailCurrencyApiMock() {
     // Scoped versions (ADR #7) — used by PaymentModal when sessionToken is present
     listCurrenciesScoped: vi.fn(() => Promise.resolve([])),
     listExchangeRatesScoped: vi.fn(() => Promise.resolve([])),
+    listLatestExchangeRatesScoped: vi.fn(() => Promise.resolve([])),
     getDefaultCurrencyScoped: vi.fn(() => Promise.resolve('IDR')),
   };
 }
