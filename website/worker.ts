@@ -104,9 +104,9 @@ function withStrictCSP(resp: Response): Response {
   const strictCSP = [
     "default-src 'none'",
     "script-src 'self' https://static.cloudflareinsights.com",
-    "style-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "img-src 'self' data:",
-    "font-src 'self'",
+    "font-src 'self' https://fonts.gstatic.com",
     "connect-src 'self' https://*.code.run https://*.ozpos.my.id https://open.er-api.com",
     "object-src 'none'",
     "base-uri 'self'",
