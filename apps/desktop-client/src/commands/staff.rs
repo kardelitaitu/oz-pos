@@ -1,3 +1,9 @@
+/*
+last audited 31-08-26 by RSA-Agent (user-role campaign, Section D)
+crate: oz-pos-app | status: SAFE | lint: CLEAN
+findings: staff IPC surface fail-closed end-to-end — legacy unscoped commands (list_staff/create_staff/update_staff/list_roles) are permission-denied tombstones (ADR #7); every scoped command gates (STAFF_READ reads, STAFF_CREATE + C1.1 tier limit on create, STAFF_UPDATE on update, STAFF_READ on role list); enforce_role_assignment_policy (STAFF-02/10) identical across shells: Owner-role assignment needs staff:manage_roles, no self-promotion, last-active-owner lock; bootstrap_owner is the only ungated command (first-run bootstrap by design)
+next: STAFF_DELETE has no desktop/tablet IPC consumer (registered + sensitive; deactivation rides STAFF_UPDATE) — confirm the cloud/CLI consumer in Section G | perf: fine
+*/
 //! Staff management commands — list, create, update staff members and roles.
 //!
 //! These commands are the IPC surface for the Staff Management UI.
