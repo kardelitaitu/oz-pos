@@ -38,6 +38,8 @@ pub enum HalErrorKind {
     Protocol,
     /// Device is busy with a prior request.
     Busy,
+    /// Driver present but the operation is not implemented.
+    Unsupported,
 }
 
 /// Errors that can originate in a HAL driver or the HAL runtime.
@@ -75,6 +77,12 @@ pub enum HalError {
     /// The device is busy with a previous request.
     #[error("device busy")]
     Busy,
+
+    /// The driver is present but this operation is not implemented — the
+    /// fail-closed default for every stubbed device path, so an
+    /// unimplemented driver can never silently report success.
+    #[error("operation not supported: {0}")]
+    Unsupported(String),
 }
 
 impl Clone for HalError {
@@ -88,6 +96,7 @@ impl Clone for HalError {
             Self::Timeout(n) => Self::Timeout(*n),
             Self::Protocol(s) => Self::Protocol(s.clone()),
             Self::Busy => Self::Busy,
+            Self::Unsupported(s) => Self::Unsupported(s.clone()),
         }
     }
 }
@@ -104,6 +113,7 @@ impl HalError {
             HalError::Timeout(_) => HalErrorKind::Timeout,
             HalError::Protocol(_) => HalErrorKind::Protocol,
             HalError::Busy => HalErrorKind::Busy,
+            HalError::Unsupported(_) => HalErrorKind::Unsupported,
         }
     }
 }

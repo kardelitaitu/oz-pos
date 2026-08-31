@@ -9,5 +9,6 @@ next: none | perf: N/A
 pub mod barcode;
 pub mod cash_drawer;
 pub mod customer_display;
+pub mod edc;
 pub mod printer;
 pub mod weight_scale;

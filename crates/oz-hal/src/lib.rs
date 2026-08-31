@@ -20,9 +20,10 @@ next: SAFETY comments when real FFI drivers are implemented | perf: drivers do d
 //! with ESC/POS formatting and KDS chits, cash drawers (standalone serial
 //! and printer-kick), serial customer pole displays, and weight scales.
 //!
-//! Not yet in this crate: NFC readers and payment terminals. The EDC card
-//! terminal currently has its own driver tree in
-//! `crates/oz-payment/src/drivers/edc/`, outside the registry.
+//! Card-payment terminals are mid-migration: the [`EdcTerminal`] trait is
+//! defined here, but its drivers still live in
+//! `crates/oz-payment/src/drivers/edc/` and are not yet registered through
+//! [`registry::DriverRegistry`]. NFC readers are not implemented at all.
 //!
 //! Every trait has a programmable mock in [`drivers::mock`]. Tests use
 //! the mocks; production code uses real drivers registered through
@@ -42,6 +43,7 @@ pub use traits::barcode::BarcodeScanner;
 pub use traits::cash_drawer::CashDrawer;
 pub use traits::customer_display::CustomerDisplay;
 pub use traits::customer_display::DisplayContent;
+pub use traits::edc::{EdcPaymentResult, EdcTerminal, TerminalStatus};
 pub use traits::printer::{PaperStatus, PrinterStatus, ReceiptPrinter};
 pub use traits::weight_scale::WeightReading;
 pub use traits::weight_scale::WeightScale;
