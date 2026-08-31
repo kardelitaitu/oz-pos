@@ -19,6 +19,7 @@
  */
 
 import { execSync, spawn } from 'child_process';
+import { existsSync } from 'node:fs';
 import { generateKeyPairSync } from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
@@ -187,14 +188,17 @@ function startDocker() {
   // Pre-flight: compose auto-reads the repo-root .env and dies with a
   // terse "key cannot contain a space" on a poisoned line (2026-08-31
   // outage). Fail here instead, with every offending line numbered.
-  try {
-    execSync(`node "${ROOT}/scripts/validate-env.mjs" "${ROOT}/.env"`, {
-      stdio: 'inherit',
-      timeout: 15_000,
-    });
-  } catch {
-    log('Docker', `${RED}.env failed validation — fix the lines above (comment out note lines; a # prefix is always safe).${NC}`);
-    process.exit(1);
+  const envPath = `${ROOT}/.env`;
+  if (existsSync(envPath)) {
+    try {
+      execSync(`node "${ROOT}/scripts/validate-env.mjs" "${envPath}"`, {
+        stdio: 'inherit',
+        timeout: 15_000,
+      });
+    } catch {
+      log('Docker', `${RED}.env failed validation — fix the lines above (comment out note lines; a # prefix is always safe).${NC}`);
+      process.exit(1);
+    }
   }
   try {
     prePullRedis();
