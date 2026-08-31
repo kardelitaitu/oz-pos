@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (drift repaired) · FIXED 31-08: crate tree +oz-crypto/oz-media/oz-notification/oz-plugin; rlua->mlua; oz-payment +Paddle (tree + prose); HAL device list 'NFC' -> real (barcode/printer/drawer/display/scale/EDC); migrations 98 -> 19 SQL files (131 squashed into init.sql); IPC endpoints 618 -> 505 unique (385 desktop + 369 tablet, 49 modules) · NOTE: this condensed guides/ARCHITECTURE.md coexists with a fuller root ARCHITECTURE.md (reorg 28147fe4 copied an archived version here); README links to THIS file · verified against HEAD Cargo.toml + generate_handler! + crates/oz-core/migrations/ · 31-08 (dc07f32a/bb7ce92d): Registry + platform-startup sections updated for the new apply_config()/HardwareConfig bootstrap path (discover() is auto-probe, not startup registration) · 31-08: module count 9 -> 14 (all wired in platform-startup; added giftcards/kitchen/loyalty/promotions/purchasing) -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (drift repaired) · FIXED 31-08: crate tree +oz-crypto/oz-media/oz-notification/oz-plugin; rlua->mlua; oz-payment +Paddle (tree + prose); HAL device list 'NFC' -> real (barcode/printer/drawer/display/scale/EDC); migrations 98 -> 19 SQL files (131 squashed into init.sql); IPC endpoints 618 -> 505 unique (385 desktop + 369 tablet, 49 modules) · NOTE: this condensed guides/ARCHITECTURE.md coexists with a fuller root ARCHITECTURE.md (reorg 28147fe4 copied an archived version here); README links to THIS file · verified against HEAD Cargo.toml + generate_handler! + crates/oz-core/migrations/ · 31-08 (dc07f32a/bb7ce92d): Registry + platform-startup sections updated for the new apply_config()/HardwareConfig bootstrap path (discover() is auto-probe, not startup registration) · 31-08: module count 9 -> 14 (all wired in platform-startup; added giftcards/kitchen/loyalty/promotions/purchasing); feature flags 32 -> 39 and store presets 4 -> 5 (verified against crates/oz-core/src/features.rs) -->
 
 # OZ-POS – Codebase Architecture
 
@@ -40,7 +40,7 @@ oz-pos/
 │   │   │   ├── staff.rs     # Staff / Role domain types
 │   │   │   ├── refund.rs    # Refund domain type
 │   │   │   ├── settings.rs  # Settings persistence layer
-│   │   │   ├── features.rs  # Feature enum (32 flags), registry, presets
+│   │   │   ├── features.rs  # Feature enum (39 flags), registry, presets
 │   │   │   ├── migrations.rs# Embedded SQL migration runner (20 migrations)
 │   │   │   └── error.rs     # CoreError enum
 │   │   └── migrations/      # SQL migration files (001–098)
@@ -157,7 +157,7 @@ oz-pos/
   - `Cart` / `CartLine` — in-memory sale pipeline with currency matching.
   - `Sale` / `SaleLine` — transaction lifecycle state machine: `Pending → Active → Completed | Voided`.
   - `Product`, `Category`, `Inventory`, `Sku` — domain types with serde.
-  - `Feature` — 32 toggleable feature flags with dependency resolution and 4 store presets.
+  - `Feature` — 39 toggleable feature flags with dependency resolution and 5 store presets (simple_retail, restaurant, full_store, cafe, franchise).
   - `Store<'a>` — typed CRUD facade over `&Connection`. All writes inside transactions.
 - **Migrations**: 19 embedded SQL files in `crates/oz-core/migrations/` (the original 131 were squashed into `init.sql`). Registered and run by `migrations.rs`; executed on startup by `platform-startup`.
 - **Rules**: `#![deny(unsafe_code)]` in `lib.rs`; `missing_docs = "warn"` comes from the root `[workspace.lints]` via `[lints] workspace = true` in every member manifest.
