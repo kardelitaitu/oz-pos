@@ -216,7 +216,10 @@ describe('PaymentModal — shortfall resolution', () => {
     };
 
     invokeMock.mockImplementation((cmd: string): Promise<unknown> => {
-      if (cmd === 'complete_sale') {
+      // The component calls the SCOPED command (ADR #7) — rejecting the
+      // legacy unscoped name never fired, leaving this test red since
+      // the scoped migration.
+      if (cmd === 'complete_sale_scoped') {
         return Promise.reject(
           new Error(JSON.stringify(shortfallPayload)),
         );
