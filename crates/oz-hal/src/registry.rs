@@ -1,8 +1,8 @@
 /*
 last audited 25-07-26 by RSA-Agent (oz-hal slice A: registry deep read)
 crate: oz-hal | status: SAFE | lint: CLEAN
-findings: clean — per-category RwLock maps with documented overwrite semantics; discovery fail-open per driver (one failure never aborts the rest); deterministic device-id scheme with serial/model fallback; companion cash-drawer registration for every printer; register_mock_scale expect is a documented startup-only invariant
-next: none | perf: short-lived read locks on lookup
+findings: clean — per-category RwLock maps with documented overwrite semantics; discovery fail-open per driver (one failure never aborts the rest); deterministic device-id scheme with serial/model fallback; companion cash-drawer registration for every printer. GAP (open, Phase 2): discover() never registers a WeightScale — drivers/scale.rs HidWeightScale has no discover_all(), and no caller anywhere invokes register_scale(), so read_scale_weight_scoped always resolves to None in production even though both clients expose the command and Feature::UsbScale is declarable. register_mock_scale() was removed 31-08-26: zero callers, it injected a mock into the production registry, and it was the crate's only library-side panic path (try_write().expect())
+next: scale discovery (Phase 2) | perf: short-lived read locks on lookup
 */
 //! `DriverRegistry` — the runtime's catalogue of available hardware.
 //!
@@ -123,17 +123,6 @@ impl DriverRegistry {
     /// Snapshot of registered scale ids.
     pub async fn scale_ids(&self) -> Vec<String> {
         self.scales.read().await.keys().cloned().collect()
-    }
-
-    /// Register a mock weight scale under `id` for testing.
-    pub fn register_mock_scale(&self, id: &str) {
-        let mock = Arc::new(crate::drivers::mock::MockWeightScale::new());
-        // Synchronous insert — only used at startup/test time.
-        self.scales
-            .try_write()
-            // SAFETY: synchronous startup/test-time insert — `try_write` only fails if a concurrent writer holds the lock.
-            .expect("register_mock_scale called concurrently")
-            .insert(id.to_owned(), mock);
     }
 
     /// Discover and register available hardware. Failure of one driver

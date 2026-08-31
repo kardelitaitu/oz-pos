@@ -133,3 +133,29 @@ fn chit_bullets_are_formatted() {
     assert!(chit.text.contains("  • Item A"));
     assert!(chit.text.contains("  • Item B"));
 }
+
+// ── HAL-1 regression: centering pads by character cells ───────────────
+
+#[test]
+fn center_text_is_symmetric_for_multibyte_names() {
+    for name in ["Ayam Gepuk", "Kopi ☕", "Sate Padang", "Café"] {
+        let centered = center_text(name, 48);
+        assert_eq!(
+            centered.chars().count(),
+            48,
+            "{name:?} did not fill the 48-cell chit width"
+        );
+        let left = centered.len() - centered.trim_start().len();
+        let right = centered.chars().count() - centered.trim_end().chars().count();
+        assert!(
+            left == right || left + 1 == right || right + 1 == left,
+            "{name:?} is lopsided: {left} left vs {right} right"
+        );
+    }
+}
+
+#[test]
+fn center_text_leaves_over_width_text_untouched() {
+    let wide = center_text("x".repeat(60).as_str(), 48);
+    assert_eq!(wide.chars().count(), 60);
+}

@@ -148,6 +148,26 @@ pub fn feed(n: u8) -> Vec<u8> {
     vec![0x1B, 0x64, n]
 }
 
+// ── Layout helpers ───────────────────────────────────────
+
+/// Width of a string in ESC/POS character cells.
+///
+/// Receipts and KDS chits are laid out in fixed-width columns, and Rust's
+/// own `{:<width$}` formatter counts *characters* — but `str::len()` counts
+/// UTF-8 *bytes*. Mixing the two silently steals padding from whichever
+/// column a multi-byte string sits in (HAL-1): the currency symbols `€`
+/// `£` `¥` `₱` `฿` `₩` are 2–3 bytes each, so every price column shifted on
+/// EUR, GBP, JPY, PHP, THB and KRW receipts, and any Indonesian store or
+/// product name with a multi-byte codepoint did the same. Every pad in the
+/// layout code goes through here so it agrees with the formatter.
+///
+/// East-Asian glyphs occupy two cells; modelling that needs a
+/// `unicode-width` dependency and is deliberately out of scope — receipts
+/// here are Latin script.
+pub(crate) fn cell_width(s: &str) -> usize {
+    s.chars().count()
+}
+
 // ── Legacy formatter ─────────────────────────────────────
 
 /// Build an ESC/POS byte buffer from a plain-text receipt body.
