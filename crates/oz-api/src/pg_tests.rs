@@ -1311,3 +1311,108 @@ async fn pg_integration_terminal_auth_survives_rls_cutover() {
     // stale-role cleanup above. Dropping it here would race concurrent
     // tests that use it; it is re-created idempotently by the next run.
 }
+
+// ── Exchange rates (ARCH-01-family repair, 2026-08-31) ─────────────
+
+/// Pure validation unit tests — no database needed.
+#[test]
+fn validate_rate_request_boundaries() {
+    // Happy.
+    assert!(validate_exchange_rate_request("USD", "IDR", 1, Some("2026-08-31")).is_ok());
+    assert!(validate_exchange_rate_request("USD", "IDR", 16_000_000, None).is_ok());
+    // Pair + positivity.
+    assert!(validate_exchange_rate_request("USD", "USD", 1, None).is_err());
+    assert!(validate_exchange_rate_request("USD", "IDR", 0, None).is_err());
+    assert!(validate_exchange_rate_request("USD", "IDR", -5, None).is_err());
+    // ISO-4217 shape. `Currency` FromStr is case-insensitive (IPC
+    // parity): lowercase is a valid code; storage keeps the casing.
+    assert!(validate_exchange_rate_request("US", "IDR", 1, None).is_err());
+    assert!(validate_exchange_rate_request("usd", "IDR", 1, None).is_ok());
+    assert!(validate_exchange_rate_request("DOLLAR", "IDR", 1, None).is_err());
+    // Date: same parser as the command layer — chrono %Y-%m-%d, which
+    // accepts non-zero-padded forms like "2026-8-31".
+    assert!(validate_exchange_rate_request("USD", "IDR", 1, Some("2026-8-31")).is_ok());
+    assert!(validate_exchange_rate_request("USD", "IDR", 1, Some("2026-13-01")).is_err());
+    assert!(validate_exchange_rate_request("USD", "IDR", 1, Some("2026-00-10")).is_err());
+    assert!(validate_exchange_rate_request("USD", "IDR", 1, Some("2026-01-32")).is_err());
+    assert!(validate_exchange_rate_request("USD", "IDR", 1, Some("2026-01-00")).is_err());
+    assert!(validate_exchange_rate_request("USD", "IDR", 1, Some("20260101")).is_err());
+    assert!(validate_exchange_rate_request("USD", "IDR", 1, Some("")).is_err());
+}
+
+/// Integration roundtrip against a live Postgres (skips when
+/// unreachable). Runs on the SHARED base DB: rates are global reference
+/// data with no locking, and every row is created with a unique
+/// `source` tag and deleted by id in cleanup, so parallel tests cannot
+/// collide.
+#[tokio::test]
+async fn pg_exchange_rates_roundtrip() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let Some(pool) = test_pool(&url).await else {
+        eprintln!("pg_exchange_rates_roundtrip: skipped (no PG at {url})");
+        return;
+    };
+    // Unique dates per run so a crashed run's leftovers cannot collide
+    // with the duplicate-detection assertion below.
+    let salt = uuid::Uuid::now_v7().simple().to_string();
+    let month = salt.as_bytes()[0] % 9 + 1;
+    let day = salt.as_bytes()[1] % 20 + 1;
+    let d1 = format!("2026-{month:02}-{day:02}");
+    let d2 = format!("2026-{month:02}-{:02}", day + 1);
+    let d3 = format!("2026-{month:02}-{:02}", day + 2);
+
+    let r1 = create_exchange_rate_pg(&pool, "USD", "IDR", 16_000_000, "pgtest", &d1)
+        .await
+        .expect("create r1");
+    let r2 = create_exchange_rate_pg(&pool, "USD", "IDR", 16_500_000, "pgtest", &d2)
+        .await
+        .expect("create r2");
+    let r3 = create_exchange_rate_pg(&pool, "IDR", "USD", 1, "pgtest", &d3)
+        .await
+        .expect("create r3");
+
+    // Duplicate (pair, date) → Conflict (unique violation mapping).
+    let dup = create_exchange_rate_pg(&pool, "USD", "IDR", 17_000_000, "pgtest", &d1).await;
+    assert!(matches!(dup, Err(PgError::Conflict)), "dup: {dup:?}");
+
+    // Unseeded currency → Validation (FK on currencies.code).
+    let fk = create_exchange_rate_pg(&pool, "USD", "ZZZ", 1, "pgtest", &d1).await;
+    assert!(matches!(fk, Err(PgError::Validation(_))), "fk: {fk:?}");
+
+    // Latest-per-pair must pick the newest effective date per pair.
+    let latest = list_latest_exchange_rates_pg(&pool).await.expect("latest");
+    let mine: Vec<_> = latest.iter().filter(|r| r.source == "pgtest").collect();
+    assert_eq!(mine.len(), 2, "one row per pgtest pair: {mine:?}");
+    let usd_idr = mine
+        .iter()
+        .find(|r| r.from_currency == "USD" && r.to_currency == "IDR")
+        .expect("USD->IDR present");
+    assert_eq!(usd_idr.id, r2.id, "newest effective_date wins");
+    assert_eq!(usd_idr.rate_millionths, 16_500_000);
+
+    // Full history includes all three rows.
+    let all = list_exchange_rates_pg(&pool).await.expect("list");
+    for id in [&r1.id, &r2.id, &r3.id] {
+        assert!(all.iter().any(|r| &r.id == id), "history missing {id}");
+    }
+
+    // Pair lookup: newest first.
+    let got = get_latest_exchange_rate_pg(&pool, "USD", "IDR")
+        .await
+        .expect("pair");
+    assert_eq!(got.id, r2.id);
+
+    // Delete + 404 semantics.
+    for id in [&r1.id, &r2.id, &r3.id] {
+        delete_exchange_rate_pg(&pool, id).await.expect("delete");
+        assert!(matches!(
+            delete_exchange_rate_pg(&pool, id).await,
+            Err(PgError::NotFound)
+        ));
+    }
+    assert!(matches!(
+        get_latest_exchange_rate_pg(&pool, "USD", "IDR").await,
+        Err(PgError::NotFound)
+    ));
+}

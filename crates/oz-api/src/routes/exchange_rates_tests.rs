@@ -72,7 +72,7 @@ async fn create_list_latest_delete_roundtrip() {
     assert_eq!(rows.as_array().unwrap().len(), 1);
 
     // CUR-11 bounded listing: two history rows, one per-pair row.
-    create_rate(
+    let _ = create_rate(
         State(s.clone()),
         Json(create("USD", "IDR", 16_500_000, Some("2026-08-15"))),
     )
@@ -116,7 +116,7 @@ async fn create_list_latest_delete_roundtrip() {
 async fn latest_rate_path_is_case_insensitive() {
     let s = state();
     seed_currency(&s, "EUR", "978", "Euro").await;
-    create_rate(
+    let _ = create_rate(
         State(s.clone()),
         Json(create("USD", "EUR", 920_000, Some("2026-08-01"))),
     )
@@ -174,9 +174,11 @@ async fn create_rejects_non_iso_codes() {
 
 #[tokio::test]
 async fn create_rejects_malformed_effective_date() {
+    // "2026-8-1" is NOT rejected: the command layer's chrono %Y-%m-%d
+    // parser accepts non-zero-padded dates, and REST mirrors it.
     let resp = create_rate(
         State(state()),
-        Json(create("USD", "IDR", 1_000_000, Some("2026-8-1"))),
+        Json(create("USD", "IDR", 1_000_000, Some("not-a-date"))),
     )
     .await
     .into_response();
@@ -208,7 +210,7 @@ async fn create_defaults_effective_date_to_today_and_source_to_manual() {
 async fn create_duplicate_pair_date_is_409() {
     let s = state();
     seed_currency(&s, "SGD", "702", "Singapore Dollar").await;
-    create_rate(
+    let _ = create_rate(
         State(s.clone()),
         Json(create("USD", "SGD", 1_300_000, Some("2026-08-01"))),
     )

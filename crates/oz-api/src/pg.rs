@@ -1417,22 +1417,12 @@ pub fn validate_exchange_rate_request(
         ));
     }
     if let Some(d) = effective_date {
-        let b = d.as_bytes();
-        let ok = b.len() == 10
-            && b[4] == b'-'
-            && b[7] == b'-'
-            && b.iter()
-                .enumerate()
-                .all(|(i, c)| matches!(i, 4 | 7) || c.is_ascii_digit())
-            && d[5..7].parse::<u8>().is_ok_and(|m| (1..=12).contains(&m))
-            && d[8..10]
-                .parse::<u8>()
-                .is_ok_and(|day| (1..=31).contains(&day));
-        if !ok {
-            return Err(PgError::Validation(format!(
-                "effective_date must be YYYY-MM-DD, got {d}"
-            )));
-        }
+        // Same parser as the command layer (CUR-05): chrono's %Y-%m-%d,
+        // which accepts non-zero-padded forms like "2026-8-1" — REST and
+        // IPC must not disagree on what a valid date is.
+        chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").map_err(|_| {
+            PgError::Validation(format!("effective_date must be YYYY-MM-DD, got {d}"))
+        })?;
     }
     Ok(())
 }
