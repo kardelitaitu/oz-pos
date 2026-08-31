@@ -8627,3 +8627,62 @@ clean and is exactly this, in the /* audit block:
   + next: add version CAS to void_sale (COR-8); decide the checkout key source (see JOURNAL round O)
 
 **Totals:** COR-7 closed. oz-core 2327 passing, 1 pre-existing failure.
+
+## 2026-08-31 — round P: COR-8 was already fixed, and my "red at HEAD" claim was wrong
+
+Went for the next item in the same stamp. It turned out to be already done,
+and the round mostly produced corrections - including two of my own.
+
+**COR-8 is closed.** db/sales_lifecycle.rs:650 void_sale now reads
+UPDATE sales SET status='voided', updated_at=?1, version=version+1
+WHERE id=?2 AND status='active', with rows==0 mapped to CoreError::Conflict.
+That is the LOY-03 work recorded in the audit register today. So the sales.rs
+stamp is now stale on BOTH of its next: items - COR-7 (fixed by me, e35a40d0)
+and COR-8 (fixed by someone else). A stale next: is a work order for a
+duplicate fix, which makes this worth recording even though the stamp itself
+is still blocked behind another agent's uncommitted work in that file.
+
+Note the CAS is on status, not on version. That is better than what the
+finding asked for: a version CAS would reject a legitimate retry, while the
+status predicate rejects exactly the interleaving that matters (a concurrent
+finalize completing the sale between the pre-check and the update).
+
+**My "oz-core is red at HEAD" claim from round O was wrong, and the method
+that produced it was wrong.** I reverted only my own two files, saw the
+migrations test still fail, and concluded "pre-existing at HEAD". The tree also
+carries other agents' uncommitted edits, so reverting mine proves only that it
+is not mine - not that it is committed. Same trap as round L: a check that
+looks like verification but holds scope constant on the wrong axis.
+
+The two export failures are another agent's UNCOMMITTED REP-03 work. git diff
+-U0 puts every hunk in sales.rs lines 259-292, which is exactly
+export_daily_summary and export_sales_by_hour, and tz_modifier appears 0 times
+at HEAD and twice in the working tree. (An earlier reading of "hunks at
+157-214" was git show 8952c558 output that I had conflated with the working
+tree diff - fixed by running the two commands separately.)
+
+What I ruled out before leaving it to them, since the obvious theory is wrong:
+  - '+07:00' IS a valid SQLite time-shift modifier. My first probe looked like
+    proof but was insensitive: 01:02Z + 7h stays on the same calendar date
+    either way, so it could not distinguish applied from ignored. Re-probing
+    with 23:30Z, which crosses midnight, shows it is applied.
+  - Their exact predicate, replicated against an in-memory table, returns the
+    row for +00:00, +07:00 and -03:00. The SQL is not the bug.
+  - create_sale does persist created_at (sales_crud.rs insert_sale_with_lines),
+    so it is not a NULL timestamp either.
+  - Both sides of the comparison carry the same modifier, so any offset shifts
+    them together and cannot empty the result.
+So the cause is elsewhere in their WIP. Left alone: the file is theirs, the
+work is uncommitted, and touching it needs a checkout that opens a clobber
+window on exactly the kind of in-flight edit this repo has already lost twice.
+
+**Also checked, not a finding:** the PaymentModal double-tap path. The Complete
+button uses loading={processing} rather than disabled, which looked like a
+hole, but Button derives isDisabled = disabled || isProcessing || isSuccess and
+applies it to both disabled and aria-disabled. The UI guard is real. What it
+does not cover is a retry after a lost response - StockShortfallDialog:248
+re-invokes completeSaleWithResolvedShortfalls with the same splits - which is
+the case the COR-7 guard exists for, still waiting on a key source.
+
+**Totals:** COR-7 closed, COR-8 verified already closed, 2 export tests red
+from another agent WIP (diagnosed, not mine, not touched).
