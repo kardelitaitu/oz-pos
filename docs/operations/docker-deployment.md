@@ -108,7 +108,7 @@ an empty or well-known authentication secret.
    | Service | Endpoint | Response |
    |---------|----------|----------|
    | Cloud server | `GET /api/v1/health` | `{"status":"ok","version":"0.0.13",...}` |
-   | License server | `GET /api/health` | `{"status":"ok","uptime_seconds":...}` |
+   | License server | `GET /api/health` | `{"status":"ok","db_connected":true,"uptime_secs":...}` |
 
 5. **Test license activation** — Once running, activate a license:
 

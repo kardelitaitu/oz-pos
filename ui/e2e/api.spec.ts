@@ -101,11 +101,26 @@ test.describe('License Server API', () => {
 
     const body = await resp.json();
 
-    // PocketBase's built-in /api/health endpoint returns an envelope rather
-    // than the retired custom { status: "ok" } payload. Keep the contract
-    // assertion aligned with the route actually registered by the server.
-    expect(body).toMatchObject({ code: 200, message: 'API is healthy.' });
-    expect(body).toHaveProperty('data');
+    // The license server mounts bindHealthOverride (apps/license-server/
+    // health.go), a root-group middleware that short-circuits PocketBase's
+    // built-in { code, message, data } envelope and serves the extended flat
+    // payload instead — the same contract asserted by health_test.go and
+    // documented in apps/license-server/DEPLOY.md. The envelope is what is
+    // retired here, not the { status: "ok" } shape.
+    expect(body).toMatchObject({ status: 'ok', db_connected: true });
+
+    // Boot-gate snapshots are status, not liveness: each must be present as
+    // an object, but their configured/verified values depend on optional
+    // deployment env and are deliberately not pinned.
+    for (const gate of ['smtp', 'paddle', 'midtrans', 'rsa', 'discord']) {
+      expect(body).toHaveProperty(gate);
+      // toBeInstanceOf, not typeof: typeof null === 'object' would pass.
+      expect(body[gate]).toBeInstanceOf(Object);
+    }
+
+    // Runtime info from the Go runtime.
+    expect(typeof body.uptime_secs).toBe('number');
+    expect(typeof body.go_version).toBe('string');
   });
 
   test('license status endpoint returns status info', async () => {
