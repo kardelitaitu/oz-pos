@@ -4,6 +4,7 @@ import { LocaleProvider } from '@/i18n/LocaleContext';
 import { BrandProvider } from '@/contexts/BrandContext';
 import { ThemeProvider } from '@/frontend/shell/ThemeProvider';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
+import CurrencyWorkspaceSync from '@/contexts/CurrencyWorkspaceSync';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { WorkspaceProvider } from '@/contexts/WorkspaceContext';
 import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
@@ -43,6 +44,10 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
           <AuthProvider>
             <ToastProvider>
               <WorkspaceProvider>
+                {/* CurrencyContext reload bridge (parity with
+                    AppProviders): per-store scoped default (CUR-03)
+                    reaches useCurrency on every workspace switch. */}
+                <CurrencyWorkspaceSync />
                 {/* F-034: the desktop entry nests Subscription (C2.2
                     upgrade gates), Zoom (root font scaling) and
                     HardwareAccel inside WorkspaceProvider — the tablet
