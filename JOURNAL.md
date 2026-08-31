@@ -9158,3 +9158,19 @@ procedural: commit verified slices immediately, pathspec-style, instead of
 batching. Also confirmed: the shared tree has a live rustfmt watcher that
 touches files between read and edit (stale-stamp errors) — batch read+edit
 tight, or let pwsh do the replacement.
+
+Correction to the check-watch note above, learned the hard way two rounds later.
+
+The cargo invocation MUST be capped generously - 1200 seconds - and not at a
+value that looks reasonable. A first cap of 240s killed two consecutive
+legitimate builds, which measured 290s and 445s, and each kill produced a log
+round reading "errors=0 warnings=0 / FAILING CRATES: none" for a check that
+never finished. That is a monitor reporting clean because it gave up.
+
+Full-workspace cold builds in this repo land between roughly 240 and 450
+seconds depending on what other agents have invalidated, so any cap inside that
+band is a coin flip. Warm-cache checks are 1-3 seconds; the range is enormous.
+
+The rule that actually fixes it is not the number: a skipped round must print
+NO verdict line at all. The status probe treats a missing FAILING CRATES line
+as UNKNOWN, so a skip can never be misread as a pass, whatever the cap is.
