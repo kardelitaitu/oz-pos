@@ -1,3 +1,10 @@
+/*
+last audited 31-08-26 by RSA-Agent (user-role campaign, Section B)
+crate: platform-core | status: SAFE | lint: CLEAN
+findings: static data tables only (no unsafe/unwrap/expect, no panics beyond format!) — six presets match ADR #35 taxonomy (Owner=* wildcard; Manager broad; Staff checkout-only; Admin explicit, never wildcard, no staff:delete; Auditor read-only; Custom empty) pinned by 20 preset tests incl. retired-role and no-wildcard assertions; ALL_ENFORCED (83 keys) bidirectionally anchored to the permission registry by the 62-test inventory suite — both green
+next: report-only finding — TERMINALS_READ is enforced+registered but granted by NO preset (only Owner's "*"), so Manager/Admin can register/edit/delete terminals yet fail the 7 gated read commands (list/get/ping/overrides/profiles/device-binding, desktop terminals.rs:176-316); confirm against the ADR #41 entitlement matrix whether intended or drift
+perf: n/a — compile-time constants
+*/
 //! Built-in role presets and the enforced-permission inventory for
 //! `platform_core::rbac` — the static authorization data tables,
 //! extracted from `rbac.rs` to keep files small (F-018).
