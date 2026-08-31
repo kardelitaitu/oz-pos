@@ -212,11 +212,11 @@ describe('VoidOrdersScreen', () => {
     await user.click(confirmBtn);
 
     await waitFor(() => {
+      // 5e0d4caa: voidSaleScoped(token, saleId, reason) — positional.
       expect(mockVoidSale).toHaveBeenCalledWith(
-        expect.objectContaining({
-          saleId: 'ORD-001',
-          reason: 'cancelled-by-customer',
-        }),
+        'session-1',
+        'ORD-001',
+        'cancelled-by-customer',
       );
     });
   });

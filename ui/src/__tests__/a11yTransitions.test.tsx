@@ -46,6 +46,8 @@ const { mockOfflineSummary } = vi.hoisted(() => ({
 
 vi.mock('@/api/offline', () => ({
   getOfflineQueueStatusSummary: () => mockOfflineSummary(),
+  // StatusBar polls conflict count via the session-scoped variant.
+  getOfflineQueueStatusSummaryScoped: () => mockOfflineSummary(),
 }));
 
 vi.mock('@/hooks/useGatewayStatus', () => ({

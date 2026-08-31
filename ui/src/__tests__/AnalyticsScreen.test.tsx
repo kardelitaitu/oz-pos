@@ -116,8 +116,10 @@ const mockGetLowStockAlerts = vi.fn(() => Promise.resolve([
   { product_id: 'lo6', sku: 'SKU-LO6', name: 'Filter Paper', current_qty: 9, threshold: 12, currency: 'USD', price_minor: 400, cost_minor: 200 },
 ]));
 const mockGetCategoryBreakdown = vi.fn(() => Promise.resolve([
-  { category_id: 'cat1', category_name: 'Beverages', total_minor: 500000, sale_count: 40, percentage: 55 },
-  { category_id: 'cat2', category_name: 'Food', total_minor: 300000, sale_count: 25, percentage: 33 },
+  // REP-06: report rows carry their own currency (the Rust DTO always
+  // populates it) — fmtIn throws without it.
+  { category_id: 'cat1', category_name: 'Beverages', total_minor: 500000, currency: 'USD', sale_count: 40, percentage: 55 },
+  { category_id: 'cat2', category_name: 'Food', total_minor: 300000, currency: 'USD', sale_count: 25, percentage: 33 },
 ]));
 // Per-day basket-size rows: 100 total sales, weighted avg 2.5 items/order
 // — a real trend for the basket chart, not a flat range average.
@@ -1058,10 +1060,12 @@ describe('AnalyticsScreen layout shell', () => {
     expect(downloadCsv).toHaveBeenCalledTimes(1);
     const [filename, columns, rows] = vi.mocked(downloadCsv).mock.calls[0]!;
     expect(filename).toContain('category-');
-    expect(columns.map((c) => c.key)).toEqual(['category', 'sales', 'orders', 'share']);
-    expect(columns.map((c) => c.label)).toEqual(['Category', 'Total sales', 'Orders', 'Share %']);
-    expect(rows[0]).toMatchObject({ category: 'Beverages', sales: '$5,000.00', orders: '40', share: '55' });
-    expect(rows[1]).toMatchObject({ category: 'Food', sales: '$3,000.00', orders: '25', share: '33' });
+    // REP-06a: the export carries a currency column — an unlabelled
+    // amount column across currencies is unreadable.
+    expect(columns.map((c) => c.key)).toEqual(['category', 'currency', 'sales', 'orders', 'share']);
+    expect(columns.map((c) => c.label)).toEqual(['Category', 'Currency', 'Total sales', 'Orders', 'Share %']);
+    expect(rows[0]).toMatchObject({ category: 'Beverages', currency: 'USD', sales: '$5,000.00', orders: '40', share: '55' });
+    expect(rows[1]).toMatchObject({ category: 'Food', currency: 'USD', sales: '$3,000.00', orders: '25', share: '33' });
   });
 
   it('exports the revenue trend CSV from the revenue card', async () => {

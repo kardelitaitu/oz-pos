@@ -197,11 +197,13 @@ describe('RefundModal', () => {
     await waitFor(() => {
       expect(mockProcessRefund).toHaveBeenCalledTimes(1);
     });
+    // 5e0d4caa: processRefund is session-scoped — token is arg 0, and the
+    // user is resolved from the session server-side (no userId on the wire).
     expect(mockProcessRefund).toHaveBeenCalledWith(
+      'mock-session-token',
       expect.objectContaining({
         saleId: 'sale-abc123456789',
         reason: 'Customer returned',
-        userId: 'user-1',
         lines: expect.arrayContaining([
           expect.objectContaining({ sku: 'SKU-001', qty: 2 }),
         ]),
