@@ -17,6 +17,8 @@ import {
   getDefaultCurrencyScoped,
   getLatestExchangeRateScoped,
   exchangeRateToDecimal,
+  convertMinorUnits,
+  reciprocalMillionths,
   type CurrencyDto,
   type ExchangeRateDto,
 } from '@/api/currency';
@@ -274,7 +276,7 @@ export default function PaymentModal({
       (r) => r.from_currency === total.currency && r.to_currency === selectedCurrency,
     );
     if (rate) {
-      return { ...rate, rate: exchangeRateToDecimal(rate) };
+      return { ...rate, rate: exchangeRateToDecimal(rate), inverted: false };
     }
     const inverse = exchangeRates.find(
       (r) => r.from_currency === selectedCurrency && r.to_currency === total.currency,
@@ -285,6 +287,9 @@ export default function PaymentModal({
         rate: 1 / exchangeRateToDecimal(inverse),
         from_currency: total.currency,
         to_currency: selectedCurrency,
+        // MONEY-01: the conversion must know the stored rate is the
+        // reciprocal — `rate` here is float display math only.
+        inverted: true,
       };
     }
     return null;
@@ -314,6 +319,9 @@ export default function PaymentModal({
     return {
       ...latestRate,
       rate: exchangeRateToDecimal(latestRate),
+      // The backend query is pair-specific (base→charge), so a hit is
+      // always the direct direction.
+      inverted: false,
     };
   }, [sessionToken, latestRate, exchangeRateInfo]);
 
@@ -472,13 +480,17 @@ export default function PaymentModal({
       if (selectedCurrency === total.currency || !effectiveRateInfo) {
         return typeof minorUnits === 'bigint' ? Number(minorUnits) : minorUnits;
       }
-      const baseMinor = typeof minorUnits === 'bigint' ? Number(minorUnits) : minorUnits;
-      const baseExponent = minorUnitExponent(total.currency);
-      const chargeExponent = minorUnitExponent(selectedCurrency);
-      // Convert: base major units * rate = charge major units, then to charge minor units
-      const baseMajor = baseMinor / 10 ** baseExponent;
-      const chargeMajor = baseMajor * effectiveRateInfo.rate;
-      return Math.round(chargeMajor * 10 ** chargeExponent);
+      // MONEY-01: exact fixed-point conversion. The old float chain
+      // (divide to major, multiply by a binary-float rate, scale back)
+      // mis-rounded every product landing on the .5 minor boundary
+      // (0.03 USD @ 149.5 → 448 instead of 449).
+      return convertMinorUnits({
+        baseMinor: typeof minorUnits === 'bigint' ? Number(minorUnits) : minorUnits,
+        baseExponent: minorUnitExponent(total.currency),
+        rateMillionths: effectiveRateInfo.rate_millionths,
+        chargeExponent: minorUnitExponent(selectedCurrency),
+        inverse: effectiveRateInfo.inverted,
+      });
     },
     [selectedCurrency, total.currency, effectiveRateInfo],
   );
@@ -583,7 +595,12 @@ export default function PaymentModal({
         ? {
             baseCurrency: total.currency,
             baseTotalMinor: total.minor_units,
-            tenderRateMillionths: Math.round(effectiveRateInfo.rate * 1_000_000),
+            // MONEY-01: persist the ORIGINAL fixed-point integer (or its
+            // exact reciprocal for inverse pairs) instead of round-tripping
+            // the float display rate through 1e6.
+            tenderRateMillionths: effectiveRateInfo.inverted
+              ? reciprocalMillionths(effectiveRateInfo.rate_millionths)
+              : effectiveRateInfo.rate_millionths,
           }
         : {}),
     }),

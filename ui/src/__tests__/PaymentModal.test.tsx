@@ -10,6 +10,7 @@ import PaymentModal from '@/features/sales/PaymentModal';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { makeSubscriptionCaps } from '@/__tests__/test-utils/mocks/subscriptionCaps';
 import type { Money, CartLine, Sku, LineId } from '@/types/domain';
+import type * as CurrencyApi from '@/api/currency';
 
 async function renderWithFluent(ui: React.ReactElement) {
   const wrapped = withFluent(<ToastProvider>{ui}</ToastProvider>, salesFtl);
@@ -90,8 +91,14 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: invokeMock,
 }));
 
-vi.mock('@/api/currency', () => ({
-  listCurrenciesScoped: mockListCurrenciesScoped,
+vi.mock('@/api/currency', async () => {
+  // Pure fixed-point helpers (convertMinorUnits, reciprocalMillionths)
+  // must be the REAL implementations — MONEY-01 tests pin their exact
+  // decimal behavior through this component. IPC functions stay mocked.
+  const actual = await vi.importActual<typeof CurrencyApi>('@/api/currency');
+  return {
+    ...actual,
+    listCurrenciesScoped: mockListCurrenciesScoped,
   listExchangeRates: mockListExchangeRates,
   listExchangeRatesScoped: vi.fn(() =>
     Promise.resolve([
@@ -121,9 +128,8 @@ vi.mock('@/api/currency', () => ({
       effective_date: '2026-01-01',
     }),
   ),
-  exchangeRateToDecimal: (rate: { rate_millionths: number }) => rate.rate_millionths / 1_000_000,
-  formatExchangeRate: (rate: { rate_millionths: number }) => (rate.rate_millionths / 1_000_000).toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0',
-}));
+  };
+});
 
 vi.mock('@/hooks/useFeatures', () => ({
   useFeatures: () => ({
