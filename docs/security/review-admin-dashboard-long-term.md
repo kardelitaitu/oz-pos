@@ -428,10 +428,19 @@ values a request must match exactly).
 treated as non-fatal, leaving the code reusable — closing it means
 claiming before minting, which moves a mid-flow failure onto the
 customer instead of the business (product call, not a silent fix);
-`enterprise_trial.go:182` logs a full license key, but `activate.go`
-does the same in three places, so it is a pre-existing convention rather
-than an outlier and fixing one file alone would be worse than
-consistent; the list handler's `updated_at` reports request time, not
+`enterprise_trial.go:182` logged a full license key — **CLOSED 2026-08-31
+(`039197e9` + `e90b2e2c`)**. The deferral reason was that fixing one file
+alone would be worse than inconsistent, so the whole class was swept instead:
+11 sites across 7 files now mask through `maskLicenseKey` (tail-8, mirroring
+`mask_token` in `crates/oz-security/src/mask.rs`, so Rust and Go share one
+convention). Classification was by argument, not keyword: 3 `login_lockout.go`
+sites were excluded as email-derived, and 2 `addon_admin.go` sites kept their
+stronger prefix form under a `key-log:masked` marker. An AST guard
+(`mask_convention_test.go`) now fails any new raw site, so this cannot regrow.
+**Open finding surfaced by that classification:** `login_lockout.go:203`,
+`:218` and `:319` write the customer's email address into the server log via
+`loginLockoutKey(email)` — PII rather than a credential, so out of scope for
+the key sweep and still unfixed; the list handler's `updated_at` reports request time, not
 the record's; the enterprise mint's uniqueness pre-check → `Save` is a
 genuine TOCTOU (unique index exists, so a true concurrent duplicate
 yields 500 not 409).
