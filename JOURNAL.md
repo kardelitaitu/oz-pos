@@ -8564,3 +8564,66 @@ time: pathspec a commit to exact files, never a directory.
 
 **Totals this area:** B46-B55 plus the license-key class closed. license-server
 full suite green in 135s, 8 new tests.
+
+## 2026-08-31 — round O: COR-7 fixed, and the fix turned out to be worth more than the finding
+
+Chased the lead the previous round ended on. The stamp claim was accurate and
+narrow: the checkout path in db/sales_checkout.rs builds its own INSERT for
+payment splits and omits the idempotency_key column, while create_payments in
+db/payments.rs writes the same table and includes it. Same struct, two writers,
+different persistence.
+
+**Reachability checked first this time**, because rounds L and M ended with a
+correct fix to code nobody calls. This one is live: complete_sale_deduction is
+reached from desktop pos.rs:1052 and tablet pos.rs:904, and args.payment_splits
+is serde-deserialised so a key can arrive from a client even though the TS
+interface does not name the field.
+
+**The surprise was what persisting the column unlocks.** The payment insert runs
+inside the same transaction as the sale insert and the stock deduction. So once
+the key is written, idx_payments_idempotency_key (init.sql:1204) stops being a
+column constraint and becomes a whole-checkout replay guard: a second completion
+carrying the same key fails and rolls back everything - no sale, no payment, no
+second deduction. Before this, a replay simply succeeded with two sales, because
+SQLite treats NULL keys as distinct and every row on this path had NULL. The
+audit found a missing column; what was actually sitting behind it was double
+checkout.
+
+**Two tests, and the second one was not trusted until proven.** The persistence
+test is a clean Red (left: None, right: Some). The replay test went green
+immediately, which per the skill means it might be a bad test - so the INSERT
+was reverted and it re-run: it failed at the is_err assertion, proving the
+replay really did succeed before the fix. It asserts on sale count, payment
+count and remaining stock rather than on which SQL ran, so it survives the insert
+moving.
+
+**The honest limit, stated in the commit.** No production caller supplies a key
+today. Desktop and tablet set None, the UI type omits the field. The guard is
+now correct and available but latent on the default till path. Making it bite
+needs a key *source*, and a per-call UUID dedups nothing - the exact mistake the
+payment drivers make, which round M documented. It has to be derived from
+something identifying the attempt (cart id, or a client-generated attempt id),
+and that is a product decision about what a double-tapped checkout should
+return. Recorded, not invented.
+
+**Verification under a moving tree.** HEAD moved twice mid-round (76412046 ->
+411fa624 -> ...). wtree-guard reported DRIFT on sales_checkout.rs, which turned
+out to be my own restore from backup, not another agent - checked by diffing
+against HEAD and confirming the delta was exactly my 3-line change. The crate
+has one failing test, migrations existing_db_with_legacy_rows_upgrades_
+idempotently; reproduced at HEAD with my files reverted, so pre-existing and not
+mine. Worth someone's attention: it is red at HEAD.
+
+**Deliberately not done: the sales.rs stamp.** It still says next: persist
+idempotency_key (COR-7), which is now false. The file carries another agent's
+uncommitted +26/-11 at lines 157-214. Staging a clean hunk would mean checking
+the file out to HEAD first, which opens a window where their in-flight work can
+be clobbered - and this repo has already eaten an agent's work twice that way.
+The hunks do not overlap the stamp, so the follow-up is safe once the file is
+clean and is exactly this, in the /* audit block:
+  - findings:  ... COR-7 MEDIUM: complete_sale_deduction inserts payment splits WITHOUT the idempotency_key column ...
+  + findings:  ... COR-7 CLOSED 2026-08-31 (e35a40d0): the column is now written, which also makes idx_payments_idempotency_key a whole-checkout replay guard because the insert is inside the sale transaction
+  - next: persist idempotency_key on the sale-path payment insert (COR-7); add version CAS to void_sale (COR-8)
+  + next: add version CAS to void_sale (COR-8); decide the checkout key source (see JOURNAL round O)
+
+**Totals:** COR-7 closed. oz-core 2327 passing, 1 pre-existing failure.
