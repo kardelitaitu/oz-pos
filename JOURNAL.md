@@ -9265,3 +9265,40 @@ context line) with a per-entry sanity check, so line drift can never again
 silently widen an error-handling hole. Worktree cleanup note: `git worktree
 remove` failed on the junction'd dir ("Invalid argument") — remove the
 junction with `cmd /c rmdir` FIRST, then the dir, then `git worktree prune`.
+
+## check-watch round 30: oz-hal test code is red and NOT a mid-edit transient
+
+Round 30 (00:43:20) - FAILING CRATES: oz-hal, exit=101:
+
+    crates/oz-hal/src/drivers/bt_printer_tests.rs:34:27: error[E0599]:
+      no method named `type_name` found for struct `TypeId` in the current scope
+    (same at :35)
+
+Only the lib TEST fails; the library itself compiles. The test reads
+
+    assert_eq!(
+        ser.device_info().type_name(),
+        bt.device_info().type_name(),
+        "the two helpers must not produce different device classes"
+    );
+
+so device_info() returns a TypeId, and TypeId has no type_name() - that method
+belongs to `dyn Any`, not to TypeId, and on stable a TypeId cannot produce a
+name at runtime at all.
+
+Fix is to compare the ids directly, since TypeId is PartialEq + Debug:
+
+    assert_eq!(
+        ser.device_info(),
+        bt.device_info(),
+        "the two helpers must not produce different device classes"
+    );
+
+If the readable name is actually wanted for the assertion message, that needs
+the concrete type at the call site - std::any::type_name::<DeviceInfo>() - not
+something derived from the TypeId.
+
+Checked twice (00:43 and 00:47): identical errors, file unchanged. Unlike the
+three transients today (the dropped format!, the mod edc deletion, the
+CoreError::Validation shape) nobody is actively fixing this one, so it will
+still be red on the next round.
