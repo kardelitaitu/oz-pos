@@ -30,8 +30,10 @@ function makePickerState(overrides: Partial<TopologyPickerState> = {}): Topology
   return {
     fromNodeId: 'node-1',
     fromPort: 'right',
+    fromVariantIndex: 0,
     toNodeId: 'node-2',
     toPort: 'left',
+    toVariantIndex: 0,
     options: [
       {
         fromPortId: 'operation-out',

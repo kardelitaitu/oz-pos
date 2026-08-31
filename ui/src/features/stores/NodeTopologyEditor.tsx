@@ -25,7 +25,6 @@ import {
   findFreeSpawnSpot,
   NODE_WIDTH,
   NODE_HEIGHT,
-  NODE_PORT_Y,
   nodeBoxesOverlap,
   resolveDropOverlaps,
   findOverlappingNodeIds,
@@ -65,9 +64,9 @@ import {
   type TopologyValidationError,
 } from './topologyContract';
 import {
-  leftPortVariants,
-  wireRelationshipOptions,
+  rowRelationshipOptions,
   legacyWireResolutionOptions,
+  socketSemanticIds,
   type WireRelationshipOption,
   NODE_TYPE_ICON,
   workspaceTypeLabel,
@@ -75,6 +74,7 @@ import {
   topologyUiString,
   sanitizeCopiedNode,
 } from './topologyCard';
+import { portRowCenterY, semanticRowIndex } from './topologyMetrics';
 import './NodeTopologyEditor.css';
 
 // ── Extracted modules (Phase 1 split) ────────────────────────────────
@@ -346,24 +346,6 @@ const PRESET_RESTAURANT: { nodes: TopologyNodeData[]; wires: TopologyWireData[] 
     { id: 'w-4', fromNodeId: 'ws-kds', fromPort: 'right', toNodeId: 'hw-prn', toPort: 'left', fromPortId: 'ticket-out', toPortId: 'ticket-in', relationshipType: 'ticket-routing', direction: 'one-way', label: 'Ticket Print' },
   ],
 };
-
-/** Port offset from node origin (left, top) for each port name.
- *  Left/right wire endpoints sit on the card edge, exactly at the center
- *  of the visible connector circles. The hit areas may overhang, but the
- *  geometry contract never does. */
-const PORT_OFFSET: Record<PortName, { dx: number; dy: number }> = {
-  // Kept for legacy loaded wires. New UX renders and authorizes only left/right.
-  top:    { dx: NODE_WIDTH / 2, dy: -6 },
-  right:  { dx: NODE_WIDTH, dy: NODE_PORT_Y },
-  bottom: { dx: NODE_WIDTH / 2, dy: NODE_HEIGHT + 6 },
-  left:   { dx: 0,             dy: NODE_PORT_Y },
-};
-
-/** Canvas-space dy (top edge) for a left port — all nodes share the rail
- *  centerline now that stacked inputs are gone. */
-function leftPortDy(_node: TopologyNodeData, _variantIndex: number): number {
-  return NODE_PORT_Y;
-}
 
 /** Evaluate a cubic bezier at parameter t (0-1). */
 const GRID_SIZE = 24;
@@ -924,6 +906,7 @@ export default function NodeTopologyEditor({
   const {
     fromNodeId: connectingFromNodeId,
     fromPort: connectingFromPort,
+    fromVariantIndex: connectingFromVariantIndex,
     picker: relationshipPicker,
     beginConnection,
     openPicker,
@@ -1338,18 +1321,16 @@ export default function NodeTopologyEditor({
       if (!fromNode || !toNode) continue;
       const fromPort = wire.fromPort ?? 'right';
       const toPort = wire.toPort ?? 'left';
-      const fromOff = PORT_OFFSET[fromPort];
-      const toOff = PORT_OFFSET[toPort];
-      // Wires targeting a left input resolve the vertical slot from their
-      // recorded toPortId ('location-in' | 'operation-in') so they terminate
-      // on the exact socket (inventory nodes stack two left inputs).
-      const toVariantIndex = toPort === 'left'
-        ? leftPortVariants(toNode).indexOf(wire.toPortId ?? 'location-in')
-        : 0;
-      const x1 = fromNode.x + fromOff.dx;
-      const y1 = fromNode.y + fromOff.dy;
-      const x2 = toNode.x + toOff.dx;
-      const y2 = toNode.y + (toPort === 'left' ? leftPortDy(toNode, Math.max(0, toVariantIndex)) : toOff.dy);
+      // Round 174 stacked ports: each semantic is its own row, so a wire's
+      // endpoint Y is the portRowCenterY of the row its recorded semantic
+      // occupies (falling back to the primary row for untyped wires). This
+      // replaces the old constant NODE_PORT_Y single-rail endpoint.
+      const fromRowIndex = semanticRowIndex(fromNode, fromPort, wire.fromPortId);
+      const toRowIndex = semanticRowIndex(toNode, toPort, wire.toPortId);
+      const x1 = fromNode.x + (fromPort === 'right' ? NODE_WIDTH : 0);
+      const y1 = fromNode.y + portRowCenterY(fromNode, fromRowIndex);
+      const x2 = toNode.x + (toPort === 'right' ? NODE_WIDTH : 0);
+      const y2 = toNode.y + portRowCenterY(toNode, toRowIndex);
       const dx = Math.abs(x2 - x1) * 0.5;
       if (wire.bends && wire.bends.length > 0) {
         // User-authored bends take precedence over auto routing: the wire
@@ -3688,13 +3669,15 @@ export default function NodeTopologyEditor({
       let closest: { nodeId: string; port: PortName; variantIndex: number; dist: number } | null = null;
       for (const n of nodes) {
         if (n.id === connectingFromNodeId) continue;
-    // Snap candidates mirror the visible sockets: one left input per node
-    // plus a single right output (stores expose output only).
-    const candidates: Array<{ port: PortName; variantIndex: number; off: { dx: number; dy: number } }> = [
-      { port: 'left', variantIndex: 0, off: { dx: PORT_OFFSET.left.dx, dy: leftPortDy(n, 0) } },
-    ];
-    if (n.type !== 'store') {
-      candidates.push({ port: 'right', variantIndex: 0, off: PORT_OFFSET.right });
+    // Snap candidates mirror the stacked port rows (round 174): every
+    // semantic row on the left (input) and right (output) column is a
+    // candidate, positioned at its own portRowCenterY.
+    const candidates: Array<{ port: PortName; variantIndex: number; off: { dx: number; dy: number } }> = [];
+    for (let i = 0; i < socketSemanticIds(n, 'left').length; i += 1) {
+      candidates.push({ port: 'left', variantIndex: i, off: { dx: 0, dy: portRowCenterY(n, i) } });
+    }
+    for (let i = 0; i < socketSemanticIds(n, 'right').length; i += 1) {
+      candidates.push({ port: 'right', variantIndex: i, off: { dx: NODE_WIDTH, dy: portRowCenterY(n, i) } });
     }
         for (const c of candidates) {
           const px = n.x + c.off.dx;
@@ -4202,12 +4185,16 @@ export default function NodeTopologyEditor({
     const target = nodeMap.get(nodeId);
     if (!source || !target) return false;
     // Compatibility is decided by the semantic pairing table (ADR #34): a
-    // drop is only completable into a target socket that admits at least
-    // one relationship with the source socket. Untyped sockets gate closed
-    // — no valid pair, no connection. A pair admitting MULTIPLE
-    // relationships stays compatible; the picker disambiguates at drop.
-    return wireRelationshipOptions(source, connectingFromPort, target, port, variantIndex).length > 0;
-  }, [connectingFromNodeId, connectingFromPort, nodeMap, portDirection]);
+    // drop is only completable into a target row that admits the source
+    // row's semantic. With stacked per-semantic rows (round 174) the source
+    // semantic is fixed by connectingFromVariantIndex, so the check resolves
+    // that specific pair — the legacy socket-wide enumeration is only used
+    // by the picker flow.
+    return rowRelationshipOptions(
+      source, connectingFromPort, connectingFromVariantIndex,
+      target, port, variantIndex,
+    ).length > 0;
+  }, [connectingFromNodeId, connectingFromPort, connectingFromVariantIndex, nodeMap, portDirection]);
 
   /** Live semantic validation of the CURRENT canvas (ADR #34 slice 2).
    *  Mirrors the Apply gate exactly — same normalize + validate, same
@@ -4506,18 +4493,6 @@ export default function NodeTopologyEditor({
     return m;
   }, [liveValidation, nodes, l10n]);
 
-  /** First-match 'left' input port wiring per node (the flexible inventory
-   *  label). Stable across hover/selection so the card memo holds. */
-  const connectedPortIdByNode = useMemo(() => {
-    const m = new Map<string, string | undefined>();
-    for (const w of wires) {
-      if ((w.toPort ?? 'left') === 'left' && w.toNodeId && !m.has(w.toNodeId)) {
-        m.set(w.toNodeId, w.toPortId);
-      }
-    }
-    return m;
-  }, [wires]);
-
   /** Pre-existing overlaps in the loaded diagram (round 143): the
    *  no-overlap invariant guards spawns, drops (140), nudges (141) and
    *  auto-layout (142), but old saved diagrams can still load stacked.
@@ -4692,7 +4667,7 @@ export default function NodeTopologyEditor({
         addToast({ message: l10n.getString('topology-port-input-only'), type: 'info' });
         return;
       }
-      beginConnection(nodeId, port);
+      beginConnection(nodeId, port, variantIndex);
       setPreviewCursor(null);
       return;
     }
@@ -4715,30 +4690,35 @@ export default function NodeTopologyEditor({
       return;
     }
 
-    const options = wireRelationshipOptions(fromNode, connectingFromPort!, toNode, port, variantIndex);
+    // With stacked per-semantic port rows (round 174), both source and
+    // target rows are known — resolve the specific pair. The picker is
+    // only needed for the rare case where a single semantic pair maps to
+    // multiple relationships (currently none in the pairing table).
+    const options = rowRelationshipOptions(
+      fromNode, connectingFromPort!, connectingFromVariantIndex,
+      toNode, port, variantIndex,
+    );
     if (options.length === 0) {
       addToast({ message: l10n.getString('topology-wire-incompatible'), type: 'warning' });
       cancelConnection();
       return;
     }
 
-    // A drop that admits MULTIPLE relationships must not draw a wire
-    // blindly — open the picker and let the user choose which one this
-    // wire means. The in-flight connection stays visible (ghost + source
-    // highlight) until the choice lands or is cancelled.
     if (options.length > 1) {
       openPicker({
         fromNodeId: connectingFromNodeId,
         fromPort: connectingFromPort!,
+        fromVariantIndex: connectingFromVariantIndex,
         toNodeId: nodeId,
         toPort: port,
+        toVariantIndex: variantIndex,
         options,
       });
       return;
     }
 
     commitWire(fromNode, connectingFromPort!, toNode, port, options[0]!);
-  }, [connectingFromNodeId, connectingFromPort, nodeMap, isPortCompatible, commitWire, addToast, l10n, beginConnection, cancelConnection, openPicker, setPreviewCursor, portDirection]);
+  }, [connectingFromNodeId, connectingFromPort, connectingFromVariantIndex, nodeMap, isPortCompatible, commitWire, addToast, l10n, beginConnection, cancelConnection, openPicker, setPreviewCursor, portDirection]);
 
   /** Cycle a wire's visual flow: one-way → reverse → two-way → one-way.
    *  Clicking the wire itself is the affordance; the from/to ownership is
@@ -4944,9 +4924,9 @@ export default function NodeTopologyEditor({
     if (!connectingFromNodeId || !connectingFromPort) return null;
     const fromNode = nodeMap.get(connectingFromNodeId);
     if (!fromNode) return null;
-    const portOff = PORT_OFFSET[connectingFromPort];
-    const x1 = fromNode.x + portOff.dx;
-    const y1 = fromNode.y + portOff.dy;
+    // Round 174: the source endpoint rides the exact semantic row.
+    const x1 = fromNode.x + (connectingFromPort === 'right' ? NODE_WIDTH : 0);
+    const y1 = fromNode.y + portRowCenterY(fromNode, connectingFromVariantIndex);
 
     // Snap the preview to a hovered target port; otherwise follow the
     // live cursor (previewCursor tracks every mousemove while connecting).
@@ -4955,10 +4935,8 @@ export default function NodeTopologyEditor({
     if (hoveredTarget) {
       const targetNode = nodes.find((n) => n.id === hoveredTarget.nodeId);
       if (targetNode) {
-        const targetOff = PORT_OFFSET[hoveredTarget.port];
-        const targetDy = hoveredTarget.port === 'left' ? leftPortDy(targetNode, hoveredTarget.variantIndex) : targetOff.dy;
-        mx = targetNode.x + targetOff.dx;
-        my = targetNode.y + targetDy;
+        mx = targetNode.x + (hoveredTarget.port === 'right' ? NODE_WIDTH : 0);
+        my = targetNode.y + portRowCenterY(targetNode, hoveredTarget.variantIndex);
       } else {
         mx = previewCursor?.x ?? mousePosRef.current.x;
         my = previewCursor?.y ?? mousePosRef.current.y;
@@ -4973,7 +4951,7 @@ export default function NodeTopologyEditor({
     }
     const dx = Math.abs(mx - x1) * 0.5;
     return { d: `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${mx - dx} ${my}, ${mx} ${my}` };
-  }, [connectingFromNodeId, connectingFromPort, nodeMap, nodes, hoveredTarget, previewCursor, wireRouting]);
+  }, [connectingFromNodeId, connectingFromPort, connectingFromVariantIndex, nodeMap, nodes, hoveredTarget, previewCursor, wireRouting]);
 
   const selectedNode = useMemo(() => nodes.find((n) => n.id === selectedNodeId), [nodes, selectedNodeId]);
 
@@ -5653,8 +5631,8 @@ export default function NodeTopologyEditor({
                 isConnectingSource={connectingFromNodeId === node.id}
                 connectingFromNodeId={connectingFromNodeId}
                 connectingFromPort={connectingFromPort}
-                isLeftPortHovered={_htn?.port === 'left'}
-                isRightPortHovered={_htn?.port === 'right'}
+                connectingFromVariantIndex={connectingFromVariantIndex}
+                hoveredTarget={_htn ? { port: _htn.port, variantIndex: _htn.variantIndex } : null}
                 nodeErrors={nodeErrorsByNode.get(node.id) ?? EMPTY_ERRORS}
                 countBadge={excessBadgeByNode.get(node.id) ?? null}
                 hasOverlap={overlappingNodeIds.has(node.id)}
@@ -5670,7 +5648,6 @@ export default function NodeTopologyEditor({
                 isRenameable={(node.type === 'store' && !!onRenameBranch) || (node.type === 'workspace' && !!onRenameWorkspace)}
                 renaming={renamingNodeId === node.id}
                 renameDraft={renameDraft}
-                connectedPortId={connectedPortIdByNode.get(node.id)}
                 l10n={l10n}
                 renameInputRef={renameInputRef}
                 renameBaselineRef={renameBaselineRef}

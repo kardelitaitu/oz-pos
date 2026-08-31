@@ -35,8 +35,10 @@ describe('useTopologyEditorConnection', () => {
     const picker: TopologyPickerState = {
       fromNodeId: 'n1',
       fromPort: 'right',
+      fromVariantIndex: 0,
       toNodeId: 'n2',
       toPort: 'left',
+      toVariantIndex: 0,
       options: [{ fromPortId: 'operation-out', toPortId: 'operation-in', relationshipType: 'generic', labelId: 'test' }],
     };
 
@@ -54,8 +56,10 @@ describe('useTopologyEditorConnection', () => {
     const picker: TopologyPickerState = {
       fromNodeId: 'n1',
       fromPort: 'right',
+      fromVariantIndex: 0,
       toNodeId: 'n2',
       toPort: 'left',
+      toVariantIndex: 0,
       options: [],
     };
 
@@ -77,8 +81,10 @@ describe('useTopologyEditorConnection', () => {
     const picker: TopologyPickerState = {
       fromNodeId: 'n1',
       fromPort: 'right',
+      fromVariantIndex: 0,
       toNodeId: 'n2',
       toPort: 'left',
+      toVariantIndex: 0,
       options: [],
     };
 
@@ -114,8 +120,10 @@ describe('useTopologyEditorConnection', () => {
     const picker: TopologyPickerState = {
       fromNodeId: 'n1',
       fromPort: 'right',
+      fromVariantIndex: 0,
       toNodeId: 'n2',
       toPort: 'left',
+      toVariantIndex: 0,
       options: [],
     };
 
@@ -154,60 +162,67 @@ describe('topologyConnectionReducer (unit)', () => {
       type: 'begin',
       fromNodeId: 'n1',
       fromPort: 'right',
+      fromVariantIndex: 0,
     });
-    expect(state).toEqual({ fromNodeId: 'n1', fromPort: 'right', picker: null });
+    expect(state).toEqual({ fromNodeId: 'n1', fromPort: 'right', fromVariantIndex: 0, picker: null });
   });
 
   it('open-picker sets picker', () => {
-    const withConnection: TopologyConnectionState = { fromNodeId: 'n1', fromPort: 'right', picker: null };
+    const withConnection: TopologyConnectionState = { fromNodeId: 'n1', fromPort: 'right', fromVariantIndex: 0, picker: null };
     const picker: TopologyPickerState = {
       fromNodeId: 'n1',
       fromPort: 'right',
+      fromVariantIndex: 0,
       toNodeId: 'n2',
       toPort: 'left',
+      toVariantIndex: 0,
       options: [],
     };
     const state = topologyConnectionReducer(withConnection, { type: 'open-picker', picker });
-    expect(state).toEqual({ fromNodeId: 'n1', fromPort: 'right', picker });
+    expect(state).toEqual({ fromNodeId: 'n1', fromPort: 'right', fromVariantIndex: 0, picker });
   });
 
   it('cancel clears both connection and picker', () => {
     const withPicker: TopologyConnectionState = {
       fromNodeId: 'n1',
       fromPort: 'right',
-      picker: { fromNodeId: 'n1', fromPort: 'right', toNodeId: 'n2', toPort: 'left', options: [] },
+      fromVariantIndex: 0,
+      picker: { fromNodeId: 'n1', fromPort: 'right', fromVariantIndex: 0, toNodeId: 'n2', toPort: 'left', toVariantIndex: 0, options: [] },
     };
     const state = topologyConnectionReducer(withPicker, { type: 'cancel' });
-    expect(state).toEqual({ fromNodeId: null, fromPort: null, picker: null });
+    expect(state).toEqual({ fromNodeId: null, fromPort: null, fromVariantIndex: 0, picker: null });
   });
 
   it('dismiss-picker clears both when picker exists', () => {
     const withPicker: TopologyConnectionState = {
       fromNodeId: 'n1',
       fromPort: 'right',
-      picker: { fromNodeId: 'n1', fromPort: 'right', toNodeId: 'n2', toPort: 'left', options: [] },
+      fromVariantIndex: 0,
+      picker: { fromNodeId: 'n1', fromPort: 'right', fromVariantIndex: 0, toNodeId: 'n2', toPort: 'left', toVariantIndex: 0, options: [] },
     };
     const state = topologyConnectionReducer(withPicker, { type: 'dismiss-picker' });
-    expect(state).toEqual({ fromNodeId: null, fromPort: null, picker: null });
+    expect(state).toEqual({ fromNodeId: null, fromPort: null, fromVariantIndex: 0, picker: null });
   });
 
   it('dismiss-picker keeps connection when no picker', () => {
-    const withConnection: TopologyConnectionState = { fromNodeId: 'n1', fromPort: 'right', picker: null };
+    const withConnection: TopologyConnectionState = { fromNodeId: 'n1', fromPort: 'right', fromVariantIndex: 0, picker: null };
     const state = topologyConnectionReducer(withConnection, { type: 'dismiss-picker' });
-    expect(state).toEqual({ fromNodeId: 'n1', fromPort: 'right', picker: null });
+    expect(state).toEqual({ fromNodeId: 'n1', fromPort: 'right', fromVariantIndex: 0, picker: null });
   });
 
   it('begin replaces existing connection and picker', () => {
     const withPicker: TopologyConnectionState = {
       fromNodeId: 'n1',
       fromPort: 'right',
-      picker: { fromNodeId: 'n1', fromPort: 'right', toNodeId: 'n2', toPort: 'left', options: [] },
+      fromVariantIndex: 0,
+      picker: { fromNodeId: 'n1', fromPort: 'right', fromVariantIndex: 0, toNodeId: 'n2', toPort: 'left', toVariantIndex: 0, options: [] },
     };
     const state = topologyConnectionReducer(withPicker, {
       type: 'begin',
       fromNodeId: 'n3',
       fromPort: 'left',
+      fromVariantIndex: 0,
     });
-    expect(state).toEqual({ fromNodeId: 'n3', fromPort: 'left', picker: null });
+    expect(state).toEqual({ fromNodeId: 'n3', fromPort: 'left', fromVariantIndex: 0, picker: null });
   });
 });

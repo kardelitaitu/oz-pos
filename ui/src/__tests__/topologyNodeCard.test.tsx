@@ -55,8 +55,8 @@ function defaultProps(overrides: Partial<{
   isConnectingSource: boolean;
   connectingFromNodeId: string | null;
   connectingFromPort: PortName | null;
-  isLeftPortHovered: boolean;
-  isRightPortHovered: boolean;
+  connectingFromVariantIndex: number;
+  hoveredTarget: { port: PortName; variantIndex: number } | null;
   nodeErrors: TopologyValidationError[];
   countBadge: string | null;
   hasOverlap: boolean;
@@ -67,7 +67,6 @@ function defaultProps(overrides: Partial<{
   isRenameable: boolean;
   renaming: boolean;
   renameDraft: string;
-  connectedPortId: string | undefined;
   l10n: Pick<ReactLocalization, 'getString'>;
   renameInputRef: React.RefObject<HTMLInputElement>;
   renameBaselineRef: { current: string | null };
@@ -82,10 +81,10 @@ function defaultProps(overrides: Partial<{
   onSetNodeName: (nodeId: string, name: string) => void;
   onSetNodeEnabled: (nodeId: string, enabled: boolean) => void;
   onDismissNodeIssue: (nodeId: string, messageId: string) => void;
-  onPortClick: (e: React.MouseEvent, nodeId: string, port: PortName) => void;
+  onPortClick: (e: React.MouseEvent, nodeId: string, port: PortName, variantIndex: number) => void;
   onHoverNode: React.Dispatch<React.SetStateAction<string | null>>;
   getTelemetry: (node: TopologyNodeData) => { badge: string; status: 'online' | 'warning' | 'offline' } | null;
-  isPortCompatible: (nodeId: string, port: PortName) => boolean;
+  isPortCompatible: (nodeId: string, port: PortName, variantIndex: number) => boolean;
 }> = {}) {
   const node = makeNode();
 

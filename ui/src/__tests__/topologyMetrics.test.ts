@@ -45,6 +45,7 @@ const HARDWARE = node({ type: 'hardware' });
 describe('topologyMetrics', () => {
   it('computes main rows per node kind (workspace adds two config rows)', () => {
     expect(mainRowCount(STORE_POS)).toBe(4);
+    expect(mainRowCount(RESTO)).toBe(4);
     expect(mainRowCount(STORE)).toBe(2);
     expect(mainRowCount(WAREHOUSE)).toBe(2);
     expect(mainRowCount(HARDWARE)).toBe(2);

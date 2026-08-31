@@ -2262,6 +2262,17 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+/* The green "configured correctly" dot's sr-only text — a separate class
+   so validation queries (.node-validation-sr) never match the healthy
+   indicator's hidden label. */
+.node-status-ok-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 .node-validation-tip {
   display: inline-flex;
   align-items: center;
