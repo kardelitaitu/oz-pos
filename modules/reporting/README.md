@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · behavioral claim verified: SaleCompletedReporter (modules/reporting/src/handlers.rs:25) subscribes to sale.completed and creates+inserts into report_sales table (handlers.rs:38/70); ReportingModule implements Module and registers handler in on_load; modules/reporting/manifest.json deps [inventory, sales] match; Kernel::register/load_all/start_all match platform/kernel API -->
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · behavioral claim verified: SaleCompletedReporter (modules/reporting/src/handlers.rs:25) subscribes to sale.completed and creates+inserts into report_sales table (handlers.rs:38/70); ReportingModule implements Module and registers handler in on_load; modules/reporting/manifest.json deps [inventory, sales] match; Kernel::register/load_all/start_all match platform/kernel API · RE-AUDITED 2026-08-31 by docs-auditor: manifest deps [inventory,sales] + perms [reports:view,reports:export] and SaleCompletedReporter (handlers.rs:32) re-confirmed against current HEAD; three post-08-09 commits (767eb0d0 audit, a8c3d9a9 MSL-4/7, bf1ff807 MSL-8) are enhancements not contradictions — MSL-8 made the report_sales insert idempotent (replayed sale.completed logged+skipped), consistent with the README's "inserts a row per completed sale". OPEN (not a doc drift): refunded sales remain in report revenue since no refund event exists — product decision to confirm; README is module-scope and correctly silent -->
 
 # Reporting Module
 
@@ -57,6 +57,4 @@ kernel.start_all()?;
 }
 ```
 
-> last audited 09-08-26 by buffy
-> audit: Phase 3 Module-Level Documentation Audit
-> status: ACCURATE (verified against actual codebase)
+> last audited 31-08-26 by docs-auditor
