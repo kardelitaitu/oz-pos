@@ -451,11 +451,17 @@ impl Store<'_> {
         if !payment_splits.is_empty() {
             for split in payment_splits {
                 let payment_id = uuid::Uuid::now_v7().to_string();
+                // COR-7: persist the split's idempotency key exactly as the
+                // main checkout path does (sales_checkout.rs) — without it,
+                // a shortfall-retry that commits but loses its response is
+                // invisible to the replay lookup, and a re-tap would ring up
+                // a second sale. UNIQUE idx_payments_idempotency_key makes
+                // any colliding write fail the whole tx (fail closed).
                 tx.execute(
                     "INSERT INTO payments (id, sale_id, method, amount_minor, currency,
                                            gateway_reference, gateway_status, gateway_response,
-                                           created_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                                           created_at, idempotency_key)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                     rusqlite::params![
                         payment_id,
                         sale.id,
@@ -466,6 +472,7 @@ impl Store<'_> {
                         split.gateway_status,
                         split.gateway_response,
                         now,
+                        split.idempotency_key,
                     ],
                 )?;
             }
