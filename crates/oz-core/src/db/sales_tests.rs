@@ -3357,13 +3357,13 @@ fn list_sales_by_user_filters_correctly() {
 
 // ── CRM-06: lifetime spend projection maintained at completion ─
 //
-// The event-bus CrmHistoryHandler that owned this projection was never
-// registered (modules/crm on_load: "future phases"), so
-// customers.total_spent_minor had ZERO production writers while the
-// customer DTO, CSV export and CustomReportScreen all read it — every
-// customer showed $0.00 lifetime spend. Now updated atomically inside
-// the completion transition (base currency, statement-level atomic
-// increment, replay-safe via the changed==1 gate).
+// The projection's old owner was the event-bus CrmHistoryHandler
+// (subscribed in platform/startup): a read-modify-write with NO
+// idempotency guard (event re-delivery double-counted) and NO currency
+// validation (foreign-currency sales added raw). It moved into the
+// completion transition (base currency, statement-level atomic
+// increment, replay-safe via the changed==1 gate) and the subscription
+// was removed — both writers at once would double-count every sale.
 
 fn seed_customer_for_spend(conn: &Connection, id: &str) {
     conn.execute(

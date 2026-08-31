@@ -752,7 +752,8 @@ pub async fn complete_sale(
     // (InventoryStockHandler, AuditLogHandler, etc.) fire their side
     // effects. Customer spend/loyalty projections are NOT event-driven:
     // they are written atomically inside the completion transaction
-    // (CRM-06/LOY-06) — the old CrmHistoryHandler was never registered.
+    // (CRM-06/LOY-06) — the old CrmHistoryHandler (non-idempotent,
+    // currency-blind) was unsubscribed in platform/startup.
     {
         let line_items: Vec<SaleCompletedLine> = sale
             .lines

@@ -8411,3 +8411,33 @@ grep.
 **Totals this area:** B46-B55, PAY-2 closed for charges in two drivers,
 COR-31 closed for all wired paths, COR-5 closed, API-4 gated. oz-payment 256
 tests across all targets.
+
+## 2026-08-31 — Incident #5 (mine): CRM-06 double-writer + broken HEAD window
+
+**What happened:** My CRM-06 sweep grepped `apps,modules,crates` for
+`CrmHistoryHandler` — MISSING `platform/`. Concluded "never registered,
+zero production writers" (wrong: `platform/startup` subscribed it in
+both shipping clients), deleted the module, and shipped a transactional
+hook alongside the live handler = **double-counting every completed
+sale** for ~2 commits. The deletion also broke HEAD (tablet/desktop
+E0433) for ~40 min because I verified with `cargo test -p modules-crm`
+instead of a workspace-wide check.
+
+**How it surfaced:** the CUR-04 slice ran `cargo test -p
+oz-pos-tablet` → E0433 → traced to startup:124.
+
+**Fix:** subscription removed (comment records WHY both writers must
+never coexist); all "never registered"/"zero writers" claims corrected
+in code comments + registry; both clients compile; spend 11/11, startup
+44/44.
+
+**Lessons (hard):** (1) dead-code claims require a FULL-workspace grep
+(`Get-ChildItem . -Recurse`), not a curated dir list; (2) after deleting
+any `pub` item, `cargo check --workspace` (or at least every dependent
+app) BEFORE committing; (3) commit messages asserting absence are the
+most dangerous kind — verify the negative.
+
+**CUR-04 residual (same slice):** `list_exchange_rates` ordered only by
+pair → the no-session PaymentModal fallback could pick the oldest
+inserted rate. Now `effective_date DESC, created_at DESC` within pairs
+(Red-first test with backfill scenario).

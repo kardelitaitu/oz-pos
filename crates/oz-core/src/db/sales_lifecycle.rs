@@ -51,9 +51,9 @@ fn apply_customer_stats_on_completion(conn: &rusqlite::Connection, sale_id: &str
     // CRM-06: accrue lifetime spend in the SAME base-currency amount the
     // award uses. Statement-level atomic increment (no read-modify-write
     // race); SQLite raises on i64 overflow, which is logged non-fatal
-    // below. The old owner of this projection — the event-bus
-    // CrmHistoryHandler — was never registered, so the column had zero
-    // production writers.
+    // below. The old owner — the event-bus CrmHistoryHandler — had no
+    // idempotency guard and no currency validation; its subscription
+    // was removed in platform/startup so this is the single writer.
     if let Err(e) = conn.execute(
         "UPDATE customers SET total_spent_minor = total_spent_minor + ?1, updated_at = ?2 WHERE id = ?3",
         rusqlite::params![

@@ -119,12 +119,15 @@ pub fn init_module_system(
                 handler_conn.clone(),
             )),
         );
-        bus.subscribe(
-            "sale.completed",
-            Box::new(modules_crm::handlers::CrmHistoryHandler::new(
-                handler_conn.clone(),
-            )),
-        );
+        // CRM-06: the CrmHistoryHandler subscription was REMOVED. Its
+        // projection (customers.total_spent_minor) moved into the
+        // completion transaction itself (Store::finalize_sale →
+        // apply_customer_stats_on_completion): base-currency,
+        // replay-safe via the finalize CAS. The handler had no
+        // idempotency guard (event re-delivery double-counted spend)
+        // and no currency validation (foreign-currency sales were
+        // added raw); leaving it subscribed alongside the transactional
+        // hook would double-count every sale.
         bus.subscribe::<oz_core::events::SaleCompleted>(
             "sale.completed",
             Box::new(crate::event_handlers::AuditLogHandler::new(
