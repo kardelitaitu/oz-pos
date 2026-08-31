@@ -8863,3 +8863,72 @@ picked up foreign staged junk before my commit — pathspec commits
 (`git commit -- <paths>`) sidestep it cleanly; and `bash` from pwsh here
 resolves to WSL (rollup native mismatch) — let the Git-Bash hooks run
 the i18n gate instead of invoking it manually.
+
+## 2026-08-31 — round R: COR-7 backend half, and the shared index bites twice
+
+Implemented the backend half of option 2 while the tree was briefly free.
+Two commits landed, one chunk is deliberately uncommitted, and the round
+produced one correction to my own model plus a second index contamination.
+
+**Landed:**
+  - 49729a3c - Store::find_sale_by_idempotency_key in db/payments.rs, four
+    tests, mutation-checked (pointing the query at the payment id fails the two
+    positive cases and leaves the two None cases green). One test pins the NULL
+    semantics that hid COR-7 originally.
+  - 0994f2c1 - test that a split tender keyed {attempt}:{n} persists both rows.
+    Verified by mutation: giving both splits the same key produces
+    "UNIQUE constraint failed: payments.idempotency_key" and the sale is
+    rejected. That is the frozen-till scenario made concrete.
+  - Working tree (uncommitted, see below): attempt_id on both desktop arg
+    structs, stamp_attempt_split_keys, and a replayed_receipt pre-check at the
+    top of both checkout commands.
+
+**Two discoveries that changed the design:**
+
+`finalize_sale` is already idempotent - UPDATE ... WHERE id = ?2 AND status =
+pending, with the loyalty award gated on changed == 1 and a comment saying it
+guarantees exactly one award even if the caller retries finalize. So a replay
+that returns the original sale id flows through the existing UI sequence
+(complete, finalize, getSale, print) without double-awarding points. No further
+work was needed there, which is why I looked for it before writing any.
+
+My model of where the bug lived was wrong. complete_sale_scoped removes the cart
+at "Lock 1", so a retry there fails with "cart not found" rather than double
+selling. The genuinely replayable path is the shortfall command: it rebuilds its
+cart from the request body and invents a resolved-<timestamp> cart id, so it has
+no cart to run out of and would re-sell the same basket on every retry. The
+guard matters most there, and the pre-check is placed before the cart is touched
+in both commands.
+
+**Left uncommitted on purpose.** apps/desktop-client/src/commands/pos.rs also
+carries ~144 lines of the promotion agent's uncommitted preview_promoted_total
+command, and git merged my attempt_id field into the SAME hunk as their block,
+so it cannot be separated by hunk filtering. The tree also does not compile at
+this instant - their in-flight super::promotions reference at
+sales_checkout.rs:485, which they were editing live while I looked. Committing
+now would either take their work or require hand-splitting a hunk in a file
+someone is actively typing in. Both are worse than waiting.
+
+**Second index contamination, different mechanism.** 49729a3c swept four file
+deletions another agent had staged (pr_body.md, temp_check.ps1,
+ui/package.json.tmp, .commandcode/taste/taste.md). Round Qs fix - stage
+precisely, then commit with no pathspecs - was necessary but NOT sufficient: in
+a single shared worktree the index itself is shared, so any agents `git add` is
+visible to everyone and a plain commit picks it up.
+
+No data lost: three of the four still exist on disk as untracked files, and
+temp_check.ps1 had been deleted by its owner. HEAD had already moved past my
+commit (df2ce5e9 landed on top), so rewriting history was not available and I
+did not attempt it.
+
+**Protocol now:** before every commit, run git diff --cached --name-only, and
+unstage anything that is not mine with git restore --staged -- <path>, which
+leaves their working tree untouched. Applied on 0994f2c1, which came out clean.
+
+**Unblocked incidentally:** cargo test -p oz-pos-app --lib built and ran with a
+filter this round. The long-standing rustc LLVM out-of-memory failure did not
+recur, so the desktop half of B53 may be executable after all.
+
+**Totals:** COR-7 now has its DB read side, its collision test, and its command
+layer written; the command layer is staged in the working tree awaiting a clean
+pos.rs.
