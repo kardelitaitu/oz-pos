@@ -9047,3 +9047,51 @@ the tree green, --workspace --all-targets already covers every member, and the
 sweep only had value while a failing crate halted the build. Killed it. Lesson:
 do not run long cargo work alongside the watcher; the lock serialises it and the
 watcher is the thing the objective depends on.
+
+## 2026-08-31 — check-watch: standing cargo check, and how to read it
+
+A background watcher runs
+
+    cargo check --workspace --all-targets --message-format short
+
+roughly every ten minutes and appends to
+%TEMP%\ozpos-check-watch\cargo-check.log (round START, round END with duration,
+error/warning counts, a FAILING CRATES rollup, then the first 25 error and 15
+warning lines).
+
+One command answers "is the tree broken right now":
+
+    pwsh -NoProfile -File "$env:TEMP\ozpos-check-watch\status.ps1"
+
+It prints CLEAN and live / REGRESSION with details / WATCHER DOWN. The third
+state matters most: the probe checks that the watcher process exists AND that
+its last round is under twenty minutes old, because a monitor reporting "clean"
+from stale data is worse than no monitor. Verified by mutation - removing the
+process match or forcing the age threshold both flip it to WATCHER DOWN.
+
+Sleep is adaptive (600 minus build seconds) so the START-to-START interval stays
+near ten minutes rather than ten minutes PLUS a seven-minute cold build.
+Measured: round 4 START 12:17:59, round 5 START 12:27:59 - exactly ten minutes.
+
+What it has already caught, all fixed by the owning agents within minutes of the
+diagnosis being posted here:
+
+  - nine "the trait bound `&str: ToStatement` is not satisfied" errors in
+    oz-api/src/pg.rs: a dropped format! macro left &("...{CONST}..."), which is
+    &&str, and ToStatement is implemented for str/String, never for &str.
+  - "recursion limit reached while expanding json_internal" in
+    apps/cloud-server/src/openapi.rs:515: build_paths() is one ~500-line json!
+    literal. Fixed with #![recursion_limit = "512"] in the bin root main.rs;
+    splitting build_paths() by OpenAPI tag is the durable fix.
+  - three #[must_use] into_response() warnings in
+    crates/oz-api/src/routes/exchange_rates_tests.rs, since bound and committed.
+
+Two limits worth knowing. A failing crate HALTS the workspace build, so
+warnings=0 while something is red means "not reached", not "clean" - check the
+FAILING CRATES line. And the shared cargo lock serialises everyone: a long
+sweep or a tauri dev session delays the watcher, which is why a 28-crate sweep
+was killed (it was redundant once the tree was green anyway, since --workspace
+then covers every member).
+
+The watcher is a session-scoped background job. It dies with the session and
+does not restart itself.
