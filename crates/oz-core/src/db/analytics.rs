@@ -21,6 +21,7 @@ use rusqlite::params;
 use crate::error::CoreError;
 
 use super::Store;
+use super::reports::check_date_bound;
 
 /// Per-staff aggregate over a date range.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,6 +62,9 @@ impl Store<'_> {
         from: &str,
         to: &str,
     ) -> Result<Vec<StaffAnalyticsSummary>, CoreError> {
+        // REP-03: boundaries are store-local dates (contract in db::reports).
+        check_date_bound("from", from)?;
+        check_date_bound("to", to)?;
         let shifts = self.analytics_shift_rows(from, to)?;
         let sales = self.analytics_sale_rows(from, to)?;
 
@@ -102,19 +106,23 @@ impl Store<'_> {
         from: &str,
         to: &str,
     ) -> Result<Vec<StaffAnalyticsDaily>, CoreError> {
+        // REP-03: day buckets in store-local dates.
+        check_date_bound("from", from)?;
+        check_date_bound("to", to)?;
+        let tz = self.tz_modifier();
         let mut stmt = self.conn.prepare(
-            "SELECT DATE(s.created_at) AS day,
+            "SELECT DATE(s.created_at, ?4) AS day,
                     COUNT(*) AS sale_count,
                     COALESCE(SUM(s.total_minor), 0) AS sale_total_minor
              FROM sales s
              WHERE s.status = 'completed'
                AND s.user_id IS NOT NULL
                AND s.user_id = ?1
-               AND DATE(s.created_at) BETWEEN ?2 AND ?3
-             GROUP BY DATE(s.created_at)",
+               AND DATE(s.created_at, ?4) BETWEEN ?2 AND ?3
+             GROUP BY DATE(s.created_at, ?4)",
         )?;
         let sales = stmt
-            .query_map(params![user_id, from, to], |row| {
+            .query_map(params![user_id, from, to, tz], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, i64>(1)?,
@@ -124,16 +132,16 @@ impl Store<'_> {
             .collect::<Result<Vec<_>, _>>()?;
 
         let mut stmt = self.conn.prepare(
-            "SELECT DATE(sh.opened_at) AS day,
+            "SELECT DATE(sh.opened_at, ?4) AS day,
                     COUNT(*) AS shift_count,
                     COALESCE(SUM(sh.total_sales_minor), 0) AS shift_sales_minor
              FROM shifts sh
              WHERE sh.user_id = ?1
-               AND DATE(sh.opened_at) BETWEEN ?2 AND ?3
-             GROUP BY DATE(sh.opened_at)",
+               AND DATE(sh.opened_at, ?4) BETWEEN ?2 AND ?3
+             GROUP BY DATE(sh.opened_at, ?4)",
         )?;
         let shifts = stmt
-            .query_map(params![user_id, from, to], |row| {
+            .query_map(params![user_id, from, to, tz], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, i64>(1)?,
@@ -173,17 +181,18 @@ impl Store<'_> {
 
     /// Shift rows: per-user count + closed count + sales total in range.
     fn analytics_shift_rows(&self, from: &str, to: &str) -> Result<Vec<ShiftAggregate>, CoreError> {
+        let tz = self.tz_modifier();
         let mut stmt = self.conn.prepare(
             "SELECT sh.user_id,
                     COUNT(*) AS shift_count,
                     SUM(CASE WHEN sh.status = 'closed' THEN 1 ELSE 0 END) AS closed_count,
                     COALESCE(SUM(sh.total_sales_minor), 0) AS shift_sales_minor
              FROM shifts sh
-             WHERE DATE(sh.opened_at) BETWEEN ?1 AND ?2
+             WHERE DATE(sh.opened_at, ?3) BETWEEN ?1 AND ?2
              GROUP BY sh.user_id",
         )?;
         let rows = stmt
-            .query_map(params![from, to], |row| {
+            .query_map(params![from, to, tz], |row| {
                 Ok(ShiftAggregate {
                     user_id: row.get(0)?,
                     shift_count: row.get(1)?,
@@ -197,6 +206,7 @@ impl Store<'_> {
 
     /// Sale rows: per-user count + total of completed sales in range.
     fn analytics_sale_rows(&self, from: &str, to: &str) -> Result<Vec<SaleAggregate>, CoreError> {
+        let tz = self.tz_modifier();
         let mut stmt = self.conn.prepare(
             "SELECT s.user_id,
                     COUNT(*) AS sale_count,
@@ -204,11 +214,11 @@ impl Store<'_> {
              FROM sales s
              WHERE s.status = 'completed'
                AND s.user_id IS NOT NULL
-               AND DATE(s.created_at) BETWEEN ?1 AND ?2
+               AND DATE(s.created_at, ?3) BETWEEN ?1 AND ?2
              GROUP BY s.user_id",
         )?;
         let rows = stmt
-            .query_map(params![from, to], |row| {
+            .query_map(params![from, to, tz], |row| {
                 Ok(SaleAggregate {
                     user_id: row.get(0)?,
                     sale_count: row.get(1)?,

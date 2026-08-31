@@ -2193,3 +2193,150 @@ fn reports_fall_back_to_join_for_legacy_null_snapshots() {
     assert_eq!(rows[0].name, "Legacy Name");
     assert_eq!(rows[0].total_minor, 700);
 }
+
+// ── REP-03: store-timezone bucketing ───────────────────────────────
+//
+// Contract: store_profiles.timezone holds a FIXED UTC OFFSET string
+// ('+HH:MM' / '-HH:MM' / 'UTC'). IANA names are NOT interpreted (no
+// tzdata dependency in core) — anything unparseable falls back to UTC
+// so a misconfigured store never silently shifts money into wrong
+// buckets without an obvious audit trail. All report date bucketing
+// uses DATE(created_at, <offset>) and the UI submits store-local
+// boundary dates.
+
+fn set_primary_store_tz(conn: &Connection, tz: &str) {
+    conn.execute(
+        "INSERT INTO store_profiles (id, name, timezone, is_primary)
+         VALUES ('store-tz', 'TZ Store', ?1, 1)
+         ON CONFLICT(id) DO UPDATE SET timezone = excluded.timezone",
+        params![tz],
+    )
+    .unwrap();
+}
+
+fn seed_sale_at_full(conn: &Connection, id: &str, total: i64, currency: &str, at: &str) {
+    conn.execute(
+        "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at)
+         VALUES (?1, ?2, ?3, 1, 'completed', ?4)",
+        params![id, total, currency, at],
+    )
+    .unwrap();
+}
+
+#[test]
+fn daily_revenue_buckets_by_store_timezone() {
+    let conn = fresh();
+    let s = store(&conn);
+    set_primary_store_tz(&conn, "+01:00");
+    // 23:30Z is 00:30 next day in UTC+1 — the sale belongs to 07-11.
+    seed_sale_at_full(&conn, "tz-d1", 5000, "USD", "2026-07-10T23:30:00.000Z");
+    let rows = s.daily_revenue("2026-07-11", "2026-07-11").unwrap();
+    assert_eq!(
+        rows.len(),
+        1,
+        "a UTC+1 store's day must include the 23:30Z sale"
+    );
+    assert!(
+        rows[0].date.starts_with("2026-07-11"),
+        "got {}",
+        rows[0].date
+    );
+    assert_eq!(rows[0].total_minor, 5000);
+}
+
+#[test]
+fn hourly_heatmap_shifts_hours_with_store_timezone() {
+    let conn = fresh();
+    let s = store(&conn);
+    set_primary_store_tz(&conn, "+02:00");
+    // Monday 22:30Z → Tuesday 00:30 local. %w: 0=Sun → Tuesday = 2.
+    seed_sale_at_full(&conn, "tz-h1", 1000, "USD", "2026-07-06T22:30:00.000Z");
+    let rows = s.hourly_heatmap("2026-07-06", "2026-07-07").unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].day_of_week, 2, "store-local day must be Tuesday");
+    assert_eq!(rows[0].hour, 0, "store-local hour must be 00");
+}
+
+#[test]
+fn weekly_revenue_week_key_shifts_across_store_timezone() {
+    let conn = fresh();
+    let s = store(&conn);
+    set_primary_store_tz(&conn, "-05:00");
+    // Monday 01:00Z → Sunday 20:00 local → the PREVIOUS Monday-first week.
+    seed_sale_at_full(&conn, "tz-w1", 3000, "USD", "2026-07-06T01:00:00.000Z");
+    let rows = s.weekly_revenue("2026-06-29", "2026-07-05").unwrap();
+    assert_eq!(
+        rows.len(),
+        1,
+        "the sale lands in the week starting 2026-06-29 for UTC-5"
+    );
+    assert!(rows[0].week_start.starts_with("2026-06-29"));
+    assert_eq!(rows[0].total_minor, 3000);
+}
+
+#[test]
+fn refunds_net_in_store_timezone() {
+    let conn = fresh();
+    let s = store(&conn);
+    set_primary_store_tz(&conn, "+03:00");
+    seed_sale_at_full(&conn, "tz-r1", 9000, "USD", "2026-07-01T08:00:00.000Z");
+    // 22:00Z is 01:00 next day at UTC+3 → the refund belongs to 07-11.
+    conn.execute(
+        "INSERT INTO refunds (id, sale_id, total_minor, currency, processed_by, created_at)
+         VALUES ('tz-rf1', 'tz-r1', 500, 'USD', 'user-1', '2026-07-10T22:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    let rows = s.daily_revenue("2026-07-11", "2026-07-11").unwrap();
+    assert_eq!(rows.len(), 1, "refund-only store-local day must appear");
+    assert_eq!(rows[0].refund_minor, 500);
+    assert_eq!(rows[0].total_minor, 0);
+    assert_eq!(rows[0].net_revenue_minor, -500);
+}
+
+#[test]
+fn report_rejects_malformed_date_bounds() {
+    let conn = fresh();
+    let s = store(&conn);
+    for bad in [
+        "2026-7-01",
+        "2026-07-1",
+        "20260701",
+        "2026-13-01",
+        "2026-07-32",
+        "",
+    ] {
+        let err = s
+            .daily_revenue(bad, "2026-07-31")
+            .expect_err(&format!("{bad:?} must be rejected"));
+        assert!(
+            matches!(err, crate::CoreError::Validation { .. }),
+            "expected Validation for {bad:?}, got {err:?}"
+        );
+    }
+    // Valid bounds still accepted.
+    s.daily_revenue("2026-07-01", "2026-07-31").unwrap();
+}
+
+#[test]
+fn iana_timezone_names_fall_back_to_utc() {
+    let conn = fresh();
+    let s = store(&conn);
+    set_primary_store_tz(&conn, "Asia/Jakarta");
+    seed_sale_at_full(&conn, "tz-i1", 5000, "USD", "2026-07-10T23:30:00.000Z");
+    let rows = s.daily_revenue("2026-07-10", "2026-07-10").unwrap();
+    assert_eq!(
+        rows.len(),
+        1,
+        "unparseable timezone must not shift buckets — UTC semantics"
+    );
+}
+
+#[test]
+fn no_store_profile_defaults_to_utc() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_sale_at_full(&conn, "tz-n1", 5000, "USD", "2026-07-10T23:30:00.000Z");
+    let rows = s.daily_revenue("2026-07-10", "2026-07-10").unwrap();
+    assert_eq!(rows.len(), 1);
+}

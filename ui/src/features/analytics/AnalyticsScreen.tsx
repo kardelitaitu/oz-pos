@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from 
 import { createPortal } from 'react-dom';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { getPrimaryStoreScoped } from '@/api/stores';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useSessionKeepalive } from '@/hooks/useSessionKeepalive';
 import { useInvalidSession } from '@/hooks/useInvalidSession';
@@ -31,6 +32,7 @@ import {
   heatmapGranularityForRange,
   loadHeatmapRows,
   rangeForGranularity,
+  storeOffsetMs,
   yearlyHeatmapColumns,
   type DailyRevenueRow,
   type HeatCell,
@@ -120,16 +122,19 @@ export const cardRange = (
   g: Granularity,
   customFrom: string,
   customTo: string,
+  storeTz?: string | null,
 ): { from: string; to: string } => {
   // A custom range is user-selected — never let a granularity remap
   // replace it with a derived window (a card that derives its grid from the
   // custom span still queries the chosen dates).
   if (g === 'custom') return { from: customFrom, to: customTo };
-  return rangeForGranularity(cardGranularity(card, g), customFrom, customTo);
+  return rangeForGranularity(cardGranularity(card, g), customFrom, customTo, storeTz);
 }
 
-function isoToday(): string {
-  return isoDay(new Date());
+function isoToday(storeTz?: string | null): string {
+  if (!storeTz) return isoDay(new Date());
+  // Offset-shifted instant read as a UTC calendar = the store's today.
+  return new Date(Date.now() + storeOffsetMs(storeTz)).toISOString().slice(0, 10);
 }
 
 function isoDay(d: Date): string {
@@ -337,6 +342,44 @@ export default function AnalyticsScreen() {
   const [granularity, setGranularity] = useState<Granularity>('weekly');
   const [customFrom, setCustomFrom] = useState(isoToday());
   const [customTo, setCustomTo] = useState(isoToday());
+  // REP-03: derived windows anchor to the PRIMARY STORE's calendar day,
+  // not the device's — a laptop in another region must still see "today"
+  // as the store sees it. Until the profile loads (or if the fetch fails)
+  // the legacy device-local anchor applies.
+  const [storeTz, setStoreTz] = useState<string | null>(null);
+  const customTouched = useRef(false);
+  useEffect(() => {
+    if (!sessionToken) return;
+    let alive = true;
+    getPrimaryStoreScoped(sessionToken)
+      .then((p) => {
+        if (alive) setStoreTz(p?.timezone ?? null);
+      })
+      .catch(() => {
+        /* keep the device-local anchor — reports still bucket store-local */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [sessionToken]);
+  useEffect(() => {
+    // Re-seed the untouched custom defaults once the store day is known.
+    if (!storeTz || customTouched.current) return;
+    const t = isoToday(storeTz);
+    setCustomFrom(t);
+    setCustomTo(t);
+  }, [storeTz]);
+  /** Store-local calendar date `daysAgo` days back (REP-03). */
+  const storeDateStr = (daysAgo: number): string => {
+    if (!storeTz) {
+      const d = new Date();
+      d.setDate(d.getDate() - daysAgo);
+      return isoDay(d);
+    }
+    return new Date(Date.now() + storeOffsetMs(storeTz) - daysAgo * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+  };
   const [zoomLevel, setZoomLevel] = useState<number>(() => {
     const saved = Number(localStorage.getItem('oz-analytics-zoom'));
     return saved >= ZOOM_MIN && saved <= ZOOM_MAX ? saved : 1;
@@ -643,11 +686,10 @@ export default function AnalyticsScreen() {
   runItemRef.current = runPaletteItem;
 
   const applyRangePreset = (days: number) => {
-    const to = new Date();
-    const from = new Date();
-    from.setDate(from.getDate() - (days - 1));
-    setCustomTo(isoDay(to));
-    setCustomFrom(isoDay(from));
+    customTouched.current = true;
+    // REP-03: presets end on the store's today, not the device's.
+    setCustomTo(storeDateStr(0));
+    setCustomFrom(storeDateStr(days - 1));
   };
 
   // When a card is expanded, only it is shown; otherwise all visible cards
@@ -667,7 +709,7 @@ export default function AnalyticsScreen() {
   // revenue rows via the TTL cache. A custom range derives its grid from the
   // span: a single calendar month → monthly, a long range → yearly columns.
   const heatmapCard = ANALYTICS_CARDS.find((c) => c.key === 'heatmap')!;
-  const heatmapRange = cardRange(heatmapCard, granularity, customFrom, customTo);
+  const heatmapRange = cardRange(heatmapCard, granularity, customFrom, customTo, storeTz);
   const heatmapGranularity = heatmapGranularityForRange(granularity, heatmapRange.from, heatmapRange.to);
   const heatmapQuery = useAnalyticsQuery(
     cardQueryKey('heatmap', workspaceView, heatmapGranularity, heatmapRange.from, heatmapRange.to),
@@ -811,7 +853,10 @@ export default function AnalyticsScreen() {
                     className="analytics-custom-input"
                     value={customFrom}
                     max={customTo}
-                    onChange={(e) => setCustomFrom(e.target.value)}
+                    onChange={(e) => {
+                  customTouched.current = true;
+                  setCustomFrom(e.target.value);
+                }}
                     aria-label={l10n.getString('analytics-custom-from')}
                   />
                 </label>
@@ -825,7 +870,10 @@ export default function AnalyticsScreen() {
                     className="analytics-custom-input"
                     value={customTo}
                     min={customFrom}
-                    onChange={(e) => setCustomTo(e.target.value)}
+                    onChange={(e) => {
+                      customTouched.current = true;
+                      setCustomTo(e.target.value);
+                    }}
                     aria-label={l10n.getString('analytics-custom-to')}
                   />
                 </label>
@@ -1246,7 +1294,7 @@ export default function AnalyticsScreen() {
           {orderedCards.map((card) => {
             const cid = cardId(card);
             const cardG = cardGranularity(card, granularity);
-            const cardWindow = cardRange(card, granularity, customFrom, customTo);
+            const cardWindow = cardRange(card, granularity, customFrom, customTo, storeTz);
             const isExpanded = expandedKey === cid;
             const isCollapsed = !isExpanded && (allCollapsed || collapsedCards.has(cid));
             const isDragging = dragId === cid;

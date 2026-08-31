@@ -318,9 +318,13 @@ impl Store<'_> {
         };
 
         // Hourly sales breakdown within the shift window (from sales table).
+        // REP-03: the window filter stays on absolute timestamps (shift
+        // open/close are instants), but the hour-of-day labels are
+        // store-local so the peak hour reads correctly for the cashier.
         let hourly_breakdown: Vec<ShiftSalesByHour> = {
+            let tz = self.tz_modifier();
             let mut stmt = self.conn.prepare(
-                "SELECT CAST(strftime('%H', created_at) AS INTEGER) AS hour,
+                "SELECT CAST(strftime('%H', created_at, ?4) AS INTEGER) AS hour,
                         SUM(total_minor) AS total_minor,
                         COUNT(*) AS sale_count
                  FROM sales
@@ -328,7 +332,7 @@ impl Store<'_> {
                    AND status = 'completed'
                  GROUP BY hour ORDER BY hour",
             )?;
-            let rows = stmt.query_map(params![user, start, end], |row| {
+            let rows = stmt.query_map(params![user, start, end, tz], |row| {
                 Ok(ShiftSalesByHour {
                     hour: row.get("hour")?,
                     total_minor: row.get("total_minor")?,

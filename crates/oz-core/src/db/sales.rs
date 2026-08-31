@@ -257,11 +257,16 @@ fn validate_payment_splits_cover_total(
 
 impl Store<'_> {
     /// Query all sales for today, ordered chronologically.
+    ///
+    /// "Today" is the store's business day (REP-03): both sides of the
+    /// comparison use the store's UTC offset, so a UTC+7 store's day ends
+    /// at 23:00Z, not midnightZ.
     pub fn export_daily_summary(&self) -> Result<Vec<DailySummaryRow>, CoreError> {
-        let mut stmt = self.conn.prepare(
+        let tz = self.tz_modifier();
+        let mut stmt = self.conn.prepare(&format!(
             "SELECT id, total_minor, currency, line_count, status, created_at
-             FROM sales WHERE date(created_at) = date('now') ORDER BY created_at",
-        )?;
+             FROM sales WHERE DATE(created_at, '{tz}') = DATE('now', '{tz}') ORDER BY created_at"
+        ))?;
         let rows = stmt.query_map([], |row| {
             Ok(DailySummaryRow {
                 sale_id: row.get("id")?,
@@ -275,14 +280,16 @@ impl Store<'_> {
         rows.map(|r| Ok(r?)).collect()
     }
 
-    /// Query sales volume grouped by hour of day (for today).
+    /// Query sales volume grouped by hour of day (for the store's today,
+    /// REP-03 — hours are store-local).
     pub fn export_sales_by_hour(&self) -> Result<Vec<SalesByHourRow>, CoreError> {
-        let mut stmt = self.conn.prepare(
-            "SELECT CAST(strftime('%H', created_at) AS INTEGER) AS hour,
+        let tz = self.tz_modifier();
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT CAST(strftime('%H', created_at, '{tz}') AS INTEGER) AS hour,
                     SUM(total_minor) AS total_minor, COUNT(*) AS sale_count
-             FROM sales WHERE date(created_at) = date('now')
+             FROM sales WHERE DATE(created_at, '{tz}') = DATE('now', '{tz}')
              GROUP BY hour ORDER BY hour",
-        )?;
+        ))?;
         let rows = stmt.query_map([], |row| {
             Ok(SalesByHourRow {
                 hour: row.get("hour")?,

@@ -229,7 +229,7 @@ const MOCK_STORE = {
   address: 'Jl. Contoh No. 123',
   tax_id: 'TAX-001',
   currency: 'IDR',
-  timezone: 'Asia/Jakarta',
+  timezone: '+07:00',
   is_primary: true,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ── Real-data IPC mocks ─────────────────────────────────────────────
 // The loaders call through the scoped reporting commands; jsdom has no
@@ -76,6 +76,7 @@ import {
   previousRange,
   rangeForGranularity,
   seriesDelta,
+  storeOffsetMs,
   turnDelta,
   type AnalyticsQuery,
   bucketGranularity,
@@ -122,6 +123,77 @@ describe('rangeForGranularity — inclusive date windows', () => {
       from: '2026-08-03',
       to: '2026-08-17',
     });
+  });
+});
+
+// REP-03: the analytics window must anchor to the STORE's calendar day,
+// not the device's — a laptop in another region (or with the wrong clock
+// zone) must still query "today" as the store sees it. The store tz is a
+// fixed offset string ('+HH:MM'); anything unparseable anchors to UTC,
+// mirroring the Rust contract in db/reports.rs.
+describe('rangeForGranularity — store-timezone anchoring (REP-03)', () => {
+  // Pin "now" to 2026-08-31T18:30:00Z — a Monday in UTC, already Tuesday
+  // in UTC+7, still Monday afternoon in UTC-5.
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-31T18:30:00Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('UTC store anchors to the UTC day', () => {
+    const r = rangeForGranularity('daily', '', '', 'UTC');
+    expect(r.to).toBe('2026-08-31');
+    expect(r.from).toBe('2026-08-31'); // Monday — week starts today
+  });
+
+  it('UTC+7 store rolls into its next day before UTC midnight', () => {
+    const r = rangeForGranularity('daily', '', '', '+07:00');
+    expect(r.to).toBe('2026-09-01'); // 01:30 Tuesday store time
+    expect(r.from).toBe('2026-08-31'); // Monday-first week
+  });
+
+  it('UTC-5 store stays on the earlier day', () => {
+    const r = rangeForGranularity('daily', '', '', '-05:00');
+    expect(r.to).toBe('2026-08-31'); // 13:30 Monday store time
+    expect(r.from).toBe('2026-08-31');
+  });
+
+  it('monthly/yearly windows follow the store day too', () => {
+    expect(rangeForGranularity('monthly', '', '', '+07:00')).toEqual({
+      from: '2026-09-01',
+      to: '2026-09-01',
+    });
+    expect(rangeForGranularity('yearly', '', '', '+07:00')).toEqual({
+      from: '2026-01-01',
+      to: '2026-09-01',
+    });
+  });
+
+  it('IANA names and garbage anchor to UTC, never the device zone', () => {
+    const iana = rangeForGranularity('daily', '', '', 'Asia/Jakarta');
+    const junk = rangeForGranularity('daily', '', '', 'nonsense');
+    expect(iana.to).toBe('2026-08-31');
+    expect(junk.to).toBe('2026-08-31');
+  });
+
+  it('null/undefined store tz keeps the legacy device-local anchor', () => {
+    const legacy = rangeForGranularity('daily', '', '');
+    const utc = rangeForGranularity('daily', '', '', null);
+    // On a UTC CI host these coincide; the contract is only that an
+    // explicit null behaves like the old call shape.
+    expect(legacy.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(utc.to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('storeOffsetMs parses the contract', () => {
+    expect(storeOffsetMs('+07:00')).toBe(7 * 3_600_000);
+    expect(storeOffsetMs('-05:30')).toBe(-19_800_000);
+    expect(storeOffsetMs('UTC')).toBe(0);
+    expect(storeOffsetMs('Asia/Jakarta')).toBe(0);
+    expect(storeOffsetMs('+99:00')).toBe(0);
+    expect(storeOffsetMs(null)).toBe(0);
   });
 });
 
