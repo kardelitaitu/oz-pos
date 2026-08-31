@@ -64,14 +64,21 @@ describe('CheckoutButton Component', () => {
     };
   }
 
-  it('renders mailto fallback when provider is unconfigured', async () => {
+  it('shows an error state when provider is unconfigured (no mailto fallback)', async () => {
     paddleMock.isPaddleConfigured.mockReturnValue(false);
+    paddleMock.hasSession.mockReturnValue(true);
     const { container, unmount } = await renderBtn(sampleTier, 'en');
 
     const link = container.querySelector('a[href^="mailto:"]');
-    expect(link).not.toBeNull();
-    expect(link?.getAttribute('href')).toContain('sales@ozpos.my.id');
-    expect(link?.textContent).toContain('Get Pro');
+    expect(link).toBeNull();
+
+    const button = container.querySelector('button');
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(paddleMock.openPaddleCheckout).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
     await unmount();
   });
 
@@ -152,17 +159,23 @@ describe('CheckoutButton Component', () => {
     await unmount();
   });
 
-  it('renders the mailto fallback when the price id is still a placeholder', async () => {
-    // Regression: with placeholder price ids (the current WIP catalog state),
-    // the button must degrade to the mailto fallback, never open a dead
-    // Paddle overlay. This is the real-world default today.
+  it('shows an error state when the price id is still a placeholder (no mailto fallback)', async () => {
+    // Regression: with placeholder price ids, the button must never open a
+    // dead Paddle overlay or hide behind a mailto link — it shows an error.
     paddleMock.isPlaceholderPriceId.mockReturnValue(true);
     paddleMock.hasSession.mockReturnValue(true);
     const { container, unmount } = await renderBtn(sampleTier, 'en');
 
     const link = container.querySelector('a[href^="mailto:"]');
-    expect(link).not.toBeNull();
-    expect(link?.getAttribute('href')).toContain('sales@ozpos.my.id');
+    expect(link).toBeNull();
+
+    const button = container.querySelector('button');
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(paddleMock.openPaddleCheckout).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
     await unmount();
   });
 

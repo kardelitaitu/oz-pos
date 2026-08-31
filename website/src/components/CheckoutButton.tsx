@@ -3,7 +3,6 @@ import { t } from '../i18n';
 import type { CheckoutTier } from '../content/pricing/types';
 import { hasSession, isPaddleConfigured, isPlaceholderPriceId, openPaddleCheckout, getSessionEmail } from './paddle';
 import { openMidtransCheckout } from './midtrans';
-import { licenseApiUrl } from '../lib/runtime-config';
 import { getExplicitRegion } from '../lib/region';
 
 /**
@@ -17,7 +16,7 @@ import { getExplicitRegion } from '../lib/region';
  *
  * When the locale's checkout provider is unconfigured (PADDLE_CLIENT_TOKEN
  * unset / placeholder price id for Paddle markets, license API unset for
- * id) the button degrades to a mailto fallback (see website-plan.md §7).
+ * id) the button shows an error on click instead of the checkout overlay.
  *
  * ## Register-first custom_data contract (ADR #23 Deviation 2)
  *
@@ -76,19 +75,6 @@ export default function CheckoutButton({ tier, locale }: Props) {
     return () => window.removeEventListener('storage', check);
   }, [locale]);
 
-  // No checkout path for this locale — degrade to the mailto fallback
-  // instead of sending the user through login into a dead checkout.
-  if (useMidtrans ? !licenseApiUrl() : !priceId || isPlaceholderPriceId(priceId) || !isPaddleConfigured()) {
-    return (
-      <a
-        href={`mailto:sales@ozpos.my.id?subject=${encodeURIComponent('OZ-POS plan: ' + tier.name)}`}
-        className="block w-full rounded-md border border-ink/15 px-4 py-2.5 text-center text-sm font-semibold text-ink transition hover:bg-ink/5"
-      >
-        {tier.cta}
-      </a>
-    );
-  }
-
   // Round-trip back to this page after login; tier hints the next step.
   const loginHref = `/${locale}/login?next=/${locale}/pricing&tier=${encodeURIComponent(tier.tierKey)}`;
 
@@ -112,15 +98,20 @@ export default function CheckoutButton({ tier, locale }: Props) {
         await openMidtransCheckout(tier.tierKey, tier.period, undefined, tier.bundle);
         return;
       }
+      // Paddle path: the checkout can only open with a real price id and a
+      // configured token. If either is missing (placeholder price / unset
+      // PADDLE_CLIENT_TOKEN), surface an error instead of opening a dead
+      // overlay or dropping the user into a dead sign-in loop.
+      if (!priceId || isPlaceholderPriceId(priceId) || !isPaddleConfigured()) {
+        setError(true);
+        return;
+      }
       const email = await getSessionEmail();
       if (!email) {
         // Session token present but no email resolvable — back to login.
         window.location.href = loginHref;
         return;
       }
-      // The mailto guard above guarantees priceId here: the Paddle branch is
-      // only reachable when !useMidtrans and the guard already ruled out a
-      // missing/placeholder price id.
       // C4.1: Track A/B variant for analytics attribution.
       if (tier.abVariant) window.__ab_variant = tier.abVariant;
       await openPaddleCheckout(priceId!, email, undefined, tier.bundle);
