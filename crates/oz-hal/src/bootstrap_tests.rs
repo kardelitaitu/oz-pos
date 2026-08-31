@@ -313,6 +313,25 @@ async fn applying_the_same_config_twice_is_idempotent() {
     assert_eq!(reg.drawer_ids().await.len(), 1);
 }
 
+#[tokio::test]
+async fn usb_printer_enumerates_and_never_faults_on_an_empty_bus() {
+    // The one branch that touches hardware. On a machine with no printer it
+    // must skip rather than reject or panic, and it must never claim a
+    // registration the lookup cannot confirm.
+    let reg = DriverRegistry::default();
+    let cfg = HardwareConfig {
+        printers: vec![printer("default", Connection::Usb)],
+        ..HardwareConfig::default()
+    };
+    let report = apply_config(&reg, &cfg).await;
+    assert!(report.ok(), "an absent USB printer is not a fault");
+    assert_eq!(
+        report.registered.is_empty(),
+        reg.printer("default").await.is_none(),
+        "a reported registration must match the lookup"
+    );
+}
+
 #[test]
 fn report_display_names_the_counts() {
     let report = BootstrapReport {

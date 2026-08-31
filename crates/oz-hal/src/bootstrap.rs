@@ -1,8 +1,8 @@
 /*
 last audited 31-08-26 by DSH-Agent (bootstrap module, new)
 crate: oz-hal | status: SAFE | lint: CLEAN
-findings: exists because the registry had a complete read side and no write side — DriverRegistry::discover() had exactly one caller (registry_tests.rs:213) and no app ever called register_*, so every hardware command resolved None at runtime while the setup wizard could still list devices via probe_all(). Deliberately does NOT open any device: constructing a driver only records addressing, so a bad saved profile cannot block startup, and the first real I/O error surfaces on the operation that needs the device. Scales are absent because TerminalProfile stores a device path but HidWeightScale needs vendor/product ids the profile never captured — that is a config-schema gap, not a wiring gap.
-next: scale config needs vid/pid in TerminalProfile | perf: sequential registration; a handful of devices, no benefit from concurrency
+findings: exists because the registry had a complete read side and no write side — DriverRegistry::discover() had exactly one caller (registry_tests.rs:213) and no app ever called register_*, so every hardware command resolved None at runtime while the setup wizard could still list devices via probe_all(). Second, independent defect found here: discover() mints hardware-derived ids ("printer:vendor:model") while the app looks up "default"/"kitchen", so calling discover() alone would not have fixed anything — apply_config binds the operator's id to the device. Addressed transports are constructed without I/O; Connection::Usb is the one branch that enumerates the bus, since it names no address. Scales are absent because TerminalProfile stores a device path but HidWeightScale needs vendor/product ids the profile never captured — a config-schema gap, not a wiring gap.
+next: scale config needs vid/pid in TerminalProfile; no serial printer driver exists | perf: USB enumeration is synchronous and blocks the runtime thread briefly at startup
 */
 //! Registry bootstrap — turning saved hardware configuration into drivers.
 //!
@@ -13,12 +13,15 @@ next: scale config needs vid/pid in TerminalProfile | perf: sequential registrat
 //!
 //! [`DriverRegistry::apply_config`] then registers each entry and returns a
 //! [`BootstrapReport`] naming what was registered, skipped, or rejected.
-//! Registration never blocks: constructing a driver records addressing only.
+//! Addressed transports are constructed without touching the device; only a
+//! `"usb"` printer enumerates the bus, because it names no address to bind.
 
 use std::fmt;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
+use crate::drivers::drawer::PrinterKickCashDrawer;
 use crate::drivers::edc::WirelessTarget;
 use crate::registry::DriverRegistry;
 use crate::types::DeviceInfo;
@@ -248,8 +251,13 @@ impl fmt::Display for BootstrapReport {
 ///
 /// Fail-open per device: one bad entry is recorded in
 /// [`BootstrapReport::rejected`] and the rest still register, matching how
-/// [`DriverRegistry::discover`] treats a driver that fails to probe. Nothing
-/// here opens a device, so a stale saved profile cannot block startup.
+/// [`DriverRegistry::discover`] treats a driver that fails to probe.
+///
+/// Addressed transports — network, Bluetooth-on-a-COM-port, serial — are
+/// constructed without touching the device, so a stale saved profile cannot
+/// block startup and the first real I/O error surfaces on the operation that
+/// needs the hardware. `Connection::Usb` is the exception: it names no
+/// address, so it enumerates the bus to find something to bind.
 pub async fn apply_config(registry: &DriverRegistry, config: &HardwareConfig) -> BootstrapReport {
     let mut report = BootstrapReport::default();
 
@@ -257,9 +265,36 @@ pub async fn apply_config(registry: &DriverRegistry, config: &HardwareConfig) ->
         let key = format!("printer:{}", printer.id);
         match &printer.connection {
             Connection::Usb => {
-                // USB printers are enumerated by discover(); a profile that
-                // says "usb" without an address has nothing to bind.
-                report.skipped.push(key);
+                // The profile said "a USB printer" without naming one, so
+                // this is the one branch that has to look at the bus. It is
+                // also the branch that makes a bootstrap necessary at all:
+                // discover() registers what it finds under hardware-derived
+                // ids like "printer:vendor:model", while the receipt path
+                // asks for "default". Without this binding, calling
+                // discover() would still leave every lookup empty.
+                //
+                // discover_all() is synchronous USB enumeration, so it does
+                // block the runtime thread briefly. It returns a Vec rather
+                // than a Result, so a dead or absent bus yields an empty
+                // list rather than an error.
+                match crate::drivers::usb_printer::UsbReceiptPrinter::discover_all()
+                    .into_iter()
+                    .next()
+                {
+                    Some(found) => {
+                        let driver = Arc::new(found);
+                        registry.register_printer(&printer.id, driver.clone()).await;
+                        registry
+                            .register_cash_drawer(
+                                &format!("drawer:kick:{}", printer.id),
+                                Arc::new(PrinterKickCashDrawer::new_pin2(driver)),
+                            )
+                            .await;
+                        report.registered.push(key);
+                    }
+                    // Nothing plugged in is a normal state, not a fault.
+                    None => report.skipped.push(key),
+                }
             }
             Connection::Serial { port, baud } => {
                 // There is no serial receipt-printer driver in this crate:
