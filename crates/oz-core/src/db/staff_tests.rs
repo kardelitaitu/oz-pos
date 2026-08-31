@@ -1040,7 +1040,12 @@ fn create_user_rejects_unknown_role_with_typed_error() {
         other => panic!("expected Validation error, got: {other:?}"),
     }
     // Nothing was written — the user row must not exist.
-    assert!(store(&conn).get_user_by_username("zombie").unwrap().is_none());
+    assert!(
+        store(&conn)
+            .get_user_by_username("zombie")
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]

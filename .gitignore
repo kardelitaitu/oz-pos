@@ -91,6 +91,7 @@ nul
 /ui/new_*.txt
 /ui/snippet.txt
 /apps/license-server/coverage.html
+/apps/license-server/coverage.out
 
 # Test artifacts
 *.profraw

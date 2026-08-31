@@ -376,6 +376,8 @@ async fn scoped_sale_deducts_from_topology_warehouse_not_pos_location() {
             tip_minor: None,
             service_charge_minor: None,
             promotion_ids: None,
+            // No attempt id: this fixture exercises the unguarded legacy path.
+            attempt_id: None,
         },
         app.state(),
     )
@@ -730,4 +732,51 @@ async fn staff_can_list_held_carts() {
     let result = list_held_carts_scoped("tok".into(), app.state()).await;
     assert!(result.is_ok(), "staff has SALES_PROCESS permission");
     assert!(result.unwrap().is_empty());
+}
+
+// ── COR-7: attempt id to per-split idempotency keys ────────────────
+
+fn tender_split(method: &str, amount_minor: i64) -> PaymentSplitArg {
+    PaymentSplitArg {
+        method: method.into(),
+        amount_minor,
+        gateway_reference: None,
+        gateway_status: None,
+        gateway_response: None,
+        idempotency_key: None,
+    }
+}
+
+#[test]
+fn attempt_keys_are_indexed_per_split() {
+    // One key shared by every split would make a two-tender sale collide with
+    // itself on its own second row and reject a legitimate sale. The index is
+    // the whole point of the format.
+    let mut splits = vec![tender_split("cash", 400), tender_split("card", 300)];
+    stamp_attempt_split_keys(Some("att-1"), &mut splits);
+    let keys: Vec<Option<&str>> = splits
+        .iter()
+        .map(|s| s.idempotency_key.as_deref())
+        .collect();
+    assert_eq!(keys, vec![Some("att-1:0"), Some("att-1:1")]);
+}
+
+#[test]
+fn attempt_keys_are_deterministic_across_retries() {
+    // A replay has to reproduce the same keys, or the UNIQUE index cannot
+    // recognise it as the same attempt and the guard never fires.
+    let mut first = vec![tender_split("cash", 700)];
+    let mut second = vec![tender_split("cash", 700)];
+    stamp_attempt_split_keys(Some("att-1"), &mut first);
+    stamp_attempt_split_keys(Some("att-1"), &mut second);
+    assert_eq!(first[0].idempotency_key, second[0].idempotency_key);
+}
+
+#[test]
+fn no_attempt_id_leaves_the_sale_unguarded() {
+    // Legacy callers and CLI imports keep working unchanged; they simply get
+    // no replay protection rather than a half-applied one.
+    let mut splits = vec![tender_split("cash", 700)];
+    stamp_attempt_split_keys(None, &mut splits);
+    assert_eq!(splits[0].idempotency_key, None);
 }
