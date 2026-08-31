@@ -8479,3 +8479,16 @@ item, recorded). (3) Forecast queries still INNER JOIN products —
 advisory consumers, deliberately out of scope. Verification: cargo
 check + EXPLAIN + actual execution against oz-pg-test-15432.
 Commit 4b8a630e.
+
+## 2026-08-31 — Batch close: STAFF-13 fully closed, refunds_summary orphan removed
+
+STAFF-13's last open half ("no confirmation dialog, no per-row pending
+state") was stale: StaffManagementScreen gates deactivation behind a
+named ConfirmDialog with loading={deactivating} and a cancel guard;
+reactivation is no-confirm by design. Combined with 34e84fb4 (tablet
+command tests), STAFF-13 is fully closed.
+
+Removed my own REP-04 orphan: refunds_summary (fn + DTO + 2 tests,
+76 lines) had zero consumers and the per-period refund_minor already
+shows the same money — the CRM-06 lesson applied to my own code.
+Recoverable from 35d8bec4. Reports 70/70. Commit ecc2c534.
