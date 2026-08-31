@@ -995,15 +995,13 @@
 }
 
 .topology-node:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
+  /* No outline: keyboard focus is indicated by the node's border-color
+     change on selection (node-selected sets --color-accent border). */
+  outline: none;
 }
 
-/* Crisp selection ring: a 2px gap of canvas background between the card
-   and a 2px accent ring — reads as "selected" even against a busy grid. */
 .node-selected {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent), var(--shadow-md);
 }
 
 /* Round 158: branch-diff overlay markers. The compare panel classifies
