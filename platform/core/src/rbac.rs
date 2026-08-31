@@ -1,9 +1,9 @@
 //! Role-Based Access Control primitives.
 /*
-last audited 25-07-26 by RSA-Agent (platform-core slice A: rbac deep read)
+last audited 31-08-26 by RSA-Agent (user-role campaign, Section A)
 crate: platform-core | status: SAFE | lint: CLEAN
-findings: exemplary — has_permission is a closed 3-level wildcard resolver (global/domain/exact, malformed strings match exactly only); Role::has_permission treats malformed permissions JSON as deny-all (fail-closed, contrast COR-30); presets pin invariants by tests (no retired cashier/kitchen roles, Admin never wildcard, Staff checkout-only with 40+ negative assertions, Auditor read-only); permission catalog is compile-time constants
-next: none | perf: linear scan over small grant lists
+findings: exemplary — 3-level wildcard resolver (global/domain/exact) is fail-closed: malformed granted JSON => deny-all via unwrap_or_default, malformed granted strings match exactly only; zero unsafe/unwrap/expect, single documented assert in Role::new; permission catalog constants well-formed domain:action with legacy composites (products:crud, categories:manage) delegated to the permission registry (Section C); retired cashier/kitchen roles absent from taxonomy (doc prose only); evidence: 67 unit + 4 doctests green
+next: observation only — a malformed REQUIRED string could match a granted "<req>:*" domain wildcard; unreachable today because required values come from the compile-time catalog, Section D verifies IPC callers use the constants | perf: linear scan over small grant lists — fine
 */
 //!
 //! Provides the [`Role`] and [`Permission`] types, the [`permissions`]
