@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# scripts/setup-multi-root.sh — bootstrap the multi-root OZ-POS layout
-# (bash twin of scripts/setup-multi-root.ps1 — keep both in step).
+# scripts/setup-multi-root.sh — bootstrap the multi-root OZ-POS layout.
 #
 #   <Base>/main/            bare repository — the ONLY git database
 #   <Base>/<release>/       stable integration worktree, locked on the
