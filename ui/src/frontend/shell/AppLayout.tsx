@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
-import RoleBadge from './RoleBadge';
+import RoleBadge from '@/components/RoleBadge';
 import Tooltip from './Tooltip';
 import UpdateBanner from './UpdateBanner';
 import StoreSwitcher from '@/components/StoreSwitcher';
