@@ -98,6 +98,11 @@ vi.mock('@/api/currency', () => ({
       { from_currency: 'USD', to_currency: 'IDR', rate_millionths: 16_000_000_000 },
     ]),
   ),
+  listLatestExchangeRatesScoped: vi.fn(() =>
+    Promise.resolve([
+      { from_currency: 'USD', to_currency: 'IDR', rate_millionths: 16_000_000_000 },
+    ]),
+  ),
   listCurrencies: vi.fn(() =>
     Promise.resolve([
       { code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' },
