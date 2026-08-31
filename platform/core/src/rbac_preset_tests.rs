@@ -16,11 +16,9 @@ fn manager_preset_excludes_sensitive_permissions() {
     let preset = &ROLE_PRESETS[1];
     assert_eq!(preset.id, builtin_roles::MANAGER);
     assert!(!preset.permissions.contains(&permissions::STAFF_DELETE));
-    assert!(
-        !preset
-            .permissions
-            .contains(&permissions::STAFF_MANAGE_ROLES)
-    );
+    assert!(!preset
+        .permissions
+        .contains(&permissions::STAFF_MANAGE_ROLES));
     assert!(!preset.permissions.contains(&permissions::PLUGINS_MANAGE));
 }
 
@@ -30,11 +28,9 @@ fn location_manage_permission_follows_inventory_roles() {
     // one. Manager holds it; Staff is checkout-only and must not manage
     // inventory locations; a bare Custom role must not either.
     let manager = &ROLE_PRESETS[1];
-    assert!(
-        manager
-            .permissions
-            .contains(&permissions::INVENTORY_LOCATIONS_MANAGE)
-    );
+    assert!(manager
+        .permissions
+        .contains(&permissions::INVENTORY_LOCATIONS_MANAGE));
     let staff = &ROLE_PRESETS[2];
     assert!(
         !staff
@@ -46,11 +42,9 @@ fn location_manage_permission_follows_inventory_roles() {
         .iter()
         .find(|p| p.id == builtin_roles::CUSTOM)
         .expect("custom preset");
-    assert!(
-        !custom
-            .permissions
-            .contains(&permissions::INVENTORY_LOCATIONS_MANAGE)
-    );
+    assert!(!custom
+        .permissions
+        .contains(&permissions::INVENTORY_LOCATIONS_MANAGE));
 }
 
 #[test]
@@ -121,11 +115,9 @@ fn staff_preset_is_checkout_only() {
     // inventory, staff, reports, audit, terminals, promotions.
     assert!(!preset.permissions.contains(&permissions::SALES_VOID));
     assert!(!preset.permissions.contains(&permissions::SALES_REFUND));
-    assert!(
-        !preset
-            .permissions
-            .contains(&permissions::SALES_OVERRIDE_PRICE)
-    );
+    assert!(!preset
+        .permissions
+        .contains(&permissions::SALES_OVERRIDE_PRICE));
     assert!(!preset.permissions.contains(&permissions::PAYMENTS_REFUND));
     assert!(!preset.permissions.contains(&permissions::PRODUCTS_CREATE));
     assert!(!preset.permissions.contains(&permissions::PRODUCTS_READ));
@@ -135,11 +127,9 @@ fn staff_preset_is_checkout_only() {
     assert!(!preset.permissions.contains(&permissions::STAFF_READ));
     assert!(!preset.permissions.contains(&permissions::REPORTS_VIEW));
     assert!(!preset.permissions.contains(&permissions::AUDIT_VIEW));
-    assert!(
-        !preset
-            .permissions
-            .contains(&permissions::TERMINALS_REGISTER)
-    );
+    assert!(!preset
+        .permissions
+        .contains(&permissions::TERMINALS_REGISTER));
     // Checkout operations stay.
     for key in [
         permissions::SALES_PROCESS,
@@ -192,11 +182,9 @@ fn admin_preset_manages_roles_and_plugins_but_never_wildcard_or_staff_delete() {
         !preset.permissions.contains(&"*"),
         "Admin is never a wildcard"
     );
-    assert!(
-        preset
-            .permissions
-            .contains(&permissions::STAFF_MANAGE_ROLES)
-    );
+    assert!(preset
+        .permissions
+        .contains(&permissions::STAFF_MANAGE_ROLES));
     assert!(preset.permissions.contains(&permissions::PLUGINS_MANAGE));
     assert!(preset.permissions.contains(&permissions::SETTINGS_EDIT));
     assert!(
@@ -305,4 +293,36 @@ fn staff_preset_has_no_manager_management_surfaces() {
     assert!(manager.permissions.contains(&permissions::PRODUCTS_CREATE));
     assert!(manager.permissions.contains(&permissions::STAFF_CREATE));
     assert!(manager.permissions.contains(&permissions::REPORTS_VIEW));
+}
+
+#[test]
+fn terminal_read_follows_terminal_manage_b1() {
+    // B-1 remediation: Manager and Admin hold terminal register/edit/delete,
+    // so they must also pass the 7 read gates — view follows manage. Staff
+    // (checkout-only) and Auditor must NOT gain terminal access, and the
+    // grants must be explicit, never via a family wildcard.
+    for role_id in [builtin_roles::MANAGER, builtin_roles::ADMIN] {
+        let preset = ROLE_PRESETS
+            .iter()
+            .find(|p| p.id == role_id)
+            .unwrap_or_else(|| panic!("preset {role_id}"));
+        assert!(
+            preset.permissions.contains(&permissions::TERMINALS_READ),
+            "{role_id} must grant terminals:read"
+        );
+        assert!(
+            !preset.permissions.contains(&"terminals:*"),
+            "{role_id} must grant terminals:read explicitly"
+        );
+    }
+    for role_id in [builtin_roles::STAFF, builtin_roles::AUDITOR] {
+        let preset = ROLE_PRESETS
+            .iter()
+            .find(|p| p.id == role_id)
+            .unwrap_or_else(|| panic!("preset {role_id}"));
+        assert!(
+            !preset.permissions.contains(&permissions::TERMINALS_READ),
+            "{role_id} must not gain terminals:read"
+        );
+    }
 }

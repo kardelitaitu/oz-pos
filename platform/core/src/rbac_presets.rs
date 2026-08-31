@@ -16,9 +16,9 @@ perf: n/a — compile-time constants
 //! Invariants: the permission_registry inventory test fails if these
 //! tables and the registry drift apart.
 
-use super::RolePreset;
 use super::builtin_roles;
 use super::permissions;
+use super::RolePreset;
 /// All built-in role presets bundled together for bulk seeding.
 pub const ROLE_PRESETS: &[RolePreset] = &[
     RolePreset {
@@ -99,6 +99,10 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::TERMINALS_REGISTER,
             permissions::TERMINALS_EDIT,
             permissions::TERMINALS_DELETE,
+            // B-1: these roles register/edit/delete terminals, so they must
+            // also pass the 7 read gates (list/get/ping/overrides/
+            // profiles/device-binding) — view follows manage.
+            permissions::TERMINALS_READ,
             permissions::KDS_VIEW,
             permissions::KDS_UPDATE,
         ],
@@ -205,6 +209,10 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::TERMINALS_REGISTER,
             permissions::TERMINALS_EDIT,
             permissions::TERMINALS_DELETE,
+            // B-1: these roles register/edit/delete terminals, so they must
+            // also pass the 7 read gates (list/get/ping/overrides/
+            // profiles/device-binding) — view follows manage.
+            permissions::TERMINALS_READ,
             permissions::CATEGORIES_MANAGE,
             permissions::PLUGINS_MANAGE,
             permissions::KDS_VIEW,
