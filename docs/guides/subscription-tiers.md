@@ -334,7 +334,7 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 
 ### Pre-Launch (Critical — before any paid marketing spend)
 1. ✅ **Enforce staff user limits** — `enforce_staff_quota()` in staff.rs, wired in desktop + tablet clients
-2. ✅ **Enforce 3-month sales history cap on Free** — `list_sales_with_history_cap()` in sales.rs
+2. ✅ **Enforce 3-month sales history cap on Free** — `list_sales_with_history_cap()` in `db/sales_crud.rs`
 3. ✅ **Set annual plan as default on pricing page** — PricingGrid.tsx defaults to annual
 4. ✅ **Add ⭐ Most Popular badge to Pro** on pricing page — `mostPopular` in i18n
 5. ✅ **Reframe annual discount as "2 bulan gratis" / "2 months free"** — all docs and pricing pages
