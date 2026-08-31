@@ -195,6 +195,16 @@ Closed items:
 
 ---
 
+## Schema — SQLite/Postgres drift (`CLOSED 2026-08-31`)
+
+Surfaced while making the loyalty fixed-point migration land on both engines; the new drift guard found a second one the same day it was written.
+
+- ~~**SCHEMA-01** — inline global `UNIQUE` on `products.sku` / `users.username` dominated the composite per-tenant uniqueness that `20260815_tenant_unique_indexes.sql` documents~~ — **FIXED `6f47c964`**: the revert (`62224b00`) restored a pre-drift init.sql carrying the global constraints and 20260815 only added the composite indexes on top, so two tenants could never share a SKU/username and the sync upserts (`ON CONFLICT (tenant_id, sku)`) failed with a bare constraint error. The PG port had been *silently hand-fixing this* — which is why only the faithful regenerated schema made `pg_integration_tenant_sku_isolation` fail. `20260831_per_tenant_unique_rebuild.sql` rebuilds both tables without the inline UNIQUE (composite indexes become the surviving rule), retargets the four `products(sku)` child FKs to composite `(tenant_id, sku)` (mirroring the PG semantics), and adds the real `product_activity.tenant_id` the cloud analytics join already expects. `PRAGMA defer_foreign_keys` carries the 10 inbound FKs per parent through each DROP+RENAME inside the runner's transaction. Regression test pins cross-tenant duplicates allowed, same-tenant rejected, upsert resolving, zero FK violations.
+- ~~**PG-DRIFT-01** — `20260813_init.pg.sql` was hand-ported, not generated~~ — **FIXED `16aa2dc8`**: the committed PG file was init.sql@old-date plus hand-ported incrementals (incl. PG-only columns and the silent SCHEMA-01 fix); the old text-based generator could not reproduce it in either direction. `scripts/generate-pg-migration.py` rewritten as a migration-engine snapshot: applies the full registry chain to in-memory SQLite, dumps final state + seed rows, translates to PG (topo-sorted tables, unique indexes inline after their table for composite FK targets, curated RLS list with staleness validation, strict trigger-port parity). `--check` renders twice (determinism self-proof) and diffs against the committed file; wired as a pre-commit gate + CI job (`pg-schema-drift`). Supersedes the "Postgres intentionally untouched" note in LOYALTY-01 — the file was not a generated artifact then; it is now, and the loyalty column has since been ported faithfully.
+- **Follow-ups flagged, not in scope**: `scripts/rls-cutover.sql` role grants may lag the curated `RLS_TABLES` list; `sale_lines` carries `tenant_id` but the REST insert does not populate it (RLS stays off there — write-path work); the cloud-server pg suite has a pre-existing shared-container deadlock flake under parallel test threads (serial run green).
+
+---
+
 ## How to close these
 
 Each finding's original remediation guidance lives in git history under

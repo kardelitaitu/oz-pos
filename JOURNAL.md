@@ -9373,3 +9373,66 @@ with no embedded double quotes.
 (3) Attribution experiment beats blame-guessing: 90 seconds of
 temporarily disabling my migration settled "did I break profile?" that
 reading code alone could not.
+
+---
+
+## Round W — 2026-08-31 · DSH — PG drift guard, and the bug it caught on day one
+
+Follow-up to the money/loyalty rounds: the user asked for good-practice
+hardening, we agreed items 2 (PG drift guard) + 3 (migration column-type
+lint) + a half-page roles doc. Item 3 landed first (lint script +
+pre-commit gate + CI job). Item 2 exploded on contact with reality:
+
+**The committed `init.pg.sql` was a hand-port.** The old generator text-
+ported only the frozen `init.sql`; the committed PG file carried
+hand-ported incrementals, PG-only columns, and — the kicker — silent
+fixes to SQLite bugs. Neither direction reproduced the other. So the
+"guard" became a generator rewrite: apply the full registry chain to
+in-memory SQLite, dump FINAL state from `sqlite_master` (ADD/DROP COLUMN,
+renames, rebuilds all reflected by construction), emit seeds from row
+data with a now-freshness rule for timestamp determinism, topo-sort
+tables for PG's forward-FK rejection, strict trigger-port parity, curated
+RLS list with staleness validation. `--check` renders twice (determinism
+self-proof) and diffs against the committed file; wired as pre-commit
+gate 6 + CI `pg-schema-drift`.
+
+**The faithful schema immediately failed a PG test**
+(`pg_integration_tenant_sku_isolation`) — exposing SCHEMA-01: the
+revert-era init.sql carries inline global `UNIQUE` on `products.sku` /
+`users.username` that dominates the composite per-tenant uniqueness
+`20260815` documents; cross-tenant SKU collisions and sync-upsert
+failures were live bugs. The old PG file had been hand-fixing it. Fixed
+with a rebuild migration (`6f47c964`): products/users rebuilt without
+the inline UNIQUE, four child FKs retargeted to composite
+`(tenant_id, sku)`, `product_activity.tenant_id` made real. The trick
+that made it possible: `PRAGMA defer_foreign_keys` — unlike
+`foreign_keys`, it IS settable inside the runner's transaction, so each
+parent DROP+RENAME sails through its 10 inbound FKs and the deferred
+check passes at COMMIT.
+
+Also caught: the auto-derived RLS list would have broken `sale_lines`
+writes (has `tenant_id`, but the REST insert never populates it) —
+reverted to a curated list the generator validates both ways; and
+`product_activity`'s RLS entry had been riding a PG-only column that
+never existed in SQLite.
+
+Verification: clean + idempotent apply on real PG 15, oz-api pg 9/9,
+cloud-server pg 35/35 (serial — the parallel flake is pre-existing
+shared-container deadlock), oz-core 2380/2380, lint green with the stale
+loyalty exemption auto-flagged (stale discipline working as designed).
+Commits: `6f47c964` (fix(core) rebuild), `16aa2dc8` (ci(pg) generator +
+guards), docs round (roles doc + AGENTS.md 6-gate update + registry
+SCHEMA-01/PG-DRIFT-01 CLOSED).
+
+Process notes:
+(1) A "1-hour CI job" estimate was wrong by 10× because the premise
+    (generator reproduces the file) was false — verify reproducibility
+    before scoping a guard.
+(2) Real PostgreSQL is the only honest validator: python sqlite3 probes
+    passed everything the generator emitted until psql ran it (FK
+    ordering, unique-index timing, RLS write paths). reset-dev-pg + the
+    pg suites caught what three probe scripts could not.
+(3) Guards earn their keep by finding bugs, not just pinning state —
+    this one found one within its first diff, and the bug's story
+    (silent hand-fix hiding a live multi-tenant defect) justified the
+    whole rework.

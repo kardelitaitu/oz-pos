@@ -1,6 +1,6 @@
 # Agents Configuration & Rules
 
-<!-- Audit stamp: 2026-08-30 · Antigravity · status: ACCURATE · version lock: 0.0.33 · 4 pre-commit gates · conventional commits enforced -->
+<!-- Audit stamp: 2026-08-31 · DSH · status: ACCURATE · version lock: 0.0.33 · 6 pre-commit gates · conventional commits enforced -->
 
 ## 🚨 Critical Agent Directives (MUST FOLLOW)
 
@@ -21,14 +21,16 @@
 ## 🛠️ Quick Setup & Pre-Commit Gates
 
 ```bash
-git config core.hooksPath .githooks   # enable pre-commit hook (cargo fmt + i18n lint + bundle-parity + FTL dedupe)
+git config core.hooksPath .githooks   # enable pre-commit hook (fmt + i18n + bundle-parity + FTL dedupe + column types + PG drift)
 ```
 
-The `.githooks/pre-commit` hook runs four gates automatically before every commit (~1s total):
+The `.githooks/pre-commit` hook runs six gates automatically before every commit (~1–3s total):
 1. **`cargo fmt --all`** — auto-formats staged Rust files and re-stages them.
 2. **`i18n lint`** — runs `scripts/lint-i18n.sh` (validates Fluent `.id.ftl` vs `.ftl` bundles).
 3. **`Bundle parity: staged files only`** — runs `scripts/verify-bundle-parity.py --staged-only` on staged `ui/src/features/**` files; fails if an `<Localized id>` key is missing from `.ftl`.
 4. **`FTL dedupe dry-run`** — runs `scripts/dedupe-ftl.py --dry-run` to detect duplicate Fluent keys before push.
+5. **`Migration column-type lint`** — runs `scripts/verify-migration-column-types.py --staged-only` when `crates/oz-core/migrations/*.sql` is staged; exact-decimal columns must be fixed-point integers (`*_minor`/`*_millionths`), new floats need a justified whitelist entry.
+6. **`PG schema drift guard`** — runs `scripts/generate-pg-migration.py --check` when any migration, the registry, or the generator is staged; `20260813_init.pg.sql` is generated, never hand-edited (see [`docs/records/sqlite-pg-roles.md`](./docs/records/sqlite-pg-roles.md)).
 
 > For full repository verification mirroring the entire CI matrix, see [`scripts/check.sh`](./scripts/check.sh).
 
@@ -102,6 +104,8 @@ npm ci --no-audit --no-fund
 
 ### 4. Database & Hardware
 - **HAL Drivers:** Hardware drivers must have a mock implementation in `crates/oz-hal/src/drivers/mock.rs`.
+- **SQLite is the schema source of truth:** `crates/oz-core/migrations/*.sql` + the registry in `migrations.rs` (registry order is canonical). See [`docs/records/sqlite-pg-roles.md`](./docs/records/sqlite-pg-roles.md).
+- **`init.pg.sql` is generated, never hand-edited:** after any migration change run `python3 scripts/generate-pg-migration.py` and re-stage `crates/oz-core/migrations/20260813_init.pg.sql`; the pre-commit gate + `pg-schema-drift` CI job fail on drift.
 - **PostgreSQL Drift:** When modifying Postgres schemas, run `bash scripts/reset-dev-pg.sh` to re-synchronize the shared dev container schema (`oz-pg-test-15432`).
 
 ---
