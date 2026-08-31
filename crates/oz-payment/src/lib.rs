@@ -1,7 +1,7 @@
 /*
-last audited 31-08-26 by TDD-Agent (round M; PAY-2 closed for charges, wiring status documented)
+last audited 31-08-26 by DSH-Agent (EDC moved out to oz-hal; wiring claims corrected again)
 crate: oz-payment | status: SAFE | lint: CLEAN
-findings: PAY-2 FIXED for charges — square.rs honors PaymentRequest.idempotency_key in the body (85b97f1d), stripe.rs forwards it as the Idempotency-Key header (788407e5). Still open for refunds in both: the trait gives refund() no PaymentRequest, so there is no caller key to forward. PAY-1 (qris parse_amount) fixed 25-07-26. Correcting the previous stamp's wording: it called stripe/square/qris the "live drivers", which implied they run in production. They do not — no app code constructs a PaymentRequest or calls authorize; the clients use drivers::edc only, and that is a documented mock. Severity of everything in this crate is prospective until the gateway wiring lands, and the module doc now says so where a reader will hit it first. Stubs fail closed.
+findings: PAY-2 FIXED for charges — square.rs honors PaymentRequest.idempotency_key in the body (85b97f1d), stripe.rs forwards it as the Idempotency-Key header (788407e5). Still open for refunds in both: the trait gives refund() no PaymentRequest, so there is no caller key to forward. PAY-1 (qris parse_amount) fixed 25-07-26. drivers::edc no longer exists — ad908e96 moved it to oz-hal, so the previous stamp's "the clients use drivers::edc only, and that is a documented mock" is now false in two ways: the module is gone, and the armed mock was removed with it. This crate is now purely the processor layer; nothing here has a production caller at all, which lowers severity of every finding in it rather than raising it. Stubs fail closed.
 next: give refund an idempotency key (trait change, touches every driver), qris PAY-2 is conditional on callers supplying keys, partial refund (PAY-3), Stripe decline classification (PAY-4) | perf: HTTP async/tokio; mock in-memory atomics
 */
 #![deny(unsafe_code)]
@@ -9,8 +9,14 @@ next: give refund an idempotency key (trait change, touches every driver), qris 
 //! Payment processor abstraction for OZ-POS.
 //!
 //! `oz-payment` provides a single trait, [`PaymentProcessor`], with
-//! vendor-specific implementations for Stripe, Square, and EMV
-//! terminals. Switching processors is a config change, not a code change.
+//! vendor-specific implementations for Stripe, Square, Paddle and QRIS.
+//! Switching processors is a config change, not a code change.
+//!
+//! Card-present terminals are not part of this crate. An EDC terminal is a
+//! device, so its trait and drivers live in `oz-hal` beside every other
+//! device class — `oz_hal::EdcTerminal`, `oz_hal::drivers::edc`, and a
+//! registry category to hold them. This crate keeps the layer above: the
+//! acquirers and gateways.
 //!
 //! # Wiring status — read this before scoring a bug's severity
 //!
@@ -20,10 +26,10 @@ next: give refund an idempotency key (trait change, touches every driver), qris 
 //! which is not true today — and a sentence like that is what makes a reader
 //! grade a latent defect as a live money-path outage.
 //!
-//! What the clients actually take from this crate is `drivers::edc`, and
-//! even that is wired to `MockEdcTerminal` in success mode: a documented
-//! placeholder until physical hardware support lands
-//! (`apps/desktop-client/src/state.rs:181-187`).
+//! Until ad908e96 the clients took `drivers::edc` from this crate, wired to
+//! an armed `MockEdcTerminal`, which is how a card sale could report approval
+//! with no terminal present. That path is gone: the commands resolve a
+//! terminal from the HAL registry and fail closed when none is configured.
 //!
 //! Defects in the HTTP gateway drivers are still real and worth fixing — the
 //! crate is compiled by CI, has a full wiremock suite, and the integration
