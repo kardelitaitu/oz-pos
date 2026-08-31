@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-25 · Buffy-Agent · status: ACCURATE (0 findings) · modules/currency/src/lib.rs exists with CurrencyModule implementing the Module trait; modules/currency/manifest.json present and matches spec schema; CurrencyRepository with exchange-rate, currency-list, and currency-format methods fully migrated from oz-core (R2 Phase 1–6 complete); Platform error variant added to CurrencyError for settings delegation -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (1 finding repaired) · F1: added CUR-11 exchange-rate methods to the repository list — list_latest_exchange_rates() (bounded latest-per-pair, repository.rs:84) and list_exchange_rates_for_pair() (repository.rs:121) · carried from 2026-07-25: CurrencyModule implements foundation::contracts::Module; CurrencyRepository migrated from oz-core (R2 Phase 1-6); Platform error variant for settings delegation -->
 
 # Currency/Exchange Module
 
@@ -51,6 +51,8 @@ pub struct CurrencyRepository<'a> {
 
 ### Exchange-Rate Methods
 - `list_exchange_rates()` — Returns all exchange rates
+- `list_latest_exchange_rates()` — Latest rate per currency pair (CUR-11 bounded latest-per-pair API)
+- `list_exchange_rates_for_pair(from, to)` — Rate rows for a single currency pair
 - `create_exchange_rate()` — Insert a new rate
 - `upsert_exchange_rate()` — Insert or update by currency pair
 - `delete_exchange_rate()` — Remove by ID
@@ -96,6 +98,6 @@ The original 15 delegating Store methods in `oz-core` are marked `#[deprecated]`
 }
 ```
 
-> last audited 09-08-26 by buffy
+> last audited 31-08-26 by docs-auditor
 > audit: Phase 3 Module-Level Documentation Audit
 > status: ACCURATE (verified against actual codebase)
