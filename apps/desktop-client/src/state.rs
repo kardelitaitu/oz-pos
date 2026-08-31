@@ -18,9 +18,12 @@ findings: unsafe env::set_var removed; terminal_id typed field added; Drop bound
 //! - The Tauri `AppHandle` for emitting events back to the front-end.
 //!
 //! `AppState::new` opens the local SQLite database, runs migrations, and
-//! creates an empty `DriverRegistry`. Hardware is registered at runtime
-//! via the setup wizard (or a future `init_hardware` command); the front
-//! end never assumes a particular device is plugged in at startup.
+//! creates an empty `DriverRegistry`. `AppState::new` does not populate it:
+//! the registry is filled after `manage()` by the hardware bootstrap daemon
+//! in `lib.rs`, which reads the saved `TerminalProfile` through
+//! `platform_startup::hardware`. The field starts empty so a failure to read
+//! the profile cannot prevent the app from starting, and the front end never
+//! assumes a particular device is present.
 //!
 //! # Connection pooling
 //!
@@ -177,15 +180,6 @@ pub struct AppState {
     /// spans the global and store databases, so concurrent Applies cannot
     /// safely compare revisions or recover partial work independently.
     pub topology_apply_lock: Mutex<()>,
-
-    /// Card-present EDC payment terminal.
-    ///
-    /// Wired to a [`MockEdcTerminal`] (success mode) so the cashier flow
-    /// can exercise card payments end-to-end without physical hardware.
-    /// A real wired/wireless terminal — driven by the protocol codecs in
-    /// `oz_payment::drivers::edc::protocol` — replaces this when the
-    /// hardware support lands.
-    pub edc_terminal: Arc<dyn oz_payment::drivers::edc::EdcTerminal>,
 }
 
 impl AppState {
@@ -357,13 +351,6 @@ impl AppState {
             terminal_id,
             picker_ticket_secret: uuid::Uuid::new_v4().as_bytes().to_vec(),
             topology_apply_lock: Mutex::new(()),
-            edc_terminal: {
-                // Mock EDC terminal in success mode: authorize + capture
-                // both succeed, so the cashier flow can run end-to-end.
-                let mock = oz_payment::drivers::edc::MockEdcTerminal::new();
-                mock.set_success();
-                Arc::new(mock)
-            },
         })
     }
 }
@@ -799,11 +786,6 @@ impl AppState {
             terminal_id: Arc::new(Mutex::new(None)),
             picker_ticket_secret: b"test-picker-ticket-secret".to_vec(),
             topology_apply_lock: Mutex::new(()),
-            edc_terminal: {
-                let mock = oz_payment::drivers::edc::MockEdcTerminal::new();
-                mock.set_success();
-                Arc::new(mock)
-            },
         }
     }
 
