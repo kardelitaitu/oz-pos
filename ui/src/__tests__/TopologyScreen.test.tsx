@@ -21,12 +21,14 @@ vi.mock('@/api/license', () => ({
 }));
 
 const mockListStores = vi.fn();
+const mockCreateStore = vi.fn();
 const mockUpdateStore = vi.fn();
 const mockDeleteStore = vi.fn();
 vi.mock('@/api/stores', () => ({
-  listStores: () => mockListStores(),
-  updateStore: (...args: unknown[]) => mockUpdateStore(...args),
-  deleteStore: (...args: unknown[]) => mockDeleteStore(...args),
+  listStoresScoped: (...args: unknown[]) => mockListStores(...args),
+  createStoreProfileScoped: (...args: unknown[]) => mockCreateStore(...args),
+  updateStoreProfileScoped: (...args: unknown[]) => mockUpdateStore(...args),
+  deleteStoreProfileScoped: (...args: unknown[]) => mockDeleteStore(...args),
 }));
 
 const mockListWorkspacesScoped = vi.fn();
@@ -436,14 +438,17 @@ describe('TopologyScreen', () => {
 
     const ok = await capturedEditorProps.onRenameBranch!('store-1', 'Main Street (Flagship)');
     expect(ok).toBe(true);
-    expect(mockUpdateStore).toHaveBeenCalledWith({
-      id: 'store-1',
-      name: 'Main Street (Flagship)',
-      address: 'A St',
-      tax_id: 'T-1',
-      currency: 'USD',
-      timezone: 'UTC',
-    });
+    expect(mockUpdateStore).toHaveBeenCalledWith(
+      'test-session-token',
+      {
+        id: 'store-1',
+        name: 'Main Street (Flagship)',
+        address: 'A St',
+        tax_id: 'T-1',
+        currency: 'USD',
+        timezone: 'UTC',
+      },
+    );
 
     // Header selector label is live: the branch dropdown now lists the new
     // name (the stores-state update flushes on a re-render).
@@ -505,7 +510,7 @@ describe('TopologyScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'topology-branch-delete-confirm-btn' }));
 
     // The profile is deleted through the API.
-    await waitFor(() => expect(mockDeleteStore).toHaveBeenCalledWith('store-1'));
+    await waitFor(() => expect(mockDeleteStore).toHaveBeenCalledWith('test-session-token', 'store-1'));
 
     // The selector option for the deleted branch is gone…
     await waitFor(() =>
@@ -748,7 +753,7 @@ describe('TopologyScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'topology-branch-delete' }));
     fireEvent.click(screen.getByRole('button', { name: 'topology-branch-delete-confirm-btn' }));
 
-    await waitFor(() => expect(mockDeleteStore).toHaveBeenCalledWith('store-1'));
+    await waitFor(() => expect(mockDeleteStore).toHaveBeenCalledWith('test-session-token', 'store-1'));
     await waitFor(() => expect(screen.queryByText('topology-compare-title')).not.toBeInTheDocument());
   });
 

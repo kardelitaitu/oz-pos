@@ -97,7 +97,7 @@ beforeEach(() => {
       { key: 'restaurant', name: 'Restaurant', description: 'Dine-in service', icon: 'restaurant' },
       { key: 'store', name: 'Retail Store', description: 'Retail counter', icon: 'store' },
     ]);
-    if (cmd === 'list_store_profiles') return Promise.resolve(SAMPLE_BRANCHES);
+    if (cmd === 'list_store_profiles_scoped') return Promise.resolve(SAMPLE_BRANCHES);
     return Promise.reject(new Error(`Unknown command: ${cmd}`));
   });
 });

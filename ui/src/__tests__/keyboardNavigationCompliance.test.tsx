@@ -49,8 +49,8 @@ const { mockListStores } = vi.hoisted(() => ({
   mockListStores: vi.fn(),
 }));
 vi.mock('@/api/stores', () => ({
-  listStores: () => mockListStores(),
-  setPrimaryStore: vi.fn(() => Promise.resolve({ id: 's' })),
+  listStoresScoped: () => mockListStores(),
+  setPrimaryStoreScoped: vi.fn(() => Promise.resolve({ id: 's' })),
 }));
 vi.mock('@/contexts/WorkspaceContext', () => ({
   useWorkspace: () => ({
