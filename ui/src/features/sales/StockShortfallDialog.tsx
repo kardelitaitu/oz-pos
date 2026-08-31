@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
-import { completeSaleWithResolvedShortfalls, type CompleteSaleWithResolvedShortfallsArgs, type ResolvedShortfall, type LocationAllocation, type PartialStockResult, type CartLineData, type PaymentSplitArg, type SerialNumberArg } from '@/api/sales';
+import { completeSaleWithResolvedShortfalls, type CompleteSaleResult, type CompleteSaleWithResolvedShortfallsArgs, type ResolvedShortfall, type LocationAllocation, type PartialStockResult, type CartLineData, type PaymentSplitArg, type SerialNumberArg } from '@/api/sales';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { Button } from '@/components/Button';
 import { l10nErrorMessage } from '@/utils/app-error';
@@ -51,8 +51,12 @@ export interface StockShortfallDialogProps {
   baseTotalMinor?: number;
   /** CUR-02: fixed-point rate (millionths) `baseCurrency → sale currency`. */
   tenderRateMillionths?: number;
-  /** Called when the sale completes successfully after resolution. */
-  onComplete: () => void;
+  /**
+   * Called when the sale completes successfully after resolution — with
+   * the committed sale's result so the caller can build the receipt
+   * preview exactly like the normal completion path.
+   */
+  onComplete: (result: CompleteSaleResult) => void;
   /** Called when the cashier cancels the sale. */
   onCancel: () => void;
 }
@@ -255,8 +259,8 @@ export default function StockShortfallDialog({
         resolutions: resolvedShortfalls,
       };
 
-      await completeSaleWithResolvedShortfalls(sessionToken, args);
-      onComplete();
+      const result = await completeSaleWithResolvedShortfalls(sessionToken, args);
+      onComplete(result);
     } catch (err) {
       const msg = l10nErrorMessage(err, l10n, 'app-error-generic');
       setError(msg);

@@ -317,6 +317,27 @@ describe('StockShortfallDialog', () => {
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
+  // Shortfall receipt gap: the retry commits a REAL sale, but onComplete
+  // was called with no arguments, so PaymentModal could never build the
+  // receipt preview the normal completion path shows. The dialog must
+  // forward the CompleteSaleResult.
+  it('forwards the CompleteSaleResult to onComplete (receipt parity)', async () => {
+    const onComplete = vi.fn();
+    const result = { saleId: 'sale-77', total: { minor_units: 9000, currency: 'IDR' }, lineCount: 2 };
+    mockCompleteSaleWithResolvedShortfalls.mockResolvedValueOnce(result);
+
+    await renderWithFluent(
+      <StockShortfallDialog {...defaultProps} onComplete={onComplete} />,
+    );
+
+    await userEvent.click(screen.getByText('Confirm & Continue'));
+
+    await waitFor(() => {
+      expect(onComplete).toHaveBeenCalledTimes(1);
+    });
+    expect(onComplete).toHaveBeenCalledWith(result);
+  });
+
   it('resolves split-mode allocations correctly on confirm', async () => {
     const onComplete = vi.fn();
     mockCompleteSaleWithResolvedShortfalls.mockResolvedValueOnce({

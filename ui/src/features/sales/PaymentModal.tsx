@@ -1083,8 +1083,63 @@ export default function PaymentModal({
           attemptId={attemptIdRef.current ?? undefined}
           discountPercent={discountPercent}
           discountLabel={discountLabel ?? null}
-          onComplete={() => {
+          onComplete={async (result) => {
             setShortfallResult(null);
+            if (!result?.saleId) {
+              // No committed sale to describe — fall back to the old
+              // bare completion (also keeps partially-mocked flows safe).
+              setDone(true);
+              return;
+            }
+            // Shortfall receipt parity: the retry committed a REAL sale,
+            // so show the same print preview the normal path does. Items
+            // come from the COMMITTED sale lines — resolutions may have
+            // reduced quantities or substituted SKUs, the local cart no
+            // longer describes what sold.
+            try {
+              const completedSale = await getSale(result.saleId);
+              const shortfallTotalMinor = result.total?.minor_units ?? completedSale?.total.minor_units ?? effectiveTotalInCartCurrency;
+              const shortfallCurrency = result.total?.currency ?? completedSale?.total.currency ?? cartCurrency;
+              const receiptData: PrintSalesReceiptArgs = {
+                date: new Date().toLocaleDateString('en-US', {
+                  year: 'numeric', month: 'short', day: 'numeric',
+                }),
+                receiptNumber: `SALE-${result.saleId}`,
+                items: (completedSale?.lines ?? []).map((line) => ({
+                  name: line.name || line.sku,
+                  quantity: line.qty,
+                  unitPrice: { minorUnits: line.unit_price.minor_units, currency: line.unit_price.currency },
+                  totalPrice: { minorUnits: line.total_minor, currency: line.unit_price.currency },
+                  ...(line.tax_amount
+                    ? { taxAmount: { minorUnits: line.tax_amount.minor_units, currency: line.tax_amount.currency } }
+                    : {}),
+                })),
+                subtotal: completedSale
+                  ? { minorUnits: completedSale.subtotal.minor_units, currency: cartCurrency }
+                  : { minorUnits: shortfallTotalMinor, currency: shortfallCurrency },
+                ...(completedSale && completedSale.taxTotal && completedSale.taxTotal.minor_units > 0
+                  ? { tax: { minorUnits: completedSale.taxTotal.minor_units, currency: cartCurrency } }
+                  : {}),
+                total: { minorUnits: shortfallTotalMinor, currency: shortfallCurrency },
+                payments: paymentSplitsFromState()
+                  ? paymentSplitsFromState()!.map((ps) => ({
+                      method: ps.method,
+                      amount: { minorUnits: ps.amountMinor, currency: cartCurrency },
+                      change: null,
+                    }))
+                  : [
+                      {
+                        method: splitMode ? 'split' : method === 'other' ? otherLabel.trim() || 'OTHER' : method.toUpperCase(),
+                        amount: { minorUnits: shortfallTotalMinor, currency: shortfallCurrency },
+                        change: null,
+                      },
+                    ],
+                ...(tableNumber ? { tableNumber } : {}),
+              };
+              setReceiptArgs(receiptData);
+            } catch {
+              // Receipt preview is non-blocking — mirrors the normal path.
+            }
             setDone(true);
           }}
           onCancel={() => {
