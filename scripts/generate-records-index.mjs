@@ -143,7 +143,7 @@ if (existsSync(decisionsDir)) {
       if (rec.num !== undefined && Number.isFinite(rec.num)) {
         const statusFile = join(dir, f.replace(/\.md$/, '.status.md'));
         const statusLink = existsSync(statusFile)
-          ? `${rec.status} (see [status](./${sub ? sub + '/' : ''}${f.replace(/\.md$/, '.status.md')}))`
+          ? `${rec.status} (see [status](${relFromRecords(statusFile)}))`
           : rec.status;
         numbered.push({
           ...rec,
