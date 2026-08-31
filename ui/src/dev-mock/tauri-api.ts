@@ -2467,7 +2467,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // PROMOTIONS
   // ═══════════════════════════════════════════════════════════════
 
-  'list_promotions': () => [
+    'list_promotions': () => [{ id: 'promo-2', name: 'Happy Hour 15%', description: '15% off the whole order', promo_type: 'percentage', value_minor: 15, min_qty: null, trigger_sku: null, reward_sku: null, reward_qty: null, starts_at: new Date().toISOString(), ends_at: null, min_order_minor: 0, category_id: null, active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },{ id: 'promo-3', name: 'VIP 5000 Off', description: '5000 minor units off', promo_type: 'fixed_amount', value_minor: 5000, min_qty: null, trigger_sku: null, reward_sku: null, reward_qty: null, starts_at: new Date().toISOString(), ends_at: null, min_order_minor: 20000, category_id: null, active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
     {
       id: 'promo-1', name: 'Buy 1 Get 1', description: 'Free croissant with any latte', promo_type: 'buy_x_get_y',
       value_minor: 0, min_qty: 1, trigger_sku: 'LATTE', reward_sku: 'CROISS', reward_qty: 1,
@@ -2475,7 +2475,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
       active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     },
   ],
-  'list_promotions_scoped': () => [
+    'list_promotions_scoped': () => [{ id: 'promo-2', name: 'Happy Hour 15%', description: '15% off the whole order', promo_type: 'percentage', value_minor: 15, min_qty: null, trigger_sku: null, reward_sku: null, reward_qty: null, starts_at: new Date().toISOString(), ends_at: null, min_order_minor: 0, category_id: null, active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },{ id: 'promo-3', name: 'VIP 5000 Off', description: '5000 minor units off', promo_type: 'fixed_amount', value_minor: 5000, min_qty: null, trigger_sku: null, reward_sku: null, reward_qty: null, starts_at: new Date().toISOString(), ends_at: null, min_order_minor: 20000, category_id: null, active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
     {
       id: 'promo-1', name: 'Buy 1 Get 1', description: 'Free croissant with any latte', promo_type: 'buy_x_get_y',
       value_minor: 0, min_qty: 1, trigger_sku: 'LATTE', reward_sku: 'CROISS', reward_qty: 1,

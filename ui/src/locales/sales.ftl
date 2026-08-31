@@ -528,6 +528,7 @@ eod-summary-discounts = Sales with Discounts
 eod-summary-payment-methods = Payment Methods Used
 
 pos-cart-add-discount = + Add Discount
+pos-cart-add-promotion = + Promotions
 pos-cart-apply = Apply
 pos-cart-cancel = Cancel
 pos-cart-clear = Clear
@@ -966,3 +967,18 @@ receipt-preview-print = Print Receipt
 daily-dashboard-locked-title = Daily Sales Dashboard
 daily-dashboard-locked-message = See your daily revenue, sales count, and item breakdown at a glance. This feature is available on Plus and above.
 daily-dashboard-locked-cta = Upgrade to Plus
+
+pos-promotions-dialog-aria = Promotions picker
+pos-promotions-close-aria = Close promotions
+pos-promotions-title = Promotions
+pos-promotions-loading = Loading promotions…
+pos-promotions-empty = No active promotions
+pos-promotions-load-failed = Failed to load promotions
+pos-promotions-value-percent = { $value }% off
+pos-promotions-value-fixed = { $value } minor units off
+pos-promotions-value-bxgy = Buy X get Y
+pos-promotions-not-applicable = Not applicable in this checkout yet
+pos-promotions-min-order = Requires a minimum order of { $min }
+pos-promotions-applied = Applied promotion: { $name }
+pos-promotions-apply-aria = Apply promotion { $name }
+pos-promotions-unavailable-aria = Promotion { $name } is not applicable

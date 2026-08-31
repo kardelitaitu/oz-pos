@@ -49,6 +49,7 @@ pos-cart-lock = Kunci
 pos-cart-subtotal = Subtotal
 pos-cart-discount-label = Diskon ({ $label })
 pos-cart-add-discount = + Tambah Diskon
+pos-cart-add-promotion = + Promosi
 pos-cart-pct-placeholder =
     .placeholder = %
 pos-cart-label-placeholder =
@@ -977,3 +978,18 @@ daily-dashboard-locked-title = Dasbor Penjualan Harian
 daily-dashboard-locked-message = Lihat total pendapatan harian, jumlah penjualan, dan rincian item dalam sekilas. Fitur ini tersedia di Plus ke atas.
 daily-dashboard-locked-cta = Upgrade ke Plus
 
+
+pos-promotions-dialog-aria = Pemilih promosi
+pos-promotions-close-aria = Tutup promosi
+pos-promotions-title = Promosi
+pos-promotions-loading = Memuat promosi…
+pos-promotions-empty = Tidak ada promosi aktif
+pos-promotions-load-failed = Gagal memuat promosi
+pos-promotions-value-percent = Diskon { $value }%
+pos-promotions-value-fixed = Potongan { $value } unit kecil
+pos-promotions-value-bxgy = Beli X dapat Y
+pos-promotions-not-applicable = Belum dapat diterapkan di kasir
+pos-promotions-min-order = Butuh pesanan minimum { $min }
+pos-promotions-applied = Promosi diterapkan: { $name }
+pos-promotions-apply-aria = Terapkan promosi { $name }
+pos-promotions-unavailable-aria = Promosi { $name } tidak dapat diterapkan

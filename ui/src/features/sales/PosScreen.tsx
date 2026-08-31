@@ -47,6 +47,8 @@ import { useBarcodeScanner } from './useBarcodeScanner';
 import { useCustomerDisplay } from './useCustomerDisplay';
 import PaymentModal from './PaymentModal';
 import PriceOverrideModal from './PriceOverrideModal';
+import PromotionsModal from './PromotionsModal';
+import type { Promotion } from '@/api/promotions';
 import FastPINOverlay from '@/components/FastPINOverlay';
 import { overrideLinePriceScoped, overrideCartDeductionLocation } from '@/api/sales';
 import {
@@ -470,6 +472,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [showDiscountInput, setShowDiscountInput] = useState(false);
+  const [showPromotions, setShowPromotions] = useState(false);
   const [discountInput, setDiscountInput] = useState('');
   const [discountName, setDiscountName] = useState('');
   const [tableNumber, setTableNumber] = useState('');
@@ -856,6 +859,15 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   const handleClearDiscount = useCallback(() => {
     setDiscount(0, '');
   }, [setDiscount]);
+
+  // PROMO-5: apply an eligible promotion through the cart-discount
+  // pipeline (percentage value_minor IS the percent — validated 1..=100
+  // by the backend at promotion create/update).
+  const handleSelectPromotion = useCallback((promo: Promotion) => {
+    setDiscount(promo.value_minor, promo.name);
+    setShowPromotions(false);
+    addToast({ message: l10nRef.current.getString('pos-promotions-applied', { name: promo.name }) || promo.name, type: 'success' });
+  }, [setDiscount, addToast]);
 
   // ── Lock: save cart state to localStorage, then logout ───────────
 
@@ -1654,15 +1666,27 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                         </button>
                       </div>
                     ) : !showDiscountInput ? (
-                      <Localized id="pos-cart-add-discount">
-                        <button
-                          type="button"
-                          className="pos-cart-discount-btn"
-                          onClick={() => setShowDiscountInput(true)}
-                        >
-                          + Add Discount
-                        </button>
-                      </Localized>
+                      <div className="pos-cart-discount-actions">
+                        <Localized id="pos-cart-add-discount">
+                          <button
+                            type="button"
+                            className="pos-cart-discount-btn"
+                            onClick={() => setShowDiscountInput(true)}
+                          >
+                            + Add Discount
+                          </button>
+                        </Localized>
+                        <Localized id="pos-cart-add-promotion">
+                          <button
+                            type="button"
+                            className="pos-cart-discount-btn pos-cart-promotion-btn"
+                            onClick={() => setShowPromotions(true)}
+                            disabled={!subtotal}
+                          >
+                            + Promotions
+                          </button>
+                        </Localized>
+                      </div>
                     ) : null}
 
                     {/* Discount input form */}
@@ -1921,6 +1945,15 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
           onClose={() => setOverrideTarget(null)}
         />
       )}
+
+      {/* ── Promotions picker modal ───────────────────── */}
+      <PromotionsModal
+        open={showPromotions}
+        sessionToken={sessionToken}
+        subtotalMinor={subtotal?.minor_units ?? 0}
+        onSelect={handleSelectPromotion}
+        onClose={() => setShowPromotions(false)}
+      />
 
       {/* ── Open Bill Input modal ────────────────────── */}
       {openBillInputExit.shouldRender && (          <div

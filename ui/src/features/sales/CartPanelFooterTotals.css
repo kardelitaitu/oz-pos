@@ -77,6 +77,23 @@
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
+/* Two side-by-side affordances: manual discount + promotions picker (PROMO-5) */
+.pos-cart-discount-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.pos-cart-promotion-btn {
+  border-style: solid;
+  color: var(--color-accent);
+}
+
+.pos-cart-promotion-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .pos-cart-discount-row {
   display: flex;
   align-items: center;
