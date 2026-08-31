@@ -89,6 +89,7 @@ impl Store<'_> {
             payment_splits,
             staff_user_id,
             terminal_id,
+            &[],
         )
     }
 }
@@ -134,6 +135,12 @@ impl Store<'_> {
     /// topology-selected locations in route order. All stock checks,
     /// deductions, sale persistence, and deduction provenance remain inside
     /// one SQLite transaction; an underfunded route set rolls back entirely.
+    ///
+    /// `checkout_applications` carries promotion applications the caller
+    /// computed via [`Store::compute_checkout_promotions`] — the sale's
+    /// total is expected to already be reduced by their sum. Each row is
+    /// persisted inside this same transaction (with a duplicate guard) so
+    /// the audit trail commits atomically with the sale.
     #[allow(clippy::too_many_arguments)]
     pub fn complete_sale_deduction_with_locations(
         &self,
@@ -143,6 +150,7 @@ impl Store<'_> {
         payment_splits: &[crate::PaymentSplitArg],
         _staff_user_id: &str,
         _terminal_id: Option<&str>,
+        checkout_applications: &[crate::PromotionApplication],
     ) -> Result<crate::sale_deduction::CompleteSaleResult, CoreError> {
         use crate::inventory_transaction::InventoryTransactionId;
         use crate::sale_deduction::{Shortfall, StockDeduction};
@@ -362,6 +370,8 @@ impl Store<'_> {
         // MONEY-04: validate payment splits against the ledger total AFTER
         // stock resolution (so the PartialStockResult dialog keeps precedence)
         // but BEFORE any write — the error path rolls the whole tx back.
+        // The total is promotion-reduced when the caller applied checkout
+        // promotions (PROMO-3 integration).
         validate_payment_splits_cover_total(payment_splits, sale.total.minor_units)?;
 
         // ── Phase 2: execute deductions ───────────────────────────
@@ -469,6 +479,46 @@ impl Store<'_> {
                     ],
                 )?;
             }
+        }
+
+        // ── Persist promotion applications (same tx as the sale) ──
+        // Checkout promotions (PROMO-3 integration): the caller reduced
+        // sale.total via compute_checkout_promotions; the audit rows commit
+        // atomically with the sale. PROMO-4: a duplicate (sale_id,
+        // promotion_id) pair fails the whole checkout rather than
+        // double-discounting. Inserted after the sale row so the
+        // promotion_applications → sales foreign key resolves.
+        for app in checkout_applications {
+            if app.sale_id != sale.id {
+                return Err(CoreError::Validation {
+                    field: "sale_id",
+                    message: "checkout application references a different sale".into(),
+                });
+            }
+            let dup: i64 = tx.query_row(
+                "SELECT COUNT(*) FROM promotion_applications
+                 WHERE sale_id = ?1 AND promotion_id = ?2",
+                rusqlite::params![app.sale_id, app.promotion_id],
+                |r| r.get(0),
+            )?;
+            if dup > 0 {
+                return Err(CoreError::Validation {
+                    field: "promotion_id",
+                    message: "promotion already applied to this sale".into(),
+                });
+            }
+            tx.execute(
+                "INSERT INTO promotion_applications (id, promotion_id, sale_id, discount_minor, description, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![
+                    app.id,
+                    app.promotion_id,
+                    app.sale_id,
+                    app.discount_minor,
+                    app.description,
+                    app.created_at,
+                ],
+            )?;
         }
 
         tx.commit()?;

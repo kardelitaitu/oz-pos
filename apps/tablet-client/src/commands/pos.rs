@@ -819,6 +819,11 @@ pub struct CompleteSaleScopedArgs {
     pub tip_minor: Option<i64>,
     /// Service-charge amount in minor units collected at checkout (default 0).
     pub service_charge_minor: Option<i64>,
+    /// PROMO-3 checkout integration: promotions to engine-apply against
+    /// the post-tax sale. Each reduces the payable total (stacking) and
+    /// the application rows persist inside the checkout transaction;
+    /// payment splits are validated against the reduced total.
+    pub promotion_ids: Option<Vec<String>>,
 }
 
 /// Complete a sale within the session scope. ADR #7 / ADR-19 §6.
@@ -888,6 +893,15 @@ pub async fn complete_sale_scoped(
             }
         }
 
+        // PROMO-3 checkout integration: engine-apply the selected
+        // promotions against the post-tax sale; sale.total is reduced in
+        // place and the application rows persist inside the checkout tx.
+        let checkout_applications = store.compute_checkout_promotions(
+            &mut sale,
+            args.promotion_ids.as_deref().unwrap_or(&[]),
+            chrono::Utc::now(),
+        )?;
+
         let splits = if let Some(ref splits) = args.payment_splits {
             splits.clone()
         } else {
@@ -901,16 +915,28 @@ pub async fn complete_sale_scoped(
             }]
         };
 
-        store.complete_sale_deduction(
+        // Same primary-location resolution the legacy complete_sale_deduction
+        // wrapper performs internally — routed through with_locations so
+        // checkout promotions persist.
+        let primary = oz_core::location_resolver::resolve_primary_location(
+            &db,
+            session.instance_id.as_str(),
+            None,
+        )
+        .unwrap_or_else(|_| oz_core::location_resolver::get_default_location_id());
+        store.complete_sale_deduction_with_locations(
             &sale,
             Some(&session.instance_id),
+            &[primary],
             &splits,
             &session.user_id,
             Some(&session.terminal_id),
+            &checkout_applications,
         )?
     };
 
-    let total = cart.total();
+    // Promotion-reduced payable (cart.total() would ignore promotions).
+    let total = Some(sale.total.clone());
     tracing::info!(%sale_id, ?total, line_count, store_id = %session.store_id, "sale completed (scoped)");
 
     // ── Event publishing (no DB lock held) ────────────────────────
@@ -1059,6 +1085,9 @@ pub struct CompleteSaleWithResolvedShortfallsArgs {
     pub tip_minor: Option<i64>,
     /// Service-charge amount in minor units collected at checkout (default 0).
     pub service_charge_minor: Option<i64>,
+    /// PROMO-3 checkout integration: promotions to engine-apply against
+    /// the post-tax sale (see `CompleteSaleScopedArgs::promotion_ids`).
+    pub promotion_ids: Option<Vec<String>>,
 }
 
 /// Complete a sale with cashier-resolved shortfalls (split fulfillment).
@@ -1127,6 +1156,15 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
             oz_core::Settings::get_tax_rounding_mode(&db)?,
         )?;
 
+        // PROMO-3 checkout integration: engine-apply the selected
+        // promotions against the post-tax sale; sale.total is reduced in
+        // place and the application rows persist inside the checkout tx.
+        let checkout_applications = store.compute_checkout_promotions(
+            &mut sale,
+            args.promotion_ids.as_deref().unwrap_or(&[]),
+            chrono::Utc::now(),
+        )?;
+
         let splits = if let Some(ref splits) = args.payment_splits {
             splits.clone()
         } else {
@@ -1147,8 +1185,12 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
             &session.user_id,
             Some(&session.terminal_id),
             &args.resolutions,
+            &checkout_applications,
         )?
     };
+
+    // Promotion-reduced payable (cart.total() would ignore promotions).
+    let total = Some(sale.total.clone());
 
     tracing::info!(%sale_id, store_id = %session.store_id, "sale completed with resolved shortfalls");
 

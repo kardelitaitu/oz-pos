@@ -1714,6 +1714,7 @@ fn complete_sale_deduction_topology_allocates_across_routes_atomically() {
             &tender(8000),
             "cashier-1",
             None,
+            &[],
         )
         .unwrap();
     assert_eq!(result.status, SaleStatus::Pending);
@@ -2159,8 +2160,15 @@ fn complete_sale_with_resolved_shortfalls_rejects_underpaid_payment_splits() {
     seed_product_with_stock(&conn, "COFFEE", 10);
 
     let sale = make_single_line_sale("COFFEE", 2, 350); // total 700
-    let result =
-        s.complete_sale_with_resolved_shortfalls(&sale, None, &tender(500), "cashier-1", None, &[]);
+    let result = s.complete_sale_with_resolved_shortfalls(
+        &sale,
+        None,
+        &tender(500),
+        "cashier-1",
+        None,
+        &[],
+        &[],
+    );
 
     match result {
         Err(CoreError::Validation { field, .. }) => {
@@ -2270,8 +2278,15 @@ fn complete_sale_with_resolved_shortfalls_rejects_negative_line_qty() {
     seed_product_with_stock(&conn, "COFFEE", 10);
 
     let sale = make_single_line_sale("COFFEE", -2, 350);
-    let result =
-        s.complete_sale_with_resolved_shortfalls(&sale, None, &tender(700), "cashier-1", None, &[]);
+    let result = s.complete_sale_with_resolved_shortfalls(
+        &sale,
+        None,
+        &tender(700),
+        "cashier-1",
+        None,
+        &[],
+        &[],
+    );
 
     match result {
         Err(CoreError::Validation { field, .. }) => {
@@ -2314,6 +2329,7 @@ fn complete_sale_with_resolved_shortfalls_splits_across_locations() {
             "cashier-1",
             None,
             &[resolution],
+            &[],
         )
         .unwrap();
     // SF-01: the retry settles a captured payment — the sale must reach
@@ -2389,6 +2405,7 @@ fn complete_sale_with_resolved_shortfalls_marks_sale_completed() {
         "cashier-1",
         None,
         &[resolution],
+        &[],
     )
     .unwrap();
 
@@ -2437,6 +2454,7 @@ fn complete_sale_with_resolved_shortfalls_awards_loyalty_points() {
         "cashier-1",
         None,
         &[resolution],
+        &[],
     )
     .unwrap();
 
@@ -2469,7 +2487,15 @@ fn complete_sale_with_resolved_shortfalls_rejects_bad_allocation_sum() {
         }],
     };
     let err = s
-        .complete_sale_with_resolved_shortfalls(&sale, None, &[], "cashier-1", None, &[resolution])
+        .complete_sale_with_resolved_shortfalls(
+            &sale,
+            None,
+            &[],
+            "cashier-1",
+            None,
+            &[resolution],
+            &[],
+        )
         .unwrap_err();
     assert!(
         matches!(&err, CoreError::Validation { field, .. } if field == &"resolutions"),
@@ -2495,7 +2521,15 @@ fn complete_sale_with_resolved_shortfalls_fails_on_second_check() {
         }],
     };
     let err = s
-        .complete_sale_with_resolved_shortfalls(&sale, None, &[], "cashier-1", None, &[resolution])
+        .complete_sale_with_resolved_shortfalls(
+            &sale,
+            None,
+            &[],
+            "cashier-1",
+            None,
+            &[resolution],
+            &[],
+        )
         .unwrap_err();
     assert!(
         matches!(&err, CoreError::InsufficientStockAtLocation { .. }),
@@ -2562,7 +2596,8 @@ fn complete_sale_with_resolved_shortfalls_bom_quantity_overflow_returns_validati
 
     // No resolutions: the non-resolution BOM path runs.
     let sale = make_single_line_sale("BURGER", i64::MAX / 2, 1);
-    let result = s.complete_sale_with_resolved_shortfalls(&sale, None, &[], "cashier-1", None, &[]);
+    let result =
+        s.complete_sale_with_resolved_shortfalls(&sale, None, &[], "cashier-1", None, &[], &[]);
 
     match result {
         Err(CoreError::Validation { field, message }) => {
@@ -2639,6 +2674,7 @@ fn complete_sale_with_resolved_shortfalls_deducts_unresolved_lines_at_primary() 
             "cashier-1",
             None,
             &[resolution],
+            &[],
         )
         .unwrap();
     // SF-01: retry completion is terminal.
@@ -2683,7 +2719,15 @@ fn complete_sale_with_resolved_shortfalls_empty_resolutions_deducts_at_primary()
 
     let sale = make_single_line_sale("COFFEE", 3, 350);
     let result = s
-        .complete_sale_with_resolved_shortfalls(&sale, None, &tender(1050), "cashier-1", None, &[])
+        .complete_sale_with_resolved_shortfalls(
+            &sale,
+            None,
+            &tender(1050),
+            "cashier-1",
+            None,
+            &[],
+            &[],
+        )
         .unwrap();
     // SF-01: retry completion is terminal.
     assert_eq!(result.status, SaleStatus::Completed);
@@ -2814,6 +2858,7 @@ fn void_sale_credits_back_to_original_deduction_source() {
         &tender(2400),
         "cashier-1",
         None,
+        &[],
     )
     .unwrap();
 
@@ -3514,4 +3559,196 @@ fn finalize_sale_without_customer_leaves_spend_untouched() {
     .unwrap();
     s.finalize_sale("sp-3").unwrap();
     assert_eq!(spend_of(&conn, "cust-spend"), 0);
+}
+
+// ── Checkout promotions (PROMO-3 integration) ──────────────────────
+
+fn checkout_promo(id: &str, promo_type: &str, value_minor: i64) -> crate::Promotion {
+    crate::Promotion {
+        id: id.into(),
+        name: "Checkout Promo".into(),
+        description: String::new(),
+        promo_type: promo_type.into(),
+        value_minor,
+        min_qty: None,
+        trigger_sku: None,
+        reward_sku: None,
+        reward_qty: None,
+        starts_at: None,
+        ends_at: None,
+        min_order_minor: 0,
+        category_id: None,
+        active: true,
+        created_at: "2026-01-01T00:00:00.000Z".into(),
+        updated_at: "2026-01-01T00:00:00.000Z".into(),
+    }
+}
+
+/// Compute checkout promotions for `sale`, then run the deduction
+/// checkout with a single `tender_minor` split — the full backend
+/// sequence the scoped command performs (minus tax, which is 0 here).
+fn complete_with_promos(
+    s: &Store<'_>,
+    mut sale: Sale,
+    promos: &[crate::Promotion],
+    tender_minor: i64,
+) -> Result<crate::sale_deduction::CompleteSaleResult, crate::error::CoreError> {
+    let ids: Vec<String> = promos.iter().map(|p| p.id.clone()).collect();
+    for p in promos {
+        s.create_promotion(p).unwrap();
+    }
+    let apps = s.compute_checkout_promotions(&mut sale, &ids, chrono::Utc::now())?;
+    s.complete_sale_deduction_with_locations(
+        &sale,
+        None,
+        &[],
+        &tender(tender_minor),
+        "cashier-1",
+        None,
+        &apps,
+    )
+}
+
+#[test]
+fn checkout_promotions_reduce_total_and_persist_applications() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product_with_stock(&conn, "COFFEE", 10);
+
+    let sale = make_single_line_sale("COFFEE", 2, 350); // total 700
+    let promos = vec![checkout_promo("cp-1", "percentage", 10)];
+    let result = complete_with_promos(&s, sale.clone(), &promos, 630).unwrap();
+    assert_eq!(result.status, SaleStatus::Pending);
+
+    let stored_total: i64 = conn
+        .query_row(
+            "SELECT total_minor FROM sales WHERE id = ?1",
+            [&sale.id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(stored_total, 630, "sale row carries the promoted total");
+
+    let (discount, promotion_id): (i64, String) = conn
+        .query_row(
+            "SELECT discount_minor, promotion_id FROM promotion_applications WHERE sale_id = ?1",
+            [&sale.id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(promotion_id, "cp-1");
+    assert_eq!(discount, 70);
+
+    let paid: i64 = conn
+        .query_row(
+            "SELECT amount_minor FROM payments WHERE sale_id = ?1",
+            [&sale.id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(paid, 630);
+}
+
+#[test]
+fn checkout_promotions_reject_splits_below_reduced_total() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product_with_stock(&conn, "COFFEE", 10);
+
+    let sale = make_single_line_sale("COFFEE", 2, 350); // 700 - 10% = 630
+    let promos = vec![checkout_promo("cp-low", "percentage", 10)];
+    let err = complete_with_promos(&s, sale, &promos, 600).unwrap_err();
+    assert!(err.to_string().contains("payment"), "got {err:?}");
+}
+
+#[test]
+fn checkout_bxgy_promotion_makes_third_item_free() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product_with_stock(&conn, "COFFEE", 10);
+
+    let sale = make_single_line_sale("COFFEE", 3, 350); // 1050
+    let mut promo = checkout_promo("cp-bxgy", "buy_x_get_y", 100);
+    promo.trigger_sku = Some("COFFEE".into());
+    promo.reward_sku = Some("COFFEE".into());
+    promo.min_qty = Some(2);
+    promo.reward_qty = Some(1);
+    // Buy 2 get 1 with 3 in cart → 1 free unit = 350 off.
+    let result = complete_with_promos(&s, sale.clone(), &[promo], 700).unwrap();
+    assert_eq!(result.status, SaleStatus::Pending);
+
+    let stored_total: i64 = conn
+        .query_row(
+            "SELECT total_minor FROM sales WHERE id = ?1",
+            [&sale.id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(stored_total, 700);
+}
+
+#[test]
+fn checkout_rejects_unknown_promotion() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product_with_stock(&conn, "COFFEE", 10);
+
+    let mut sale = make_single_line_sale("COFFEE", 2, 350);
+    let err = s
+        .compute_checkout_promotions(&mut sale, &["nope".into()], chrono::Utc::now())
+        .unwrap_err();
+    assert!(
+        matches!(err, crate::error::CoreError::NotFound { ref entity, .. } if entity == &"promotion")
+    );
+}
+
+#[test]
+fn checkout_rejects_duplicate_promotion_ids() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product_with_stock(&conn, "COFFEE", 10);
+
+    let mut sale = make_single_line_sale("COFFEE", 2, 350);
+    s.create_promotion(&checkout_promo("cp-dup", "percentage", 10))
+        .unwrap();
+    let err = s
+        .compute_checkout_promotions(
+            &mut sale,
+            &["cp-dup".into(), "cp-dup".into()],
+            chrono::Utc::now(),
+        )
+        .unwrap_err();
+    assert!(err.to_string().contains("already selected"));
+}
+
+#[test]
+fn checkout_promotions_stack() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product_with_stock(&conn, "COFFEE", 10);
+
+    let sale = make_single_line_sale("COFFEE", 2, 350); // 700 → 630 → 530
+    let promos = vec![
+        checkout_promo("cp-pct", "percentage", 10),
+        checkout_promo("cp-fix", "fixed_amount", 100),
+    ];
+    complete_with_promos(&s, sale.clone(), &promos, 530).unwrap();
+
+    let stored_total: i64 = conn
+        .query_row(
+            "SELECT total_minor FROM sales WHERE id = ?1",
+            [&sale.id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(stored_total, 530);
+
+    let apps: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM promotion_applications WHERE sale_id = ?1",
+            [&sale.id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(apps, 2);
 }

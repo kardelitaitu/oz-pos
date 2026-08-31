@@ -375,6 +375,7 @@ async fn scoped_sale_deducts_from_topology_warehouse_not_pos_location() {
             tender_rate_millionths: None,
             tip_minor: None,
             service_charge_minor: None,
+            promotion_ids: None,
         },
         app.state(),
     )

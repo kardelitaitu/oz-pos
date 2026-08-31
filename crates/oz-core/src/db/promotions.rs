@@ -9,6 +9,7 @@ next: extend update validation | perf: N/A
 use rusqlite::params;
 
 use crate::error::CoreError;
+use crate::sale::Sale;
 use crate::{Promotion, PromotionApplication};
 
 use super::Store;
@@ -376,6 +377,80 @@ impl Store<'_> {
         )?;
         let rows = stmt.query_map(params![sale_id], row_to_promotion_application)?;
         rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// Engine-apply the given promotions to an in-memory checkout sale.
+    ///
+    /// Checkout integration (Phase-2 promotion work): the caller builds the
+    /// post-tax sale, calls this BEFORE constructing payment splits, and
+    /// passes the returned applications into the checkout method so the
+    /// rows persist inside the checkout transaction. Each promotion is
+    /// computed against the progressively reduced total (stacking), the
+    /// same engine semantics as `apply_promotion_to_sale`, and `sale.total`
+    /// is reduced in place.
+    ///
+    /// Guards: unknown promotion → NotFound; a duplicate id in
+    /// `promotion_ids` → Validation; a computed discount that would underflow
+    /// the total → Validation (the engine already clamps to the base).
+    pub fn compute_checkout_promotions(
+        &self,
+        sale: &mut Sale,
+        promotion_ids: &[String],
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<PromotionApplication>, CoreError> {
+        let mut applications = Vec::with_capacity(promotion_ids.len());
+        let mut applied: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for promotion_id in promotion_ids {
+            if !applied.insert(promotion_id.as_str()) {
+                return Err(CoreError::Validation {
+                    field: "promotion_id",
+                    message: "promotion already selected for this checkout".into(),
+                });
+            }
+            let promo = self
+                .get_promotion(promotion_id)?
+                .ok_or_else(|| CoreError::NotFound {
+                    entity: "promotion",
+                    id: promotion_id.to_owned(),
+                })?;
+
+            // Category scope resolution: SKU -> product category. Only
+            // consulted when the promotion carries a category_id.
+            let category_of = |sku: &str| {
+                self.get_product(sku)
+                    .ok()
+                    .flatten()
+                    .and_then(|p| p.product.category_id)
+            };
+            let discount_minor = crate::compute_discount(&promo, sale, now, category_of)?;
+
+            let remaining = sale
+                .total
+                .minor_units
+                .checked_sub(discount_minor)
+                .ok_or_else(|| CoreError::Validation {
+                    field: "discount_minor",
+                    message: "promotion discount overflows the sale total".into(),
+                })?;
+            sale.total = crate::foundation::Money {
+                minor_units: remaining,
+                currency: sale.total.currency,
+            };
+
+            applications.push(PromotionApplication {
+                id: uuid::Uuid::now_v7().to_string(),
+                promotion_id: promotion_id.to_owned(),
+                sale_id: sale.id.clone(),
+                discount_minor,
+                description: format!(
+                    "{}: {} off",
+                    promo.name,
+                    crate::format_minor(discount_minor, sale.total.currency)
+                ),
+                created_at: now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            });
+        }
+        Ok(applications)
     }
 }
 

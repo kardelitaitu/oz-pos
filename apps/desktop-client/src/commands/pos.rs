@@ -568,6 +568,11 @@ pub struct CompleteSaleArgs {
     pub tip_minor: Option<i64>,
     /// Service-charge amount in minor units collected at checkout (default 0).
     pub service_charge_minor: Option<i64>,
+    /// PROMO-3 checkout integration: promotions to engine-apply against
+    /// the post-tax sale. Each reduces the payable total (stacking) and
+    /// the application rows persist inside the checkout transaction;
+    /// payment splits are validated against the reduced total.
+    pub promotion_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -598,6 +603,9 @@ pub struct CompleteSaleScopedArgs {
     pub tip_minor: Option<i64>,
     /// Service-charge amount in minor units collected at checkout (default 0).
     pub service_charge_minor: Option<i64>,
+    /// PROMO-3 checkout integration: promotions to engine-apply against
+    /// the post-tax sale (see `CompleteSaleArgs::promotion_ids`).
+    pub promotion_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -689,6 +697,9 @@ pub struct CompleteSaleWithResolvedShortfallsArgs {
     pub tip_minor: Option<i64>,
     /// Service-charge amount in minor units collected at checkout (default 0).
     pub service_charge_minor: Option<i64>,
+    /// PROMO-3 checkout integration: promotions to engine-apply against
+    /// the post-tax sale (see `CompleteSaleArgs::promotion_ids`).
+    pub promotion_ids: Option<Vec<String>>,
 }
 
 /// Complete a sale with cashier-resolved shortfalls (split fulfillment).
@@ -743,7 +754,6 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
     }
 
     let line_count = cart.line_count();
-    let total = cart.total();
 
     let mut sale = oz_core::Sale::from_cart_with_user(&cart, Some(session.user_id.clone()))
         .ok_or_else(|| AppError::Invalid("cart total overflowed i64".into()))?;
@@ -777,6 +787,15 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
             oz_core::Settings::get_tax_rounding_mode(&db)?,
         )?;
 
+        // PROMO-3 checkout integration: engine-apply the selected
+        // promotions against the post-tax sale; sale.total is reduced in
+        // place and the application rows persist inside the checkout tx.
+        let checkout_applications = store.compute_checkout_promotions(
+            &mut sale,
+            args.promotion_ids.as_deref().unwrap_or(&[]),
+            chrono::Utc::now(),
+        )?;
+
         let splits = if let Some(ref splits) = args.payment_splits {
             splits.clone()
         } else {
@@ -800,8 +819,12 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
             &session.user_id,
             Some(&session.terminal_id),
             &args.resolutions,
+            &checkout_applications,
         )?
     };
+
+    // Promotion-reduced payable (cart.total() would ignore promotions).
+    let total = Some(sale.total.clone());
 
     tracing::info!(%sale_id, store_id = %session.store_id, "sale completed with resolved shortfalls");
 
@@ -1035,6 +1058,15 @@ pub async fn complete_sale_scoped(
             }
         }
 
+        // PROMO-3 checkout integration: engine-apply the selected
+        // promotions against the post-tax sale; sale.total is reduced in
+        // place and the application rows persist inside the checkout tx.
+        let checkout_applications = store.compute_checkout_promotions(
+            &mut sale,
+            args.promotion_ids.as_deref().unwrap_or(&[]),
+            chrono::Utc::now(),
+        )?;
+
         let splits = if let Some(ref splits) = args.payment_splits {
             splits.clone()
         } else {
@@ -1049,12 +1081,24 @@ pub async fn complete_sale_scoped(
         };
 
         if stock_locations.is_empty() {
-            store.complete_sale_deduction(
+            // Same primary-location resolution the legacy
+            // complete_sale_deduction wrapper performs internally —
+            // routed through with_locations so checkout promotions
+            // persist on this branch too.
+            let primary = oz_core::location_resolver::resolve_primary_location(
+                &db,
+                deduction_instance_id,
+                None,
+            )
+            .unwrap_or_else(|_| oz_core::location_resolver::get_default_location_id());
+            store.complete_sale_deduction_with_locations(
                 &sale,
                 Some(deduction_instance_id),
+                &[primary],
                 &splits,
                 &session.user_id,
                 Some(&session.terminal_id),
+                &checkout_applications,
             )?
         } else {
             store.complete_sale_deduction_with_locations(
@@ -1064,11 +1108,13 @@ pub async fn complete_sale_scoped(
                 &splits,
                 &session.user_id,
                 Some(&session.terminal_id),
+                &checkout_applications,
             )?
         }
     };
 
-    let total = cart.total();
+    // Promotion-reduced payable (cart.total() would ignore promotions).
+    let total = Some(sale.total.clone());
     tracing::info!(%sale_id, ?total, line_count, store_id = %session.store_id, "sale completed (scoped)");
 
     // ── Event publishing (no DB lock held) ────────────────────────
