@@ -365,6 +365,31 @@ impl Store<'_> {
         display_name: &str,
         role_id: &str,
     ) -> Result<User, CoreError> {
+        // F-1: the user row and its default assignment are one logical
+        // write — a failure between the two statements must not strand a
+        // user without its assignment (repo rule: writes run in
+        // transactions).
+        let tx = self.conn.unchecked_transaction()?;
+        let user = Store::new(&tx).create_user_in_tx(username, pin_hash, display_name, role_id)?;
+        tx.commit()?;
+        Ok(user)
+    }
+
+    /// The body of [`Self::create_user`], writing on `self.conn` WITHOUT
+    /// opening a transaction — the caller must already hold one on this
+    /// connection. `create_user_with_profile` needs this: calling the
+    /// standalone method inside its profile tx issued a nested BEGIN
+    /// ("cannot start a transaction within a transaction"), silently
+    /// breaking every staff creation with a profile on both clients
+    /// (found 2026-08-31; same shape as the `finalize_sale_in_tx`
+    /// precedent from the webhook round).
+    pub(crate) fn create_user_in_tx(
+        &self,
+        username: &str,
+        pin_hash: &str,
+        display_name: &str,
+        role_id: &str,
+    ) -> Result<User, CoreError> {
         let username = username.trim().to_lowercase();
         if username.is_empty() {
             return Err(CoreError::Validation {
@@ -412,38 +437,30 @@ impl Store<'_> {
         let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
-        // F-1: the user row and its default assignment are one logical
-        // write — a failure between the two statements must not strand a
-        // user without its assignment (repo rule: writes run in
-        // transactions).
-        let tx = self.conn.unchecked_transaction()?;
-
-        let result = tx.execute(
+        self.conn.execute(
             "INSERT INTO users (id, username, pin_hash, display_name, role_id, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![id, username, pin_hash, display_name.trim(), role_id, now, now],
-        );
-        match result {
-            Err(rusqlite::Error::SqliteFailure(e, _))
-                if e.code == rusqlite::ErrorCode::ConstraintViolation =>
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::SqliteFailure(ref err, _)
+                if err.code == rusqlite::ErrorCode::ConstraintViolation =>
             {
-                return Err(CoreError::Conflict {
+                CoreError::Conflict {
                     entity: "user",
                     field: "username",
-                });
+                }
             }
-            Err(e) => return Err(e.into()),
-            Ok(_) => {}
-        }
+            other => other.into(),
+        })?;
 
         // Every user gets their single effective assignment (ADR #35 D5 /
         // spec 0048): a default global-mode assignment mirroring the role.
-        tx.execute(
+        self.conn.execute(
             "INSERT INTO assignments (user_id, role_id, scope_mode, branch_scope, workspace_scope)
              VALUES (?1, ?2, 'global', 'all', 'all')",
             params![id, role_id],
         )?;
-        tx.commit()?;
 
         Ok(User {
             id,

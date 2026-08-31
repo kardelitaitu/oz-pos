@@ -361,7 +361,7 @@ impl Store<'_> {
         profile.validate()?;
         let tx = self.conn.unchecked_transaction()?;
         let store = Store::new(&tx);
-        let user = store.create_user(username, pin_hash, display_name, role_id)?;
+        let user = store.create_user_in_tx(username, pin_hash, display_name, role_id)?;
         store.write_user_profile(&user.id, profile)?;
         if let Some(spec) = assignment {
             store.write_assignment_scope(&user.id, role_id, spec)?;
