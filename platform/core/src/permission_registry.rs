@@ -2,10 +2,10 @@
 //! permission key means, which family it belongs to, and whether it is
 //! sensitive (ADR #35 D3 / spec 0046).
 /*
-last audited 31-08-26 by RSA-Agent (user-role campaign, Section C)
+last audited 31-08-26 by RSA-Agent (user-role campaign, FINAL verification pass)
 crate: platform-core | status: SAFE | lint: CLEAN
-findings: exemplary — 83-key registry with family/sensitivity classification per ADR #35 D2/D3 (14 sensitive keys: voids, refunds, settlement, role mgmt, staff deletion, identity/payroll/notes reads, report+audit export, giftcard issue, security, data export); validate_grant is fail-closed (unregistered key, sensitive-under-family-wildcard, global * reserved for the Owner seed — allow_global=false at the sole write-path call site db/staff.rs:131); malformed edges (":*", "*:*") fall to UnknownKey; bidirectional inventory pinned by 62 green tests
-next: cross-check in Section D — sensitivity is a creation-time invariant only; the has_permission resolver is sensitivity-blind, so a hand-edited DB role row with "staff:*" would pass enforcement unless the gate re-validates grants | perf: linear registry scan — fine at 83 entries
+findings: exemplary — 83-key registry with family/sensitivity classification per ADR #35 D2/D3 (14 sensitive keys); validate_grant fail-closed (unregistered key, sensitive-under-family-wildcard, global * reserved for the Owner seed); G-3 CLOSED: staff:delete is documented RESERVED (no enforcement consumer; deactivation rides staff:update; any future hard-delete surface must gate on this key) in both the registry entry and the rbac.rs catalog constant; the Section-D verification held — hand-edited DB rows carrying a family wildcard for a sensitive key still deny at the registry-aware gate (db/staff.rs:122-125), so the creation-time-only sensitivity invariant has an enforcement-side backstop
+next: none — campaign closed for this file | perf: linear registry scan — fine at 83 entries
 */
 //!
 //! Growing the system means adding keys here — never editing roles. Sensitive

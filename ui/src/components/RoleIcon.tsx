@@ -1,7 +1,7 @@
 /*
-last audited 31-08-26 by RSA-Agent (user-role campaign, Section H)
-findings: display drift — doc comment promises "admin: Shield" but the switch has NO admin case (normalizeRole yields admin, falls to default staff icon); auditor/owner/manager correct
-next: batch into the fix-order phase | perf: n/a (presentational)
+last audited 31-08-26 by RSA-Agent (user-role campaign, FINAL verification pass)
+findings: H-2 CLOSED — admin renders the promised Shield; all five variants (owner/admin/manager/auditor/staff-default) present and fail-closed; 10 RoleIcon tests green
+next: none — campaign closed | perf: n/a (presentational)
 */
 import { normalizeRole } from '@/utils/role';
 

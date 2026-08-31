@@ -1,9 +1,9 @@
 //! Staff management — User CRUD + Role CRUD.
 /*
-last audited 31-08-26 by RSA-Agent (user-role campaign, Section F)
+last audited 31-08-26 by RSA-Agent (user-role campaign, FINAL verification pass)
 crate: oz-core | status: SAFE | lint: CLEAN
-findings: exemplary core — parameterized SQL throughout (no injection surface); centralized gate authorize_with is registry-aware deny-by-default (unregistered required key, missing/inactive user, unresolvable role, scope mismatch all deny); STAFF-07 rate limiter (account/device/global + exponential backoff, persisted, push-over re-check); preset upsert-sync converges builtin roles; assignments FK ON DELETE CASCADE armed via PRAGMA foreign_keys=ON at migrate time (migrations.rs:139); evidence 63 unit + 25 integration tests green
-next: report-only F-1 — create_user and update_user write users + assignments as separate statements with NO rusqlite transaction (repo hard rule: all writes in transactions); failure window strands a user without its default assignment (gate falls back to users.role_id so no security impact, integrity drift only); INFO — staff-quota count-then-insert TOCTOU is serialized by the process-wide session Mutex, verify the cloud path in Section G | perf: indexed lookups, fine
+findings: exemplary core, F-1 and G-2 CLOSED — create_user/update_user now wrap the users + assignments writes in unchecked_transaction (established idiom) and validate role_id existence with a typed Validation error before any write (all five callers inherit: desktop/tablet staff.rs, cloud users.rs, CLI user.rs, profile helper; unseeded paths fail closed instead of stranding a zombie); parameterized SQL throughout; authorize_with is registry-aware deny-by-default and still enforces registered-grants + sensitive-keys-never-family-wildcard + Owner-only global * (db/staff.rs:122-125); STAFF-07 rate limiter intact; assignments FK CASCADE armed at migrations.rs:139; role seeding precedes user creation on interactive paths (setup.rs:102, desktop/tablet staff.rs seed call); evidence: 74 staff tests green incl. the two G-2 guards
+next: none — campaign closed for this file | perf: indexed lookups, fine
 */
 
 use rusqlite::params;

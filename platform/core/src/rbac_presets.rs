@@ -1,9 +1,8 @@
 /*
-last audited 31-08-26 by RSA-Agent (user-role campaign, Section B)
+last audited 31-08-26 by RSA-Agent (user-role campaign, FINAL verification pass)
 crate: platform-core | status: SAFE | lint: CLEAN
-findings: static data tables only (no unsafe/unwrap/expect, no panics beyond format!) — six presets match ADR #35 taxonomy (Owner=* wildcard; Manager broad; Staff checkout-only; Admin explicit, never wildcard, no staff:delete; Auditor read-only; Custom empty) pinned by 20 preset tests incl. retired-role and no-wildcard assertions; ALL_ENFORCED (83 keys) bidirectionally anchored to the permission registry by the 62-test inventory suite — both green
-next: report-only finding — TERMINALS_READ is enforced+registered but granted by NO preset (only Owner's "*"), so Manager/Admin can register/edit/delete terminals yet fail the 7 gated read commands (list/get/ping/overrides/profiles/device-binding, desktop terminals.rs:176-316); confirm against the ADR #41 entitlement matrix whether intended or drift
-perf: n/a — compile-time constants
+findings: static data tables only (no unsafe/unwrap/expect) — B-1 CLOSED: Manager and Admin presets now grant terminals:read explicitly (view follows manage, never a family wildcard), pinned by the terminal_read_follows_terminal_manage_b1 test alongside the six ADR #35 presets (Owner=*; Manager broad; Staff checkout-only; Admin explicit, never wildcard, no staff:delete; Auditor read-only; Custom empty); ALL_ENFORCED (83 keys) still bidirectionally anchored to the registry by the 62-test inventory suite; evidence: 317 + 4 platform-core tests green
+next: none — campaign closed for this file | perf: n/a — compile-time constants
 */
 //! Built-in role presets and the enforced-permission inventory for
 //! `platform_core::rbac` — the static authorization data tables,
@@ -16,9 +15,9 @@ perf: n/a — compile-time constants
 //! Invariants: the permission_registry inventory test fails if these
 //! tables and the registry drift apart.
 
+use super::RolePreset;
 use super::builtin_roles;
 use super::permissions;
-use super::RolePreset;
 /// All built-in role presets bundled together for bulk seeding.
 pub const ROLE_PRESETS: &[RolePreset] = &[
     RolePreset {

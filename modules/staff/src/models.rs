@@ -1,8 +1,8 @@
 /*
-last audited 31-08-26 by RSA-Agent (user-role campaign, Section E)
+last audited 31-08-26 by RSA-Agent (user-role campaign, FINAL verification pass)
 crate: modules-staff | status: SAFE | lint: CLEAN
-findings: MSL-6 carried unfixed — builtin_roles::STAFF doc (line 143) still claims "Manager-level access minus settings" while the authoritative preset (platform-core rbac_presets, 40+ negative assertions) is checkout-only; one-line doc fix pending; NEW INFO — builtin_roles here lists 4 of the 6 platform ids (no ADMIN/AUDITOR) and test fns at file top-level (line 235+) sit outside mod tests, both convention drift; otherwise exemplary: has_permission/permission_keys delegate to platform-core rbac fail-closed (malformed JSON => empty => authorize nothing, test-pinned), UserId UUID v7
-next: batch the STAFF doc fix + top-level test relocation in the fix-order phase | perf: N/A
+findings: E-1 / MSL-6 CLOSED — builtin_roles::STAFF doc now states checkout-only (preset-pinned) and cross-references the authoritative platform-core taxonomy; accepted convention drift remains: builtin_roles here lists 4 of the 6 platform ids (ADMIN/AUDITOR unused by this module's seeds — deliberate subset, documented) and top-level test fns at the file bottom sit outside mod tests (cosmetic; all 52 tests green via the module target)
+next: none — campaign closed for this file; optional cosmetic relocation of top-level tests into mod tests in a future chore pass | perf: N/A
 */
 
 //! Staff & Role domain models.

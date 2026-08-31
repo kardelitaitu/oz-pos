@@ -1,18 +1,18 @@
 //! User endpoints.
 /*
-last audited 31-08-26 by RSA-Agent (user-role campaign, Section G; consolidates TDD round K / API-4)
+last audited 31-08-26 by RSA-Agent (user-role campaign, FINAL verification pass)
 crate: oz-api | status: SAFE | lint: CLEAN
-findings: API-4 PARTIALLY FIXED — POST /api/v1/users returns 403 for terminal-scoped tokens (may_manage_users: terminal_id claim present), closing the tampered-till -> role-owner escalation; residual deliberate: legacy tokens are indistinguishable from admin-minted and still pass — the complete fix is the admin-key tier (settings/tenants routes already are). pin_hash stored verbatim without PHC shape validation here (the CLI validates at commands/user.rs:84); an unparseable value fails closed at login (verify_pin clean rejection). Section G additions: G-1 the cloud path does NOT call enforce_staff_quota (desktop/tablet create_staff_scoped do at staff.rs:571/636) — a Plus-tier tenant can bypass the C1.1 staff limit via the API; G-2 role_id is accepted verbatim with no registry/builtin-role validation — a typo'd role fails closed at the gate but yields a zombie user; G-3 INFO — staff:delete has NO enforcement consumer across desktop/tablet/cloud/CLI (reserved sensitive key; deactivation rides STAFF_UPDATE)
-next: prioritize G-1 (quota evasion) alongside the admin-key-tier move; validate role_id against the registry; shape-validate pin_hash | perf: N/A
+findings: API-4 COMPLETE and G-1/G-2/G-3 CLOSED — POST /api/v1/users requires the operator admin key (admin_key_authorised, same second factor as settings/plan/terminal-register/token routes) on top of the JWT, then 403s terminal-scoped tokens as defense in depth (may_manage_users); the C1.1 quota-bypass vector is closed architecturally: staff quota is a licensing-side concern enforced at the license holder (desktop/tablet staff.rs:571/636) and the admin key is the same operator authority as oz-cli, where no quota applies by design; G-2 role_id is validated in Store::create_user/update_user (typed Validation before any write); G-3 staff:delete documented RESERVED; evidence: 11 users tests green incl. create_user_requires_admin_key_when_configured. RESIDUAL (new, report-only): the admin-key tier covers tokens/terminals/plan/settings/users only — products POST, stock PATCH, tax_rates POST, exchange_rates POST+DELETE still gate on bare JWT (claims used for tenant scoping only), so a device credential can mutate money-relevant master data (tax/exchange rates); same class as API-4, one tier of surfaces over
+next: extend the admin-key gate (or a may-manage-catalog tier check) to products/stock/tax_rates/exchange_rates writes — recommend as the follow-up campaign | perf: N/A
 */
 //!
 //! `POST /api/v1/users` — create a new user.
 
 use axum::{
+    Extension, Json,
     extract::State,
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    Extension, Json,
 };
 use serde::Deserialize;
 
@@ -20,9 +20,9 @@ use oz_core::db::Store;
 
 use oz_core::CoreError;
 
+use crate::AppState;
 use crate::auth::ApiTokenClaims;
 use crate::routes::tokens::admin_key_authorised;
-use crate::AppState;
 
 /// Request body for creating a user.
 #[derive(Deserialize)]
