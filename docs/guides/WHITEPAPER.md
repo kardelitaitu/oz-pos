@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: "Implemented in Rust using the embedded-hal traits" -> oz-hal uses #[async_trait] async traits (`BarcodeScanner`, `ReceiptPrinter`, `CashDrawer`) and a `DriverRegistry`; no universal `Device::connect/read/write` API · otherwise architectural prose holds (Rust + Tauri v2 + Lua via rlua + SQLite + optional PostgreSQL sync) · re-audited 2026-08-08 by docs-auditor: rlua -> mlua, crate list completed to 11 (oz-api/oz-notification/oz-plugin), Android minSdk 26, RocksDB/LMDB claim corrected to SQLite offline_queue outbox -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: "Implemented in Rust using the embedded-hal traits" -> oz-hal uses #[async_trait] async traits (`BarcodeScanner`, `ReceiptPrinter`, `CashDrawer`) and a `DriverRegistry`; no universal `Device::connect/read/write` API · otherwise architectural prose holds (Rust + Tauri v2 + Lua via rlua + SQLite + optional PostgreSQL sync) · re-audited 2026-08-08 by docs-auditor: rlua -> mlua, crate list completed to 11 (oz-api/oz-notification/oz-plugin), Android minSdk 26, RocksDB/LMDB claim corrected to SQLite offline_queue outbox · 31-08: removed 'NFC' device claim (no NFC trait/driver exists); crate list 11 -> 13 (+oz-crypto, +oz-media); HAL async-trait list 3 -> 6 (+CustomerDisplay, WeightScale, EdcTerminal) -->
 
 # Whitepaper: OZ-POS Software Framework
 
@@ -39,7 +39,7 @@ Every crate in the workspace follows the `oz-*` prefix, making the ecosystem imm
 ```
 oz-pos          →  root workspace / meta-crate
 oz-core         →  transaction engine & data models
-oz-hal          →  hardware abstraction layer (barcode, printer, NFC)
+oz-hal          →  hardware abstraction layer (barcode, printer, drawer, display, scale, EDC)
 oz-lua          →  embedded Lua scripting runtime (mlua)
 oz-security     →  encryption, secrets, PCI-DSS helpers
 oz-payment      →  payment processor abstraction (Stripe, Square, QRIS, mock)
@@ -49,6 +49,8 @@ oz-api          →  HTTP API server (axum)
 oz-notification →  email & push notification dispatching
 oz-plugin       →  plugin sandbox & lifecycle (Lua scripting bridge)
 oz-cli          →  command-line tools (migrations, backup, export)
+oz-crypto       →  AES-256-GCM encryption helpers (data at rest)
+oz-media        →  image processing (thumbnails, compression, auto-crop) — stubs
 ```
 
 The `oz-` prefix is short, memorable, and signals: *this is part of the wizard's toolkit.*
@@ -79,7 +81,7 @@ The `oz-` prefix is short, memorable, and signals: *this is part of the wizard's
 | **iPad** | iPadOS (ARM) | Premium touch UI, Apple Pay integration, high‑resolution display. |
 
 **Hardware Abstraction Layer (HAL):**
-- Implemented in Rust using `#[async_trait]` async traits (`BarcodeScanner`, `ReceiptPrinter`, `CashDrawer`), allowing drivers for barcode scanners, receipt printers, NFC readers, and payment terminals to be swapped seamlessly.
+- Implemented in Rust using `#[async_trait]` async traits (`BarcodeScanner`, `ReceiptPrinter`, `CashDrawer`, `CustomerDisplay`, `WeightScale`, `EdcTerminal`), allowing drivers for barcode scanners, receipt printers, cash drawers, customer displays, weight scales, and EDC payment terminals to be swapped seamlessly.
 - Provides a `DriverRegistry` for lookup/injection per device category, plus programmable mock drivers for testing.
 
 ---
@@ -137,7 +139,7 @@ OZ-POS is more than a POS system — it is a **platform**. Like the wizard behin
 
 > *Small codebase. Limitless possibilities.*
 
-> last audited 09-08-26 by buffy
+> last audited 31-08-26 by docs-auditor
 > audit: Phase 1 Core Architecture & API Docs Audit
 
 > status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
