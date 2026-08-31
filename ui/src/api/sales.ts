@@ -202,6 +202,37 @@ export const previewPromotedTotalScoped = (
 ): Promise<PreviewPromotedTotalResult> =>
   loggedInvoke<PreviewPromotedTotalResult>('preview_promoted_total_scoped', { sessionToken, args });
 
+/** One cart line for the lines-based promotion preview (already in cart currency). */
+export interface PreviewLineArg {
+  sku: string;
+  qty: number;
+  unitPriceMinor: number;
+  /** ISO-4217 code of the unit price currency. */
+  unitPriceCurrency: string;
+}
+
+/** Arguments for previewing the promotion-reduced payable from raw lines. */
+export interface PreviewPromotedTotalFromLinesArgs {
+  /** Cart lines, in cart order (already in cart currency). */
+  lines: PreviewLineArg[];
+  /** Cart discount percent already applied client-side (0-100). */
+  discountPercent: number;
+  /** Promotions to preview, in application order (they stack). */
+  promotionIds: string[];
+}
+
+/**
+ * PROMO-3 checkout integration: preview the promotion-reduced payable from
+ * raw cart lines — no backend cart needed. The client materializes its cart
+ * only at the confirm step, so the payment modal uses this to show the
+ * engine-exact promoted total and let split payments be entered against it.
+ */
+export const previewPromotedTotalFromLinesScoped = (
+  sessionToken: string,
+  args: PreviewPromotedTotalFromLinesArgs
+): Promise<PreviewPromotedTotalResult> =>
+  loggedInvoke<PreviewPromotedTotalResult>('preview_promoted_total_from_lines_scoped', { sessionToken, args });
+
 // ── Shortfall Resolution — complete_sale_with_resolved_shortfalls ──
 
 export interface LocationAllocation {
