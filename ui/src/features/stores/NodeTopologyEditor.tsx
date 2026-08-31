@@ -4984,7 +4984,10 @@ export default function NodeTopologyEditor({
   /** Compute live telemetry for a node from SettingsContext. */
   const getTelemetry = useCallback((node: TopologyNodeData): { badge: string; status: 'online' | 'warning' | 'offline' } | null => {
     if (node.type === 'store') {
-      return { badge: settings.store.name ? 'Active' : 'Unconfigured', status: settings.store.name ? 'online' : 'warning' };
+      // The node's own name is the Branch Location display name — if it has
+      // one, the location is active regardless of whether the backend store
+      // profile settings have been loaded yet.
+      return { badge: node.name ? 'Active' : 'Unconfigured', status: node.name ? 'online' : 'warning' };
     }
     if (node.type === 'workspace') {
       const typeKey = (node.metadata?.['typeKey'] as string) ?? 'store-pos';
