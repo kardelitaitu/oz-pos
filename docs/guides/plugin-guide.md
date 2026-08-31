@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-31 · Buffy-Agent · status: SYNCED (PLG-10 parity rewrite) · verified against crates/oz-plugin (manager.rs, manifest.rs, loader.rs, package.rs) and crates/oz-lua (lib.rs, bridge.rs) · corrected: oz table surface (get_time/log/apply_discount/register_hook/on/off only), mandatory required_permissions + manifest validation (kebab-case name, strict SemVer, unknown-permission rejection), register_hook(string) signature, per-plugin env isolation, HAL traits table (no NfcReader), oz-cli commands (no run-script/validate-plugins), sandbox limits (100k instr / 10 MB) -->
+<!-- Audit stamp: 2026-07-31 · Buffy-Agent · status: SYNCED (PLG-10 parity rewrite) · verified against crates/oz-plugin (manager.rs, manifest.rs, loader.rs, package.rs) and crates/oz-lua (lib.rs, bridge.rs) · corrected: oz table surface (get_time/log/apply_discount/register_hook/on/off only), mandatory required_permissions + manifest validation (kebab-case name, strict SemVer, unknown-permission rejection), register_hook(string) signature, per-plugin env isolation, HAL traits table (no NfcReader), oz-cli commands (no run-script/validate-plugins), sandbox limits (100k instr / 10 MiB) · RE-AUDITED 31-08 by docs-auditor: re-verified limits against crates/oz-lua (INSTRUCTION_LIMIT=100_000 at lib.rs:53, 10 MiB via set_memory_limit) — accurate; PLG-11 (cbe01ace) hardened the internal SQL validator (ensure_no_quoted_identifiers) but that API is Rust-side (manager namespace setup), not a plugin Lua global, so no guide change needed; aligned '10 MB' -> '10 MiB' to match the oz-lua README + the actual 10*1024*1024 constant; normalized the non-standard 3-line footer to the single-line standard -->
 
 # OZ-POS Plugin System
 
@@ -81,7 +81,7 @@ Lua scripts run in a hardened sandbox:
   and `os.exit` are `nil`; read-only `os.date`/`os.time`/`os.clock` remain
 - **Instruction limit**: scripts abort after 100 000 Lua instructions
   (prevents infinite loops)
-- **Memory limit**: the Lua VM is capped at 10 MB (prevents memory exhaustion)
+- **Memory limit**: the Lua VM is capped at 10 MiB (prevents memory exhaustion)
 - **Isolated environments**: each plugin loads into its own `_ENV`, with `_G`
   pointed at that environment — a plugin writing `_G.foo = ...` cannot affect
   any other plugin
@@ -171,7 +171,7 @@ Key requirements:
 ## Security
 
 - Lua scripts run in a sandbox with no filesystem or network access
-- CPU time and memory are limited (100 000 instructions / 10 MB)
+- CPU time and memory are limited (100 000 instructions / 10 MiB)
 - Each plugin loads into its own isolated environment; hooks are owner-tagged
 - Plugins can only ever unsubscribe their own hooks/callbacks
 - Manifests are validated: kebab-case plugin IDs, strict SemVer, recognised
@@ -207,8 +207,5 @@ cargo test -p oz-plugin --lib
 | `attempt to call a nil value` on `oz.*` | The plugin lacks the permission for that binding |
 | Hook not firing | `oz.register_hook` needs `cart:read`; check the event name and function name |
 
-> last audited 09-08-26 by buffy
-> audit: Phase 1 Core Architecture & API Docs Audit
-
-> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
+> last audited 31-08-26 by docs-auditor
 
