@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (drift repaired) · FIXED 31-08: crate tree +oz-crypto/oz-media/oz-notification/oz-plugin; rlua->mlua; oz-payment +Paddle (tree + prose); HAL device list 'NFC' -> real (barcode/printer/drawer/display/scale/EDC); migrations 98 -> 19 SQL files (131 squashed into init.sql); IPC endpoints 618 -> 505 unique (385 desktop + 369 tablet, 49 modules) · NOTE: this condensed guides/ARCHITECTURE.md coexists with a fuller root ARCHITECTURE.md (reorg 28147fe4 copied an archived version here); README links to THIS file · verified against HEAD Cargo.toml + generate_handler! + crates/oz-core/migrations/ · 31-08 (dc07f32a/bb7ce92d): Registry + platform-startup sections updated for the new apply_config()/HardwareConfig bootstrap path (discover() is auto-probe, not startup registration) -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (drift repaired) · FIXED 31-08: crate tree +oz-crypto/oz-media/oz-notification/oz-plugin; rlua->mlua; oz-payment +Paddle (tree + prose); HAL device list 'NFC' -> real (barcode/printer/drawer/display/scale/EDC); migrations 98 -> 19 SQL files (131 squashed into init.sql); IPC endpoints 618 -> 505 unique (385 desktop + 369 tablet, 49 modules) · NOTE: this condensed guides/ARCHITECTURE.md coexists with a fuller root ARCHITECTURE.md (reorg 28147fe4 copied an archived version here); README links to THIS file · verified against HEAD Cargo.toml + generate_handler! + crates/oz-core/migrations/ · 31-08 (dc07f32a/bb7ce92d): Registry + platform-startup sections updated for the new apply_config()/HardwareConfig bootstrap path (discover() is auto-probe, not startup registration) · 31-08: module count 9 -> 14 (all wired in platform-startup; added giftcards/kitchen/loyalty/promotions/purchasing) -->
 
 # OZ-POS – Codebase Architecture
 
@@ -226,8 +226,8 @@ Each app crate has an identical command surface, wired through `platform-startup
 - **platform-sync**: Offline-first sync engine with `SyncTransport` (reqwest-based HTTP push/pull), conflict detection, retry logic.
 
 ### modules/ (Business Modules)
-9 modules wired via the event bus in `platform-startup`:
-- **sales**, **inventory**, **crm**, **tax**, **settings**, **staff**, **reporting**, **terminal**, **currency**
+14 modules wired via the event bus in `platform-startup`:
+- **sales**, **inventory**, **crm**, **tax**, **settings**, **staff**, **reporting**, **terminal**, **currency**, **giftcards**, **kitchen**, **loyalty**, **promotions**, **purchasing**
 - Each module registers event handlers (e.g. `SaleCompleted` → stock decrement, audit log, report update).
 - **Currency module** (`modules/currency`): Manages exchange rates, currency listings, and currency-format settings via `CurrencyRepository`. Provides `ExchangeRateRow`, `CurrencyDto`, `CurrencyError` (with `Platform`, `Db`, `Validation`, `NotFound` variants), and 15+ typed DB methods. All settings delegate to `platform_core::settings::Settings`. The original 15 `oz-core` Store wrappers are `#[deprecated]` in favour of direct `CurrencyRepository` calls.
 
