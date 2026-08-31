@@ -1,8 +1,8 @@
 ---
 title: Peran Pengguna
 description: Lima preset izin menentukan apa yang bisa dilakukan dan dilihat setiap akun staf.
-category: guides
-order: 9
+category: gettingStarted
+order: 5
 updated: "2026-08-16"
 ---
 
