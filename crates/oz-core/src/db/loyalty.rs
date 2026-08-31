@@ -881,9 +881,14 @@ pub(crate) fn reverse_loyalty_on_refund(
         )
         .map_err(CoreError::Db)?;
     let headroom = earned_points - already_reversed;
-    let proportional = if sale_total_minor > 0 {
-        ((earned_points as f64) * (refund_total_minor as f64) / (sale_total_minor as f64)).round()
-            as i64
+    // Integer round-half-up in i128 — the same no-floats-on-money
+    // arithmetic as the CRM-06 base-currency conversion in refunds.rs.
+    // (f64 would silently quantize beyond 2^53 and diverge from the
+    // house policy that points, like money, never touch a float.)
+    let proportional = if sale_total_minor > 0 && refund_total_minor > 0 {
+        let num = i128::from(earned_points) * i128::from(refund_total_minor);
+        let den = i128::from(sale_total_minor);
+        ((num * 2 + den) / (den * 2)) as i64
     } else {
         0
     };
