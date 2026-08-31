@@ -1024,3 +1024,31 @@
   font-size: var(--text-xs);
   color: var(--color-fg-tertiary);
 }
+
+/* PROMO-3: engine-applied promotion discounts under the Total Due row.
+   Amounts come from the lines-based engine preview (cart currency). */
+.payment-promotions-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 0 var(--space-5) var(--space-3);
+}
+
+.payment-promotions-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--text-sm);
+  color: var(--color-success);
+}
+
+.payment-promotions-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-promotions-amount {
+  flex-shrink: 0;
+  font-weight: 500;
+}

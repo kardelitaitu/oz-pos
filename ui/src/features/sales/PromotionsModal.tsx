@@ -8,23 +8,31 @@ import { l10nErrorMessage } from '@/utils/app-error';
 import { evaluatePromotionEligibility } from './promotionEligibility';
 import './PromotionsModal.css';
 
-/** Props for the PromotionsModal — lets the cashier apply an eligible promotion to the current cart. */
+/** Props for the PromotionsModal — lets the cashier pick eligible promotions for the current cart. */
 export interface PromotionsModalProps {
   open: boolean;
   sessionToken: string;
   /** Cart subtotal in minor units — used for min-order eligibility. */
   subtotalMinor: number;
-  /** Called with an eligible promotion the cashier picked. */
-  onSelect: (promo: Promotion) => void;
+  /** Promotion ids already applied to the cart (seeds the selection). */
+  initiallySelectedIds?: string[];
+  /** Called with the full promotion selection when the cashier confirms. */
+  onApply: (selected: Promotion[]) => void;
   onClose: () => void;
 }
 
-/** Promotions picker — lists active promotions and applies an eligible one to the cart discount. */
+/**
+ * Promotions picker — multi-select over active promotions. Since PROMO-3
+ * the selection rides to checkout as `promotionIds` and the backend engine
+ * applies each against the post-tax sale (percentage, fixed amount, and
+ * buy-x-get-y alike), so all engine kinds are selectable here.
+ */
 export default function PromotionsModal({
   open,
   sessionToken,
   subtotalMinor,
-  onSelect,
+  initiallySelectedIds = [],
+  onApply,
   onClose,
 }: PromotionsModalProps) {
   const { l10n } = useLocalization();
@@ -53,6 +61,7 @@ export default function PromotionsModal({
 
   const [promos, setPromos] = useState<Promotion[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useFocusTrap(panelRef, open, handleClose);
 
@@ -61,6 +70,7 @@ export default function PromotionsModal({
     let cancelled = false;
     setPromos(null);
     setLoadError(null);
+    setSelectedIds(new Set(initiallySelectedIds));
     const load = sessionToken
       ? listPromotionsScoped(sessionToken)
       : listPromotions();
@@ -77,11 +87,26 @@ export default function PromotionsModal({
     return () => {
       cancelled = true;
     };
+    // Re-seed the selection whenever the modal is re-opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, sessionToken, l10n]);
 
   if (!open) return null;
 
   const items = promos ? evaluatePromotionEligibility(promos, subtotalMinor) : null;
+  const selectedPromos = (promos ?? []).filter((p) => selectedIds.has(p.id));
+
+  const toggle = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   return (
     <div
@@ -122,40 +147,64 @@ export default function PromotionsModal({
 
           {items && items.length > 0 && (
             <ul className="promo-picker-list">
-              {items.map(({ promo, kind }) => (
-                <li key={promo.id} className="promo-picker-item">
-                  <button
-                    type="button"
-                    className={`promo-picker-item-btn${kind === 'eligible' ? '' : ' promo-picker-item-btn--disabled'}`}
-                    disabled={kind !== 'eligible'}
-                    onClick={() => onSelect(promo)}
-                    aria-label={
-                      kind === 'eligible'
-                        ? l10n.getString('pos-promotions-apply-aria', { name: promo.name })
-                        : l10n.getString('pos-promotions-unavailable-aria', { name: promo.name })
-                    }
-                  >
-                    <span className="promo-picker-item-name">{promo.name}</span>
-                    <span className="promo-picker-item-value">
-                      {promo.promo_type === 'percentage'
-                        ? requiredLocalized(l10n, 'pos-promotions-value-percent', { value: String(promo.value_minor) })
-                        : promo.promo_type === 'fixed_amount'
-                          ? requiredLocalized(l10n, 'pos-promotions-value-fixed', { value: String(promo.value_minor) })
-                          : requiredLocalized(l10n, 'pos-promotions-value-bxgy')}
-                    </span>
-                    <span className="promo-picker-item-hint">
-                      {kind === 'eligible'
-                        ? (promo.description || promo.name)
-                        : kind === 'below-min-order'
-                          ? requiredLocalized(l10n, 'pos-promotions-min-order', {
-                              min: String(promo.min_order_minor),
-                            })
-                          : requiredLocalized(l10n, 'pos-promotions-not-applicable')}
-                    </span>
-                  </button>
-                </li>
-              ))}
+              {items.map(({ promo, kind }) => {
+                const checked = selectedIds.has(promo.id);
+                return (
+                  <li key={promo.id} className="promo-picker-item">
+                    <button
+                      type="button"
+                      className={`promo-picker-item-btn${kind === 'eligible' ? '' : ' promo-picker-item-btn--disabled'}${checked ? ' promo-picker-item-btn--selected' : ''}`}
+                      disabled={kind !== 'eligible'}
+                      role="checkbox"
+                      aria-checked={checked}
+                      onClick={() => toggle(promo.id)}
+                      aria-label={
+                        kind === 'eligible'
+                          ? l10n.getString('pos-promotions-toggle-aria', { name: promo.name })
+                          : l10n.getString('pos-promotions-unavailable-aria', { name: promo.name })
+                      }
+                    >
+                      <span className="promo-picker-item-check" aria-hidden="true">
+                        {checked ? '✓' : ''}
+                      </span>
+                      <span className="promo-picker-item-name">{promo.name}</span>
+                      <span className="promo-picker-item-value">
+                        {promo.promo_type === 'percentage'
+                          ? requiredLocalized(l10n, 'pos-promotions-value-percent', { value: String(promo.value_minor) })
+                          : promo.promo_type === 'fixed_amount'
+                            ? requiredLocalized(l10n, 'pos-promotions-value-fixed', { value: String(promo.value_minor) })
+                            : requiredLocalized(l10n, 'pos-promotions-value-bxgy')}
+                      </span>
+                      <span className="promo-picker-item-hint">
+                        {kind === 'eligible'
+                          ? (promo.description || promo.name)
+                          : kind === 'below-min-order'
+                            ? requiredLocalized(l10n, 'pos-promotions-min-order', {
+                                min: String(promo.min_order_minor),
+                              })
+                            : requiredLocalized(l10n, 'pos-promotions-not-applicable')}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
+          )}
+
+          {items && items.length > 0 && (
+            <div className="promo-picker-footer">
+              <span className="promo-picker-count" role="status">
+                {requiredLocalized(l10n, 'pos-promotions-selected-count', { count: String(selectedPromos.length) })}
+              </span>
+              <button
+                type="button"
+                className="promo-picker-apply"
+                disabled={selectedPromos.length === 0}
+                onClick={() => onApply(selectedPromos)}
+              >
+                {requiredLocalized(l10n, 'pos-promotions-apply-selected')}
+              </button>
+            </div>
           )}
       </div>
     </div>

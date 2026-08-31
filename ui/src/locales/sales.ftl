@@ -618,6 +618,7 @@ pos-cart-discount-pct-aria = Discount percentage
 pos-cart-discount-label-aria = Discount label
 pos-cart-discount-remove-aria = Remove discount
 pos-cart-discount-cancel-aria = Cancel discount
+pos-cart-promotion-remove-aria = Remove promotion { $name }
 
 # Cart line items (dynamic)
 pos-cart-line-aria = { $sku }, { $qty } × { $amount }
@@ -979,6 +980,9 @@ pos-promotions-value-fixed = { $value } minor units off
 pos-promotions-value-bxgy = Buy X get Y
 pos-promotions-not-applicable = Not applicable in this checkout yet
 pos-promotions-min-order = Requires a minimum order of { $min }
-pos-promotions-applied = Applied promotion: { $name }
+pos-promotions-applied = Promotions applied: { $name }
+pos-promotions-toggle-aria = Toggle promotion { $name }
+pos-promotions-selected-count = { $count } selected
+pos-promotions-apply-selected = Apply promotions
 pos-promotions-apply-aria = Apply promotion { $name }
 pos-promotions-unavailable-aria = Promotion { $name } is not applicable

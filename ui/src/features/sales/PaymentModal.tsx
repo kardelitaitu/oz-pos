@@ -6,7 +6,7 @@ import { openUpgradePricing } from '@/utils/upgrade';
 import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { Skeleton } from '@/components/Skeleton';
-import { startSaleScoped, addLineScoped, completeSaleScoped, printSalesReceipt, getSale, setCartDiscountScoped, holdCartScoped, finalizeSale, voidPendingSale, type SetCartDiscountScopedArgs, type CompleteSaleScopedArgs, type PaymentSplitArg, type SerialNumberArg, type PartialStockResult } from '@/api/sales';
+import { startSaleScoped, addLineScoped, completeSaleScoped, printSalesReceipt, getSale, setCartDiscountScoped, holdCartScoped, finalizeSale, voidPendingSale, previewPromotedTotalFromLinesScoped, type SetCartDiscountScopedArgs, type CompleteSaleScopedArgs, type PaymentSplitArg, type SerialNumberArg, type PartialStockResult, type PreviewPromotedTotalResult } from '@/api/sales';
 import { createKdsOrderFromSale, createKdsOrderFromSaleScoped } from '@/api/kds';
 import { Button } from '@/components/Button';
 import { formatMoney, minorUnitExponent, type Money, type CartLine } from '@/types/domain';
@@ -64,6 +64,13 @@ export interface PaymentModalProps {
   tipMinor?: number;
   /** Service-charge amount in minor units collected at checkout (default 0). Persisted on the sale. */
   serviceChargeMinor?: number;
+  /**
+   * PROMO-3: promotion ids selected in the picker. The backend engine
+   * applies them against the post-tax sale at checkout; this modal previews
+   * the reduced total so the displayed amount and the payment splits cover
+   * exactly what the checkout call will validate against.
+   */
+  promotionIds?: string[];
 }
 
 /** Payment processing modal — method selection (cash, card, QRIS, open bill, credit), split tender, customer/loyalty, multi-currency, and change calculation. */
@@ -84,6 +91,7 @@ export default function PaymentModal({
   tenderPresets,
   tipMinor = 0,
   serviceChargeMinor = 0,
+  promotionIds,
 }: PaymentModalProps) {
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
@@ -105,6 +113,11 @@ export default function PaymentModal({
   const [redeemPoints, setRedeemPoints] = useState(false);
   const [loyaltyDiscount, setLoyaltyDiscount] = useState(0n);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
+  // PROMO-3: engine-exact preview of the promotion-reduced payable, from
+  // the displayed cart lines. Null when no promotions are selected (or the
+  // preview failed — the checkout call then validates against the
+  // un-promoted total and fails closed if the splits no longer cover it).
+  const [promoPreview, setPromoPreview] = useState<PreviewPromotedTotalResult | null>(null);
   const [pointsWorthMinor, setPointsWorthMinor] = useState<number | null>(null);
 
   const notifyCustomerChange = useCallback(
@@ -432,10 +445,14 @@ export default function PaymentModal({
   }, [pointsToRedeem, redeemPoints, totalMinor, sessionToken]);
 
   const effectiveTotal = useMemo(() => {
-    const base = totalMinor;
+    // PROMO-3: when promotions are selected the base is the engine-exact
+    // previewed total (post-tax, post-cart-discount, promotions applied);
+    // otherwise the cart total prop. Loyalty discount subtracts on top in
+    // both cases.
+    const base = promoPreview ? BigInt(promoPreview.totalMinor) : totalMinor;
     const discount = loyaltyDiscount;
     return base - discount >= 0n ? base - discount : 0n;
-  }, [totalMinor, loyaltyDiscount]);
+  }, [promoPreview, totalMinor, loyaltyDiscount]);
 
   const effectiveTotalMoney = useMemo<Money>(() => ({
     minor_units: Number(effectiveTotal),
@@ -469,11 +486,29 @@ export default function PaymentModal({
   // Get the currency to use for the cart (charge currency if multi-currency, else base)
   const cartCurrency = multiCurrency && selectedCurrency !== total.currency ? selectedCurrency : total.currency;
 
-  // Get the effective total in the cart currency
-  const effectiveTotalInCartCurrency = useMemo(() => {
+  // PROMO-3: the charge total when promotions are selected — the engine
+  // preview result (already in cart currency) minus the loyalty discount
+  // converted into cart currency. Null when no preview (no promotions).
+  const promotedChargeTotal = useMemo(() => {
+    if (!promoPreview) return null;
+    const loyaltyInCart = cartCurrency === total.currency
+      ? Number(loyaltyDiscount)
+      : convertToChargeCurrency(loyaltyDiscount);
+    return Math.max(0, promoPreview.totalMinor - loyaltyInCart);
+  }, [promoPreview, loyaltyDiscount, cartCurrency, total.currency, convertToChargeCurrency]);
+
+  // Get the effective total in the cart currency — WITHOUT promotions.
+  // The StockShortfallDialog retry needs this unpromoted base: the backend
+  // shortfall command re-applies the promotions itself, so passing the
+  // promoted total here would discount twice.
+  const unpromotedTotalInCartCurrency = useMemo(() => {
     if (cartCurrency === total.currency) return Number(effectiveTotal);
     return convertToChargeCurrency(effectiveTotal);
   }, [effectiveTotal, cartCurrency, total.currency, convertToChargeCurrency]);
+
+  // The charge total the cashier sees and pays: engine-promoted when a
+  // preview is active, the loyalty-adjusted cart total otherwise.
+  const effectiveTotalInCartCurrency = promotedChargeTotal ?? unpromotedTotalInCartCurrency;
 
   // Convert line item unit prices to cart currency
   const lineItemsInCartCurrency = useMemo(() => {
@@ -486,6 +521,45 @@ export default function PaymentModal({
       },
     }));
   }, [lineItems, cartCurrency, total.currency, convertToChargeCurrency]);
+
+  // PROMO-3: keep the engine preview in sync with the displayed cart.
+  // The backend cart doesn't exist yet (it is materialized at the confirm
+  // step), so the preview runs over the raw lines — the same cart → sale →
+  // tax → engine sequence the checkout call performs.
+  useEffect(() => {
+    if (!open || !sessionToken || !promotionIds || promotionIds.length === 0) {
+      setPromoPreview(null);
+      return;
+    }
+    let cancelled = false;
+    const args = {
+      lines: lineItemsInCartCurrency.map((l) => ({
+        sku: l.sku,
+        qty: l.qty,
+        unitPriceMinor: l.unit_price.minor_units,
+        unitPriceCurrency: l.unit_price.currency,
+      })),
+      discountPercent,
+      promotionIds,
+    };
+    if (args.lines.length === 0) {
+      setPromoPreview(null);
+      return;
+    }
+    previewPromotedTotalFromLinesScoped(sessionToken, args)
+      .then((r) => {
+        if (!cancelled) setPromoPreview(r);
+      })
+      .catch(() => {
+        // Preview is best-effort display support: fall back to the
+        // un-promoted total. The checkout call re-validates everything
+        // server-side and fails closed on any mismatch.
+        if (!cancelled) setPromoPreview(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, sessionToken, promotionIds, lineItemsInCartCurrency, discountPercent]);
 
   // Convert tendered amount to cart currency
   const tenderedMinorInCartCurrency = useMemo(() => {
@@ -611,6 +685,8 @@ export default function PaymentModal({
                 gatewayResponse: 'QRIS payment confirmed',
               },
             ],
+            // PROMO-3: the engine re-applies and re-validates server-side.
+            ...(promotionIds && promotionIds.length > 0 ? { promotionIds } : {}),
             ...tenderSnapshot,
           } as CompleteSaleScopedArgs);
 
@@ -851,6 +927,8 @@ export default function PaymentModal({
             ...(paymentSplits ? { paymentSplits } : {}),
             ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
             ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
+            // PROMO-3: the engine re-applies and re-validates server-side.
+            ...(promotionIds && promotionIds.length > 0 ? { promotionIds } : {}),
             attemptId: attemptIdRef.current ?? undefined,
             ...tenderSnapshot,
           } as CompleteSaleScopedArgs);
@@ -1067,9 +1145,16 @@ export default function PaymentModal({
             // backend can enforce it on reconstruction.
             unitPriceCurrency: l.unit_price.currency,
           }))}
-          totalMinor={effectiveTotalInCartCurrency}
+          // PROMO-3: the retry total must be the UNPROMOTED one — the
+          // backend shortfall command re-applies the promotions itself
+          // (reducing the sale total from this base), so the promoted
+          // charge total would discount twice.
+          totalMinor={unpromotedTotalInCartCurrency}
           currency={cartCurrency}
           {...tenderSnapshot}
+          // PROMO-3: the SAME promotion list the first submission carried,
+          // in the same order, so the retry re-applies identical discounts.
+          promotionIds={promotionIds && promotionIds.length > 0 ? promotionIds : null}
           paymentMethod={splitMode ? 'split' : method === 'other' ? otherLabel.trim() || 'OTHER' : method.toUpperCase()}
           tenderedMinor={method === 'cash' && !splitMode ? tenderedMinorInCartCurrency : null}
           paymentSplits={paymentSplitsFromState() ?? null}
@@ -1223,9 +1308,24 @@ export default function PaymentModal({
                 <span className="payment-total-label">Total Due</span>
               </Localized>
               <span className="payment-total-amount">
-                {loyaltyDiscount > 0n ? formatMoney(effectiveTotalMoney) : formatMoney(total)}
+                {promoPreview
+                  ? formatMoney({ minor_units: effectiveTotalInCartCurrency, currency: cartCurrency })
+                  : loyaltyDiscount > 0n ? formatMoney(effectiveTotalMoney) : formatMoney(total)}
               </span>
             </div>
+
+            {promoPreview && promoPreview.discounts.length > 0 && (
+              <div className="payment-promotions-row">
+                {promoPreview.discounts.map((d) => (
+                  <div key={d.promotionId} className="payment-promotions-item">
+                    <span className="payment-promotions-label">{d.description}</span>
+                    <span className="payment-promotions-amount">
+                      −{formatMoney({ minor_units: d.discountMinor, currency: cartCurrency })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {multiCurrency && (
               <div className="payment-currency-selector">

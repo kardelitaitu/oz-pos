@@ -36,6 +36,8 @@ export interface StockShortfallDialogProps {
    * nothing carried over from the first attempt identifies it as a replay.
    */
   attemptId?: string;
+  /** PROMO-3: promotion ids to re-apply on the retry (same list/order as the first submission). */
+  promotionIds?: string[] | null;
   /** Discount percentage. */
   discountPercent: number;
   /** Discount label. */
@@ -90,6 +92,7 @@ export default function StockShortfallDialog({
   customerName,
   serialNumbers,
   attemptId,
+  promotionIds,
   discountPercent,
   discountLabel,
   tipMinor,
@@ -243,6 +246,10 @@ export default function StockShortfallDialog({
         ...(paymentSplits ? { paymentSplits } : {}),
         ...(serialNumbers ? { serialNumbers } : {}),
         ...(attemptId ? { attemptId } : {}),
+        // PROMO-3: the same promotion list the first submission carried, in
+        // the same order — the backend re-applies them against the sale
+        // built from `totalMinor`, so the retry matches the first attempt.
+        ...(promotionIds && promotionIds.length > 0 ? { promotionIds } : {}),
         lines: cartLines,
         totalMinor,
         currency,
@@ -280,6 +287,7 @@ export default function StockShortfallDialog({
     paymentSplits,
     serialNumbers,
     attemptId,
+    promotionIds,
     cartLines,
     totalMinor,
     currency,

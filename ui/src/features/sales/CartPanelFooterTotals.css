@@ -460,3 +460,65 @@
   gap: var(--space-3);
   padding-top: var(--space-3);
 }
+
+/* PROMO-3: applied promotion chips — engine-applied at checkout, so the
+   chip shows only the name; the discounted amount surfaces in the
+   payment modal (lines-based engine preview) and the receipt. */
+.pos-cart-promotion-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.pos-cart-promotion-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.pos-cart-promotion-chip-name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pos-cart-promotion-chip-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: var(--text-sm);
+  line-height: 1;
+  cursor: pointer;
+  transition: all var(--duration-100) var(--ease-out);
+}
+
+.pos-cart-promotion-chip-clear:hover {
+  background: var(--color-success-subtle);
+}
+
+.pos-cart-promotion-chip-clear:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pos-cart-promotion-chip,
+  .pos-cart-promotion-chip-clear {
+    transition: none;
+  }
+}

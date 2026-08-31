@@ -1,4 +1,5 @@
-// Unit tests for the POS promotions picker eligibility filter (PROMO-5).
+// Unit tests for the POS promotions picker eligibility filter (PROMO-5,
+// flipped by PROMO-3: every engine kind is selectable at checkout).
 import { describe, expect, it } from 'vitest';
 import { evaluatePromotionEligibility } from '../features/sales/promotionEligibility';
 import type { Promotion } from '../api/promotions';
@@ -32,16 +33,24 @@ describe('evaluatePromotionEligibility', () => {
     expect(result[0]).toMatchObject({ kind: 'eligible' });
   });
 
-  it('marks fixed_amount and buy_x_get_y as not applicable in this checkout', () => {
+  it('marks fixed_amount and buy_x_get_y eligible (PROMO-3 checkout integration)', () => {
     const result = evaluatePromotionEligibility(
       [promo({ promo_type: 'fixed_amount' }), promo({ promo_type: 'buy_x_get_y' })],
       50_000,
     );
-    expect(result.map((r) => r.kind)).toEqual(['not-applicable-type', 'not-applicable-type']);
+    expect(result.map((r) => r.kind)).toEqual(['eligible', 'eligible']);
   });
 
   it('rejects percentage promotions whose minimum order exceeds the subtotal', () => {
     const result = evaluatePromotionEligibility([promo({ min_order_minor: 100_000 })], 50_000);
+    expect(result[0]).toMatchObject({ kind: 'below-min-order' });
+  });
+
+  it('rejects fixed_amount promotions whose minimum order exceeds the subtotal', () => {
+    const result = evaluatePromotionEligibility(
+      [promo({ promo_type: 'fixed_amount', min_order_minor: 100_000 })],
+      50_000,
+    );
     expect(result[0]).toMatchObject({ kind: 'below-min-order' });
   });
 
@@ -55,6 +64,6 @@ describe('evaluatePromotionEligibility', () => {
       [promo({ value_minor: 0 }), promo({ value_minor: 150 })],
       50_000,
     );
-    expect(result.map((r) => r.kind)).toEqual(['not-applicable-type', 'not-applicable-type']);
+    expect(result.map((r) => r.kind)).toEqual(['invalid-value', 'invalid-value']);
   });
 });
