@@ -181,6 +181,25 @@ jobs:
       - name: Verify no unwhitelisted float columns in migrations
         run: python3 scripts/verify-migration-column-types.py
 
+  # ── Postgres schema drift guard ──────────────────────────────────────
+  # 20260813_init.pg.sql is GENERATED from the full SQLite migration
+  # chain (registry order, applied and dumped at final state) by
+  # scripts/generate-pg-migration.py — hand-porting incrementals onto it
+  # is how the PG twin silently diverged (per-tenant uniqueness,
+  # product_activity.tenant_id). --check renders twice (determinism
+  # self-proof) and diffs against the committed file; drift fails here
+  # and in .githooks/pre-commit. Needs python ≥ 3.35-sqlite for
+  # DROP COLUMN-era migrations (ubuntu-latest ships 3.37+).
+  pg-schema-drift:
+    name: Postgres Schema Drift Guard
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Verify generated PG schema matches the migration chain
+        run: python3 scripts/generate-pg-migration.py --check
+
   # ── Architecture boundary checker (P1 pilot) ───────────────────────
   # Static-only enforcement: existing transitional findings are tracked in
   # the expiring baseline; new, expired, or stale findings block CI.
