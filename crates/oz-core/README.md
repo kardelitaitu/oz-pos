@@ -1,10 +1,10 @@
 # oz-core
 
-<!-- Audit stamp: 2026-08-29 · docs-auditor · status: ACCURATE (3 findings repaired) · F1: "Public modules (42)" -> 56 pub mod in lib.rs (table now complete) · F2: migrations "001-047" -> date-prefixed consolidated (20260813_init.sql etc.; 131 sequential migrations consolidated 2026-08-14) · F3: Money/Currency are defined in foundation/src/money.rs and re-exported from oz-core (pub use money::{Currency, Money}) -- already noted, now confirmed · verified accurate: #![deny(unsafe_code)] + #![warn(missing_docs)] present in lib.rs, Money-i64 policy, Store-transaction convention -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (1 finding repaired) · F1: added missing `promotion_engine` pub-mod row (PROMO-3 discount engine — compute_discount/compute_discount_unscoped) and corrected the module count 56 -> 57 to match `pub mod` in lib.rs at HEAD · carried from 29-08: migrations date-prefixed/consolidated; Money/Currency defined in foundation/src/money.rs re-exported here · verified accurate: #![deny(unsafe_code)] + missing_docs warn, Money-i64 policy, Store-transaction convention -->
 
 Domain models, SQLite persistence, and migrations for OZ-POS. Every other crate builds on types defined here.
 
-## Public modules (56)
+## Public modules (57)
 
 | Module | Key types |
 |--------|-----------|
@@ -39,6 +39,7 @@ Domain models, SQLite persistence, and migrations for OZ-POS. Every other crate 
 | `product_bundle` | Product bundle types |
 | `product_variant` | Product variant types |
 | `promotion` | Promotion types |
+| `promotion_engine` | PROMO-3 discount engine — `compute_discount`, `compute_discount_unscoped` |
 | `purchase_order` | Purchase order types |
 | `rate_limiter` | Rate limiter |
 | `recipe` | Recipe types |
@@ -89,4 +90,4 @@ Key methods: `create_product`, `list_products`, `update_product`, `delete_produc
   `[lints] workspace = true`, inherited from the root `[workspace.lints]`.
 - All public items have `///` docs.
 
-> last audited 29-08-26 by docs-auditor
+> last audited 31-08-26 by docs-auditor
