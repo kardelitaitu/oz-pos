@@ -107,6 +107,10 @@ pub const ALL: &[Migration] = &[
         id: "20260831_loyalty_multiplier_fixedpoint.sql",
         sql: include_str!("../migrations/20260831_loyalty_multiplier_fixedpoint.sql"),
     },
+    Migration {
+        id: "20260831_per_tenant_unique_rebuild.sql",
+        sql: include_str!("../migrations/20260831_per_tenant_unique_rebuild.sql"),
+    },
 ];
 
 /// Postgres DDL for the full schema, parallel to the SQLite `init.sql`.

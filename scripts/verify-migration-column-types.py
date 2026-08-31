@@ -84,16 +84,16 @@ WHITELIST: tuple[Allowed, ...] = (
         "earn_multiplier_millionths by 20260831_loyalty_multiplier_fixedpoint.sql",
     ),
     Allowed(
-        "20260813_init.pg.sql", "loyalty_tiers", "earn_multiplier",
-        "PG twin of the replay column above; dormant (cloud has no loyalty code path)",
-    ),
-    Allowed(
         "20260813_init.sql", "products", "popularity_score",
         "analytics score recomputed from sales history; display-ranked, never money",
     ),
     Allowed(
         "20260813_init.pg.sql", "products", "popularity_score",
         "PG twin of the analytics score above",
+    ),
+    Allowed(
+        "20260831_per_tenant_unique_rebuild.sql", "products_new", "popularity_score",
+        "faithful copy of products.popularity_score during the uniqueness rebuild",
     ),
     # Floor-plan canvas geometry on the restaurant `tables` table —
     # display-only coordinates, never money.

@@ -504,6 +504,7 @@ fn existing_db_with_legacy_rows_upgrades_idempotently() {
             "20260826_sale_line_snapshots.sql".to_string(),
             "20260827_refunds_tenant.sql".to_string(),
             "20260831_loyalty_multiplier_fixedpoint.sql".to_string(),
+            "20260831_per_tenant_unique_rebuild.sql".to_string(),
         ]
     );
 
@@ -1330,7 +1331,7 @@ fn loyalty_multiplier_backfill_from_legacy_real_column() {
     );
 }
 
-/// Fresh installs run init.sql (seeds REAL multipliers) and then the
+/// LOYALTY-01: fresh installs run init.sql (seeds REAL multipliers) and then the
 /// fixed-point migration — the seeded tiers must land on exact millionths.
 #[test]
 fn loyalty_seeded_tiers_carry_exact_millionths() {
@@ -1352,5 +1353,100 @@ fn loyalty_seeded_tiers_carry_exact_millionths() {
             ("tier-platinum".to_string(), 2_000_000),
             ("tier-silver".to_string(), 1_250_000),
         ]
+    );
+}
+
+/// The 20260815 composite indexes documented per-tenant SKU/username
+/// uniqueness, but the inline global `UNIQUE` from the reverted init.sql
+/// survived on both tables and dominated it — two tenants could never
+/// share a SKU/username, and the sync upserts (`ON CONFLICT
+/// (tenant_id, sku)`) failed with a bare constraint error instead of
+/// resolving. The rebuild migration must: allow cross-tenant duplicates,
+/// still reject same-tenant duplicates, make the upsert pattern resolve,
+/// and leave every inbound FK intact (defer_foreign_keys rebuild with 10
+/// referencing tables on each side).
+#[test]
+fn per_tenant_unique_rebuild_restores_documented_intent() {
+    let mut conn = fresh();
+    run(&mut conn).unwrap();
+
+    // The parent DROP + RENAME must not strand a single inbound FK.
+    let fk_violations: i64 = conn
+        .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(fk_violations, 0, "rebuild broke referential integrity");
+
+    // Cross-tenant duplicate SKU: allowed (was rejected pre-rebuild).
+    conn.execute(
+        "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+         VALUES ('p-a', 'SKU1', 'A', 100, 'IDR', 't-A')",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+         VALUES ('p-b', 'SKU1', 'B', 100, 'IDR', 't-B')",
+        [],
+    )
+    .unwrap();
+    // Same-tenant duplicate: still rejected by the composite index.
+    let dup = conn.execute(
+        "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+         VALUES ('p-c', 'SKU1', 'C', 100, 'IDR', 't-A')",
+        [],
+    );
+    assert!(dup.is_err(), "same-tenant SKU must stay unique");
+    // The sync_client upsert pattern resolves against the composite index.
+    conn.execute(
+        "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+         VALUES ('p-a', 'SKU1', 'A-updated', 100, 'IDR', 't-A')
+         ON CONFLICT (tenant_id, sku) DO UPDATE SET name = 'A-updated'",
+        [],
+    )
+    .unwrap();
+    let name: String = conn
+        .query_row("SELECT name FROM products WHERE id = 'p-a'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(name, "A-updated");
+
+    // Users: same story on username.
+    conn.execute("INSERT INTO roles (id, name) VALUES ('role-t', 'T')", [])
+        .unwrap();
+    conn.execute(
+        "INSERT INTO users (id, username, pin_hash, display_name, role_id, tenant_id)
+         VALUES ('u-a', 'cashier', 'h', 'A', 'role-t', 't-A')",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO users (id, username, pin_hash, display_name, role_id, tenant_id)
+         VALUES ('u-b', 'cashier', 'h', 'B', 'role-t', 't-B')",
+        [],
+    )
+    .unwrap();
+    let dup_user = conn.execute(
+        "INSERT INTO users (id, username, pin_hash, display_name, role_id, tenant_id)
+         VALUES ('u-c', 'cashier', 'h', 'C', 'role-t', 't-A')",
+        [],
+    );
+    assert!(dup_user.is_err(), "same-tenant username must stay unique");
+
+    // The rebuilt tables kept the non-unique guardrails too, and carry NO
+    // inline constraint-derived unique index (origin 'u' = the old global
+    // `sku UNIQUE`; its absence is the actual fix).
+    let no_inline_unique: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_index_list('products') WHERE origin = 'u'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        no_inline_unique, 0,
+        "inline global UNIQUE constraints must be gone from the rebuilt products table"
     );
 }
