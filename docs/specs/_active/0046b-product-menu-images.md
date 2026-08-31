@@ -70,9 +70,10 @@ One IPC command, `products_register_image(product_id, bytes)`:
 2. **Caps:** ≤ 5 MB raw input, decoded dimensions ≤ 4096² (denial-of-heap
    guard — `image` crate `ImageReader::with_guessed_format().limits()`).
 3. **Transcode & resize:** decode → EXIF orientation applied → EXIF stripped →
-   resize to **256 px longest edge** (POS tiles never render larger) →
-   encode **WebP q80**. Target output ≈ **8–20 KB** (the guideline's
-   10–20 KB class), decoded ARGB ≈ **256 KB** per image in RAM.
+   resize to **512 px longest edge** (decided — headroom for 2x-DPR tablet
+   tiles) → encode **WebP q40**. Target output ≈ **10–25 KB** per image
+   (aggressive but clean at tile render size), decoded ARGB ≈ **1 MB** per
+   image in RAM — which is exactly why §3.5 virtualization is mandatory.
 4. **Write & commit:** write `{product_id}.{hash8}.webp` to the cache dir
    (temp + atomic rename), then `UPDATE products SET image_hash = ?,
    version = version + 1` inside a **rusqlite transaction** (repo rule).
@@ -89,9 +90,9 @@ One IPC command, `products_register_image(product_id, bytes)`:
   `bytea`). The unified cloud image already declares `VOLUME ["/data"]` with
   `OZ_DB_PATH=/data/oz-pos.db`; image files live beside the DB at
   `OZ_IMAGE_DIR` (default `/data/images` in prod, `./data/images` in dev).
-  Capacity math: 6 GB volume, ~16 KB per image ⇒ **≈ 350k product images**
-  before the DB ever matters; P4 adds a bytes-used metric with a soft alert
-  at 4 GB.
+  Capacity math: 6 GB volume, ~20 KB per image (512 px q40) ⇒ **≈ 300k
+  product images** before the DB ever matters; P4 adds a bytes-used metric
+  with a soft alert at 4 GB.
 - oz-api serves the bytes itself — **no new component**:
   - `PUT /api/v1/products/{id}/image` (admin-key gate, same tier as catalog
     writes per API-4/G-1; ≤ 32 KB body; writes `{product_id}.{hash8}.webp`
@@ -103,15 +104,16 @@ One IPC command, `products_register_image(product_id, bytes)`:
 - Tablet pull: a tiny **download manager** in the tablet's Rust shell — on
   catalog apply, for each product with `image_hash` and no local file, queue
   a background GET (bounded concurrency 3, LRU eviction of the images dir at
-  a configurable budget, default **64 MB** ≈ 3–6 k products). Offline-first
+  a configurable budget, default **64 MB** ≈ ~3k products at 20 KB). Offline-first
   holds: missing image degrades to the existing colored-initial tile.
 
 ### 3.5 UI: virtualize or the pixel RAM wins anyway
 
-- The math that makes virtualization non-optional: a 256×256 decoded image is
-  ~256 KB of ARGB; a 512×512 is ~1 MB (the guideline's 1.05 MB). A
-  non-virtualized 300-item grid would pin ~75 MB of decoded bitmaps on a
-  2 GB tablet even with tiny files on disk.
+- The math that makes virtualization non-optional: the chosen 512 px variant
+  decodes to ~1 MB of ARGB per tile (the guideline's 1.05 MB). A
+  non-virtualized 300-item grid would pin ~300 MB of decoded bitmaps on a
+  2 GB tablet even with 15 KB files on disk — the disk size is irrelevant;
+  the decoded bitmap is what eats RAM.
 - **POS grids** (`RetailProductGrid`, resto ordering screen) switch the
   product tiles to `react-window` v2 (`FixedSizeGrid`) — already in the
   dependency tree — so off-screen tiles **unmount entirely** and Android
@@ -136,8 +138,9 @@ slice. P3 unlocks tablets. P4 is polish.
 
 ## 5. Decision points to confirm before P1
 
-1. **256 px WebP q80 single variant** — good enough, or do we want a 512 px
-   "detail" variant now? (Doubles storage + sync surface; my default: no.)
+1. ~~256 px q80 vs 512 px detail~~ **RESOLVED: single 512 px WebP q40
+   variant** — decided 2026-08-31; 2x-DPR headroom on tablet tiles, q40
+   keeps bytes at 10–25 KB so storage/sync surface stays tiny.
 2. **R2 as the byte store** vs PG `bytea` (simpler, but blobs in PG fight the
    "DB stays light" rule and bloat snapshots).
 3. **Upload authoring surface** — desktop settings screen only (v1), or also
