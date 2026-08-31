@@ -1,6 +1,6 @@
 # oz-hal
 
-<!-- Audit stamp: 2026-08-29 · docs-auditor · status: ACCURATE (2 findings repaired) · F1: driver table "WeightScale" -> HidWeightScale (drivers/scale.rs struct name) · F2: added missing KdsChit driver entry (drivers/kds_chit.rs) · verified accurate: all traits (barcode/printer/cash_drawer/customer_display/weight_scale), drivers (usb/bt/serial/tcp scanner+printer, drawer, serial_display, scale), mocks (MockBarcodeScanner/MockReceiptPrinter/MockCashDrawer in drivers/mock.rs), escpos consts (CUT_FULL/CUT_PARTIAL/ALIGN_CENTER/BOLD_ON/BOLD_OFF) + format_receipt, receipt format_sales_receipt/SalesReceipt/ReceiptConfig, and DriverRegistry methods (discover/register_tcp_printer/scanner) all present; unsafe confined to lib.rs with SAFETY comment per convention -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (3 findings repaired) · F1: removed dead `Scanner`/`drivers/scanner.rs` row (file deleted at HEAD; scanners covered by usb/bt/serial_scanner) · F2: added `EdcTerminal` trait row (traits/edc.rs — status/authorize/capture/sale/refund/void/print_receipt/device_info; re-exported with EdcPaymentResult/TerminalStatus) · F3: added EDC drivers WiredEdcTerminal (drivers/edc/wired.rs), WirelessEdcTerminal (drivers/edc/wireless.rs), protocol codecs Ingenico/PAX/Verifone (drivers/edc/protocol/), and MockEdcTerminal (drivers/mock.rs) · verified accurate: remaining traits (barcode/printer/cash_drawer/customer_display/weight_scale), drivers (usb/bt/serial/tcp printer, drawer, serial_display, scale, kds_chit), mocks, escpos consts + format_receipt, receipt format_sales_receipt/SalesReceipt/ReceiptConfig, DriverRegistry methods; unsafe confined to lib.rs with SAFETY comment. NOTE: EdcTerminal is mid-migration per lib.rs doc — trait + drivers exist at HEAD, registry wiring not yet claimed -->
 
 Hardware Abstraction Layer — the seam between business logic and physical devices (USB, Bluetooth, serial, TCP).
 
@@ -13,6 +13,7 @@ Hardware Abstraction Layer — the seam between business logic and physical devi
 | `CashDrawer` | `traits/cash_drawer.rs` | `open`, `is_open` |
 | `CustomerDisplay` | `traits/customer_display.rs` | Pole/line display for customer-facing screen |
 | `WeightScale` | `traits/weight_scale.rs` | `WeightScale`, `WeightReading` — re-exported at crate root |
+| `EdcTerminal` | `traits/edc.rs` | `status`, `authorize`, `capture`, `sale`, `refund`, `void`, `print_receipt`, `device_info` — card-payment terminals; re-exported with `EdcPaymentResult`/`TerminalStatus` |
 
 Business code never imports a specific driver — only traits via `DriverRegistry`.
 
@@ -32,7 +33,6 @@ Business code never imports a specific driver — only traits via `DriverRegistr
 | `UsbHidBarcodeScanner` | `drivers/usb_scanner.rs` | Real — USB HID interrupt + keycode→ASCII |
 | `BtBarcodeScanner` | `drivers/bt_scanner.rs` | Stub |
 | `SerialBarcodeScanner` | `drivers/serial_scanner.rs` | Stub |
-| `Scanner` | `drivers/scanner.rs` | Scanner abstraction |
 | `UsbReceiptPrinter` | `drivers/usb_printer.rs` | Stub |
 | `BtReceiptPrinter` | `drivers/bt_printer.rs` | Stub |
 | `TcpReceiptPrinter` | `drivers/tcp_printer.rs` | Stub |
@@ -40,9 +40,12 @@ Business code never imports a specific driver — only traits via `DriverRegistr
 | `SerialCustomerDisplay` | `drivers/serial_display.rs` | Stub |
 | `HidWeightScale` | `drivers/scale.rs` | USB HID weight scale driver |
 | `KdsChit` | `drivers/kds_chit.rs` | KDS chit printer |
+| `WiredEdcTerminal` | `drivers/edc/wired.rs` | Real — wired card terminal; protocol codecs (Ingenico/PAX/Verifone) in `drivers/edc/protocol/` |
+| `WirelessEdcTerminal` | `drivers/edc/wireless.rs` | Real — wireless card terminal; shares the `drivers/edc/protocol/` codecs |
 | `MockBarcodeScanner` | `drivers/mock.rs` | Programmable mock |
 | `MockReceiptPrinter` | `drivers/mock.rs` | Programmable mock |
 | `MockCashDrawer` | `drivers/mock.rs` | Programmable mock |
+| `MockEdcTerminal` | `drivers/mock.rs` | Programmable mock |
 
 ## ESC/POS & receipt formatting
 
@@ -82,4 +85,4 @@ scanner.push(Barcode::new("ABC123"));
 - No `unwrap()` in driver code — map errors to `HalError` at the trait boundary.
 - Wrap blocking I/O in `tokio::task::spawn_blocking`.
 
-> last audited 29-08-26 by docs-auditor
+> last audited 31-08-26 by docs-auditor
