@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (drift repaired) · FIXED 31-08: crate tree +oz-crypto/oz-media/oz-notification/oz-plugin; rlua->mlua; oz-payment +Paddle (tree + prose); HAL device list 'NFC' -> real (barcode/printer/drawer/display/scale/EDC); migrations 98 -> 19 SQL files (131 squashed into init.sql); IPC endpoints 618 -> 505 unique (385 desktop + 369 tablet, 49 modules) · NOTE: this condensed guides/ARCHITECTURE.md coexists with a fuller root ARCHITECTURE.md (reorg 28147fe4 copied an archived version here); README links to THIS file · verified against HEAD Cargo.toml + generate_handler! + crates/oz-core/migrations/ · 31-08 (dc07f32a/bb7ce92d): Registry + platform-startup sections updated for the new apply_config()/HardwareConfig bootstrap path (discover() is auto-probe, not startup registration) · 31-08: module count 9 -> 14 (all wired in platform-startup; added giftcards/kitchen/loyalty/promotions/purchasing); feature flags 32 -> 39 and store presets 4 -> 5 (verified against crates/oz-core/src/features.rs); ui/api 'pos.ts THE ONLY place that calls invoke()' -> per-domain <domain>.ts wrappers; locales 48 -> 50 .ftl files -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (drift repaired) · FIXED 31-08: crate tree +oz-crypto/oz-media/oz-notification/oz-plugin; rlua->mlua; oz-payment +Paddle (tree + prose); HAL device list 'NFC' -> real (barcode/printer/drawer/display/scale/EDC); migrations 98 -> 19 SQL files (131 squashed into init.sql); IPC endpoints 618 -> 505 unique (385 desktop + 369 tablet, 49 modules) · NOTE: this condensed guides/ARCHITECTURE.md coexists with a fuller root ARCHITECTURE.md (reorg 28147fe4 copied an archived version here); README links to THIS file · verified against HEAD Cargo.toml + generate_handler! + crates/oz-core/migrations/ · 31-08 (dc07f32a/bb7ce92d): Registry + platform-startup sections updated for the new apply_config()/HardwareConfig bootstrap path (discover() is auto-probe, not startup registration) · 31-08: module count 9 -> 14 (all wired in platform-startup; added giftcards/kitchen/loyalty/promotions/purchasing); feature flags 32 -> 39 and store presets 4 -> 5 (verified against crates/oz-core/src/features.rs); ui/api 'pos.ts THE ONLY place that calls invoke()' -> per-domain <domain>.ts wrappers; locales 48 -> 50 .ftl files · 31-08 (cont): caught two body spots the first pass missed — crate-tree '20 migrations' -> 19 (was inconsistent with the §Migrations '19 files' line) and 'SQL migration files (001–098)' -> 'date-stamped (19, 2026-08-13 → 2026-08-27)'; the files are named 20260813_init.sql … 20260827_refunds_tenant.sql, not numbered 001–098 -->
 
 # OZ-POS – Codebase Architecture
 
@@ -41,9 +41,9 @@ oz-pos/
 │   │   │   ├── refund.rs    # Refund domain type
 │   │   │   ├── settings.rs  # Settings persistence layer
 │   │   │   ├── features.rs  # Feature enum (39 flags), registry, presets
-│   │   │   ├── migrations.rs# Embedded SQL migration runner (20 migrations)
+│   │   │   ├── migrations.rs# Embedded SQL migration runner (19 migrations)
 │   │   │   └── error.rs     # CoreError enum
-│   │   └── migrations/      # SQL migration files (001–098)
+│   │   └── migrations/      # Date-stamped SQL migration files (19, 2026-08-13 → 2026-08-27)
 │   ├─ oz-hal/               # Hardware Abstraction Layer
 │   │   ├─ Cargo.toml
 │   │   └─ src/
