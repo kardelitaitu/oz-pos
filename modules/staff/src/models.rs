@@ -136,12 +136,18 @@ impl User {
 }
 
 /// Well-known role ids used by the seed data.
+///
+/// The authoritative taxonomy is `platform_core::rbac::builtin_roles`
+/// (six ids incl. ADMIN/AUDITOR); this subset covers the seeds this
+/// module owns. STAFF is checkout-only per the preset (40+ negative
+/// assertions) — NOT "Manager minus settings" as an earlier revision
+/// of this doc claimed (MSL-6 / E-1).
 pub mod builtin_roles {
     /// Owner — full access to all features and settings.
     pub const OWNER: &str = "role-owner";
-    /// Manager — can manage products, categories, and view reports.
+    /// Manager — can manage products, inventory, sales, staff, and settings.
     pub const MANAGER: &str = "role-manager";
-    /// Staff — operational role with Manager-level access minus settings.
+    /// Staff — checkout-only operational role (preset-pinned).
     pub const STAFF: &str = "role-staff";
     /// Custom — fully flexible role with no preset permissions.
     pub const CUSTOM: &str = "role-custom";
