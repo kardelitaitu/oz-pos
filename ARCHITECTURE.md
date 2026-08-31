@@ -1,6 +1,6 @@
 # OZ-POS Architecture
 
-<!-- Audit stamp: 2026-08-29 · docs-auditor · status: ACCURATE (counts refreshed) · F1: 14/14 modules active (was 10 — giftcards/kitchen/promotions/purchasing added) · F2: 61 ADRs in docs/decisions/ (was 58) · F3: 13 crates + 4 platform + 1 foundation + 14 modules + 3 apps = 35 workspace members (was 29) · F4: 14/14 modules have README · re-audited 2026-08-29: module/crate/ADR counts refreshed to current tree -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: PARTIAL — STRUCTURAL DRIFT FOUND (do not trust the sections below) · SYNCED 31-08: HAL/payment/reporting device lists (added customer displays + EDC payment terminals; oz-payment +Paddle; oz-reporting PDF->CSV) · OUTSTANDING MAJORS (pending verbatim rewrite from foundation/src/contracts.rs, events.rs, permission_registry.rs): (1) Module/Service trait signatures wrong — no load/unload; actual id/dependencies/on_load/on_start/on_stop -> ModuleResult; (2) `trait Integration` documented but exists nowhere repo-wide; (3) Platform Core Services tree lists 8 of 12 services that don't exist (only auth/rbac/database/settings present); (4) permission examples use `domain.action` but code uses `domain:action`; (5) Event Flow example names 4 events with zero repo hits (real: sale.completed/product.created/stock.adjusted/SettingsUpdated); (6) no HAL/driver-trait section — EdcTerminal undocumented here, see crates/oz-hal/README.md · counts from 29-08 (35 members / 13 crates / 14 modules / 61 ADRs) verified accurate -->
 
 **Version:** 2.0 (Post-Restructuring)
 **Status:** Active — restructuring complete
@@ -373,14 +373,14 @@ oz-pos/
 │   ├─ oz-api/         HTTP API server (axum) — now injects config via AppState
 │   ├─ oz-cli/         CLI tool for data import/export and maintenance
 │   ├─ oz-crypto/      Cryptographic primitives (key generation, hashing, encryption)
-│   ├─ oz-hal/         Hardware abstraction layer (printers, scanners, cash drawers, scales)
+│   ├─ oz-hal/         Hardware abstraction layer (printers, scanners, cash drawers, customer displays, scales, EDC payment terminals)
 │   ├─ oz-logging/     Structured logging setup
 │   ├─ oz-lua/         Lua scripting integration
 │   ├─ oz-media/       Media/image handling
 │   ├─ oz-notification/ Email & push notification dispatching
-│   ├─ oz-payment/     Card payment processing (Stripe, QRIS, Square, mock)
+│   ├─ oz-payment/     Card payment processing (Stripe, QRIS, Square, Paddle, mock)
 │   ├─ oz-plugin/      Plugin sandbox & lifecycle (Lua scripting bridge)
-│   ├─ oz-reporting/   Report generation (PDF, CSV)
+│   ├─ oz-reporting/   Report generation (CSV export, daily summaries, menu engineering)
 │   └─ oz-security/    Auth, hashing, encryption
 │
 ├─ foundation/        Reusable zero-business-logic code
@@ -515,5 +515,5 @@ architecture.*
 
 > last audited 29-08-26 by docs-auditor
 
-> status: ACCURATE (verified against actual codebase) · verified accurate: 35 workspace members (13 crates + 4 platform + 1 foundation + 14 modules + 3 apps); 61 ADRs in docs/decisions/; foundation crate verified; cloud-server config consolidation; OpenAPI spec; N+1 SKU lookup fix; all clippy warnings resolved workspace-wide
+> status: PARTIAL (31-08-26 re-audit found structural drift) · counts verified accurate (35 members / 13 crates / 14 modules / 61 ADRs); HAL/payment device lists synced; BUT the Event Bus trait signatures, Platform Core Services tree, permission delimiter, and Event Flow example are stale vs foundation/src/contracts.rs — see the top audit comment for the outstanding majors
 
