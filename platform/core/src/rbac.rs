@@ -405,7 +405,10 @@ pub mod permissions {
     pub const STAFF_READ: &str = "staff:read";
     /// Update an existing staff member.
     pub const STAFF_UPDATE: &str = "staff:update";
-    /// Delete / deactivate a staff member.
+    /// Delete / deactivate a staff member. RESERVED (G-3): registered and
+    /// sensitive, but no enforcement consumer yet across desktop, tablet,
+    /// cloud, and CLI — deactivation rides [`Self::STAFF_UPDATE`]; any
+    /// future hard-delete surface must gate on this key.
     pub const STAFF_DELETE: &str = "staff:delete";
     /// Create, edit, or delete roles and their permission sets.
     pub const STAFF_MANAGE_ROLES: &str = "staff:manage_roles";

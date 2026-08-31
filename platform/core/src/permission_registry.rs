@@ -190,7 +190,7 @@ pub const REGISTRY: &[PermissionEntry] = &[
         key: "staff:delete",
         family: "staff",
         sensitive: true,
-        description: "Delete / deactivate a staff member.",
+        description: "Delete / deactivate a staff member. RESERVED (G-3): no enforcement consumer yet across desktop/tablet/cloud/CLI — deactivation rides staff:update; any future hard-delete IPC must gate on this key.",
     },
     PermissionEntry {
         key: "staff:manage_roles",
