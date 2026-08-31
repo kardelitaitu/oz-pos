@@ -21,6 +21,11 @@
 //! | `OZ_SYNC_REDIRECT_URL` | — | New server URL for migration redirect. When set, all `/api/sync/*` requests return `{"error":"server_migrated","new_url":"<url>"}` with HTTP 421. |
 //! | `RUST_LOG` | `info` | Log level filter (e.g. `debug`, `oz_cloud_server=debug`) |
 
+// serde_json's `json!` recurses once per key/value pair, and the OpenAPI
+// spec's `paths` object is one long literal (exchange-rates endpoints,
+// 2026-08-31, pushed it past the default 128).
+#![recursion_limit = "512"]
+
 mod config;
 mod db;
 mod email;

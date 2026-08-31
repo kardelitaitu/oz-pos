@@ -4332,6 +4332,7 @@ dependencies = [
  "hmac 0.12.1",
  "http-body-util",
  "jsonwebtoken",
+ "modules-currency",
  "oz-core",
  "rusqlite",
  "serde",

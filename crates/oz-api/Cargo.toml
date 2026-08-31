@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 oz-core = { workspace = true }
+modules-currency = { workspace = true }
 rusqlite = { workspace = true }
 axum = { workspace = true }
 jsonwebtoken = { workspace = true }

@@ -252,6 +252,22 @@ pub fn router(state: AppState) -> Router {
             post(routes::tax_rates::create_tax_rate),
         )
         .route(
+            "/api/v1/exchange-rates",
+            get(routes::exchange_rates::list_rates).post(routes::exchange_rates::create_rate),
+        )
+        .route(
+            "/api/v1/exchange-rates/latest",
+            get(routes::exchange_rates::list_latest_rates),
+        )
+        .route(
+            "/api/v1/exchange-rates/latest/{from}/{to}",
+            get(routes::exchange_rates::latest_rate),
+        )
+        .route(
+            "/api/v1/exchange-rates/{id}",
+            axum::routing::delete(routes::exchange_rates::delete_rate),
+        )
+        .route(
             "/api/v1/tenants/me/plan",
             get(routes::plans::get_my_plan_handler),
         )

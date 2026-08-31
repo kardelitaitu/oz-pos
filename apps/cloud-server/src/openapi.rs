@@ -38,6 +38,7 @@ pub fn openapi_spec() -> Value {
             { "name": "Products", "description": "Product CRUD and stock management" },
             { "name": "Categories", "description": "Product category listing" },
             { "name": "Tax Rates", "description": "Tax rate configuration" },
+            { "name": "Exchange Rates", "description": "Currency exchange rate management (global reference data)" },
             { "name": "Users", "description": "User account management" },
             { "name": "Sales", "description": "Sale creation, retrieval, and status transitions" },
             { "name": "Sync", "description": "Offline queue push/pull sync endpoints" },
@@ -321,6 +322,30 @@ fn build_schemas() -> Value {
                 "rate_bps": { "type": "integer", "format": "int64", "description": "Rate in basis points (1000 = 10%)", "example": 1000 },
                 "is_default": { "type": "boolean", "description": "Whether this is the default rate" },
                 "is_inclusive": { "type": "boolean", "description": "Whether the rate is tax-inclusive" }
+            }
+        },
+        "CreateExchangeRateRequest": {
+            "type": "object",
+            "required": ["from_currency", "to_currency", "rate_millionths"],
+            "properties": {
+                "from_currency": { "type": "string", "description": "ISO-4217 alpha-3 source currency code", "example": "USD" },
+                "to_currency": { "type": "string", "description": "ISO-4217 alpha-3 target currency code", "example": "IDR" },
+                "rate_millionths": { "type": "integer", "format": "int64", "description": "Fixed-point rate at 6-decimal scale (16000000 = 16.0), strictly positive", "example": 16000000 },
+                "source": { "type": "string", "description": "Provenance label; defaults to 'manual'", "example": "manual" },
+                "effective_date": { "type": "string", "description": "YYYY-MM-DD; defaults to today (UTC)", "example": "2026-08-31" }
+            }
+        },
+        "ExchangeRateResponse": {
+            "type": "object",
+            "required": ["id", "from_currency", "to_currency", "rate_millionths", "source", "effective_date", "created_at"],
+            "properties": {
+                "id": { "type": "string", "description": "Row id (UUID v7)" },
+                "from_currency": { "type": "string", "example": "USD" },
+                "to_currency": { "type": "string", "example": "IDR" },
+                "rate_millionths": { "type": "integer", "format": "int64", "example": 16000000 },
+                "source": { "type": "string", "example": "manual" },
+                "effective_date": { "type": "string", "example": "2026-08-31" },
+                "created_at": { "type": "string", "description": "RFC-3339 creation timestamp" }
             }
         },
         "CreateUserRequest": {
@@ -721,6 +746,87 @@ fn build_paths() -> Value {
                 "responses": {
                     "201": { "description": "Tax rate created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TaxRateResponse" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+
+        // ── Exchange Rates ──────────────────────────────────────────
+        "/api/v1/exchange-rates": {
+            "get": {
+                "tags": ["Exchange Rates"],
+                "summary": "List exchange rate history",
+                "description": "Full rate history ordered pair-major with newest effective date first within each pair (CUR-04). Rates are global reference data.",
+                "operationId": "listExchangeRates",
+                "security": [{ "bearerAuth": [] }],
+                "responses": {
+                    "200": { "description": "Rate history (may be empty)", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/ExchangeRateResponse" } } } } },
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            },
+            "post": {
+                "tags": ["Exchange Rates"],
+                "summary": "Create an exchange rate",
+                "description": "Creates a rate with 6-decimal fixed-point precision. Rejects non-positive rates, identical pairs, non-ISO codes, and malformed effective dates (CUR-05). Duplicate (pair, date) returns 409.",
+                "operationId": "createExchangeRate",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateExchangeRateRequest" } } }
+                },
+                "responses": {
+                    "201": { "description": "Rate created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ExchangeRateResponse" } } } },
+                    "400": { "description": "Validation error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "409": { "description": "Rate already exists for this pair and effective date", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+        "/api/v1/exchange-rates/latest": {
+            "get": {
+                "tags": ["Exchange Rates"],
+                "summary": "List the current rate for every pair",
+                "description": "One row per (from_currency, to_currency) pair — the newest effective date (CUR-11 bounded listing).",
+                "operationId": "listLatestExchangeRates",
+                "security": [{ "bearerAuth": [] }],
+                "responses": {
+                    "200": { "description": "Current rates (may be empty)", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/ExchangeRateResponse" } } } } },
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+        "/api/v1/exchange-rates/latest/{from}/{to}": {
+            "get": {
+                "tags": ["Exchange Rates"],
+                "summary": "Get the newest rate for one pair",
+                "description": "Path codes are case-insensitive; 404 when the pair has no rates.",
+                "operationId": "getLatestExchangeRate",
+                "security": [{ "bearerAuth": [] }],
+                "parameters": [
+                    { "name": "from", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Source currency code" },
+                    { "name": "to", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Target currency code" }
+                ],
+                "responses": {
+                    "200": { "description": "Newest rate for the pair", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ExchangeRateResponse" } } } },
+                    "400": { "description": "Invalid ISO-4217 code", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "404": { "description": "No rate for this pair", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+        "/api/v1/exchange-rates/{id}": {
+            "delete": {
+                "tags": ["Exchange Rates"],
+                "summary": "Delete an exchange rate",
+                "description": "Removes a rate row by id.",
+                "operationId": "deleteExchangeRate",
+                "security": [{ "bearerAuth": [] }],
+                "parameters": [
+                    { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Rate row id" }
+                ],
+                "responses": {
+                    "204": { "description": "Rate deleted" },
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "404": { "description": "Rate not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
         },
