@@ -479,44 +479,10 @@ impl Store<'_> {
         }
 
         // ── Persist promotion applications (same tx as the sale) ──
-        // Checkout promotions (PROMO-3 integration): the caller reduced
-        // sale.total via compute_checkout_promotions; the audit rows commit
-        // atomically here. PROMO-4: a duplicate (sale_id, promotion_id) pair
-        // fails the whole checkout rather than double-discounting. Inserted
-        // after the sale row so the promotion_applications → sales foreign
-        // key resolves.
-        for app in checkout_applications {
-            if app.sale_id != sale.id {
-                return Err(CoreError::Validation {
-                    field: "sale_id",
-                    message: "checkout application references a different sale".into(),
-                });
-            }
-            let dup: i64 = tx.query_row(
-                "SELECT COUNT(*) FROM promotion_applications
-                 WHERE sale_id = ?1 AND promotion_id = ?2",
-                rusqlite::params![app.sale_id, app.promotion_id],
-                |r| r.get(0),
-            )?;
-            if dup > 0 {
-                return Err(CoreError::Validation {
-                    field: "promotion_id",
-                    message: "promotion already applied to this sale".into(),
-                });
-            }
-            tx.execute(
-                "INSERT INTO promotion_applications (id, promotion_id, sale_id, discount_minor, description, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                rusqlite::params![
-                    app.id,
-                    app.promotion_id,
-                    app.sale_id,
-                    app.discount_minor,
-                    app.description,
-                    app.created_at,
-                ],
-            )?;
-        }
+        // PROMO-3 checkout integration: the caller reduced sale.total via
+        // compute_checkout_promotions; the audit rows commit atomically
+        // with the sale (guards documented on the helper).
+        crate::db::promotions::persist_checkout_applications(&tx, &sale.id, checkout_applications)?;
 
         tx.commit()?;
 

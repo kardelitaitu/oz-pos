@@ -454,6 +454,60 @@ impl Store<'_> {
     }
 }
 
+/// Persist checkout promotion applications inside the caller's sale
+/// transaction. Shared by both completion paths
+/// (`complete_sale_deduction_with_locations` and
+/// `complete_sale_with_resolved_shortfalls`) so the audit rows commit
+/// atomically with the sale row they reference — inserted after it so
+/// the `promotion_applications → sales` foreign key resolves.
+///
+/// Guards: an application pointing at a different sale is a caller
+/// wiring bug and fails closed. The per-`(sale_id, promotion_id)`
+/// duplicate check is defence in depth, not the primary dedupe — the
+/// real one is the `HashSet` in
+/// [`Store::compute_checkout_promotions`]; a fresh sale row cannot have
+/// prior applications, so this only fires if an already-completed sale
+/// id is ever replayed into a checkout.
+pub(crate) fn persist_checkout_applications(
+    tx: &rusqlite::Transaction<'_>,
+    sale_id: &str,
+    checkout_applications: &[PromotionApplication],
+) -> Result<(), CoreError> {
+    for app in checkout_applications {
+        if app.sale_id != sale_id {
+            return Err(CoreError::Validation {
+                field: "sale_id",
+                message: "checkout application references a different sale".into(),
+            });
+        }
+        let dup: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM promotion_applications
+             WHERE sale_id = ?1 AND promotion_id = ?2",
+            params![app.sale_id, app.promotion_id],
+            |r| r.get(0),
+        )?;
+        if dup > 0 {
+            return Err(CoreError::Validation {
+                field: "promotion_id",
+                message: "promotion already applied to this sale".into(),
+            });
+        }
+        tx.execute(
+            "INSERT INTO promotion_applications (id, promotion_id, sale_id, discount_minor, description, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                app.id,
+                app.promotion_id,
+                app.sale_id,
+                app.discount_minor,
+                app.description,
+                app.created_at,
+            ],
+        )?;
+    }
+    Ok(())
+}
+
 fn row_to_promotion(row: &rusqlite::Row) -> rusqlite::Result<Promotion> {
     Ok(Promotion {
         id: row.get("id")?,
