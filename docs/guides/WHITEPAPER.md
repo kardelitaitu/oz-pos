@@ -140,7 +140,4 @@ OZ-POS is more than a POS system — it is a **platform**. Like the wizard behin
 > *Small codebase. Limitless possibilities.*
 
 > last audited 31-08-26 by docs-auditor
-> audit: Phase 1 Core Architecture & API Docs Audit
-
-> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
 

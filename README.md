@@ -244,7 +244,4 @@ This software (`oz-pos`) is **NOT open source**. No part of this codebase, assoc
 See [LICENSE](./LICENSE) for terms and restrictions. For commercial licensing and pricing inquiries, contact: **adikaradwiatmaja@gmail.com**.
 
 > last audited 31-08-26 by docs-auditor
-> audit: Phase 1 Core Architecture & API Docs Audit
-
-> status: ACCURATE (verified against actual codebase) · verified accurate: modules, crates, security features, and feature capabilities confirmed; version 0.0.33 matches Cargo.toml
 
