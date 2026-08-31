@@ -170,13 +170,69 @@ author; tablets render).
   state; no layout shift (fixed tile aspect-ratio). Menu editor enforces the
   always-1-image rule in its save flow.
 
+
+### 3.6 Push & pull scheduling — batching + jitter (server efficiency)
+
+Image bytes get their **own scheduler lane**, separate from the metadata
+delta sync (§3.4): byte transfers are the expensive ops, so they must never
+delay metadata sync or hold the DB lock. Both lanes run inside the existing
+background sync daemon pattern (`sync_bootstrap` / tablet daemon).
+
+**Push (desktop → cloud):**
+
+- `products_set_image` enqueues into a persisted `image_push_queue`
+  `(hash PK, size_bytes, attempts, next_attempt_at, enqueued_at)` — the
+  apply action commits locally and returns immediately; the network leg is
+  never on the UI path.
+- A drain loop wakes on **`next_run = now + jitter(60 s .. 300 s)`** (full
+  jitter — uniformly random per cycle, per device) and drains up to
+  **16 images / 512 KB per batch** via `POST /api/v1/images:batch`
+  (admin-key gated, length-prefixed binary frames). The server re-verifies
+  magic bytes + sha-256 per file and answers per-hash
+  `{hash, stored|duplicate|rejected}` — partial success is allowed, the
+  queue keeps only the failures. One auth check, one connection, one
+  transaction-free static-file store per batch.
+- Idempotency makes retries free: re-uploading a hash the server already
+  has answers `duplicate` = success.
+- Failure backoff: `full jitter(60..300) × 2^attempts`, capped at 30 min;
+  after 8 attempts the entry dead-letters (0045 pattern) and the desktop UI
+  surfaces "image pending upload" on the product row.
+- Server-driven nudge: the catalog delta response already tells the server
+  which hashes product rows reference — it appends `missing_hashes` to the
+  delta response so the desktop prioritizes exactly what the cloud lacks in
+  its next push batch (no polling, no full-scan).
+
+**Pull (tablet ← cloud; desktop only after a cache wipe):**
+
+- The missing-hash set is computed at catalog apply (referenced hashes minus
+  files present locally) — no polling of "what's new".
+- A drain loop wakes on the same **jitter(60..300 s)** window and downloads
+  at most **40 images (~1 MB) per cycle**, 2 GETs in flight, **slot-1
+  primaries first**, alternatives opportunistically. Per-hash GET (not a
+  multipart batch) keeps `Cache-Control: immutable` + per-hash 404
+  granularity; the *scheduler* is the batch, not the response format.
+- Same backoff/dead-letter ladder; a dead-lettered hash degrades the tile to
+  the colored-initial fallback until the next catalog apply recomputes the
+  missing set (self-healing).
+- **Jitter seeding:** each device persists a random phase offset at first
+  boot, so after a menu update the 100 tablets do not wake in the same
+  second — the herd spreads across the full 4-minute window by construction.
+
+**Server-load accounting (why these constants):** 100 devices × (1 push
+batch + ≤ 40 GETs) spread over a 3-minute mean cycle ≈ **8 req/s steady
+worst case** of immutable static-file serving on the volume — negligible for
+the axum server, and the jitter removes the herd spike entirely. Constants
+are env-tunable per repo convention: `OZ_IMG_PUSH_JITTER_SECS`,
+`OZ_IMG_PULL_JITTER_SECS` (both `60..300`), `OZ_IMG_PUSH_BATCH` (16),
+`OZ_IMG_PULL_CYCLE_CAP` (40).
+
 ## 4. Work breakdown (each phase = conventional commits, tests first)
 
 | Phase | Deliverable | Touches |
 |---|---|---|
 | **P1 — storage spine** | `products.image_hash` + `product_images` table (sqlite+pg migrations, models, repository), `products_set_image` / `products_clear_image` commands with sniff/limits/transcode/hash/atomic-write/txn + promotion + menu-invariant logic, unit tests (malformed magic, oversized, slot bounds, promotion, menu-clear refusal, dedupe) | `oz-core` (migrations, db/products), `desktop-client/src/commands`, tauri.conf `assetProtocol` |
 | **P2 — UI** | `FixedSizeGrid` on POS rendering slot 1 via `convertFileSrc`, miss→initial-tile fallback; editor flows: assign-at-apply for menu (1 required) and product (primary + ≤4 alternatives with reorder); alternatives strip lazy-mounted; a11y (alt from product name, aria-busy) | `ui/src/features/retail`, `restaurant`, shared `ProductThumb` |
-| **P3 — cloud sync** | `PUT/GET /api/v1/images` on the Northflank volume (`OZ_IMAGE_DIR`, admin-key gate, hash re-verification), image array in the product delta payload, tablet download manager (primary-first, LRU), sync tests | `oz-api`, `Dockerfile.unified` volume note, tablet-client Rust |
+| **P3 — cloud sync** | `PUT/GET /api/v1/images` on the Northflank volume (`OZ_IMAGE_DIR`, admin-key gate, hash re-verification), image array in the product delta payload, push/pull scheduler lanes with batching + jitter (§3.6), tablet download manager (primary-first, LRU), sync tests | `oz-api`, `Dockerfile.unified` volume note, tablet-client Rust |
 | **P4 — hygiene** | startup GC sweep (reverse-index + grace), metrics (bytes dir, hit/miss latency, 4 GB soft alert), e2e, docs (`docs/guides`), i18n strings for the editor UI (en+id FTL) | `desktop-client`, `ui`, docs |
 
 **Est. budget:** P1–P2 make a fully local (single-device) feature — shippable
@@ -196,6 +252,10 @@ slice. P3 unlocks tablets. P4 is polish.
    Model: **menu item = exactly 1 image (always); product = 1 primary +
    max 4 alternatives** (slots 1..5, slot 1 mirrored to the product row).
    Authoring device: desktop editors (tablet capture stays a non-goal for v1).
+
+4. **RESOLVED: batched, jittered byte transfer** — decided 2026-08-31; push
+   batches ≤ 16 images / 512 KB per request, pull cycles cap ≤ 40 images,
+   both lanes wake on full random jitter in the 1–5 min window (§3.6).
 
 ## 6. Risks
 
