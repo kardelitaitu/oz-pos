@@ -1924,6 +1924,87 @@ fn complete_sale_deduction_with_payment_splits() {
     assert_eq!(payment_count, 1, "one payment row created");
 }
 
+/// COR-7: the sale-path payment insert omitted the `idempotency_key` column,
+/// so a key supplied by a caller was silently dropped here even though
+/// `create_payments` (db/payments.rs) persists it. The same `PaymentSplitArg`
+/// therefore produced different rows depending on which writer ran, and the
+/// `UNIQUE idx_payments_idempotency_key` index could never protect a checkout.
+#[test]
+fn complete_sale_deduction_persists_the_payment_idempotency_key() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product_with_stock(&conn, "COFFEE", 10);
+
+    let sale = make_single_line_sale("COFFEE", 2, 350);
+    let mut splits = tender(700);
+    splits[0].idempotency_key = Some("idem-cor7-0001".into());
+
+    s.complete_sale_deduction(&sale, None, &splits, "cashier-1", None)
+        .unwrap();
+
+    let stored = s.list_payments_for_sale(&sale.id).unwrap();
+    assert_eq!(stored.len(), 1, "one payment row expected");
+    assert_eq!(
+        stored[0].idempotency_key.as_deref(),
+        Some("idem-cor7-0001"),
+        "the sale-path insert must persist the caller's idempotency key"
+    );
+}
+
+/// COR-7 follow-on: the payment insert runs inside the same transaction as the
+/// sale insert and the stock deduction, so persisting the key turns
+/// `idx_payments_idempotency_key` (migrations/20260813_init.sql:1204) into a
+/// whole-checkout replay guard. A second completion carrying the same key must
+/// fail and leave no trace — not merely skip the payment row.
+///
+/// Pins behaviour rather than mechanism: if a future change moved the payment
+/// insert out of the transaction, or started swallowing constraint errors, the
+/// assertions below fail even though the key is still being written.
+#[test]
+fn complete_sale_deduction_rejects_a_replayed_idempotency_key_without_side_effects() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product_with_stock(&conn, "COFFEE", 10);
+
+    let mut splits = tender(700);
+    splits[0].idempotency_key = Some("idem-cor7-replay".into());
+
+    let sale = make_single_line_sale("COFFEE", 2, 350);
+    s.complete_sale_deduction(&sale, None, &splits, "cashier-1", None)
+        .unwrap();
+
+    // A replay. Sale::from_cart mints a fresh id per call, so the second
+    // attempt is a different sale carrying the same key — which is exactly
+    // what a double-tapped checkout looks like once it reaches this layer.
+    let replay = make_single_line_sale("COFFEE", 2, 350);
+    let result = s.complete_sale_deduction(&replay, None, &splits, "cashier-1", None);
+    assert!(
+        result.is_err(),
+        "a replayed idempotency key must not complete a second sale"
+    );
+
+    let sale_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM sales", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(sale_count, 1, "the replayed sale must not persist");
+
+    let pay_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM payments", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(pay_count, 1, "the replayed payment must not persist");
+
+    let coffee_qty: i64 = conn
+        .query_row(
+            "SELECT qty FROM stock_summary \
+             WHERE item_id = (SELECT id FROM products WHERE sku = 'COFFEE') \
+             AND location_id = ?1",
+            rusqlite::params![crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(coffee_qty, 8, "stock deducted once, not twice");
+}
+
 /// One full-tender cash split for the given amount (MONEY-04 tests).
 fn tender(amount_minor: i64) -> Vec<crate::PaymentSplitArg> {
     vec![crate::PaymentSplitArg {

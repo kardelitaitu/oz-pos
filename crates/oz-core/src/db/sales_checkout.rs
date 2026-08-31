@@ -453,8 +453,8 @@ impl Store<'_> {
                 tx.execute(
                     "INSERT INTO payments (id, sale_id, method, amount_minor, currency,
                                            gateway_reference, gateway_status, gateway_response,
-                                           created_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                                           created_at, idempotency_key)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                     rusqlite::params![
                         payment_id,
                         sale.id,
@@ -465,6 +465,7 @@ impl Store<'_> {
                         split.gateway_status,
                         split.gateway_response,
                         now,
+                        split.idempotency_key,
                     ],
                 )?;
             }
