@@ -9302,3 +9302,74 @@ Checked twice (00:43 and 00:47): identical errors, file unchanged. Unlike the
 three transients today (the dropped format!, the mod edc deletion, the
 CoreError::Validation shape) nobody is actively fixing this one, so it will
 still be red on the next round.
+
+## 2026-08-31 — round V: LOYALTY-01 — the multiplier migration ($22.50 → 32 points)
+
+The money TDD round ended with one honest residual: the loyalty tier
+multiplier lived as `REAL`/`DOUBLE PRECISION` and the points formula ran
+through f64. The user picked the real fix — fixed-point millionths,
+end to end. Two commits: `803f6239` (core + SQL), `02b264cd` (UI).
+
+**What the scan taught.** My own recorded counterexample was wrong: base
+250 × 1.4 does NOT flip — the product lands exactly on the tie and
+round-half-to-even snaps it back to 3.5. The real flips start at base
+2250 ($22.50 at 1 point/dollar, 1.4× tier → 31.5 → float 31.499999999999996
+→ 31 points, exact decimal 32). 585 flip bases ≤ 2M, all downward for
+1.4. And the reason it stayed hidden for so long: the four seeded tiers
+(1.0/1.25/1.5/2.0) are all binary-exact — only custom multipliers like
+1.4 or 1.35 can corrupt. Writing the explanation forced the verification
+that corrected the record — evidence over assertion applies to findings
+you wrote yourself.
+
+**The migration.** `20260831_loyalty_multiplier_fixedpoint.sql`: drop the
+validation triggers → ADD COLUMN `earn_multiplier_millionths` INTEGER →
+backfill `CAST(ROUND(old × 1e6) AS INTEGER)` (recovers the intended
+decimal for every ≤6-digit multiplier — the f64 error is far below half a
+millionth) → DROP COLUMN → recreate triggers. Deliberately NOT a table
+rebuild: the `loyalty_accounts.tier_id` FK stays undisturbed, and the
+runner applies each file once inside a transaction. Postgres intentionally
+untouched — the cloud server has no loyalty code path (verified: zero
+references outside the dormant generated table), and `init.pg.sql` is a
+generated artifact; hand-editing it would be undone by the next
+regeneration, exactly like the drift every incremental migration has left
+since 20260813.
+
+**The compute.** `compute_points(base, millionths)`: i128 numerator,
+floor-divide, half-up toward +∞ — the house convention shared with
+refunds.rs (CRM-06). Saturates at i64::MAX instead of wrapping; negative
+inputs (unreachable in practice) follow the same uniform rule. The old
+comment claimed f64 was needed "to preserve fractional cents" — the
+millionths form preserves them exactly.
+
+**The UI.** Wire field `earn_multiplier_millionths`; the tier editor
+parses with `parseMinorUnits(x, 6)` (built for MONEY-02 — it slotted
+straight in) and displays with the new `millionthsToDecimalString`
+(integer-only: 1_400_000 → "1.4", never String(f64) artifacts). Red-first
+tests: prefill shows exactly "1.25" (raw `.value` — `toHaveValue` coerces
+number inputs to JS numbers and would hide artifacts), typing "1.4" sends
+1_400_000, zero is rejected without a request. One test had to be
+rewritten after jsdom taught me that "1e3" is VALID text in a
+type=number field (it arrives sanitized) — the parser-level rejection
+stays pinned at the unit level instead.
+
+**Verification.** 53 loyalty + 21 migrations lib tests, 20 integration,
+40 module tests, 26 screen + 57 loyalty-family UI tests — all green;
+targeted cargo check clean on all four crates; typecheck + lint clean.
+Full `cargo test -p oz-core` then surfaced 7 red `db::profile` tests —
+NOT mine (proven by temporarily removing my migration from the registry
+and reproducing identically). Root cause: rbac F-1 (`ea826188`) gave
+`create_user` its own `unchecked_transaction`, but `create_user_with_profile`
+already wraps it in a profile tx → nested BEGIN → every staff creation
+with a profile was broken on both clients. Fixed as `3cb756db` with the
+`finalize_sale_in_tx` precedent (thin wrapper + `create_user_in_tx` body);
+profile 25/25, staff 65/65 + 25/25, whole crate green.
+
+**Process notes.** (1) Foreign commits interleaved mid-round (a topology
+test fix, two loyalty README docs commits, a docs publish) — pathspec
+commits absorbed it all without a single conflict; my slice-1 hash moved
+two slots down the log and I re-read it instead of assuming HEAD~1.
+(2) pwsh mangles `\"` inside git -m strings — use single-quoted messages
+with no embedded double quotes.
+(3) Attribution experiment beats blame-guessing: 90 seconds of
+temporarily disabling my migration settled "did I break profile?" that
+reading code alone could not.
