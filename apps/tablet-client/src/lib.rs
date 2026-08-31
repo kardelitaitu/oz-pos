@@ -265,7 +265,12 @@ pub fn run() {
                 commands::categories::delete_category_scoped,
                 commands::currencies::currency_info,
                 commands::currencies::list_currencies_scoped,
+                // Bootstrap: get_default_currency/set_default_currency are
+                // pre-session commands — CurrencyProvider sits above
+                // AuthProvider/WorkspaceProvider and has no session token.
+                commands::currencies::get_default_currency,
                 commands::currencies::get_default_currency_scoped,
+                commands::currencies::set_default_currency,
                 commands::currencies::set_default_currency_scoped,
                 commands::exchange_rates::list_exchange_rates_scoped,
                 commands::exchange_rates::create_exchange_rate_scoped,
