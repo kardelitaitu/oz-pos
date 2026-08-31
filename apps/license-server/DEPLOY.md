@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · scripts/generate-license-keys.{ps1,sh} verified; Dockerfile uses golang:1.25-alpine -> alpine:3.20; health.go (GET /api/health, returns status: ok) + healthcheck.go present; pb_schema.json present; go.mod is go 1.25.0; all build/deploy/env-var claims match the Go code -->
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · scripts/generate-license-keys.{ps1,sh} verified; Dockerfile uses golang:1.25-alpine -> alpine:3.22 (was 3.20, bumped for Trivy EOL); health.go (GET /api/health, returns status: ok) + healthcheck.go present; pb_schema.json present; go.mod is go 1.25.0; all build/deploy/env-var claims match the Go code · RE-AUDITED 2026-08-31 by docs-auditor: go.mod still 1.25.0, /api/health present, oz-license.key.pub committed; env-var section confirmed current (Midtrans/ADR #39, PADDLE_PRICE_TIERS six sandbox prices catalogued 08-31); corrected the body's alpine 3.20 -> 3.22 -->
 
 # OZ-POS License Server — Northflank Deployment Guide
 
@@ -86,7 +86,7 @@ $env:OZ_LICENSE_PRIVATE_KEY = (Get-Content -Raw ../../crates/oz-core/oz-license-
 
 ## 3. Build the Docker Image
 
-The `Dockerfile` uses a **multi-stage build**: `golang:1.25-alpine` compiles the binary, then copies it into `alpine:3.20` for a ~25 MB final image.
+The `Dockerfile` uses a **multi-stage build**: `golang:1.25-alpine` compiles the binary, then copies it into `alpine:3.22` for a ~25 MB final image.
 
 ### 3.1 Build locally
 
