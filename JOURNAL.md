@@ -9174,3 +9174,85 @@ band is a coin flip. Warm-cache checks are 1-3 seconds; the range is enormous.
 The rule that actually fixes it is not the number: a skipped round must print
 NO verdict line at all. The status probe treats a missing FAILING CRATES line
 as UNKNOWN, so a skip can never be misread as a pass, whatever the cap is.
+
+
+## 2026-08-31 — round U: /tdd on the money area — five real bugs, one honest stop
+
+The foundation `money.rs` came back exemplary (deep-audit stamp, 966 lines
+of tests + proptests) — the weaknesses were at the EDGES of the money area:
+the UI conversion path, the UI input parsers, one daemon cast, and two
+hardcoded scales. All found the TDD way: counterexample first, then fix.
+
+**MONEY-01 (`79247c92`)** — the PaymentModal converted tender amounts
+through binary floats. A brute-force search (float path vs exact BigInt
+path over a rate/amount grid) produced instant counterexamples: 0.03 USD
+@ 149.5 → 448 where exact decimal half-up is 449. Every product landing
+on the .5 minor boundary mis-rounds, because the decimal .5 is
+representable but the binary approximation of the operands sits below it.
+Fix: `convertMinorUnits` — whole computation in BigInt, half-up toward
++Infinity, `inverse` flag for reciprocal pairs. The tender snapshot's
+`tenderRateMillionths` also stopped round-tripping through a float.
+
+**MONEY-02 (`89589dae`)** — same class at the INPUT boundary: six sites
+across four screens parsed free-text money with
+`Math.round(parseFloat(s) * 10**exp)`. "1.005" → 100 cents (should be
+101); "1e3" → 1000; "1,500" → 1. `parseMinorUnits` (strict decimal regex,
+BigInt scaling, null on garbage) replaced every site. The staff-pay field
+previously stored NaN when the field held junk — now garbage means absent.
+
+**MONEY-03 (`6736fb02`)** — the rate-sync daemon trusted a comment
+("legitimate FX rates are bounded") over its input: `(rate * 1e6).round()
+as i64` on untrusted network JSON, and Rust's `as` cast SATURATES — a
+1e300 response becomes i64::MAX, which passes the repo's `> 0` validation
+and persists. `rate_to_millionths` now bounds the domain before the cast.
+
+**MONEY-04/05 (`46fd1ab0`)** — the nastiest pair, found by reading the
+scale the parser used against the currency it served: the Rp discount tab
+and the shift-balance handlers hardcoded ×100 while the default store
+currency is IDR (exponent 0). For IDR the discount ratio inflated 100× and
+`setDiscount` clamps to 100 — entering Rp 2,000 on a Rp 100,000 cart made
+the sale FREE. The shift balances stored drawer counts 100× inflated,
+poisoning `expected_cash` reconciliation. The existing shift test had
+PINNED the bug (`100000 → 10000000`) — a reminder that green tests can
+certify wrong behavior when they were written against the implementation
+instead of the contract.
+
+**Stopping point.** One residual recorded rather than fixed: LOYALTY-01 —
+points computed through an f64 multiplier stored as REAL (base 250 × 1.4
+→ 3 points, exact decimal → 4). The honest fix is a schema decision
+(fixed-point multipliers), not a local patch, and the registry carries the
+counterexample. Foundation money: exemplary. UI money paths: now exact at
+every boundary I could produce a counterexample for. That's the "no more
+problems" bar — with one documented exception that needs a product call.
+
+**Process notes.** (1) The ExchangeRateScreen suite was 9-red at HEAD
+before this round — CUR-06/8c21abeb moved the screen to always-scoped and
+the legacy tests kept stubbing removed wrappers (`5474aac7` rewired them).
+(2) I popped a FOREIGN stash by accident when a `git stash push` aborted on
+an untracked pathspec and the paired `pop` consumed the pre-existing top of
+stack — the shared tree's stash stack is everyone's. Recovery was clean
+(restore the conflicted file to HEAD; the foreign entry was never dropped),
+but the rule is now: in this repo, never `git stash pop` blind; check
+`git stash list` first, or avoid stash entirely (file-copy swaps work
+fine). (3) `index.lock` collisions from foreign git processes are routine;
+a failed `git checkout` mid-swap silently left the "baseline" run on my
+version — verify the swap actually happened before trusting a baseline.
+
+**Addendum (same round): the stale-test sweep widened.** A full-suite run
+after the money commits found 7 red files. A clean pre-batch worktree
+(`git worktree add` + node_modules junction — no stash, no risk) attributed
+them: 6 were red at HEAD BEFORE this round (the scoped-IPC audit `5e0d4caa`
+and REP-06 shipped with test updates left behind), 2 topology files were a
+foreign agent's uncommitted WIP (green at clean HEAD — left alone), and 2
+were MY drift: the ERR-10 compliance whitelist pinned PaymentModal line
+numbers, which MONEY-01/02 shifted. Fixed all six stale assertions
+(`0ffdd2c3`) — RefundModal's wire object also dropped `userId` (the session
+token now resolves the user server-side), VoidOrders' scoped call is
+positional, StatusBar's offline mock missed the scoped export, and the
+Analytics category fixture omitted the REP-06 row currency — which crashed
+`Intl.NumberFormat` in `fmtIn`, a real money-display class worth knowing.
+The compliance whitelist is now content-anchored (anchor + discriminating
+context line) with a per-entry sanity check, so line drift can never again
+silently widen an error-handling hole. Worktree cleanup note: `git worktree
+remove` failed on the junction'd dir ("Invalid argument") — remove the
+junction with `cmd /c rmdir` FIRST, then the dir, then `git worktree prune`.
