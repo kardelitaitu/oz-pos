@@ -53,6 +53,9 @@ The `.githooks/pre-commit` hook runs six gates automatically before every commit
 | **Build Bundle** | `npm run build` | Validates bundle compilation |
 | **E2E Suite** | `npm run e2e` | Docker backend + Vite + Playwright + cleanup |
 | **E2E UI Only** | `npm run e2e:ui` | Runs Playwright UI spec subset |
+| **E2E + Rebuild Images** | `npm run e2e -- --build` | Rebuilds stale `e2e-{cloud,license}-server` images first |
+
+> **Stale-image guard:** `compose up --pull=missing` never rebuilds a tag that already exists, so `run-e2e.mjs` **refuses to start** when a locally-built image predates its own sources (exit 3 · `E2E SETUP FAILED`). Re-run with `--build`. Agents must not treat a green local E2E run as proof of current backend behaviour unless the guard passed. Skipped under `CI`, where the workflow builds from the checkout.
 
 *If `node_modules` is missing, install cleanly:*
 ```powershell
