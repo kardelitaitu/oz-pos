@@ -9095,3 +9095,51 @@ then covers every member).
 
 The watcher is a session-scoped background job. It dies with the session and
 does not restart itself.
+
+## 2026-08-31 — round T: repairing the four discoveries, one by one
+
+The previous round's "notable discoveries" became this round's work order:
+repair carefully, one by one. All four landed; three needed code, one was a
+sweep that came back clean.
+
+**1. Rate REST gap (the big one).** The exchange-rate commands were IPC +
+dev-mock only — `crates/oz-api` had no rate endpoints at all, so web
+deployments could not read or manage rates. Built the full surface mirroring
+the five scoped IPC commands 1:1 (`5b0f1662`), dual-path like tax_rates: PG
+helpers in `pg.rs` or SQLite fallback via `CurrencyRepository`. Two parity
+lessons: (a) the repo surfaces UNIQUE violations as a raw Db error, so the
+fallback needs an explicit duplicate pre-check to match the PG path's 409 —
+check+insert share the store lock, so it is race-free; (b) my hand-rolled
+strict YYYY-MM-DD byte check REJECTED `2026-8-1` while the command layer's
+chrono `%Y-%m-%d` accepts it — the validator must be the same parser, not an
+equivalent one, or the slice reintroduces exactly the drift it exists to
+close (`9cd8c6bb`). The e2e suite then taught a third thing: Playwright runs
+`api.spec.ts` under BOTH browser projects in parallel against ONE server,
+and rates are global reference data — the second worker's identical create
+409ed. Workers now isolate by effective date and the latest-per-pair
+assertions test the contract (one row per pair, never older than mine)
+instead of assuming exclusivity. 20/20 green, live-PG roundtrip included.
+
+**2. UUID-vs-rowid sweep — clean.** Every other `ORDER BY … id` recency
+pattern checked: `audit_log` and `offline_queue` ids are UUID v7
+(time-ordered), so their `id` tails are sound; `prune.rs` and the
+line-item listings order by id for STABILITY, not recency. `exchange_rates`
+was the only genuine trap (mixed id lineage possible in real stores) and it
+already pins `rowid`. No change.
+
+**3. .env poison — hardened.** The six note-lines that killed compose are
+commented; the root .env now parses (two full e2e runs prove it). Added
+`scripts/validate-env.mjs` — a quote-state-aware dotenv validator (the real
+file carries a multi-line PEM value; a naive line checker false-positives on
+it) wired as a pre-flight in `run-e2e.mjs`, so the next poisoned line fails
+fast with every offender numbered instead of dying inside compose with one
+terse message.
+
+**Incident worth recording: uncommitted work evaporates in this tree.**
+Mid-repair, `pg.rs` reverted to its pre-edit size under a foreign git
+operation — my ~250-line section was gone because it was uncommitted while
+other agents committed around it (HEAD moved twice in minutes). The fix is
+procedural: commit verified slices immediately, pathspec-style, instead of
+batching. Also confirmed: the shared tree has a live rustfmt watcher that
+touches files between read and edit (stale-stamp errors) — batch read+edit
+tight, or let pwsh do the replacement.
