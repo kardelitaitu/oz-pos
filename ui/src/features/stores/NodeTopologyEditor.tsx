@@ -74,7 +74,7 @@ import {
   topologyUiString,
   sanitizeCopiedNode,
 } from './topologyCard';
-import { portRowCenterY, semanticRowIndex } from './topologyMetrics';
+import { nodeHeight, portRowCenterY, semanticRowIndex } from './topologyMetrics';
 import './NodeTopologyEditor.css';
 
 // ── Extracted modules (Phase 1 split) ────────────────────────────────
@@ -1174,7 +1174,7 @@ export default function NodeTopologyEditor({
     const minX = Math.min(...sel.map((n) => n.x));
     const minY = Math.min(...sel.map((n) => n.y));
     const maxX = Math.max(...sel.map((n) => n.x + NODE_WIDTH));
-    const maxY = Math.max(...sel.map((n) => n.y + NODE_HEIGHT));
+    const maxY = Math.max(...sel.map((n) => n.y + nodeHeight(n)));
     return { minX, minY, maxX, maxY };
   }, [nodes, selectedNodeIds]);
 
@@ -1385,7 +1385,7 @@ export default function NodeTopologyEditor({
   const svgBounds = useMemo(() => {
     if (nodes.length === 0) return { width: 0, height: 0 };
     const maxX = nodes.reduce((acc, n) => Math.max(acc, n.x + NODE_WIDTH), -Infinity);
-    const maxY = nodes.reduce((acc, n) => Math.max(acc, n.y + NODE_HEIGHT), -Infinity);
+    const maxY = nodes.reduce((acc, n) => Math.max(acc, n.y + nodeHeight(n)), -Infinity);
     if (!isFinite(maxX) || !isFinite(maxY)) return { width: 0, height: 0 };
     return { width: maxX + 200, height: maxY + 200 };
   }, [nodes]);
@@ -2485,7 +2485,7 @@ export default function NodeTopologyEditor({
       const minX = Math.min(...sel.map((n) => n.x));
       const maxX = Math.max(...sel.map((n) => n.x + NODE_WIDTH));
       const minY = Math.min(...sel.map((n) => n.y));
-      const maxY = Math.max(...sel.map((n) => n.y + NODE_HEIGHT));
+      const maxY = Math.max(...sel.map((n) => n.y + nodeHeight(n)));
       const aligned = prev.map((n) => {
         if (!ids.has(n.id)) return n;
         switch (mode) {
@@ -2708,7 +2708,7 @@ export default function NodeTopologyEditor({
     const minX = nodes.reduce((acc, n) => Math.min(acc, n.x), Infinity);
     const minY = nodes.reduce((acc, n) => Math.min(acc, n.y), Infinity);
     const maxX = nodes.reduce((acc, n) => Math.max(acc, n.x + NODE_WIDTH), -Infinity);
-    const maxY = nodes.reduce((acc, n) => Math.max(acc, n.y + NODE_HEIGHT), -Infinity);
+    const maxY = nodes.reduce((acc, n) => Math.max(acc, n.y + nodeHeight(n)), -Infinity);
     // Guard against degenerate bounding box with zero or negative dimensions
     if (!isFinite(minX) || !isFinite(maxX) || maxX <= minX || maxY <= minY) return;
     const padding = 60;
@@ -2736,7 +2736,7 @@ export default function NodeTopologyEditor({
     const minX = Math.min(...sel.map((n) => n.x));
     const minY = Math.min(...sel.map((n) => n.y));
     const maxX = Math.max(...sel.map((n) => n.x + NODE_WIDTH));
-    const maxY = Math.max(...sel.map((n) => n.y + NODE_HEIGHT));
+    const maxY = Math.max(...sel.map((n) => n.y + nodeHeight(n)));
     if (!isFinite(minX) || !isFinite(maxX) || maxX <= minX || maxY <= minY) return;
     const padding = 60;
     const viewW = (canvasRef.current?.clientWidth ?? 800) - padding * 2;
@@ -2758,11 +2758,19 @@ export default function NodeTopologyEditor({
     setZoom((prev) => Math.min(2.0, Math.max(0.4, prev * factor)));
   }, []);
 
-  /** Return to the identity transform (100%, no pan). */
+  /** Reset the view: 100% zoom, pan so the Branch Location node sits at
+   *  the top-left of the visible canvas (with a fixed margin). That way
+   *  the location anchor is always in view after a reset, regardless of
+   *  where the user has panned. Falls back to the identity transform when
+   *  no Branch Location exists. */
   const resetView = useCallback(() => {
+    const storeNode = nodes.find((n) => n.type === 'store');
+    const margin = 60;
     setZoom(1);
-    setPan({ x: 0, y: 0 });
-  }, []);
+    setPan(storeNode
+      ? { x: margin - storeNode.x, y: margin - storeNode.y }
+      : { x: 0, y: 0 });
+  }, [nodes]);
 
   /** One-shot load auto-fit: when a diagram's content first lands (the
    *  mount preset or an async load) on a MEASURED canvas, fit it if it
