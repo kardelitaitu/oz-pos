@@ -109,6 +109,7 @@ analytics-card-discounts = Diskon & Promo
 analytics-card-refunds = Pengembalian & Void
 analytics-card-top-products = Produk Terlaris
 analytics-card-category = Penjualan per Kategori
+analytics-category-currency-aria = Pilih mata uang untuk grafik kategori
 analytics-card-basket = Rata-rata Isi Keranjang
 analytics-card-inventory = Perputaran Stok
 analytics-card-low-stock = Peringatan Stok Menipis

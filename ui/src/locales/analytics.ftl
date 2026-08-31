@@ -115,6 +115,7 @@ analytics-card-discounts = Discounts & Promotions
 analytics-card-refunds = Refunds & Voids
 analytics-card-top-products = Top Products
 analytics-card-category = Sales by Category
+analytics-category-currency-aria = Select currency for the category chart
 analytics-card-basket = Average Basket Size
 analytics-card-inventory = Stock Turnover
 analytics-card-low-stock = Low Stock Alerts
