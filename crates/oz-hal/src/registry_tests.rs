@@ -116,3 +116,103 @@ async fn register_tcp_printer_and_lookup() {
     assert!(got.is_some());
     assert_eq!(got.unwrap().device_info().vendor, "epson");
 }
+
+// --- EDC card-payment terminals ------------------------------------------
+
+fn usd(minor: i64) -> oz_core::Money {
+    oz_core::Money {
+        minor_units: minor,
+        currency: "USD".parse::<oz_core::Currency>().unwrap(),
+    }
+}
+
+#[tokio::test]
+async fn register_and_lookup_terminal() {
+    let reg = DriverRegistry::default();
+    let terminal: Arc<dyn EdcTerminal> =
+        Arc::new(crate::drivers::mock::MockEdcTerminal::with_info(
+            DeviceInfo::new("pax", "S920", "S920-0001"),
+        ));
+    reg.register_terminal("front", terminal).await;
+    let got = reg.terminal("front").await.unwrap();
+    assert_eq!(got.device_info().vendor, "pax");
+    assert_eq!(got.device_info().model, "S920");
+}
+
+#[tokio::test]
+async fn missing_terminal_returns_none() {
+    let reg = DriverRegistry::default();
+    assert!(reg.terminal("nope").await.is_none());
+}
+
+#[tokio::test]
+async fn terminal_ids_snapshot() {
+    let reg = DriverRegistry::default();
+    assert!(reg.terminal_ids().await.is_empty());
+    reg.register_terminal(
+        "front",
+        Arc::new(crate::drivers::mock::MockEdcTerminal::new()),
+    )
+    .await;
+    reg.register_terminal(
+        "back",
+        Arc::new(crate::drivers::mock::MockEdcTerminal::new()),
+    )
+    .await;
+    let mut ids = reg.terminal_ids().await;
+    ids.sort();
+    assert_eq!(ids, vec!["back".to_string(), "front".to_string()]);
+}
+
+#[tokio::test]
+async fn register_wired_terminal_installs_the_real_stub_driver() {
+    let reg = DriverRegistry::default();
+    reg.register_wired_terminal(
+        "edc-front",
+        "COM3",
+        9600,
+        DeviceInfo::new("ingenico", "iPP320", "IPP-0001"),
+    )
+    .await;
+    let t = reg.terminal("edc-front").await.expect("registered");
+    assert_eq!(t.device_info().model, "iPP320");
+    // It is the wired stub, not a mock: an unimplemented driver must fail
+    // closed rather than report an approval.
+    assert!(
+        matches!(
+            t.authorize(usd(1000)).await,
+            Err(crate::error::HalError::Unsupported(_))
+        ),
+        "wired stub must not authorize"
+    );
+}
+
+#[tokio::test]
+async fn register_wireless_terminal_installs_the_real_stub_driver() {
+    let reg = DriverRegistry::default();
+    reg.register_wireless_terminal(
+        "edc-mobile",
+        crate::drivers::edc::WirelessTarget::Network("192.168.1.50:9500".into()),
+        DeviceInfo::new("verifone", "P400", "P400-0001"),
+    )
+    .await;
+    let t = reg.terminal("edc-mobile").await.expect("registered");
+    assert_eq!(t.device_info().vendor, "verifone");
+    assert!(matches!(
+        t.status().await,
+        Err(crate::error::HalError::Unsupported(_))
+    ));
+}
+
+#[tokio::test]
+async fn discover_never_registers_a_card_terminal() {
+    // Deliberate design, not an oversight: a money device must be named by
+    // an operator before the register can take a card on it. If discovery
+    // ever grows EDC probing this test fails and the decision gets revisited.
+    let reg = DriverRegistry::default();
+    reg.discover().await;
+    assert!(
+        reg.terminal_ids().await.is_empty(),
+        "discover() must not auto-register EDC terminals"
+    );
+}

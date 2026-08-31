@@ -1,8 +1,8 @@
 /*
 last audited 25-07-26 by RSA-Agent (oz-hal slice A: registry deep read)
 crate: oz-hal | status: SAFE | lint: CLEAN
-findings: clean — per-category RwLock maps with documented overwrite semantics; discovery fail-open per driver (one failure never aborts the rest); deterministic device-id scheme with serial/model fallback; companion cash-drawer registration for every printer. GAP (open, Phase 2): discover() never registers a WeightScale — drivers/scale.rs HidWeightScale has no discover_all(), and no caller anywhere invokes register_scale(), so read_scale_weight_scoped always resolves to None in production even though both clients expose the command and Feature::UsbScale is declarable. register_mock_scale() was removed 31-08-26: zero callers, it injected a mock into the production registry, and it was the crate's only library-side panic path (try_write().expect())
-next: scale discovery (Phase 2) | perf: short-lived read locks on lookup
+findings: clean — per-category RwLock maps with documented overwrite semantics; discovery fail-open per driver (one failure never aborts the rest); deterministic device-id scheme with serial/model fallback; companion cash-drawer registration for every printer. Six categories as of 31-08-26: the EDC terminal slot arrived with the HAL unification, closing the bypass where a card terminal was reachable only through a hardcoded AppState field rather than the registry. EDC is registered by configuration (register_wired_terminal / register_wireless_terminal, the same shape register_tcp_printer uses) and is deliberately absent from discover() — auto-probing and silently binding a money device would let an unconfigured terminal show up in the tender list. That decision is pinned by discover_never_registers_a_card_terminal. GAP (open, Phase 2): discover() also never registers a WeightScale, but for the opposite reason — no discovery path exists for it yet (drivers/scale.rs HidWeightScale has no discover_all(), and no caller invokes register_scale()), so read_scale_weight_scoped always resolves to None in production even though both clients expose the command and Feature::UsbScale is declarable. register_mock_scale() was removed 31-08-26: zero callers, it injected a mock into the production registry, and it was the crate's only library-side panic path (try_write().expect())
+next: scale discovery + TCP printer discovery (Phase 2) | perf: short-lived read locks on lookup
 */
 //! `DriverRegistry` — the runtime's catalogue of available hardware.
 //!
@@ -23,6 +23,7 @@ use crate::drivers::drawer::PrinterKickCashDrawer;
 use crate::traits::barcode::BarcodeScanner;
 use crate::traits::cash_drawer::CashDrawer;
 use crate::traits::customer_display::CustomerDisplay;
+use crate::traits::edc::EdcTerminal;
 use crate::traits::printer::ReceiptPrinter;
 use crate::traits::weight_scale::WeightScale;
 use crate::types::DeviceInfo;
@@ -35,6 +36,7 @@ pub struct DriverRegistry {
     drawers: RwLock<HashMap<String, Arc<dyn CashDrawer>>>,
     displays: RwLock<HashMap<String, Arc<dyn CustomerDisplay>>>,
     scales: RwLock<HashMap<String, Arc<dyn WeightScale>>>,
+    terminals: RwLock<HashMap<String, Arc<dyn EdcTerminal>>>,
 }
 
 impl DriverRegistry {
@@ -125,6 +127,53 @@ impl DriverRegistry {
         self.scales.read().await.keys().cloned().collect()
     }
 
+    /// Register an EDC card-payment terminal under `id`. Overwrites any
+    /// previous entry with the same id.
+    pub async fn register_terminal(&self, id: &str, driver: Arc<dyn EdcTerminal>) {
+        self.terminals.write().await.insert(id.to_owned(), driver);
+    }
+
+    /// Look up an EDC terminal by id. Returns `None` if none is registered.
+    pub async fn terminal(&self, id: &str) -> Option<Arc<dyn EdcTerminal>> {
+        self.terminals.read().await.get(id).cloned()
+    }
+
+    /// Snapshot of registered EDC terminal ids.
+    pub async fn terminal_ids(&self) -> Vec<String> {
+        self.terminals.read().await.keys().cloned().collect()
+    }
+
+    /// Register a wired EDC terminal under the given id. The setup wizard
+    /// calls this when an operator configures a card terminal by serial
+    /// port, mirroring [`register_tcp_printer`].
+    ///
+    /// [`register_tcp_printer`]: Self::register_tcp_printer
+    pub async fn register_wired_terminal(
+        &self,
+        id: &str,
+        port_name: &str,
+        baud_rate: u32,
+        info: DeviceInfo,
+    ) {
+        let terminal = Arc::new(crate::drivers::edc::WiredEdcTerminal::new(
+            port_name, baud_rate, info,
+        ));
+        self.register_terminal(id, terminal).await;
+    }
+
+    /// Register a wireless EDC terminal under the given id. The setup
+    /// wizard calls this when an operator configures a Bluetooth or network
+    /// card terminal.
+    pub async fn register_wireless_terminal(
+        &self,
+        id: &str,
+        target: crate::drivers::edc::WirelessTarget,
+        info: DeviceInfo,
+    ) {
+        let terminal = Arc::new(crate::drivers::edc::WirelessEdcTerminal::new(target, info));
+        self.register_terminal(id, terminal).await;
+    }
+
     /// Discover and register available hardware. Failure of one driver
     /// does not abort the rest. Probes USB HID scanners, serial scanners,
     /// and USB receipt printers, then registers them all.
@@ -192,6 +241,17 @@ impl DriverRegistry {
             let drawer = Arc::new(PrinterKickCashDrawer::new_pin2(printer_arc));
             self.register_cash_drawer(&drawer_id, drawer).await;
         }
+
+        // EDC card terminals are deliberately NOT probed here. A money
+        // device must be named by an operator before the register can take
+        // a card on it: silently binding whatever serial device answers the
+        // probe would let an unconfigured terminal appear in the tender
+        // list. They are registered through register_wired_terminal /
+        // register_wireless_terminal from the edc_terminals configuration
+        // instead, the same way TCP printers and pole displays are.
+        //
+        // Weight scales are also absent, but for a different reason: no
+        // discovery path exists for them yet. See the crate stamp.
     }
 
     /// Register a TCP (network) printer under the given id. Also registers
