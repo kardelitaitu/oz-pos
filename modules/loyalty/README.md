@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-26 · rewritten after the previous file was found corrupted (2.8 MB of repeated garbage text); content reconstructed from modules/loyalty/manifest.json, src/{lib,models,repository,service,error}.rs, and platform/startup/src/lib.rs -->
+<!-- Audit stamp: 2026-07-26 · rewritten after the previous file was found corrupted (2.8 MB of repeated garbage text); content reconstructed from modules/loyalty/manifest.json, src/{lib,models,repository,service,error}.rs, and platform/startup/src/lib.rs · RE-AUDITED 31-08 (cont) by docs-auditor: lifecycle hooks are stubs (lib.rs:98-118) — corrected the Lifecycle section which claimed on_load "validates dependencies" and on_start "initialises state" (both are "future phases" comments); earn-handler-wired-in-platform and the not-registered-history claims re-confirmed. CAUTION: src/models.rs is currently DIRTY (in-flight — likely the gift-card migration the "Misplaced: gift cards" section describes as pending), so the Models list and that section were NOT re-verified this pass; re-audit them once models.rs lands -->
 
 # Loyalty Module
 
@@ -45,11 +45,11 @@ deprecated in this crate and do not add to them here.
 
 ## Lifecycle
 
-Implements `foundation::contracts::Module`:
+Implements `foundation::contracts::Module`. The lifecycle hooks are currently **stubs** — each logs and returns `Ok(())` (lib.rs:98-118); the earn handler is wired in `platform/startup`, not here (see *Currently Owns*):
 
-1. **`on_load`** — validates configuration and dependencies
-2. **`on_start`** — initialises state
-3. **`on_stop`** — cleans up resources
+1. **`on_load`** — logs "validating configuration" (a future phase will check the `crm` dependency and validate tier seed data)
+2. **`on_start`** — logs "ready to process loyalty operations" (a future phase will start the point-expiry checker and cache tier definitions)
+3. **`on_stop`** — logs "cleaning up"
 
 `dependencies()` returns `&["crm"]`, matching `manifest.json`; a test asserts
 the two cannot drift apart.
