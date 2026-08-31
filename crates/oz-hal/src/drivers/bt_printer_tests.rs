@@ -5,7 +5,6 @@
 
 use super::*;
 use crate::registry::DriverRegistry;
-use crate::traits::printer::ReceiptPrinter;
 use crate::types::DeviceInfo;
 
 #[test]
