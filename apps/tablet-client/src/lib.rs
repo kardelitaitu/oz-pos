@@ -84,6 +84,61 @@ pub fn run() {
                 let app_handle = app.handle().clone();
                 app.manage(state);
 
+                // ── Hardware registry bootstrap ───────────────────────────
+                // Same gap the desktop client had: AppState builds an empty
+                // DriverRegistry and nothing registered into it, so every
+                // printer, drawer and display command resolved None at
+                // runtime. Config-driven only — DriverRegistry::discover()
+                // is not called, because it binds whatever is attached under
+                // hardware-derived ids and opens ports nobody named.
+                {
+                    let hardware_app_handle = app.handle().clone();
+                    platform_startup::spawn_daemon("hardware bootstrap", async move {
+                        let state = hardware_app_handle.state::<AppState>();
+                        let registry = state.registry.clone();
+                        let base_dir = state
+                            .db_path
+                            .parent()
+                            .unwrap_or(std::path::Path::new("."))
+                            .to_path_buf();
+                        let terminal_id = state
+                            .terminal_id
+                            .lock()
+                            .await
+                            .clone()
+                            .unwrap_or_else(|| "unknown".to_string());
+                        let profile = {
+                            let conn = state.db.lock().await;
+                            platform_startup::hardware::load_profile(
+                                &conn,
+                                &terminal_id,
+                                &base_dir,
+                            )
+                        }; // Connection is !Send; guard dropped before any await.
+                        match profile {
+                            Some(profile) => {
+                                let report = platform_startup::hardware::register_hardware(
+                                    &registry,
+                                    &profile,
+                                )
+                                .await;
+                                tracing::info!(%report, "hardware registry bootstrap complete");
+                                for (id, reason) in &report.rejected {
+                                    tracing::warn!(
+                                        device = %id,
+                                        reason = %reason,
+                                        "configured device could not be registered"
+                                    );
+                                }
+                            }
+                            None => tracing::info!(
+                                terminal_id = %terminal_id,
+                                "no hardware profile saved yet; leaving the driver registry empty"
+                            ),
+                        }
+                    });
+                }
+
                 // ── Background session cleanup daemon (TTL expiry) ──────
                 // Runs every 5 minutes to sweep expired sessions from the
                 // in-memory session store.

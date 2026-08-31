@@ -130,6 +130,59 @@ pub fn run() {
                 }
             });
 
+            // ── Hardware registry bootstrap ───────────────────────────
+            // AppState builds an empty DriverRegistry; until this ran,
+            // nothing ever registered into it, so receipt printing, KDS,
+            // drawer and display commands all resolved None at runtime
+            // while the setup wizard could still list devices.
+            //
+            // Config-driven only, on purpose. DriverRegistry::discover() is
+            // deliberately not called here: it binds whatever is attached
+            // under hardware-derived ids and opens serial and Bluetooth
+            // ports nobody named, which is the same reason card terminals
+            // stay out of discovery. An operator configures hardware on the
+            // settings screen; this turns that into drivers.
+            let hardware_app_handle = app.handle().clone();
+            platform_startup::spawn_daemon("hardware bootstrap", async move {
+                let state = hardware_app_handle.state::<AppState>();
+                let registry = state.registry.clone();
+                let base_dir = state
+                    .db_path
+                    .parent()
+                    .unwrap_or(std::path::Path::new("."))
+                    .to_path_buf();
+                // Same resolution the settings screen uses, so the profile
+                // this reads is the one the operator edits.
+                let terminal_id = state
+                    .terminal_id
+                    .lock()
+                    .await
+                    .clone()
+                    .unwrap_or_else(|| "unknown".to_string());
+                let profile = {
+                    let conn = state.db.lock().await;
+                    platform_startup::hardware::load_profile(&conn, &terminal_id, &base_dir)
+                }; // Connection is !Send; the guard is dropped before any await.
+                match profile {
+                    Some(profile) => {
+                        let report =
+                            platform_startup::hardware::register_hardware(&registry, &profile).await;
+                        tracing::info!(%report, "hardware registry bootstrap complete");
+                        for (id, reason) in &report.rejected {
+                            tracing::warn!(
+                                device = %id,
+                                reason = %reason,
+                                "configured device could not be registered"
+                            );
+                        }
+                    }
+                    None => tracing::info!(
+                        terminal_id = %terminal_id,
+                        "no hardware profile saved yet; leaving the driver registry empty"
+                    ),
+                }
+            });
+
             // ── Show the main window after state restore ────────────
             // The window starts with visible:false to prevent initial
             // position flash while window-state restores its position/size.
