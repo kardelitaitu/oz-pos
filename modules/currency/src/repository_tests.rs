@@ -705,3 +705,35 @@ fn list_exchange_rates_for_pair_empty_returns_empty() {
     let rates = repo.list_exchange_rates_for_pair("USD", "EUR").unwrap();
     assert!(rates.is_empty(), "no rates for the pair → empty vec");
 }
+
+#[test]
+fn list_exchange_rates_orders_recent_first_within_pair() {
+    // CUR-04 residual: the PaymentModal no-session fallback picks the
+    // FIRST row of a pair from this list. Ordered only by
+    // (from, to), SQLite returns insertion order — so a pair whose
+    // older rate was entered first surfaced the stale rate. Within a
+    // pair the newest effective date must come first, matching
+    // list_exchange_rates_for_pair.
+    let conn = fresh();
+    seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+    seed_currency(&conn, "IDR", "360", "Rupiah", 0, "Rp");
+    let repo = CurrencyRepository::new(&conn);
+    repo.create_exchange_rate("USD", "IDR", 15_000_000_000, "manual", "2026-01-05")
+        .unwrap();
+    repo.create_exchange_rate("USD", "IDR", 16_300_000_000, "manual", "2026-06-01")
+        .unwrap();
+    repo.create_exchange_rate("IDR", "USD", 61_000, "manual", "2026-06-01")
+        .unwrap();
+
+    let rates = repo.list_exchange_rates().unwrap();
+    let usd_idr: Vec<_> = rates
+        .iter()
+        .filter(|r| r.from_currency == "USD" && r.to_currency == "IDR")
+        .collect();
+    assert_eq!(usd_idr.len(), 2);
+    assert_eq!(
+        usd_idr[0].effective_date, "2026-06-01",
+        "newest effective rate must lead its pair"
+    );
+    assert_eq!(usd_idr[1].effective_date, "2026-01-05");
+}

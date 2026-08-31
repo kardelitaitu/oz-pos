@@ -43,11 +43,15 @@ impl<'a> CurrencyRepository<'a> {
         Ok(out)
     }
 
-    /// List all exchange rates ordered by `(from_currency, to_currency)`.
+    /// List all exchange rates ordered by `(from_currency, to_currency)`,
+    /// newest effective date first WITHIN each pair (CUR-04: consumers
+    /// that take the first match per pair must get the current rate, not
+    /// the oldest inserted).
     pub fn list_exchange_rates(&self) -> Result<Vec<ExchangeRateRow>, CurrencyError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, from_currency, to_currency, rate_millionths, source, effective_date, created_at
-             FROM exchange_rates ORDER BY from_currency, to_currency",
+             FROM exchange_rates
+             ORDER BY from_currency, to_currency, effective_date DESC, created_at DESC",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(ExchangeRateRow {
