@@ -3031,6 +3031,16 @@ const SCOPED_ALIASES: Array<[string, string]> = [
   ['create_customer_scoped', 'create_customer'],
   ['update_customer_scoped', 'update_customer'],
   ['delete_customer_scoped', 'delete_customer'],
+  // Store profiles (topology editor / store switcher / dashboards) — the
+  // API layer migrated to *_scoped (ADR #7); without these aliases the
+  // browser preview would serve `null` stores and gate Apply off.
+  ['list_store_profiles_scoped', 'list_store_profiles'],
+  ['get_store_profile_scoped', 'get_store_profile'],
+  ['get_primary_store_scoped', 'get_primary_store'],
+  ['create_store_profile_scoped', 'create_store_profile'],
+  ['update_store_profile_scoped', 'update_store_profile'],
+  ['set_primary_store_scoped', 'set_primary_store'],
+  ['delete_store_profile_scoped', 'delete_store_profile'],
 ];
 for (const [scoped, base] of SCOPED_ALIASES) {
   if (handlers[scoped] === undefined && handlers[base] !== undefined) {

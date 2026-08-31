@@ -22,6 +22,9 @@ interface MockStoreRow {
   tax_id: string;
   currency: string;
   timezone: string;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
 }
 interface MockTopologyNodeRow {
   id: string;
@@ -162,6 +165,65 @@ describe('dev-mock store + topology round-trip', () => {
     expect(list.find((s) => s.id === created.id)).toBeUndefined();
     // Deletion is targeted — the seed branch survives.
     expect(list.some((s) => s.id === 'store-1')).toBe(true);
+  });
+
+  it('answers the scoped store commands the API layer now invokes (ADR #7 aliases)', async () => {
+    // The TS API migrated to *_scoped (listStoresScoped etc. → the
+    // list_store_profiles_scoped family). The dev-mock must serve those
+    // names so the browser preview does not see `null` stores — which would
+    // gate the topology editor's Apply off and empty StoreSwitcher. Call
+    // shapes mirror the real wrappers in @/api/stores (sessionToken for
+    // read/write-by-id, sessionToken + nested args for create/update).
+    const list = await invoke('list_store_profiles_scoped', {
+      sessionToken: 'test-session-token',
+    }) as MockStoreRow[];
+    expect(Array.isArray(list)).toBe(true);
+    expect(list.some((s) => s.id === 'store-1')).toBe(true);
+
+    const one = await invoke('get_store_profile_scoped', {
+      sessionToken: 'test-session-token',
+      id: 'store-1',
+    }) as MockStoreRow | null;
+    expect(one?.id).toBe('store-1');
+
+    const primary = await invoke('get_primary_store_scoped', {
+      sessionToken: 'test-session-token',
+    }) as MockStoreRow | null;
+    expect(primary).toBeDefined();
+
+    // Mutations resolve through the same alias and persist to the list.
+    const created = await invoke('create_store_profile_scoped', {
+      sessionToken: 'test-session-token',
+      args: { id: 'store-sc-1', name: 'Scoped Branch' },
+    }) as MockStoreRow;
+    expect(created.name).toBe('Scoped Branch');
+
+    const renamed = await invoke('update_store_profile_scoped', {
+      sessionToken: 'test-session-token',
+      args: {
+        id: 'store-sc-1',
+        name: 'Scoped Renamed',
+        address: '',
+        tax_id: '',
+        currency: 'USD',
+        timezone: 'UTC',
+      },
+    }) as MockStoreRow;
+    expect(renamed.name).toBe('Scoped Renamed');
+
+    await invoke('set_primary_store_scoped', {
+      sessionToken: 'test-session-token',
+      id: 'store-sc-1',
+    });
+    const afterSet = await invoke('list_store_profiles') as MockStoreRow[];
+    expect(afterSet.find((s) => s.id === 'store-sc-1')?.is_primary).toBe(true);
+
+    await invoke('delete_store_profile_scoped', {
+      sessionToken: 'test-session-token',
+      id: 'store-sc-1',
+    });
+    const afterDelete = await invoke('list_store_profiles') as MockStoreRow[];
+    expect(afterDelete.find((s) => s.id === 'store-sc-1')).toBeUndefined();
   });
 });
 
