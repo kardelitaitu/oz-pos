@@ -107,34 +107,55 @@ pub fn run() {
                             .await
                             .clone()
                             .unwrap_or_else(|| "unknown".to_string());
-                        let profile = {
+                        let (profile, terminals) = {
                             let conn = state.db.lock().await;
-                            platform_startup::hardware::load_profile(
-                                &conn,
-                                &terminal_id,
-                                &base_dir,
+                            let store = oz_core::db::Store::new(&conn);
+                            (
+                                platform_startup::hardware::load_profile(
+                                    &conn,
+                                    &terminal_id,
+                                    &base_dir,
+                                ),
+                                store.list_active_edc_terminals().unwrap_or_else(|e| {
+                                    tracing::warn!(
+                                        error = %e,
+                                        "could not read configured card terminals; \
+                                         the card tender will fail closed"
+                                    );
+                                    Vec::new()
+                                }),
                             )
                         }; // Connection is !Send; guard dropped before any await.
-                        match profile {
+
+                        let mut report = match profile {
                             Some(profile) => {
-                                let report = platform_startup::hardware::register_hardware(
-                                    &registry,
-                                    &profile,
-                                )
-                                .await;
-                                tracing::info!(%report, "hardware registry bootstrap complete");
-                                for (id, reason) in &report.rejected {
-                                    tracing::warn!(
-                                        device = %id,
-                                        reason = %reason,
-                                        "configured device could not be registered"
-                                    );
-                                }
+                                platform_startup::hardware::register_hardware(&registry, &profile)
+                                    .await
                             }
-                            None => tracing::info!(
-                                terminal_id = %terminal_id,
-                                "no hardware profile saved yet; leaving the driver registry empty"
-                            ),
+                            None => {
+                                tracing::info!(
+                                    terminal_id = %terminal_id,
+                                    "no hardware profile saved yet; nothing to register"
+                                );
+                                oz_hal::BootstrapReport::default()
+                            }
+                        };
+                        let terminals = platform_startup::hardware::register_card_terminals(
+                            &registry,
+                            &terminals,
+                        )
+                        .await;
+                        report.registered.extend(terminals.registered);
+                        report.skipped.extend(terminals.skipped);
+                        report.rejected.extend(terminals.rejected);
+
+                        tracing::info!(%report, "hardware registry bootstrap complete");
+                        for (id, reason) in &report.rejected {
+                            tracing::warn!(
+                                device = %id,
+                                reason = %reason,
+                                "configured device could not be registered"
+                            );
                         }
                     });
                 }

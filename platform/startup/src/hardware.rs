@@ -1,21 +1,23 @@
 /*
 last audited 31-08-26 by DSH-Agent (hardware bootstrap, new)
 crate: platform-startup | status: SAFE | lint: CLEAN
-findings: the missing write side of the HAL registry. Both clients built an empty DriverRegistry and nothing ever registered into it, so every hardware command resolved None while the setup wizard could still list devices. Reads the profile the UI already saves; adds no new configuration surface. Deliberately does not wire scanners (nothing looks a scanner up by id - both clients only call scanner_ids() to populate the wizard) or scales (TerminalProfile records a device path, HidWeightScale needs a USB vendor/product pair the profile never captured). Card terminals stay unregistered until edc_terminals CRUD lands, which is the fail-closed behaviour chosen for the EDC path.
-next: scale vid/pid in TerminalProfile; edc_terminals CRUD + registration | perf: one indexed row read plus optional file stat at startup
+findings: the missing write side of the HAL registry. Both clients built an empty DriverRegistry and nothing ever registered into it, so every hardware command resolved None while the setup wizard could still list devices. Reads the profile the UI already saves; adds no new configuration surface. Deliberately does not wire scanners (nothing looks a scanner up by id - both clients only call scanner_ids() to populate the wizard) or scales (TerminalProfile records a device path, HidWeightScale needs a USB vendor/product pair the profile never captured). Card terminals now come from edc_terminals via register_card_terminals; a wired row gets DEFAULT_BAUD because the table records no baud column.
+next: scale vid/pid in TerminalProfile; baud_rate + is_default columns on edc_terminals | perf: one indexed profile read, one ordered terminal read
 */
 //! Startup hardware registration — the missing write side of the HAL registry.
 //!
 //! The UI already lets an operator save a [`TerminalProfile`] describing
-//! their printer, kitchen printer, scanner and scale. Until now nothing read
-//! it back into drivers, so `AppState` held an empty
-//! [`DriverRegistry`] and every hardware command resolved `None`.
+//! their printer, kitchen printer, scanner and scale, and an `edc_terminals`
+//! table holds their card terminals. Until now nothing read either back into
+//! drivers, so `AppState` held an empty [`DriverRegistry`] and every hardware
+//! command resolved `None`.
 //!
 //! [`load_profile`] reads the profile the same way the settings command
 //! does — database first, JSON file as fallback — and
 //! [`register_hardware`] maps it onto [`HardwareConfig`] and applies it.
-//! [`config_from_profile`] is pure, so the mapping is testable without a
-//! database or a device.
+//! [`register_card_terminals`] does the same for terminal rows. Both
+//! mappings are pure where they can be, so they are testable without a
+//! device.
 
 use std::path::Path;
 
@@ -24,9 +26,12 @@ use rusqlite::Connection;
 
 use oz_hal::DriverRegistry;
 use oz_hal::bootstrap::{
-    BootstrapReport, Connection as HalConnection, HardwareConfig, PrinterConfig,
+    BootstrapReport, Connection as HalConnection, HardwareConfig, PrinterConfig, TerminalConfig,
 };
+use oz_hal::drivers::edc::WirelessTarget;
 use oz_hal::types::DeviceInfo;
+
+use oz_core::db::edc_terminals::EdcTerminalConfig;
 
 /// Registry id the main receipt printer is looked up under.
 ///
@@ -151,6 +156,118 @@ pub async fn register_hardware(
     profile: &TerminalProfile,
 ) -> BootstrapReport {
     oz_hal::apply_config(registry, &config_from_profile(profile)).await
+}
+
+/// The registry id the EDC commands resolve when no terminal is named.
+///
+/// Mirrors `oz_pos_app::commands::edc::DEFAULT_TERMINAL_ID`; duplicated
+/// because platform-startup must not depend on an app crate. A desktop test
+/// asserts the two stay equal.
+pub const DEFAULT_TERMINAL_ID: &str = "default";
+
+/// Map a stored row onto the HAL's terminal connection.
+///
+/// A wired row needs a baud rate that `edc_terminals` does not record, so it
+/// gets [`oz_hal::drivers::edc::wired::DEFAULT_BAUD`]. Adding a `baud_rate`
+/// column is the known follow-up; inferring one from the address would be
+/// worse than using the documented default.
+fn terminal_connection(row: &EdcTerminalConfig) -> Option<oz_hal::bootstrap::TerminalConnection> {
+    use oz_hal::bootstrap::TerminalConnection;
+    match (
+        row.connection_type.as_str(),
+        row.transport.as_str(),
+        row.address.trim(),
+    ) {
+        (_, _, "") => None,
+        ("wired", "serial" | "usb", address) => Some(TerminalConnection::Wired {
+            port: address.to_owned(),
+            baud: oz_hal::drivers::edc::wired::DEFAULT_BAUD,
+        }),
+        ("wireless", "bluetooth", address) => Some(TerminalConnection::Wireless {
+            target: WirelessTarget::Bluetooth(address.to_owned()),
+        }),
+        ("wireless", "tcp", address) => Some(TerminalConnection::Wireless {
+            target: WirelessTarget::Network(address.to_owned()),
+        }),
+        _ => None,
+    }
+}
+
+/// Register every card terminal the operator configured.
+///
+/// Each row is registered under its own database id, and the first row in
+/// the slice is additionally bound to [`DEFAULT_TERMINAL_ID`] — the string
+/// the EDC commands look up. Without that alias the commands still resolve
+/// `None`, because a UUID row id is not the name `terminal("default")` asks
+/// for. The alias is interim, not design: `edc_terminals` has no
+/// `is_default` column, so "which terminal is this register's" is answered
+/// by creation order until the column exists or the commands take a
+/// `terminal_id`. Callers must pass rows already ordered by
+/// `list_active_edc_terminals()`, never `DriverRegistry::terminal_ids()`,
+/// which iterates a `HashMap` and would make the choice vary per restart.
+pub async fn register_card_terminals(
+    registry: &DriverRegistry,
+    rows: &[EdcTerminalConfig],
+) -> BootstrapReport {
+    let mut report = BootstrapReport::default();
+    // Carries the identity alongside the connection so the alias registers
+    // the same device, not rows[0] which may have been rejected.
+    let mut default_terminal: Option<(oz_hal::bootstrap::TerminalConnection, DeviceInfo)> = None;
+
+    for row in rows {
+        let Some(connection) = terminal_connection(row) else {
+            report.rejected.push((
+                format!("terminal:{}", row.id),
+                format!(
+                    "no HAL terminal driver for {} + {}",
+                    row.connection_type, row.transport
+                ),
+            ));
+            continue;
+        };
+        let info = DeviceInfo::new(
+            row.vendor.clone().unwrap_or_else(|| "unknown".into()),
+            row.model.clone().unwrap_or_else(|| "card".into()),
+            &row.address,
+        );
+        // The first *registrable* row claims the default id, not merely the
+        // first row: an unpairable row earlier in the table would otherwise
+        // leave the register with no terminal at all.
+        if default_terminal.is_none() {
+            default_terminal = Some((connection.clone(), info.clone()));
+        }
+
+        let config = HardwareConfig {
+            terminals: vec![TerminalConfig {
+                id: row.id.clone(),
+                connection,
+                info,
+            }],
+            ..HardwareConfig::default()
+        };
+        merge(&mut report, oz_hal::apply_config(registry, &config).await);
+    }
+
+    if let Some((connection, info)) = default_terminal {
+        let config = HardwareConfig {
+            terminals: vec![TerminalConfig {
+                id: DEFAULT_TERMINAL_ID.to_string(),
+                connection,
+                info,
+            }],
+            ..HardwareConfig::default()
+        };
+        merge(&mut report, oz_hal::apply_config(registry, &config).await);
+    }
+
+    report
+}
+
+/// Fold one device's report into the running total.
+fn merge(into: &mut BootstrapReport, from: BootstrapReport) {
+    into.registered.extend(from.registered);
+    into.skipped.extend(from.skipped);
+    into.rejected.extend(from.rejected);
 }
 
 #[cfg(test)]

@@ -87,10 +87,10 @@ async fn a_fresh_registry_has_no_terminal_so_the_tender_fails_closed() {
 }
 
 #[tokio::test]
-async fn the_bootstrapped_registry_still_has_no_terminal() {
-    // The hardware bootstrap registers printers from the saved profile. It
-    // must not invent a card terminal: edc_terminals CRUD is a stub, so
-    // there is no configuration that could name one.
+async fn the_profile_bootstrap_alone_never_invents_a_card_terminal() {
+    // register_hardware reads TerminalProfile, which has no EDC fields. A
+    // terminal must come from an edc_terminals row, so the printer path
+    // working must not be enough to make the tender resolve.
     let registry = oz_hal::DriverRegistry::default();
     let profile = serde_json::from_str::<platform_core::terminal_profile::TerminalProfile>(
         r#"{"printer_connection":"network","printer_device_path":"10.0.0.5:9100"}"#,
@@ -100,4 +100,52 @@ async fn the_bootstrapped_registry_still_has_no_terminal() {
     assert!(report.ok(), "{report}");
     assert!(registry.printer(DEFAULT_TERMINAL_ID).await.is_some());
     assert!(registry.terminal_ids().await.is_empty());
+}
+
+#[test]
+fn the_default_terminal_id_matches_the_one_the_bootstrap_binds() {
+    // Two crates declare the same string: the command looks it up, the
+    // startup bootstrap binds it. A rename on one side would silently turn
+    // every configured terminal back into NotFound, which is exactly the
+    // class of bug this whole change was about.
+    assert_eq!(
+        DEFAULT_TERMINAL_ID,
+        platform_startup::hardware::DEFAULT_TERMINAL_ID
+    );
+}
+
+#[tokio::test]
+async fn a_configured_terminal_row_makes_the_tender_resolve() {
+    // End-to-end for the configuration path: an edc_terminals row reaches
+    // the id the commands ask for. Reachable is not the same as working —
+    // the driver is still a stub, so it must fail closed rather than
+    // approve a card.
+    let registry = oz_hal::DriverRegistry::default();
+    let rows = [oz_core::db::edc_terminals::EdcTerminalConfig {
+        id: "row-1".into(),
+        name: "Front counter".into(),
+        connection_type: "wired".into(),
+        transport: "serial".into(),
+        address: "COM3".into(),
+        vendor: Some("ingenico".into()),
+        model: Some("iPP320".into()),
+        is_active: true,
+        created_at: "2026-01-01T00:00:00.000Z".into(),
+        updated_at: "2026-01-01T00:00:00.000Z".into(),
+    }];
+    let report = platform_startup::hardware::register_card_terminals(&registry, &rows).await;
+    assert!(report.ok(), "{report}");
+
+    let terminal = registry
+        .terminal(DEFAULT_TERMINAL_ID)
+        .await
+        .expect("a configured terminal must resolve");
+    let money = foundation::Money {
+        minor_units: 1_000,
+        currency: "USD".parse::<foundation::Currency>().unwrap(),
+    };
+    assert!(matches!(
+        terminal.authorize(money).await,
+        Err(oz_hal::HalError::Unsupported(_))
+    ));
 }

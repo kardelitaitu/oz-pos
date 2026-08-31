@@ -24,11 +24,15 @@ use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
 
-/// Registry id the card tender uses.
+/// Registry id the card tender uses when the caller names none.
 ///
-/// Single-terminal for now: `edc_terminals` CRUD is still a stub, so there
-/// is no per-row id to address yet. When configuration lands this becomes an
-/// argument on each command.
+/// The startup bootstrap binds this to the earliest-created active row in
+/// `edc_terminals` (see `platform_startup::hardware::register_card_terminals`),
+/// so a store that has configured a terminal resolves here and one that has
+/// not fails closed. It is a single-terminal convention: the table has no
+/// `is_default` column, so with two rows configured the operator gets the
+/// oldest. Making the commands take a `terminal_id` is the follow-up that
+/// removes that.
 pub const DEFAULT_TERMINAL_ID: &str = "default";
 
 /// Terminal status, serialisable for the front-end.

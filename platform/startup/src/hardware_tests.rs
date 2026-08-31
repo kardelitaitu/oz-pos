@@ -243,6 +243,136 @@ async fn an_unconfigured_profile_registers_nothing_and_reports_no_failure() {
     assert!(registry.printer_ids().await.is_empty());
 }
 
+// ── register_card_terminals ──────────────────────────────────────────
+
+fn row(id: &str, connection_type: &str, transport: &str, address: &str) -> EdcTerminalConfig {
+    EdcTerminalConfig {
+        id: id.into(),
+        name: format!("terminal {id}"),
+        connection_type: connection_type.into(),
+        transport: transport.into(),
+        address: address.into(),
+        vendor: Some("ingenico".into()),
+        model: Some("iPP320".into()),
+        is_active: true,
+        created_at: "2026-01-01T00:00:00.000Z".into(),
+        updated_at: "2026-01-01T00:00:00.000Z".into(),
+    }
+}
+
+#[tokio::test]
+async fn a_wired_row_is_reachable_under_its_own_id_and_under_default() {
+    let registry = DriverRegistry::default();
+    let rows = [row("t-1", "wired", "serial", "COM3")];
+    let report = register_card_terminals(&registry, &rows).await;
+    assert!(report.ok(), "{report}");
+    assert!(registry.terminal("t-1").await.is_some());
+    assert!(
+        registry.terminal(DEFAULT_TERMINAL_ID).await.is_some(),
+        "the commands look up \"default\"; without the alias they still see None"
+    );
+}
+
+#[tokio::test]
+async fn default_follows_row_order_not_hash_order() {
+    // Callers pass list_active_edc_terminals(), which is ORDER BY
+    // created_at, id. Whichever row arrives first owns the default id, so
+    // the binding is reproducible across restarts.
+    let registry = DriverRegistry::default();
+    let rows = [
+        row("first", "wired", "serial", "COM3"),
+        row("second", "wireless", "tcp", "10.0.0.9:9500"),
+    ];
+    register_card_terminals(&registry, &rows).await;
+    assert_eq!(registry.terminal_ids().await.len(), 3, "two rows + default");
+    let bound = registry
+        .terminal(DEFAULT_TERMINAL_ID)
+        .await
+        .expect("default");
+    assert_eq!(
+        bound.device_info().serial,
+        "COM3",
+        "default must be the earliest-created row"
+    );
+}
+
+#[tokio::test]
+async fn wireless_transports_map_to_their_own_targets() {
+    let registry = DriverRegistry::default();
+    let rows = [
+        row("bt", "wireless", "bluetooth", "00:11:22:33:44:55"),
+        row("net", "wireless", "tcp", "10.0.0.9:9500"),
+    ];
+    let report = register_card_terminals(&registry, &rows).await;
+    assert!(report.ok(), "{report}");
+    assert_eq!(report.registered_count(), 3, "two rows + the default alias");
+}
+
+#[tokio::test]
+async fn a_registered_terminal_still_fails_closed() {
+    // Registration makes a terminal reachable, not functional: the drivers
+    // are stubs until a vendor protocol ships, and a configured terminal must
+    // still never report an approval.
+    let registry = DriverRegistry::default();
+    register_card_terminals(&registry, &[row("t-1", "wired", "usb", "/dev/ttyUSB0")]).await;
+    let terminal = registry.terminal("t-1").await.expect("registered");
+    let money = oz_core::Money {
+        minor_units: 100,
+        currency: "USD".parse::<oz_core::Currency>().unwrap(),
+    };
+    assert!(matches!(
+        terminal.authorize(money).await,
+        Err(oz_hal::HalError::Unsupported(_))
+    ));
+}
+
+#[tokio::test]
+async fn an_unpairable_row_is_rejected_not_dropped_silently() {
+    // The CRUD layer blocks this at the door; the bootstrap still guards,
+    // because a row can predate the rule.
+    let registry = DriverRegistry::default();
+    let report = register_card_terminals(&registry, &[row("t-1", "wired", "tcp", "1.2.3.4")]).await;
+    assert!(!report.ok());
+    assert_eq!(report.rejected.len(), 1);
+    assert!(report.rejected[0].1.contains("no HAL terminal driver"));
+    assert!(registry.terminal("t-1").await.is_none());
+}
+
+#[tokio::test]
+async fn a_blank_address_never_becomes_a_terminal() {
+    let registry = DriverRegistry::default();
+    let report = register_card_terminals(&registry, &[row("t-1", "wired", "serial", "   ")]).await;
+    assert!(!report.ok(), "an address of nothing is not a terminal");
+    assert!(registry.terminal_ids().await.is_empty());
+}
+
+#[tokio::test]
+async fn no_rows_leaves_the_registry_without_a_default_terminal() {
+    let registry = DriverRegistry::default();
+    let report = register_card_terminals(&registry, &[]).await;
+    assert!(report.ok());
+    assert_eq!(report.registered_count(), 0);
+    assert!(registry.terminal(DEFAULT_TERMINAL_ID).await.is_none());
+}
+
+#[tokio::test]
+async fn one_bad_row_does_not_stop_the_good_ones() {
+    let registry = DriverRegistry::default();
+    let rows = [
+        row("t-1", "wired", "tcp", "1.2.3.4"), // unpairable
+        row("t-2", "wired", "serial", "COM4"),
+    ];
+    let report = register_card_terminals(&registry, &rows).await;
+    assert_eq!(report.rejected.len(), 1);
+    assert!(registry.terminal("t-2").await.is_some());
+    // The default alias follows the first *registrable* row's slot: row 0 was
+    // rejected, so nothing claims "default" from it.
+    assert!(
+        registry.terminal(DEFAULT_TERMINAL_ID).await.is_some(),
+        "t-2 is rows[1]; the alias must still land somewhere usable"
+    );
+}
+
 #[allow(dead_code)]
 fn path_arg_is_a_str_slice() {
     // Keeps the signature honest: base_dir is a &Path, not a String.
