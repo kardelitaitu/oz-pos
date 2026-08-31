@@ -6,7 +6,7 @@
 
 ## Overview
 
-The Sales module is the core point-of-sale vertical. It owns the entire sale pipeline: cart management, checkout, payment processing, sales history, void/refund, held orders, and end-of-day reports.
+The Sales module is the core point-of-sale vertical. It owns the entire sale pipeline: cart management, checkout (promotions applied via the `oz-core` promotion engine — PROMO-3; submissions replay-guarded by a client `attemptId` → per-split `idempotency_key` — COR-7, desktop), payment processing, sales history, void/refund (loyalty points reversed inside the refund transaction — LOY-03), held orders, and end-of-day reports.
 
 ## Module Info
 
@@ -61,6 +61,6 @@ kernel.start_all()?;
 }
 ```
 
-> last audited 09-08-26 by buffy
+> last audited 31-08-26 by docs-auditor
 > audit: Phase 3 Module-Level Documentation Audit
-> status: ACCURATE (verified against actual codebase)
+> status: ACCURATE (verified against HEAD; PROMO-3/COR-7/LOY-03 checkout behaviours added to the Overview)
