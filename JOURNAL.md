@@ -9218,12 +9218,21 @@ certify wrong behavior when they were written against the implementation
 instead of the contract.
 
 **Stopping point.** One residual recorded rather than fixed: LOYALTY-01 —
-points computed through an f64 multiplier stored as REAL (base 250 × 1.4
-→ 3 points, exact decimal → 4). The honest fix is a schema decision
-(fixed-point multipliers), not a local patch, and the registry carries the
-counterexample. Foundation money: exemplary. UI money paths: now exact at
-every boundary I could produce a counterexample for. That's the "no more
-problems" bar — with one documented exception that needs a product call.
+points computed through an f64 multiplier stored as REAL. The original
+counterexample here (base 250 × 1.4 → 3) was WRONG — an exhaustive
+double-vs-decimal scan showed that product snaps back to exactly 3.5
+(ties-to-even saves it); the real flips start at base 2250: a $22.50 sale
+at points_per_unit=1 with a 1.4× tier gives 31 points where exact decimal
+gives 32 — 585 flip bases ≤ 2M, always downward for 1.4, while
+1.1/1.2/1.3/1.5/1.75/2.0 never flip in that range. The corruption happens
+at WRITE time (UI sends a JS number, the column is REAL), so no
+compute-site patch can recover the owner's intent; the honest fix is
+fixed-point millionths (the repo's own `rate_millionths` precedent) — a
+schema decision, deferred. Foundation money: exemplary. UI money paths:
+now exact at every boundary I could produce a counterexample for. That's
+the "no more problems" bar — with one documented exception that needs a
+product call. (And one lesson: the scan corrected MY registry entry too —
+evidence over assertion applies to findings I wrote myself.)
 
 **Process notes.** (1) The ExchangeRateScreen suite was 9-red at HEAD
 before this round — CUR-06/8c21abeb moved the screen to always-scoped and
