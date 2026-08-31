@@ -7,8 +7,8 @@ next: none | perf: N/A
 //! ESC/POS command constants and receipt formatting helpers.
 //!
 //! Shared across all printer drivers (`UsbReceiptPrinter`,
-//! `BtReceiptPrinter`, `TcpReceiptPrinter`) and the receipt
-//! formatter (`super::receipt`).
+//! `SerialReceiptPrinter` — which `BtReceiptPrinter` is an alias for — and
+//! `TcpReceiptPrinter`) and the receipt formatter (`super::receipt`).
 
 /// Initialize printer.
 pub const ESC_INIT: &[u8] = &[0x1B, 0x40];

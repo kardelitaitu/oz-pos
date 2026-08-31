@@ -269,14 +269,37 @@ impl DriverRegistry {
         self.register_cash_drawer(&drawer_id, drawer).await;
     }
 
+    /// Register a serial receipt printer under the given id, plus its
+    /// companion cash drawer.
+    ///
+    /// Covers RS-232, USB-serial and Bluetooth SPP alike — see
+    /// [`crate::drivers::serial_printer`] for why one driver serves all
+    /// three. The setup wizard calls this when an operator names a port.
+    pub async fn register_serial_printer(
+        &self,
+        id: &str,
+        port_name: &str,
+        baud_rate: u32,
+        info: DeviceInfo,
+    ) {
+        let printer_arc = Arc::new(crate::drivers::serial_printer::SerialReceiptPrinter::new(
+            port_name, baud_rate, info,
+        ));
+        self.register_printer(id, printer_arc.clone()).await;
+        let drawer_id = format!("drawer:kick:{id}");
+        let drawer = Arc::new(PrinterKickCashDrawer::new_pin2(printer_arc));
+        self.register_cash_drawer(&drawer_id, drawer).await;
+    }
+
     /// Register a Bluetooth (SPP) printer under the given id, plus its
     /// companion cash drawer.
     ///
     /// `port_name` is the COM port the OS Bluetooth stack bound the device
-    /// to — Bluetooth SPP is exposed as serial on Windows, which is why
-    /// [`crate::drivers::bt_printer`] is serialport-backed rather than a
-    /// separate radio transport. The setup wizard calls this when an
-    /// operator names a printer they paired beforehand;
+    /// to — Bluetooth SPP is exposed as serial, so this registers the same
+    /// [`crate::drivers::serial_printer::SerialReceiptPrinter`] that
+    /// [`Self::register_serial_printer`] does. The two helpers stay separate
+    /// because the setup wizard and the logs should report the transport the
+    /// operator chose, not the socket class behind it.
     /// [`Self::discover`] binds one automatically for every Bluetooth port
     /// it finds.
     pub async fn register_bluetooth_printer(

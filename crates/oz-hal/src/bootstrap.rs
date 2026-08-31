@@ -2,7 +2,7 @@
 last audited 31-08-26 by DSH-Agent (bootstrap module, new)
 crate: oz-hal | status: SAFE | lint: CLEAN
 findings: exists because the registry had a complete read side and no write side — DriverRegistry::discover() had exactly one caller (registry_tests.rs:213) and no app ever called register_*, so every hardware command resolved None at runtime while the setup wizard could still list devices via probe_all(). Second, independent defect found here: discover() mints hardware-derived ids ("printer:vendor:model") while the app looks up "default"/"kitchen", so calling discover() alone would not have fixed anything — apply_config binds the operator's id to the device. Addressed transports are constructed without I/O; Connection::Usb is the one branch that enumerates the bus, since it names no address. Scales are absent because TerminalProfile stores a device path but HidWeightScale needs vendor/product ids the profile never captured — a config-schema gap, not a wiring gap.
-next: scale config needs vid/pid in TerminalProfile; no serial printer driver exists | perf: USB enumeration is synchronous and blocks the runtime thread briefly at startup
+next: scale config needs vid/pid in TerminalProfile | perf: USB enumeration is synchronous and blocks the runtime thread briefly at startup
 */
 //! Registry bootstrap — turning saved hardware configuration into drivers.
 //!
@@ -297,17 +297,10 @@ pub async fn apply_config(registry: &DriverRegistry, config: &HardwareConfig) ->
                 }
             }
             Connection::Serial { port, baud } => {
-                // There is no serial receipt-printer driver in this crate:
-                // drivers/ has usb_printer, bt_printer and tcp_printer only.
-                // BtReceiptPrinter happens to be serialport-backed, but
-                // routing a wired printer through it would name the wrong
-                // device in every log and status screen, so the entry is
-                // reported rather than quietly redirected.
-                let _ = baud;
-                report.rejected.push((
-                    key,
-                    format!("no serial printer driver exists (port {port})"),
-                ));
+                registry
+                    .register_serial_printer(&printer.id, port, *baud, printer.info.clone())
+                    .await;
+                report.registered.push(key);
             }
             Connection::Bluetooth { port } => {
                 registry

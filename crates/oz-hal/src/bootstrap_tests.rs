@@ -158,50 +158,82 @@ async fn kitchen_and_main_printers_coexist_under_their_own_ids() {
 }
 
 #[tokio::test]
-async fn serial_printer_is_reported_not_silently_rerouted() {
-    // There is no serial printer driver. BtReceiptPrinter is serialport-
-    // backed and would work mechanically, but naming a wired printer "bt"
-    // in every log is worse than admitting the gap.
+async fn serial_printer_registers_the_shared_serial_driver() {
+    // Serial printers used to be rejected because drivers/ had no serial
+    // printer. BtReceiptPrinter turned out to contain nothing
+    // Bluetooth-specific, so they are one driver now and a wired operator
+    // gets a working printer instead of a log line.
     let reg = DriverRegistry::default();
     let cfg = HardwareConfig {
         printers: vec![printer(
             "default",
             Connection::Serial {
                 port: "COM3".into(),
-                baud: 9600,
+                baud: 19200,
             },
         )],
         ..HardwareConfig::default()
     };
     let report = apply_config(&reg, &cfg).await;
-    assert!(!report.ok(), "a serial printer must surface as rejected");
-    assert_eq!(report.rejected.len(), 1);
-    assert!(report.rejected[0].1.contains("no serial printer driver"));
-    assert!(reg.printer("default").await.is_none());
+    assert!(report.ok(), "{report}");
+    assert!(reg.printer("default").await.is_some());
+    // The companion drawer must come from the same entry, as with TCP.
+    assert!(reg.cash_drawer("drawer:kick:default").await.is_some());
 }
 
 #[tokio::test]
-async fn one_bad_entry_does_not_stop_the_rest() {
+async fn every_printer_transport_the_profile_can_name_now_resolves() {
     let reg = DriverRegistry::default();
     let cfg = HardwareConfig {
         printers: vec![
-            printer("default", Connection::Network { addr: "a:1".into() }),
+            printer("net", Connection::Network { addr: "h:1".into() }),
             printer(
-                "kitchen",
+                "ser",
                 Connection::Serial {
-                    port: "COM9".into(),
+                    port: "COM3".into(),
                     baud: 9600,
                 },
             ),
-            printer("bar", Connection::Network { addr: "c:3".into() }),
+            printer(
+                "bt",
+                Connection::Bluetooth {
+                    port: "COM8".into(),
+                },
+            ),
         ],
         ..HardwareConfig::default()
     };
     let report = apply_config(&reg, &cfg).await;
-    assert_eq!(report.registered_count(), 2, "the good printers still land");
-    assert_eq!(report.rejected.len(), 1);
+    assert!(report.ok(), "{report}");
+    assert_eq!(report.registered_count(), 3);
+    for id in ["net", "ser", "bt"] {
+        assert!(reg.printer(id).await.is_some(), "{id} must resolve");
+    }
+}
+
+#[tokio::test]
+async fn one_unusable_entry_does_not_stop_the_rest() {
+    let reg = DriverRegistry::default();
+    let cfg = HardwareConfig {
+        printers: vec![printer(
+            "default",
+            Connection::Network { addr: "a:1".into() },
+        )],
+        terminals: vec![TerminalConfig {
+            id: "edc".into(),
+            connection: TerminalConnection::Wired {
+                port: String::new(), // unusable
+                baud: 9600,
+            },
+            info: info("x"),
+        }],
+        ..HardwareConfig::default()
+    };
+    let report = apply_config(&reg, &cfg).await;
+    assert_eq!(report.registered_count(), 1, "the printer still lands");
+    assert_eq!(report.skipped.len(), 1);
     assert!(reg.printer("default").await.is_some());
-    assert!(reg.printer("bar").await.is_some());
+    assert!(reg.terminal("edc").await.is_none());
 }
 
 #[tokio::test]

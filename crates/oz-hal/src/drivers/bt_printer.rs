@@ -1,120 +1,29 @@
 /*
-last audited 25-07-26 by RSA-Agent (oz-hal slice B: verified)
+last audited 31-08-26 by DSH-Agent (implementation moved to serial_printer.rs)
 crate: oz-hal | status: SAFE | lint: CLEAN
-findings: clean driver — no unwrap/panic/unsafe, sibling tests per convention
+findings: this file is now a transport-named alias, not a driver. Nothing Bluetooth-specific ever lived in it — open_port(name, baud) plus ESC/POS — and registry.rs builds it from a plain serial-port enumeration, so keeping a second implementation would have meant two drivers to keep in step. The alias stays because discovery, the setup wizard and the README all describe what was found, not how it is wired.
 next: none | perf: N/A
 */
-//! Bluetooth (SPP / RFCOMM) receipt printer driver.
+//! Bluetooth (SPP) receipt printer — an alias for the serial driver.
 //!
-//! Implements `ReceiptPrinter` over a Bluetooth serial (SPP) connection.
-//! Most BT receipt printers (Epson TM-m30 BT, Star SP700 BT) use the
-//! Serial Port Profile, which appears as a virtual COM port (Windows) or
-//! `/dev/rfcomm*` (Linux) after pairing.
+//! The Serial Port Profile presents a paired printer as an ordinary COM or
+//! rfcomm port, so the application cannot tell a Bluetooth printer from a
+//! wired one and there is nothing for a separate driver to do. The
+//! implementation is [`SerialReceiptPrinter`]; this name exists because
+//! [`crate::registry::DriverRegistry::discover`] finds ports over Bluetooth
+//! and the setup wizard should report the transport the operator chose.
 //!
-//! The user pairs the printer with the OS, notes the port name (e.g.
-//! `"COM7"` or `"/dev/rfcomm0"`), and enters it in the setup wizard.
+//! Prefer [`SerialReceiptPrinter`] in new code. The alias is a compatibility
+//! name, not a distinct device class.
 
-use std::sync::Arc;
+pub use super::serial_printer::SerialReceiptPrinter;
 
-use async_trait::async_trait;
-use tokio::sync::Mutex;
-use tokio::task::spawn_blocking;
-
-use crate::error::HalError;
-use crate::traits::printer::ReceiptPrinter;
-use crate::transport::serial::open_port;
-use crate::types::DeviceInfo;
-
-use super::escpos;
-
-/// A receipt printer driven through a Bluetooth serial (SPP) connection.
-pub struct BtReceiptPrinter {
-    port_name: String,
-    baud_rate: u32,
-    port: Arc<Mutex<Option<Box<dyn serialport::SerialPort + Send>>>>,
-    info: DeviceInfo,
-    partial_cut: bool,
-}
-
-impl BtReceiptPrinter {
-    /// Create a new BT printer at the given serial port and baud rate.
-    pub fn new(port_name: impl Into<String>, baud_rate: u32, info: DeviceInfo) -> Self {
-        Self {
-            port_name: port_name.into(),
-            baud_rate,
-            port: Arc::new(Mutex::new(None)),
-            info,
-            partial_cut: false,
-        }
-    }
-
-    /// Set whether to use a partial cut instead of full cut.
-    pub fn with_partial_cut(mut self, partial: bool) -> Self {
-        self.partial_cut = partial;
-        self
-    }
-
-    async fn ensure_connected(&self) -> Result<(), HalError> {
-        let mut guard = self.port.lock().await;
-        if guard.is_some() {
-            return Ok(());
-        }
-
-        let mut port = open_port(&self.port_name, self.baud_rate)?;
-        port.set_timeout(std::time::Duration::from_secs(5))
-            .map_err(|e| HalError::Protocol(format!("serial set_timeout: {e}")))?;
-
-        *guard = Some(port);
-        Ok(())
-    }
-
-    async fn write_to_port(&self, data: &[u8]) -> Result<(), HalError> {
-        let port_arc = self.port.clone();
-        let data_owned = data.to_vec();
-
-        spawn_blocking(move || {
-            let mut guard = port_arc.blocking_lock();
-            let port = guard
-                .as_mut()
-                .ok_or(HalError::NotFound("not connected".into()))?;
-
-            use std::io::Write;
-            port.write_all(&data_owned).map_err(HalError::Io)?;
-            port.flush().map_err(HalError::Io)?;
-            Ok(())
-        })
-        .await
-        .map_err(|e| HalError::Protocol(format!("serial write join error: {e}")))?
-    }
-}
-
-#[async_trait]
-impl ReceiptPrinter for BtReceiptPrinter {
-    async fn print_receipt(&self, body: &str) -> Result<(), HalError> {
-        self.ensure_connected().await?;
-        let data = escpos::format_receipt(body);
-        self.write_to_port(&data).await
-    }
-
-    async fn print_raw(&self, data: &[u8]) -> Result<(), HalError> {
-        self.ensure_connected().await?;
-        self.write_to_port(data).await
-    }
-
-    async fn cut(&self) -> Result<(), HalError> {
-        self.ensure_connected().await?;
-        let data = if self.partial_cut {
-            escpos::CUT_PARTIAL.to_vec()
-        } else {
-            escpos::CUT_FULL.to_vec()
-        };
-        self.write_to_port(&data).await
-    }
-
-    fn device_info(&self) -> DeviceInfo {
-        self.info.clone()
-    }
-}
+/// Compatibility spelling of [`SerialReceiptPrinter`].
+///
+/// Not deprecated: `discover()`, the setup wizard and several tests name the
+/// transport they found, and marking those call sites would break the
+/// `-D warnings` gate for a rename that carries no behavioural difference.
+pub type BtReceiptPrinter = SerialReceiptPrinter;
 
 #[cfg(test)]
 #[path = "bt_printer_tests.rs"]
