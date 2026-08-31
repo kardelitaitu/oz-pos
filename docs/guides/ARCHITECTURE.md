@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (drift repaired) · FIXED 31-08: crate tree +oz-crypto/oz-media/oz-notification/oz-plugin; rlua->mlua; oz-payment +Paddle (tree + prose); HAL device list 'NFC' -> real (barcode/printer/drawer/display/scale/EDC); migrations 98 -> 19 SQL files (131 squashed into init.sql); IPC endpoints 618 -> 505 unique (385 desktop + 369 tablet, 49 modules) · NOTE: this condensed guides/ARCHITECTURE.md coexists with a fuller root ARCHITECTURE.md (reorg 28147fe4 copied an archived version here); README links to THIS file · verified against HEAD Cargo.toml + generate_handler! + crates/oz-core/migrations/ -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (drift repaired) · FIXED 31-08: crate tree +oz-crypto/oz-media/oz-notification/oz-plugin; rlua->mlua; oz-payment +Paddle (tree + prose); HAL device list 'NFC' -> real (barcode/printer/drawer/display/scale/EDC); migrations 98 -> 19 SQL files (131 squashed into init.sql); IPC endpoints 618 -> 505 unique (385 desktop + 369 tablet, 49 modules) · NOTE: this condensed guides/ARCHITECTURE.md coexists with a fuller root ARCHITECTURE.md (reorg 28147fe4 copied an archived version here); README links to THIS file · verified against HEAD Cargo.toml + generate_handler! + crates/oz-core/migrations/ · 31-08 (dc07f32a/bb7ce92d): Registry + platform-startup sections updated for the new apply_config()/HardwareConfig bootstrap path (discover() is auto-probe, not startup registration) -->
 
 # OZ-POS – Codebase Architecture
 
@@ -165,7 +165,7 @@ oz-pos/
 ### oz-hal
 - **Responsibilities**: Uniform async API for all peripheral devices.
 - **Traits**: `BarcodeScanner`, `ReceiptPrinter`, `CashDrawer` (async, in `traits/`).
-- **Registry**: `DriverRegistry` — `HashMap<String, Arc<dyn Trait>>` per device category behind `RwLock`. Register/lookup/discover. `discover()` probes USB + serial hardware at startup.
+- **Registry**: `DriverRegistry` — `HashMap<String, Arc<dyn Trait>>` per device category behind `RwLock`. Register/lookup/discover. At startup, `platform-startup` maps the saved `TerminalProfile` → `HardwareConfig` and calls `apply_config()` to register the operator's devices; `discover()` is the auto-probe path (USB/serial/BT), not the startup registration.
 - **Transport layer** (`transport/`): `usb.rs` enumerates HID-class and printer-class USB devices by known VID/PID pairs. `serial.rs` enumerates serial ports with POS adapter detection and Bluetooth SPP port filtering. `tcp.rs` provides async TCP connection helpers for network printers (port 9100).
 - **Real drivers**:
   - `UsbHidBarcodeScanner` — USB HID interrupt transfers, HID keycode → ASCII conversion, Enter-terminated scan accumulation.
@@ -222,7 +222,7 @@ Each app crate has an identical command surface, wired through `platform-startup
 
 ### platform/ (Platform Crates)
 - **platform-core**: Shared DB schema, Store facade, migration runner for all platform crates.
-- **platform-startup**: Initialisation orchestration — DB setup, migration run, event handler registration, audit logging.
+- **platform-startup**: Initialisation orchestration — DB setup, migration run, event handler registration, audit logging, and HAL hardware registration (`register_hardware` → `apply_config`).
 - **platform-sync**: Offline-first sync engine with `SyncTransport` (reqwest-based HTTP push/pull), conflict detection, retry logic.
 
 ### modules/ (Business Modules)
