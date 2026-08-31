@@ -72,6 +72,10 @@ env:
   NF_SERVICE_ID: ${{ vars.NORTHFLANK_SERVICE_ID }}
   NF_SERVICE_URL: ${{ vars.NORTHFLANK_SERVICE_URL }}
 
+defaults:
+  run:
+    shell: bash
+
 # CICD-01: least-privilege default — the deploy job talks to the Northflank
 # API with its own token and needs no GitHub write access.
 permissions:
@@ -80,7 +84,7 @@ permissions:
 jobs:
   deploy:
     name: Build + deploy to Northflank
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     timeout-minutes: 90
     steps:
       # Fail-closed credential gate (website.yml convention): a deploy that

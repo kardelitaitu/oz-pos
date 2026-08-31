@@ -54,6 +54,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+defaults:
+  run:
+    shell: bash
+
 # CICD-01: least-privilege default (artifact upload works with read).
 permissions:
   contents: read
@@ -61,7 +65,7 @@ permissions:
 jobs:
   e2e-pr:
     name: E2E (PR) — ${{ matrix.project }}
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     # One shard per Playwright project (desktop / tablet) so each job
     # runs ~half the suite (~125 of 250 tests) in parallel. A single
     # full-matrix job took ~25-30 min (canceled at 15 min mid-suite on
@@ -108,7 +112,7 @@ jobs:
         # suffices there too.)
         run: cd ui && npx playwright install ${{ matrix.project == 'tablet' && 'webkit' || 'chromium' }} --with-deps
       - name: Install Playwright system deps (${{ matrix.project }})
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        if: runner.os == 'Linux' && steps.playwright-cache.outputs.cache-hit == 'true'
         run: cd ui && npx playwright install-deps ${{ matrix.project == 'tablet' && 'webkit' || 'chromium' }}
 
       - name: Set up Docker Buildx

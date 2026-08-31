@@ -57,6 +57,10 @@ env:
   # against production; flip the secret to "production" when going live.
   PUBLIC_PADDLE_ENVIRONMENT: ${{ secrets.PUBLIC_PADDLE_ENVIRONMENT || 'sandbox' }}
 
+defaults:
+  run:
+    shell: bash
+
 # CICD-01: least-privilege default — deploys authenticate with the
 # Cloudflare API token, not the GitHub token.
 permissions:
@@ -65,7 +69,7 @@ permissions:
 jobs:
   check:
     name: Website Check + Build
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -99,6 +103,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: mozilla/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696 # v0.0.10
       - name: Install system dependencies (portal cargo doc)
+        if: runner.os == 'Linux'
         # platform-startup depends on tauri → gdk-sys (gtk3) and oz-hal
         # depends on serialport → libudev; both must exist even for
         # --no-deps because the workspace members compile to emit docs.
@@ -137,7 +142,7 @@ jobs:
 
   deploy:
     name: Deploy to Cloudflare Workers
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     if: github.event_name == 'push'
     needs: check
     environment: production
@@ -213,6 +218,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: mozilla/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696 # v0.0.10
       - name: Install system dependencies (portal cargo doc)
+        if: runner.os == 'Linux'
         # platform-startup depends on tauri → gdk-sys (gtk3) and oz-hal
         # depends on serialport → libudev; both must exist even for
         # --no-deps because the workspace members compile to emit docs.

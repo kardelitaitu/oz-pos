@@ -39,6 +39,10 @@ env:
   RUSTC_WRAPPER: sccache
   SCCACHE_GHA_ENABLED: "true"
 
+defaults:
+  run:
+    shell: bash
+
 # CICD-01: least-privilege default; android-build grants contents: write
 # in its own block for the release upload.
 permissions:
@@ -47,7 +51,7 @@ permissions:
 jobs:
   android-build:
     name: Android APK
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     # AUDIT-28 RELEASE-02: the release.yml workflow creates the GitHub
     # Release only after all matrix builds finish (build timeouts are 60
     # min each), so this job must survive the build + a long poll window.

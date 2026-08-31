@@ -23,6 +23,10 @@ env:
   RUSTFLAGS: -D warnings
   SCCACHE_GHA_ENABLED: "true"
 
+defaults:
+  run:
+    shell: bash
+
 # CICD-01: least-privilege default; jobs that write (GHCR push, SARIF
 # upload) grant it in their own permissions blocks.
 permissions:
@@ -34,7 +38,7 @@ jobs:
   # On push to main, all required merge validation jobs run normally.
   changes:
     name: Detect Changes
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
       ui: ${{ steps.filter.outputs.ui }}
@@ -83,7 +87,7 @@ jobs:
   # ── Rust: Format (fastest — ~30s, no deps needed) ──────────────────
   rust-fmt:
     name: Rust Format
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     needs: [changes]
     if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
     steps:
@@ -99,7 +103,7 @@ jobs:
   # auto-fixes instead because Windows checkouts are CRLF on disk).
   go:
     name: Go Format + Vet
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     needs: [changes]
     if: github.event_name == 'push' || needs.changes.outputs.go == 'true'
     steps:
@@ -130,7 +134,7 @@ jobs:
   # harness (apps/unified/test-healthcheck.sh). Pure POSIX sh, no toolchain.
   unified-healthcheck:
     name: Unified Healthcheck Script Test
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Run unified healthcheck script test
@@ -142,7 +146,7 @@ jobs:
   # line). Pure python — no toolchain deps, so it stays fast.
   rust-panic-inventory:
     name: Rust Panic Inventory
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     needs: [changes]
     if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
     steps:
@@ -157,7 +161,7 @@ jobs:
   # minor units). Pure python — no toolchain deps, so it stays fast.
   rust-money-format:
     name: Rust Money Format
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     needs: [changes]
     if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
     steps:
@@ -173,7 +177,7 @@ jobs:
   # as a staged-only pre-commit gate in .githooks/pre-commit.
   migration-column-types:
     name: Migration Column Types
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     needs: [changes]
     if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
     steps:
@@ -192,7 +196,7 @@ jobs:
   # DROP COLUMN-era migrations (ubuntu-latest ships 3.37+).
   pg-schema-drift:
     name: Postgres Schema Drift Guard
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     needs: [changes]
     if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
     steps:
@@ -205,17 +209,18 @@ jobs:
   # the expiring baseline; new, expired, or stale findings block CI.
   architecture-boundaries:
     name: Architecture Boundaries
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     needs: [changes]
     if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
       - name: Verify architecture boundaries
         run: python3 scripts/verify-architecture-boundaries.py --strict
 
   ipc-parity:
     name: IPC Registration Parity
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Verify IPC parity (F-008/F-050)
@@ -224,7 +229,7 @@ jobs:
   # ── Rust: Clippy (needs system deps for compilation, all-features) ─
   rust-clippy:
     name: Rust Clippy
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     needs: [changes]
     if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
     steps:
@@ -234,6 +239,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -253,7 +259,7 @@ jobs:
   # Sharded 5-ways for parallel crate-group execution.
   rust-test-fast:
     name: Rust Test Fast (${{ matrix.shard }})
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     needs: [changes]
     if: github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true'
     # Postgres for the cloud-server / oz-api PG integration tests
@@ -289,6 +295,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -340,7 +347,7 @@ jobs:
   # the nextest JUnit report for visibility.
   sync-slow-tests:
     name: Sync Integration (slow-tests)
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     continue-on-error: ${{ github.event_name == 'pull_request' }}
     needs: [changes]
     if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
@@ -398,7 +405,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install system dependencies
-        if: steps.gate.outputs.run == 'true'
+        if: steps.gate.outputs.run == 'true' && runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -434,7 +441,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [self-hosted]
+        os: [[self-hosted, ozpos-ci]]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
@@ -470,7 +477,7 @@ jobs:
   # fail fast in BOTH the PR fast track and this push/job run.
   rust-test-apps:
     name: Rust Test Apps
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     needs: [changes]
     if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
     # Postgres for the cloud-server PG integration tests (same rationale as
@@ -496,6 +503,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -515,7 +523,7 @@ jobs:
   # ── UI: Lint ──────────────────────────────────────────────────────
   ui-lint:
     name: UI Lint
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     needs: [changes]
     if: github.event_name == 'push' || needs.changes.outputs.ui == 'true'
     steps:
@@ -531,7 +539,7 @@ jobs:
   # ── UI: TypeCheck ─────────────────────────────────────────────────
   ui-typecheck:
     name: UI TypeCheck
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     needs: [changes]
     if: github.event_name == 'push' || needs.changes.outputs.ui == 'true'
     steps:
@@ -547,7 +555,7 @@ jobs:
   # ── UI: Tests + quality gates (4-way sharded) ────────────────────
   ui-test:
     name: UI Tests (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     needs: [changes]
     if: github.event_name == 'push' || needs.changes.outputs.ui == 'true'
     strategy:
@@ -616,7 +624,7 @@ jobs:
   # continue-on-error is enforced by scripts/verify-ci-docs-drift.py.
   lighthouse:
     name: Lighthouse a11y audit
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     continue-on-error: true
     timeout-minutes: 10
     needs: [changes, ui-typecheck, ui-lint]
@@ -642,7 +650,7 @@ jobs:
   # services start, pass healthchecks, and answer their health endpoints.
   docker:
     name: Docker (build + scan + smoke)
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     needs: [changes]
     if: github.event_name == 'push' || needs.changes.outputs.docker == 'true' || needs.changes.outputs.rust == 'true'
     # SARIF upload needs security-events: write on the token. Without an
@@ -764,7 +772,7 @@ jobs:
   # ── Coverage gate (non-blocking, informational) ─────────────────
   coverage:
     name: Coverage Report
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     continue-on-error: true
     if: github.event_name == 'push'
     steps:
@@ -776,6 +784,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -806,7 +815,7 @@ jobs:
   # findings are always recorded in the job log.
   audit:
     name: Dependency Audit
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     continue-on-error: ${{ github.event_name == 'pull_request' }}
     needs: [changes]
     if: github.event_name == 'push' || needs.changes.outputs.rust == 'true' || needs.changes.outputs.ui == 'true'
@@ -834,7 +843,7 @@ jobs:
   # before merge (the weekly security.yml stays for the full tree).
   security-pr:
     name: Security (PR baseline)
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -889,7 +898,7 @@ jobs:
   # ── Fuzz tests (non-blocking, informational) ─────────────────────
   fuzz:
     name: Fuzz
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     continue-on-error: true
     timeout-minutes: 30
     # Advisory (crash artifacts uploaded). Runs on every main push; on PRs
@@ -1051,7 +1060,7 @@ jobs:
   # quarantined tests have an enforced lifecycle (see docs/ci-pipeline.md).
   flaky-quarantine:
     name: Flaky Quarantine Registry
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Verify quarantine manifest
@@ -1066,7 +1075,7 @@ jobs:
   # of actually-built Windows exes runs in release.yml's Windows job.
   windows-config:
     name: Windows Config Drift
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Verify NSIS installMode + asInvoker manifests
@@ -1075,10 +1084,11 @@ jobs:
   # ── Skill drift tests ────────────────────────────────────────────
   skill-drift-tests:
     name: Skill drift tests
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install bats
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y bats
       - name: Clean baseline smoke test
         run: bash .agents/skills/skill-drift-guard/scripts/detect.sh
@@ -1094,7 +1104,7 @@ jobs:
   # Pure python — no toolchain deps, so it stays fast.
   ci-docs-drift:
     name: CI Docs Drift
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Verify docs/ci-pipeline.md matches workflows + local runners
@@ -1103,7 +1113,7 @@ jobs:
   # ── E2E: Pre-build Docker image (main only, GHCR push) ───────────
   e2e-docker-image:
     name: E2E Docker Image
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     if: github.event_name == 'push'
     permissions:
       packages: write
@@ -1134,7 +1144,7 @@ jobs:
   # Target: < 8 min (down from ~20 min).
   e2e:
     name: E2E Tests (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
-    runs-on: self-hosted
+    runs-on: [self-hosted, ozpos-ci]
     timeout-minutes: 12
     needs: [changes]
     if: github.event_name == 'push' || needs.changes.outputs.e2e == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.docker == 'true' || needs.changes.outputs.rust == 'true'
@@ -1153,6 +1163,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'ui/package-lock.json'
       - name: Install system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -1177,7 +1188,7 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: cd ui && npx playwright install chromium --with-deps
       - name: Install Playwright system deps (cached)
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        if: runner.os == 'Linux' && steps.playwright-cache.outputs.cache-hit == 'true'
         run: cd ui && npx playwright install-deps chromium
       # P28-1: Docker layer caching via BuildKit GHA cache
       - name: Set up Docker Buildx
