@@ -1,6 +1,6 @@
 # API Reference — OZ-POS
 
-> **Note:** This document lists all Tauri IPC commands available from the React frontend via `ui/src/api/*.ts`. All commands return `Result<T, AppError>`. Commands are organized by feature module.
+> **⚠️ STALE — do not treat as authoritative (re-audited 31-08-26).** This inventory predates the ADR #7 scoped-IPC migration and CUR-11. Against committed HEAD it lists ~56 commands that are **no longer registered** in either client's `generate_handler!` (e.g. `complete_sale`, `start_sale`, `get_shift_report`, `discover_hardware`, `process_refund`, `void_sale`) and **omits ~192 registered commands** — including the entire Currencies & FX domain (`list_currencies_scoped`, `list_latest_exchange_rates_scoped` (CUR-11), `get_default_currency_scoped`, …) and `get_shift_report_scoped`. Until it is regenerated from `tauri::generate_handler!`, the authoritative command surface is `apps/desktop-client/src/lib.rs` and `apps/tablet-client/src/lib.rs`. All commands return `Result<T, AppError>`.
 
 ## Authentication & Sessions
 
@@ -851,8 +851,8 @@ If the store has more active instances than the tier allows, the |
 
 Renames the instance and updates its description / accent colour. |
 
-> last audited 09-08-26 by buffy
-> audit: Phase 1 Core Architecture & API Docs Audit
+> last audited 31-08-26 by docs-auditor
+> audit: full re-audit against HEAD — inventory found out of sync
 
-> status: ACCURATE (verified against actual codebase) · verified accurate: all 365 commands extracted from #[tauri::command] macros, organized into 12 feature categories
+> status: STALE — regeneration pending (see top warning). The 09-08 "all 365 commands ACCURATE" claim no longer holds: ~56 listed commands are unregistered at HEAD and ~192 registered commands are undocumented. Do not stamp ACCURATE until the scoped-IPC command surface settles and the inventory is regenerated from `generate_handler!`.
 
