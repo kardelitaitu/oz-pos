@@ -412,7 +412,13 @@ impl Store<'_> {
         let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
-        let result = self.conn.execute(
+        // F-1: the user row and its default assignment are one logical
+        // write — a failure between the two statements must not strand a
+        // user without its assignment (repo rule: writes run in
+        // transactions).
+        let tx = self.conn.unchecked_transaction()?;
+
+        let result = tx.execute(
             "INSERT INTO users (id, username, pin_hash, display_name, role_id, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![id, username, pin_hash, display_name.trim(), role_id, now, now],
@@ -432,11 +438,12 @@ impl Store<'_> {
 
         // Every user gets their single effective assignment (ADR #35 D5 /
         // spec 0048): a default global-mode assignment mirroring the role.
-        self.conn.execute(
+        tx.execute(
             "INSERT INTO assignments (user_id, role_id, scope_mode, branch_scope, workspace_scope)
              VALUES (?1, ?2, 'global', 'all', 'all')",
             params![id, role_id],
         )?;
+        tx.commit()?;
 
         Ok(User {
             id,
@@ -478,7 +485,10 @@ impl Store<'_> {
         }
 
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let rows = self.conn.execute(
+        // F-1: same transaction discipline as create_user — the user update
+        // and its assignment role sync are one logical write.
+        let tx = self.conn.unchecked_transaction()?;
+        let rows = tx.execute(
             "UPDATE users SET username = ?1, display_name = ?2, role_id = ?3, is_active = ?4, updated_at = ?5 WHERE id = ?6",
             params![username, display_name.trim(), role_id, is_active, now, id],
         )?;
@@ -490,12 +500,13 @@ impl Store<'_> {
         }
         // Keep the assignment role in sync — the scope columns and scope rows
         // of an existing assignment are preserved (only the role follows).
-        self.conn.execute(
+        tx.execute(
             "INSERT INTO assignments (user_id, role_id, scope_mode, branch_scope, workspace_scope, updated_at)
              VALUES (?1, ?2, 'global', 'all', 'all', ?3)
              ON CONFLICT(user_id) DO UPDATE SET role_id = excluded.role_id, updated_at = excluded.updated_at",
             params![id, role_id, now],
         )?;
+        tx.commit()?;
         self.get_user(id)?.ok_or_else(|| CoreError::NotFound {
             entity: "user",
             id: id.to_owned(),
