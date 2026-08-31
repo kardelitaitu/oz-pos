@@ -23,7 +23,7 @@ import { hasGrantedPermission } from '@/platform/ui/page-registry';
 import { openProductImagesScoped } from '@/api/browser';
 import { loadCatalog, invalidateCatalog } from '@/utils/catalog-cache';
 import { usePagedList } from '@/hooks/usePagedList';
-import { listCustomers, type CustomerDto } from '@/api/customers';
+import { listCustomersScoped, type CustomerDto } from '@/api/customers';
 import { getActiveShiftScoped, openShiftScoped, closeShiftScoped, type ShiftDto } from '@/api/shifts';
 import { holdCartScoped, listHeldCartsScoped, getHeldCartScoped, deleteHeldCartScoped, type HeldCartRow, type SaleDetail } from '@/api/sales';
 import { getStoreSettingsScoped, listCreditSalesScoped, settleCreditScoped, type StoreSettingsDto, type CreditSaleDto } from '@/api/settings';
@@ -1042,7 +1042,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     if (!showCustomerSearch) { setCustomerSearchResults([]); return; }
     let cancelled = false;
     setLoadingCustomers(true);
-    listCustomers()
+    listCustomersScoped(sessionToken)
       .then((customers) => {
         if (cancelled) return;
         allCustomersRef.current = customers;
