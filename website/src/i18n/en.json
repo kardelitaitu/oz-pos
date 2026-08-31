@@ -392,7 +392,8 @@
   },
   "checkout": {
     "signInToSubscribe": "Sign in to subscribe",
-    "error": "Couldn't start the checkout. Please try again."
+    "error": "Couldn't start the checkout. Please try again.",
+    "unavailable": "This plan isn't available to purchase online yet — contact sales@ozpos.my.id to subscribe."
   },
   "password": {
     "meterLabel": "Password strength",

@@ -51,6 +51,10 @@ interface Props {
 export default function CheckoutButton({ tier, locale }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  // Distinct from `error`: set when the tier's checkout is not purchasable
+  // online yet (placeholder price id / unconfigured provider) — a different,
+  // actionable message instead of the generic "try again".
+  const [unavailable, setUnavailable] = useState(false);
   // SSR-safe label: hasSession() reads sessionStorage, which does not
   // exist during the Astro server render. Rendering it unconditionally
   // made the SSR HTML say "Sign in to subscribe" while hydration showed
@@ -86,6 +90,7 @@ export default function CheckoutButton({ tier, locale }: Props) {
     }
     setLoading(true);
     setError(false);
+    setUnavailable(false);
     try {
       if (useMidtrans) {
         // The snap token request is session-authed; the license server
@@ -100,10 +105,11 @@ export default function CheckoutButton({ tier, locale }: Props) {
       }
       // Paddle path: the checkout can only open with a real price id and a
       // configured token. If either is missing (placeholder price / unset
-      // PADDLE_CLIENT_TOKEN), surface an error instead of opening a dead
-      // overlay or dropping the user into a dead sign-in loop.
+      // PADDLE_CLIENT_TOKEN), surface the "not available to purchase yet"
+      // message instead of opening a dead overlay or dropping the user into
+      // a dead sign-in loop.
       if (!priceId || isPlaceholderPriceId(priceId) || !isPaddleConfigured()) {
-        setError(true);
+        setUnavailable(true);
         return;
       }
       const email = await getSessionEmail();
@@ -132,6 +138,11 @@ export default function CheckoutButton({ tier, locale }: Props) {
       >
         {loading ? '…' : mounted && hasSession() ? tier.cta : t(locale, 'checkout.signInToSubscribe')}
       </button>
+      {unavailable && (
+        <p className="text-xs text-link" role="alert">
+          {t(locale, 'checkout.unavailable')}
+        </p>
+      )}
       {error && (
         <p className="text-xs text-link" role="alert">
           {t(locale, 'checkout.error')}

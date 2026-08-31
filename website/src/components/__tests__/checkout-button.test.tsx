@@ -64,7 +64,7 @@ describe('CheckoutButton Component', () => {
     };
   }
 
-  it('shows an error state when provider is unconfigured (no mailto fallback)', async () => {
+  it('shows a "not available" message when provider is unconfigured (no mailto fallback)', async () => {
     paddleMock.isPaddleConfigured.mockReturnValue(false);
     paddleMock.hasSession.mockReturnValue(true);
     const { container, unmount } = await renderBtn(sampleTier, 'en');
@@ -78,7 +78,9 @@ describe('CheckoutButton Component', () => {
     });
 
     expect(paddleMock.openPaddleCheckout).not.toHaveBeenCalled();
-    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert).not.toBeNull();
+    expect(alert?.textContent).toContain("isn't available to purchase online");
     await unmount();
   });
 
@@ -159,9 +161,10 @@ describe('CheckoutButton Component', () => {
     await unmount();
   });
 
-  it('shows an error state when the price id is still a placeholder (no mailto fallback)', async () => {
+  it('shows a "not available" message when the price id is still a placeholder (no mailto fallback)', async () => {
     // Regression: with placeholder price ids, the button must never open a
-    // dead Paddle overlay or hide behind a mailto link — it shows an error.
+    // dead Paddle overlay or hide behind a mailto link — it shows the
+    // actionable "not available to purchase online" message.
     paddleMock.isPlaceholderPriceId.mockReturnValue(true);
     paddleMock.hasSession.mockReturnValue(true);
     const { container, unmount } = await renderBtn(sampleTier, 'en');
@@ -175,7 +178,9 @@ describe('CheckoutButton Component', () => {
     });
 
     expect(paddleMock.openPaddleCheckout).not.toHaveBeenCalled();
-    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert).not.toBeNull();
+    expect(alert?.textContent).toContain("isn't available to purchase online");
     await unmount();
   });
 

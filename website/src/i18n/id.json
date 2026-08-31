@@ -392,7 +392,8 @@
   },
   "checkout": {
     "signInToSubscribe": "Masuk untuk berlangganan",
-    "error": "Tidak dapat memulai checkout. Silakan coba lagi."
+    "error": "Tidak dapat memulai checkout. Silakan coba lagi.",
+    "unavailable": "Paket ini belum bisa dibeli online — hubungi sales@ozpos.my.id untuk berlangganan."
   },
   "password": {
     "meterLabel": "Kekuatan kata sandi",
