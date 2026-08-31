@@ -65,7 +65,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-GUIDE = ROOT / "docs" / "plugin-guide.md"
+# CICD-04 lineage: the guide lives under docs/guides/ (mdBook layout) —
+# the historical docs/plugin-guide.md path made this gate fail-closed
+# with "guide not found" on every run after the doc tree was reorganized.
+GUIDE = ROOT / "docs" / "guides" / "plugin-guide.md"
 MANAGER = ROOT / "crates" / "oz-plugin" / "src" / "manager.rs"
 OZ_LUA_LIB = ROOT / "crates" / "oz-lua" / "src" / "lib.rs"
 OZ_CLI = ROOT / "crates" / "oz-cli" / "src" / "cli.rs"
