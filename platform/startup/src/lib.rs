@@ -32,6 +32,8 @@ next: none | perf: N/A
 
 pub mod console;
 pub mod event_handlers;
+/// Startup hardware registration from the saved terminal profile.
+pub mod hardware;
 pub mod metrics;
 pub mod rate_sync;
 
