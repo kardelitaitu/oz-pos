@@ -259,10 +259,13 @@ async fn insert_pg_batch(
     let value_groups = (0..rows.len())
         .map(|r| {
             let base = r * col_count;
-            (1..=col_count)
-                .map(|c| format!("${}", base + c))
-                .collect::<Vec<_>>()
-                .join(", ")
+            format!(
+                "({})",
+                (1..=col_count)
+                    .map(|c| format!("${}", base + c))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
         })
         .collect::<Vec<_>>()
         .join(", ");
