@@ -832,6 +832,116 @@ pub(crate) fn earn_points_with_conn(
     }))
 }
 
+/// LOY-03: proportionally reverse a sale's loyalty award on refund.
+///
+/// Deducts `round(award_points × refund_total / sale_total)`, capped at
+/// the not-yet-reversed remainder of the award, so cumulative refunds
+/// can never claw back more than was earned. The ledger row stores the
+/// full proportional deduction (negative points, type
+/// `'refund_reversal'` — same sign convention as `'redeem'`), while the
+/// account balance floors at zero: points already spent are not dragged
+/// negative. Lifetime points drop with it, so tier demotion recomputes
+/// naturally.
+///
+/// Idempotent per refund: the deterministic primary key
+/// (`loyalty-reversal-<refund_id>`) turns a retry into a no-op.
+///
+/// Runs on the CALLER's connection/transaction — like
+/// [`earn_points_with_conn`] this must commit or roll back atomically
+/// with the refund row itself.
+pub(crate) fn reverse_loyalty_on_refund(
+    conn: &rusqlite::Connection,
+    sale_id: &str,
+    refund_id: &str,
+    refund_total_minor: i64,
+    sale_total_minor: i64,
+) -> Result<Option<LoyaltyTransaction>, CoreError> {
+    // The award to reverse (LOY-06 wrote exactly one 'earn' row per sale).
+    let earn: Option<(String, i64)> = conn
+        .query_row(
+            "SELECT account_id, points FROM loyalty_transactions
+             WHERE sale_id = ?1 AND txn_type = 'earn'
+             ORDER BY created_at ASC LIMIT 1",
+            params![sale_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .ok();
+    let Some((account_id, earned_points)) = earn else {
+        // Legacy sale predating LOY-06 awarding, or a sale that earned nothing.
+        return Ok(None);
+    };
+
+    // Cumulative cap: never reverse more than the award.
+    let already_reversed: i64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(-points), 0) FROM loyalty_transactions
+             WHERE sale_id = ?1 AND txn_type = 'refund_reversal'",
+            params![sale_id],
+            |row| row.get(0),
+        )
+        .map_err(CoreError::Db)?;
+    let headroom = earned_points - already_reversed;
+    let proportional = if sale_total_minor > 0 {
+        ((earned_points as f64) * (refund_total_minor as f64) / (sale_total_minor as f64)).round()
+            as i64
+    } else {
+        0
+    };
+    let deduct = proportional.min(headroom).max(0);
+    if deduct <= 0 {
+        return Ok(None);
+    }
+
+    let txn_id = format!("loyalty-reversal-{refund_id}");
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let description = format!("Reversed {deduct} points for refund on sale");
+    match conn.execute(
+        "INSERT INTO loyalty_transactions (id, account_id, sale_id, points, txn_type, description, created_at)
+         VALUES (?1, ?2, ?3, ?4, 'refund_reversal', ?5, ?6)",
+        params![txn_id, account_id, sale_id, -deduct, description, now],
+    ) {
+        Ok(_) => {}
+        Err(rusqlite::Error::SqliteFailure(ref code, _))
+            if code.code == rusqlite::ErrorCode::ConstraintViolation =>
+        {
+            // Replay of the same refund id: the first reversal stands.
+            return Ok(None);
+        }
+        Err(e) => return Err(e.into()),
+    }
+
+    // Balance floors at zero; lifetime drops and the tier recomputes.
+    conn.execute(
+        "UPDATE loyalty_accounts
+         SET points = MAX(points - ?1, 0),
+             lifetime_points = MAX(lifetime_points - ?1, 0),
+             tier_id = COALESCE((SELECT id FROM loyalty_tiers
+                                 WHERE min_points <= MAX(lifetime_points - ?1, 0)
+                                 ORDER BY min_points DESC LIMIT 1), tier_id),
+             updated_at = ?2
+         WHERE id = ?3",
+        params![deduct, now, account_id],
+    )?;
+
+    // MSL-4: keep the customers.loyalty_points projection in step.
+    conn.execute(
+        "UPDATE customers SET loyalty_points =
+            (SELECT points FROM loyalty_accounts WHERE id = ?1),
+         updated_at = ?2 WHERE id = (SELECT customer_id FROM loyalty_accounts WHERE id = ?1)",
+        params![account_id, now],
+    )?;
+
+    Ok(Some(LoyaltyTransaction {
+        id: txn_id,
+        account_id,
+        sale_id: Some(sale_id.to_owned()),
+        points: -deduct,
+        txn_type: "refund_reversal".into(),
+        description,
+        created_at: now,
+    }))
+}
+
 #[cfg(test)]
 #[path = "loyalty_tests.rs"]
 mod tests;

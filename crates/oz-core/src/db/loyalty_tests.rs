@@ -801,3 +801,140 @@ fn finalize_replay_awards_once() {
         .unwrap();
     assert_eq!(count, 1, "replayed finalize must not double-award");
 }
+
+// ── LOY-03: proportional refund reversal ───────────────────────
+//
+// LOY-06 made completion award points atomically; refunds must
+// claw back their proportional share in the same DB tx, or every
+// refund silently leaks points.
+
+fn acct_state(conn: &Connection, customer_id: &str) -> (i64, i64, String) {
+    conn.query_row(
+        "SELECT points, lifetime_points, COALESCE(tier_id, '')
+         FROM loyalty_accounts WHERE customer_id = ?1",
+        params![customer_id],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )
+    .unwrap()
+}
+
+fn seed_earned_sale(conn: &Connection, sale_total: i64) {
+    seed_customer(conn, "cust-1", "Alice");
+    seed_sale_for_customer(conn, "sale-1", Some("cust-1"), sale_total);
+    store(conn)
+        .earn_points("cust-1", "sale-1", sale_total)
+        .unwrap();
+}
+
+#[test]
+fn refund_reversal_deducts_proportionally() {
+    let conn = fresh();
+    // Bronze: 10 pts / 100 minor → 10000 earns 1000.
+    seed_earned_sale(&conn, 10000);
+    let txn = reverse_loyalty_on_refund(&conn, "sale-1", "ref-1", 3000, 10000)
+        .unwrap()
+        .expect("30% refund reverses 30% of the award");
+    assert_eq!(txn.points, -300);
+    assert_eq!(txn.txn_type, "refund_reversal");
+    assert_eq!(acct_state(&conn, "cust-1").0, 700);
+    assert_eq!(acct_state(&conn, "cust-1").1, 700);
+    let projection: i64 = conn
+        .query_row(
+            "SELECT loyalty_points FROM customers WHERE id = 'cust-1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(projection, 700);
+}
+
+#[test]
+fn refund_reversal_is_idempotent_per_refund() {
+    let conn = fresh();
+    seed_earned_sale(&conn, 10000);
+    assert!(
+        reverse_loyalty_on_refund(&conn, "sale-1", "ref-1", 3000, 10000)
+            .unwrap()
+            .is_some()
+    );
+    // Replay of the SAME refund id (retry after a crash) must not deduct twice.
+    assert!(
+        reverse_loyalty_on_refund(&conn, "sale-1", "ref-1", 3000, 10000)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(acct_state(&conn, "cust-1").0, 700);
+}
+
+#[test]
+fn refund_reversal_cumulative_capped_at_award() {
+    let conn = fresh();
+    seed_earned_sale(&conn, 10000); // 1000 pts awarded
+    let t1 = reverse_loyalty_on_refund(&conn, "sale-1", "ref-1", 6000, 10000)
+        .unwrap()
+        .unwrap();
+    assert_eq!(t1.points, -600);
+    // Second 60% refund: only 400 headroom remains under the award.
+    let t2 = reverse_loyalty_on_refund(&conn, "sale-1", "ref-2", 6000, 10000)
+        .unwrap()
+        .unwrap();
+    assert_eq!(t2.points, -400);
+    // Nothing left to reverse.
+    assert!(
+        reverse_loyalty_on_refund(&conn, "sale-1", "ref-3", 1000, 10000)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(acct_state(&conn, "cust-1").0, 0);
+}
+
+#[test]
+fn refund_reversal_without_earn_is_noop() {
+    let conn = fresh();
+    seed_customer(&conn, "cust-1", "Alice");
+    seed_sale_for_customer(&conn, "sale-1", Some("cust-1"), 10000);
+    // Legacy sale that never earned (LOY-06 rollout boundary).
+    assert!(
+        reverse_loyalty_on_refund(&conn, "sale-1", "ref-1", 5000, 10000)
+            .unwrap()
+            .is_none()
+    );
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM loyalty_transactions", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[test]
+fn refund_reversal_floors_balance_at_zero() {
+    let conn = fresh();
+    seed_earned_sale(&conn, 10000); // 1000 pts
+    // Customer spent points meanwhile: balance 200, lifetime 1000.
+    conn.execute(
+        "UPDATE loyalty_accounts SET points = 200 WHERE customer_id = 'cust-1'",
+        [],
+    )
+    .unwrap();
+    let txn = reverse_loyalty_on_refund(&conn, "sale-1", "ref-1", 10000, 10000)
+        .unwrap()
+        .unwrap();
+    assert_eq!(txn.points, -1000, "ledger records the full reversal");
+    let (points, lifetime, _) = acct_state(&conn, "cust-1");
+    assert_eq!(points, 0, "balance floors at zero, never negative");
+    assert_eq!(lifetime, 0);
+}
+
+#[test]
+fn refund_reversal_demotes_tier_when_lifetime_drops() {
+    let conn = fresh();
+    seed_earned_sale(&conn, 10000); // lifetime 1000 → Gold (min 500)
+    assert_eq!(acct_state(&conn, "cust-1").2, "tier-gold");
+    reverse_loyalty_on_refund(&conn, "sale-1", "ref-1", 10000, 10000).unwrap();
+    assert_eq!(
+        acct_state(&conn, "cust-1").2,
+        "tier-bronze",
+        "lifetime back to 0 → tier recomputed down"
+    );
+}
