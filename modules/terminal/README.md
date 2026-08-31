@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · modules/terminal/src/lib.rs has TerminalModule (line 47); modules/terminal/manifest.json present with deps [] + permissions [terminal:view,terminal:edit] matching the Module Info table · Kernel::register/load_all/start_all code matches platform/kernel API · no owned-path claims to diverge -->
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · modules/terminal/src/lib.rs has TerminalModule (line 47); modules/terminal/manifest.json present with deps [] + permissions [terminal:view,terminal:edit] matching the Module Info table · Kernel::register/load_all/start_all code matches platform/kernel API · no owned-path claims to diverge · RE-AUDITED 31-08 by docs-auditor: manifest.json re-verified (id terminal, v1.0.0, deps [], perms view/edit); on_load/on_start/on_stop are stubs (log + "future phases will register handlers") — Lifecycle section corrected to say so (previously implied they validate/prepare/clean up); crate has repository.rs/service.rs (TerminalRepository/TerminalService) NOT wired into runtime and NOT parity-tested (no tests/boundary_contract.rs, unlike tax/inventory); normalized footer -->
 
 # Terminal Module
 
@@ -19,11 +19,13 @@ The Terminal module manages registered POS terminals: device registration, heart
 
 ## Lifecycle
 
-The module implements `foundation::contracts::Module` and follows the standard lifecycle:
+The module implements `foundation::contracts::Module`. Its lifecycle hooks are currently **stubs** — each logs a message and returns `Ok(())`; none touch the database or event bus yet:
 
-1. **`on_load`** — Validates configuration
-2. **`on_start`** — Prepares for terminal operations
-3. **`on_stop`** — Cleans up resources
+1. **`on_load`** — logs "validating configuration" (a future phase will register event handlers to track terminal activity)
+2. **`on_start`** — logs "ready for terminal operations"
+3. **`on_stop`** — logs "cleaning up"
+
+The crate also contains `repository.rs` (`TerminalRepository`) and `service.rs` (`TerminalService`), but these are **not yet wired into the runtime** — and unlike the tax/inventory modules there is no `tests/boundary_contract.rs` pinning them to the live path.
 
 ## Registration
 
@@ -51,6 +53,4 @@ kernel.start_all()?;
 }
 ```
 
-> last audited 09-08-26 by buffy
-> audit: Phase 3 Module-Level Documentation Audit
-> status: ACCURATE (verified against actual codebase)
+> last audited 31-08-26 by docs-auditor
