@@ -1,8 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent (oz-core slice B2: sales deep read; CLI-1 support 25-07-26: new tx-aware create_sale_in_tx + shared validate_sale_money/insert_sale_with_lines helpers)
+last audited 25-07-26 by RSA-Agent (oz-core slice B2: sales deep read; CLI-1 support 25-07-26: new tx-aware create_sale_in_tx + shared validate_sale_money/insert_sale_with_lines helpers); COR-7 re-audited 31-08-26 by docs-auditor (idempotency_key now persisted on both sale paths)
 crate: oz-core | status: SAFE | lint: CLEAN
-findings: money paths exemplary (MONEY-01..04 + TAX-02..06 in-line, checked arithmetic at every IPC boundary, explicit rounding modes, TAX-06 exclusive-total correction); COR-7 MEDIUM: complete_sale_deduction inserts payment splits WITHOUT the idempotency_key column it carries — bypasses create_payments dedup persistence; COR-8 LOW: void_sale comment claims optimistic concurrency but UPDATE has no version CAS (WHERE id only); COR-9 INFO: receipt-barcode lookup swallows DB errors via .ok(); COR-10 INFO: PartialStockResult travels inside Validation.message JSON (documented tradeoff)
-next: persist idempotency_key on the sale-path payment insert (COR-7); add version CAS to void_sale (COR-8) | perf: batch SKU lookup avoids N+1; popularity recompute outside tx
+findings: money paths exemplary (MONEY-01..04 + TAX-02..06 in-line, checked arithmetic at every IPC boundary, explicit rounding modes, TAX-06 exclusive-total correction); COR-7 RESOLVED (re-audited 31-08-26): both sale-path payment inserts now persist idempotency_key (sales_checkout.rs:466/478, sales_lifecycle.rs:463/475) — the old "inserts splits WITHOUT the idempotency_key column" finding no longer holds; COR-8 LOW: void_sale comment claims optimistic concurrency but UPDATE has no version CAS (WHERE id only); COR-9 INFO: receipt-barcode lookup swallows DB errors via .ok(); COR-10 INFO: PartialStockResult travels inside Validation.message JSON (documented tradeoff)
+next: add version CAS to void_sale (COR-8) | perf: batch SKU lookup avoids N+1; popularity recompute outside tx
 */
 //! Sale domain core — shared DTOs, cross-part helpers, small query APIs.
 //!
