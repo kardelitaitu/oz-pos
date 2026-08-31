@@ -48,37 +48,37 @@ pub fn compute_discount(
 ) -> Result<i64, CoreError> {
     let promo_type =
         PromotionType::from_str(promo.promo_type.trim()).ok_or_else(|| CoreError::Validation {
-            field: "promo_type".into(),
+            field: "promo_type",
             message: format!("unknown promotion type: {}", promo.promo_type),
         })?;
 
     if !promo.active {
         return Err(CoreError::Validation {
-            field: "active".into(),
+            field: "active",
             message: "promotion is not active".into(),
         });
     }
 
     if let Some(ref starts_at) = promo.starts_at {
         let start = DateTime::parse_from_rfc3339(starts_at).map_err(|e| CoreError::Validation {
-            field: "starts_at".into(),
+            field: "starts_at",
             message: format!("invalid starts_at: {e}"),
         })?;
         if now < start {
             return Err(CoreError::Validation {
-                field: "starts_at".into(),
+                field: "starts_at",
                 message: "promotion has not started yet".into(),
             });
         }
     }
     if let Some(ref ends_at) = promo.ends_at {
         let end = DateTime::parse_from_rfc3339(ends_at).map_err(|e| CoreError::Validation {
-            field: "ends_at".into(),
+            field: "ends_at",
             message: format!("invalid ends_at: {e}"),
         })?;
         if now > end {
             return Err(CoreError::Validation {
-                field: "ends_at".into(),
+                field: "ends_at",
                 message: "promotion has expired".into(),
             });
         }
@@ -86,7 +86,7 @@ pub fn compute_discount(
 
     if sale.total.minor_units < promo.min_order_minor {
         return Err(CoreError::Validation {
-            field: "min_order_minor".into(),
+            field: "min_order_minor",
             message: format!(
                 "sale total {} is below minimum order {}",
                 sale.total.minor_units, promo.min_order_minor
@@ -96,7 +96,7 @@ pub fn compute_discount(
 
     if promo.value_minor < 0 {
         return Err(CoreError::Validation {
-            field: "value_minor".into(),
+            field: "value_minor",
             message: "value_minor must not be negative".into(),
         });
     }
@@ -141,7 +141,7 @@ pub fn compute_discount(
             let trigger_sku = promo.trigger_sku.as_deref().unwrap_or_default();
             if trigger_sku.is_empty() {
                 return Err(CoreError::Validation {
-                    field: "trigger_sku".into(),
+                    field: "trigger_sku",
                     message: "buy_x_get_y promotion requires trigger_sku".into(),
                 });
             }
@@ -149,13 +149,13 @@ pub fn compute_discount(
             let reward_qty = promo.reward_qty.unwrap_or(1);
             if min_qty < 1 {
                 return Err(CoreError::Validation {
-                    field: "min_qty".into(),
+                    field: "min_qty",
                     message: "buy_x_get_y min_qty must be at least 1".into(),
                 });
             }
             if reward_qty < 1 {
                 return Err(CoreError::Validation {
-                    field: "reward_qty".into(),
+                    field: "reward_qty",
                     message: "buy_x_get_y reward_qty must be at least 1".into(),
                 });
             }
@@ -220,7 +220,7 @@ pub fn compute_discount_unscoped(
 
 fn overflow(field: &'static str) -> CoreError {
     CoreError::Validation {
-        field: field.into(),
+        field,
         message: "discount computation overflow".into(),
     }
 }

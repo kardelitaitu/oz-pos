@@ -44,13 +44,11 @@ fn export_refuses_an_empty_password() {
     // unchanged, and any future caller inherits the trap. A
     // crypto-critical precondition enforced only in a React component is
     // enforced in the wrong place.
-    // `.err().expect(..)` rather than `expect_err(..)`: on failure the
+    // `.expect_err(..)` rather than `expect_err(..)`: on failure the
     // latter dumps the whole exported Vec<u8> into the log, which is both
     // unreadable and a plaintext header (salt, nonce, store name) sitting
     // in CI output.
-    let err = export("")
-        .err()
-        .expect("an empty password must not produce a backup");
+    let err = export("").expect_err("an empty password must not produce a backup");
     assert!(
         err.to_string().contains("password"),
         "the error must name the cause, got: {err}"
@@ -61,9 +59,7 @@ fn export_refuses_an_empty_password() {
 fn export_refuses_a_whitespace_only_password() {
     // "   " is the same accident (an unfilled field, a stray keystroke)
     // and derives just as deterministically as "".
-    let err = export("   ")
-        .err()
-        .expect("a whitespace-only password must not produce a backup");
+    let err = export("   ").expect_err("a whitespace-only password must not produce a backup");
     assert!(err.to_string().contains("password"), "got: {err}");
 }
 

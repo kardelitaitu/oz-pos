@@ -2005,3 +2005,147 @@ fn voided_sales_summary_groups_by_currency() {
     assert_eq!(idr_row.void_count, 1);
     assert_eq!(idr_row.void_total_minor, 165000);
 }
+
+// ── REP-05 (rewrite half): sale-line product snapshots ─────────────
+//
+// sale_lines now stores product_id / product_name / category_id at
+// sale creation. Reports read the snapshot first and fall back to the
+// mutable products join for legacy rows, so renaming a product,
+// moving it between categories, or reusing a deleted product's sku
+// can no longer relabel historical revenue.
+
+/// Seed a product with a real name + optional category and one
+/// completed sale; returns the sale id.
+fn seed_named_sale(
+    conn: &Connection,
+    sku: &str,
+    name: &str,
+    category: Option<&str>,
+    qty: i64,
+    unit: i64,
+) -> String {
+    let s = store(conn);
+    let money = Money {
+        minor_units: unit,
+        currency: usd(),
+    };
+    s.create_product(sku, name, money, category, None, 100, None)
+        .unwrap();
+    let mut cart = Cart::new(usd());
+    cart.add_line(CartLine::new(Sku::new(sku), qty, price(unit)))
+        .unwrap();
+    let mut sale = Sale::from_cart(&cart).unwrap();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    sale.created_at = now.clone();
+    sale.updated_at = now;
+    s.create_sale(&sale).unwrap();
+    s.update_sale_status(&sale.id, SaleStatus::Active).unwrap();
+    s.update_sale_status(&sale.id, SaleStatus::Completed)
+        .unwrap();
+    sale.id
+}
+
+#[test]
+fn create_sale_snapshots_product_identity_on_lines() {
+    let conn = fresh();
+    store(&conn)
+        .create_category("cat-drinks", "Drinks", "#00f", "")
+        .unwrap();
+    seed_named_sale(&conn, "SNAP-1", "Caffe Latte", Some("cat-drinks"), 1, 500);
+    let (pid, pname, cid): (Option<String>, Option<String>, Option<String>) = conn
+        .query_row(
+            "SELECT product_id, product_name, category_id FROM sale_lines WHERE sku = 'SNAP-1'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    let product_id: String = conn
+        .query_row("SELECT id FROM products WHERE sku = 'SNAP-1'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(pid.as_deref(), Some(product_id.as_str()));
+    assert_eq!(pname.as_deref(), Some("Caffe Latte"));
+    assert_eq!(cid.as_deref(), Some("cat-drinks"));
+}
+
+#[test]
+fn top_products_keeps_snapshot_name_after_rename() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_named_sale(&conn, "RN-1", "Caffe Latte", None, 2, 500);
+    conn.execute(
+        "UPDATE products SET name = 'Caffè Mocha' WHERE sku = 'RN-1'",
+        [],
+    )
+    .unwrap();
+    let rows = s
+        .top_products("2000-01-01", "2099-12-31", 10, "revenue")
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        rows[0].name, "Caffe Latte",
+        "historical revenue must keep the name the product had at sale time"
+    );
+    assert_eq!(rows[0].total_minor, 1000);
+}
+
+#[test]
+fn category_breakdown_keeps_snapshot_category_after_move() {
+    let conn = fresh();
+    let s = store(&conn);
+    s.create_category("cat-drinks", "Drinks", "#00f", "")
+        .unwrap();
+    s.create_category("cat-food", "Food", "#f00", "").unwrap();
+    seed_named_sale(&conn, "MV-1", "Latte", Some("cat-drinks"), 1, 500);
+    // Move the product to another category AFTER the sale.
+    conn.execute(
+        "UPDATE products SET category_id = 'cat-food' WHERE sku = 'MV-1'",
+        [],
+    )
+    .unwrap();
+    let rows = s.category_breakdown("2000-01-01", "2099-12-31").unwrap();
+    assert_eq!(rows.len(), 1, "the sale must not move to Food");
+    assert_eq!(rows[0].category_id.as_deref(), Some("cat-drinks"));
+    assert_eq!(rows[0].category_name, "Drinks");
+    assert_eq!(rows[0].total_minor, 500);
+}
+
+#[test]
+fn top_products_splits_rows_when_sku_is_reused() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_named_sale(&conn, "REUSE", "Old Widget", None, 1, 400);
+    conn.execute("DELETE FROM products WHERE sku = 'REUSE'", [])
+        .unwrap();
+    seed_named_sale(&conn, "REUSE", "New Widget", None, 1, 600);
+    let rows = s
+        .top_products("2000-01-01", "2099-12-31", 10, "revenue")
+        .unwrap();
+    assert_eq!(rows.len(), 2, "each sale era keeps its own snapshot label");
+    let old = rows.iter().find(|r| r.name == "Old Widget").unwrap();
+    let new = rows.iter().find(|r| r.name == "New Widget").unwrap();
+    assert_eq!(old.total_minor, 400);
+    assert_eq!(new.total_minor, 600);
+}
+
+#[test]
+fn reports_fall_back_to_join_for_legacy_null_snapshots() {
+    // Rows written before the snapshot migration have NULL snapshots;
+    // reports must keep working via the products join (best-effort
+    // labelling, identical to pre-fix behavior).
+    let conn = fresh();
+    let s = store(&conn);
+    seed_named_sale(&conn, "LEG-1", "Legacy Name", None, 1, 700);
+    conn.execute(
+        "UPDATE sale_lines SET product_id = NULL, product_name = NULL, category_id = NULL WHERE sku = 'LEG-1'",
+        [],
+    )
+    .unwrap();
+    let rows = s
+        .top_products("2000-01-01", "2099-12-31", 10, "revenue")
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].name, "Legacy Name");
+    assert_eq!(rows[0].total_minor, 700);
+}

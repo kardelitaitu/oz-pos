@@ -75,21 +75,17 @@ fn validate_promotion(promo: &Promotion) -> Result<(), CoreError> {
                 message: "buy_x_get_y promotion requires a trigger_sku".into(),
             });
         }
-        if let Some(min_qty) = promo.min_qty {
-            if min_qty < 1 {
-                return Err(CoreError::Validation {
-                    field: "min_qty",
-                    message: "buy_x_get_y min_qty must be at least 1".into(),
-                });
-            }
+        if promo.min_qty.is_some_and(|min_qty| min_qty < 1) {
+            return Err(CoreError::Validation {
+                field: "min_qty",
+                message: "buy_x_get_y min_qty must be at least 1".into(),
+            });
         }
-        if let Some(reward_qty) = promo.reward_qty {
-            if reward_qty < 1 {
-                return Err(CoreError::Validation {
-                    field: "reward_qty",
-                    message: "buy_x_get_y reward_qty must be at least 1".into(),
-                });
-            }
+        if promo.reward_qty.is_some_and(|reward_qty| reward_qty < 1) {
+            return Err(CoreError::Validation {
+                field: "reward_qty",
+                message: "buy_x_get_y reward_qty must be at least 1".into(),
+            });
         }
     }
     Ok(())

@@ -347,7 +347,6 @@ async fn bootstrap_owner_mints_verifiable_picker_ticket() {
 
 use oz_core::session::SessionContext;
 use platform_core::StoreDatabaseManager;
-use tauri::Manager as _;
 
 fn scoped_state_with_token(
     conn: rusqlite::Connection,

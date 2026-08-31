@@ -416,7 +416,7 @@ fn every_entry_key_matches_domain_action_format() {
 #[test]
 fn family_matches_domain_from_key() {
     for e in REGISTRY {
-        let domain = e.key.splitn(2, ':').next().unwrap();
+        let domain = e.key.split(':').next().unwrap();
         assert_eq!(
             e.family, domain,
             "entry {} has family '{}' but key domain is '{}'",

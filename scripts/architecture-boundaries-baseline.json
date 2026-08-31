@@ -91,42 +91,6 @@
       "owner": "OZ-POS maintainers",
       "introduced": "2026-08-06",
       "expires": "2026-11-06"
-    },
-    {
-      "rule": "ui-direct-invoke",
-      "path": "ui/src/frontend/shell/UpdateBanner.tsx",
-      "target": "set_setting",
-      "reason": "Existing pre-login updater persistence adapter documented in the Phase 1 architecture baseline.",
-      "owner": "OZ-POS maintainers",
-      "introduced": "2026-08-06",
-      "expires": "2026-11-06"
-    },
-    {
-      "rule": "ui-direct-invoke",
-      "path": "ui/src/hooks/useCloudSync.ts",
-      "target": "get_setting",
-      "reason": "Existing cloud-sync token bootstrap path documented in the Phase 1 architecture baseline.",
-      "owner": "OZ-POS maintainers",
-      "introduced": "2026-08-06",
-      "expires": "2026-11-06"
-    },
-    {
-      "rule": "ui-direct-invoke",
-      "path": "ui/src/hooks/useCloudSync.ts",
-      "target": "set_setting",
-      "reason": "Existing cloud-sync token persistence path documented in the Phase 1 architecture baseline.",
-      "owner": "OZ-POS maintainers",
-      "introduced": "2026-08-06",
-      "expires": "2026-11-06"
-    },
-    {
-      "rule": "ui-direct-invoke",
-      "path": "ui/src/hooks/useGatewayStatus.ts",
-      "target": "get_setting",
-      "reason": "Existing gateway status compatibility path documented in the Phase 1 architecture baseline.",
-      "owner": "OZ-POS maintainers",
-      "introduced": "2026-08-06",
-      "expires": "2026-11-06"
     }
   ]
 }

@@ -132,7 +132,7 @@ pub trait Keyring {
         // SEC-6: scrub the raw entropy buffer as soon as it is encoded,
         // and keep the encoded form in a zeroizing allocation so it does
         // not linger past the rotation.
-        let hex_key = Zeroizing::new(hex::encode(&key_bytes));
+        let hex_key = Zeroizing::new(hex::encode(key_bytes));
         key_bytes.zeroize();
         let now = chrono::Utc::now().to_rfc3339();
 
@@ -247,7 +247,7 @@ impl Keyring for InMemoryKeyring {
             .map_err(|e| SecurityError::KeyGenerationFailed(format!("rng error: {e}")))?;
 
         // SEC-6: scrub the raw entropy buffer after encoding.
-        let hex_key = Zeroizing::new(hex::encode(&key_bytes));
+        let hex_key = Zeroizing::new(hex::encode(key_bytes));
         key_bytes.zeroize();
         let now = chrono::Utc::now().to_rfc3339();
 

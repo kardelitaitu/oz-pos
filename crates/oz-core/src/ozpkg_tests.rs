@@ -161,8 +161,7 @@ fn empty_password_is_refused_at_export() {
     };
 
     let err = export_ozpkg("", "Store", "0.0.1", vec![], HashMap::new(), &payload)
-        .err()
-        .expect("an empty password must not produce a backup");
+        .expect_err("an empty password must not produce a backup");
     assert!(err.to_string().contains("password"), "got: {err}");
 }
 

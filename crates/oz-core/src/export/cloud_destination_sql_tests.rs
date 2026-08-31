@@ -69,9 +69,7 @@ fn a_hostile_table_name_is_rejected_not_embedded() {
     // lines that read config.database/schema/table straight from the
     // persisted `cloud_export_config` setting.
     let result = snowflake_insert_statement("DB", "SC", "T1; DROP TABLE users; --", 1);
-    let err = result
-        .err()
-        .expect("a hostile table name must be rejected, not embedded in the SQL");
+    let err = result.expect_err("a hostile table name must be rejected, not embedded in the SQL");
     assert!(
         err.to_string().contains("table"),
         "the error must name the offending field, got: {err}"
@@ -87,8 +85,7 @@ fn a_hostile_database_or_schema_name_is_rejected() {
         assert!(err.to_string().contains("database"), "got: {err}");
     }
     let err = snowflake_insert_statement("DB", "SC; SELECT 1", "T", 1)
-        .err()
-        .expect("a hostile schema name must be rejected");
+        .expect_err("a hostile schema name must be rejected");
     assert!(err.to_string().contains("schema"), "got: {err}");
 }
 
@@ -99,8 +96,7 @@ fn a_dotted_identifier_cannot_retarget_the_insert() {
     // name the batch is written to, sending rows to a different table than
     // the one configured.
     let err = snowflake_insert_statement("DB", "SC", "OTHER.PUBLIC.T", 1)
-        .err()
-        .expect("a dotted identifier must be rejected");
+        .expect_err("a dotted identifier must be rejected");
     assert!(err.to_string().contains("table"), "got: {err}");
 }
 
