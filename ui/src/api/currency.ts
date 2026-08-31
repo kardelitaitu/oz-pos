@@ -91,6 +91,15 @@ export function formatExchangeRate(rate: Pick<ExchangeRateDto, 'rate_millionths'
 export const listExchangeRatesScoped = (sessionToken: string): Promise<ExchangeRateDto[]> =>
   loggedInvoke<ExchangeRateDto[]>('list_exchange_rates_scoped', { sessionToken });
 
+/**
+ * The CURRENT rate for every pair (CUR-11), bounded — one row per
+ * (from, to) instead of the full history. For overview/converter
+ * consumers like the PaymentModal currency picker; the rate-history
+ * editor keeps `listExchangeRatesScoped`.
+ */
+export const listLatestExchangeRatesScoped = (sessionToken: string): Promise<ExchangeRateDto[]> =>
+  loggedInvoke<ExchangeRateDto[]>('list_latest_exchange_rates_scoped', { sessionToken });
+
 /** ADR #7: Create an exchange rate in the store resolved from a session token. */
 export const createExchangeRateScoped = (
   sessionToken: string,

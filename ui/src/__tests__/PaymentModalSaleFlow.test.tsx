@@ -300,7 +300,7 @@ describe('PaymentModal — shortfall resolution', () => {
           { code: 'IDR', name: 'Indonesian Rupiah', minor_exponent: 0, symbol: 'Rp' },
         ]);
       }
-      if (cmd === 'list_exchange_rates' || cmd === 'list_exchange_rates_scoped') {
+      if (cmd === 'list_exchange_rates' || cmd === 'list_exchange_rates_scoped' || cmd === 'list_latest_exchange_rates_scoped') {
         return Promise.resolve([]);
       }
       if (cmd === 'get_default_currency' || cmd === 'get_default_currency_scoped') {

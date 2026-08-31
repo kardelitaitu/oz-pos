@@ -59,6 +59,7 @@ const { invokeMock, defaultImpl } = vi.hoisted(() => {
       case 'list_exchange_rates':
         return Promise.resolve([]);
       case 'list_exchange_rates_scoped':
+      case 'list_latest_exchange_rates_scoped':
         return Promise.resolve([]);
       case 'get_default_currency':
         return Promise.resolve('USD');
@@ -357,6 +358,7 @@ describe('PaymentModal — edge cases', () => {
       ]);
       if (cmd === 'list_exchange_rates') return Promise.resolve([]);
       if (cmd === 'list_exchange_rates_scoped') return Promise.resolve([]);
+      if (cmd === 'list_latest_exchange_rates_scoped') return Promise.resolve([]);
       if (cmd === 'get_default_currency') return Promise.resolve('USD');
       if (cmd === 'get_default_currency_scoped') return Promise.resolve('USD');
       if (cmd === 'get_latest_exchange_rate_scoped') return Promise.resolve(null);

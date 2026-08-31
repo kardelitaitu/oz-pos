@@ -2137,6 +2137,9 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'list_exchange_rates_scoped': () => [
     { id: 'rate-1', from_currency: 'USD', to_currency: 'IDR', rate_millionths: 1_6000000, source: 'manual', effective_date: '2026-08-01', created_at: new Date().toISOString() },
   ],
+  'list_latest_exchange_rates_scoped': () => [
+    { id: 'rate-1', from_currency: 'USD', to_currency: 'IDR', rate_millionths: 1_6000000, source: 'manual', effective_date: '2026-08-01', created_at: new Date().toISOString() },
+  ],
   'create_exchange_rate': () => null,
   'create_exchange_rate_scoped': () => null,
   'delete_exchange_rate': () => null,

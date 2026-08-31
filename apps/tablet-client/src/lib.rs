@@ -273,6 +273,7 @@ pub fn run() {
                 commands::currencies::set_default_currency,
                 commands::currencies::set_default_currency_scoped,
                 commands::exchange_rates::list_exchange_rates_scoped,
+                commands::exchange_rates::list_latest_exchange_rates_scoped,
                 commands::exchange_rates::create_exchange_rate_scoped,
                 commands::exchange_rates::delete_exchange_rate_scoped,
                 commands::exchange_rates::get_latest_exchange_rate_scoped,

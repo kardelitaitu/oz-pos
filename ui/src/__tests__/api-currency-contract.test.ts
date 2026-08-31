@@ -11,6 +11,7 @@ import {
   getDefaultCurrency,
   setDefaultCurrency,
   listExchangeRatesScoped,
+  listLatestExchangeRatesScoped,
   createExchangeRateScoped,
   deleteExchangeRateScoped,
 } from '@/api/currency';
@@ -58,6 +59,15 @@ describe('currency.ts API contract', () => {
     mockInvoke.mockResolvedValue([]);
     await listExchangeRatesScoped(TOKEN);
     expect(mockInvoke).toHaveBeenCalledWith('list_exchange_rates_scoped', {
+      sessionToken: TOKEN,
+    });
+  });
+
+  // CUR-11: bounded latest-per-pair listing (PaymentModal picker).
+  it('listLatestExchangeRatesScoped calls correct command', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listLatestExchangeRatesScoped(TOKEN);
+    expect(mockInvoke).toHaveBeenCalledWith('list_latest_exchange_rates_scoped', {
       sessionToken: TOKEN,
     });
   });

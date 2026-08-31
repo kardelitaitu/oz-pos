@@ -737,3 +737,53 @@ fn list_exchange_rates_orders_recent_first_within_pair() {
     );
     assert_eq!(usd_idr[1].effective_date, "2026-01-05");
 }
+
+// ── CUR-11: bounded latest-per-pair listing ──────────────────────────
+
+#[test]
+fn list_latest_exchange_rates_returns_one_row_per_pair() {
+    let conn = fresh();
+    let repo = CurrencyRepository::new(&conn);
+    seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+    seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+    seed_currency(&conn, "JPY", "392", "Japanese Yen", 0, "\u{a5}");
+    repo.create_exchange_rate("USD", "EUR", 900_000, "ecb", "2026-06-01")
+        .unwrap();
+    repo.create_exchange_rate("USD", "EUR", 920_000, "ecb", "2026-06-28")
+        .unwrap();
+    repo.create_exchange_rate("USD", "JPY", 149_500_000, "ecb", "2026-06-28")
+        .unwrap();
+    let rows = repo.list_latest_exchange_rates().unwrap();
+    assert_eq!(rows.len(), 2, "one row per pair, not the full history");
+    let eur = rows.iter().find(|r| r.to_currency == "EUR").unwrap();
+    assert_eq!(eur.rate_millionths, 920_000, "newest effective_date wins");
+    assert_eq!(eur.effective_date, "2026-06-28");
+}
+
+#[test]
+fn list_latest_exchange_rates_is_pair_independent() {
+    let conn = fresh();
+    let repo = CurrencyRepository::new(&conn);
+    seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+    seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+    repo.create_exchange_rate("USD", "EUR", 900_000, "ecb", "2026-06-01")
+        .unwrap();
+    repo.create_exchange_rate("USD", "EUR", 920_000, "ecb", "2026-06-28")
+        .unwrap();
+    // Same dates, opposite direction — each pair resolves independently.
+    repo.create_exchange_rate("EUR", "USD", 1_100_000, "ecb", "2026-06-10")
+        .unwrap();
+    let rows = repo.list_latest_exchange_rates().unwrap();
+    assert_eq!(rows.len(), 2);
+    let fwd = rows.iter().find(|r| r.to_currency == "EUR").unwrap();
+    assert_eq!(fwd.rate_millionths, 920_000);
+    let rev = rows.iter().find(|r| r.to_currency == "USD").unwrap();
+    assert_eq!(rev.rate_millionths, 1_100_000);
+}
+
+#[test]
+fn list_latest_exchange_rates_empty_table() {
+    let conn = fresh();
+    let repo = CurrencyRepository::new(&conn);
+    assert!(repo.list_latest_exchange_rates().unwrap().is_empty());
+}

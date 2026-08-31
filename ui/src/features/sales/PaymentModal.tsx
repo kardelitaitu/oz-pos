@@ -13,7 +13,7 @@ import { formatMoney, minorUnitExponent, type Money, type CartLine } from '@/typ
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import {
   listCurrenciesScoped,
-  listExchangeRatesScoped,
+  listLatestExchangeRatesScoped,
   getDefaultCurrencyScoped,
   getLatestExchangeRateScoped,
   exchangeRateToDecimal,
@@ -240,7 +240,9 @@ export default function PaymentModal({
         Promise<string | null>,
       ] = [
         listCurrenciesScoped(sessionToken!),
-        listExchangeRatesScoped(sessionToken!),
+        // CUR-11: the picker needs the CURRENT rate per pair, not the
+        // whole history — bounded query, no first-match ambiguity.
+        listLatestExchangeRatesScoped(sessionToken!),
         getDefaultCurrencyScoped(sessionToken!),
       ];
       Promise.all(loads)

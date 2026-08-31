@@ -135,6 +135,29 @@ pub async fn list_exchange_rates_scoped(
     Ok(rows.into_iter().map(ExchangeRateDto::from).collect())
 }
 
+/// The current rate for every pair (CUR-11), store resolved from a
+/// session token. ADR #7.
+///
+/// Bounded counterpart to `list_exchange_rates_scoped`: one row per
+/// currency pair (newest effective date), so rate-overview consumers
+/// never ship the full history over IPC. Same `SETTINGS_READ` gate.
+#[tauri::command]
+pub async fn list_latest_exchange_rates_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<ExchangeRateDto>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SETTINGS_READ).await?;
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let repo = CurrencyRepository::new(&db);
+    let rows = repo.list_latest_exchange_rates()?;
+    drop(db);
+    Ok(rows.into_iter().map(ExchangeRateDto::from).collect())
+}
+
 /// Create an exchange rate in the store resolved from a session token. ADR #7.
 ///
 /// CUR-03: resolves the store from the session and enforces

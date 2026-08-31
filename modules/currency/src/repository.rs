@@ -71,6 +71,48 @@ impl<'a> CurrencyRepository<'a> {
         Ok(out)
     }
 
+    /// The CURRENT rate for every pair — one row per
+    /// `(from_currency, to_currency)`, the full history excluded (CUR-11).
+    ///
+    /// `list_exchange_rates` grows without bound as rates are recorded;
+    /// consumers that only ever read the first row per pair (dashboards,
+    /// converters, the no-session PaymentModal fallback) should use this
+    /// instead of shipping every historical row over IPC. Ordering within
+    /// a pair mirrors the CUR-04 rule: newest `effective_date` wins —
+    /// `UNIQUE(from, to, effective_date)` makes ties impossible, so the
+    /// `created_at`/`rowid` tail of the ordering is defence in depth.
+    pub fn list_latest_exchange_rates(&self) -> Result<Vec<ExchangeRateRow>, CurrencyError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT er.id, er.from_currency, er.to_currency, er.rate_millionths,
+                    er.source, er.effective_date, er.created_at
+             FROM exchange_rates er
+             WHERE er.id = (
+                 SELECT e2.id FROM exchange_rates e2
+                 WHERE e2.from_currency = er.from_currency
+                   AND e2.to_currency = er.to_currency
+                 ORDER BY e2.effective_date DESC, e2.created_at DESC, e2.rowid DESC
+                 LIMIT 1
+             )
+             ORDER BY er.from_currency, er.to_currency",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(ExchangeRateRow {
+                id: row.get(0)?,
+                from_currency: row.get(1)?,
+                to_currency: row.get(2)?,
+                rate_millionths: row.get(3)?,
+                source: row.get(4)?,
+                effective_date: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r?);
+        }
+        Ok(out)
+    }
+
     /// List exchange rates for a specific currency pair, ordered by
     /// effective date descending (most recent first).
     ///
