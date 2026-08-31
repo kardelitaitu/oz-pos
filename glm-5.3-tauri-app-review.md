@@ -85,6 +85,25 @@ not `*`. Grant them in role presets when those features are enabled for managers
 | F-040 (P3) | Lua CPU/instruction hook implemented — 100K instruction budget aborts runaway scripts with a host-visible error | verified this review | oz-lua hook tests green; host no longer hangs on infinite loops |
 | F-047 (P3) | License-server webhook gap closed: signature-verified Paddle HMAC-SHA256 / Midtrans SHA512 handlers committed by the parallel agent, then reviewed against the committed baseline | verified this review | Go suite green (119s) |
 
+### Phase 4 — Promotion engine hardening (2026-08-30, PROMO-1..8 closed)
+
+Follow-up audit of the promotion apply path (`crates/oz-core/src/db/promotions.rs`,
+desktop/tablet apply commands, `ui/src/api/promotions.ts` callers). Findings
+PROMO-1..PROMO-8 (engine math + persistence + IPC + UI) all closed:
+
+| Finding | Fix | Commit | Verification |
+|---------|-----|--------|--------------|
+| PROMO-1/2/5/6 engine | Promotion math hoisted into `crates/oz-core/src/promotion_engine.rs` (`compute_discount` / `compute_discount_unscoped`): fail-closed checked arithmetic (i64 overflow → Validation), percentage truncates down and clamps to the base, fixed amount capped at `min(value, base)`, BXGY trigger/reward validation with cheapest-unit rewards, `category_id` scoping enforced via an injected SKU→category closure; both shell commands call the single engine | `2095a8ed` | +35 engine tests; oz-core promotion suite green |
+| PROMO-8 create/update validation | `validate_promotion` wired into BOTH `create_promotion` and `update_promotion` (was name-only on update): percentage/bxgy value 1..=100, fixed ≥ 0, BXGY requires trigger_sku + qty ≥ 1 | `643f89b6` | +7 validation tests; `update_changes_all_fields` fixed (had an unparseable promo_type that only passed because update skipped validation) |
+| PROMO-3/4 apply-to-payable + dedup | New `Store::apply_promotion_to_sale`: one transaction — engine compute, duplicate `(sale_id, promotion_id)` rejection, application INSERT, and `total_minor -= discount` (version+1, updated_at) with `status='pending'` + `total >= discount` fail-closed guards; different promotions stack; zero-discount applications still recorded | `16953f31` | +6 db integration tests; promotion suite 126/126 |
+| PROMO-5 orphaned UI path | Promotions picker in the POS cart (`PromotionsModal` + `promotionEligibility.ts`): eligible percentage promotions apply through the existing cart-discount pipeline (`set_cart_discount` at checkout); other engine kinds listed disabled with reasons; dev-mock sample promos; en+id FTL keys; exit-animation + theme-token + a11y conventions followed | `76412046` | +5 picker tests; animation/noise-dither/theme-token compliance suites green |
+
+Residual (documented, deliberate): fixed_amount/BXGY promotions apply server-side
+today but have no POS-checkout UI yet — they need a complete-sale `promotionIds`
+integration (payment splits validated against the reduced total); the picker
+renders them disabled with an explanatory hint. `min_order` compares the
+cart/sale total (post-discount) — semantics noted, unchanged.
+
 ---
 
 ## How to use this journal
@@ -869,3 +888,8 @@ ARCHITECTURE.md accuracy stamp vs measured reality, repo tracking docs.
   and the 4 P3s (F-016 proptests sibling + branch bookkeeping, F-026 boundary
   contracts, F-040 Lua instruction hook verified, F-047 webhook verification
   verified). See the Phase 3 table above for commit hashes and verification.
+- **Promotion engine hardening (2026-08-30)**: audited the promotion apply path
+  end-to-end (8 findings PROMO-1..8) and closed all of them in 4 commits — engine
+  hoist into oz-core with fail-closed math (2095a8ed), create/update validation
+  (643f89b6), atomic apply-to-payable with dedup (16953f31), POS promotions
+  picker (76412046). See the Phase 4 table above.
