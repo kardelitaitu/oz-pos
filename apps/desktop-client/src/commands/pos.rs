@@ -606,6 +606,11 @@ pub struct CompleteSaleScopedArgs {
     /// PROMO-3 checkout integration: promotions to engine-apply against
     /// the post-tax sale (see `CompleteSaleArgs::promotion_ids`).
     pub promotion_ids: Option<Vec<String>>,
+    /// COR-7: identifies one checkout attempt. Every submission of the same
+    /// attempt (first tap, shortfall retry, re-tap after a lost response)
+    /// carries the same value, so a replay returns the receipt that already
+    /// exists instead of ringing up a second sale. Absent means no guard.
+    pub attempt_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -617,6 +622,59 @@ pub struct CompleteSaleResult {
     pub total: Option<Money>,
     /// Line Count.
     pub line_count: usize,
+}
+
+/// Stamp one idempotency key per split from a checkout attempt id.
+///
+/// The index is required, not cosmetic: a split tender whose rows all carried
+/// the same key would collide with itself on the second row and reject a
+/// legitimate first sale. `{attempt}:{n}` is deterministic, so replaying an
+/// attempt reproduces exactly the same set of keys and the UNIQUE index on
+/// `payments.idempotency_key` closes the race.
+///
+/// No attempt id means no guard, which keeps legacy callers and CLI imports
+/// working unchanged.
+fn stamp_attempt_split_keys(attempt_id: Option<&str>, splits: &mut [PaymentSplitArg]) {
+    if let Some(attempt) = attempt_id {
+        for (i, split) in splits.iter_mut().enumerate() {
+            split.idempotency_key = Some(format!("{attempt}:{i}"));
+        }
+    }
+}
+
+/// Return the receipt an already-completed attempt produced, if there is one.
+///
+/// The caller cannot supply the sale id — the response that carried it is the
+/// very thing that was lost — so the attempt key is the only handle back to the
+/// original sale. Resolving it here, before any write, is what makes a replay
+/// return a receipt instead of an error:
+///
+/// - `complete_sale_scoped` removes the cart as its first step, so a retry
+///   would otherwise fail with "cart not found" while the sale sits completed.
+/// - the shortfall command rebuilds its lines from the request body and carries
+///   a synthetic `resolved-<timestamp>` cart id, so it has no cart dependency
+///   at all and would otherwise sell the same basket a second time.
+///
+/// Only the first split's key is consulted: every key of one attempt maps to
+/// the same sale.
+fn replayed_receipt(
+    store: &Store,
+    attempt_id: Option<&str>,
+) -> Result<Option<CompleteSaleResult>, AppError> {
+    let Some(attempt) = attempt_id else {
+        return Ok(None);
+    };
+    let Some(sale_id) = store.find_sale_by_idempotency_key(&format!("{attempt}:0"))? else {
+        return Ok(None);
+    };
+    let sale = store
+        .get_sale(&sale_id)?
+        .ok_or_else(|| AppError::Internal("replayed payment points at a missing sale".into()))?;
+    Ok(Some(CompleteSaleResult {
+        sale_id: sale.id.clone(),
+        total: Some(sale.total),
+        line_count: sale.lines.len(),
+    }))
 }
 
 /// A single cart line reconstructed by the frontend for the second command.
@@ -700,6 +758,274 @@ pub struct CompleteSaleWithResolvedShortfallsArgs {
     /// PROMO-3 checkout integration: promotions to engine-apply against
     /// the post-tax sale (see `CompleteSaleArgs::promotion_ids`).
     pub promotion_ids: Option<Vec<String>>,
+    /// COR-7: identifies one checkout attempt. Every submission of the same
+    /// attempt (first tap, shortfall retry, re-tap after a lost response)
+    /// carries the same value, so a replay returns the receipt that already
+    /// exists instead of ringing up a second sale. Absent means no guard.
+    pub attempt_id: Option<String>,
+}
+
+/// Plugin `calc_line_tax` overrides for a cart — shared by the complete
+/// and preview commands so a previewed total matches the charged one.
+async fn lua_calc_line_overrides(
+    state: &State<'_, AppState>,
+    cart: &oz_core::Cart,
+) -> Result<Vec<(String, i64, bool)>, AppError> {
+    let mut overrides: Vec<(String, i64, bool)> = Vec::new();
+    let plugins = state.plugins.lock().await;
+    if let Some(ref plugins) = *plugins {
+        for cl in cart.lines() {
+            let currency_str = String::from_utf8_lossy(&cl.unit_price.currency.0).into_owned();
+            if let Some(override_) = plugins
+                .calc_line_tax(
+                    cl.sku.as_str(),
+                    cl.qty,
+                    cl.unit_price.minor_units,
+                    &currency_str,
+                )
+                .map_err(|e| AppError::Internal(e.to_string()))?
+            {
+                overrides.push((
+                    cl.sku.as_str().to_owned(),
+                    override_.rate_bps,
+                    override_.is_inclusive,
+                ));
+            }
+        }
+    }
+    Ok(overrides)
+}
+
+/// Arguments for previewing the promotion-reduced payable of a cart.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewPromotedTotalArgs {
+    /// ID of the associated cart.
+    pub cart_id: CartId,
+    /// Promotions to preview, in application order (they stack).
+    pub promotion_ids: Vec<String>,
+}
+
+/// One promotion's discount in the preview result.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewPromotionDiscount {
+    /// Promotion that was applied.
+    pub promotion_id: String,
+    /// Discount in minor units.
+    pub discount_minor: i64,
+    /// Human-readable description (name + amount).
+    pub description: String,
+}
+
+/// Result of previewing the promotion-reduced payable.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewPromotedTotalResult {
+    /// Cart total after cart discount + tax, before promotions.
+    pub base_total_minor: i64,
+    /// Final payable after promotions — what payment splits must cover.
+    pub total_minor: i64,
+    /// Per-promotion discounts in application order.
+    pub discounts: Vec<PreviewPromotionDiscount>,
+}
+
+/// Preview the promotion-reduced payable for a cart without mutating it.
+///
+/// PROMO-3 checkout integration: the client needs the promoted total
+/// BEFORE constructing payment splits (the checkout call validates splits
+/// against the reduced total). This runs the same cart → sale → tax →
+/// engine sequence as [`complete_sale_scoped`] — including plugin tax
+/// overrides — but consumes no cart and writes no rows; the authoritative
+/// computation still happens inside the checkout call, which re-validates
+/// the splits against the freshly computed total.
+#[tauri::command]
+pub async fn preview_promoted_total_scoped(
+    session_token: String,
+    args: PreviewPromotedTotalArgs,
+    state: State<'_, AppState>,
+) -> Result<PreviewPromotedTotalResult, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    // ── Lock 1: peek the cart (do NOT delete it) ──────────────────
+    let cart = {
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+        store
+            .load_active_cart(&args.cart_id)?
+            .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?
+    };
+
+    let mut sale = oz_core::Sale::from_cart(&cart)
+        .ok_or_else(|| AppError::Invalid("cart total overflowed i64".into()))?;
+
+    // ── Plugin tax overrides (no DB lock held) ────────────────────
+    let lua_overrides = lua_calc_line_overrides(&state, &cart).await?;
+
+    // ── Lock 2: tax + engine discounts (no writes) ────────────────
+    let (base_total_minor, discounts) = {
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+        store.compute_sale_tax(
+            &mut sale,
+            &lua_overrides,
+            oz_core::Settings::get_tax_rounding_mode(&db)?,
+        )?;
+        let base_total_minor = sale.total.minor_units;
+        let apps = store.compute_checkout_promotions(
+            &mut sale,
+            &args.promotion_ids,
+            chrono::Utc::now(),
+        )?;
+        let discounts = apps
+            .into_iter()
+            .map(|app| PreviewPromotionDiscount {
+                promotion_id: app.promotion_id,
+                discount_minor: app.discount_minor,
+                description: app.description,
+            })
+            .collect();
+        (base_total_minor, discounts)
+    };
+
+    Ok(PreviewPromotedTotalResult {
+        base_total_minor,
+        total_minor: sale.total.minor_units,
+        discounts,
+    })
+}
+
+/// One cart line for the lines-based promotion preview.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewLineArgs {
+    /// Product SKU.
+    pub sku: String,
+    /// Quantity.
+    pub qty: i64,
+    /// Unit price in minor units.
+    pub unit_price_minor: i64,
+    /// ISO-4217 code of the unit price currency.
+    pub unit_price_currency: String,
+}
+
+/// Arguments for previewing the promotion-reduced payable from raw lines.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewPromotedTotalFromLinesArgs {
+    /// Cart lines, in cart order (already in cart currency).
+    pub lines: Vec<PreviewLineArgs>,
+    /// Cart discount percent already applied client-side (0-100).
+    pub discount_percent: i64,
+    /// Promotions to preview, in application order (they stack).
+    pub promotion_ids: Vec<String>,
+}
+
+/// Build an in-memory cart mirroring the client's displayed cart for the
+/// lines-based promotion preview (no persistence, no cart id needed).
+fn build_preview_cart(
+    lines: &[PreviewLineArgs],
+    discount_percent: i64,
+) -> Result<oz_core::Cart, AppError> {
+    let first = lines
+        .first()
+        .ok_or_else(|| AppError::Invalid("cannot preview an empty cart".into()))?;
+    let parse_currency = |code: &str| -> Result<oz_core::Currency, AppError> {
+        code.parse()
+            .map_err(|_| AppError::Invalid(format!("invalid currency code: {code}")))
+    };
+    let mut cart = oz_core::Cart::new(parse_currency(&first.unit_price_currency)?);
+    for l in lines {
+        cart.add_line(oz_core::CartLine::new(
+            oz_core::Sku::new(l.sku.clone()),
+            l.qty,
+            oz_core::Money {
+                minor_units: l.unit_price_minor,
+                currency: parse_currency(&l.unit_price_currency)?,
+            },
+        ))
+        .map_err(|e| AppError::Invalid(format!("cart line rejected: {e}")))?;
+    }
+    if discount_percent > 0
+        && let Some(pct) = foundation::Percentage::new(discount_percent.min(100) as u8)
+    {
+        cart.set_discount(pct, None);
+    }
+    Ok(cart)
+}
+
+/// Preview the promotion-reduced payable from raw cart lines.
+///
+/// PROMO-3 checkout integration: the client materializes its backend cart
+/// only at the confirm step, but needs the engine-exact payable BEFORE
+/// then — to show the promoted total and let split payments be entered
+/// against it. Runs cart → sale → tax → engine on an in-memory cart built
+/// from the caller's lines (plugin tax overrides included, so the number
+/// matches what the checkout call will charge); the authoritative
+/// computation still happens inside the checkout call, which re-validates
+/// the splits against the freshly computed total.
+#[tauri::command]
+pub async fn preview_promoted_total_from_lines_scoped(
+    session_token: String,
+    args: PreviewPromotedTotalFromLinesArgs,
+    state: State<'_, AppState>,
+) -> Result<PreviewPromotedTotalResult, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    let cart = build_preview_cart(&args.lines, args.discount_percent)?;
+    let mut sale = oz_core::Sale::from_cart(&cart)
+        .ok_or_else(|| AppError::Invalid("cart total overflowed i64".into()))?;
+
+    // ── Plugin tax overrides (no DB lock held) ────────────────────
+    let lua_overrides = lua_calc_line_overrides(&state, &cart).await?;
+
+    // ── Lock: tax + engine discounts (no writes) ──────────────────
+    let (base_total_minor, discounts) = {
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+        store.compute_sale_tax(
+            &mut sale,
+            &lua_overrides,
+            oz_core::Settings::get_tax_rounding_mode(&db)?,
+        )?;
+        let base_total_minor = sale.total.minor_units;
+        let apps = store.compute_checkout_promotions(
+            &mut sale,
+            &args.promotion_ids,
+            chrono::Utc::now(),
+        )?;
+        let discounts = apps
+            .into_iter()
+            .map(|app| PreviewPromotionDiscount {
+                promotion_id: app.promotion_id,
+                discount_minor: app.discount_minor,
+                description: app.description,
+            })
+            .collect();
+        (base_total_minor, discounts)
+    };
+
+    Ok(PreviewPromotedTotalResult {
+        base_total_minor,
+        total_minor: sale.total.minor_units,
+        discounts,
+    })
 }
 
 /// Complete a sale with cashier-resolved shortfalls (split fulfillment).
@@ -730,6 +1056,24 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
         .db_manager
         .open_store(&session.store_id)
         .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    // ── COR-7 replay guard ─────────────────────────────────────────
+    // This is the path the guard really matters on: the command rebuilds its
+    // cart from the request body and invents a `resolved-<timestamp>` cart id,
+    // so unlike complete_sale_scoped it has no cart to run out of and would
+    // otherwise re-sell the same basket on every retry.
+    {
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        if let Some(replay) = replayed_receipt(&Store::new(&db), args.attempt_id.as_deref())? {
+            tracing::info!(
+                sale_id = %replay.sale_id,
+                "shortfall retry replayed an existing attempt — returning the original receipt"
+            );
+            return Ok(replay);
+        }
+    }
 
     // ── Reconstruct the Cart from front-end line data ─────────────
     let currency: oz_core::Currency = args
@@ -796,7 +1140,7 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
             chrono::Utc::now(),
         )?;
 
-        let splits = if let Some(ref splits) = args.payment_splits {
+        let mut splits = if let Some(ref splits) = args.payment_splits {
             splits.clone()
         } else {
             vec![PaymentSplitArg {
@@ -808,6 +1152,11 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
                 idempotency_key: None,
             }]
         };
+        // COR-7: one key per split, derived from the attempt id so a replay of
+        // this attempt reproduces the same keys and the UNIQUE index rejects a
+        // second sale. The per-split index is what stops a multi-tender sale
+        // from colliding with itself on its own second row.
+        stamp_attempt_split_keys(args.attempt_id.as_deref(), &mut splits);
 
         // Multi-terminal: terminal_id is passed to complete_sale so that
         // the sale record tracks which terminal processed it. This enables
@@ -824,7 +1173,7 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
     };
 
     // Promotion-reduced payable (cart.total() would ignore promotions).
-    let total = Some(sale.total.clone());
+    let total = Some(sale.total);
 
     tracing::info!(%sale_id, store_id = %session.store_id, "sale completed with resolved shortfalls");
 
@@ -896,6 +1245,23 @@ pub async fn complete_sale_scoped(
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         for target_instance_id in &stock_target_instance_ids {
             oz_core::location_resolver::resolve_primary_location(&db, target_instance_id, None)?;
+        }
+    }
+
+    // ── COR-7 replay guard ─────────────────────────────────────────
+    // Resolved before the cart is touched: the first attempt already removed
+    // it, so a retry that fell through to Lock 1 would fail with "cart not
+    // found" on a sale that actually completed.
+    {
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        if let Some(replay) = replayed_receipt(&Store::new(&db), args.attempt_id.as_deref())? {
+            tracing::info!(
+                sale_id = %replay.sale_id,
+                "checkout attempt replayed — returning the original receipt"
+            );
+            return Ok(replay);
         }
     }
 
@@ -999,30 +1365,7 @@ pub async fn complete_sale_scoped(
     sale.service_charge_minor = args.service_charge_minor.unwrap_or(0);
 
     // ── Apply Lua calc_line_tax overrides (no DB lock) ────────────
-    let mut lua_overrides: Vec<(String, i64, bool)> = Vec::new();
-    {
-        let plugins = state.plugins.lock().await;
-        if let Some(ref plugins) = *plugins {
-            for cl in cart.lines() {
-                let currency_str = String::from_utf8_lossy(&cl.unit_price.currency.0).into_owned();
-                if let Some(override_) = plugins
-                    .calc_line_tax(
-                        cl.sku.as_str(),
-                        cl.qty,
-                        cl.unit_price.minor_units,
-                        &currency_str,
-                    )
-                    .map_err(|e| AppError::Internal(e.to_string()))?
-                {
-                    lua_overrides.push((
-                        cl.sku.as_str().to_owned(),
-                        override_.rate_bps,
-                        override_.is_inclusive,
-                    ));
-                }
-            }
-        }
-    }
+    let lua_overrides = lua_calc_line_overrides(&state, &cart).await?;
 
     let sale_id = sale.id.clone();
 
@@ -1067,7 +1410,7 @@ pub async fn complete_sale_scoped(
             chrono::Utc::now(),
         )?;
 
-        let splits = if let Some(ref splits) = args.payment_splits {
+        let mut splits = if let Some(ref splits) = args.payment_splits {
             splits.clone()
         } else {
             vec![PaymentSplitArg {
@@ -1079,6 +1422,11 @@ pub async fn complete_sale_scoped(
                 idempotency_key: None,
             }]
         };
+        // COR-7: one key per split, derived from the attempt id so a replay of
+        // this attempt reproduces the same keys and the UNIQUE index rejects a
+        // second sale. The per-split index is what stops a multi-tender sale
+        // from colliding with itself on its own second row.
+        stamp_attempt_split_keys(args.attempt_id.as_deref(), &mut splits);
 
         if stock_locations.is_empty() {
             // Same primary-location resolution the legacy
@@ -1114,7 +1462,7 @@ pub async fn complete_sale_scoped(
     };
 
     // Promotion-reduced payable (cart.total() would ignore promotions).
-    let total = Some(sale.total.clone());
+    let total = Some(sale.total);
     tracing::info!(%sale_id, ?total, line_count, store_id = %session.store_id, "sale completed (scoped)");
 
     // ── Event publishing (no DB lock held) ────────────────────────

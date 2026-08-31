@@ -458,6 +458,8 @@ pub fn run() {
             commands::health::get_local_ip_scoped,
             commands::pos::start_sale_scoped,
             commands::pos::add_line_scoped,
+            commands::pos::preview_promoted_total_scoped,
+            commands::pos::preview_promoted_total_from_lines_scoped,
             commands::pos::complete_sale_scoped,
             commands::pos::complete_sale_with_resolved_shortfalls_scoped,
             commands::pos::set_cart_discount_scoped,
