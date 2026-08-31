@@ -8746,3 +8746,71 @@ background, and slice 4 landed with all four gates green. Also: a
 PowerShell `\'` escape silently killed a whole compound command (nothing
 ran — index stayed empty); and `git add` before a gate-failing commit can
 leave the index stale vs a gate-applied fmt pass — re-add after failure.
+
+## 2026-08-31 — round Q: option 2 (idempotent checkout), UI half landed
+
+User picked returning the original receipt on replay. Landed the client half
+as 3bfd28e8; the backend half is blocked, and I repeated a mistake I had
+already written down once.
+
+**Design facts that made this safe to start:**
+  - PaymentModal is rendered conditionally by RetailPosScreen
+    (if (showPayment && total)), so it unmounts between sales. A mount-scoped
+    ref is therefore exactly one checkout attempt. Verified before relying on
+    it: an always-mounted modal would have made this change freeze the till on
+    the second sale.
+  - StockShortfallDialog renders inside PaymentModal, so the component stays
+    mounted across a shortfall retry and the id survives.
+  - The dialog synthesises cartId: \esolved-\\` on every submit,
+    so the attempt cannot be derived from the cart id here. That settled the
+    option-(a) question with evidence rather than argument.
+  - No arg struct uses deny_unknown_fields, so the extra JSON field is inert.
+    Deliberate ordering, not an oversight: sending keys before the replay path
+    can return a receipt would surface a raw UNIQUE violation to a cashier,
+    which is the error behaviour the user rejected by choosing option 2.
+
+Five new tests, each proven to fail when the behaviour is removed: dropping the
+send breaks both modal tests, dropping the forward breaks exactly the two
+dialog forwarding tests while the 'omits when absent' test correctly keeps
+passing. That last asymmetry is the point of writing them together.
+
+**Blocked:** oz-core does not compile at all right now - 12 errors, all from
+the promotion agent's uncommitted checkout_applications parameter on
+complete_sale_deduction_with_locations with call sites not yet updated. Every
+Rust crate depends on it, so the backend half cannot be built or tested.
+Released my claim on sales_checkout.rs and sales_tests.rs; they need it more.
+
+**Nine UI test failures are not mine, proven rather than assumed.** Reverting
+only my three files gave the identical 8 failures in PaymentModalEdgeCases and
+1 in PaymentModalSaleFlow. All are loading-state and error-classification
+tests: the modal renders a receipt where a shortfall dialog should appear.
+Someone's FRONTEND/Loading-States work today. A tenth appeared mid-round from
+their in-flight CUR-11 currency work. Left alone.
+
+**The mistake, again.** I committed with git commit -- <paths>. A pathspec
+commit uses the WORKING TREE, not the index, so it silently swallowed the
+promotion agent's CUR-11 hunks from PaymentModal.tsx and one line from
+PaymentModalSaleFlow.test.tsx. This is the same class as the directory-pathspec
+error recorded earlier, and the earlier lesson was written as "pathspec to
+exact files, never a directory" - which was the wrong generalisation. Listing
+files does not help; the problem is that commit -- <anything> bypasses the
+index entirely.
+
+**Corrected rule: never pass pathspecs to git commit.** Stage precisely, then
+git commit with no paths.
+
+What caught it: I had already computed the expected shape of my own change
+(27 + 178 = 205 insertions, 0 deletions, purely additive). The commit reported
+210/3. A commit whose diffstat does not match a prediction made before writing
+it is the cheapest possible contamination alarm, and it fired within seconds.
+
+Recovery: git reset --soft left the index polluted, because the pathspec
+commit had already written working-tree content into it. git reset (mixed),
+re-add the three purely-mine files, then filter the two mixed files down to my
+hunks with a generated patch and git apply --cached, then git commit -F msg
+with no paths. Result 205/0, verified free of foreign content, and their work
+still present as uncommitted changes in all three of their files.
+
+**Totals:** COR-7 client half landed and tested. Backend half blocked on a
+non-compiling tree. One repeated process error caught by prediction, corrected,
+and its rule sharpened.
