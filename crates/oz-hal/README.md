@@ -1,6 +1,6 @@
 # oz-hal
 
-<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (3 findings repaired) · F1: removed dead `Scanner`/`drivers/scanner.rs` row (file deleted at HEAD; scanners covered by usb/bt/serial_scanner) · F2: added `EdcTerminal` trait row (traits/edc.rs — status/authorize/capture/sale/refund/void/print_receipt/device_info; re-exported with EdcPaymentResult/TerminalStatus) · F3: added EDC drivers WiredEdcTerminal (drivers/edc/wired.rs), WirelessEdcTerminal (drivers/edc/wireless.rs), protocol codecs Ingenico/PAX/Verifone (drivers/edc/protocol/), and MockEdcTerminal (drivers/mock.rs) · verified accurate: remaining traits (barcode/printer/cash_drawer/customer_display/weight_scale), drivers (usb/bt/serial/tcp printer, drawer, serial_display, scale, kds_chit), mocks, escpos consts + format_receipt, receipt format_sales_receipt/SalesReceipt/ReceiptConfig, DriverRegistry methods; unsafe confined to lib.rs with SAFETY comment. NOTE: EdcTerminal is mid-migration per lib.rs doc — trait + drivers exist at HEAD, registry wiring not yet claimed · F4 (31-08, post dc07f32a): documented the new `bootstrap` module (`HardwareConfig` + `apply_config()` → `BootstrapReport`) as the production registration path and corrected the registry example — `discover()` was never wired into startup, so the registry was empty at runtime -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (3 findings repaired) · F1: removed dead `Scanner`/`drivers/scanner.rs` row (file deleted at HEAD; scanners covered by usb/bt/serial_scanner) · F2: added `EdcTerminal` trait row (traits/edc.rs — status/authorize/capture/sale/refund/void/print_receipt/device_info; re-exported with EdcPaymentResult/TerminalStatus) · F3: added EDC drivers WiredEdcTerminal (drivers/edc/wired.rs), WirelessEdcTerminal (drivers/edc/wireless.rs), protocol codecs Ingenico/PAX/Verifone (drivers/edc/protocol/), and MockEdcTerminal (drivers/mock.rs) · verified accurate: remaining traits (barcode/printer/cash_drawer/customer_display/weight_scale), drivers (usb/bt/serial/tcp printer, drawer, serial_display, scale, kds_chit), mocks, escpos consts + format_receipt, receipt format_sales_receipt/SalesReceipt/ReceiptConfig, DriverRegistry methods; unsafe confined to lib.rs with SAFETY comment. NOTE: EdcTerminal migration is now complete — trait (217554f5), drivers (bbd74c01), registry category (459f852c) and the oz-payment switchover (ad908e96, which deleted the duplicate trait and made the commands fail closed) · F4 (31-08, post dc07f32a): documented the new `bootstrap` module (`HardwareConfig` + `apply_config()` → `BootstrapReport`) as the production registration path and corrected the registry example — `discover()` was never wired into startup, so the registry was empty at runtime · CORRECTED 31-08 by DSH-Agent (F5-F7): F5 WiredEdcTerminal/WirelessEdcTerminal were labelled "Real" but every op returns HalError::Unsupported — they are stubs, and the mislabel was on a money path; F6 "registration never blocks" was superseded by 6624df1c (Connection::Usb enumerates the bus); F7 the registry example would not compile — apply_config is a free function not a method, register_tcp_printer takes a DeviceInfo, and the ids shown were discover()-style ones that no command looks up -->
 
 Hardware Abstraction Layer — the seam between business logic and physical devices (USB, Bluetooth, serial, TCP).
 
@@ -41,8 +41,8 @@ Business code never imports a specific driver — only traits via `DriverRegistr
 | `SerialCustomerDisplay` | `drivers/serial_display.rs` | Stub |
 | `HidWeightScale` | `drivers/scale.rs` | USB HID weight scale driver |
 | `KdsChit` | `drivers/kds_chit.rs` | KDS chit printer |
-| `WiredEdcTerminal` | `drivers/edc/wired.rs` | Real — wired card terminal; protocol codecs (Ingenico/PAX/Verifone) in `drivers/edc/protocol/` |
-| `WirelessEdcTerminal` | `drivers/edc/wireless.rs` | Real — wireless card terminal; shares the `drivers/edc/protocol/` codecs |
+| `WiredEdcTerminal` | `drivers/edc/wired.rs` | Stub — every op fails closed with `HalError::Unsupported`; the Ingenico/PAX/Verifone codecs in `drivers/edc/protocol/` are stubs too |
+| `WirelessEdcTerminal` | `drivers/edc/wireless.rs` | Stub — same `Unsupported` behaviour, shares the `drivers/edc/protocol/` codecs |
 | `MockBarcodeScanner` | `drivers/mock.rs` | Programmable mock |
 | `MockReceiptPrinter` | `drivers/mock.rs` | Programmable mock |
 | `MockCashDrawer` | `drivers/mock.rs` | Programmable mock |
@@ -59,19 +59,28 @@ All printer drivers share a single ESC/POS module at `drivers::escpos`:
 
 ## Registry
 
-`DriverRegistry` holds `Arc<dyn Trait>` per device behind `RwLock`. In production it is populated at startup from the operator's saved config via `apply_config()` (apps map their `TerminalProfile` → `HardwareConfig`; the HAL never reads a settings table):
+`DriverRegistry` holds `Arc<dyn Trait>` per device behind `RwLock`. In production it is populated at startup from the operator's saved config via `apply_config()` (apps map their `TerminalProfile` → `HardwareConfig` in `platform_startup::hardware`; the HAL never reads a settings table):
 
 ```rust
+use oz_hal::{apply_config, DriverRegistry, HardwareConfig};
+
 let registry = DriverRegistry::default();
 // Production path — register the devices the operator configured:
-let report = registry.apply_config(&hardware_config).await; // → registered / skipped / rejected
-registry.register_tcp_printer("printer:tm-counter", "192.168.1.100").await; // manual add
-if let Some(scanner) = registry.scanner("scanner:usb:<serial>").await {
-    let barcode = scanner.connect().await?.poll(5000).await?;
+let report = apply_config(&registry, &hardware_config).await; // → registered / skipped / rejected
+for (id, reason) in &report.rejected {
+    tracing::warn!(device = %id, reason = %reason, "configured device not registered");
+}
+
+// Manual add — note the id: commands look up fixed strings.
+registry.register_tcp_printer("default", "192.168.1.100:9100", info).await;
+if let Some(printer) = registry.printer("default").await {
+    printer.print_raw(&escpos_bytes).await?; // or print_receipt(&body) for the text path
 }
 ```
 
-`discover()` is the auto-probe path (enumerates connected USB/serial/BT); `apply_config()` is what makes configured devices usable at runtime. Registration never blocks — constructing a driver only records addressing, so a bad saved profile cannot stall startup.
+**The id is the contract.** Receipt printing asks for `printer("default")`, KDS for `printer("kitchen")`, the scale commands for `scale("default")`. `discover()` mints hardware-derived ids like `printer:vendor:model`, so registering through it leaves those lookups empty — which is exactly how the registry ended up unreadable at runtime.
+
+`discover()` is the auto-probe path (enumerates connected USB/serial/BT) and no app calls it today; `apply_config()` is what makes configured devices usable. Addressed transports are constructed without touching the device, so a stale profile cannot stall startup — `Connection::Usb` is the exception, since it names no address and has to enumerate the bus.
 
 ## Mocks
 
