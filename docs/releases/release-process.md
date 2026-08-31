@@ -1,5 +1,7 @@
 # Release Process — OZ-POS
 
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (references verified) · verified against HEAD: all referenced scripts exist (bump-version.ps1, release.sh, check-release-version.mjs, check.sh, dev-code-sign.ps1); .github/workflows/release.yml present; SignPath action @v2 (release.yml:296) + SIGNPATH_* secrets/vars (9 refs); first-release-runbook.md, signpath-onboarding.md, checklist.md, mobile-checklist.md all exist. Scope: file/action references verified; procedural steps not executed -->
+
 This document captures the operational runbook for shipping a release of
 OZ-POS. It exists because the updater pubkey is a security-critical value
 that operators must know how to rotate safely (audit finding **L-4**).
@@ -150,3 +152,5 @@ See [`docs/releases/checklist.md`](./checklist.md) and
 [`docs/releases/mobile-checklist.md`](./mobile-checklist.md) for the
 operational pre-release checks. Both are referenced from
 `scripts/release.sh`.
+
+> last audited 31-08-26 by docs-auditor
