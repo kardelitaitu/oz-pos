@@ -2,10 +2,10 @@
 //! permission key means, which family it belongs to, and whether it is
 //! sensitive (ADR #35 D3 / spec 0046).
 /*
-last audited 25-07-26 by RSA-Agent (platform-core slice B: permission_registry deep read)
+last audited 31-08-26 by RSA-Agent (user-role campaign, Section C)
 crate: platform-core | status: SAFE | lint: CLEAN
-findings: exemplary — single source of truth with family/sensitivity classification; sensitive keys (voids, refunds, settlement, role mgmt, staff deletion, bulk export) never grantable through family wildcards (validate_grants enforces + tests); global * reserved for the Owner seed; duplicate-key invariant pinned
-next: none | perf: linear registry scan
+findings: exemplary — 83-key registry with family/sensitivity classification per ADR #35 D2/D3 (14 sensitive keys: voids, refunds, settlement, role mgmt, staff deletion, identity/payroll/notes reads, report+audit export, giftcard issue, security, data export); validate_grant is fail-closed (unregistered key, sensitive-under-family-wildcard, global * reserved for the Owner seed — allow_global=false at the sole write-path call site db/staff.rs:131); malformed edges (":*", "*:*") fall to UnknownKey; bidirectional inventory pinned by 62 green tests
+next: cross-check in Section D — sensitivity is a creation-time invariant only; the has_permission resolver is sensitivity-blind, so a hand-edited DB role row with "staff:*" would pass enforcement unless the gate re-validates grants | perf: linear registry scan — fine at 83 entries
 */
 //!
 //! Growing the system means adding keys here — never editing roles. Sensitive
