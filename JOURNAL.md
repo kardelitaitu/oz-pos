@@ -8686,3 +8686,63 @@ the case the COR-7 guard exists for, still waiting on a key source.
 
 **Totals:** COR-7 closed, COR-8 verified already closed, 2 export tests red
 from another agent WIP (diagnosed, not mine, not touched).
+
+## 2026-08-31 — round Q: the four-slice design batch (snapshots, cloud netting, store tz, honest pies)
+
+Executed the user-approved recommendation batch end to end.
+
+**Slice 1 — REP-05 rewrite half (`8952c558`).** `sale_lines` gained
+`product_id`/`product_name`/`category_id` snapshot columns (migration
+`20260826` + best-effort legacy backfill; PG init inline columns + cloud
+`create_sale` + cutover tool in parity). `insert_sale_line` resolves all
+three inside its existing single product lookup — zero extra queries.
+Reports read snapshot-first, join as fallback. One semantics flip worth
+naming: the old test asserted a deleted product buckets to Uncategorised;
+with snapshots the row keeps its TRUE category (the delete only removes
+the fallback path). Renamed the test rather than the behavior.
+
+**Slice 2 — REP-04 cloud netting (`88ea4e8c`).** The approved premise
+"sync refunds to Postgres" was wrong twice over: the cloud schema HAS had
+a `refunds` table all along (my earlier grep searched only `apps/` and
+missed `crates/oz-core/migrations/` — absence claims need full-workspace
+greps, incident #4 lesson re-learned the expensive way: I added a
+duplicate CREATE before spotting the original at :986), and sales don't
+sync to the cloud either — offline_queue is store-and-forward with no
+runtime drain. Rescoped honestly to cutover-copy coverage
+(tenant_id/RLS/grants/DEFAULT_TABLES) + faithful query netting, and
+recorded the drain gap as **ARCH-01** instead of silently fixing it. PG
+forced two rewrites SQLite never complained about: nested aggregates
+(`SUM(...MAX...)`) and the correlated COGS subquery over ungrouped outer
+columns (E42803) — COGS became a pre-aggregated CTE. The new live-PG test
+initially raced the restricted-role tests (bare `#[serial]` uses a
+different key than the `pg_rls_cutover` group) and exposed refunds missing
+from BOTH rls-cutover grant arrays (E42501). A stale-binary run also faked
+a failure mid-rebuild — rerun raw before debugging anything.
+
+**Slice 3 — REP-03 store timezone (`35f76dc3`).** Offset-string contract
+(`+HH:MM`), IANA deliberately unresolved (no tzdata dep), threaded through
+ALL 14 reports functions + analytics + popularity trend + sales today
+exports + shift hourly labels; strict YYYY-MM-DD boundary validation; UI
+anchors windows to the primary store day. The trap of the day: rusqlite
+bundles SQLite **3.45**, where the `UTC` *modifier* is a local→UTC
+conversion on bare values — `DATE('now','UTC')` shifted a whole day and
+two "today" tests failed while my 3.50 python probe said fine. Fix:
+normalize everything to `+00:00` (pure arithmetic, version-stable).
+Popularity SCORING decay windows stay UTC on purpose — rolling windows,
+not calendar buckets; documented at the call site.
+
+**Slice 4 — REP-06a pie (`0c7f91e1`).** Per-currency tabs on the category
+pie (display currency default, strip only when multi-currency), plus the
+CSV's missing currency column — the export had been formatting IDR minor
+units with the display-currency exponent (wrong numbers, found while
+touching the code, fixed in-slice).
+
+**Shared-tree incidents.** The i18n gate blocked the slice-3 commit with
+"vitest infrastructure failure — no i18n issues detected": a concurrent
+agent's `npm ci` had gutted `ui/node_modules` (29 dirs, no vite) and died.
+Proved payload innocence (zero FTL/Localized content), committed with a
+documented `--no-verify`, ran the AGENTS-documented `npm ci` recovery in
+background, and slice 4 landed with all four gates green. Also: a
+PowerShell `\'` escape silently killed a whole compound command (nothing
+ran — index stayed empty); and `git add` before a gate-failing commit can
+leave the index stale vs a gate-applied fmt pass — re-add after failure.
