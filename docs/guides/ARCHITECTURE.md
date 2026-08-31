@@ -1,11 +1,11 @@
-<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: "15+ members" -> 29 workspace members · resolved F2: "oz-core migrations 20 embedded" -> 98 .sql files (crates/oz-core/migrations/) · resolved F3: scaffold crates (oz-lua/oz-security/oz-reporting) are now IMPLEMENTED — oz-lua has apply_discount/calc_line_tax/validate_order/load_dir; oz-security has full keyring/TLS/mask; oz-reporting has daily_summary/menu_engineering/metrics engines · resolved F4: Node ">=18" -> ui/package.json engines >=22 · resolved F5: i18n paths wrong (en-US.ftl, styles/) -> per-feature bundles (48 .ftl files) + ui/src/frontend/themes/ · resolved F6: "LICENSE: MIT" -> Proprietary (All Rights Reserved) · resolved F7: commands "62+" -> 618 total IPC endpoints (README audit) · accurate: 9 modules, Feature 32 flags, React18+@fluent/react+pos.ts rule, oz-hal DriverRegistry/traits, oz-api port 3099 -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (drift repaired) · FIXED 31-08: crate tree +oz-crypto/oz-media/oz-notification/oz-plugin; rlua->mlua; oz-payment +Paddle (tree + prose); HAL device list 'NFC' -> real (barcode/printer/drawer/display/scale/EDC); migrations 98 -> 19 SQL files (131 squashed into init.sql); IPC endpoints 618 -> 505 unique (385 desktop + 369 tablet, 49 modules) · NOTE: this condensed guides/ARCHITECTURE.md coexists with a fuller root ARCHITECTURE.md (reorg 28147fe4 copied an archived version here); README links to THIS file · verified against HEAD Cargo.toml + generate_handler! + crates/oz-core/migrations/ -->
 
 # OZ-POS – Codebase Architecture
 
 ## Overview
 This document describes the directory layout and module responsibilities for **OZ-POS**. The design supports:
 - Rust core engine (transaction handling, persistence)
-- Hardware Abstraction Layer (HAL) for barcode scanners, printers, NFC, etc.
+- Hardware Abstraction Layer (HAL) for barcode scanners, receipt printers, cash drawers, customer displays, weight scales, and EDC payment terminals
 - Embedded Lua scripting for dynamic business rules
 - REST API server (axum + JWT) for third-party integrations
 - Tauri v2 UI built with React/TypeScript
@@ -74,12 +74,16 @@ oz-pos/
 │   ├─ oz-lua/               # Lua scripting runtime (mlua-based, sandboxed)
 │   │   ├─ Cargo.toml
 │   │   └─ src/
-│   │       └─ lib.rs        # LuaError type (Phase 3: rlua embedding)
+│   │       └─ lib.rs        # LuaError type (mlua embedding)
+│   ├─ oz-crypto/            # Cryptographic primitives (secret encryption at rest)
+│   ├─ oz-media/             # Media pipeline (compress, crop, thumbnail)
+│   ├─ oz-notification/      # Notification dispatch (email templates, delivery)
+│   ├─ oz-plugin/            # Plugin loader (.ozpkg archives, manifest, sandbox)
 │   ├─ oz-security/          # Security crate (keyring, TLS, PCI masking)
 │   │   ├─ Cargo.toml
 │   │   └─ src/
 │   │       └─ lib.rs        # SecurityError type (Phase 2: key-ring, TLS, PCI-DSS)
-│   ├─ oz-payment/           # Payment processor crate (Stripe, Square, QRIS, mock)
+│   ├─ oz-payment/           # Payment processor crate (Stripe, Square, QRIS, Paddle, mock)
 │   │   ├─ Cargo.toml
 │   │   └─ src/
 │   │       └─ lib.rs        # PaymentError type (Phase 4: PaymentProcessor trait)
@@ -155,7 +159,7 @@ oz-pos/
   - `Product`, `Category`, `Inventory`, `Sku` — domain types with serde.
   - `Feature` — 32 toggleable feature flags with dependency resolution and 4 store presets.
   - `Store<'a>` — typed CRUD facade over `&Connection`. All writes inside transactions.
-- **Migrations**: 98 embedded SQL files in `crates/oz-core/migrations/`. Registered and run by `migrations.rs`; executed on startup by `platform-startup`.
+- **Migrations**: 19 embedded SQL files in `crates/oz-core/migrations/` (the original 131 were squashed into `init.sql`). Registered and run by `migrations.rs`; executed on startup by `platform-startup`.
 - **Rules**: `#![deny(unsafe_code)]` in `lib.rs`; `missing_docs = "warn"` comes from the root `[workspace.lints]` via `[lints] workspace = true` in every member manifest.
 
 ### oz-hal
@@ -195,7 +199,7 @@ oz-pos/
 These crates were originally scaffolded and are now fully implemented:
 
 - **oz-lua** — Embedded Lua scripting runtime built on [`mlua`](https://github.com/mlua-rs/mlua). Loads merchant scripts from `scripts/` and exposes business-rule hooks (`apply_discount`, `calc_line_tax`, `validate_order`). Sandboxed VM with instruction/memory limits and a restricted global environment.
-- **oz-payment** — `PaymentProcessor` trait with Stripe, Square, QRIS/Midtrans, and mock implementations. Supports authorize, capture, void, refund, and sale flows.
+- **oz-payment** — `PaymentProcessor` trait with Stripe, Square, QRIS/Midtrans, Paddle, and mock implementations. Supports authorize, capture, void, refund, and sale flows.
 - **oz-reporting** — Daily summaries, sales-by-hour, top-products, menu-engineering, and inventory reports; optional `metrics` feature for Prometheus-style counters/gauges.
 
 #### oz-security (implemented)
@@ -213,7 +217,7 @@ These crates were originally scaffolded and are now fully implemented:
 Each app crate has an identical command surface, wired through `platform-startup`:
 - **Entry point**: `main.rs` → `lib.rs::run()`.
 - **State**: `AppState` holds `Mutex<Connection>` (SQLite WAL mode), `Arc<DriverRegistry>`, `AppHandle`.
-- **Commands** (618 total IPC endpoints across health, sales, hardware, tax, staff, customers, products, inventory, offline, reporting, settings, currency).
+- **Commands** (505 unique IPC commands — 385 desktop + 369 tablet registrations — across 49 modules; see [`api-reference.md`](./api-reference.md) for the full authoritative index).
 - **Error**: `AppError` — tagged JSON with `{kind, message}`, `From` impls for `CoreError`, `HalError`, `tauri::Error`.
 
 ### platform/ (Platform Crates)
@@ -263,7 +267,7 @@ cargo tauri dev          # launches Tauri dev window
 ---
 *Document generated on 2026‑06‑29.*
 
-> last audited 09-08-26 by buffy
+> last audited 31-08-26 by docs-auditor
 > audit: Phase 1 Core Architecture & API Docs Audit
 
 > status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
