@@ -24,6 +24,18 @@ $excludeDirs = @(
     "gen"
 )
 
+# Generated documentation output, excluded by repo-relative path prefix (the
+# name-based list above can't express these without also dropping real source:
+# "api" would match crates/oz-api and ui/src/api). These trees are rebuilt by
+# scripts/build-docs.sh and .gitignore'd — counting them made the badge report
+# ~1.16M lines of mdBook/TypeDoc HTML instead of source.
+$excludePaths = @(
+    "docs\book",
+    "docs\src\api",
+    "website\public\docs-portal",
+    "website\public\dev"
+)
+
 # File extensions to scan and map to language labels
 $extToLanguage = @{
     ".rs"   = "rust"
@@ -49,6 +61,12 @@ $totalLines = 0
 function IsExcluded($path) {
     foreach ($dir in $excludeDirs) {
         if ($path -like "*\$dir\*" -or $path -like "*\$dir") {
+            return $true
+        }
+    }
+    $rel = $path.Substring($projectRoot.Length).TrimStart('\')
+    foreach ($p in $excludePaths) {
+        if ($rel -like "$p\*" -or $rel -eq $p) {
             return $true
         }
     }
@@ -103,7 +121,11 @@ $report = [ordered]@{
     }
 }
 
-$outputPath = Join-Path $scriptDir "stats.json"
+# The badge file is committed at the REPO ROOT (README reads /stats.json).
+# This used to write into scripts/, so the root copy silently froze at its
+# 2026-07-18 value while every `scripts/check.ps1` run left an untracked
+# scripts/stats.json behind.
+$outputPath = Join-Path $projectRoot "stats.json"
 $report | ConvertTo-Json -Depth 4 | Out-File -FilePath $outputPath -Encoding utf8
 
 Write-Host "Generated stats.json at $outputPath (Total lines: $totalLines, Files: $totalFiles)"
