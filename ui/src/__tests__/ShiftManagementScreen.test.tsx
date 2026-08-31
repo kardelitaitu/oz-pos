@@ -28,6 +28,7 @@ vi.mock('@/api/shifts', () => ({
   openShiftScoped: (...args: unknown[]) => mockOpenShift(...args),
   closeShiftScoped: (...args: unknown[]) => mockCloseShift(...args),
   getShiftReport: (...args: unknown[]) => mockGetShiftReport(...args),
+  getShiftReportScoped: (...args: unknown[]) => mockGetShiftReport(...args),
   createCashPayout: (...args: unknown[]) => mockCreateCashPayout(...args),
 }));
 

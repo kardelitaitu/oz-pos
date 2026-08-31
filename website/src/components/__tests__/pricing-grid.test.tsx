@@ -140,5 +140,67 @@ describe('PricingGrid Component', () => {
     expect(downloadLink?.textContent).toContain('Download free');
     await unmount();
   });
+
+  it('marks the highlighted (popular) tier with the badge', async () => {
+    const { container, unmount } = await renderGrid('en');
+    expect(container.textContent).toContain('Most Popular');
+    // The highlighted tier's card carries the primary-border class.
+    const article = container.querySelector('article[id="pro"]');
+    expect(article?.className).toContain('border-primary');
+    await unmount();
+  });
+
+  it('applies the monthly A/B price variant when ?ab=pro_price is set', async () => {
+    // C4.1: the ?ab=pro_price URL param swaps Pro monthly to the $7.99
+    // variant (variantPriceId) so the split is visible to the user.
+    Object.defineProperty(window, 'location', {
+      value: { search: '?ab=pro_price' },
+      writable: true,
+      configurable: true,
+    });
+    const { container, unmount } = await renderGrid('en');
+    try {
+      const monthlyBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('Monthly'));
+      await act(async () => {
+        monthlyBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      expect(container.textContent).toContain('$7.99');
+    } finally {
+      await unmount();
+    }
+  });
+
+  it('shows the billed-yearly note only on the yearly selection', async () => {
+    const { container, unmount } = await renderGrid('en');
+    try {
+      // Yearly (default) shows the note for paid, non-enterprise tiers.
+      expect(container.textContent).toContain('Billed yearly');
+      // Switching to monthly hides it.
+      const monthlyBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('Monthly'));
+      await act(async () => {
+        monthlyBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      expect(container.textContent).not.toContain('Billed yearly');
+    } finally {
+      await unmount();
+    }
+  });
+
+  it('toggles aria-pressed on the billing buttons', async () => {
+    const { container, unmount } = await renderGrid('en');
+    try {
+      const monthlyBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('Monthly'));
+      const yearlyBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('Yearly'));
+      expect(yearlyBtn?.getAttribute('aria-pressed')).toBe('true');
+      expect(monthlyBtn?.getAttribute('aria-pressed')).toBe('false');
+      await act(async () => {
+        monthlyBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      expect(monthlyBtn?.getAttribute('aria-pressed')).toBe('true');
+      expect(yearlyBtn?.getAttribute('aria-pressed')).toBe('false');
+    } finally {
+      await unmount();
+    }
+  });
 });
 

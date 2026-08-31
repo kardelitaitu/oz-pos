@@ -414,7 +414,7 @@ func midtransProvision(app core.App, n midtransNotification) error {
 		if saveErr := app.Save(keyRecord); saveErr != nil {
 			return fmt.Errorf("failed to save license key for transaction %s: %w", n.OrderID, saveErr)
 		}
-		log.Printf("midtrans webhook: minted key %q (tier=%s, bundle=%s) for order %s", key, tier, bundle, n.OrderID)
+		log.Printf("midtrans webhook: minted key %q (tier=%s, bundle=%s) for order %s", maskLicenseKey(key), tier, bundle, n.OrderID)
 		// Non-fatal: a failed receipt must not fail provisioning.
 		if mailErr := sendReceiptEmail(email, key, tier, expiresAt); mailErr != nil {
 			log.Printf("midtrans webhook: receipt email to %q failed (non-fatal): %v", email, mailErr)
@@ -591,8 +591,9 @@ func midtransCaptureRevenue(app core.App, n midtransNotification) {
 		log.Printf("midtrans revenue: tenant not found for email=%s (transaction=%s): %v", email, n.TransactionID, err)
 		return
 	}
-	amountIDR := parseMidtransGrossAmount(n.GrossAmount)
-	if amountIDR <= 0 {
+	// LSE-7: gross_amount is parsed to i64 whole rupiah (minor units).
+	amountIDRMinor := parseMidtransGrossAmountMinor(n.GrossAmount)
+	if amountIDRMinor <= 0 {
 		return
 	}
 	tier, _, _, _ := midtransTierForNotification(n)
@@ -601,14 +602,14 @@ func midtransCaptureRevenue(app core.App, n midtransNotification) {
 		notes += " subscription_id=" + n.SubscriptionID
 	}
 	saveRevenueEvent(app, revenueEvent{
-		Provider:       "midtrans",
-		EventID:        n.TransactionID,
-		TenantID:       tenant.Id,
-		TierKey:        tier,
-		NativeAmount:   amountIDR,
-		NativeCurrency: "IDR",
-		SubscriptionID: n.SubscriptionID,
-		Notes:          notes,
+		Provider:          "midtrans",
+		EventID:           n.TransactionID,
+		TenantID:          tenant.Id,
+		TierKey:           tier,
+		NativeAmountMinor: amountIDRMinor,
+		NativeCurrency:    "IDR",
+		SubscriptionID:    n.SubscriptionID,
+		Notes:             notes,
 	})
 }
 

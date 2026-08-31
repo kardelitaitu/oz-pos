@@ -1,3 +1,9 @@
+---
+num: 36
+area: products
+title: ADR #36: Retail POS Product Attributes — Cost, Brand, Rack, Notes + Configurable Columns
+status: Implemented (2026-08-12)
+---
 # ADR #36: Retail POS Product Attributes — Cost, Brand, Rack, Notes + Configurable Columns
 
 Date: 2026-08-11

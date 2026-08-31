@@ -1,3 +1,10 @@
+/*
+last audited 31-08-26 by RSA-Agent (user-role campaign, Section E)
+crate: modules-staff | status: SAFE | lint: CLEAN
+findings: clean thiserror taxonomy (Db/Platform/NotFound/Validation), no sensitive data in error payloads (ids + static entity names only)
+next: none | perf: N/A
+*/
+
 //! Error type for the staff domain.
 
 use thiserror::Error;

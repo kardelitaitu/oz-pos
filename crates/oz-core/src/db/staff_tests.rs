@@ -731,6 +731,9 @@ fn update_user_deactivate() {
 #[test]
 fn update_user_not_found() {
     let conn = fresh();
+    // Seed roles so the G-2 role guard passes and the test exercises the
+    // user-not-found path it exists for (a fresh DB has no role-owner).
+    seed_roles(&conn);
     let err = store(&conn)
         .update_user("nope", "u", "U", "role-owner", true)
         .unwrap_err();
@@ -1016,4 +1019,47 @@ fn legacy_record_login_attempt_delegates_to_scoped() {
     assert!(s.record_login_attempt("alice", 3, 60).unwrap().is_ok());
     assert!(s.record_login_attempt("alice", 3, 60).unwrap().is_ok());
     assert!(s.record_login_attempt("alice", 3, 60).unwrap().is_err());
+}
+
+// ── G-2: role existence validation ──────────────────────────────────
+
+#[test]
+fn create_user_rejects_unknown_role_with_typed_error() {
+    let conn = fresh();
+    seed_roles(&conn);
+    // No role 'role-ghost' exists — the create must fail with a Validation
+    // error naming role_id, not a mislabelled Conflict or a zombie user.
+    let err = store(&conn)
+        .create_user("zombie", "hash_z", "Zombie", "role-ghost")
+        .unwrap_err();
+    match err {
+        CoreError::Validation { field, message } => {
+            assert_eq!(field, "role_id");
+            assert!(message.contains("role-ghost"), "message: {message}");
+        }
+        other => panic!("expected Validation error, got: {other:?}"),
+    }
+    // Nothing was written — the user row must not exist.
+    assert!(
+        store(&conn)
+            .get_user_by_username("zombie")
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn update_user_rejects_unknown_role_before_any_write() {
+    let conn = fresh();
+    seed_users(&conn);
+    let err = store(&conn)
+        .update_user("user-1", "alice", "Alice", "role-ghost", true)
+        .unwrap_err();
+    match err {
+        CoreError::Validation { field, .. } => assert_eq!(field, "role_id"),
+        other => panic!("expected Validation error, got: {other:?}"),
+    }
+    // The user's real role is untouched — no partial write happened.
+    let user = store(&conn).get_user("user-1").unwrap().expect("user");
+    assert_eq!(user.role_id, "role-lite");
 }

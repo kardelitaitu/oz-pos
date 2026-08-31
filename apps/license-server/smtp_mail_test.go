@@ -36,14 +36,30 @@ type smtpCapture struct {
 
 // runSMTPServer starts a minimal SMTP server on 127.0.0.1:0 and returns
 // its address plus a channel that receives one capture per message. The
-// server advertises AUTH PLAIN/LOGIN but NOT STARTTLS, so the
-// smtp.SendMail path stays on the plaintext connection (it would
-// otherwise try to upgrade to TLS and fail). With rejectMailFrom true it
-// answers MAIL FROM with a permanent 550 (what relays do for an
+// server advertises AUTH PLAIN/LOGIN. When startTLSCert is non-nil it
+// also advertises STARTTLS and upgrades the connection when the client
+// issues the command (production relays on 587 must support STARTTLS —
+// smtp_mail.go refuses plaintext delivery, LSE-21). With rejectMailFrom
+// true it answers MAIL FROM with a permanent 550 (what relays do for an
 // unverified sender identity).
-func runSMTPServer(t *testing.T, tlsCfg *tls.Config, rejectMailFrom bool) (addr string, captures chan smtpCapture) {
+func runSMTPServer(t *testing.T, tlsCfg *tls.Config, rejectMailFrom bool, startTLSCert *tls.Certificate) (addr string, captures chan smtpCapture) {
 	t.Helper()
 	captures = make(chan smtpCapture, 4)
+
+	// When this server negotiates STARTTLS, the production client will
+	// verify our self-signed certificate - trust it for the duration of
+	// the test (implicit-TLS callers manage smtpTLSRootCAs themselves).
+	if startTLSCert != nil {
+		leaf, err := x509.ParseCertificate(startTLSCert.Certificate[0])
+		if err != nil {
+			t.Fatalf("parse cert: %v", err)
+		}
+		pool := x509.NewCertPool()
+		pool.AddCert(leaf)
+		orig := smtpTLSRootCAs
+		smtpTLSRootCAs = pool
+		t.Cleanup(func() { smtpTLSRootCAs = orig })
+	}
 
 	var ln net.Listener
 	var err error
@@ -63,15 +79,16 @@ func runSMTPServer(t *testing.T, tlsCfg *tls.Config, rejectMailFrom bool) (addr 
 			if err != nil {
 				return
 			}
-			go serveSMTPConn(conn, captures, rejectMailFrom)
+			go serveSMTPConn(conn, captures, rejectMailFrom, startTLSCert)
 		}
 	}()
 	return ln.Addr().String(), captures
 }
 
 // serveSMTPConn speaks just enough SMTP for Go's smtp.Client: greeting,
-// EHLO with AUTH, AUTH PLAIN, MAIL/RCPT/DATA, QUIT.
-func serveSMTPConn(conn net.Conn, captures chan smtpCapture, rejectMailFrom bool) {
+// EHLO with AUTH (+ STARTTLS when a cert is provided), optional STARTTLS
+// upgrade, AUTH PLAIN, MAIL/RCPT/DATA, QUIT.
+func serveSMTPConn(conn net.Conn, captures chan smtpCapture, rejectMailFrom bool, startTLSCert *tls.Certificate) {
 	defer conn.Close()
 	r := textproto.NewReader(bufio.NewReader(conn))
 	w := textproto.NewWriter(bufio.NewWriter(conn))
@@ -92,7 +109,25 @@ func serveSMTPConn(conn net.Conn, captures chan smtpCapture, rejectMailFrom bool
 			// Multi-line: every line but the last carries a dash.
 			write("250-localhost")
 			write("250-AUTH PLAIN LOGIN")
+			if startTLSCert != nil {
+				write("250-STARTTLS")
+			}
 			write("250 OK")
+		case strings.HasPrefix(upper, "STARTTLS"):
+			if startTLSCert == nil {
+				write("454 TLS not available")
+				continue
+			}
+			if err := write("220 Go ahead"); err != nil {
+				return
+			}
+			tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{*startTLSCert}})
+			if err := tlsConn.Handshake(); err != nil {
+				return
+			}
+			conn = tlsConn
+			r = textproto.NewReader(bufio.NewReader(conn))
+			w = textproto.NewWriter(bufio.NewWriter(conn))
 		case strings.HasPrefix(upper, "AUTH PLAIN"):
 			// base64("\x00user\x00pass")
 			raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(line[len("AUTH PLAIN"):]))
@@ -178,7 +213,7 @@ func testTLSCert(t *testing.T) tls.Certificate {
 // TestSendMailSMTP_PlaintextPort exercises the non-465 branch (what
 // smtp.SendMail handles): delivery on a plaintext listener, unauthenticated.
 func TestSendMailSMTP_PlaintextPort(t *testing.T) {
-	addr, captures := runSMTPServer(t, nil, false)
+	addr, captures := runSMTPServer(t, nil, false, testTLSCertPtr(t))
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		t.Fatalf("split host/port: %v", err)
@@ -205,6 +240,26 @@ func TestSendMailSMTP_PlaintextPort(t *testing.T) {
 	}
 }
 
+// TestSendMailSMTP_RejectsMissingSTARTTLS pins the LSE-21 fix: a relay on
+// a non-465 port that does not advertise STARTTLS must be refused (the
+// previous smtp.SendMail behavior silently sent credentials and the
+// message body — OTP codes — in plaintext).
+func TestSendMailSMTP_RejectsMissingSTARTTLS(t *testing.T) {
+	addr, _ := runSMTPServer(t, nil, false, nil) // plain listener, no STARTTLS advertisement
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		t.Fatalf("split host/port: %v", err)
+	}
+
+	err = sendMailSMTP(host, port, "user", "pass", "sender@example.com", []string{"rcpt@example.com"}, []byte("x"))
+	if err == nil {
+		t.Fatal("expected an error against a relay that does not advertise STARTTLS")
+	}
+	if !strings.Contains(err.Error(), "STARTTLS") {
+		t.Errorf("expected a STARTTLS-refusal error, got: %v", err)
+	}
+}
+
 // TestSendMailImplicitTLS exercises the 465 transport directly (the
 // public-function routing to it is covered by
 // TestSendMailSMTP_SelectsImplicitTLSForPort465): delivery + AUTH PLAIN
@@ -212,7 +267,7 @@ func TestSendMailSMTP_PlaintextPort(t *testing.T) {
 func TestSendMailImplicitTLS(t *testing.T) {
 	cert := testTLSCert(t)
 	tlsCfg := &tls.Config{Certificates: []tls.Certificate{cert}}
-	addr, captures := runSMTPServer(t, tlsCfg, false)
+	addr, captures := runSMTPServer(t, tlsCfg, false, nil)
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		t.Fatalf("split host/port: %v", err)
@@ -255,7 +310,7 @@ func TestSendMailImplicitTLS(t *testing.T) {
 // here would mean the branch was NOT taken — we assert the TLS dial fails
 // against a non-TLS listener instead.
 func TestSendMailSMTP_SelectsImplicitTLSForPort465(t *testing.T) {
-	addr, captures := runSMTPServer(t, nil, false)
+	addr, captures := runSMTPServer(t, nil, false, testTLSCertPtr(t))
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		t.Fatalf("split host/port: %v", err)
@@ -284,7 +339,7 @@ func TestVerifySMTPConfig_UnsetHostSkipped(t *testing.T) {
 func TestVerifySMTPConfig_UnsetFromFallsBackToDefault(t *testing.T) {
 	// When OZ_SMTP_FROM is empty, the code falls back to smtpDefaultFrom
 	// and the SMTP probe decides whether the relay accepts it.
-	addr, _ := runSMTPServer(t, nil, false) // accepts all senders
+	addr, _ := runSMTPServer(t, nil, false, testTLSCertPtr(t)) // accepts all senders
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		t.Fatalf("split host/port: %v", err)
@@ -303,7 +358,7 @@ func TestVerifySMTPConfig_DefaultFromAccepted(t *testing.T) {
 	// The default sender is now a real verified sender on Brevo — the
 	// SMTP probe decides whether it works, not a hardcoded rejection.
 	// With an unreachable relay, the probe is transient → warn-only.
-	addr, _ := runSMTPServer(t, nil, false) // accepts all senders
+	addr, _ := runSMTPServer(t, nil, false, testTLSCertPtr(t)) // accepts all senders
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		t.Fatalf("split host/port: %v", err)
@@ -319,7 +374,7 @@ func TestVerifySMTPConfig_DefaultFromAccepted(t *testing.T) {
 }
 
 func TestVerifySMTPConfig_AcceptedSenderPasses(t *testing.T) {
-	addr, _ := runSMTPServer(t, nil, false)
+	addr, _ := runSMTPServer(t, nil, false, testTLSCertPtr(t))
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		t.Fatalf("split host/port: %v", err)
@@ -335,7 +390,7 @@ func TestVerifySMTPConfig_AcceptedSenderPasses(t *testing.T) {
 }
 
 func TestVerifySMTPConfig_RejectedSenderFails(t *testing.T) {
-	addr, _ := runSMTPServer(t, nil, true) // 550 on MAIL FROM
+	addr, _ := runSMTPServer(t, nil, true, testTLSCertPtr(t)) // 550 on MAIL FROM
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		t.Fatalf("split host/port: %v", err)
@@ -375,4 +430,11 @@ func TestVerifySMTPConfig_UnreachableRelayWarnsOnly(t *testing.T) {
 	if err := verifySMTPConfig(); err != nil {
 		t.Fatalf("a transient relay outage must warn, not fail boot: %v", err)
 	}
+}
+
+// testTLSCertPtr returns a pointer wrapper so remote call sites can hand
+// runSMTPServer a STARTTLS certificate inline.
+func testTLSCertPtr(t *testing.T) *tls.Certificate {
+	c := testTLSCert(t)
+	return &c
 }

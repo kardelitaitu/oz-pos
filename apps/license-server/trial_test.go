@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -94,6 +95,44 @@ func TestTrialClaimEndpoint(t *testing.T) {
 		`{"hardware_fingerprint":"not-a-fingerprint","platform":"windows","app_version":"0.0.28"}`)
 	if rec3.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for malformed fingerprint, got %d: %s", rec3.Code, rec3.Body.String())
+	}
+}
+
+// TestTrialClaimEndpoint_RateLimited verifies the claim endpoint shares
+// the persisted per-IP token bucket: fingerprints are client-derived, so
+// without the shared 5/hr budget the endpoint allowed unlimited
+// unauthenticated trial_registrations writes (LSE-13).
+func TestTrialClaimEndpoint_RateLimited(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// Exhaust the IP budget for a specific IP (PocketBase's RealIP()
+	// parses RemoteAddr via net.SplitHostPort; supply port:IP form) —
+	// same pattern as TestActivateHandler_RateLimited.
+	testIP := "10.99.99.91"
+	for i := 0; i < ipRateLimiter.maxPerHr; i++ {
+		ipRateLimiter.allow(testIP)
+	}
+
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	req := httptest.NewRequest("POST", trialPath,
+		strings.NewReader(`{"hardware_fingerprint":"`+trialFP2+`","platform":"windows","app_version":"0.0.28"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = testIP + ":1234"
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 once the IP budget is exhausted, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Nothing was written for the throttled request.
+	if _, err := app.FindFirstRecordByData("trial_registrations", "hardware_fingerprint", trialFP2); err == nil {
+		t.Error("a rate-limited claim must not persist a trial registration")
 	}
 }
 

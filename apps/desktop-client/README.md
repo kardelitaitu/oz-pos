@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-08-29 · docs-auditor · status: ACCURATE (3 findings repaired) · F1: "156 commands" -> 354 in generate_handler! (lib.rs:350) · F2: "42 files" -> 52 production modules / 102 .rs files (commands/) · F3: layout list updated (removed deleted sales.rs, added analytics/browser/edc/email/inventory/kds_device/kds_routing/license/picker_ticket/security/subscription/topology) · verified accurate: AppState fields (db, registry, app, scanner_cancel — state.rs:69-87), barcode:scanned via app.emit() (hardware.rs:415), app is Option<AppHandle>, add-command steps match tauri-ipc/SKILL.md -->
+<!-- Audit stamp: 2026-08-29 · docs-auditor · status: ACCURATE (3 findings repaired) · F1: "156 commands" -> 354 in generate_handler! (lib.rs:350) · F2: "42 files" -> 52 production modules / 102 .rs files (commands/) · F3: layout list updated (removed deleted sales.rs, added analytics/browser/edc/email/inventory/kds_device/kds_routing/license/picker_ticket/security/subscription/topology) · verified accurate: AppState fields (db, registry, app, scanner_cancel — state.rs:69-87), barcode:scanned via app.emit() (hardware.rs:415), app is Option<AppHandle>, add-command steps match tauri-ipc/SKILL.md · 31-08: command count 354 -> 385 (generate_handler! grew since 29-08; now points to api-reference.md as authoritative); documented startup hardware registration (register_hardware -> apply_config, dc07f32a/bb7ce92d/a8350a66) -->
 
 # `apps/desktop-client/` — OZ-POS desktop shell
 
@@ -16,7 +16,7 @@ apps/desktop-client/
 ├── icons/                  # Full platform icon set (generated via cargo tauri icon)
 └── src/
     ├── main.rs             # Binary entry; calls lib::run()
-    ├── lib.rs              # Builder, invoke_handler!, run() — 354 commands registered
+    ├── lib.rs              # Builder, invoke_handler!, run() — 385 commands registered (see docs/guides/api-reference.md for the authoritative list)
     ├── error.rs            # AppError (typed, non_exhaustive)
     ├── state.rs            # AppState (DB, driver registry, scanner cancel channel)
     └── commands/           # 52 production modules (102 .rs files incl. tests), grouped by domain
@@ -103,8 +103,8 @@ cargo tauri dev               # Terminal 2: Tauri dev shell
 
 ## Key state
 
-- `AppState` holds a `Mutex<Connection>` for SQLite, a `DriverRegistry` for HAL devices, and a `Mutex<Option<oneshot::Sender<()>>>` for scanner cancellation.
+- `AppState` holds a `Mutex<Connection>` for SQLite, a `DriverRegistry` for HAL devices, and a `Mutex<Option<oneshot::Sender<()>>>` for scanner cancellation. At startup the client calls `platform_startup::hardware::register_hardware`, which maps the saved `TerminalProfile` → `HardwareConfig` and applies it to the registry (`apply_config`) so the operator's configured printers/displays/drawers are usable at runtime.
 - Scanner background tasks emit `barcode:scanned` events via `app.emit()`.
 - The `app` handle is `Option<AppHandle>` — always unwrap via `if let Some(ref app)`.
 
-> last audited 29-08-26 by docs-auditor
+> last audited 31-08-26 by docs-auditor

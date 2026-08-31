@@ -1,20 +1,23 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
-  listExchangeRates,
-  createExchangeRate,
-  deleteExchangeRate,
-  listCurrencies,
+  listExchangeRatesScoped,
+  createExchangeRateScoped,
+  deleteExchangeRateScoped,
+  listCurrenciesScoped,
   formatExchangeRate,
   type ExchangeRateDto,
   type CurrencyDto,
+  type CreateExchangeRateArgs,
 } from '@/api/currency';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup, requiredLocalized } from '@/frontend/shared';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useToast } from '@/frontend/shared/Toast';
+import { parseMinorUnits } from '@/types/domain';
 import './ExchangeRateScreen.css';
 
 function todayStr(): string {
@@ -44,6 +47,12 @@ const EMPTY_FORM: FormData = {
 export default function ExchangeRateScreen() {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
+  // CUR-06: route every read/write through the session-scoped commands when
+  // a workspace session is active — the legacy commands hit the global
+  // database, which in multi-store deployments leaks configuration across
+  // stores. Without a session (single-store legacy/dev) fall back to them.
+  const { sessionToken: rawSessionToken } = useWorkspace();
+  const sessionToken = rawSessionToken ?? '';
   const [rates, setRates] = useState<ExchangeRateDto[]>([]);
   const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,8 +73,8 @@ export default function ExchangeRateScreen() {
     setError(null);
     try {
       const [items, currs] = await Promise.all([
-        listExchangeRates(),
-        listCurrencies(),
+        listExchangeRatesScoped(sessionToken),
+        listCurrenciesScoped(sessionToken),
       ]);
       if (seq !== loadSeqRef.current) return;
       setRates(items);
@@ -78,7 +87,7 @@ export default function ExchangeRateScreen() {
         setLoading(false);
       }
     }
-  }, [l10n]);
+  }, [l10n, sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -98,18 +107,19 @@ export default function ExchangeRateScreen() {
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      const rate = parseFloat(form.rate);
-      const rateMillionths = Math.round(rate * 1_000_000);
-      if (!Number.isFinite(rate) || rate <= 0 || !Number.isSafeInteger(rateMillionths) || rateMillionths <= 0) return;
+      // MONEY-02: exact decimal parse at the 6-decimal rate scale;
+      // rejects non-decimal garbage and unsafe magnitudes outright.
+      const rateMillionths = parseMinorUnits(form.rate, 6);
+      if (rateMillionths === null || rateMillionths <= 0) return;
 
-      const args: Parameters<typeof createExchangeRate>[0] = {
+      const args: CreateExchangeRateArgs = {
         from_currency: form.fromCurrency,
         to_currency: form.toCurrency,
         rate_millionths: rateMillionths,
       };
       if (form.source) args.source = form.source;
       if (form.effectiveDate) args.effective_date = form.effectiveDate;
-      await createExchangeRate(args);
+      await createExchangeRateScoped(sessionToken, args);
       setShowModal(false);
       await load();
     } catch {
@@ -117,7 +127,7 @@ export default function ExchangeRateScreen() {
     } finally {
       setSaving(false);
     }
-  }, [form, load, l10n, addToast]);
+  }, [form, load, l10n, addToast, sessionToken]);
 
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
@@ -125,14 +135,14 @@ export default function ExchangeRateScreen() {
     setDeleting(id);
     setDeleteTarget(null);
     try {
-      await deleteExchangeRate(id);
+      await deleteExchangeRateScoped(sessionToken, id);
       setDeleting(null);
       await load();
     } catch {
       addToast({ message: requiredLocalized(l10n, 'currency-delete-error'), type: 'error' });
       setDeleting(null);
     }
-  }, [deleteTarget, load, l10n, addToast]);
+  }, [deleteTarget, load, l10n, addToast, sessionToken]);
 
   const currencyOptions = currencies.map((c) => (
     <option key={c.code} value={c.code}>
@@ -142,13 +152,14 @@ export default function ExchangeRateScreen() {
 
   // The rate must also survive the millionths conversion — a sub-0.000001
   // rate would otherwise pass these checks and silently do nothing on Save.
-  const rateMillionths = Math.round(parseFloat(form.rate) * 1_000_000);
+  // MONEY-02: exact parse; null means "not a plain decimal literal".
+  const rateMillionths = parseMinorUnits(form.rate, 6);
   const formValid =
     !!form.fromCurrency &&
     !!form.toCurrency &&
     form.fromCurrency !== form.toCurrency &&
     form.rate.trim() !== '' &&
-    Number.isFinite(rateMillionths) &&
+    rateMillionths !== null &&
     rateMillionths > 0;
 
   return (

@@ -1,9 +1,9 @@
 //! Staff management — User CRUD + Role CRUD.
 /*
-last audited 25-07-26 by RSA-Agent (oz-core slice B5 closeout)
+last audited 31-08-26 by RSA-Agent (user-role campaign, FINAL verification pass)
 crate: oz-core | status: SAFE | lint: CLEAN
-findings: exemplary — STAFF-07 three-tier rate limiter (per-account/per-device/global + backoff) with settings-driven tuning object; role presets upsert-sync converge model; permission resolution fails closed (unresolvable role = PermissionDenied, never a crash); username normalized + conflict mapped to typed error; default global assignment on create; pin_hash column (user PINs hashed — contrast COR-17 gift-card PINs)
-next: none | perf: N/A
+findings: exemplary core, F-1 and G-2 CLOSED — create_user/update_user now wrap the users + assignments writes in unchecked_transaction (established idiom) and validate role_id existence with a typed Validation error before any write (all five callers inherit: desktop/tablet staff.rs, cloud users.rs, CLI user.rs, profile helper; unseeded paths fail closed instead of stranding a zombie); parameterized SQL throughout; authorize_with is registry-aware deny-by-default and still enforces registered-grants + sensitive-keys-never-family-wildcard + Owner-only global * (db/staff.rs:122-125); STAFF-07 rate limiter intact; assignments FK CASCADE armed at migrations.rs:139; role seeding precedes user creation on interactive paths (setup.rs:102, desktop/tablet staff.rs seed call); evidence: 74 staff tests green incl. the two G-2 guards
+next: none — campaign closed for this file | perf: indexed lookups, fine
 */
 
 use rusqlite::params;
@@ -365,6 +365,31 @@ impl Store<'_> {
         display_name: &str,
         role_id: &str,
     ) -> Result<User, CoreError> {
+        // F-1: the user row and its default assignment are one logical
+        // write — a failure between the two statements must not strand a
+        // user without its assignment (repo rule: writes run in
+        // transactions).
+        let tx = self.conn.unchecked_transaction()?;
+        let user = Store::new(&tx).create_user_in_tx(username, pin_hash, display_name, role_id)?;
+        tx.commit()?;
+        Ok(user)
+    }
+
+    /// The body of [`Self::create_user`], writing on `self.conn` WITHOUT
+    /// opening a transaction — the caller must already hold one on this
+    /// connection. `create_user_with_profile` needs this: calling the
+    /// standalone method inside its profile tx issued a nested BEGIN
+    /// ("cannot start a transaction within a transaction"), silently
+    /// breaking every staff creation with a profile on both clients
+    /// (found 2026-08-31; same shape as the `finalize_sale_in_tx`
+    /// precedent from the webhook round).
+    pub(crate) fn create_user_in_tx(
+        &self,
+        username: &str,
+        pin_hash: &str,
+        display_name: &str,
+        role_id: &str,
+    ) -> Result<User, CoreError> {
         let username = username.trim().to_lowercase();
         if username.is_empty() {
             return Err(CoreError::Validation {
@@ -396,27 +421,38 @@ impl Store<'_> {
                 ),
             });
         }
+        // G-2: a role_id that references no row would either violate the FK
+        // (mislabelled as a username Conflict by the catch-all arm below)
+        // or — on a connection with foreign_keys off — create a user whose
+        // gate always denies ("role not found"), a silent zombie account.
+        // Validate up front so every caller (desktop, cloud, CLI) gets a
+        // typed error instead.
+        if self.get_role(role_id)?.is_none() {
+            return Err(CoreError::Validation {
+                field: "role_id",
+                message: format!("role '{role_id}' does not exist"),
+            });
+        }
 
         let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
-        let result = self.conn.execute(
+        self.conn.execute(
             "INSERT INTO users (id, username, pin_hash, display_name, role_id, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![id, username, pin_hash, display_name.trim(), role_id, now, now],
-        );
-        match result {
-            Err(rusqlite::Error::SqliteFailure(e, _))
-                if e.code == rusqlite::ErrorCode::ConstraintViolation =>
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::SqliteFailure(ref err, _)
+                if err.code == rusqlite::ErrorCode::ConstraintViolation =>
             {
-                return Err(CoreError::Conflict {
+                CoreError::Conflict {
                     entity: "user",
                     field: "username",
-                });
+                }
             }
-            Err(e) => return Err(e.into()),
-            Ok(_) => {}
-        }
+            other => other.into(),
+        })?;
 
         // Every user gets their single effective assignment (ADR #35 D5 /
         // spec 0048): a default global-mode assignment mirroring the role.
@@ -456,9 +492,20 @@ impl Store<'_> {
                 message: "display name must not be empty".into(),
             });
         }
+        // G-2: same zombie-account guard as create_user — a role change to
+        // a nonexistent role must fail with a typed error before any write.
+        if self.get_role(role_id)?.is_none() {
+            return Err(CoreError::Validation {
+                field: "role_id",
+                message: format!("role '{role_id}' does not exist"),
+            });
+        }
 
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let rows = self.conn.execute(
+        // F-1: same transaction discipline as create_user — the user update
+        // and its assignment role sync are one logical write.
+        let tx = self.conn.unchecked_transaction()?;
+        let rows = tx.execute(
             "UPDATE users SET username = ?1, display_name = ?2, role_id = ?3, is_active = ?4, updated_at = ?5 WHERE id = ?6",
             params![username, display_name.trim(), role_id, is_active, now, id],
         )?;
@@ -470,12 +517,13 @@ impl Store<'_> {
         }
         // Keep the assignment role in sync — the scope columns and scope rows
         // of an existing assignment are preserved (only the role follows).
-        self.conn.execute(
+        tx.execute(
             "INSERT INTO assignments (user_id, role_id, scope_mode, branch_scope, workspace_scope, updated_at)
              VALUES (?1, ?2, 'global', 'all', 'all', ?3)
              ON CONFLICT(user_id) DO UPDATE SET role_id = excluded.role_id, updated_at = excluded.updated_at",
             params![id, role_id, now],
         )?;
+        tx.commit()?;
         self.get_user(id)?.ok_or_else(|| CoreError::NotFound {
             entity: "user",
             id: id.to_owned(),

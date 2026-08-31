@@ -219,6 +219,70 @@ fn validate_allows_insert_or_replace() {
     .unwrap();
 }
 
+// ── PLG-11: quoted-identifier bypass ──────────────────────────────
+
+#[test]
+fn plg11_rejects_double_quoted_table_reference() {
+    // Before the fix: zero tables captured, statement passed validation
+    // and reached the core schema.
+    let err = validate_sql("DELETE FROM \"sales\"", "plugin_test_").unwrap_err();
+    assert!(err.to_string().contains("quoted identifiers"));
+}
+
+#[test]
+fn plg11_rejects_backtick_table_reference() {
+    let err = validate_sql("SELECT * FROM `sales`", "plugin_test_").unwrap_err();
+    assert!(err.to_string().contains("quoted identifiers"));
+}
+
+#[test]
+fn plg11_rejects_bracket_table_reference() {
+    let err = validate_sql("SELECT * FROM [sales]", "plugin_test_").unwrap_err();
+    assert!(err.to_string().contains("quoted identifiers"));
+}
+
+#[test]
+fn plg11_rejects_quoted_identifier_via_execute_batch_path() {
+    // `execute` routes through validate_sql before execute_batch; the
+    // multi-statement form inherits the same fail-closed scan.
+    let db = make_db("plugin_test");
+    let err = db
+        .execute("DELETE FROM plugin_test_items; DELETE FROM \"sales\";")
+        .unwrap_err();
+    assert!(err.to_string().contains("quoted identifiers"));
+}
+
+#[test]
+fn plg11_allows_quote_chars_inside_string_literals() {
+    // Values legitimately containing quote/bracket characters are invisible
+    // to the scan inside single-quoted literals (with '' doubling).
+    validate_sql(
+        "INSERT INTO plugin_test_items (id, name) VALUES (1, 'it''s \"quoted\" [brackets] `ticks`')",
+        "plugin_test_",
+    )
+    .unwrap();
+}
+
+#[test]
+fn plg11_rejects_unterminated_string_literal() {
+    // Fail-closed: an unterminated literal is malformed SQL whose quote
+    // characters cannot be classified as values.
+    let err = validate_sql(
+        "INSERT INTO plugin_test_items (id, name) VALUES (1, 'unterminated)",
+        "plugin_test_",
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("unterminated string literal"));
+}
+
+#[test]
+fn plg11_rejects_quoted_identifier_between_literals() {
+    // The quote characters sit BETWEEN two string literals — outside, and
+    // therefore identified as an identifier quoting dialect.
+    let err = validate_sql("SELECT * FROM \"sales\" WHERE name = 'x'", "plugin_test_").unwrap_err();
+    assert!(err.to_string().contains("quoted identifiers"));
+}
+
 // ── PluginDb Tests ─────────────────────────────────────────────────
 
 fn make_db(plugin_id: &str) -> PluginDb {

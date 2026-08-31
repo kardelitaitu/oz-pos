@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-inventory slice A: repository verified)
+crate: modules-inventory | status: SAFE | lint: CLEAN
+findings: clean — currency and Sku parse fail-closed into validation errors, parameterized SQL
+next: none | perf: N/A
+*/
 //! Inventory Repository — database queries for products, categories, and stock levels.
 
 use crate::error::InventoryError;

@@ -1,15 +1,23 @@
 package main
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pocketbase/pocketbase/core"
 )
+
+// enterpriseRedeemMu guards the check-and-redeem critical section of
+// handleEnterpriseTrial so a one-time approval code cannot be spent twice
+// by parallel requests (B45). Consistent with the other in-process state
+// this server keeps (webOtpStore, key-failure trackers, FX cache).
+var enterpriseRedeemMu sync.Mutex
 
 // EnterpriseTrialRequest is the JSON body for POST /api/v1/license/enterprise-trial.
 type EnterpriseTrialRequest struct {
@@ -48,6 +56,9 @@ type EnterpriseTrialResponse struct {
 // the activation handler mints a 30-day Enterprise trial license.
 func handleEnterpriseTrial(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
+		// Cap request body at 16KB to prevent OOM via oversized JSON payloads (M4 audit).
+		e.Request.Body = http.MaxBytesReader(e.Response, e.Request.Body, 16*1024)
+
 		// Parse request body
 		var req EnterpriseTrialRequest
 		if err := json.NewDecoder(e.Request.Body).Decode(&req); err != nil {
@@ -76,7 +87,29 @@ func handleEnterpriseTrial(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
+		// ── Rate limit: shared persisted per-IP token bucket (5/hr) ──
+		// The redeem endpoint was unthrottled: unlimited probing of the
+		// approval-code space (and the 403 vs 409 distinction maps spent
+		// codes). Sharing the activation bucket bounds probing to the
+		// same budget as the flows that mint trials for real (LSE-18).
+		if !ipRateLimiter.allow(e.RealIP()) {
+			return e.JSON(http.StatusTooManyRequests, map[string]any{
+				"error": "rate limit exceeded, try again later",
+			})
+		}
+
 		// ── Validate approval code against PocketBase collection ──
+		// B45: serialize the check-and-redeem critical section. The status
+		// check below and the "redeemed" write at the END of this handler
+		// are separated by tenant creation + license-key minting, so
+		// concurrent requests carrying the same one-time code all saw
+		// "unused" and each received an enterprise trial (reproduced: 2/2
+		// racers returned 200). Self-serve enterprise redemptions are low
+		// volume, so one mutex is the cheapest correct fix; holding it for
+		// the whole mint means the loser observes "redeemed" and gets 409.
+		enterpriseRedeemMu.Lock()
+		defer enterpriseRedeemMu.Unlock()
+
 		codeRec, err := app.FindFirstRecordByData("enterprise_approvals", "code",
 			strings.ToUpper(strings.TrimSpace(req.ApprovalCode)))
 		if err != nil {
@@ -161,7 +194,7 @@ func handleEnterpriseTrial(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		log.Printf("enterprise-trial: code %s accepted, minted key %s for %s (30-day Enterprise trial)",
-			req.ApprovalCode[:4]+"****", licenseKey, req.Email)
+			req.ApprovalCode[:4]+"****", maskLicenseKey(licenseKey), req.Email)
 
 		return e.JSON(http.StatusOK, EnterpriseTrialResponse{
 			Status:     "trial_key_minted",
@@ -177,12 +210,24 @@ func handleEnterpriseTrial(app core.App) func(e *core.RequestEvent) error {
 // generateEnterpriseTrialKey creates a license key in the format
 // OZ-ENTR-XXXXX-XXXXX where X is alphanumeric. The prefix makes
 // enterprise trial keys visually distinguishable from paid keys.
+//
+// LSE-17: the characters come from crypto/rand — the previous
+// implementation derived each byte from time.Now().UnixNano()%32 with a
+// time.Sleep(1) in between, i.e. clock jitter rather than entropy. These
+// keys mint 30-day enterprise trials, so a predictable keyspace would let
+// an attacker mint trials without an approval code. The charset is 32
+// characters, which divides 256 evenly, so byte%len(charset) is
+// bias-free. Failure of crypto/rand is fatal (same policy as
+// generateAPIKey): a predictable fallback is worse than crashing.
 func generateEnterpriseTrialKey() string {
 	const charset = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // no I/O/0/1 to avoid ambiguity
+	raw := make([]byte, 16)
+	if _, err := rand.Read(raw); err != nil {
+		log.Fatalf("crypto/rand.Read failed: %v — cannot generate secure trial key", err)
+	}
 	key := make([]byte, 16)
-	for i := range key {
-		key[i] = charset[time.Now().UnixNano()%int64(len(charset))]
-		time.Sleep(1) // ensure unique nanosecond seed
+	for i := range raw {
+		key[i] = charset[int(raw[i])%len(charset)]
 	}
 	return fmt.Sprintf("OZ-ENTR-%s-%s", string(key[:5]), string(key[5:]))
 }

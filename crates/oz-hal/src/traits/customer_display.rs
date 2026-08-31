@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-hal slice A: verified)
+crate: oz-hal | status: SAFE | lint: CLEAN
+findings: clean
+next: none | perf: N/A
+*/
 //! `CustomerDisplay` — a secondary screen that shows the cart total
 //! and line count to the customer.
 //!

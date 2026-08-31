@@ -1,3 +1,9 @@
+---
+num: 41
+area: topology
+title: ADR #41: App Lifecycle, Device Onboarding, Dynamic Topology Workspaces, and Two-Layer Gated Home Experience (Tier & RBAC)
+status: Accepted (2026-08-28)
+---
 # ADR #41: App Lifecycle, Device Onboarding, Dynamic Topology Workspaces, and Two-Layer Gated Home Experience (Tier & RBAC)
 
 **Status:** Accepted (2026-08-28)  

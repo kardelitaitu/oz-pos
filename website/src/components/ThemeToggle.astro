@@ -43,7 +43,7 @@ const locale = Astro.currentLocale ?? 'en';
     if (!btn) return;
     const html = document.documentElement;
     const next = html.dataset.theme === 'light' ? 'dark' : 'light';
-    html.dataset.theme = next;
+    document.documentElement.dataset.theme = next;
     localStorage.setItem('oz_theme', next);
   });
 </script>

@@ -777,21 +777,22 @@ func paddleCaptureRevenue(app core.App, ev paddleEvent) {
 		log.Printf("paddle revenue: tenant not found for email=%s (transaction=%s): %v", email, txn.ID, err)
 		return
 	}
+	// LSE-7: Paddle totals already arrive as USD cents (i64) — pass the
+	// minor units straight through instead of converting to float dollars.
 	cents := paddleTransactionTotalCents(txn)
-	amount := float64(cents) / 100.0
 	notes := ""
 	if txn.SubscriptionID != "" {
 		notes = "subscription_id=" + txn.SubscriptionID
 	}
 	saveRevenueEvent(app, revenueEvent{
-		Provider:       "paddle",
-		EventID:        ev.EventID,
-		TenantID:       tenant.Id,
-		TierKey:        paddleTransactionTier(txn),
-		NativeAmount:   amount,
-		NativeCurrency: "USD",
-		SubscriptionID: txn.SubscriptionID,
-		Notes:          notes,
+		Provider:          "paddle",
+		EventID:           ev.EventID,
+		TenantID:          tenant.Id,
+		TierKey:           paddleTransactionTier(txn),
+		NativeAmountMinor: cents,
+		NativeCurrency:    "USD",
+		SubscriptionID:    txn.SubscriptionID,
+		Notes:             notes,
 	})
 }
 
@@ -915,7 +916,7 @@ func paddleProvision(app core.App, ev paddleEvent, sendReceipt bool) error {
 		if saveErr := app.Save(keyRecord); saveErr != nil {
 			return fmt.Errorf("failed to save license key for subscription %s: %w", sub.ID, saveErr)
 		}
-		log.Printf("paddle webhook: minted key %q (tier=%s, bundle=%s) for subscription %s", key, tier, bundle, sub.ID)
+		log.Printf("paddle webhook: minted key %q (tier=%s, bundle=%s) for subscription %s", maskLicenseKey(key), tier, bundle, sub.ID)
 		if sendReceipt {
 			// Non-fatal: a failed receipt must not fail provisioning.
 			if mailErr := sendReceiptEmail(email, key, tier, expiresAt); mailErr != nil {

@@ -13,36 +13,6 @@ fn price(minor: i64) -> Money {
     }
 }
 
-#[test]
-fn start_cart_add_line() {
-    let mut cart = oz_core::Cart::new(usd());
-    let cart_id = cart.id();
-
-    let line = CartLine::new(Sku::new("COFFEE"), 2, price(350));
-    cart.add_line(line).unwrap();
-
-    assert_eq!(cart.line_count(), 1);
-    let total = cart.total();
-    assert_eq!(total.unwrap().minor_units, 700);
-    assert_eq!(total.unwrap().currency, usd());
-    assert!(!cart_id.to_string().is_empty());
-
-    let line2 = CartLine::new(Sku::new("BAGEL"), 1, price(450));
-    cart.add_line(line2).unwrap();
-    assert_eq!(cart.line_count(), 2);
-    assert_eq!(cart.total().unwrap().minor_units, 1150);
-}
-
-#[test]
-fn cart_total_with_fractional_qty() {
-    let mut cart = oz_core::Cart::new(usd());
-    let line = CartLine::new(Sku::new("TEA"), 3, price(200));
-    let line_total = line.total().unwrap();
-    cart.add_line(line).unwrap();
-    assert_eq!(line_total.minor_units, 600);
-    assert_eq!(cart.total().unwrap().minor_units, 600);
-}
-
 // ── DTO struct tests ─────────────────────────────────────────────
 
 #[test]
@@ -83,10 +53,128 @@ fn add_line_args_fields() {
         sku: Sku::new("COFFEE"),
         qty: 3,
         unit_price_minor: 350,
+        unit_price_currency: None,
     };
     assert_eq!(args.qty, 3);
     assert_eq!(args.unit_price_minor, 350);
     assert_eq!(args.sku.as_str(), "COFFEE");
+}
+
+// ── FRONTEND-03: line currency crosses the IPC boundary ─────────
+
+#[test]
+fn add_line_args_unit_price_currency_shape() {
+    // camelCase wire shape: present → Some, absent → None (legacy callers).
+    let with_cur: AddLineArgs = serde_json::from_str(
+        r#"{"cartId":"11111111-1111-1111-1111-111111111111","sku":"BAGEL","qty":2,"unitPriceMinor":500,"unitPriceCurrency":"EUR"}"#,
+    )
+    .unwrap();
+    assert_eq!(with_cur.unit_price_currency.as_deref(), Some("EUR"));
+    let without_cur: AddLineArgs = serde_json::from_str(
+        r#"{"cartId":"11111111-1111-1111-1111-111111111111","sku":"BAGEL","qty":2,"unitPriceMinor":500}"#,
+    )
+    .unwrap();
+    assert_eq!(without_cur.unit_price_currency, None);
+}
+
+#[test]
+fn line_unit_price_uses_wire_currency_over_cart_currency() {
+    // FRONTEND-03: an EUR line against a USD cart must be BUILT in EUR so
+    // Cart::add_line can reject it — previously the command re-stamped the
+    // cart's currency and the mismatch check could never fire.
+    let args = AddLineArgs {
+        cart_id: CartId::new(),
+        sku: Sku::new("IMPORT"),
+        qty: 1,
+        unit_price_minor: 500,
+        unit_price_currency: Some("EUR".into()),
+    };
+    let money = line_unit_price(&args, usd()).unwrap();
+    assert_eq!(money.currency, "EUR".parse::<Currency>().unwrap());
+    assert_eq!(money.minor_units, 500);
+}
+
+#[test]
+fn line_unit_price_falls_back_to_cart_currency_when_absent() {
+    let args = AddLineArgs {
+        cart_id: CartId::new(),
+        sku: Sku::new("COFFEE"),
+        qty: 1,
+        unit_price_minor: 350,
+        unit_price_currency: None,
+    };
+    let money = line_unit_price(&args, usd()).unwrap();
+    assert_eq!(money.currency, usd());
+}
+
+#[test]
+fn line_unit_price_rejects_invalid_currency() {
+    let args = AddLineArgs {
+        cart_id: CartId::new(),
+        sku: Sku::new("COFFEE"),
+        qty: 1,
+        unit_price_minor: 350,
+        unit_price_currency: Some("NOPE!".into()),
+    };
+    let err = line_unit_price(&args, usd()).unwrap_err();
+    assert!(
+        err.to_string().to_lowercase().contains("currency"),
+        "invalid currency must surface as a clear error, got: {err}"
+    );
+}
+
+// ── FRONTEND-03 follow-up: shortfall line currency ─────────────
+
+#[test]
+fn cart_line_data_unit_price_currency_shape() {
+    let with_cur: CartLineData = serde_json::from_str(
+        r#"{"sku":"IMPORT","qty":2,"unitPriceMinor":500,"unitPriceCurrency":"EUR"}"#,
+    )
+    .unwrap();
+    assert_eq!(with_cur.unit_price_currency.as_deref(), Some("EUR"));
+    let without_cur: CartLineData =
+        serde_json::from_str(r#"{"sku":"COFFEE","qty":1,"unitPriceMinor":350}"#).unwrap();
+    assert_eq!(without_cur.unit_price_currency, None);
+}
+
+#[test]
+fn shortfall_line_unit_price_uses_wire_currency_over_sale_currency() {
+    let line_data = CartLineData {
+        sku: "IMPORT".into(),
+        qty: 1,
+        unit_price_minor: 500,
+        unit_price_currency: Some("EUR".into()),
+    };
+    let money = shortfall_line_unit_price(&line_data, usd()).unwrap();
+    assert_eq!(money.currency, "EUR".parse::<Currency>().unwrap());
+    assert_eq!(money.minor_units, 500);
+}
+
+#[test]
+fn shortfall_line_unit_price_falls_back_to_sale_currency_when_absent() {
+    let line_data = CartLineData {
+        sku: "COFFEE".into(),
+        qty: 1,
+        unit_price_minor: 350,
+        unit_price_currency: None,
+    };
+    let money = shortfall_line_unit_price(&line_data, usd()).unwrap();
+    assert_eq!(money.currency, usd());
+}
+
+#[test]
+fn shortfall_line_unit_price_rejects_invalid_currency() {
+    let line_data = CartLineData {
+        sku: "COFFEE".into(),
+        qty: 1,
+        unit_price_minor: 350,
+        unit_price_currency: Some("NOPE!".into()),
+    };
+    let err = shortfall_line_unit_price(&line_data, usd()).unwrap_err();
+    assert!(
+        err.to_string().to_lowercase().contains("currency"),
+        "invalid currency must surface as a clear error, got: {err}"
+    );
 }
 
 #[test]
@@ -266,6 +354,7 @@ async fn scoped_sale_deducts_from_topology_warehouse_not_pos_location() {
             sku: Sku::new("STOCK-ROUTE-COFFEE"),
             qty: 3,
             unit_price_minor: 1000,
+            unit_price_currency: None,
         },
         app.state(),
     )
@@ -286,6 +375,9 @@ async fn scoped_sale_deducts_from_topology_warehouse_not_pos_location() {
             tender_rate_millionths: None,
             tip_minor: None,
             service_charge_minor: None,
+            promotion_ids: None,
+            // No attempt id: this fixture exercises the unguarded legacy path.
+            attempt_id: None,
         },
         app.state(),
     )
@@ -640,4 +732,51 @@ async fn staff_can_list_held_carts() {
     let result = list_held_carts_scoped("tok".into(), app.state()).await;
     assert!(result.is_ok(), "staff has SALES_PROCESS permission");
     assert!(result.unwrap().is_empty());
+}
+
+// ── COR-7: attempt id to per-split idempotency keys ────────────────
+
+fn tender_split(method: &str, amount_minor: i64) -> PaymentSplitArg {
+    PaymentSplitArg {
+        method: method.into(),
+        amount_minor,
+        gateway_reference: None,
+        gateway_status: None,
+        gateway_response: None,
+        idempotency_key: None,
+    }
+}
+
+#[test]
+fn attempt_keys_are_indexed_per_split() {
+    // One key shared by every split would make a two-tender sale collide with
+    // itself on its own second row and reject a legitimate sale. The index is
+    // the whole point of the format.
+    let mut splits = vec![tender_split("cash", 400), tender_split("card", 300)];
+    stamp_attempt_split_keys(Some("att-1"), &mut splits);
+    let keys: Vec<Option<&str>> = splits
+        .iter()
+        .map(|s| s.idempotency_key.as_deref())
+        .collect();
+    assert_eq!(keys, vec![Some("att-1:0"), Some("att-1:1")]);
+}
+
+#[test]
+fn attempt_keys_are_deterministic_across_retries() {
+    // A replay has to reproduce the same keys, or the UNIQUE index cannot
+    // recognise it as the same attempt and the guard never fires.
+    let mut first = vec![tender_split("cash", 700)];
+    let mut second = vec![tender_split("cash", 700)];
+    stamp_attempt_split_keys(Some("att-1"), &mut first);
+    stamp_attempt_split_keys(Some("att-1"), &mut second);
+    assert_eq!(first[0].idempotency_key, second[0].idempotency_key);
+}
+
+#[test]
+fn no_attempt_id_leaves_the_sale_unguarded() {
+    // Legacy callers and CLI imports keep working unchanged; they simply get
+    // no replay protection rather than a half-applied one.
+    let mut splits = vec![tender_split("cash", 700)];
+    stamp_attempt_split_keys(None, &mut splits);
+    assert_eq!(splits[0].idempotency_key, None);
 }

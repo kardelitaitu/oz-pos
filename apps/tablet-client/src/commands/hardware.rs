@@ -1,6 +1,12 @@
-//! Hardware-facing Tauri commands: cash drawer, receipt printer, and
-//! barcode scanner lifecycle (start/stop/list). All commands reach into
-//! the HAL via `state.registry` — they never construct a concrete driver.
+//! Hardware-facing Tauri commands: cash drawer, receipt printer, barcode
+//! scanner lifecycle (start/stop/list), customer displays, and USB
+//! discovery. All commands reach into the HAL via `state.registry` — they
+//! never construct a concrete driver.
+//!
+//! The command surface mirrors `apps/desktop-client/src/commands/hardware.rs`
+//! so one React setup wizard works on both. Where the two differ, the
+//! tablet authenticates with `resolve_session` rather than `resolve_scope`
+//! for commands that touch no database row.
 
 use std::sync::Arc;
 
@@ -10,7 +16,9 @@ use tokio::sync::oneshot;
 
 use oz_core::{Currency, Money, Settings};
 use oz_hal::BarcodeScanner;
+use oz_hal::DisplayContent;
 use oz_hal::drivers::receipt;
+use oz_hal::transport::usb::{UsbDeviceInfo, probe_all};
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -524,6 +532,22 @@ pub async fn print_sales_receipt_scoped(
     Ok(PrintSalesReceiptResult { printed: true })
 }
 
+/// Move the preferred scanner to the front, leaving the rest in order.
+///
+/// Mirrors the desktop helper: the UI auto-detects with `scanners[0]`, so
+/// the saved device must come first or the setting does nothing. A no-op
+/// when `preferred` is empty or matches nothing.
+fn prefer_first(mut scanners: Vec<ScannerInfo>, preferred: &str) -> Vec<ScannerInfo> {
+    if preferred.is_empty() {
+        return scanners;
+    }
+    if let Some(pos) = scanners.iter().position(|s| s.id == preferred) {
+        let chosen = scanners.remove(pos);
+        scanners.insert(0, chosen);
+    }
+    scanners
+}
+
 /// Session-scoped variant of `list_scanners`.
 #[allow(clippy::needless_borrow, dropping_references)]
 #[command]
@@ -533,7 +557,14 @@ pub async fn list_scanners_scoped(
 ) -> Result<Vec<ScannerInfo>, AppError> {
     let _session = state.resolve_session(&session_token)?;
     let ids = state.registry.scanner_ids().await;
-    Ok(ids.into_iter().map(|id| ScannerInfo { id }).collect())
+    let preferred = {
+        let conn = state.db.lock().await;
+        oz_core::Settings::get_scanner_device_id(&conn).unwrap_or_default()
+    }; // guard dropped: Connection is !Send
+    Ok(prefer_first(
+        ids.into_iter().map(|id| ScannerInfo { id }).collect(),
+        &preferred,
+    ))
 }
 
 /// Session-scoped variant of `start_scanner`.
@@ -619,6 +650,7 @@ pub async fn start_scanner_scoped(
 }
 
 /// Session-scoped variant of `stop_scanner`.
+/// Session-scoped variant of `stop_scanner`.
 #[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn stop_scanner_scoped(
@@ -631,6 +663,92 @@ pub async fn stop_scanner_scoped(
         let _ = sender.send(());
     }
     Ok(())
+}
+
+// ── Displays and discovery (ADR #7 parity with desktop) ──────────────
+//
+// These four existed only in the desktop client, so the tablet's setup
+// wizard could list scanners but never a customer display, and could not
+// probe at all. They authenticate with resolve_session rather than
+// resolve_scope: the desktop versions call resolve_scope, which additionally
+// opens the store database, and none of these four reads or writes a row.
+// An invalid session is rejected identically either way.
+
+/// Arguments for [`display_show_scoped`].
+#[derive(Debug, Deserialize)]
+pub struct DisplayShowArgs {
+    /// ID of the associated display.
+    pub display_id: String,
+    /// Line1.
+    pub line1: String,
+    /// Line2.
+    pub line2: String,
+}
+
+/// List all registered customer displays (scoped).
+#[command]
+pub async fn list_displays_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    Ok(state.registry.display_ids().await)
+}
+
+/// Show content on a customer-facing pole display (scoped).
+#[command]
+pub async fn display_show_scoped(
+    args: DisplayShowArgs,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    let display = state
+        .registry
+        .display(&args.display_id)
+        .await
+        .ok_or_else(|| {
+            AppError::Invalid(format!("no display registered as '{}'", args.display_id))
+        })?;
+    let content = DisplayContent {
+        line1: args.line1,
+        line2: args.line2,
+    };
+    display.connect().await?;
+    display.show(&content).await?;
+    Ok(())
+}
+
+/// Clear a customer-facing pole display (scoped).
+#[command]
+pub async fn display_clear_scoped(
+    display_id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    let display = state
+        .registry
+        .display(&display_id)
+        .await
+        .ok_or_else(|| AppError::Invalid(format!("no display registered as '{display_id}'")))?;
+    display.clear().await?;
+    Ok(())
+}
+
+/// Discover all connected USB hardware devices (scoped).
+///
+/// On Android this needs USB host mode (OTG) and the `android.hardware.usb
+/// .host.xml` feature; a tablet without it gets an error rather than an
+/// empty list, which is the same shape the desktop returns when libusb
+/// cannot enumerate. The setup wizard treats the error as "no devices".
+#[command]
+pub async fn discover_hardware_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<UsbDeviceInfo>, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    probe_all().map_err(|e| AppError::Internal(format!("hardware discovery failed: {e}")))
 }
 
 #[cfg(test)]

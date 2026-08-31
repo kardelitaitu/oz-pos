@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-inventory slice A: error verified)
+crate: modules-inventory | status: SAFE | lint: CLEAN
+findings: clean thiserror inventory error taxonomy
+next: none | perf: N/A
+*/
 //! Error type for the inventory domain.
 
 use thiserror::Error;

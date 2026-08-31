@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
-import { completeSaleWithResolvedShortfalls, type CompleteSaleWithResolvedShortfallsArgs, type ResolvedShortfall, type LocationAllocation, type PartialStockResult, type CartLineData, type PaymentSplitArg, type SerialNumberArg } from '@/api/sales';
+import { completeSaleWithResolvedShortfalls, type CompleteSaleResult, type CompleteSaleWithResolvedShortfallsArgs, type ResolvedShortfall, type LocationAllocation, type PartialStockResult, type CartLineData, type PaymentSplitArg, type SerialNumberArg } from '@/api/sales';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { Button } from '@/components/Button';
 import { l10nErrorMessage } from '@/utils/app-error';
@@ -28,12 +28,37 @@ export interface StockShortfallDialogProps {
   customerName?: string | null;
   /** Serial numbers (if track_serial products). */
   serialNumbers?: SerialNumberArg[] | null;
+  /**
+   * The checkout attempt id of the submission that produced this shortfall.
+   * Must be forwarded unchanged: this dialog retries that same attempt, and
+   * the backend's replay guard keys on it. Note the retry cannot derive one —
+   * it synthesises a fresh `resolved-${Date.now()}` cartId on every submit, so
+   * nothing carried over from the first attempt identifies it as a replay.
+   */
+  attemptId?: string;
+  /** PROMO-3: promotion ids to re-apply on the retry (same list/order as the first submission). */
+  promotionIds?: string[] | null;
   /** Discount percentage. */
   discountPercent: number;
   /** Discount label. */
   discountLabel?: string | null;
-  /** Called when the sale completes successfully after resolution. */
-  onComplete: () => void;
+  /** CUR-02: tip collected at checkout (FRONTEND-04 — forwarded so the
+   *  retry records what the customer actually paid; backend defaults 0). */
+  tipMinor?: number;
+  /** CUR-02: service charge collected at checkout. */
+  serviceChargeMinor?: number;
+  /** CUR-02: original sale currency when multi-currency checkout is used. */
+  baseCurrency?: string;
+  /** CUR-02: original sale total in `baseCurrency` minor units. */
+  baseTotalMinor?: number;
+  /** CUR-02: fixed-point rate (millionths) `baseCurrency → sale currency`. */
+  tenderRateMillionths?: number;
+  /**
+   * Called when the sale completes successfully after resolution — with
+   * the committed sale's result so the caller can build the receipt
+   * preview exactly like the normal completion path.
+   */
+  onComplete: (result: CompleteSaleResult) => void;
   /** Called when the cashier cancels the sale. */
   onCancel: () => void;
 }
@@ -66,8 +91,15 @@ export default function StockShortfallDialog({
   customerId = null,
   customerName,
   serialNumbers,
+  attemptId,
+  promotionIds,
   discountPercent,
   discountLabel,
+  tipMinor,
+  serviceChargeMinor,
+  baseCurrency,
+  baseTotalMinor,
+  tenderRateMillionths,
   onComplete,
   onCancel,
 }: StockShortfallDialogProps) {
@@ -213,16 +245,29 @@ export default function StockShortfallDialog({
         ...(customerName ? { customerName } : {}),
         ...(paymentSplits ? { paymentSplits } : {}),
         ...(serialNumbers ? { serialNumbers } : {}),
+        ...(attemptId ? { attemptId } : {}),
+        // PROMO-3: the same promotion list the first submission carried, in
+        // the same order — the backend re-applies them against the sale
+        // built from `totalMinor`, so the retry matches the first attempt.
+        ...(promotionIds && promotionIds.length > 0 ? { promotionIds } : {}),
         lines: cartLines,
         totalMinor,
         currency,
         discountPercent,
         ...(discountLabel ? { discountLabel } : {}),
+        // FRONTEND-04: forward the CUR-02 tender snapshot collected at
+        // checkout. Without these the backend records tip/service as 0 and
+        // loses the base-currency audit trail on the retry sale.
+        ...(tipMinor != null ? { tipMinor } : {}),
+        ...(serviceChargeMinor != null ? { serviceChargeMinor } : {}),
+        ...(baseCurrency != null ? { baseCurrency } : {}),
+        ...(baseTotalMinor != null ? { baseTotalMinor } : {}),
+        ...(tenderRateMillionths != null ? { tenderRateMillionths } : {}),
         resolutions: resolvedShortfalls,
       };
 
-      await completeSaleWithResolvedShortfalls(sessionToken, args);
-      onComplete();
+      const result = await completeSaleWithResolvedShortfalls(sessionToken, args);
+      onComplete(result);
     } catch (err) {
       const msg = l10nErrorMessage(err, l10n, 'app-error-generic');
       setError(msg);
@@ -241,11 +286,18 @@ export default function StockShortfallDialog({
     customerName,
     paymentSplits,
     serialNumbers,
+    attemptId,
+    promotionIds,
     cartLines,
     totalMinor,
     currency,
     discountPercent,
     discountLabel,
+    tipMinor,
+    serviceChargeMinor,
+    baseCurrency,
+    baseTotalMinor,
+    tenderRateMillionths,
     onComplete,
     l10n,
   ]);

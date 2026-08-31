@@ -1,3 +1,9 @@
+---
+num: 13
+area: release
+title: ADR #13: Desktop App Updater — Tauri Plugin + Settings Page Integration
+status: Partially Implemented (2026-07-16) — Settings About page UI is live; see ADR #14 for release automation
+---
 <!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: RESOLVED (AUDIT-28 2026-08-03) · F1: release workflow is SHIPPED and now builds real Tauri installers with signed latest.json/beta.json manifests (see release.yml + generate-latest-json.mjs). F2: Settings About updater UI is live at SettingsPage.tsx with full updater state + FTL strings. · verified accurate: tauri_plugin_updater registered (lib.rs); @tauri-apps/plugin-updater ^2.10.1 in ui/package.json; tauri.conf.json updater config; oz-pos-updater.key.pub present; capabilities/default.json grants updater:default; UpdateBanner.tsx exists; shared.ftl banner strings present -->
 
 # ADR #13: Desktop App Updater — Tauri Plugin + Settings Page Integration

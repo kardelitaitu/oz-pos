@@ -16,9 +16,9 @@ const mockListStores = vi.fn();
 const mockListTerminals = vi.fn();
 
 vi.mock('@/api/stores', () => ({
-  listStores: () => mockListStores(),
-  setPrimaryStore: vi.fn(),
-  deleteStore: vi.fn(),
+  listStoresScoped: () => mockListStores(),
+  setPrimaryStoreScoped: vi.fn(),
+  deleteStoreProfileScoped: vi.fn(),
 }));
 
 vi.mock('@/api/terminals', () => ({

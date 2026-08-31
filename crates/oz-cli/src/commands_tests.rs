@@ -1,3 +1,4 @@
+use super::user::validate_phc_pin_hash;
 use super::*;
 use rusqlite::{Connection, params};
 
@@ -382,7 +383,14 @@ fn run_user_create_and_list() {
     let conn = setup_in_memory_db();
     seed_role(&conn, "role-staff", "Staff");
     let store = make_store(&conn);
-    run_user_create(&store, "jdoe", "hash123", "John Doe", "role-staff").unwrap();
+    run_user_create(
+        &store,
+        "jdoe",
+        &oz_core::auth::hash_pin("4321").unwrap(),
+        "John Doe",
+        "role-staff",
+    )
+    .unwrap();
 
     let users = store.list_users().unwrap();
     assert!(!users.is_empty());
@@ -480,4 +488,85 @@ fn run_migrate_on_fresh_db() {
     let conn = Connection::open_in_memory().unwrap();
     let result = run_migrate(conn);
     assert!(result.is_ok());
+}
+
+// ── CLI-3: PHC pin-hash validation ────────────────────────────────
+
+#[test]
+fn cli3_phc_validation_accepts_real_argon2_hash() {
+    // Produce a genuine argon2id PHC string through the project's own
+    // hashing helper, then confirm the validator accepts it.
+    let hash = oz_core::auth::hash_pin("4321").unwrap();
+    validate_phc_pin_hash(&hash).unwrap();
+}
+
+#[test]
+fn cli3_phc_validation_rejects_placeholder_garbage() {
+    // The old seeded placeholder value must be rejected up front.
+    let err = validate_phc_pin_hash("hashed_pin_placeholder").unwrap_err();
+    assert!(err.to_string().contains("not a valid PHC string"));
+}
+
+#[test]
+fn cli3_phc_validation_rejects_non_argon2_algorithm() {
+    // A well-formed PHC envelope with a foreign algorithm is rejected too.
+    let err = validate_phc_pin_hash("$pbkdf2-sha256$v=19$abc$def").unwrap_err();
+    // Either the PHC parse or the algorithm check rejects it; both name --pin-hash.
+    assert!(err.to_string().contains("--pin-hash"));
+}
+
+// ── CLI-4: restore removes WAL sidecars before copy ───────────────
+
+#[test]
+fn restore_removes_wal_sidecars_and_replaces_database() {
+    let dir = std::env::temp_dir().join(format!(
+        "oz-cli-restore-{}-{}",
+        std::process::id(),
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let db_path = dir.join("live.db");
+    let backup_path = dir.join("backup.db");
+
+    // Seed a live WAL-mode database.
+    {
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL; CREATE TABLE marker(x); INSERT INTO marker VALUES ('live');",
+        )
+        .unwrap();
+    }
+    // Simulate a crashed process: hot sidecars left on disk (a clean
+    // close would have removed them).
+    std::fs::write(db_path.with_extension("db-wal"), b"hot wal frames").unwrap();
+    std::fs::write(db_path.with_extension("db-shm"), b"hot shm").unwrap();
+
+    // A backup with different content.
+    {
+        let conn = Connection::open(&backup_path).unwrap();
+        conn.execute_batch("CREATE TABLE marker(x); INSERT INTO marker VALUES ('backup');")
+            .unwrap();
+    }
+
+    let conn = Connection::open(&db_path).unwrap();
+    super::run_restore(conn, backup_path.to_str().unwrap()).unwrap();
+
+    // Sidecars are gone.
+    assert!(
+        !db_path.with_extension("db-wal").exists(),
+        "-wal must be removed"
+    );
+    assert!(
+        !db_path.with_extension("db-shm").exists(),
+        "-shm must be removed"
+    );
+
+    // The database content is the backup's.
+    let check = Connection::open(&db_path).unwrap();
+    let value: String = check
+        .query_row("SELECT x FROM marker", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(value, "backup");
+
+    let _ = std::fs::remove_dir_all(&dir);
 }

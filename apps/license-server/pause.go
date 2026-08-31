@@ -23,6 +23,9 @@ type PauseRequest struct {
 // - The subscription remains paused until paused_until, then auto-resumes
 func handlePause(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
+		// Cap request body at 64KB to prevent OOM via oversized JSON payloads (M4 audit).
+		e.Request.Body = http.MaxBytesReader(e.Response, e.Request.Body, 64*1024)
+
 		// Authenticate via Bearer token
 		apiKey, err := extractAPIKey(e.Request.Header.Get("Authorization"))
 		if err != nil {
@@ -39,6 +42,18 @@ func handlePause(app core.App) func(e *core.RequestEvent) error {
 		if req.PauseMonths < 1 || req.PauseMonths > 3 {
 			return e.JSON(http.StatusBadRequest, map[string]any{
 				"error": "pause_months must be 1, 2, or 3",
+			})
+		}
+
+		// ── Rate limit: shared persisted per-IP token bucket (5/hr) ──
+		// pause/resume were the only findTenantByAPIKey (bcrypt) endpoints
+		// without the bucket — an unauthenticated client could hammer them
+		// for cheap CPU exhaustion (the exact flaw status.go's limiter
+		// comment describes for /status). Applied after body validation,
+		// mirroring activate.go ordering (LSE-16).
+		if !ipRateLimiter.allow(e.RealIP()) {
+			return e.JSON(http.StatusTooManyRequests, map[string]any{
+				"error": "rate limit exceeded, try again later",
 			})
 		}
 

@@ -1,3 +1,9 @@
+/*
+last audited 31-08-26 by RSA-Agent (user-role campaign, Section D)
+crate: oz-tablet | status: SAFE | lint: CLEAN
+findings: mirror of the desktop staff gate matrix (verified line-level: STAFF_READ reads, STAFF_CREATE + tier limit create, STAFF_UPDATE update, shared enforce_role_assignment_policy STAFF-02/10, permission-denied tombstones for legacy unscoped commands, ungated bootstrap_owner first-run bootstrap); tablet parity holds — no gate divergence found
+next: none | perf: fine
+*/
 //! Staff management commands — list, create, update staff members and roles.
 //!
 //! These commands are the IPC surface for the Staff Management UI.

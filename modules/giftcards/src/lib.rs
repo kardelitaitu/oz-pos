@@ -1,8 +1,8 @@
 /*
-stub module — created as part of the growable-workspace plan
+last audited 25-07-26 by RSA-Agent (modules-giftcards slice A: lib deep read)
 crate: modules-giftcards | status: SAFE | lint: CLEAN
-findings: No-op Module implementation. No unsafe code, no DB access yet.
-next: Move GiftCard* types out of modules/loyalty into this module's models.rs.
+findings: clean documented STUB correcting misplaced ownership (GiftCard types currently re-exported from modules/loyalty; move here on promotion with one-release re-export); kernel registration + sales dependency; promotion path documents tx-scoped issuance/redemption so a partial redeem can never leave a card debited without a matching sale line; gift-cards feature flag gates capability; sibling tests per convention
+next: none (promote GiftCard types when built; remember MSL-10 pin redaction at the same time) | perf: N/A
 */
 
 //! Gift Cards Module — issuance, balances, and redemption.

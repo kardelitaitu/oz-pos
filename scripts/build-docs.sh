@@ -43,14 +43,14 @@ fi
 
 echo ""
 echo "[3/7] Copying detailed docs into the book source..."
-rm -rf "$BOOK_SRC/guides" "$BOOK_SRC/decisions"
-mkdir -p "$BOOK_SRC/guides" "$BOOK_SRC/decisions"
-# The hand-written guides were archived to docs/archived/ (commit d0fe7481,
-# 2026-08-29) as stale content; copy them from there so the book's Docs
-# category is not empty. See documentation.md §2026-08-30 drift note.
-cp "$WORKSPACE_ROOT"/docs/archived/*.md "$BOOK_SRC/guides/" 2>/dev/null || true
+rm -rf "$BOOK_SRC/guides" "$BOOK_SRC/decisions" "$BOOK_SRC/releases" "$BOOK_SRC/operations"
+mkdir -p "$BOOK_SRC/guides" "$BOOK_SRC/decisions/archived" "$BOOK_SRC/releases" "$BOOK_SRC/operations"
+cp "$WORKSPACE_ROOT"/docs/guides/*.md "$BOOK_SRC/guides/" 2>/dev/null || true
 cp "$WORKSPACE_ROOT"/docs/decisions/*.md "$BOOK_SRC/decisions/" 2>/dev/null || true
-echo "✔ guides + ADRs copied into docs/src/"
+cp "$WORKSPACE_ROOT"/docs/decisions/archived/*.md "$BOOK_SRC/decisions/archived/" 2>/dev/null || true
+cp "$WORKSPACE_ROOT"/docs/releases/*.md "$BOOK_SRC/releases/" 2>/dev/null || true
+cp "$WORKSPACE_ROOT"/docs/operations/*.md "$BOOK_SRC/operations/" 2>/dev/null || true
+echo "✔ guides + ADRs + releases + operations copied into docs/src/"
 
 echo ""
 echo "[4/7] Copying Rust API docs into the book source..."

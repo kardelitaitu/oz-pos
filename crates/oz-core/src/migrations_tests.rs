@@ -501,6 +501,10 @@ fn existing_db_with_legacy_rows_upgrades_idempotently() {
             "20260823_po_receive_state.sql".to_string(),
             "20260824_media_edc.sql".to_string(),
             "20260825_payment_infra.sql".to_string(),
+            "20260826_sale_line_snapshots.sql".to_string(),
+            "20260827_refunds_tenant.sql".to_string(),
+            "20260831_loyalty_multiplier_fixedpoint.sql".to_string(),
+            "20260831_per_tenant_unique_rebuild.sql".to_string(),
         ]
     );
 
@@ -1252,5 +1256,197 @@ fn migration_registry_matches_filesystem() {
         "DB-01: registry/file parity broken — {} files vs {} registered entries",
         files.len(),
         registered.len()
+    );
+}
+
+/// LOYALTY-01: the fixed-point migration must recover the owner's intended
+/// decimal from the corrupted REAL column (1.4 was stored as
+/// 1.3999999999999999111; ROUND(×1e6) gives back 1_400_000), drop the old
+/// column, and re-arm the validation triggers on the new one.
+#[test]
+fn loyalty_multiplier_backfill_from_legacy_real_column() {
+    let conn = fresh();
+    // Pre-migration schema, verbatim from init.sql:310.
+    conn.execute_batch(
+        "CREATE TABLE loyalty_tiers (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            min_points  INTEGER NOT NULL DEFAULT 0,
+            points_per_unit INTEGER NOT NULL DEFAULT 10,
+            earn_multiplier REAL NOT NULL DEFAULT 1.0,
+            colour      TEXT NOT NULL DEFAULT '#6b7280',
+            sort_order  INTEGER NOT NULL DEFAULT 0,
+            created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
+        INSERT INTO loyalty_tiers (id, name, earn_multiplier) VALUES
+            ('t-one',   'One',   1.0),
+            ('t-gold',  'Gold',  1.25),
+            ('t-flip',  'Flip',  1.4),
+            ('t-drift', 'Drift', 1.07);",
+    )
+    .unwrap();
+
+    conn.execute_batch(include_str!(
+        "../migrations/20260831_loyalty_multiplier_fixedpoint.sql"
+    ))
+    .unwrap();
+
+    let get: Vec<(String, i64)> = conn
+        .prepare("SELECT id, earn_multiplier_millionths FROM loyalty_tiers ORDER BY id")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+    assert_eq!(
+        get,
+        vec![
+            ("t-drift".to_string(), 1_070_000),
+            ("t-flip".to_string(), 1_400_000),
+            ("t-gold".to_string(), 1_250_000),
+            ("t-one".to_string(), 1_000_000),
+        ],
+        "backfill must recover the intended decimal for every ≤6-digit multiplier"
+    );
+
+    // The old column is gone…
+    let cols: Vec<String> = conn
+        .prepare("SELECT name FROM pragma_table_info('loyalty_tiers')")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+    assert!(!cols.contains(&"earn_multiplier".to_string()));
+
+    // …and the recreated triggers guard the new column.
+    let err = conn.execute(
+        "INSERT INTO loyalty_tiers (id, name, earn_multiplier_millionths, colour)
+         VALUES ('t-bad', 'Bad', 0, '#6b7280')",
+        [],
+    );
+    assert!(
+        err.is_err(),
+        "zero multiplier must be rejected by the trigger"
+    );
+}
+
+/// LOYALTY-01: fresh installs run init.sql (seeds REAL multipliers) and then the
+/// fixed-point migration — the seeded tiers must land on exact millionths.
+#[test]
+fn loyalty_seeded_tiers_carry_exact_millionths() {
+    let mut conn = fresh();
+    run(&mut conn).unwrap();
+    let mut stmt = conn
+        .prepare("SELECT id, earn_multiplier_millionths FROM loyalty_tiers ORDER BY id")
+        .unwrap();
+    let rows: Vec<(String, i64)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            ("tier-bronze".to_string(), 1_000_000),
+            ("tier-gold".to_string(), 1_500_000),
+            ("tier-platinum".to_string(), 2_000_000),
+            ("tier-silver".to_string(), 1_250_000),
+        ]
+    );
+}
+
+/// The 20260815 composite indexes documented per-tenant SKU/username
+/// uniqueness, but the inline global `UNIQUE` from the reverted init.sql
+/// survived on both tables and dominated it — two tenants could never
+/// share a SKU/username, and the sync upserts (`ON CONFLICT
+/// (tenant_id, sku)`) failed with a bare constraint error instead of
+/// resolving. The rebuild migration must: allow cross-tenant duplicates,
+/// still reject same-tenant duplicates, make the upsert pattern resolve,
+/// and leave every inbound FK intact (defer_foreign_keys rebuild with 10
+/// referencing tables on each side).
+#[test]
+fn per_tenant_unique_rebuild_restores_documented_intent() {
+    let mut conn = fresh();
+    run(&mut conn).unwrap();
+
+    // The parent DROP + RENAME must not strand a single inbound FK.
+    let fk_violations: i64 = conn
+        .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(fk_violations, 0, "rebuild broke referential integrity");
+
+    // Cross-tenant duplicate SKU: allowed (was rejected pre-rebuild).
+    conn.execute(
+        "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+         VALUES ('p-a', 'SKU1', 'A', 100, 'IDR', 't-A')",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+         VALUES ('p-b', 'SKU1', 'B', 100, 'IDR', 't-B')",
+        [],
+    )
+    .unwrap();
+    // Same-tenant duplicate: still rejected by the composite index.
+    let dup = conn.execute(
+        "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+         VALUES ('p-c', 'SKU1', 'C', 100, 'IDR', 't-A')",
+        [],
+    );
+    assert!(dup.is_err(), "same-tenant SKU must stay unique");
+    // The sync_client upsert pattern resolves against the composite index.
+    conn.execute(
+        "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+         VALUES ('p-a', 'SKU1', 'A-updated', 100, 'IDR', 't-A')
+         ON CONFLICT (tenant_id, sku) DO UPDATE SET name = 'A-updated'",
+        [],
+    )
+    .unwrap();
+    let name: String = conn
+        .query_row("SELECT name FROM products WHERE id = 'p-a'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(name, "A-updated");
+
+    // Users: same story on username.
+    conn.execute("INSERT INTO roles (id, name) VALUES ('role-t', 'T')", [])
+        .unwrap();
+    conn.execute(
+        "INSERT INTO users (id, username, pin_hash, display_name, role_id, tenant_id)
+         VALUES ('u-a', 'cashier', 'h', 'A', 'role-t', 't-A')",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO users (id, username, pin_hash, display_name, role_id, tenant_id)
+         VALUES ('u-b', 'cashier', 'h', 'B', 'role-t', 't-B')",
+        [],
+    )
+    .unwrap();
+    let dup_user = conn.execute(
+        "INSERT INTO users (id, username, pin_hash, display_name, role_id, tenant_id)
+         VALUES ('u-c', 'cashier', 'h', 'C', 'role-t', 't-A')",
+        [],
+    );
+    assert!(dup_user.is_err(), "same-tenant username must stay unique");
+
+    // The rebuilt tables kept the non-unique guardrails too, and carry NO
+    // inline constraint-derived unique index (origin 'u' = the old global
+    // `sku UNIQUE`; its absence is the actual fix).
+    let no_inline_unique: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_index_list('products') WHERE origin = 'u'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        no_inline_unique, 0,
+        "inline global UNIQUE constraints must be gone from the rebuilt products table"
     );
 }

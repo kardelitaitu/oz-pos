@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-giftcards slice A: error verified)
+crate: modules-giftcards | status: SAFE | lint: CLEAN
+findings: clean thiserror gift-cards error taxonomy (stub)
+next: none | perf: N/A
+*/
 //! Error type for the gift-card domain.
 //!
 //! Mirrors the shape used by the other module crates (`Db`, `NotFound`,

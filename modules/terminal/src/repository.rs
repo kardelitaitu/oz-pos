@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-terminal slice A: repository verified)
+crate: modules-terminal | status: SAFE | lint: CLEAN
+findings: clean parameterized terminal queries
+next: none | perf: N/A
+*/
 //! Terminal Repository — database persistence layer for POS terminals.
 
 use crate::error::TerminalError;

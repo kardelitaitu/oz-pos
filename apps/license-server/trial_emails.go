@@ -3,12 +3,12 @@ package main
 import (
 	"fmt"
 	"log"
+	netmail "net/mail"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tools/types"
 )
 
 // trialEmailMilestone defines a day-offset and the email template to send.
@@ -177,9 +177,13 @@ func runTrialEmailScanner(app core.App) {
 	sent := 0
 
 	for _, sub := range subs {
-		startsAt, err := time.Parse(time.RFC3339, sub.GetString("starts_at"))
-		if err != nil {
-			log.Printf("trial-email-scanner: skipping sub %s — invalid starts_at: %v", sub.Id, err)
+		// LSE-23: PocketBase datetimes are "2006-01-02 15:04:05.000Z" (no
+		// "T"), which time.Parse(RFC3339, ...) always rejects — the old
+		// code skipped EVERY subscription, so the scanners never sent a
+		// single email. Use the PocketBase DateTime accessor instead.
+		startsAt := sub.GetDateTime("starts_at").Time()
+		if startsAt.IsZero() {
+			log.Printf("trial-email-scanner: skipping sub %s — missing starts_at", sub.Id)
 			continue
 		}
 
@@ -197,7 +201,10 @@ func runTrialEmailScanner(app core.App) {
 			if milestone.Segment != segment {
 				continue
 			}
-			if daysSinceStart != milestone.DayOffset {
+			// LSE-24: >= (not ==) so a scan skipped by downtime catches up;
+			// the trial_email_log idempotency check below prevents
+			// duplicates, which is exactly what the log exists for.
+			if daysSinceStart < milestone.DayOffset {
 				continue
 			}
 
@@ -223,7 +230,7 @@ func runTrialEmailScanner(app core.App) {
 			salesCount, revenue := getTrialUsageSummary(sub)
 
 			// Calculate days remaining.
-			expiresAt, _ := time.Parse(time.RFC3339, sub.GetString("expires_at"))
+			expiresAt := sub.GetDateTime("expires_at").Time()
 			daysRemaining := int(time.Until(expiresAt).Hours() / 24)
 			if daysRemaining < 0 {
 				daysRemaining = 0
@@ -309,6 +316,15 @@ func detectLocale(tenant *core.Record) string {
 
 // sendTrialEmail builds and sends a trial milestone email via SMTP.
 func sendTrialEmail(to, subject, body string) error {
+	// LSE-25: `to` lands in an RFC 5322 header AND an RCPT TO command —
+	// reject anything that is not a single well-formed address (blocks
+	// CRLF/control-character injection; the PocketBase email field is the
+	// primary defense, this is defense in depth).
+	addr, err := netmail.ParseAddress(to)
+	if err != nil || addr.Address != to {
+		return fmt.Errorf("invalid recipient address %q", to)
+	}
+
 	host := strings.TrimSpace(os.Getenv("OZ_SMTP_HOST"))
 	if host == "" {
 		return fmt.Errorf("OZ_SMTP_HOST is not configured")
@@ -345,17 +361,22 @@ func buildTrialEmail(from, to, subject, body string) []byte {
 // ensureTrialEmailLogCollection creates the trial_email_log collection
 // if it doesn't exist (idempotent migration for existing deployments).
 func ensureTrialEmailLogCollection(app core.App) error {
-	_, err := app.FindCollectionByNameOrId("trial_email_log")
+	existing, err := app.FindCollectionByNameOrId("trial_email_log")
 	if err == nil {
-		return nil // already exists
+		// LSE-5 repair: legacy migrations created this collection with
+		// empty-string create/update/delete rules, which PocketBase treats
+		// as PUBLIC guest writes (nil is superuser-only). Anonymous row
+		// tampering would break the email idempotency log.
+		return ensureSuperuserOnlyRules(app, existing)
 	}
 
 	collection := core.NewBaseCollection("trial_email_log")
-	collection.ListRule = types.Pointer("@request.auth.id != ''")
-	collection.ViewRule = types.Pointer("@request.auth.id != ''")
-	collection.CreateRule = types.Pointer("") // server-only
-	collection.UpdateRule = types.Pointer("") // server-only
-	collection.DeleteRule = types.Pointer("") // server-only
+	// Superuser-only (LSE-5): nil rules; "" would be PUBLIC guest access.
+	collection.ListRule = nil
+	collection.ViewRule = nil
+	collection.CreateRule = nil
+	collection.UpdateRule = nil
+	collection.DeleteRule = nil
 
 	collection.Fields.Add(&core.TextField{
 		Name:     "subscription",
@@ -445,15 +466,16 @@ func runWinBackScanner(app core.App) {
 	sent := 0
 
 	for _, sub := range subs {
-		// Use expires_at as the churn reference point.
-		expiresAt, err := time.Parse(time.RFC3339, sub.GetString("expires_at"))
-		if err != nil {
+		// LSE-23: GetDateTime, not RFC3339 parse of the raw PB string.
+		expiresAt := sub.GetDateTime("expires_at").Time()
+		if expiresAt.IsZero() {
 			continue
 		}
 		daysSinceExpiry := int(now.Sub(expiresAt).Hours() / 24)
 
 		for _, milestone := range winBackMilestones {
-			if daysSinceExpiry != milestone.DayOffset {
+			// LSE-24: catch-up semantics, same rationale as the trial scanner.
+			if daysSinceExpiry < milestone.DayOffset {
 				continue
 			}
 

@@ -3,7 +3,7 @@ title: Aktivasi Lisensi
 description: Dapatkan kunci lisensi, aktifkan di aplikasi, dan kelola perangkat Anda.
 category: gettingStarted
 order: 4
-updated: "2026-08-17"
+updated: "2026-08-30"
 ---
 
 ## Dapatkan kunci lisensi
@@ -28,6 +28,36 @@ lisensi dan langganan bertanda tangan disimpan di perangkat.
 Aktivasi mengikat lisensi ke perangkat keras. Kunci yang sama dapat
 diaktifkan di register sebanyak yang diizinkan paket Anda, dan admin tenant
 dapat mencabut perangkat dari jarak jauh.
+
+## Instal ulang atau pemulihan lisensi
+
+Pindah ke register baru, atau instal ulang setelah disk direset? Masukkan
+email dan kunci lisensi yang sama — aplikasi akan mengaktifkan ulang,
+mengembalikan langganan Anda yang sudah ada, dan POS tetap berfungsi.
+Paket, perangkat, dan data Anda tidak terpengaruh.
+
+Aplikasi juga menyimpan **kunci manajemen lisensi** di latar belakang. Kunci
+inilah yang memungkinkan aplikasi memperpanjang langganan dan memeriksa
+status lisensi, dan terpisah dari kunci lisensi yang Anda ketik. Jika
+instalasi baru tidak memilikinya (disk direset, register baru), aplikasi
+akan meminta Anda **memulihkannya**:
+
+1. Di aplikasi, pilih **Pulihkan lisensi** (atau coba perpanjang — aplikasi
+   akan memandu Anda).
+2. OZ-POS mengirim **kode pemulihan 6 digit** ke alamat email akun Anda.
+3. Masukkan kode tersebut di aplikasi. Kunci manajemen Anda dipulihkan dan
+   kunci lama berhenti bekerja.
+
+Dua pengaman melindungi Anda di sini:
+
+- Kunci manajemen hanya dirotasi **maksimal sekali per 24 jam**. Jika ada
+  yang meminta lagi sebelumnya, permintaan ditolak — coba lagi nanti atau
+  hubungi dukungan.
+- **Setiap rotasi mengirimkan pemberitahuan email.** Jika Anda menerima
+  pemberitahuan rotasi atau kode pemulihan yang tidak Anda minta, ada yang
+  mungkin mencoba menggunakan kunci lisensi Anda: masuk di
+  [halaman login](../../login/), tinjau dan cabut perangkat yang tidak
+  dikenal di akun Anda, dan [hubungi dukungan](../../support/).
 
 ## Akun Anda di situs web
 

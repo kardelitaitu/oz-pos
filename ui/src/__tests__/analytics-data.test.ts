@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ── Real-data IPC mocks ─────────────────────────────────────────────
 // The loaders call through the scoped reporting commands; jsdom has no
@@ -15,8 +15,8 @@ vi.mock('@/api/reports', () => ({
     { month: '2026-07', total_minor: 35000000, currency: 'USD', sale_count: 280, cogs_minor: 14000000, gross_profit_minor: 21000000, gross_margin_percent: 60 },
   ])),
   getHourlyHeatmap: vi.fn(() => Promise.resolve([
-    { day_of_week: 1, hour: 10, total_minor: 350000, sale_count: 3 },
-    { day_of_week: 2, hour: 11, total_minor: 400000, sale_count: 4 },
+    { currency: 'USD', day_of_week: 1, hour: 10, total_minor: 350000, sale_count: 3 },
+    { currency: 'USD', day_of_week: 2, hour: 11, total_minor: 400000, sale_count: 4 },
   ])),
   getTopProducts: vi.fn(() => Promise.resolve([])),
   getLowStockAlerts: vi.fn(() => Promise.resolve([])),
@@ -27,7 +27,7 @@ vi.mock('@/api/reports', () => ({
   getCustomerSplit: vi.fn(() => Promise.resolve({ new_count: 0, returning_count: 0 })),
   getPaymentMethodBreakdown: vi.fn(() => Promise.resolve([])),
   getDiscountsSummary: vi.fn(() => Promise.resolve({ sale_count: 0, discounted_sale_count: 0, share_percent: 0, codes: [] })),
-  getVoidedSalesSummary: vi.fn(() => Promise.resolve({ void_count: 0, void_total_minor: 0 })),
+  getVoidedSalesSummary: vi.fn(() => Promise.resolve([])),
   getVoidedItems: vi.fn(() => Promise.resolve([])),
   getInventoryTurnover: vi.fn(() => Promise.resolve({ units_sold: 0, stock_on_hand: 0, sku_count: 0, range_days: 0 })),
   getInventoryTrend: vi.fn(() => Promise.resolve([])),
@@ -76,6 +76,7 @@ import {
   previousRange,
   rangeForGranularity,
   seriesDelta,
+  storeOffsetMs,
   turnDelta,
   type AnalyticsQuery,
   bucketGranularity,
@@ -122,6 +123,77 @@ describe('rangeForGranularity — inclusive date windows', () => {
       from: '2026-08-03',
       to: '2026-08-17',
     });
+  });
+});
+
+// REP-03: the analytics window must anchor to the STORE's calendar day,
+// not the device's — a laptop in another region (or with the wrong clock
+// zone) must still query "today" as the store sees it. The store tz is a
+// fixed offset string ('+HH:MM'); anything unparseable anchors to UTC,
+// mirroring the Rust contract in db/reports.rs.
+describe('rangeForGranularity — store-timezone anchoring (REP-03)', () => {
+  // Pin "now" to 2026-08-31T18:30:00Z — a Monday in UTC, already Tuesday
+  // in UTC+7, still Monday afternoon in UTC-5.
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-31T18:30:00Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('UTC store anchors to the UTC day', () => {
+    const r = rangeForGranularity('daily', '', '', 'UTC');
+    expect(r.to).toBe('2026-08-31');
+    expect(r.from).toBe('2026-08-31'); // Monday — week starts today
+  });
+
+  it('UTC+7 store rolls into its next day before UTC midnight', () => {
+    const r = rangeForGranularity('daily', '', '', '+07:00');
+    expect(r.to).toBe('2026-09-01'); // 01:30 Tuesday store time
+    expect(r.from).toBe('2026-08-31'); // Monday-first week
+  });
+
+  it('UTC-5 store stays on the earlier day', () => {
+    const r = rangeForGranularity('daily', '', '', '-05:00');
+    expect(r.to).toBe('2026-08-31'); // 13:30 Monday store time
+    expect(r.from).toBe('2026-08-31');
+  });
+
+  it('monthly/yearly windows follow the store day too', () => {
+    expect(rangeForGranularity('monthly', '', '', '+07:00')).toEqual({
+      from: '2026-09-01',
+      to: '2026-09-01',
+    });
+    expect(rangeForGranularity('yearly', '', '', '+07:00')).toEqual({
+      from: '2026-01-01',
+      to: '2026-09-01',
+    });
+  });
+
+  it('IANA names and garbage anchor to UTC, never the device zone', () => {
+    const iana = rangeForGranularity('daily', '', '', 'Asia/Jakarta');
+    const junk = rangeForGranularity('daily', '', '', 'nonsense');
+    expect(iana.to).toBe('2026-08-31');
+    expect(junk.to).toBe('2026-08-31');
+  });
+
+  it('null/undefined store tz keeps the legacy device-local anchor', () => {
+    const legacy = rangeForGranularity('daily', '', '');
+    const utc = rangeForGranularity('daily', '', '', null);
+    // On a UTC CI host these coincide; the contract is only that an
+    // explicit null behaves like the old call shape.
+    expect(legacy.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(utc.to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('storeOffsetMs parses the contract', () => {
+    expect(storeOffsetMs('+07:00')).toBe(7 * 3_600_000);
+    expect(storeOffsetMs('-05:30')).toBe(-19_800_000);
+    expect(storeOffsetMs('UTC')).toBe(0);
+    expect(storeOffsetMs('Asia/Jakarta')).toBe(0);
+    expect(storeOffsetMs('+99:00')).toBe(0);
+    expect(storeOffsetMs(null)).toBe(0);
   });
 });
 
@@ -381,9 +453,9 @@ describe('heatmap intensity builders', () => {
   it('weekdayIntensities aggregates hourly rows by Monday-first day', () => {
     // day_of_week 1 = Monday (JS getDay), day_of_week 7 = Sunday.
     const map = weekdayIntensities([
-      { day_of_week: 1, hour: 9, total_minor: 100, sale_count: 1 },
-      { day_of_week: 1, hour: 12, total_minor: 300, sale_count: 2 },
-      { day_of_week: 7, hour: 19, total_minor: 200, sale_count: 2 },
+      { currency: 'USD', day_of_week: 1, hour: 9, total_minor: 100, sale_count: 1 },
+      { currency: 'USD', day_of_week: 1, hour: 12, total_minor: 300, sale_count: 2 },
+      { currency: 'USD', day_of_week: 7, hour: 19, total_minor: 200, sale_count: 2 },
     ]);
     // Monday aggregates 100 + 300 = 400 → strongest; Sunday 200 → 2.
     expect(map.get('0')).toBe(4);
@@ -392,7 +464,7 @@ describe('heatmap intensity builders', () => {
 
   it('weeklyHourlyIntensities keys are dayIdx:hour', () => {
     const map = weeklyHourlyIntensities([
-      { day_of_week: 1, hour: 10, total_minor: 100, sale_count: 1 },
+      { currency: 'USD', day_of_week: 1, hour: 10, total_minor: 100, sale_count: 1 },
     ]);
     expect(map.get('0:10')).toBe(4);
   });
@@ -479,7 +551,7 @@ describe('heatmap intensity builders', () => {
   });
 
   it('buildHeatmapIntensities dispatches by granularity', () => {
-    const hourly = [{ day_of_week: 1, hour: 10, total_minor: 100, sale_count: 1 }];
+    const hourly = [{ currency: 'USD', day_of_week: 1, hour: 10, total_minor: 100, sale_count: 1 }];
     const daily = [{ date: '2026-07-27', total_minor: 100, currency: 'USD', sale_count: 1, cogs_minor: 0, gross_profit_minor: 100, gross_margin_percent: 100 }];
     const weekly = [{ week_start: '2026-07-21', total_minor: 100, currency: 'USD', sale_count: 1, cogs_minor: 0, gross_profit_minor: 100, gross_margin_percent: 100 }];
 
@@ -494,9 +566,9 @@ describe('heatmap intensity builders', () => {
 
 describe('buildHeatmapCells — per-cell values for the heatmap card', () => {
   const hourly = [
-    { day_of_week: 1, hour: 10, total_minor: 100, sale_count: 2 },
-    { day_of_week: 1, hour: 10, total_minor: 100, sale_count: 1 },
-    { day_of_week: 2, hour: 11, total_minor: 50, sale_count: 3 },
+    { currency: 'USD', day_of_week: 1, hour: 10, total_minor: 100, sale_count: 2 },
+    { currency: 'USD', day_of_week: 1, hour: 10, total_minor: 100, sale_count: 1 },
+    { currency: 'USD', day_of_week: 2, hour: 11, total_minor: 50, sale_count: 3 },
   ];
 
   it('sums duplicate keys and normalizes the level against the peak', () => {
@@ -528,7 +600,7 @@ describe('buildHeatmapCells — per-cell values for the heatmap card', () => {
     expect(peak?.key).toBe('0:10');
     expect(peak?.cell.minor).toBe(200);
 
-    const empty = buildHeatmapCells('weekly', { hourly: [{ day_of_week: 1, hour: 10, total_minor: 0, sale_count: 0 }] });
+    const empty = buildHeatmapCells('weekly', { hourly: [{ currency: 'USD', day_of_week: 1, hour: 10, total_minor: 0, sale_count: 0 }] });
     expect(heatPeak(empty)).toBeNull();
   });
 
@@ -538,7 +610,7 @@ describe('buildHeatmapCells — per-cell values for the heatmap card', () => {
     expect(low?.key).toBe('1:11');
     expect(low?.cell.minor).toBe(50);
 
-    const empty = buildHeatmapCells('weekly', { hourly: [{ day_of_week: 1, hour: 10, total_minor: 0, sale_count: 0 }] });
+    const empty = buildHeatmapCells('weekly', { hourly: [{ currency: 'USD', day_of_week: 1, hour: 10, total_minor: 0, sale_count: 0 }] });
     expect(heatLow(empty)).toBeNull();
   });
 });

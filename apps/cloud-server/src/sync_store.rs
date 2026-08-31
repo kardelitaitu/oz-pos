@@ -1,6 +1,13 @@
+/*
+last audited 25-07-26 by RSA-Agent (cloud-server slice B: sync_store verified)
+crate: cloud-server | status: SAFE | lint: CLEAN
+findings: all queue reads tenant-scoped in SQL (WHERE tenant_id = ?1); push per-item outcomes with duplicate detection; CS-3 FIXED — the SQLite push_batch arm now runs in one transaction
+next: CS-3 | perf: N/A
+*/
 //! Sync data-store abstraction for the cloud server's sync function.
 //!
-//! This is the foundation of Phase 1.2 in `unify-auth-and-sync.md`: the
+//! This is the foundation of Phase 1.2 in
+//! `docs/archived/2026-08-15-unify-auth-and-sync.md`: the
 //! whole POS data layer ([`oz_core::Store`]) is a synchronous `rusqlite`
 //! borrow-wrapper used by desktop, tablet, *and* cloud clients, so it cannot
 //! be rewritten to Postgres. The cloud server therefore needs a **parallel
@@ -162,9 +169,16 @@ impl SyncStore {
         match self {
             Self::Sqlite(conn) => {
                 let conn = conn.lock().await;
+                // CS-3 fix: wrap the batch in ONE transaction — the
+                // previous per-item autocommit loop persisted a partial
+                // batch on a mid-batch failure (crash, disk error), and
+                // the push_handler doc already claims single-transaction
+                // semantics. UNIQUE failures roll back only their own
+                // statement in SQLite, so per-item outcomes are unchanged.
+                let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
                 let mut results = Vec::with_capacity(items.len());
                 for item in items {
-                    let outcome = match conn.execute(
+                    let outcome = match tx.execute(
                         "INSERT INTO offline_queue (id, action, payload, status, retry_count, \
                          last_error, created_at, synced_at, tenant_id)
                          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
@@ -190,6 +204,8 @@ impl SyncStore {
                     };
                     results.push(outcome);
                 }
+                // The write path must COMMIT (drop would roll back the inserts).
+                tx.commit().map_err(|e| e.to_string())?;
                 Ok(results)
             }
             Self::Postgres(pool) => {

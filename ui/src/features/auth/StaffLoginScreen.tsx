@@ -9,7 +9,7 @@ import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import { Localized } from '@/frontend/shared/Localized';
 import { useLocalization } from '@fluent/react';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { convertFileSrc } from '@/api/tauri';
 import './StaffLoginScreen.css';
 
 // ── SVG icons ───────────────────────────────────────────────────────

@@ -110,11 +110,14 @@ fn update_tier_rejects_invalid_values() {
     let s = store(&conn);
 
     for (field, args) in [
-        ("name", ("", 0, 10, 1.0, "#ffffff")),
-        ("min_points", ("Bronze", -1, 10, 1.0, "#ffffff")),
-        ("points_per_unit", ("Bronze", 0, 0, 1.0, "#ffffff")),
-        ("earn_multiplier", ("Bronze", 0, 10, 0.0, "#ffffff")),
-        ("colour", ("Bronze", 0, 10, 1.0, "not-a-colour")),
+        ("name", ("", 0, 10, 1_000_000, "#ffffff")),
+        ("min_points", ("Bronze", -1, 10, 1_000_000, "#ffffff")),
+        ("points_per_unit", ("Bronze", 0, 0, 1_000_000, "#ffffff")),
+        (
+            "earn_multiplier_millionths",
+            ("Bronze", 0, 10, 0, "#ffffff"),
+        ),
+        ("colour", ("Bronze", 0, 10, 1_000_000, "not-a-colour")),
     ] {
         let err = s
             .update_tier("tier-bronze", args.0, args.1, args.2, args.3, args.4)
@@ -289,11 +292,11 @@ fn list_tiers_returns_seeded() {
 fn update_tier_modifies_fields() {
     let conn = fresh();
     let updated = store(&conn)
-        .update_tier("tier-bronze", "Bronze Updated", 0, 15, 1.5, "#ff0000")
+        .update_tier("tier-bronze", "Bronze Updated", 0, 15, 1_500_000, "#ff0000")
         .unwrap();
     assert_eq!(updated.name, "Bronze Updated");
     assert_eq!(updated.points_per_unit, 15);
-    assert_eq!(updated.earn_multiplier, 1.5);
+    assert_eq!(updated.earn_multiplier_millionths, 1_500_000);
 }
 
 #[test]
@@ -413,7 +416,7 @@ fn earn_points_no_integer_truncation_for_sub_dollar_amounts() {
         .get_or_create_loyalty_account("cust-1")
         .unwrap();
 
-    // total_minor = 155 ($1.55), points_per_unit = 10, earn_multiplier = 1.0
+    // total_minor = 155 ($1.55), points_per_unit = 10, multiplier 1.0 (1_000_000)
     // Correct math: 155 * 10 / 100 = 15.5 → round → 16
     // Integer-division bug: 155 * 10 / 100 = 15 (truncated) → 15
     let txn = store(&conn).earn_points("cust-1", "sale-1", 155).unwrap();
@@ -503,7 +506,7 @@ fn redeem_points_no_account_returns_not_found() {
 fn update_tier_not_found() {
     let conn = fresh();
     let err = store(&conn)
-        .update_tier("nonexistent", "No Tier", 0, 10, 1.0, "#000")
+        .update_tier("nonexistent", "No Tier", 0, 10, 1_000_000, "#000")
         .unwrap_err();
     assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "loyalty_tier"));
 }
@@ -677,4 +680,321 @@ fn sale_less_transaction_rows_are_not_projection_constrained() {
         )
         .unwrap_or_else(|e| panic!("sale-less adjust row {i} must insert: {e}"));
     }
+}
+
+// ── LOY-06: finalize_sale awards loyalty points atomically ─────────────
+
+fn seed_pending_sale(
+    conn: &Connection,
+    id: &str,
+    customer_id: Option<&str>,
+    total_minor: i64,
+    base_total_minor: Option<i64>,
+) {
+    conn.execute(
+        "INSERT INTO sales (id, total_minor, currency, line_count, status, customer_id,
+                            created_at, updated_at, subtotal_minor, tax_total_minor,
+                            base_total_minor)
+         VALUES (?1, ?2, 'USD', 0, 'pending', ?3, '2025-01-01T00:00:00.000Z',
+                 '2025-01-01T00:00:00.000Z', ?2, 0, ?4)",
+        params![id, total_minor, customer_id, base_total_minor],
+    )
+    .unwrap();
+}
+
+fn earn_points_for(conn: &Connection, sale_id: &str) -> Option<i64> {
+    conn.query_row(
+        "SELECT points FROM loyalty_transactions WHERE sale_id = ?1 AND txn_type = 'earn'",
+        params![sale_id],
+        |r| r.get(0),
+    )
+    .ok()
+}
+
+#[test]
+fn finalize_sale_awards_points_to_customer_sale() {
+    let conn = fresh();
+    seed_customer(&conn, "cust-1", "Alice");
+    seed_pending_sale(&conn, "sale-1", Some("cust-1"), 700, None);
+
+    store(&conn).finalize_sale("sale-1").unwrap();
+
+    // Bronze default: points_per_unit = 10, multiplier 1.0 → 700*10/100 = 70.
+    assert_eq!(
+        earn_points_for(&conn, "sale-1"),
+        Some(70),
+        "finalizing a customer sale must award tier points"
+    );
+    let projected: i64 = conn
+        .query_row(
+            "SELECT loyalty_points FROM customers WHERE id = 'cust-1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        projected, 70,
+        "customers.loyalty_points projection must update"
+    );
+}
+
+#[test]
+fn finalize_sale_awards_on_base_total_when_converted() {
+    let conn = fresh();
+    seed_customer(&conn, "cust-1", "Alice");
+    // Multi-currency charge: customer paid 115500 IDR-minor for a 700
+    // USD-minor sale. Points must follow the BASE total, not the charge
+    // amount — otherwise the charge currency silently multiplies rewards.
+    seed_pending_sale(&conn, "sale-1", Some("cust-1"), 115_500, Some(700));
+
+    store(&conn).finalize_sale("sale-1").unwrap();
+
+    assert_eq!(
+        earn_points_for(&conn, "sale-1"),
+        Some(70),
+        "earn must use base_total_minor when present (currency-naive formula guard)"
+    );
+}
+
+#[test]
+fn finalize_sale_without_customer_awards_nothing() {
+    let conn = fresh();
+    seed_pending_sale(&conn, "sale-1", None, 700, None);
+
+    store(&conn).finalize_sale("sale-1").unwrap();
+
+    assert_eq!(earn_points_for(&conn, "sale-1"), None);
+}
+
+#[test]
+fn finalize_sale_zero_total_completes_without_award() {
+    let conn = fresh();
+    seed_customer(&conn, "cust-1", "Alice");
+    seed_pending_sale(&conn, "sale-1", Some("cust-1"), 0, None);
+
+    store(&conn).finalize_sale("sale-1").unwrap();
+
+    // Too-small-to-earn is expected, not an error: the sale must still be
+    // completed and no ledger row written.
+    let status: String = conn
+        .query_row("SELECT status FROM sales WHERE id = 'sale-1'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(status, "completed");
+    assert_eq!(earn_points_for(&conn, "sale-1"), None);
+}
+
+#[test]
+fn finalize_replay_awards_once() {
+    let conn = fresh();
+    seed_customer(&conn, "cust-1", "Alice");
+    seed_pending_sale(&conn, "sale-1", Some("cust-1"), 700, None);
+
+    let s = store(&conn);
+    s.finalize_sale("sale-1").unwrap();
+    s.finalize_sale("sale-1").unwrap();
+
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM loyalty_transactions WHERE sale_id = 'sale-1' AND txn_type = 'earn'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 1, "replayed finalize must not double-award");
+}
+
+// ── LOY-03: proportional refund reversal ───────────────────────
+//
+// LOY-06 made completion award points atomically; refunds must
+// claw back their proportional share in the same DB tx, or every
+// refund silently leaks points.
+
+fn acct_state(conn: &Connection, customer_id: &str) -> (i64, i64, String) {
+    conn.query_row(
+        "SELECT points, lifetime_points, COALESCE(tier_id, '')
+         FROM loyalty_accounts WHERE customer_id = ?1",
+        params![customer_id],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )
+    .unwrap()
+}
+
+fn seed_earned_sale(conn: &Connection, sale_total: i64) {
+    seed_customer(conn, "cust-1", "Alice");
+    seed_sale_for_customer(conn, "sale-1", Some("cust-1"), sale_total);
+    store(conn)
+        .earn_points("cust-1", "sale-1", sale_total)
+        .unwrap();
+}
+
+#[test]
+fn refund_reversal_deducts_proportionally() {
+    let conn = fresh();
+    // Bronze: 10 pts / 100 minor → 10000 earns 1000.
+    seed_earned_sale(&conn, 10000);
+    let txn = reverse_loyalty_on_refund(&conn, "sale-1", "ref-1", 3000, 10000)
+        .unwrap()
+        .expect("30% refund reverses 30% of the award");
+    assert_eq!(txn.points, -300);
+    assert_eq!(txn.txn_type, "refund_reversal");
+    assert_eq!(acct_state(&conn, "cust-1").0, 700);
+    assert_eq!(acct_state(&conn, "cust-1").1, 700);
+    let projection: i64 = conn
+        .query_row(
+            "SELECT loyalty_points FROM customers WHERE id = 'cust-1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(projection, 700);
+}
+
+#[test]
+fn refund_reversal_is_idempotent_per_refund() {
+    let conn = fresh();
+    seed_earned_sale(&conn, 10000);
+    assert!(
+        reverse_loyalty_on_refund(&conn, "sale-1", "ref-1", 3000, 10000)
+            .unwrap()
+            .is_some()
+    );
+    // Replay of the SAME refund id (retry after a crash) must not deduct twice.
+    assert!(
+        reverse_loyalty_on_refund(&conn, "sale-1", "ref-1", 3000, 10000)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(acct_state(&conn, "cust-1").0, 700);
+}
+
+#[test]
+fn refund_reversal_cumulative_capped_at_award() {
+    let conn = fresh();
+    seed_earned_sale(&conn, 10000); // 1000 pts awarded
+    let t1 = reverse_loyalty_on_refund(&conn, "sale-1", "ref-1", 6000, 10000)
+        .unwrap()
+        .unwrap();
+    assert_eq!(t1.points, -600);
+    // Second 60% refund: only 400 headroom remains under the award.
+    let t2 = reverse_loyalty_on_refund(&conn, "sale-1", "ref-2", 6000, 10000)
+        .unwrap()
+        .unwrap();
+    assert_eq!(t2.points, -400);
+    // Nothing left to reverse.
+    assert!(
+        reverse_loyalty_on_refund(&conn, "sale-1", "ref-3", 1000, 10000)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(acct_state(&conn, "cust-1").0, 0);
+}
+
+#[test]
+fn refund_reversal_without_earn_is_noop() {
+    let conn = fresh();
+    seed_customer(&conn, "cust-1", "Alice");
+    seed_sale_for_customer(&conn, "sale-1", Some("cust-1"), 10000);
+    // Legacy sale that never earned (LOY-06 rollout boundary).
+    assert!(
+        reverse_loyalty_on_refund(&conn, "sale-1", "ref-1", 5000, 10000)
+            .unwrap()
+            .is_none()
+    );
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM loyalty_transactions", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[test]
+fn refund_reversal_floors_balance_at_zero() {
+    let conn = fresh();
+    seed_earned_sale(&conn, 10000); // 1000 pts
+    // Customer spent points meanwhile: balance 200, lifetime 1000.
+    conn.execute(
+        "UPDATE loyalty_accounts SET points = 200 WHERE customer_id = 'cust-1'",
+        [],
+    )
+    .unwrap();
+    let txn = reverse_loyalty_on_refund(&conn, "sale-1", "ref-1", 10000, 10000)
+        .unwrap()
+        .unwrap();
+    assert_eq!(txn.points, -1000, "ledger records the full reversal");
+    let (points, lifetime, _) = acct_state(&conn, "cust-1");
+    assert_eq!(points, 0, "balance floors at zero, never negative");
+    assert_eq!(lifetime, 0);
+}
+
+#[test]
+fn refund_reversal_demotes_tier_when_lifetime_drops() {
+    let conn = fresh();
+    seed_earned_sale(&conn, 10000); // lifetime 1000 → Gold (min 500)
+    assert_eq!(acct_state(&conn, "cust-1").2, "tier-gold");
+    reverse_loyalty_on_refund(&conn, "sale-1", "ref-1", 10000, 10000).unwrap();
+    assert_eq!(
+        acct_state(&conn, "cust-1").2,
+        "tier-bronze",
+        "lifetime back to 0 → tier recomputed down"
+    );
+}
+
+// ── LOYALTY-01: fixed-point multiplier, exact points ──────────────────
+
+#[test]
+fn compute_points_exact_half_up_boundaries() {
+    // The $22.50 case: 22.5 × 1.4 = 31.5 exact → 32. The old float path
+    // computed 31.499999999999996 → 31 (scan-verified: 585 such bases ≤ 2M
+    // for multiplier 1.4, all rounding DOWNWARD).
+    assert_eq!(compute_points(2250, 1_400_000), 32);
+    // Further scan-verified flip bases: exact 59.5 → 60, exact 115.5 → 116.
+    assert_eq!(compute_points(4250, 1_400_000), 60);
+    assert_eq!(compute_points(8250, 1_400_000), 116);
+    // base=250: exact 3.5 → 4. (The old float happened to be right here —
+    // the product snapped back to exactly 3.5 — pin it so it stays right.)
+    assert_eq!(compute_points(250, 1_400_000), 4);
+    // The pre-existing $1.55 boundary (155 × 10 = 1550; 15.5 → 16).
+    assert_eq!(compute_points(1550, 1_000_000), 16);
+    // Non-boundary rounding: 123.45 → 123, 123.5 → 124, 123.6 → 124.
+    assert_eq!(compute_points(12345, 1_000_000), 123);
+    assert_eq!(compute_points(12350, 1_000_000), 124);
+    assert_eq!(compute_points(12360, 1_000_000), 124);
+    // 1.25× (seeded Silver): 4.4 × 1.25 = 5.5 → 6.
+    assert_eq!(compute_points(440, 1_250_000), 6);
+    // Zero and identity.
+    assert_eq!(compute_points(0, 1_400_000), 0);
+    assert_eq!(compute_points(99, 1_000_000), 1); // 0.99 → 1
+    assert_eq!(compute_points(49, 1_000_000), 0); // 0.49 → 0
+}
+
+#[test]
+fn compute_points_extremes_do_not_overflow() {
+    // i128 intermediate: i64::MAX × 1.0 stays in i64 range.
+    assert_eq!(compute_points(i64::MAX, 1_000_000), i64::MAX / 100);
+    // Absurd multiplier: result saturates instead of wrapping.
+    assert_eq!(compute_points(i64::MAX, i64::MAX), i64::MAX);
+    // Negative base (defensive — sale totals are non-negative): half-up
+    // toward +∞, the house convention. -3.5 → -3.
+    assert_eq!(compute_points(-250, 1_400_000), -3);
+}
+
+#[test]
+fn earn_points_22_50_at_1_4x_tier_earns_32() {
+    // The real-world repro, end to end through the DB path: Gold-style
+    // tier "1 point per dollar, 1.4× bonus", $22.50 sale.
+    let conn = fresh();
+    seed_customer(&conn, "cust-1", "Alice");
+    seed_sale(&conn, "sale-1");
+    let s = store(&conn);
+    s.get_or_create_loyalty_account("cust-1").unwrap();
+    s.update_tier("tier-bronze", "Bronze", 0, 1, 1_400_000, "#cd7f32")
+        .unwrap();
+    let txn = s.earn_points("cust-1", "sale-1", 2250).unwrap();
+    assert_eq!(
+        txn.points, 32,
+        "22.5 × 1.4 = 31.5 → half-up 32; the old f64 path earned 31"
+    );
 }

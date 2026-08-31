@@ -2,7 +2,7 @@
 // CurrencyContext mismatch.
 /// @refresh reset
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
-import { getDefaultCurrency, setDefaultCurrency as setDefaultCurrencyApi } from '@/api/currency';
+import { getDefaultCurrency, getDefaultCurrencyScoped, setDefaultCurrency as setDefaultCurrencyApi } from '@/api/currency';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -11,6 +11,13 @@ interface CurrencyContextValue {
   currency: string;
   /** Persist a new default currency to the backend and update the context. */
   setCurrency: (code: string) => Promise<void>;
+  /**
+   * Re-read the default currency (CurrencyContext reload): the scoped
+   * per-store value (CUR-03) when a session token is supplied, the
+   * global bootstrap value otherwise. A failed refresh keeps the last
+   * good value — it must never reset the display currency.
+   */
+  refresh: (sessionToken?: string | null) => Promise<void>;
   /** True while the initial currency value is being fetched from the backend. */
   loading: boolean;
 }
@@ -57,8 +64,20 @@ export function CurrencyProvider({ children, fallback = 'USD' }: CurrencyProvide
     setCurrencyState(code);
   }, []);
 
+  const refresh = useCallback(async (sessionToken?: string | null) => {
+    try {
+      const stored = sessionToken
+        ? await getDefaultCurrencyScoped(sessionToken)
+        : await getDefaultCurrency();
+      if (stored) setCurrencyState(stored);
+    } catch {
+      // Keep the current value — a failed refresh must not change the
+      // display currency out from under the user.
+    }
+  }, []);
+
   return (
-    <CurrencyContext.Provider value={{ currency, setCurrency, loading }}>
+    <CurrencyContext.Provider value={{ currency, setCurrency, refresh, loading }}>
       {children}
     </CurrencyContext.Provider>
   );

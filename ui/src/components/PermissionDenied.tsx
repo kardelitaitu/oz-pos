@@ -1,3 +1,8 @@
+/*
+last audited 31-08-26 by RSA-Agent (user-role campaign, Section H)
+findings: clean — reports the missing registry permission key (0046) when supplied, full Localized i18n, live in AppShell + TabletAppShell
+next: batch into the fix-order phase | perf: n/a (presentational)
+*/
 import { Localized } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import './PermissionDenied.css';

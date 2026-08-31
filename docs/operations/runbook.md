@@ -1,5 +1,7 @@
 # Operations Runbook — OZ-POS (unified Northflank deployment)
 
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (0 findings) · verified against HEAD: apps/unified/healthcheck.sh + docs/archived/2026-08-15-unify-auth-and-sync.md exist; sync port 3099 (config.rs:61); rate limits push100/pull300/status300/snapshot50 + token 30/min/IP + license 5/IP/hr (activate.go:585) all match code; all 6 §2 metric names present in cloud-server/unified -->
+
 One Northflank service, one Docker image. Two functions behind one caddy
 reverse proxy (single public port):
 
@@ -8,7 +10,7 @@ reverse proxy (single public port):
 | Auth (license) | PocketBase + Go hooks | 8080 | PocketBase SQLite (`pb_data/data.db`) |
 | Sync (cloud) | Rust axum | 3099 | Postgres (managed addon) |
 
-This runbook covers the §11 reliability contract of `unify-auth-and-sync.md`:
+This runbook covers the §11 reliability contract of `docs/archived/2026-08-15-unify-auth-and-sync.md`:
 Postgres PITR, PocketBase backup, restore drills, and alerting on retention
 flatline, queue depth, webhook 5xx, and token-mint rate. It also documents the
 metrics that make each incident observable.
@@ -155,7 +157,7 @@ the throwaway. A drill that has never been executed is not a backup strategy.
 ### 4.2 PocketBase SQLite (auth)
 
 Low-traffic, but irreplaceable: `tenants`, `license_keys`, `subscriptions`,
-`tenant_machines`. Two acceptable strategies per `unify-auth-and-sync.md`:
+`tenant_machines`. Two acceptable strategies per `docs/archived/2026-08-15-unify-auth-and-sync.md`:
 
 **Option A — litestream (continuous, recommended):** replicate
 `/data/pb_data/data.db` to object storage continuously. Minimal config:
@@ -306,7 +308,7 @@ data is exposed:
 
 The sync limiter and snapshot cache are **per-process** (in-memory); scaling
 past one sync instance requires moving both to a shared store (Redis) — see
-the growth path in `unify-auth-and-sync.md`.
+the growth path in `docs/archived/2026-08-15-unify-auth-and-sync.md`.
 
 ---
 
@@ -411,7 +413,7 @@ docker volume prune
 Both live under `/data` so one persistent volume covers the whole service.
 The old `pb_data:/pb/pb_data` mount from the standalone license service no
 longer exists — migrating that data requires a PocketBase backup → restore
-(see `unify-auth-and-sync.md` §Phase 3.5).
+(see `docs/archived/2026-08-15-unify-auth-and-sync.md` §Phase 3.5).
 
 ### Environment variables
 
@@ -424,6 +426,7 @@ longer exists — migrating that data requires a PocketBase backup → restore
 | `OZ_ENFORCE_PLANS` | `1` | reject free-plan sync (403 plan_required) |
 | `OZ_CORS_ORIGINS` | optional | extra origins beyond the default allowlist |
 | `OZ_DB_POOL_SIZE` | `20` | Postgres pool size (ignored for SQLite) |
+| `DATABASE_URL` | `postgres://user:pass@host:5432/db?sslmode=require` | optional — switch from SQLite to the managed PostgreSQL addon (free on Northflank). Requires `sslmode=require` (fail-fast at boot). See `docs/archived/2026-08-15-unify-auth-and-sync.md` §Phase 3.5 for the full cutover. The image defaults to `/data/oz-pos.db` (SQLite); this variable overrides the connection string. |
 | `OZ_LOG_FORMAT` | `json` or unset | log output format (plain unless `json`) |
 | `OZ_APPLY_SCHEMA` | `0` post-cutover | default applies full DDL at startup; set `0` once the schema exists and the app runs as the restricted `oz_app` role (§6.3) |
 | `OZ_REDIRECT_ONLY` / `OZ_SYNC_REDIRECT_URL` | optional | sync-redirect mode — `OZ_REDIRECT_ONLY=true` requires `OZ_SYNC_REDIRECT_URL`; dev/testing only |
@@ -443,6 +446,17 @@ longer exists — migrating that data requires a PocketBase backup → restore
 > `OZ_ADMIN_KEY` are set** — startup fails fast by design (no dev-secret
 > fallback, no open token mint). Without `OZ_PRODUCTION`, the service runs
 > in dev mode: `/api/v1/tokens` mints freely.
+
+> **Scaling beyond the free tier:** the unified image defaults to SQLite
+> (sync `/data/oz-pos.db` + PocketBase `/data/pb_data/`), which is fine for
+> the target 200–400 terminals. When you approach that ceiling — or observe
+> SQLite lock contention in production (`SQLITE_BUSY` in the logs, sync
+> latency growing) — enable the **free Northflank PostgreSQL addon** and set
+> `DATABASE_URL` (see the env table above). The managed PG addon eliminates
+> the single-writer lock and is the documented production target (see
+> `docs/archived/2026-08-15-unify-auth-and-sync.md` §Phase 3.5 for the full cutover,
+> including the RLS migration). Keep the `/data` volume either way — PocketBase
+> stays on SQLite under `/data/pb_data`.
 
 ### Verification checklist (post-deploy)
 
@@ -512,6 +526,15 @@ If the service's native git trigger beats the workflow to the API (HTTP
 build for the same commit** and watches it to conclusion — a merge shows
 one green, auditable check either way.
 
+> **⏱️ Expected build time:** the unified image compiles the full Rust
+> workspace (`oz-cloud-server` + its dependency graph), which takes roughly
+> **15 minutes** on Northflank's 4-core / 16 GB builders. The deploy job's
+> 90-minute timeout and 50-minute poll window are sized for worst-case
+> cold caches — a warm cache (unchanged `Cargo.toml`/`Cargo.lock` between
+> builds) lands closer to ~10 minutes. A push that touches only docs or the
+> `website/`/`ui/` tree does not trigger a deploy (path filter above), so
+> these builds are backend-only.
+
 **Manual redeploy from a shell** (same API call, no GitHub needed):
 
 ```bash
@@ -526,6 +549,36 @@ curl -sS -X POST "https://api.northflank.com/v1/projects/$PROJECT/services/$SERV
 — Build configuration → branch restrictions → `main` — Northflank then
 auto-builds + auto-deploys on every push itself. Same outcome, but
 invisible in GitHub Actions; `deploy.yml` is the preferred, auditable path.
+
+### 8.6 Logging & Debugging
+
+The unified image runs three processes under supervisord (caddy, license,
+sync); all write to the container's stdout/stderr, which Northflank
+captures and surfaces in **Dashboard → service → Logs**.
+
+**Recommended log format:** set `OZ_LOG_FORMAT=json` in the service env
+(§8 table) so the Rust cloud-server emits structured, queryable log lines
+instead of plain text. The Go license server (PocketBase) logs plain text
+regardless — the JSON toggle only affects the sync function.
+
+**Common debugging flows:**
+
+| Goal | How |
+|------|-----|
+| Tail live logs | Northflank dashboard → service → **Logs** (stream). |
+| Increase Rust log verbosity | temporarily add `RUST_LOG=debug` (or `=trace`) to the service env and redeploy; remove afterwards. |
+| Find a crash / restart reason | check the Logs tab around the restart timestamp; supervisord restarts a crashed process automatically (`autorestart=true`), so the crash line precedes the restart marker. |
+| Inspect process state | `exec` into the service from the Northflank dashboard: `ps aux`, `supervisorctl status`, `wget -qO- http://localhost:3099/health`. |
+
+**Structured querying tip:** with `OZ_LOG_FORMAT=json`, the Logs viewer's
+filter box can match `"level":"error"` or `"component":"sync"` — far easier
+than scanning plain-text lines. When diagnosing a specific endpoint, add
+the request path to the filter (e.g. `/api/v1/tokens`).
+
+> ⚠️ Crash logs are retained only as long as Northflank's log retention
+> policy — for long-term diagnostics export the log stream before a
+> container is replaced.
+
 ---
 ---
 
@@ -625,3 +678,5 @@ the ~5 min portal build — probe #3 stays the ground truth for what actually sh
   says. Add it to the §5 alert rules as a page-level check.
 - **Treat a red `deploy` job as an incident:** add "Website Deploy `deploy` job failed"
   to §3 — the check job being green is not a signal that anything shipped.
+
+> last audited 31-08-26 by docs-auditor

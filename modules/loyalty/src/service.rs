@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-loyalty slice A: service verified)
+crate: modules-loyalty | status: SAFE | lint: CLEAN
+findings: clean thin service facade
+next: none | perf: N/A
+*/
 //! Loyalty & Gift Card Service — business logic workflows.
 
 use crate::error::LoyaltyError;

@@ -1,4 +1,10 @@
 //! Sales Service — domain business logic, checkout orchestration, and event dispatching.
+/*
+last audited 25-07-26 by RSA-Agent (modules-sales slice B: service deep read)
+crate: modules-sales | status: SAFE | lint: CLEAN
+findings: MSL-2 FIXED — void_sale enforces the transition matrix (Active-to-Voided only via SaleStatus::can_transition_to; Completed sales are rejected with refund-flow guidance): the guard only rejects an already-voided sale, then writes SaleStatus::Voided directly via update_sale_status, which previously let a COMPLETED sale be voided without transition_to (which forbids Completed-to-Voided); voiding also neither records a Refund nor restores stock, so the refund path (Refund model) should be the route for completed sales. Proposed: enforce the transition matrix here (Active-to-Voided only; route Completed-to-Voided to the refund flow or make the bypass an explicit policy). process_checkout is clean: cart construction validated, double transition enforces the DAG, tx-scoped insert, versioned
+next: fix MSL-2 in the fix-order phase | perf: N/A
+*/
 
 use crate::error::SalesError;
 use foundation::{Cart, SaleStatus};
@@ -42,7 +48,15 @@ impl SalesService {
         repo.get_sale(id)
     }
 
-    /// Void an active or completed sale.
+    /// Void an active sale.
+    ///
+    /// MSL-2 fix: the transition matrix (`SaleStatus::can_transition_to`)
+    /// allows only Active→Voided. The previous guard rejected just an
+    /// already-voided sale and wrote `Voided` unconditionally, so a
+    /// Completed sale could be voided — even though `transition_to`
+    /// forbids Completed→Voided — with no refund recorded and no stock
+    /// restored. Completed sales must go through the refund flow
+    /// (`Refund` model) instead.
     pub fn void_sale(conn: &Connection, id: &str) -> Result<(), SalesError> {
         let repo = SalesRepository::new(conn);
         let sale = repo.get_sale(id)?.ok_or_else(|| SalesError::NotFound {
@@ -50,8 +64,18 @@ impl SalesService {
             id: id.to_string(),
         })?;
 
-        if sale.is_terminal() && sale.status == SaleStatus::Voided {
+        if sale.status == SaleStatus::Voided {
             return Err(SalesError::validation("status", "sale is already voided"));
+        }
+
+        if !SaleStatus::can_transition_to(sale.status, SaleStatus::Voided) {
+            return Err(SalesError::validation(
+                "status",
+                format!(
+                    "cannot void a {:?} sale; completed sales must go through the refund flow",
+                    sale.status
+                ),
+            ));
         }
 
         repo.update_sale_status(id, SaleStatus::Voided)?;
@@ -60,103 +84,5 @@ impl SalesService {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use foundation::{Cart, CartLine, Sku};
-
-    fn usd() -> foundation::Currency {
-        "USD".parse().unwrap()
-    }
-
-    fn cart_with_line() -> Cart {
-        let mut cart = Cart::new(usd());
-        cart.add_line(CartLine::new(
-            Sku::new("COFFEE"),
-            2,
-            foundation::Money {
-                minor_units: 350,
-                currency: usd(),
-            },
-        ))
-        .unwrap();
-        cart
-    }
-
-    fn fresh_conn() -> rusqlite::Connection {
-        oz_core::migrations::fresh_db()
-    }
-
-    #[test]
-    fn process_checkout_persists_completed_sale() {
-        let mut conn = fresh_conn();
-        let sale = SalesService::process_checkout(
-            &mut conn,
-            &cart_with_line(),
-            Some("u-1".to_string()),
-            "cash".to_string(),
-        )
-        .unwrap();
-
-        assert_eq!(sale.status, SaleStatus::Completed);
-        assert_eq!(sale.payment_method.as_deref(), Some("cash"));
-        assert_eq!(sale.total.minor_units, 700);
-
-        // Read back from the DB through the service.
-        let fetched = SalesService::get_sale(&conn, &sale.id).unwrap().unwrap();
-        assert_eq!(fetched.id, sale.id);
-        assert_eq!(fetched.status, SaleStatus::Completed);
-        assert_eq!(fetched.total.minor_units, 700);
-        assert_eq!(fetched.line_count, 1);
-        assert_eq!(fetched.lines.len(), 1);
-        assert_eq!(fetched.lines[0].sku, "COFFEE");
-    }
-
-    #[test]
-    fn process_checkout_without_user_id() {
-        let mut conn = fresh_conn();
-        let sale =
-            SalesService::process_checkout(&mut conn, &cart_with_line(), None, "card".to_string())
-                .unwrap();
-        assert_eq!(sale.payment_method.as_deref(), Some("card"));
-        assert!(sale.user_id.is_none());
-    }
-
-    #[test]
-    fn get_sale_via_service_missing_returns_none() {
-        let conn = fresh_conn();
-        assert!(SalesService::get_sale(&conn, "missing").unwrap().is_none());
-    }
-
-    #[test]
-    fn void_sale_marks_sale_voided() {
-        let mut conn = fresh_conn();
-        let sale =
-            SalesService::process_checkout(&mut conn, &cart_with_line(), None, "cash".to_string())
-                .unwrap();
-
-        SalesService::void_sale(&conn, &sale.id).unwrap();
-
-        let fetched = SalesService::get_sale(&conn, &sale.id).unwrap().unwrap();
-        assert_eq!(fetched.status, SaleStatus::Voided);
-        assert!(fetched.is_terminal());
-    }
-
-    #[test]
-    fn void_sale_not_found_errors() {
-        let conn = fresh_conn();
-        let err = SalesService::void_sale(&conn, "missing").unwrap_err();
-        assert!(err.to_string().contains("missing"));
-    }
-
-    #[test]
-    fn void_sale_already_voided_errors() {
-        let mut conn = fresh_conn();
-        let sale =
-            SalesService::process_checkout(&mut conn, &cart_with_line(), None, "cash".to_string())
-                .unwrap();
-
-        SalesService::void_sale(&conn, &sale.id).unwrap();
-        let err = SalesService::void_sale(&conn, &sale.id).unwrap_err();
-        assert!(err.to_string().contains("already voided"));
-    }
-}
+#[path = "service_tests.rs"]
+mod tests;

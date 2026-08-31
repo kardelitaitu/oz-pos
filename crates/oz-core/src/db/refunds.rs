@@ -2,8 +2,8 @@
 /*
 last audited 25-07-26 by RSA-Agent (oz-core slice B5 part 4: refunds deep read)
 crate: oz-core | status: SAFE | lint: CLEAN
-findings: refund stock restoration per ADR-19 §5.3 is well built (FIFO full / reverse partial crediting via deduction_locations JSON, qty<=deducted guard, legacy fallback with warn audit, audit row inside the same tx); COR-25 MEDIUM: the over-refund guard runs OUTSIDE the transaction AND reads cumulative refunded with .unwrap_or(0) — a DB error reads as zero refunds and bypasses the guard (fail-open on a MONEY guard; same class as COR-11), and the check-then-act is race-safe only under the single-connection mutex; COR-26 LOW: refund currency never compared to the sale currency (comment defers to caller's checked_add, nothing enforces) — a cross-currency refund passes the over-refund guard against the wrong unit
-next: move the guard inside the tx, propagate SUM errors, compare currencies (COR-25/COR-26) | perf: N/A
+findings: refund stock restoration per ADR-19 §5.3 is well built (FIFO full / reverse partial crediting via deduction_locations JSON, qty<=deducted guard, legacy fallback with warn audit, audit row inside the same tx); COR-25 MEDIUM: FIXED 30-08-26 — the over-refund guard now runs inside the transaction and propagates cumulative-SUM read errors (was: outside the tx with .unwrap_or(0), fail-open on a money guard); COR-26 LOW: FIXED 30-08-26 — create_refund now rejects a refund currency that differs from the sale currency (was: sale_currency read then discarded, trusting callers)
+next: none for the guard path | perf: N/A
 */
 //!
 //! ADR-19 §5.3: On refund, stock is credited back to the original deduction
@@ -38,16 +38,26 @@ impl Store<'_> {
                 message: format!("invalid UTF-8 in currency bytes: {e}"),
             })?;
 
+        // COR-25: the guard reads and the refund writes share one
+        // transaction, so the check-then-act window is closed against any
+        // other writer on another connection (e.g. sync replay).
+        let tx = self.conn.unchecked_transaction()?;
+
         // ── 0. Over-refund guard ──────────────────────────────────
         // A sale may be refunded AT MOST its original total. The sale stays
         // 'completed' (nothing transitions it to 'refunded'), so without
         // this check the same sale could be refunded unlimited times and
         // stock credited each time. Reject when the cumulative refunded
         // amount plus this refund would exceed the sale's total.
-        let (sale_total, sale_currency): (i64, String) = match self.conn.query_row(
-            "SELECT total_minor, currency FROM sales WHERE id = ?1",
+        let (sale_total, sale_currency, sale_customer_id, sale_base_total): (
+            i64,
+            String,
+            Option<String>,
+            Option<i64>,
+        ) = match tx.query_row(
+            "SELECT total_minor, currency, customer_id, base_total_minor FROM sales WHERE id = ?1",
             params![refund.sale_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         ) {
             Ok(pair) => pair,
             Err(rusqlite::Error::QueryReturnedNoRows) => {
@@ -58,14 +68,27 @@ impl Store<'_> {
             }
             Err(e) => return Err(CoreError::Db(e)),
         };
-        let already_refunded: i64 = self
-            .conn
+        // COR-26: the refund must be denominated in the sale's own currency.
+        // The per-currency SUM below only bounds refunds that share the
+        // sale's unit; a foreign-currency refund would compare minor units
+        // against the wrong total (and could be repeated once per currency
+        // to bypass the guard). Enforced here so no caller has to be
+        // trusted to have folded with `Money::zero(sale.currency)`.
+        if cur_str != sale_currency {
+            return Err(CoreError::CurrencyMismatch(
+                sale_currency,
+                cur_str.to_owned(),
+            ));
+        }
+        // COR-25: fail CLOSED — a failed cumulative read must abort the
+        // refund, never be mistaken for "no refunds yet" via unwrap_or(0).
+        let already_refunded: i64 = tx
             .query_row(
                 "SELECT COALESCE(SUM(total_minor), 0) FROM refunds WHERE sale_id = ?1 AND currency = ?2",
                 params![refund.sale_id, cur_str],
                 |row| row.get(0),
             )
-            .unwrap_or(0);
+            .map_err(CoreError::Db)?;
         let after = already_refunded
             .checked_add(refund.total.minor_units)
             .ok_or_else(|| CoreError::Validation {
@@ -84,9 +107,6 @@ impl Store<'_> {
                 ),
             });
         }
-        let _ = sale_currency; // currency mismatch handled by caller's checked_add
-
-        let tx = self.conn.unchecked_transaction()?;
 
         // ── 1. Persist refund + lines ──────────────────────────────
         tx.execute(
@@ -134,6 +154,52 @@ impl Store<'_> {
             }
             Some(locations) => {
                 self.credit_refund_from_deduction_locations(&tx, refund, locations)?;
+            }
+        }
+
+        // ── 2b. LOY-03: reverse the loyalty award proportionally ───
+        // Same transaction as the refund rows; a loyalty bug must not
+        // block the refund itself (same non-fatal policy as the award
+        // hook in finalize_sale), so failures are logged, not raised.
+        if let Err(e) = crate::db::loyalty::reverse_loyalty_on_refund(
+            &tx,
+            &refund.sale_id,
+            &refund.id,
+            refund.total.minor_units,
+            sale_total,
+        ) {
+            tracing::warn!(
+                "loyalty refund reversal failed for sale {} (refund {}): {e}",
+                refund.sale_id,
+                refund.id
+            );
+        }
+
+        // ── 2c. CRM-06: reverse lifetime spend (base currency) ────
+        // The completion hook accrues spend in base currency; the refund
+        // converts its amount at the rate recorded on the sale
+        // (refund_base = refund_total × base_total / total, integer
+        // round-half-up — no floats on money). Floors at zero: legacy
+        // customers accrued nothing during the projection-gap window.
+        if let Some(customer_id) = sale_customer_id.as_deref() {
+            let refund_base = match (sale_base_total, sale_total) {
+                (Some(base), t) if t > 0 && base != t => {
+                    let num = i128::from(refund.total.minor_units) * i128::from(base);
+                    let den = i128::from(t);
+                    ((num * 2 + den) / (den * 2)) as i64
+                }
+                _ => refund.total.minor_units,
+            };
+            if let Err(e) = tx.execute(
+                "UPDATE customers SET total_spent_minor = MAX(total_spent_minor - ?1, 0),
+                 updated_at = ?2 WHERE id = ?3",
+                params![refund_base, refund.created_at, customer_id],
+            ) {
+                tracing::warn!(
+                    "customer spend reversal failed for sale {} (refund {}): {e}",
+                    refund.sale_id,
+                    refund.id
+                );
             }
         }
 

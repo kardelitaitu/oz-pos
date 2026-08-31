@@ -110,8 +110,15 @@ async fn throwaway_test_pool(
             .ok()?;
     }
     // PID + random suffix: unique even if the OS reuses a PID while a
-    // stale DB from a crashed run is still present.
-    let db_name = format!("{prefix}_{}_{}", std::process::id(), uuid::Uuid::now_v7());
+    // stale DB from a crashed run is still present. `.simple()` (hex only)
+    // is REQUIRED: the name is interpolated as an unquoted identifier, and
+    // UUID `Display` hyphens made `CREATE DATABASE` a syntax error on the
+    // server — every throwaway-DB test silently skipped and reported PASS.
+    let db_name = format!(
+        "{prefix}_{}_{}",
+        std::process::id(),
+        uuid::Uuid::now_v7().simple()
+    );
     if admin
         .execute(&format!("CREATE DATABASE {db_name}"), &[])
         .await
@@ -308,6 +315,13 @@ async fn pg_integration_rest_roundtrip() {
         course: None,
         modifiers_json: None,
     }];
+    // CUR-02: a multi-currency tender sale — the metadata the desktop
+    // PaymentModal snapshots must round-trip through the cloud.
+    sale.base_currency = Some("IDR".into());
+    sale.base_total_minor = Some(11_000_000);
+    sale.tender_rate_millionths = Some(16_500_000);
+    sale.tip_minor = 150;
+    sale.service_charge_minor = 70;
     create_sale(&pool, &tenant, &sale)
         .await
         .expect("create_sale");
@@ -320,6 +334,19 @@ async fn pg_integration_rest_roundtrip() {
     assert_eq!(fetched_sale.lines[0].sku, sku);
     assert_eq!(fetched_sale.total.minor_units, 700);
     assert_eq!(fetched_sale.status, SaleStatus::Pending);
+    // CUR-02 cloud gap: the multi-currency tender metadata and the
+    // tip/service amounts must survive the create_sale → get_sale
+    // round-trip. The PG INSERT previously omitted all five columns, so
+    // the cloud always saw NULL/0 and reconciliation could not see what
+    // the customer was actually charged in.
+    assert_eq!(fetched_sale.base_currency, sale.base_currency);
+    assert_eq!(fetched_sale.base_total_minor, sale.base_total_minor);
+    assert_eq!(
+        fetched_sale.tender_rate_millionths,
+        sale.tender_rate_millionths
+    );
+    assert_eq!(fetched_sale.tip_minor, sale.tip_minor);
+    assert_eq!(fetched_sale.service_charge_minor, sale.service_charge_minor);
     assert_eq!(
         get_sale(&pool, &tenant, &unique_id("pg-nosale"))
             .await
@@ -493,14 +520,20 @@ async fn pg_integration_rest_rls_non_owner() {
         .await
         .expect("probe role setup should succeed");
 
+    // Probe connections must target the THROWAWAY DB (where PG_INIT was
+    // applied and the owner's rows live), not the base DB behind `url` —
+    // the base DB has no schema under the throwaway harness.
+    let (base, _old_db) = url.rsplit_once('/').expect("URL must have a database path");
+    let db_url = format!("{base}/{db_name}");
+
     // Probe pool connecting AS the restricted role (same endpoint, just
     // different credentials) — never applies PG_INIT, the owner did.
-    let scheme_end = url.find("://").expect("URL has a scheme") + 3;
-    let at = url.find('@').expect("URL has credentials");
+    let scheme_end = db_url.find("://").expect("URL has a scheme") + 3;
+    let at = db_url.find('@').expect("URL has credentials");
     let probe_url = format!(
         "{}oz_rest_probe:oz_rest_probe_pw@{}",
-        &url[..scheme_end],
-        &url[at + 1..]
+        &db_url[..scheme_end],
+        &db_url[at + 1..]
     );
     let probe_pool = {
         use deadpool_postgres::Manager;
@@ -532,7 +565,7 @@ async fn pg_integration_rest_rls_non_owner() {
     .expect("owner create_product");
 
     // Proof 1a: dedicated probe connection, no GUC → zero rows visible.
-    let (probe_raw, conn) = tokio_postgres::connect(&url, tokio_postgres::NoTls)
+    let (probe_raw, conn) = tokio_postgres::connect(&db_url, tokio_postgres::NoTls)
         .await
         .expect("dedicated probe connection");
     tokio::spawn(async move {
@@ -702,7 +735,11 @@ async fn pg_integration_concurrent_adjust_stock() {
     }
     // PID + random suffix: unique even if the OS reuses a PID while a
     // stale DB from a crashed run is still present.
-    let db_name = format!("oz_race_{}_{}", std::process::id(), uuid::Uuid::now_v7());
+    let db_name = format!(
+        "oz_race_{}_{}",
+        std::process::id(),
+        uuid::Uuid::now_v7().simple()
+    );
     if admin
         .execute(&format!("CREATE DATABASE {db_name}"), &[])
         .await
@@ -1273,4 +1310,109 @@ async fn pg_integration_terminal_auth_survives_rls_cutover() {
     // `oz_email_discovery` deliberately left in place — see the NOTE at the
     // stale-role cleanup above. Dropping it here would race concurrent
     // tests that use it; it is re-created idempotently by the next run.
+}
+
+// ── Exchange rates (ARCH-01-family repair, 2026-08-31) ─────────────
+
+/// Pure validation unit tests — no database needed.
+#[test]
+fn validate_rate_request_boundaries() {
+    // Happy.
+    assert!(validate_exchange_rate_request("USD", "IDR", 1, Some("2026-08-31")).is_ok());
+    assert!(validate_exchange_rate_request("USD", "IDR", 16_000_000, None).is_ok());
+    // Pair + positivity.
+    assert!(validate_exchange_rate_request("USD", "USD", 1, None).is_err());
+    assert!(validate_exchange_rate_request("USD", "IDR", 0, None).is_err());
+    assert!(validate_exchange_rate_request("USD", "IDR", -5, None).is_err());
+    // ISO-4217 shape. `Currency` FromStr is case-insensitive (IPC
+    // parity): lowercase is a valid code; storage keeps the casing.
+    assert!(validate_exchange_rate_request("US", "IDR", 1, None).is_err());
+    assert!(validate_exchange_rate_request("usd", "IDR", 1, None).is_ok());
+    assert!(validate_exchange_rate_request("DOLLAR", "IDR", 1, None).is_err());
+    // Date: same parser as the command layer — chrono %Y-%m-%d, which
+    // accepts non-zero-padded forms like "2026-8-31".
+    assert!(validate_exchange_rate_request("USD", "IDR", 1, Some("2026-8-31")).is_ok());
+    assert!(validate_exchange_rate_request("USD", "IDR", 1, Some("2026-13-01")).is_err());
+    assert!(validate_exchange_rate_request("USD", "IDR", 1, Some("2026-00-10")).is_err());
+    assert!(validate_exchange_rate_request("USD", "IDR", 1, Some("2026-01-32")).is_err());
+    assert!(validate_exchange_rate_request("USD", "IDR", 1, Some("2026-01-00")).is_err());
+    assert!(validate_exchange_rate_request("USD", "IDR", 1, Some("20260101")).is_err());
+    assert!(validate_exchange_rate_request("USD", "IDR", 1, Some("")).is_err());
+}
+
+/// Integration roundtrip against a live Postgres (skips when
+/// unreachable). Runs on the SHARED base DB: rates are global reference
+/// data with no locking, and every row is created with a unique
+/// `source` tag and deleted by id in cleanup, so parallel tests cannot
+/// collide.
+#[tokio::test]
+async fn pg_exchange_rates_roundtrip() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let Some(pool) = test_pool(&url).await else {
+        eprintln!("pg_exchange_rates_roundtrip: skipped (no PG at {url})");
+        return;
+    };
+    // Unique dates per run so a crashed run's leftovers cannot collide
+    // with the duplicate-detection assertion below.
+    let salt = uuid::Uuid::now_v7().simple().to_string();
+    let month = salt.as_bytes()[0] % 9 + 1;
+    let day = salt.as_bytes()[1] % 20 + 1;
+    let d1 = format!("2026-{month:02}-{day:02}");
+    let d2 = format!("2026-{month:02}-{:02}", day + 1);
+    let d3 = format!("2026-{month:02}-{:02}", day + 2);
+
+    let r1 = create_exchange_rate_pg(&pool, "USD", "IDR", 16_000_000, "pgtest", &d1)
+        .await
+        .expect("create r1");
+    let r2 = create_exchange_rate_pg(&pool, "USD", "IDR", 16_500_000, "pgtest", &d2)
+        .await
+        .expect("create r2");
+    let r3 = create_exchange_rate_pg(&pool, "IDR", "USD", 1, "pgtest", &d3)
+        .await
+        .expect("create r3");
+
+    // Duplicate (pair, date) → Conflict (unique violation mapping).
+    let dup = create_exchange_rate_pg(&pool, "USD", "IDR", 17_000_000, "pgtest", &d1).await;
+    assert!(matches!(dup, Err(PgError::Conflict)), "dup: {dup:?}");
+
+    // Unseeded currency → Validation (FK on currencies.code).
+    let fk = create_exchange_rate_pg(&pool, "USD", "ZZZ", 1, "pgtest", &d1).await;
+    assert!(matches!(fk, Err(PgError::Validation(_))), "fk: {fk:?}");
+
+    // Latest-per-pair must pick the newest effective date per pair.
+    let latest = list_latest_exchange_rates_pg(&pool).await.expect("latest");
+    let mine: Vec<_> = latest.iter().filter(|r| r.source == "pgtest").collect();
+    assert_eq!(mine.len(), 2, "one row per pgtest pair: {mine:?}");
+    let usd_idr = mine
+        .iter()
+        .find(|r| r.from_currency == "USD" && r.to_currency == "IDR")
+        .expect("USD->IDR present");
+    assert_eq!(usd_idr.id, r2.id, "newest effective_date wins");
+    assert_eq!(usd_idr.rate_millionths, 16_500_000);
+
+    // Full history includes all three rows.
+    let all = list_exchange_rates_pg(&pool).await.expect("list");
+    for id in [&r1.id, &r2.id, &r3.id] {
+        assert!(all.iter().any(|r| &r.id == id), "history missing {id}");
+    }
+
+    // Pair lookup: newest first.
+    let got = get_latest_exchange_rate_pg(&pool, "USD", "IDR")
+        .await
+        .expect("pair");
+    assert_eq!(got.id, r2.id);
+
+    // Delete + 404 semantics.
+    for id in [&r1.id, &r2.id, &r3.id] {
+        delete_exchange_rate_pg(&pool, id).await.expect("delete");
+        assert!(matches!(
+            delete_exchange_rate_pg(&pool, id).await,
+            Err(PgError::NotFound)
+        ));
+    }
+    assert!(matches!(
+        get_latest_exchange_rate_pg(&pool, "USD", "IDR").await,
+        Err(PgError::NotFound)
+    ));
 }

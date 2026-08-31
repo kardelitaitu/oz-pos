@@ -1,4 +1,5 @@
 use super::*;
+use crate::commands::authz::require_permission_for_user;
 use oz_core::migrations;
 use rusqlite::Connection;
 use tauri::Manager as _;

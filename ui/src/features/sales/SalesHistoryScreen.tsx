@@ -6,8 +6,8 @@ import {
   listSales,
   getSale,
   printSalesReceipt,
-  listRefunds,
-  voidSale,
+  listRefundsScoped,
+  voidSaleScoped,
   type SaleListItem,
   type SaleDetail,
   type RefundDto,
@@ -263,11 +263,7 @@ export default function SalesHistoryScreen() {
     setVoiding(true);
     setVoidError(null);
     try {
-      await voidSale({
-        saleId: voidTarget.id,
-        userId: session?.user_id ?? 'unknown',
-        reason: voidReason || l10n.getString('sales-history-void-default-reason'),
-      });
+      await voidSaleScoped(sessionToken!, voidTarget.id, voidReason || l10n.getString('sales-history-void-default-reason'));
       invalidateCache(voidTarget.id);
       setVoidTarget(null);
       setVoidReason('');
@@ -348,7 +344,7 @@ export default function SalesHistoryScreen() {
       setDetailLoading(false);
       // Still fetch refunds (they may have changed)
       try {
-        const refundData = await listRefunds(id).catch(() => [] as RefundDto[]);
+        const refundData = await listRefundsScoped(sessionToken!, id).catch(() => [] as RefundDto[]);
         setRefunds(refundData);
       } catch {
         setRefunds([]);
@@ -371,7 +367,7 @@ export default function SalesHistoryScreen() {
     try {
       const [sale, refundData, margins] = await Promise.all([
         getSale(id),
-        listRefunds(id).catch(() => [] as RefundDto[]),
+        listRefundsScoped(sessionToken!, id).catch(() => [] as RefundDto[]),
         sessionToken
           ? getSaleLineMarginsScoped(sessionToken, id).catch(() => [] as SaleLineMarginDto[])
           : Promise.resolve([] as SaleLineMarginDto[]),
@@ -452,7 +448,7 @@ export default function SalesHistoryScreen() {
   const loadRefunds = useCallback(async (saleId: string) => {
     setRefundsLoading(true);
     try {
-      const data = await listRefunds(saleId);
+      const data = await listRefundsScoped(sessionToken!, saleId);
       setRefunds(data);
     } catch {
       setRefunds([]);

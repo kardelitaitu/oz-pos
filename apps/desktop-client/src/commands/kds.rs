@@ -14,7 +14,7 @@ use oz_core::db::Store;
 use oz_core::permissions;
 use serde_json::Value;
 
-use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
+use crate::commands::authz::require_permission_for_session;
 use crate::commands::topology::TOPOLOGY_RUNTIME_SETTING_KEY;
 use crate::error::AppError;
 use crate::state::AppState;
@@ -127,23 +127,6 @@ fn build_kds_chit_jobs(
     jobs
 }
 
-/// List KDS orders from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `list_kds_orders_scoped`.
-#[tauri::command]
-pub async fn list_kds_orders(
-    user_id: String,
-    status: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<Vec<KdsOrder>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, permissions::KDS_VIEW)?;
-    let orders = store.list_kds_orders(status.as_deref())?;
-    drop(db);
-    Ok(orders)
-}
-
 /// List KDS orders for the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn list_kds_orders_scoped(
@@ -162,23 +145,6 @@ pub async fn list_kds_orders_scoped(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let orders = store.list_kds_orders_for_instance(status.as_deref(), &session.instance_id)?;
-    drop(db);
-    Ok(orders)
-}
-
-/// Get the kitchen queue from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `get_kds_queue_scoped`.
-#[tauri::command]
-pub async fn get_kds_queue(
-    user_id: String,
-    kds_zone: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<Vec<KdsOrder>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, permissions::KDS_VIEW)?;
-    let orders = store.get_kds_queue(kds_zone.as_deref())?;
     drop(db);
     Ok(orders)
 }
@@ -203,53 +169,6 @@ pub async fn get_kds_queue_scoped(
     let orders = store.get_kds_queue_for_instance(kds_zone.as_deref(), &session.instance_id)?;
     drop(db);
     Ok(orders)
-}
-
-/// Update a KDS order's status in the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `update_kds_status_scoped`.
-#[tauri::command]
-pub async fn update_kds_status(
-    user_id: String,
-    id: String,
-    status: String,
-    state: State<'_, AppState>,
-) -> Result<KdsOrder, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, permissions::KDS_UPDATE)?;
-    let order = store.update_kds_status(&id, &status)?;
-    drop(db);
-
-    // Push real-time update to all KDS displays (1a: real-time push).
-    if let Some(app) = state.app.as_ref() {
-        let _ = app.emit("kds:orders-changed", ());
-    }
-
-    Ok(order)
-}
-
-/// Update the items (summary + count) on an existing KDS order.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `update_kds_order_items_scoped`.
-#[tauri::command]
-pub async fn update_kds_order_items(
-    user_id: String,
-    args: oz_core::UpdateKdsOrderItemsInput,
-    state: State<'_, AppState>,
-) -> Result<KdsOrder, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, permissions::KDS_UPDATE)?;
-    let order = store.update_kds_order_items(args)?;
-    drop(db);
-
-    // Push real-time update to all KDS displays.
-    if let Some(app) = state.app.as_ref() {
-        let _ = app.emit("kds:orders-changed", ());
-    }
-
-    Ok(order)
 }
 
 /// Update the items on a KDS order in the store resolved from a session token. ADR #7.
@@ -307,37 +226,6 @@ pub async fn update_kds_status_scoped(
     }
 
     Ok(order)
-}
-
-/// Create KDS orders from a completed sale. Returns one order per kitchen zone.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `create_kds_order_from_sale_scoped`.
-#[tauri::command]
-pub async fn create_kds_order_from_sale(
-    user_id: String,
-    sale_id: String,
-    state: State<'_, AppState>,
-) -> Result<Vec<KdsOrder>, AppError> {
-    // Scope-limit the DB access so Store (which borrows from the MutexGuard)
-    // is dropped before any .await point — required for Tauri's Send bound.
-    let orders = {
-        let db = state.db.lock().await;
-        let store = Store::new(&db);
-        require_permission_for_user(&store, &user_id, permissions::KDS_UPDATE)?;
-        store.complete_sale_to_kds(&sale_id, None)?
-    }; // db + store dropped here
-
-    // Push real-time update to all KDS displays — skip if no kitchen items.
-    if !orders.is_empty()
-        && let Some(app) = state.app.as_ref()
-    {
-        let _ = app.emit("kds:orders-changed", ());
-    }
-
-    // Auto-print kitchen chits (3c: printer HAL — best-effort).
-    try_auto_print_kds_chits(&orders, &state.registry, state.app.as_ref()).await;
-
-    Ok(orders)
 }
 
 /// Create KDS orders in the store resolved from a session token. ADR #7.
@@ -406,23 +294,6 @@ pub async fn create_kds_order_from_sale_scoped(
     }
 
     Ok(orders)
-}
-
-/// Get a KDS order by id from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `get_kds_order_scoped`.
-#[tauri::command]
-pub async fn get_kds_order(
-    user_id: String,
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<Option<KdsOrder>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, permissions::KDS_VIEW)?;
-    let order = store.get_kds_order(&id)?;
-    drop(db);
-    Ok(order)
 }
 
 /// Get a KDS order from the store resolved from a session token. ADR #7.

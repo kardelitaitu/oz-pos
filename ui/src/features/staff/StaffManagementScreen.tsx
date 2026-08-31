@@ -13,8 +13,9 @@ import {
   isStaffQuotaLimitError,
 } from '@/api/staff';
 import { listAllWorkspacesScoped, type WorkspaceTypeDto } from '@/api/workspaces';
-import { listStores, type StoreProfile } from '@/api/stores';
+import { listStoresScoped, type StoreProfile } from '@/api/stores';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { parseMinorUnits } from '@/types/domain';
 import { LocaleContext } from '@/i18n/LocaleContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { openUpgradePricing as openUpgradePricingPage } from '@/utils/upgrade';
@@ -152,8 +153,10 @@ const EMPTY_FORM: FormData = {
 
 /** Build the IPC `ProfileArgs` from the form, skipping empty optionals. */
 function profileArgsFromForm(form: FormData): ProfileArgs {
+  // MONEY-02: exact decimal parse; garbage input is treated as absent
+  // (the old parseFloat path stored NaN).
   const payMinor = form.monthlyTakeHome.trim()
-    ? Math.round(parseFloat(form.monthlyTakeHome) * 100)
+    ? parseMinorUnits(form.monthlyTakeHome, 2) ?? undefined
     : undefined;
   const profile: ProfileArgs = {};
   const set = (key: keyof ProfileArgs, value: string | number | undefined) => {
@@ -300,7 +303,7 @@ export default function StaffManagementScreen() {
       try {
         const [workspaces, storeProfiles] = await Promise.all([
           listAllWorkspacesScoped(sessionToken),
-          listStores(),
+          listStoresScoped(sessionToken),
         ]);
         const nameMap = new Map<string, string>();
         for (const w of workspaces) {
@@ -390,7 +393,7 @@ export default function StaffManagementScreen() {
       const [profile, workspaces, storeProfiles] = await Promise.all([
         getStaffProfileScoped(sessionToken, member.id),
         listAllWorkspacesScoped(sessionToken),
-        listStores(),
+        listStoresScoped(sessionToken),
       ]);
       setForm((prev) => ({
         ...prev,

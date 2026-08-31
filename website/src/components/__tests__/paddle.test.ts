@@ -97,8 +97,29 @@ describe('getSessionEmail', () => {
   });
 
   it('returns null when there is no session token', async () => {
+    // getSessionToken calls /__oz/session first; stub it so the test
+    // doesn't hit the real network. A 401 or rejection means no cookie.
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no worker')));
     const email = await paddle.getSessionEmail();
     expect(email).toBeNull();
+  });
+
+  it('resolves the email from a cookie token when sessionStorage is empty (R1 cookie path)', async () => {
+    // P1: the httpOnly-cookie session (sessionStorage cleared) must still
+    // resolve the email — getSessionToken reads /__oz/session, then /me.
+    sessionStorage.clear();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (url: string) => {
+        if (url === '/__oz/session') {
+          return { ok: true, json: async () => ({ token: 'cookie.token' }) };
+        }
+        return { ok: true, json: async () => ({ tenant: { email: 'cookie@test.com' } }) };
+      }),
+    );
+    const email = await paddle.getSessionEmail();
+    expect(email).toBe('cookie@test.com');
+    expect(sessionStorage.getItem('oz_email')).toBe('cookie@test.com');
   });
 
   it('returns null when the /me endpoint fails', async () => {

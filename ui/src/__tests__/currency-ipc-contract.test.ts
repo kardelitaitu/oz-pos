@@ -9,10 +9,12 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 import {
-  createExchangeRate,
+  createExchangeRateScoped,
   formatExchangeRate,
-  listExchangeRates,
+  listExchangeRatesScoped,
 } from '@/api/currency';
+
+const TOKEN = 'tok';
 
 describe('currency.ts fixed-point IPC contract', () => {
   beforeEach(() => {
@@ -21,7 +23,7 @@ describe('currency.ts fixed-point IPC contract', () => {
   });
 
   it('sends the Rust exchange-rate field names and fixed-point value', async () => {
-    await createExchangeRate({
+    await createExchangeRateScoped(TOKEN, {
       from_currency: 'USD',
       to_currency: 'IDR',
       rate_millionths: 16_000_000_000,
@@ -29,7 +31,8 @@ describe('currency.ts fixed-point IPC contract', () => {
       effective_date: '2026-07-31',
     });
 
-    expect(mockInvoke).toHaveBeenCalledWith('create_exchange_rate', {
+    expect(mockInvoke).toHaveBeenCalledWith('create_exchange_rate_scoped', {
+      sessionToken: TOKEN,
       args: {
         from_currency: 'USD',
         to_currency: 'IDR',
@@ -53,9 +56,9 @@ describe('currency.ts fixed-point IPC contract', () => {
       },
     ]);
 
-    const rates = await listExchangeRates();
+    const rates = await listExchangeRatesScoped(TOKEN);
 
-    expect(mockInvoke).toHaveBeenCalledWith('list_exchange_rates', undefined);
+    expect(mockInvoke).toHaveBeenCalledWith('list_exchange_rates_scoped', { sessionToken: TOKEN });
     expect(rates[0]?.rate_millionths).toBe(16_000_000_000);
   });
 

@@ -4,10 +4,13 @@
 The sidebar is built from the canonical folders, so dropping a .md file into
 `docs/` or `docs/decisions/` makes it appear in the portal on the next build:
 
-  - docs/*.md           -> Guides section  (copied to docs/src/guides/ by build-docs)
-  - docs/decisions/*.md -> ADR section     (copied to docs/src/decisions/ by build-docs)
-  - docs/src/api/rust/  -> Rust section    (rustdoc output)
-  - docs/src/api/ts/    -> TypeScript section (TypeDoc output)
+  - docs/guides/*.md      -> Guides section  (copied to docs/src/guides/ by build-docs)
+  - docs/decisions/*.md   -> ADR section     (copied to docs/src/decisions/ by build-docs)
+  - docs/src/api/rust/    -> Rust section    (rustdoc output)
+  - docs/src/api/ts/      -> TypeScript section (TypeDoc output)
+
+docs/archived/ is deliberately absent: it holds superseded material kept for
+provenance, not guidance to publish.
 """
 from __future__ import annotations
 
@@ -41,19 +44,21 @@ def chapter(name: str, title: str, folder: str) -> str:
 
 
 def guides() -> list[str]:
-    """Every markdown file at the docs/ root + docs/archived/, sorted by title."""
-    entries = sorted(
-        list(DOCS.glob("*.md")) + list((DOCS / "archived").glob("*.md")),
-        key=lambda p: prettify(p.stem).lower(),
-    )
-    seen = set()
-    result: list[str] = []
-    for p in entries:
-        if p.name in seen:
-            continue
-        seen.add(p.name)
-        result.append(chapter(p.name, prettify(p.stem), "guides"))
-    return result
+    """Every markdown file under docs/guides/, sorted by title.
+
+    Not docs/archived/. Listing that tree published 26 superseded documents
+    as current guidance while the 22 live guides in docs/guides/ never
+    appeared at all — the glob and the directory had drifted apart. And not
+    docs/README.md, which is a directory index whose relative links resolve
+    on disk but break inside the book; docs/src/intro.md covers that job.
+    """
+    return [
+        chapter(p.name, prettify(p.stem), "guides")
+        for p in sorted(
+            (DOCS / "guides").glob("*.md"),
+            key=lambda p: prettify(p.stem).lower(),
+        )
+    ]
 
 
 def decisions() -> list[str]:
@@ -67,6 +72,39 @@ def decisions() -> list[str]:
             continue
         entries.append(chapter(p.name, prettify(p.stem), "decisions"))
     return entries
+
+
+def archived_decisions() -> list[str]:
+    """Superseded ADRs kept under docs/decisions/archived/ for provenance."""
+    archived = DOCS / "decisions" / "archived"
+    if not archived.is_dir():
+        return []
+    return [
+        chapter(p.name, prettify(p.stem), "decisions/archived")
+        for p in sorted(archived.glob("*.md"))
+    ]
+
+
+def releases() -> list[str]:
+    """Release checklists and process docs under docs/releases/."""
+    rel = DOCS / "releases"
+    if not rel.is_dir():
+        return []
+    return [
+        chapter(p.name, prettify(p.stem), "releases")
+        for p in sorted(rel.glob("*.md"))
+    ]
+
+
+def operations() -> list[str]:
+    """Operational runbooks and deployment guides under docs/operations/."""
+    ops = DOCS / "operations"
+    if not ops.is_dir():
+        return []
+    return [
+        chapter(p.name, prettify(p.stem), "operations")
+        for p in sorted(ops.glob("*.md"))
+    ]
 
 
 def rust_crates() -> list[str]:
@@ -112,6 +150,23 @@ def build() -> str:
         "---",
         "",
         *decisions(),
+    ]
+    arch = archived_decisions()
+    if arch:
+        lines += ["", "## Archived", *arch]
+    lines += [
+        "",
+        "---",
+        "",
+        "# Releases",
+        *releases(),
+        "",
+        "---",
+        "",
+        "# Operations",
+        *operations(),
+        "",
+        "---",
         "",
         "# Rust",
         "- [API Reference](api/rust/index.html)",
@@ -127,7 +182,7 @@ def main() -> None:
     SRC.mkdir(parents=True, exist_ok=True)
     out = SRC / "SUMMARY.md"
     out.write_text(build(), encoding="utf-8")
-    print(f"Wrote {out}: {len(guides())} guides, {len(decisions())} ADRs")
+    print(f"Wrote {out}: {len(guides())} guides, {len(decisions())} ADRs, {len(archived_decisions())} archived, {len(releases())} releases, {len(operations())} ops")
 
     crates = rust_crates()
     ensure_api_landing(

@@ -160,6 +160,32 @@ impl Store<'_> {
         })?;
         rows.map(|r| Ok(r?)).collect()
     }
+
+    /// Look up the sale that a checkout attempt already paid for.
+    ///
+    /// This is the read-side counterpart to the UNIQUE guard on
+    /// `idempotency_key`. A replayed submission must return the receipt that
+    /// already exists rather than ring up a second sale — but the caller
+    /// cannot know the sale id, because the response it is replaying is
+    /// precisely the thing that was lost. The attempt key is therefore the
+    /// only handle back to the original sale.
+    ///
+    /// `key` is the idempotency key of any one split in the attempt; callers
+    /// normally pass the first. Returns `None` for a key that was never
+    /// stored. Keys written before COR-7 are SQL `NULL` and never match,
+    /// which is correct: SQLite treats each NULL as distinct from every
+    /// other, so unkeyed legacy payments cannot be replayed by accident.
+    pub fn find_sale_by_idempotency_key(&self, key: &str) -> Result<Option<String>, CoreError> {
+        let sale_id: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT sale_id FROM payments WHERE idempotency_key = ?1",
+                params![key],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(sale_id)
+    }
 }
 
 #[cfg(test)]

@@ -9,9 +9,88 @@ next: extend update validation | perf: N/A
 use rusqlite::params;
 
 use crate::error::CoreError;
+use crate::sale::Sale;
 use crate::{Promotion, PromotionApplication};
 
 use super::Store;
+
+/// Validate a promotion before it reaches the database (create and
+/// update — the previous create-only, name-only asymmetry was COR-12
+/// class). Rules (PROMO-8):
+/// - `name` must not be blank; `promo_type` must parse as a
+///   [`PromotionType`]
+/// - `value_minor` must not be negative; for `percentage` and
+///   `buy_x_get_y` it is a percent and must be `1..=100`
+/// - `min_order_minor` must not be negative
+/// - `buy_x_get_y` requires a non-empty `trigger_sku` and, when set,
+///   `min_qty >= 1` and `reward_qty >= 1`
+fn validate_promotion(promo: &Promotion) -> Result<(), CoreError> {
+    if promo.name.trim().is_empty() {
+        return Err(CoreError::Validation {
+            field: "name",
+            message: "promotion name must not be empty".into(),
+        });
+    }
+    let promo_type = crate::PromotionType::from_str(promo.promo_type.trim()).ok_or_else(|| {
+        CoreError::Validation {
+            field: "promo_type",
+            message: "invalid promotion type".into(),
+        }
+    })?;
+    if promo.value_minor < 0 {
+        return Err(CoreError::Validation {
+            field: "value_minor",
+            message: "value_minor must not be negative".into(),
+        });
+    }
+    if promo.min_order_minor < 0 {
+        return Err(CoreError::Validation {
+            field: "min_order_minor",
+            message: "min_order_minor must not be negative".into(),
+        });
+    }
+    match promo_type {
+        crate::PromotionType::Percentage | crate::PromotionType::BuyXGetY => {
+            if promo.value_minor < 1 || promo.value_minor > 100 {
+                return Err(CoreError::Validation {
+                    field: "value_minor",
+                    message: format!(
+                        "{} value_minor is a percent and must be between 1 and 100",
+                        promo_type.as_str()
+                    ),
+                });
+            }
+        }
+        crate::PromotionType::FixedAmount => {}
+    }
+    if promo_type == crate::PromotionType::BuyXGetY {
+        if promo
+            .trigger_sku
+            .as_deref()
+            .unwrap_or_default()
+            .trim()
+            .is_empty()
+        {
+            return Err(CoreError::Validation {
+                field: "trigger_sku",
+                message: "buy_x_get_y promotion requires a trigger_sku".into(),
+            });
+        }
+        if promo.min_qty.is_some_and(|min_qty| min_qty < 1) {
+            return Err(CoreError::Validation {
+                field: "min_qty",
+                message: "buy_x_get_y min_qty must be at least 1".into(),
+            });
+        }
+        if promo.reward_qty.is_some_and(|reward_qty| reward_qty < 1) {
+            return Err(CoreError::Validation {
+                field: "reward_qty",
+                message: "buy_x_get_y reward_qty must be at least 1".into(),
+            });
+        }
+    }
+    Ok(())
+}
 
 impl Store<'_> {
     /// List all promotions, ordered by name.
@@ -48,32 +127,7 @@ impl Store<'_> {
 
     /// Insert a new promotion.
     pub fn create_promotion(&self, promo: &Promotion) -> Result<Promotion, CoreError> {
-        if promo.name.trim().is_empty() {
-            return Err(CoreError::Validation {
-                field: "name",
-                message: "promotion name must not be empty".into(),
-            });
-        }
-        if promo.promo_type.trim().is_empty()
-            || crate::PromotionType::from_str(promo.promo_type.trim()).is_none()
-        {
-            return Err(CoreError::Validation {
-                field: "promo_type",
-                message: "invalid promotion type".into(),
-            });
-        }
-        if promo.value_minor < 0 {
-            return Err(CoreError::Validation {
-                field: "value_minor",
-                message: "value_minor must not be negative".into(),
-            });
-        }
-        if promo.min_order_minor < 0 {
-            return Err(CoreError::Validation {
-                field: "min_order_minor",
-                message: "min_order_minor must not be negative".into(),
-            });
-        }
+        validate_promotion(promo)?;
         self.conn.execute(
             "INSERT INTO promotions (id, name, description, promo_type, value_minor,
                                      min_qty, trigger_sku, reward_sku, reward_qty,
@@ -104,12 +158,7 @@ impl Store<'_> {
 
     /// Update an existing promotion by id.
     pub fn update_promotion(&self, promo: &Promotion) -> Result<Promotion, CoreError> {
-        if promo.name.trim().is_empty() {
-            return Err(CoreError::Validation {
-                field: "name",
-                message: "promotion name must not be empty".into(),
-            });
-        }
+        validate_promotion(promo)?;
         let rows = self.conn.execute(
             "UPDATE promotions
              SET name = ?1, description = ?2, promo_type = ?3, value_minor = ?4,
@@ -205,6 +254,116 @@ impl Store<'_> {
         Ok(app.clone())
     }
 
+    /// Atomically apply a promotion to a pending sale: compute the
+    /// discount via the promotion engine, record the application row,
+    /// and reduce the sale's payable total — all in one transaction
+    /// (PROMO-3: the recorded discount now changes what the customer
+    /// actually pays).
+    ///
+    /// Guards (PROMO-4): a second application of the same promotion to
+    /// the same sale is rejected, and only `pending` (modifiable) sales
+    /// accept promotions.
+    ///
+    /// `now` is injected so callers and tests control the clock.
+    pub fn apply_promotion_to_sale(
+        &self,
+        sale_id: &str,
+        promotion_id: &str,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<PromotionApplication, CoreError> {
+        let promo = self
+            .get_promotion(promotion_id)?
+            .ok_or_else(|| CoreError::NotFound {
+                entity: "promotion",
+                id: promotion_id.to_owned(),
+            })?;
+        let sale = self.get_sale(sale_id)?.ok_or_else(|| CoreError::NotFound {
+            entity: "sale",
+            id: sale_id.to_owned(),
+        })?;
+
+        // Category scope resolution: SKU -> product category. Only
+        // consulted when the promotion carries a category_id.
+        let category_of = |sku: &str| {
+            self.get_product(sku)
+                .ok()
+                .flatten()
+                .and_then(|p| p.product.category_id)
+        };
+        let discount_minor = crate::compute_discount(&promo, &sale, now, category_of)?;
+
+        let app = PromotionApplication {
+            id: uuid::Uuid::now_v7().to_string(),
+            promotion_id: promotion_id.to_owned(),
+            sale_id: sale_id.to_owned(),
+            discount_minor,
+            description: format!(
+                "{}: {} off",
+                promo.name,
+                crate::format_minor(discount_minor, sale.currency)
+            ),
+            created_at: now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        };
+
+        let tx = self.conn.unchecked_transaction()?;
+        let dup: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM promotion_applications
+             WHERE sale_id = ?1 AND promotion_id = ?2",
+            params![app.sale_id, app.promotion_id],
+            |r| r.get(0),
+        )?;
+        if dup > 0 {
+            return Err(CoreError::Validation {
+                field: "promotion_id",
+                message: "promotion already applied to this sale".into(),
+            });
+        }
+
+        let (status, stored_total): (String, i64) = tx.query_row(
+            "SELECT status, total_minor FROM sales WHERE id = ?1",
+            params![app.sale_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+        if status != "pending" {
+            return Err(CoreError::Validation {
+                field: "sale_id",
+                message: format!("sale is not modifiable (status: {status})"),
+            });
+        }
+        if stored_total < discount_minor {
+            return Err(CoreError::Validation {
+                field: "discount_minor",
+                message: "sale total changed below the discount amount".into(),
+            });
+        }
+
+        tx.execute(
+            "INSERT INTO promotion_applications (id, promotion_id, sale_id, discount_minor, description, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                app.id,
+                app.promotion_id,
+                app.sale_id,
+                app.discount_minor,
+                app.description,
+                app.created_at,
+            ],
+        )?;
+        let changed = tx.execute(
+            "UPDATE sales SET total_minor = total_minor - ?1, updated_at = ?2, version = version + 1
+             WHERE id = ?3 AND status = 'pending' AND total_minor >= ?1",
+            params![discount_minor, app.created_at, app.sale_id],
+        )?;
+        if changed == 0 {
+            return Err(CoreError::Validation {
+                field: "sale_id",
+                message: "sale is no longer modifiable".into(),
+            });
+        }
+        tx.commit()?;
+        Ok(app)
+    }
+
     /// List all promotion applications for a given sale.
     pub fn get_promotion_applications_for_sale(
         &self,
@@ -219,6 +378,134 @@ impl Store<'_> {
         let rows = stmt.query_map(params![sale_id], row_to_promotion_application)?;
         rows.map(|r| Ok(r?)).collect()
     }
+
+    /// Engine-apply the given promotions to an in-memory checkout sale.
+    ///
+    /// Checkout integration (Phase-2 promotion work): the caller builds the
+    /// post-tax sale, calls this BEFORE constructing payment splits, and
+    /// passes the returned applications into the checkout method so the
+    /// rows persist inside the checkout transaction. Each promotion is
+    /// computed against the progressively reduced total (stacking), the
+    /// same engine semantics as `apply_promotion_to_sale`, and `sale.total`
+    /// is reduced in place.
+    ///
+    /// Guards: unknown promotion → NotFound; a duplicate id in
+    /// `promotion_ids` → Validation; a computed discount that would underflow
+    /// the total → Validation (the engine already clamps to the base).
+    pub fn compute_checkout_promotions(
+        &self,
+        sale: &mut Sale,
+        promotion_ids: &[String],
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<PromotionApplication>, CoreError> {
+        let mut applications = Vec::with_capacity(promotion_ids.len());
+        let mut applied: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for promotion_id in promotion_ids {
+            if !applied.insert(promotion_id.as_str()) {
+                return Err(CoreError::Validation {
+                    field: "promotion_id",
+                    message: "promotion already selected for this checkout".into(),
+                });
+            }
+            let promo = self
+                .get_promotion(promotion_id)?
+                .ok_or_else(|| CoreError::NotFound {
+                    entity: "promotion",
+                    id: promotion_id.to_owned(),
+                })?;
+
+            // Category scope resolution: SKU -> product category. Only
+            // consulted when the promotion carries a category_id.
+            let category_of = |sku: &str| {
+                self.get_product(sku)
+                    .ok()
+                    .flatten()
+                    .and_then(|p| p.product.category_id)
+            };
+            let discount_minor = crate::compute_discount(&promo, sale, now, category_of)?;
+
+            let remaining = sale
+                .total
+                .minor_units
+                .checked_sub(discount_minor)
+                .ok_or_else(|| CoreError::Validation {
+                    field: "discount_minor",
+                    message: "promotion discount overflows the sale total".into(),
+                })?;
+            sale.total = crate::foundation::Money {
+                minor_units: remaining,
+                currency: sale.total.currency,
+            };
+
+            applications.push(PromotionApplication {
+                id: uuid::Uuid::now_v7().to_string(),
+                promotion_id: promotion_id.to_owned(),
+                sale_id: sale.id.clone(),
+                discount_minor,
+                description: format!(
+                    "{}: {} off",
+                    promo.name,
+                    crate::format_minor(discount_minor, sale.total.currency)
+                ),
+                created_at: now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            });
+        }
+        Ok(applications)
+    }
+}
+
+/// Persist checkout promotion applications inside the caller's sale
+/// transaction. Shared by both completion paths
+/// (`complete_sale_deduction_with_locations` and
+/// `complete_sale_with_resolved_shortfalls`) so the audit rows commit
+/// atomically with the sale row they reference — inserted after it so
+/// the `promotion_applications → sales` foreign key resolves.
+///
+/// Guards: an application pointing at a different sale is a caller
+/// wiring bug and fails closed. The per-`(sale_id, promotion_id)`
+/// duplicate check is defence in depth, not the primary dedupe — the
+/// real one is the `HashSet` in
+/// [`Store::compute_checkout_promotions`]; a fresh sale row cannot have
+/// prior applications, so this only fires if an already-completed sale
+/// id is ever replayed into a checkout.
+pub(crate) fn persist_checkout_applications(
+    tx: &rusqlite::Transaction<'_>,
+    sale_id: &str,
+    checkout_applications: &[PromotionApplication],
+) -> Result<(), CoreError> {
+    for app in checkout_applications {
+        if app.sale_id != sale_id {
+            return Err(CoreError::Validation {
+                field: "sale_id",
+                message: "checkout application references a different sale".into(),
+            });
+        }
+        let dup: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM promotion_applications
+             WHERE sale_id = ?1 AND promotion_id = ?2",
+            params![app.sale_id, app.promotion_id],
+            |r| r.get(0),
+        )?;
+        if dup > 0 {
+            return Err(CoreError::Validation {
+                field: "promotion_id",
+                message: "promotion already applied to this sale".into(),
+            });
+        }
+        tx.execute(
+            "INSERT INTO promotion_applications (id, promotion_id, sale_id, discount_minor, description, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                app.id,
+                app.promotion_id,
+                app.sale_id,
+                app.discount_minor,
+                app.description,
+                app.created_at,
+            ],
+        )?;
+    }
+    Ok(())
 }
 
 fn row_to_promotion(row: &rusqlite::Row) -> rusqlite::Result<Promotion> {

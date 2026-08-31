@@ -51,6 +51,13 @@
       "ci": { "workflow": "ci.yml", "job": "go" }
     },
     {
+      "id": "website-tests",
+      "label": "Website unit tests",
+      "status": "required",
+      "runners": { "check.sh": ["website test"] },
+      "ci": { "workflow": "website.yml", "job": "check" }
+    },
+    {
       "id": "rust-clippy",
       "label": "Clippy",
       "status": "required",

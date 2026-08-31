@@ -236,3 +236,39 @@ fn create_token_response_is_serializable() {
     let json = serde_json::to_string(&resp).unwrap();
     assert!(json.contains("fake.jwt.token"));
 }
+
+// ── API-2: constant-time admin-key comparison ─────────────────────
+
+#[test]
+fn admin_key_compare_accepts_exact_match() {
+    let headers = request_with_header(Some("sekret"));
+    assert!(admin_key_authorised(&headers, Some("sekret")));
+}
+
+#[test]
+fn admin_key_compare_rejects_wrong_key_and_prefixes() {
+    // Wrong key of the same length, and shorter prefixes/suffixes of the
+    // real key — all must be rejected (the HMAC compare makes the timing
+    // of these branches uniform).
+    for probe in ["wrong-key-length", "sek", "sekret-extra", ""] {
+        let headers = request_with_header(Some(probe));
+        assert!(
+            !admin_key_authorised(&headers, Some("sekret")),
+            "probe '{probe}' must be rejected"
+        );
+    }
+}
+
+#[test]
+fn admin_key_compare_dev_mode_still_open_without_configured_key() {
+    let headers = request_with_header(Some("anything"));
+    assert!(admin_key_authorised(&headers, None));
+    let empty = request_with_header(None);
+    assert!(admin_key_authorised(&empty, None));
+}
+
+#[test]
+fn admin_key_compare_rejects_missing_header_when_configured() {
+    let headers = request_with_header(None);
+    assert!(!admin_key_authorised(&headers, Some("sekret")));
+}

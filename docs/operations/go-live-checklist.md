@@ -1,8 +1,8 @@
 # OZ-POS Go-Live — Northflank Env Checklist
 
 > One page to take the deployed license server from "pre-fail-fast image, no SMTP, no
-> Paddle" to "sandbox live". Companion to [`DEPLOY.md`](../../apps/license-server/DEPLOY.md) §7 (which documents
-> every variable in full) and [`uptime-monitor.md`](../../apps/license-server/uptime-monitor.md) (how to watch the
+> Paddle" to "sandbox live". Companion to [`DEPLOY.md`](https://github.com/kardelitaitu/oz-pos/blob/main/apps/license-server/DEPLOY.md) §7 (which documents
+> every variable in full) and [`uptime-monitor.md`](https://github.com/kardelitaitu/oz-pos/blob/main/apps/license-server/uptime-monitor.md) (how to watch the
 > gates once they're set).
 >
 > **Why order matters:** the current deployed image predates the fail-fast boot gates.
@@ -70,13 +70,12 @@ webhook delivery work the moment the new image is up.
 ```ini
 # ── Paddle (sandbox) — REQUIRED at boot (fail-fast gates) ────────────
 PADDLE_WEBHOOK_SECRET=<copy from §1 #3>
-# NOTE (2026-08-17): the two ids below are the LEGACY $19/$49 sandbox
-# prices, superseded by the 5-tier lineup (subscription-tiers.md §2). The
-# new catalog needs SIX prices (Plus/Pro/Premium × monthly/yearly) once it
-# lands; until then the website shows the new prices with placeholder ids
-# and checkout degrades to the mailto fallback. PADDLE_PRICE_TIERS must
-# list every price id → tier_key pair (plus_monthly/plus_yearly → plus, etc.).
-PADDLE_PRICE_TIERS=pri_01m05gdnqp30xze6db73qcracp:pro,pri_01m05gdpk4hmnm0k8e6vxm8cec:premium
+# NOTE (2026-08-31): the six sandbox prices are catalogued from the Paddle
+# dashboard (Plus/Pro/Premium × monthly/yearly). PADDLE_PRICE_TIERS must
+# list every price id → tier_key pair (plus_monthly/plus_yearly → plus,
+# etc.) so the webhook can provision each one; the `:period` segment
+# cross-checks the billing cycle.
+PADDLE_PRICE_TIERS=pro_01m1amcb41qkbr7zzd1kxa3qnd:plus:month,pro_01m1amdj2swb3q21r2mwcy3krh:plus:year,pro_01m1amdwp700jp6183k9zjsgaz:pro:month,pro_01m1ame8ckw8vzjnf8y4q15mww:pro:year,pro_01m1amema8yj6w5mfm8wx8jwhm:premium:month,pro_01m1amf0vpbyfndg5rkvxvyqj4:premium:year
 PADDLE_API_URL=https://sandbox-api.paddle.com
 PADDLE_API_KEY=<copy from Paddle (sandbox) → Developer tools → Authentication>
 

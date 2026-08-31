@@ -442,7 +442,7 @@ pub async fn get_voided_sales_summary_scoped(
     start_date: String,
     end_date: String,
     state: State<'_, AppState>,
-) -> Result<VoidedSummaryRow, AppError> {
+) -> Result<Vec<VoidedSummaryRow>, AppError> {
     let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
     let db = conn
         .lock()
@@ -585,21 +585,6 @@ pub async fn get_hourly_occupancy_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     Ok(Store::new(&db).hourly_table_activity(&start_date, &end_date)?)
-}
-
-/// Build a custom report from user-selected columns and filters.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `build_custom_report_scoped`.
-#[tauri::command]
-pub async fn build_custom_report(
-    state: State<'_, AppState>,
-    request: CustomReportRequest,
-) -> Result<CustomReportResponse, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let result = store.build_custom_report(request)?;
-    drop(db);
-    Ok(result)
 }
 
 /// Build a custom report for the session's store.

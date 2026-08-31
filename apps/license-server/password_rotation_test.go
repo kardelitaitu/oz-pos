@@ -77,7 +77,7 @@ func TestScanner_SendsEmailWhenOver120Days(t *testing.T) {
 	_ = createPasswordState(t, testApp, "admin@test.com", 130)
 
 	// spin up the in-process SMTP server (from smtp_mail_test.go)
-	addr, captures := runSMTPServer(t, nil, false)
+	addr, captures := runSMTPServer(t, nil, false, testTLSCertPtr(t))
 	_, port, _ := net.SplitHostPort(addr)
 
 	// set env so the scanner delivers through the test server

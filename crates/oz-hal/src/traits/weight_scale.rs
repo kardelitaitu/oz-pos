@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-hal slice A: verified)
+crate: oz-hal | status: SAFE | lint: CLEAN
+findings: clean
+next: none | perf: N/A
+*/
 //! `WeightScale` — the trait every weight-scale driver implements.
 //!
 //! Scale drivers read weight over USB HID POS (usage page `0x0011`).

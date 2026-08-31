@@ -1,3 +1,9 @@
+---
+num: 30
+area: module-system
+title: ADR #30: Domain Module Extraction & oz-core Decomposition
+status: Accepted — Phase 4 (Currency) Complete (2026-07-25)
+---
 <!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: ACTIVE · ADR #30: Domain Module Extraction & oz-core Decomposition -->
 
 # ADR #30: Domain Module Extraction & oz-core Decomposition

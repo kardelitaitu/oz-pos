@@ -75,7 +75,7 @@ DECLARE
 BEGIN
     FOREACH t IN ARRAY ARRAY['bundle_items','offline_queue','product_activity',
                             'product_bundles','product_taxes','product_variants',
-                            'products','sales','sent_reports','stripe_customers',
+                            'products','refunds','sales','sent_reports','stripe_customers',
                             'sync_terminals','tax_rates','tenant_plans',
                             'tenant_subscription','users']
     LOOP
@@ -177,7 +177,7 @@ DECLARE
 BEGIN
     FOREACH t IN ARRAY ARRAY['bundle_items','offline_queue','product_activity',
                             'product_bundles','product_taxes','product_variants',
-                            'products','sales','sent_reports','stripe_customers',
+                            'products','refunds','sales','sent_reports','stripe_customers',
                             'sync_terminals','tax_rates','tenant_plans',
                             'tenant_subscription','users']
     LOOP

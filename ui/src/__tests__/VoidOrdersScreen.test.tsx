@@ -8,7 +8,7 @@ import sharedFtl from '@/locales/shared.ftl?raw';
 vi.mock('@/api/sales', () => ({
   listSales: vi.fn(),
   getSale: vi.fn(),
-  voidSale: vi.fn(),
+  voidSaleScoped: vi.fn(),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -17,12 +17,16 @@ vi.mock('@/contexts/AuthContext', () => ({
   }),
 }));
 
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({ sessionToken: 'session-1' }),
+}));
+
 import VoidOrdersScreen from '@/features/sales/VoidOrdersScreen';
-import { listSales, getSale, voidSale } from '@/api/sales';
+import { listSales, getSale, voidSaleScoped } from '@/api/sales';
 
 const mockListSales = listSales as ReturnType<typeof vi.fn>;
 const mockGetSale = getSale as ReturnType<typeof vi.fn>;
-const mockVoidSale = voidSale as ReturnType<typeof vi.fn>;
+const mockVoidSale = voidSaleScoped as ReturnType<typeof vi.fn>;
 
 
 
@@ -208,11 +212,11 @@ describe('VoidOrdersScreen', () => {
     await user.click(confirmBtn);
 
     await waitFor(() => {
+      // 5e0d4caa: voidSaleScoped(token, saleId, reason) — positional.
       expect(mockVoidSale).toHaveBeenCalledWith(
-        expect.objectContaining({
-          saleId: 'ORD-001',
-          reason: 'cancelled-by-customer',
-        }),
+        'session-1',
+        'ORD-001',
+        'cancelled-by-customer',
       );
     });
   });

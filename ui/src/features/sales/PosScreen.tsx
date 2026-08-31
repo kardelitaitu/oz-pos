@@ -47,6 +47,8 @@ import { useBarcodeScanner } from './useBarcodeScanner';
 import { useCustomerDisplay } from './useCustomerDisplay';
 import PaymentModal from './PaymentModal';
 import PriceOverrideModal from './PriceOverrideModal';
+import PromotionsModal from './PromotionsModal';
+import type { Promotion } from '@/api/promotions';
 import FastPINOverlay from '@/components/FastPINOverlay';
 import { overrideLinePriceScoped, overrideCartDeductionLocation } from '@/api/sales';
 import {
@@ -436,6 +438,14 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
 
   // ── Restore locked cart on mount ────────────────────────────────
   const LOCKED_CART_KEY = 'pos-locked-cart';
+  // PROMO-5/PROMO-3: promotions selected in the picker. They no longer
+  // map onto the cart-discount pipeline — the selected ids ride to
+  // checkout (PaymentModal → complete_sale promotionIds) and the backend
+  // engine applies them against the post-tax sale, so fixed/BXGY work
+  // and percentage promotions stack instead of overwriting the manual
+  // discount slot. Declared before the restore effect so a lock/unlock
+  // cycle can rehydrate the selection.
+  const [appliedPromotions, setAppliedPromotions] = useState<Promotion[]>([]);
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LOCKED_CART_KEY);
@@ -454,6 +464,9 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
       if (typeof data.discountPercent === 'number') {
         setDiscount(data.discountPercent, data.discountLabel || '');
       }
+      if (Array.isArray(data.appliedPromotions)) {
+        setAppliedPromotions(data.appliedPromotions);
+      }
       if (typeof data.tipPercent === 'number') {
         setTipPercent(data.tipPercent);
       }
@@ -462,7 +475,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
       }
       localStorage.removeItem(LOCKED_CART_KEY);
     } catch { /* ignore */ }
-  }, [setLines, setDiscount, setTipPercent, setServiceCharge]);
+  }, [setLines, setDiscount, setAppliedPromotions, setTipPercent, setServiceCharge]);
   const [showOptions, setShowOptions] = useState(false);
   const [showTables, setShowTables] = useState(false);
   const [showSalesHistory, setShowSalesHistory] = useState(false);
@@ -470,6 +483,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [showDiscountInput, setShowDiscountInput] = useState(false);
+  const [showPromotions, setShowPromotions] = useState(false);
   const [discountInput, setDiscountInput] = useState('');
   const [discountName, setDiscountName] = useState('');
   const [tableNumber, setTableNumber] = useState('');
@@ -829,6 +843,8 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     deductionLocationIdRef.current = null;
     setDeductionLocationName(null);
     setDeductionOverridden(false);
+    // PROMO-3: the checkout consumed the promotion selection.
+    setAppliedPromotions([]);
     // If this was an open bill being paid, delete it from DB.
     if (activeOpenBillId) {
       deleteHeldCartScoped(sessionToken, activeOpenBillId).catch(() => {
@@ -857,6 +873,16 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     setDiscount(0, '');
   }, [setDiscount]);
 
+  // PROMO-3: accumulate the picker selection (multi-select, stacking).
+  const handleSelectPromotions = useCallback((selected: Promotion[]) => {
+    setAppliedPromotions(selected);
+    setShowPromotions(false);
+    const names = selected.map((p) => p.name).join(', ');
+    if (selected.length > 0) {
+      addToast({ message: l10nRef.current.getString('pos-promotions-applied', { name: names }) || names, type: 'success' });
+    }
+  }, [addToast]);
+
   // ── Lock: save cart state to localStorage, then logout ───────────
 
   const handleLock = useCallback(() => {
@@ -872,6 +898,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
           })),
           discountPercent,
           discountLabel,
+          appliedPromotions,
           tipPercent,
           serviceChargeEnabled,
           serviceChargePercent,
@@ -882,7 +909,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
       }
     } catch { /* storage quota or unavailable — ignore */ }
     logout();
-  }, [lines, discountPercent, discountLabel, tipPercent, serviceChargeEnabled, serviceChargePercent, logout]);
+  }, [lines, discountPercent, discountLabel, appliedPromotions, tipPercent, serviceChargeEnabled, serviceChargePercent, logout]);
 
   // ── Multi-step undo stack ───────────────────────────────────
   // Each removed line is pushed onto the stack. Pressing Undo pops
@@ -1149,6 +1176,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
         customer_name: openBillName.trim(),
       });
     resetCart();
+    setAppliedPromotions([]);
     openBillInputExit.requestClose();
     setOpenBillName('');
     loadOpenBills();
@@ -1654,16 +1682,48 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                         </button>
                       </div>
                     ) : !showDiscountInput ? (
-                      <Localized id="pos-cart-add-discount">
-                        <button
-                          type="button"
-                          className="pos-cart-discount-btn"
-                          onClick={() => setShowDiscountInput(true)}
-                        >
-                          + Add Discount
-                        </button>
-                      </Localized>
+                      <div className="pos-cart-discount-actions">
+                        <Localized id="pos-cart-add-discount">
+                          <button
+                            type="button"
+                            className="pos-cart-discount-btn"
+                            onClick={() => setShowDiscountInput(true)}
+                          >
+                            + Add Discount
+                          </button>
+                        </Localized>
+                        <Localized id="pos-cart-add-promotion">
+                          <button
+                            type="button"
+                            className="pos-cart-discount-btn pos-cart-promotion-btn"
+                            onClick={() => setShowPromotions(true)}
+                            disabled={!subtotal}
+                          >
+                            + Promotions
+                          </button>
+                        </Localized>
+                      </div>
                     ) : null}
+
+                    {/* PROMO-3: applied promotion chips (engine-applied at
+                        checkout; the amount shows in the payment modal). */}
+                    {appliedPromotions.length > 0 && (
+                      <div className="pos-cart-promotion-row">
+                        {appliedPromotions.map((p) => (
+                          <span key={p.id} className="pos-cart-promotion-chip">
+                            <span className="pos-cart-promotion-chip-name">{p.name}</span>
+                            <button
+                              type="button"
+                              className="pos-cart-promotion-chip-clear"
+                              aria-label={l10n.getString('pos-cart-promotion-remove-aria', { name: p.name })}
+                              onClick={() => setAppliedPromotions(appliedPromotions.filter((x) => x.id !== p.id))}
+                            >
+                              &times;
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Discount input form */}
                     {showDiscountInput && (
@@ -1904,6 +1964,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
           userId={userId}
           tipMinor={tipAmount?.minor_units ?? 0}
           serviceChargeMinor={serviceChargeAmount?.minor_units ?? 0}
+          promotionIds={appliedPromotions.map((p) => p.id)}
           {...(sessionToken ? { sessionToken } : {})}
           tableNumber={tableNumber}
           onComplete={handlePaymentComplete}
@@ -1921,6 +1982,16 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
           onClose={() => setOverrideTarget(null)}
         />
       )}
+
+      {/* ── Promotions picker modal ───────────────────── */}
+      <PromotionsModal
+        open={showPromotions}
+        sessionToken={sessionToken}
+        subtotalMinor={subtotal?.minor_units ?? 0}
+        initiallySelectedIds={appliedPromotions.map((p) => p.id)}
+        onApply={handleSelectPromotions}
+        onClose={() => setShowPromotions(false)}
+      />
 
       {/* ── Open Bill Input modal ────────────────────── */}
       {openBillInputExit.shouldRender && (          <div

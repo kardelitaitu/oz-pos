@@ -63,10 +63,6 @@ export interface OfflineQueueSummaryDto {
   oldestPendingAt: string | null;
 }
 
-/** Get a summary of the offline queue status. */
-export const getOfflineQueueStatusSummary = (): Promise<OfflineQueueSummaryDto> =>
-  loggedInvoke<OfflineQueueSummaryDto>('offline_queue_status_summary');
-
 /** Get offline queue status summary (scoped — ADR #7). */
 export const getOfflineQueueStatusSummaryScoped = (sessionToken: string): Promise<OfflineQueueSummaryDto> =>
   loggedInvoke<OfflineQueueSummaryDto>('offline_queue_status_summary_scoped', { sessionToken });
@@ -256,23 +252,25 @@ export interface PgDaemonStatusDto {
   pendingCount: number;
 }
 
-/** Get the PostgreSQL sync settings. */
-export const getPgSyncSettings = (): Promise<PgSyncSettingsDto> =>
-  loggedInvoke<PgSyncSettingsDto>('get_pg_sync_settings');
+/** Get the PostgreSQL sync settings (scoped — ADR #7). */
+export const getPgSyncSettingsScoped = (sessionToken: string): Promise<PgSyncSettingsDto> =>
+  loggedInvoke<PgSyncSettingsDto>('get_pg_sync_settings_scoped', { sessionToken });
 
-/** Update the PostgreSQL sync settings. */
-export const updatePgSyncSettings = (args: UpdatePgSyncSettingsArgs): Promise<void> =>
-  loggedInvoke<void>('update_pg_sync_settings', { args });
+/** Update the PostgreSQL sync settings (scoped — ADR #7). */
+export const updatePgSyncSettingsScoped = (sessionToken: string, args: UpdatePgSyncSettingsArgs): Promise<void> =>
+  loggedInvoke<void>('update_pg_sync_settings_scoped', { sessionToken, args });
 
-/** Get the PG sync daemon's current status. */
-export const pgSyncStatus = (): Promise<PgDaemonStatusDto> =>
-  loggedInvoke<PgDaemonStatusDto>('pg_sync_status');
+/** Get the PG sync daemon's current status (scoped — ADR #7). */
+export const pgSyncStatusScoped = (sessionToken: string): Promise<PgDaemonStatusDto> =>
+  loggedInvoke<PgDaemonStatusDto>('pg_sync_status_scoped', { sessionToken });
 
-/** Start the background PG sync daemon (no-op when already running). */
-export const pgSyncStart = (): Promise<void> => loggedInvoke<void>('pg_sync_start');
+/** Start the background PG sync daemon (scoped — ADR #7; no-op when already running). */
+export const pgSyncStartScoped = (sessionToken: string): Promise<void> =>
+  loggedInvoke<void>('pg_sync_start_scoped', { sessionToken });
 
-/** Stop the background PG sync daemon (no-op when not running). */
-export const pgSyncStop = (): Promise<void> => loggedInvoke<void>('pg_sync_stop');
+/** Stop the background PG sync daemon (scoped — ADR #7; no-op when not running). */
+export const pgSyncStopScoped = (sessionToken: string): Promise<void> =>
+  loggedInvoke<void>('pg_sync_stop_scoped', { sessionToken });
 
 /**
  * Arguments for a destructive snapshot pull.

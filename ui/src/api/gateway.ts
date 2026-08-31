@@ -7,6 +7,13 @@ export type { GatewayStatus };
  * Get the configured status of all payment gateways (Stripe, Square,
  * Midtrans).
  *
+ * UI-1 fix: the backend computes the configured/online booleans
+ * server-side (see `gateway_status` in the desktop/tablet clients) so
+ * the raw credential values never reach the renderer. The previous
+ * implementation fetched `stripe.api_key`, `square.api_key`, and
+ * `midtrans.server_key` via `get_setting`, pulling secrets into the
+ * webview just to compute booleans.
+ *
  * Propagates any backend error (DB failure, session expiry, missing
  * settings table) to the caller. The previous version caught all
  * errors and returned a synthetic `[{ name: 'Gateway', ... }]`
@@ -14,13 +21,5 @@ export type { GatewayStatus };
  * returned an inconsistent array length (3 on success, 1 on failure).
  */
 export async function getGatewayStatus(): Promise<GatewayStatus[]> {
-  const stripeKey: string | null = await loggedInvoke('get_setting', { key: 'stripe.api_key' });
-  const squareKey: string | null = await loggedInvoke('get_setting', { key: 'square.api_key' });
-  const midtransKey: string | null = await loggedInvoke('get_setting', { key: 'midtrans.server_key' });
-  // Always show all three gateways — configured state reflects whether a key is present
-  return [
-    { name: 'Stripe', configured: stripeKey !== null && stripeKey !== '', online: stripeKey !== null && stripeKey !== '' },
-    { name: 'Square', configured: squareKey !== null && squareKey !== '', online: squareKey !== null && squareKey !== '' },
-    { name: 'QRIS (Midtrans)', configured: midtransKey !== null && midtransKey !== '', online: midtransKey !== null && midtransKey !== '' },
-  ];
+  return loggedInvoke('gateway_status');
 }

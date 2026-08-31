@@ -58,8 +58,14 @@ if [ ! -f "$PG_INIT_PATH" ]; then
 fi
 
 echo "📄 Applying PG_INIT (${PG_INIT_PATH})..."
-docker cp "$PG_INIT_PATH" oz-pg-test-15432:/tmp/pg_init.sql
-docker exec oz-pg-test-15432 psql -U postgres -d postgres -f /tmp/pg_init.sql 2>&1
+# Pipe the schema through stdin instead of `docker cp` + `psql -f /tmp/...`:
+# Git Bash (MSYS) rewrites POSIX-looking paths in arguments of native
+# Windows executables, so `/tmp/pg_init.sql` silently became
+# `C:/Users/.../Temp/pg_init.sql` inside the container and the apply
+# failed after the schema had already been dropped. stdin has no path
+# to convert and works under Git Bash, WSL, and Linux alike.
+docker exec -i oz-pg-test-15432 psql -U postgres -d postgres \
+    -v ON_ERROR_STOP=1 < "$PG_INIT_PATH" 2>&1
 
 echo "✅ Dev PG reset complete — schema matches the committed PG_INIT."
 TABLE_COUNT=$(docker exec oz-pg-test-15432 psql -U postgres -d postgres -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';")

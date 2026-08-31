@@ -9,7 +9,7 @@ package main
 //
 //	GET  /api/v1/web/usage    — tenant usage stats (device/terminal count + limits)
 //	GET  /api/v1/web/devices  — registered devices for the tenant
-//	POST /api/v1/web/devices/{machine_id}/revoke — revoke one device (self-service)
+//	POST /api/v1/web/devices/{id}/revoke — revoke one device (self-service)
 //	PATCH /api/v1/web/settings — update tenant preferences (region, notifications)
 
 import (
@@ -42,6 +42,11 @@ func resolveWebSession(app core.App, e *core.RequestEvent) (*core.Record, bool) 
 		e.JSON(http.StatusUnauthorized, map[string]any{"error": "invalid or expired session"})
 		return nil, false
 	}
+	// Active-use refresh (hardening F6): every authenticated dashboard
+	// call extends the session TTL so an operator who keeps the dashboard
+	// open stays signed in without re-authenticating. No-op for expired
+	// sessions (touchSession guards on expiry).
+	webOtpStore.touchSession(hashWebToken(token))
 	tenant, err := app.FindRecordById("tenants", tenantID)
 	if err != nil {
 		webOtpStore.deleteSession(hashWebToken(token))
@@ -55,6 +60,12 @@ func resolveWebSession(app core.App, e *core.RequestEvent) (*core.Record, bool) 
 // ── GET /api/v1/web/usage ──────────────────────────────────────────
 
 // handleWebUsage returns usage stats for the authenticated tenant.
+//
+// DEPRECATED (review finding R5): the account portal (AccountView.tsx)
+// renders all of this from GET /api/v1/web/me — the only caller of this
+// endpoint was the retired static dashboard (website/public/dashboard),
+// which now redirects to the account portal. Kept for backward
+// compatibility, but no longer wired into any active page.
 func handleWebUsage(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		tenant, ok := resolveWebSession(app, e)
@@ -63,15 +74,25 @@ func handleWebUsage(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		// Count tenant_machines (devices).
-		machines, _ := app.FindRecordsByFilter("tenant_machines",
+		machines, err := app.FindRecordsByFilter("tenant_machines",
 			"tenant_id = {:tid}", "-created", 0, 0,
 			map[string]any{"tid": tenant.Id})
+		if err != nil {
+			// A DB failure must not masquerade as a free/empty account —
+			// log it and fail loudly instead of returning zeroed limits.
+			log.Printf("/web/usage: device query failed for tenant %q: %v", tenant.Id, err)
+			return e.JSON(http.StatusInternalServerError, map[string]any{"error": "could not load usage stats"})
+		}
 		deviceCount := len(machines)
 
 		// Count subscriptions for this tenant.
-		subs, _ := app.FindRecordsByFilter("subscriptions",
+		subs, err := app.FindRecordsByFilter("subscriptions",
 			"tenant_id = {:tid}", "-created", 0, 0,
 			map[string]any{"tid": tenant.Id})
+		if err != nil {
+			log.Printf("/web/usage: subscription query failed for tenant %q: %v", tenant.Id, err)
+			return e.JSON(http.StatusInternalServerError, map[string]any{"error": "could not load usage stats"})
+		}
 		subCount := len(subs)
 
 		// Pull entitlement limits from the latest subscription.
@@ -127,8 +148,11 @@ func handleWebDevices(app core.App) func(e *core.RequestEvent) error {
 			"-created", 0, 0,
 			map[string]any{"tid": tenant.Id})
 		if err != nil {
+			// A DB failure must not masquerade as "no devices" — log it and
+			// fail loudly so the frontend can distinguish an error from an
+			// empty list.
 			log.Printf("/web/devices: query failed for tenant %q: %v", tenant.Id, err)
-			return e.JSON(http.StatusOK, map[string]any{"devices": []any{}})
+			return e.JSON(http.StatusInternalServerError, map[string]any{"error": "could not load devices"})
 		}
 
 		devices := make([]map[string]any, 0, len(records))
@@ -136,7 +160,6 @@ func handleWebDevices(app core.App) func(e *core.RequestEvent) error {
 			devices = append(devices, map[string]any{
 				"id":         rec.Id,
 				"machine_id": rec.GetString("machine_id"),
-				"device_id":  rec.GetString("device_id"),
 				"created":    rec.GetDateTime("created").Time().Format(time.RFC3339),
 				"revoked_at": rec.GetString("revoked_at"),
 			})

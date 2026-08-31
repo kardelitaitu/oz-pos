@@ -4,12 +4,13 @@ import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import settingsFtl from '@/locales/settings.ftl?raw';
 import ExitSurveyModal from '@/components/ExitSurveyModal';
 
-const { mockInvoke } = vi.hoisted(() => ({
-  mockInvoke: vi.fn(),
+const { mockSetSurvey } = vi.hoisted(() => ({
+  mockSetSurvey: vi.fn(),
 }));
 
-vi.mock('@/utils/logged-invoke', () => ({
-  loggedInvoke: (...args: unknown[]) => mockInvoke(...args),
+// F-007: the modal persists the response through the settings api layer.
+vi.mock('@/api/settings', () => ({
+  setSettingScoped: (...args: unknown[]) => mockSetSurvey(...args),
 }));
 
 vi.mock('@/contexts/WorkspaceContext', () => ({
@@ -22,8 +23,8 @@ vi.mock('@/contexts/BrandContext', () => ({
 }));
 
 beforeEach(() => {
-  mockInvoke.mockReset();
-  mockInvoke.mockResolvedValue(undefined);
+  mockSetSurvey.mockReset();
+  mockSetSurvey.mockResolvedValue(undefined);
 });
 
 describe('ExitSurveyModal', () => {
@@ -110,11 +111,11 @@ describe('ExitSurveyModal', () => {
 
     // Wait for the async IPC call
     await vi.waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('set_exit_survey_response', {
-        sessionToken: 'test-token',
-        reason: 'too_expensive',
-        detail: undefined,
-      });
+      expect(mockSetSurvey).toHaveBeenCalledWith(
+        'test-token',
+        'exit_survey.last_response',
+        expect.stringContaining('"reason":"too_expensive"'),
+      );
     });
     expect(defaultProps.onConfirm).toHaveBeenCalled();
   });
@@ -129,17 +130,19 @@ describe('ExitSurveyModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /pause subscription/i }));
 
     await vi.waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('set_exit_survey_response', {
-        sessionToken: 'test-token',
-        reason: 'other',
-        detail: 'Switching to competitor X',
-      });
+      expect(mockSetSurvey).toHaveBeenCalledWith(
+        'test-token',
+        'exit_survey.last_response',
+        expect.any(String),
+      );
     });
+    const payload = JSON.parse(mockSetSurvey.mock.calls[0]![2] as string);
+    expect(payload).toMatchObject({ reason: 'other', detail: 'Switching to competitor X' });
     expect(defaultProps.onConfirm).toHaveBeenCalled();
   });
 
   it('still calls onConfirm even if IPC fails (best-effort)', async () => {
-    mockInvoke.mockRejectedValue(new Error('IPC error'));
+    mockSetSurvey.mockRejectedValue(new Error('IPC error'));
     const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     renderWithProvidersSync(<ExitSurveyModal {...defaultProps} />, settingsFtl);
@@ -166,7 +169,7 @@ describe('ExitSurveyModal', () => {
   it('does not submit IPC when cancel is clicked without selecting a reason', () => {
     renderWithProvidersSync(<ExitSurveyModal {...defaultProps} />, settingsFtl);
     fireEvent.click(screen.getByRole('button', { name: /go back/i }));
-    expect(mockInvoke).not.toHaveBeenCalled();
+    expect(mockSetSurvey).not.toHaveBeenCalled();
   });
 
   // ── Submit button disabled state ───────────────────────────────

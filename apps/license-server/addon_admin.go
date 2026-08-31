@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pocketbase/pocketbase/core"
 )
@@ -25,6 +27,17 @@ type AddonRemoveRequest struct {
 	// Addon identifier to remove.
 	AddonID string `json:"addon_id"`
 }
+
+// B44: license_keys.addons is a Max:1024 text column and addon_id had no
+// cap at all — one oversized id (or enough small ones) reached Save and
+// failed PocketBase's field validation, surfacing a 500 for plainly bad
+// admin input (same class as B42's enterprise fields and B30's unknown
+// tier_key). Both limits are enforced BEFORE Save, counting RUNES to
+// match PocketBase's len([]rune(value)) validator.
+const (
+	addonIDMax      = 64
+	addonsColumnMax = 1024 // must match the license_keys.addons field Max
+)
 
 // handleAddLicenseAddon returns an HTTP handler for adding an addon to a
 // license key (admin-only). This is called after a successful Paddle
@@ -53,6 +66,12 @@ func handleAddLicenseAddon(app core.App) func(e *core.RequestEvent) error {
 				"error": "license_key and addon_id are required",
 			})
 		}
+		// B44: reject an oversized identifier before it can reach Save.
+		if utf8.RuneCountInString(req.AddonID) > addonIDMax {
+			return e.JSON(http.StatusBadRequest, map[string]any{
+				"error": "addon_id must be at most 64 characters",
+			})
+		}
 
 		// ── Find the license key ──────────────────────────────
 		keyRec, err := app.FindFirstRecordByData("license_keys", "key", req.LicenseKey)
@@ -74,7 +93,19 @@ func handleAddLicenseAddon(app core.App) func(e *core.RequestEvent) error {
 
 		// ── Add the addon ─────────────────────────────────────
 		existingAddons = append(existingAddons, req.AddonID)
-		addonsJSON, _ := json.Marshal(existingAddons)
+		addonsJSON, marshalErr := json.Marshal(existingAddons)
+		if marshalErr != nil {
+			log.Printf("addon-admin: failed to serialize addons: %v", marshalErr)
+			return e.JSON(http.StatusInternalServerError, map[string]any{
+				"error": "failed to add addon to license key",
+			})
+		}
+		// B44: the whole serialized list must still fit the column.
+		if utf8.RuneCountInString(string(addonsJSON)) > addonsColumnMax {
+			return e.JSON(http.StatusBadRequest, map[string]any{
+				"error": "addon limit reached for this license key",
+			})
+		}
 		keyRec.Set("addons", string(addonsJSON))
 
 		if saveErr := app.Save(keyRec); saveErr != nil {
@@ -84,7 +115,7 @@ func handleAddLicenseAddon(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
-		log.Printf("addon-admin: added addon %s to key %s", req.AddonID, req.LicenseKey[:8]+"****")
+		log.Printf("addon-admin: added addon %s to key %s", req.AddonID, req.LicenseKey[:8]+"****") // key-log:masked prefix mask predates maskLicenseKey; switching would expose 8 random chars instead of 1
 
 		return e.JSON(http.StatusOK, map[string]any{
 			"status":      "addon_added",
@@ -157,7 +188,7 @@ func handleRemoveLicenseAddon(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
-		log.Printf("addon-admin: removed addon %s from key %s", req.AddonID, req.LicenseKey[:8]+"****")
+		log.Printf("addon-admin: removed addon %s from key %s", req.AddonID, req.LicenseKey[:8]+"****") // key-log:masked prefix mask predates maskLicenseKey; switching would expose 8 random chars instead of 1
 
 		return e.JSON(http.StatusOK, map[string]any{
 			"status":      "addon_removed",
@@ -219,17 +250,34 @@ func parseAddonsFromRecord(rec *core.Record) []string {
 	return addons
 }
 
-// authenticateAdmin checks that the request has a valid Bearer token.
+// authenticateAdmin reports whether the request is authorized for the
+// admin-only addon endpoints: either the OZ_ADMIN_KEY bearer secret, or a
+// web session belonging to the admin tenant (OZ_ADMIN_EMAIL, defaulting to
+// defaultAdminEmail). It writes NO response — callers reply 401 themselves.
+//
+// LSE-9 fix: this gate previously accepted ANY valid tenant api_key (the
+// old doc comment called it an interim measure) — any activated customer
+// could mint enterprise approval codes or mutate add-ons on any license
+// key. It now mirrors adminAuth's semantics minus the response writing.
 func authenticateAdmin(app core.App, e *core.RequestEvent) bool {
-	authHeader := e.Request.Header.Get("Authorization")
-	if !strings.HasPrefix(authHeader, bearerPrefix) {
+	if adminKeyOK(e) {
+		return true
+	}
+	token, err := extractBearerToken(e)
+	if err != nil {
 		return false
 	}
-	apiKey := strings.TrimSpace(strings.TrimPrefix(authHeader, bearerPrefix))
-	if apiKey == "" {
+	tenantID := webOtpStore.getSession(hashWebToken(token))
+	if tenantID == "" {
 		return false
 	}
-	lookup := apiKeyLookup(apiKey)
-	_, err := app.FindFirstRecordByData("tenants", "api_key_lookup", lookup)
-	return err == nil
+	tenant, err := app.FindRecordById("tenants", tenantID)
+	if err != nil {
+		return false
+	}
+	adminEmail := strings.TrimSpace(os.Getenv("OZ_ADMIN_EMAIL"))
+	if adminEmail == "" {
+		adminEmail = defaultAdminEmail
+	}
+	return strings.EqualFold(tenant.GetString("email"), adminEmail)
 }

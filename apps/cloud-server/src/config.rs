@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (cloud-server slice A: verified)
+crate: cloud-server | status: SAFE | lint: CLEAN
+findings: clean — sharded token buckets with per-route configs and background cleanup; unwraps carry SAFETY comments on static metric names; panic guards are deliberate pool-type mismatches; sweep found no SQL interpolation
+next: none | perf: N/A
+*/
 //! Centralised configuration for the cloud server.
 //!
 //! All environment-variable reads happen in [`CloudServerConfig::from_env`].

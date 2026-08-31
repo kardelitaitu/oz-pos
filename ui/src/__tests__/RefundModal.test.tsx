@@ -5,7 +5,7 @@ import salesFtl from '@/locales/sales.ftl?raw';
 
 // Mock the sales API.
 vi.mock('@/api/sales', () => ({
-  processRefund: vi.fn(),
+  processRefundScoped: vi.fn(),
 }));
 
 // Mock AuthContext.
@@ -16,9 +16,9 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 import RefundModal from '@/features/sales/RefundModal';
-import { processRefund } from '@/api/sales';
+import { processRefundScoped } from '@/api/sales';
 
-const mockProcessRefund = processRefund as ReturnType<typeof vi.fn>;
+const mockProcessRefund = processRefundScoped as ReturnType<typeof vi.fn>;
 
 const refundFtl = `
 refund-title = Process Refund
@@ -197,11 +197,13 @@ describe('RefundModal', () => {
     await waitFor(() => {
       expect(mockProcessRefund).toHaveBeenCalledTimes(1);
     });
+    // 5e0d4caa: processRefund is session-scoped — token is arg 0, and the
+    // user is resolved from the session server-side (no userId on the wire).
     expect(mockProcessRefund).toHaveBeenCalledWith(
+      'mock-session-token',
       expect.objectContaining({
         saleId: 'sale-abc123456789',
         reason: 'Customer returned',
-        userId: 'user-1',
         lines: expect.arrayContaining([
           expect.objectContaining({ sku: 'SKU-001', qty: 2 }),
         ]),

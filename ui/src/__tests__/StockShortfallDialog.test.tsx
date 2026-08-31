@@ -76,7 +76,7 @@ function partialStockResult(
 
 const defaultProps = {
   shortfallResult: partialStockResult(),
-  cartLines: [{ sku: 'SKU-001', qty: 20, unitPriceMinor: 5000 }] as CartLineData[],
+  cartLines: [{ sku: 'SKU-001', qty: 20, unitPriceMinor: 5000, unitPriceCurrency: 'USD' }] as CartLineData[],
   totalMinor: 100_000,
   currency: 'IDR',
   paymentMethod: 'CASH',
@@ -317,6 +317,27 @@ describe('StockShortfallDialog', () => {
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
+  // Shortfall receipt gap: the retry commits a REAL sale, but onComplete
+  // was called with no arguments, so PaymentModal could never build the
+  // receipt preview the normal completion path shows. The dialog must
+  // forward the CompleteSaleResult.
+  it('forwards the CompleteSaleResult to onComplete (receipt parity)', async () => {
+    const onComplete = vi.fn();
+    const result = { saleId: 'sale-77', total: { minor_units: 9000, currency: 'IDR' }, lineCount: 2 };
+    mockCompleteSaleWithResolvedShortfalls.mockResolvedValueOnce(result);
+
+    await renderWithFluent(
+      <StockShortfallDialog {...defaultProps} onComplete={onComplete} />,
+    );
+
+    await userEvent.click(screen.getByText('Confirm & Continue'));
+
+    await waitFor(() => {
+      expect(onComplete).toHaveBeenCalledTimes(1);
+    });
+    expect(onComplete).toHaveBeenCalledWith(result);
+  });
+
   it('resolves split-mode allocations correctly on confirm', async () => {
     const onComplete = vi.fn();
     mockCompleteSaleWithResolvedShortfalls.mockResolvedValueOnce({
@@ -434,8 +455,16 @@ describe('StockShortfallDialog', () => {
 
     const argsPayload = mockCompleteSaleWithResolvedShortfalls.mock.calls[0]![1] as {
       resolutions: Array<{ sku: string; allocations: Array<{ locationId: string; qty: number }> }>;
+      lines: Array<{ sku: string; qty: number; unitPriceMinor: number; unitPriceCurrency?: string }>;
     };
     expect(argsPayload.resolutions).toHaveLength(1);
+    // FRONTEND-03 follow-up: the dialog must pass the line currency
+    // through to the second command untouched.
+    expect(argsPayload.lines[0]).toMatchObject({
+      sku: 'SKU-001',
+      unitPriceMinor: 5000,
+      unitPriceCurrency: 'USD',
+    });
     const resolution = argsPayload.resolutions[0]!;
     // With no alternatives, allocation falls back to primaryLocationId
     expect(resolution.sku).toBe('SKU-001');
@@ -494,5 +523,81 @@ describe('StockShortfallDialog', () => {
       resolutions: Array<{ sku: string; allocations: Array<{ locationId: string; qty: number }> }>;
     };
     expect(argsPayload.resolutions).toHaveLength(2);
+  });
+
+  // ── Checkout attempt id (COR-7 replay guard) ─────────────────────────
+  //
+  // This dialog is a *retry* of the submission that produced the shortfall, so
+  // it must forward the caller's attempt id unchanged. Nothing else in the
+  // payload ties the two calls together — the dialog synthesises a fresh
+  // `resolved-${Date.now()}` cartId on every submit — so if the id were
+  // re-minted here, a first submission that committed but lost its response
+  // would be replayed as a second, independent sale.
+
+  describe('checkout attempt id', () => {
+    it('forwards the attempt id of the submission that produced the shortfall', async () => {
+      mockCompleteSaleWithResolvedShortfalls.mockResolvedValueOnce({
+        saleId: 'sale-1',
+        total: null,
+        lineCount: 1,
+      });
+
+      await renderWithFluent(
+        <StockShortfallDialog {...defaultProps} attemptId="attempt-abc" />,
+      );
+      await userEvent.click(screen.getByText('Confirm & Continue'));
+
+      await waitFor(() => {
+        expect(mockCompleteSaleWithResolvedShortfalls).toHaveBeenCalledTimes(1);
+      });
+      const payload = mockCompleteSaleWithResolvedShortfalls.mock.calls[0]![1] as {
+        attemptId?: string;
+      };
+      expect(payload.attemptId).toBe('attempt-abc');
+    });
+
+    it('sends the SAME attempt id on a retry after a failed submit', async () => {
+      mockCompleteSaleWithResolvedShortfalls
+        .mockRejectedValueOnce(new Error('Network failure'))
+        .mockResolvedValueOnce({ saleId: 'sale-1', total: null, lineCount: 1 });
+
+      await renderWithFluent(
+        <StockShortfallDialog {...defaultProps} attemptId="attempt-abc" />,
+      );
+      await userEvent.click(screen.getByText('Confirm & Continue'));
+      await waitFor(() => {
+        expect(mockCompleteSaleWithResolvedShortfalls).toHaveBeenCalledTimes(1);
+      });
+
+      await userEvent.click(screen.getByText('Confirm & Continue'));
+      await waitFor(() => {
+        expect(mockCompleteSaleWithResolvedShortfalls).toHaveBeenCalledTimes(2);
+      });
+
+      const ids = mockCompleteSaleWithResolvedShortfalls.mock.calls.map(
+        (c) => (c[1] as { attemptId?: string }).attemptId,
+      );
+      expect(ids).toEqual(['attempt-abc', 'attempt-abc']);
+    });
+
+    it('omits attemptId entirely when the caller has none', async () => {
+      mockCompleteSaleWithResolvedShortfalls.mockResolvedValueOnce({
+        saleId: 'sale-1',
+        total: null,
+        lineCount: 1,
+      });
+
+      await renderWithFluent(<StockShortfallDialog {...defaultProps} />);
+      await userEvent.click(screen.getByText('Confirm & Continue'));
+
+      await waitFor(() => {
+        expect(mockCompleteSaleWithResolvedShortfalls).toHaveBeenCalledTimes(1);
+      });
+      const payload = mockCompleteSaleWithResolvedShortfalls.mock.calls[0]![1] as Record<string, unknown>;
+      // Absent, not null: the backend treats a missing key as "no guard
+      // requested", and an explicit null would sit in the same column that
+      // already holds NULL rows which SQLite considers mutually distinct.
+      expect('attemptId' in payload).toBe(false);
+    });
   });
 });

@@ -143,18 +143,6 @@ export interface DisplayShowArgs {
   line2: string;
 }
 
-/** List all registered customer-facing pole displays. */
-export const listDisplays = (): Promise<string[]> =>
-  loggedInvoke<string[]>('list_displays');
-
-/** Show content on a customer-facing pole display. */
-export const displayShow = (args: DisplayShowArgs): Promise<void> =>
-  loggedInvoke('display_show', { args });
-
-/** Clear a customer-facing pole display. */
-export const displayClear = (displayId: string): Promise<void> =>
-  loggedInvoke('display_clear', { displayId });
-
 // ── Weight Scale ────────────────────────────────────────────────────
 
 /** A weight reading from a connected scale. */
@@ -186,11 +174,9 @@ export interface UsbDeviceInfo {
   label: string;
 }
 
-/** Discover all connected USB hardware devices (scanners, printers, scales). */
-export const discoverHardware = (): Promise<UsbDeviceInfo[]> =>
-  loggedInvoke<UsbDeviceInfo[]>('discover_hardware');
-
 // ── Scoped variants (ADR #7) ───────────────────────────────────────
+
+/** Discover all connected USB hardware devices (scoped). */
 
 /** Open a cash drawer (scoped). */
 export const openCashDrawerScoped = (sessionToken: string, args: OpenCashDrawerArgs = {}): Promise<OpenCashDrawerResult> =>

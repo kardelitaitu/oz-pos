@@ -49,6 +49,12 @@ step "no-raw-params (ADR #7 Phase 4)" "bash scripts/verify-no-raw-params.sh" bas
 # ── H-1/H-2: every registered command has a _scoped variant or allowlist entry ──
 step "scoped coverage (H-1)" "bash scripts/verify-scoped-coverage.sh" bash scripts/verify-scoped-coverage.sh
 
+# ── IPC registration parity (F-008/F-050) ────────────────────────────────
+# Fails when the UI invokes a command string absent from a shell's
+# generate_handler![] unless allowlisted; stale allowlist entries fail
+# so the list shrinks to zero as F-006 removes the dead surface.
+step "ipc parity" "python3 scripts/verify-ipc-parity.py" python3 scripts/verify-ipc-parity.py
+
 # ── Architecture boundary checker (P1 pilot) ────────────────────────────
 # Existing transitional debt is reported but only new, expired, or stale
 # baseline entries fail. This is static-only and has no runtime impact.
@@ -195,6 +201,21 @@ if command -v npm &>/dev/null && [ -f ui/package-lock.json ]; then
     # Docker+Vite provisioning) or `npm run e2e` directly for managed E2E.
 else
     echo -e "${YELLOW}⚠ UI checks skipped (npm not found or ui/package-lock.json missing)${NC}"
+fi
+
+# ── Website (mirrors CI website.yml `check` job — auto-detected) ─────────
+# Review follow-up (H2): the admin/dashboard SPA helpers (admin-utils.js)
+# and the worker auth gate have vitest suites that previously ran nowhere
+# but a manual `npm test`. Gate: scripts/gates.json → "website-tests".
+if command -v npm &>/dev/null && [ -f website/package-lock.json ]; then
+    cd website
+    if [ ! -d node_modules ]; then
+        step "website npm ci" "cd website; npm ci --no-audit --no-fund" npm ci --no-audit --no-fund
+    fi
+    step "website test" "cd website; npm test" npm test
+    cd ..
+else
+    echo -e "${YELLOW}⚠ Website checks skipped (npm not found or website/package-lock.json missing)${NC}"
 fi
 
 # ── Plugin guide / API parity (PLG-10 tail; Rust-side, always runs) ─────

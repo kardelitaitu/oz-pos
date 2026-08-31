@@ -1,5 +1,7 @@
 # Release Checklist — OZ-POS
 
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (0 findings) · verified against HEAD: all CI job names exist in workflows (rust-fmt/rust-clippy/rust-test-fast/ui-lint/ui-typecheck/ui-test/release-validate); scripts lint-i18n.sh, check-release-version.mjs, bump-version.ps1, generate-latest-json.mjs, verify-updater-signature.mjs all present; nextest [profile.ci] in .config/nextest.toml:26; latest.json + beta.json updater endpoints in tauri.conf.json; UPDATER_PRIVATE_KEY in release.yml. Size targets (<100MB/<50MB/<5MB) and smoke-test steps are operational, not code-falsifiable -->
+
 > Follow these steps in order for every release. Mark each item as completed.
 
 ## Pre-Release
@@ -51,3 +53,5 @@
 - [ ] Mobile APK/AAB + IPA attached to the same release (via their tag workflows)
 - [ ] Rollback verified: previous version installer reinstalls cleanly on a test terminal (see `release-process.md`)
 - [ ] Release announced to team/channel
+
+> last audited 31-08-26 by docs-auditor

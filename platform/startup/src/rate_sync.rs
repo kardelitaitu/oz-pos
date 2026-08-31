@@ -29,6 +29,29 @@ pub type DbConnection = Arc<std::sync::Mutex<rusqlite::Connection>>;
 /// including the `0.00025` (JPY→KWD) extreme.
 const RATE_SCALE: f64 = 1_000_000.0;
 
+/// Convert an untrusted `f64` API rate to fixed-point `rate_millionths`.
+///
+/// Returns `None` for values that must never reach the repository:
+/// non-finite (NaN/±inf), non-positive, magnitudes at or above `1e10`
+/// (the bare `as i64` cast *saturates* to `i64::MAX`, which then passes
+/// the repo's `> 0` validation and persists a garbage rate), and rates
+/// below the fixed-point resolution that would round to zero. Legitimate
+/// FX rates sit far inside the bound — the largest real-world pair is
+/// ~10^4 per unit.
+fn rate_to_millionths(rate: f64) -> Option<i64> {
+    if !rate.is_finite() || rate <= 0.0 || rate >= 1e10 {
+        return None;
+    }
+    let scaled = (rate * RATE_SCALE).round();
+    if scaled < 1.0 {
+        return None;
+    }
+    // 0 < scaled < 1e16 — far inside the i64 range, so the cast cannot
+    // saturate or truncate.
+    #[allow(clippy::cast_possible_truncation)]
+    Some(scaled as i64)
+}
+
 /// Snapshot of the daemon's current state.
 #[derive(Debug, Clone, Default)]
 pub struct RateSyncStatus {
@@ -112,7 +135,24 @@ impl RateSyncDaemon {
             s.last_error = None;
         }
 
-        let http_client = reqwest::Client::new();
+        // COR-31: was a bare Client::new(), which has no timeout. In a
+        // daemon this is worse than a hang in a request path, not better:
+        // run_tick never returns, the loop never reaches the next tick, and
+        // daemon_status.running stays true — so rate sync silently stops
+        // updating while still reporting itself healthy. Small JSON GETs to
+        // a rates API, so 10s connect / 30s total, matching the convention
+        // used elsewhere for non-bulk calls.
+        let http_client = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|e| {
+                tracing::error!(
+                    error = %e,
+                    "could not build bounded HTTP client for rate sync; ticks are unbounded"
+                );
+                reqwest::Client::new()
+            });
         let interval = self.interval;
 
         tokio::spawn(async move {
@@ -235,14 +275,21 @@ impl RateSyncDaemon {
             let repo = CurrencyRepository::new(&conn);
             let mut updated = 0usize;
             for (to_currency, rate) in &rates {
-                // The Frankfurter API returns `f64` rates. Convert to
-                // `i64` millionths via fixed-point scale + `.round()` to
-                // neutralise the unavoidable fp→integer off-by-one at
-                // the 6th decimal. The cast is wrapped-precision-safe
-                // because legitimate FX rates are bounded (< 1e7
-                // dollars-per-base), well inside `i64`.
-                #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-                let rate_millionths = (rate * RATE_SCALE).round() as i64;
+                // The Frankfurter API returns `f64` rates. Conversion to
+                // `i64` millionths goes through `rate_to_millionths`,
+                // which rejects non-finite, non-positive, sub-resolution,
+                // and absurd-magnitude values outright — an untrusted
+                // response can no longer saturate the cast into a
+                // "valid" i64::MAX rate.
+                let Some(rate_millionths) = rate_to_millionths(*rate) else {
+                    tracing::warn!(
+                        from = %base_inner,
+                        to = %to_currency,
+                        rate = %rate,
+                        "rejected out-of-range API exchange rate"
+                    );
+                    continue;
+                };
                 if let Err(e) = repo.upsert_exchange_rate(
                     &base_inner,
                     to_currency,
@@ -409,3 +456,7 @@ mod tests {
         assert_eq!(resp.rates.len(), 3);
     }
 }
+
+#[cfg(test)]
+#[path = "rate_sync_tests.rs"]
+mod conversion_tests;

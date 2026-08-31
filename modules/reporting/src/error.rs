@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-reporting slice A: error verified)
+crate: modules-reporting | status: SAFE | lint: CLEAN
+findings: clean thiserror reporting error taxonomy
+next: none | perf: N/A
+*/
 //! Error type for the reporting domain.
 
 use thiserror::Error;

@@ -105,9 +105,12 @@ export default function AuthForm({ locale }: Props) {
               return;
             }
           }
-          // Exchange failed — fall back to the direct ?token= path (the
-          // Worker still accepts it while the rollout completes).
-          u.searchParams.set('token', token);
+          // Exchange failed — land on the dashboard URL clean (no code,
+          // no token). The Worker's no-cookie gate redirects to the
+          // subdomain login page so the user is never stranded. The old
+          // `?token=` fallback is removed (WEB-1): the Worker no longer
+          // consumes `?token=`, so the fallback only leaked the JWT into
+          // browser history and the Referer header.
           window.location.href = u.toString();
           return;
         }
@@ -116,6 +119,32 @@ export default function AuthForm({ locale }: Props) {
       }
     }
     const target = next && next.startsWith('/') && !next.startsWith('//') ? next : `/${locale}/account`;
+    // R1: exchange the token so the Worker sets the httpOnly cookie on the
+    // marketing host. The Worker catches ?code= on any path, consumes it,
+    // sets the cookie, and redirects to a clean URL — the real session
+    // token never appears in a URL. Falls back to a direct redirect
+    // (sessionStorage) when the exchange fails or the Worker is absent.
+    if (token) {
+      try {
+        const res = await fetch(`${API}/api/v1/web/exchange-issue`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const body = await res.json() as { code?: string };
+          if (body.code) {
+            const u = new URL(target, window.location.origin);
+            u.searchParams.set('code', body.code);
+            window.location.href = u.toString();
+            return;
+          }
+        }
+      } catch {
+        // Exchange failed — fall through to the direct redirect below.
+        // sessionStorage still has the token; the account page uses it as
+        // fallback (/__oz/session is a no-Worker dev path).
+      }
+    }
     window.location.href = target;
   };
 
@@ -380,6 +409,7 @@ export default function AuthForm({ locale }: Props) {
         <form onSubmit={verifyOtp} className="space-y-4" aria-label={t(locale, 'login.title')}>
           <div>
             <span className="mb-2 block text-sm text-muted">{t(locale, 'login.code')}</span>
+            <p className="mb-2 text-xs text-muted">{t(locale, 'login.codePlaceholder')}</p>
             <OtpInput
               value={code}
               onChange={(val) => {

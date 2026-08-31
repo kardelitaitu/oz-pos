@@ -151,6 +151,52 @@ pub fn mask_cvv(_cvv: &str) -> String {
     "***".to_string()
 }
 
+/// Mask an opaque bearer token for logging: `"..."` plus a stable tail, or
+/// `"***"` when there is nothing meaningful to show.
+///
+/// A session token is a bearer credential — whoever holds it acts as that
+/// session without knowing the user's PIN — so it must never reach a log
+/// intact. A bare `"***"` is not good enough either: the eviction, expiry
+/// and PIN-rotation lines each name a specific session, and support cannot
+/// correlate them without some stable suffix.
+///
+/// The tail is eight characters, and that size is a deliberate compromise
+/// rather than a round number. Four characters (16 bits) would collide
+/// between two of the 256 sessions the store allows roughly half the time,
+/// which makes the logs actively misleading — the failure is invisible and
+/// looks like a real event about the wrong session. Eight characters
+/// (32 bits) puts that below one in a hundred thousand while revealing 32 of
+/// a UUID v7's ~122 random bits, leaving ~90 unguessable. Same reasoning
+/// PCI-DSS accepts for PAN last-four, scaled to how many tokens are in
+/// flight at once.
+///
+/// Inputs no longer than twice the tail are fully masked. Showing eight
+/// characters of a ten-character token would leak 80% of its entropy and
+/// produce a "masked" string LONGER than the secret — masking that reveals
+/// most of the value is not masking, so the tail is only worth showing when
+/// it is a small fraction of the whole.
+///
+/// # Example
+///
+/// ```
+/// use oz_security::mask::mask_token;
+///
+/// assert_eq!(mask_token("018f3b2c-7de7-7a91-9c4d-2f1b8a6e5d44"), "...8a6e5d44");
+/// assert_eq!(mask_token("abcd1234ef01"), "***");
+/// assert_eq!(mask_token(""), "***");
+/// ```
+pub fn mask_token(token: &str) -> String {
+    const TAIL_CHARS: usize = 8;
+    // Chars, not bytes: a byte slice can split a multibyte sequence and
+    // panic (the hazard SEC-8 pinned for mask_name).
+    let count = token.chars().count();
+    if count <= TAIL_CHARS * 2 {
+        return "***".to_string();
+    }
+    let tail: String = token.chars().skip(count - TAIL_CHARS).collect();
+    format!("...{tail}")
+}
+
 #[cfg(test)]
 #[path = "mask_tests.rs"]
 mod tests;

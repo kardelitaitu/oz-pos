@@ -1,9 +1,9 @@
 //! User endpoints.
 /*
-last audited 25-07-26 by RSA-Agent (oz-api slice C: users deep read)
+last audited 31-08-26 by RSA-Agent (user-role campaign, FINAL verification pass)
 crate: oz-api | status: SAFE | lint: CLEAN
-findings: API-4 LOW-MED: POST /api/v1/users is JWT-protected but performs NO privilege check — any valid token (label/terminal-scoped) can create a user with any role_id including role-owner, then obtain owner sessions; propose requiring admin-key minted tokens or an owner-scope claim; accepts caller-computed pin_hash (documented contract); SQLite path stamps tenant_id in a follow-up UPDATE (documented non-atomic degrade, same as products)
-next: privilege-gate user creation (API-4) | perf: N/A
+findings: API-4 COMPLETE and G-1/G-2/G-3 CLOSED — POST /api/v1/users requires the operator admin key (admin_key_authorised, same second factor as settings/plan/terminal-register/token routes) on top of the JWT, then 403s terminal-scoped tokens as defense in depth (may_manage_users); the C1.1 quota-bypass vector is closed architecturally: staff quota is a licensing-side concern enforced at the license holder (desktop/tablet staff.rs:571/636) and the admin key is the same operator authority as oz-cli, where no quota applies by design; G-2 role_id is validated in Store::create_user/update_user (typed Validation before any write); G-3 staff:delete documented RESERVED; evidence: 11 users tests green incl. create_user_requires_admin_key_when_configured. RESIDUAL (new, report-only): the admin-key tier covers tokens/terminals/plan/settings/users only — products POST, stock PATCH, tax_rates POST, exchange_rates POST+DELETE still gate on bare JWT (claims used for tenant scoping only), so a device credential can mutate money-relevant master data (tax/exchange rates); same class as API-4, one tier of surfaces over
+next: extend the admin-key gate (or a may-manage-catalog tier check) to products/stock/tax_rates/exchange_rates writes — recommend as the follow-up campaign | perf: N/A
 */
 //!
 //! `POST /api/v1/users` — create a new user.
@@ -11,7 +11,7 @@ next: privilege-gate user creation (API-4) | perf: N/A
 use axum::{
     Extension, Json,
     extract::State,
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
@@ -22,13 +22,22 @@ use oz_core::CoreError;
 
 use crate::AppState;
 use crate::auth::ApiTokenClaims;
+use crate::routes::tokens::admin_key_authorised;
 
 /// Request body for creating a user.
 #[derive(Deserialize)]
 pub struct CreateUserRequest {
     /// Unique username for login.
     pub username: String,
-    /// SHA-256 hash of the user's PIN.
+    /// PHC-formatted Argon2id hash of the user's PIN, as produced by
+    /// `oz_core::auth::hash_pin` — e.g.
+    /// `$argon2id$v=19$m=19456,t=2,p=1$<salt>$<hash>`.
+    ///
+    /// This is NOT a SHA-256 digest, which an earlier version of this
+    /// comment claimed. `verify_pin` treats an unparseable hash as a clean
+    /// rejection, so a client that followed the old wording would get a
+    /// 201 and a user who can never log in. The value is stored verbatim:
+    /// hash it before sending.
     pub pin_hash: String,
     /// Display name shown in the UI.
     pub display_name: String,
@@ -67,16 +76,61 @@ fn store_error_response(e: CoreError) -> Response {
     }
 }
 
+/// May this token create users?
+///
+/// Pure so the rule is testable without a store or an HTTP stack.
+///
+/// `terminal_id` is `Some` only for tokens minted through the terminal
+/// client-credentials path (ADR sync-auth-hardening P3), so this rejects
+/// device credentials while leaving admin-minted tokens — and legacy
+/// tokens, which cannot be told apart from admin ones — alone.
+fn may_manage_users(claims: &ApiTokenClaims) -> bool {
+    claims.terminal_id.is_none()
+}
+
 /// Create a new user.
 ///
 /// Accepts a `CreateUserRequest` JSON body. Returns 201 with the created
 /// user. The `tenant_id` from the JWT claims is stamped on the user row
 /// so the cloud server's snapshot endpoint can scope users per tenant.
+///
+/// Returns 401 without the operator admin key (G-1: user creation is an
+/// operator-tier action — the JWT-authenticated self-service path let a
+/// Plus-tier tenant bypass the C1.1 staff cap that the desktop enforces;
+/// the staff quota is a licensing-side concern and the admin key is the
+/// same operator authority the CLI uses, where no quota applies by
+/// design). Returns 403 for a terminal-scoped token as defense in depth.
 pub async fn create_user(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Extension(claims): Extension<ApiTokenClaims>,
     Json(body): Json<CreateUserRequest>,
 ) -> Response {
+    // G-1 / API-4: settings and tenant plans already require the admin key;
+    // this route was the one admin-tier write still reachable with a plain
+    // tenant JWT. A terminal token is a device credential, and creating a
+    // role-owner user with it turns a tampered till into an owner session
+    // over the whole tenant. Both gates run before anything touches the
+    // store.
+    if !admin_key_authorised(&headers, state.admin_key.as_deref()) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "invalid_admin_key"})),
+        )
+            .into_response();
+    }
+    if !may_manage_users(&claims) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": "insufficient_scope",
+                "message": "user management requires an admin-minted token; \
+                            this token is scoped to a registered terminal",
+            })),
+        )
+            .into_response();
+    }
+
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
 
     if let Some(pool) = &state.pg {

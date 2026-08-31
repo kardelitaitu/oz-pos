@@ -1,18 +1,13 @@
-const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'https://license.ozpos.my.id';
+    const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'https://license.ozpos.my.id';
     let currentTab = 'dashboard';
 
     // ── FX rate (live from open.er-api.com, fallback to 16000) ───
     let fxRate = 16000;
     let fxUpdatedAt = '';
     let fxLive = false;
-
-    async function fetchFxRate() {
-      try {
-        const r = await fetch('https://open.er-api.com/v6/latest/USD');
-        const d = await r.json();
-        if (d.rates && d.rates.IDR) { fxRate = d.rates.IDR; fxLive = true; fxUpdatedAt = new Date().toISOString(); }
-      } catch { fxLive = false; }
-    }
+    // fetchFxRate (with its B10 timeout) comes from admin-utils.js; the
+    // old local copy awaited an un-timed fetch and could hang the whole
+    // dashboard render. State is applied at the call site below.
 
     // ── Helpers ──────────────────────────────────────────────────────
     // el, escapeHtml, fmtIdr, fmtUsd, statusPill, svgChart, svgDonut are
@@ -20,16 +15,34 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
     // admin-utils.js sets these as globals for backward compatibility.
 
     async function api(path, body) {
-      const token = (await (await fetch('/__oz/session')).json()).token;
+      // B12 fix: both fetches go through admin-utils.fetchWithTimeout —
+      // the old un-timed awaits left the whole render pending forever on
+      // a hung connection (skeleton, no retry UI, no console error).
+      const sess = await fetchWithTimeout(undefined, '/__oz/session');
+      const token = (await sess.json()).token;
       const opts = { headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } };
       if (body) { opts.method = 'POST'; opts.body = body; }
-      const res = await fetch(API + path, opts);
+      const res = await fetchWithTimeout(undefined, API + path, opts);
       if (isAuthDenied(res.status)) {
-        document.getElementById('content').innerHTML =
-          '<div class="card" style="text-align:center;padding:2rem">' +
-          '<h2 style="margin:0 0 .5rem;color:var(--bad)">' + t('auth.accessDenied') + '</h2>' +
-          '<p class="empty">' + t('auth.signInAgain') + '</p>' +
-          '</div>';
+        // P3: build the card via DOM API (el() uses textContent), NOT
+        // innerHTML — the sign-in-again message is text-only i18n now, and
+        // a future translator cannot accidentally inject markup.
+        const card = el('div', 'card');
+        card.style.cssText = 'text-align:center;padding:2rem';
+        const h2 = el('h2', null, t('auth.accessDenied'));
+        h2.style.cssText = 'margin:0 0 .5rem;color:var(--bad)';
+        card.appendChild(h2);
+        const p = el('p', 'empty');
+        p.appendChild(document.createTextNode(t('auth.signInAgainBefore')));
+        const link = el('a', null, t('auth.signInAgainLink'));
+        link.href = '/__oz/logout';
+        link.style.color = 'var(--accent)';
+        p.appendChild(link);
+        p.appendChild(document.createTextNode(t('auth.signInAgainAfter')));
+        card.appendChild(p);
+        const content = document.getElementById('content');
+        content.innerHTML = '';
+        content.appendChild(card);
         // Throw so callers don't overwrite the access-denied screen with a
         // generic error state (the fetch was fine; auth is the problem).
         throw authDeniedError(path);
@@ -42,14 +55,21 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
     // svgChart, svgDonut are defined in admin-utils.js (loaded first).
 
     // ── Dashboard tab ────────────────────────────────────────────────
+    // P3 fix (review): renderDashboard had no sequence guard — a slow stats
+    // response landing after the user switched tabs overwrote the tenants/
+    // health view. Same last-click-wins pattern as renderTenants (B15).
+    const dashboardGuard = createSeqGuard();
     async function renderDashboard() {
       const c = document.getElementById('content');
+      const seq = dashboardGuard.next();
       c.innerHTML = '<div class="skeleton" style="height:8rem"></div>';
 
       // Load real stats; on failure show an error state (no MOCK fallback).
       let stats = null;
       let loadError = null;
       try { stats = await api('/api/v1/admin/stats'); } catch (err) { loadError = err; }
+      // A newer render superseded this one while we awaited — drop out.
+      if (!dashboardGuard.isCurrent(seq)) { return; }
       if (!stats) {
         // api() already rendered an "Access denied" screen for 401/403 —
         // don't overwrite it with a generic error. Only show the retry UI
@@ -65,11 +85,19 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         if (retry) { retry.addEventListener('click', renderDashboard); }
         return;
       }
-      const m = stats;
+      // B6 fix: normalizeStats guarantees the array/kpis shapes the render
+      // below dereferences — previously a partial payload made
+      // m.revenueTrend.forEach throw before any chart guard could run.
+      const m = normalizeStats(stats);
 
       // FX rate: prefer the real endpoint's value; otherwise fetch live.
-      if (m.kpis && m.kpis.fxRate) { fxRate = m.kpis.fxRate; fxLive = !!m.kpis.fxLive; fxUpdatedAt = m.kpis.fxUpdatedAt || ''; }
-      else { await fetchFxRate(); }
+      if (m.kpis.fxRate) { fxRate = m.kpis.fxRate; fxLive = !!m.kpis.fxLive; fxUpdatedAt = m.kpis.fxUpdatedAt || ''; }
+      else {
+        const fx = await fetchFxRate();
+        if (!dashboardGuard.isCurrent(seq)) { return; } // superseded mid-fx-fetch
+        if (fx.live) { fxRate = fx.rate; fxLive = true; fxUpdatedAt = fx.updatedAt; }
+        else { fxLive = false; }
+      }
       // Convert all revenue data to IDR.
       m.revenueTrend.forEach(d => d.idr = Math.round(d.usd * fxRate));
       const mrrIdr = Math.round(m.kpis.mrrUsd * fxRate);
@@ -148,35 +176,19 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       provCard.appendChild(provRow);
       chartGrid.appendChild(provCard);
 
-      // Signups per month (bar chart as SVG)
+      // Signups per month (bar chart — extracted to admin-utils.svgBarChart)
       const signupCard = el('div', 'chart-card');
       signupCard.appendChild(el('h3', null, t('chart.signupsPerMonth')));
-      const maxS = Math.max(...m.signupsPerMonth.map(d => d.count));
-      const barW = 420 / m.signupsPerMonth.length;
-      let bars = '';
-      m.signupsPerMonth.forEach((d,i) => {
-        const bh = (d.count / maxS) * 140;
-        const bx = 10 + i * (barW + 2);
-        bars += `<rect x="${bx}" y="${150 - bh}" width="${barW * 0.7}" height="${bh}" rx="2" fill="var(--accent)" opacity=".8"/>
-                 <text x="${bx + barW * 0.35}" y="${150 - bh - 4}" text-anchor="middle" fill="var(--text)" font-size="9">${d.count}</text>
-                 <text x="${bx + barW * 0.35}" y="165" text-anchor="middle" fill="var(--muted)" font-size="8">${escapeHtml(d.month.slice(5))}</text>`;
-      });
-      signupCard.innerHTML += `<svg viewBox="0 0 440 180" style="max-height:180px">${bars}</svg>`;
+      signupCard.innerHTML += svgBarChart('signups', m.signupsPerMonth, { valueKey: 'count', color: 'var(--accent)' });
       chartGrid.appendChild(signupCard);
 
-      // Churn per month
+      // Churn per month — B3 fix: the server's churnPerMonth rows carry the
+      // number in `churn` (count is Go's zero value), so the old inline code
+      // reading d.count rendered permanently-zero/NaN bars. Churn also reused
+      // the signups barW; each chart now sizes itself.
       const churnCard = el('div', 'chart-card');
       churnCard.appendChild(el('h3', null, t('chart.churnCanceled')));
-      const maxC = Math.max(...m.churnPerMonth.map(d => d.count), 1);
-      let churnBars = '';
-      m.churnPerMonth.forEach((d,i) => {
-        const bh = (d.count / maxC) * 140;
-        const bx = 10 + i * (barW + 2);
-        churnBars += `<rect x="${bx}" y="${150 - bh}" width="${barW * 0.7}" height="${bh}" rx="2" fill="var(--bad)" opacity=".8"/>
-                      <text x="${bx + barW * 0.35}" y="${150 - bh - 4}" text-anchor="middle" fill="var(--text)" font-size="9">${d.count}</text>
-                      <text x="${bx + barW * 0.35}" y="165" text-anchor="middle" fill="var(--muted)" font-size="8">${escapeHtml(d.month.slice(5))}</text>`;
-      });
-      churnCard.innerHTML += `<svg viewBox="0 0 440 180" style="max-height:180px">${churnBars}</svg>`;
+      churnCard.innerHTML += svgBarChart('churn', m.churnPerMonth, { valueKey: 'churn', color: 'var(--bad)' });
       chartGrid.appendChild(churnCard);
 
       c.appendChild(chartGrid);
@@ -199,10 +211,11 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
 // kpiC, tableCard are defined in admin-utils.js (loaded first).
 
     // ── Tab switching ──────────────────────────────────────────────
+    // B38: use setNavActive so aria-current moves with .nav-active — the
+    // screen reader must know which admin section is open.
     document.querySelectorAll('.nav-btn').forEach(tab => {
       tab.addEventListener('click', () => {
-        document.querySelectorAll('.nav-btn').forEach(t => t.classList.remove('nav-active'));
-        tab.classList.add('nav-active');
+        setNavActive(document.querySelectorAll('.nav-btn'), tab);
         currentTab = tab.dataset.tab;
         if (currentTab === 'dashboard') renderDashboard();
         if (currentTab === 'tenants') renderTenants();
@@ -216,16 +229,22 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
     let tenantsPerPage = 25;
     let tenantsTotal = 0;
     let tenantsSearch = '';
+    // B15: sequence guard — a slow response for a superseded page/search
+    // must not overwrite the newer view (last-click-wins, not
+    // last-arrival-wins).
+    const tenantsGuard = createSeqGuard();
 
     async function renderTenants() {
       const c = document.getElementById('content');
+      const seq = tenantsGuard.next();
       c.innerHTML = '<div class="card"><p class="empty">' + t('common.loadingTenants') + '</p></div>';
       let data;
       try {
         const qs = '?page=' + tenantsPage + '&perPage=' + tenantsPerPage +
           (tenantsSearch ? '&search=' + encodeURIComponent(tenantsSearch) : '');
         data = await api('/api/v1/admin/tenants' + qs);
-      } catch (err) { if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">' + t('common.failedToLoadTenants') + '</p></div>'; return; }
+      } catch (err) { if (!tenantsGuard.isCurrent(seq)) { return; } if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">' + t('common.failedToLoadTenants') + '</p></div>'; return; }
+      if (!tenantsGuard.isCurrent(seq)) { return; } // a newer request superseded this one
       tenants = data.tenants || [];
       tenantsTotal = data.total || 0;
 
@@ -255,17 +274,10 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       [t('th.email'),t('th.status'),t('th.license'),t('th.tier'),t('th.created'),''].forEach(h => tr.appendChild(el('th', null, h)));
       thead.appendChild(tr); table.appendChild(thead);
       const tbody = el('tbody');
-      tenants.forEach(t => {
-        const row = el('tr');
-        row.appendChild(el('td', null, t.email || '—'));
-        const td1 = el('td'); td1.appendChild(statusPill(t.status)); row.appendChild(td1);
-        row.appendChild(el('td', null, (t.license && t.license.key) || '—'));
-        row.appendChild(el('td', null, (t.subscription && t.subscription.tierKey) || '—'));
-        row.appendChild(el('td', null, t.created ? t.created.slice(0,10) : '—'));
-        const tdAction = el('td'); const btn = el('button', 'btn btn-sm btn-ghost', t('tenant.details'));
-        btn.addEventListener('click', () => showTenantDetail(t.id)); tdAction.appendChild(btn); row.appendChild(tdAction);
-        tbody.appendChild(row);
-      });
+      // B1 fix: the row builder moved to admin-utils.tenantRow — the old
+      // inline callback named its parameter `t`, shadowing the i18n t()
+      // helper, so t('tenant.details') threw and the table never rendered.
+      tenants.forEach(tenant => tbody.appendChild(tenantRow(tenant, showTenantDetail)));
       table.appendChild(tbody); card.appendChild(table); c.appendChild(card);
 
       // ── Pagination controls ─────────────────────────────────────
@@ -292,11 +304,15 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       modal.innerHTML = '<div class="modal-back"><div class="modal"><h3>' + t('common.loading') + '</h3></div></div>';
       try {
         const data = await api('/api/v1/admin/tenants/' + id);
-        const t = data.tenant || {}, lic = data.license || {}, sub = data.subscription || {}, devices = data.devices || [];
-        const m = el('div', 'modal-back'), box = el('div', 'modal');
+        // B2 fix: the old `const t = data.tenant` shadowed the global i18n
+        // t(), so every t('…') label below threw TypeError and the modal
+        // ALWAYS fell through to "Failed to load tenant detail". The kv
+        // mapping now lives in admin-utils.tenantDetailRows (unit-tested).
+        const tenant = data.tenant || {};
+        const box = el('div', 'modal');
         box.setAttribute('role', 'dialog');
         box.setAttribute('aria-modal', 'true');
-        box.appendChild(el('h3', null, t('tenant.title') + (t.email || '')));
+        box.appendChild(el('h3', null, t('tenant.title') + (tenant.email || '')));
         const kv = el('div'); kv.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.82rem';
         // Build the key-value grid safely — never innerHTML with API data.
         function addRow(label, val) {
@@ -306,56 +322,54 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
           if (label === t('th.licenseKey')) { vs.style.cssText += ';font-family:monospace;font-size:.75rem'; }
           kv.appendChild(vs);
         }
-        addRow(t('th.status'), t.status);
-        addRow(t('th.emailVerified'), t.emailVerified ? '✓' : '○');
-        addRow(t('th.created'), t.created ? t.created.slice(0,10) : '—');
-        addRow(t('th.licenseKey'), lic.key || '—');
-        addRow(t('th.tier'), sub.tierKey || lic.tierKey || '—');
-        addRow(t('th.subscriptionStatus'), sub.status || '—');
-        addRow(t('th.expires'), sub.expiresAt || '—');
-        addRow(t('th.devices'), devices.length);
+        tenantDetailRows(data).forEach(pair => addRow(pair[0], pair[1]));
         box.appendChild(kv);
         const actions = el('div', null); actions.style.cssText = 'display:flex;gap:.4rem;margin-top:.8rem;flex-wrap:wrap';
-        if (t.status === 'active') { const revoke = el('button', 'btn btn-sm btn-bad', t('tenant.revoke')); revoke.addEventListener('click', () => doAction(id,'revoke',t('tenant.revoked'))); actions.appendChild(revoke); }
-        if (t.status !== 'active') { const activate = el('button', 'btn btn-sm btn-ok', t('tenant.activate')); activate.addEventListener('click', () => doAction(id,'activate',t('tenant.activated'))); actions.appendChild(activate); }
-        const renew = el('button', 'btn btn-sm', t('tenant.renew365')); renew.addEventListener('click', () => doAction(id,'renew',t('tenant.renewed'),'{"days":365}')); actions.appendChild(renew);
+        // B19: busyWrap (single-flight guard) on every action button —
+        // Renew POSTs +365 days per call, so a double-click granted 730.
+        if (tenant.status === 'active') { const revoke = el('button', 'btn btn-sm btn-bad', t('tenant.revoke')); revoke.addEventListener('click', busyWrap(revoke, () => doAction(id,'revoke',t('tenant.revoked'),undefined,closeModal))); actions.appendChild(revoke); }
+        if (tenant.status !== 'active') { const activate = el('button', 'btn btn-sm btn-ok', t('tenant.activate')); activate.addEventListener('click', busyWrap(activate, () => doAction(id,'activate',t('tenant.activated'),undefined,closeModal))); actions.appendChild(activate); }
+        const renew = el('button', 'btn btn-sm', t('tenant.renew365')); renew.addEventListener('click', busyWrap(renew, () => doAction(id,'renew',t('tenant.renewed'),'{"days":365}',closeModal))); actions.appendChild(renew);
         const upgrade = el('button', 'btn btn-sm btn-warn', t('tenant.upgrade')); upgrade.addEventListener('click', () => upgradePrompt(id,data)); actions.appendChild(upgrade);
         box.appendChild(actions);
-        const close = el('button', 'btn btn-ghost', t('tenant.close')); close.style.cssText = 'margin-top:.8rem;width:100%'; close.addEventListener('click', () => { modal.innerHTML = ''; }); box.appendChild(close);
-        m.appendChild(box); modal.appendChild(m);
-        m.addEventListener('click', e => { if (e.target === m) { modal.innerHTML = ''; } });
-        // ESC key closes the modal (a11y #16)
-        const escHandler = e => { if (e.key === 'Escape') { modal.innerHTML = ''; document.removeEventListener('keydown', escHandler); } };
-        document.addEventListener('keydown', escHandler);
+        // B11: mountModal owns the backdrop/ESC/close wiring and always
+        // detaches the keydown listener — the old inline blocks leaked one
+        // listener per non-ESC close, and each stale handler kept reacting
+        // to later ESC presses.
+        const closeModal = mountModal(modal, box);
+        const closeBtn = el('button', 'btn btn-ghost', t('tenant.close')); closeBtn.style.cssText = 'margin-top:.8rem;width:100%'; closeBtn.addEventListener('click', closeModal); box.appendChild(closeBtn);
       } catch (err) {
         if (err && err.authDenied) { modal.innerHTML = ''; return; }
         modal.innerHTML = '<div class="modal-back"><div class="modal"><p class="empty">' + t('common.failedToLoadTenantDetail') + '</p></div></div>';
       }
     }
 
-    async function doAction(id, action, label, body) {
+    async function doAction(id, action, label, body, close) {
       const modal = document.getElementById('modal-root');
-      try { await api('/api/v1/admin/tenants/' + id + '/' + action, body); modal.innerHTML = ''; flash(label + t('common.successfully')); renderTenants(); } catch { flash(label + t('common.failed')); }
+      try { await api('/api/v1/admin/tenants/' + id + '/' + action, body); if (close) { close(); } else { modal.innerHTML = ''; } flash(label + t('common.successfully')); renderTenants(); } catch { flash(label + t('common.failed')); }
     }
 
     function upgradePrompt(id, data) {
-      const modal = document.getElementById('modal-root'), m = el('div', 'modal-back'), box = el('div', 'modal');
+      const modal = document.getElementById('modal-root');
+      const box = el('div', 'modal');
       box.setAttribute('role', 'dialog');
       box.setAttribute('aria-modal', 'true');
       box.appendChild(el('h3', null, t('tenant.changeTier')));
       const p = el('p', 'small'); p.style.marginBottom = '.6rem'; p.textContent = t('tenant.currentTier') + ((data.subscription && data.subscription.tierKey) || 'none');
       box.appendChild(p);
+      // Tier override dropdown — hardcoded to non-free plans (server-side
+      // upgradeable tiers only; 'free' is excluded because a free tenant
+      // gets a tier-override when they subscribe, not via admin override).
+      // Keep this list in sync with the server's ValidTiers if new tiers
+      // are added (see LSE-8 tier-override handler).
       const select = el('select', 'input'); ['plus','pro','premium','enterprise'].forEach(tier => { const opt = el('option', null, tier); if (tier === (data.subscription && data.subscription.tierKey)) opt.selected = true; select.appendChild(opt); });
       box.appendChild(select);
       const reason = el('input', 'input'); reason.placeholder = t('tenant.reasonOverride'); reason.style.cssText = 'margin-top:.5rem;' + reason.style.cssText; box.appendChild(reason);
       const act = el('div', 'modal-actions');
-      const cancel = el('button', 'btn btn-ghost', t('tenant.cancel')); cancel.addEventListener('click', () => { modal.innerHTML = ''; }); act.appendChild(cancel);
-      const save = el('button', 'btn', t('tenant.save')); save.addEventListener('click', async () => { await doAction(id,'tier-override',t('tenant.tierChanged'),JSON.stringify({tier_key:select.value,reason:reason.value||'admin override'})); }); act.appendChild(save);
-      box.appendChild(act); m.appendChild(box); modal.appendChild(m);
-      m.addEventListener('click', e => { if (e.target === m) { modal.innerHTML = ''; } });
-      // ESC key closes the modal (a11y #16)
-      const escHandler = e => { if (e.key === 'Escape') { modal.innerHTML = ''; document.removeEventListener('keydown', escHandler); } };
-      document.addEventListener('keydown', escHandler);
+      const closeModal = mountModal(modal, box);
+      const cancel = el('button', 'btn btn-ghost', t('tenant.cancel')); cancel.addEventListener('click', closeModal); act.appendChild(cancel);
+      const save = el('button', 'btn', t('tenant.save')); save.addEventListener('click', busyWrap(save, async () => { await doAction(id,'tier-override',t('tenant.tierChanged'),JSON.stringify({tier_key:select.value,reason:reason.value||'admin override'}),closeModal); })); act.appendChild(save);
+      box.appendChild(act);
     }
 
     // ── Health tab ──────────────────────────────────────────────────
@@ -375,7 +389,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
     }
 
     // ── Flash ───────────────────────────────────────────────────────
-    function flash(msg) { const f = el('div', 'flash', msg); document.body.appendChild(f); setTimeout(() => f.remove(), 3000); }
+    function flash(msg) { flashMessage(document.body, msg); } // B34: announced via role=alert (admin-utils)
 
     // ── Boot ────────────────────────────────────────────────────────
     document.getElementById('logout-btn').addEventListener('click', () => {

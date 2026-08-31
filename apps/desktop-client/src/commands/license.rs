@@ -15,8 +15,10 @@ use oz_core::license_verification::{
 };
 use oz_core::subscription::TenantSubscription;
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
+use oz_core::permissions;
 
 /// PocketBase requires IDs to be exactly 15 lowercase alphanumeric chars.
 const MACHINE_ID_LEN: usize = 15;
@@ -762,6 +764,9 @@ pub async fn renew_license_scoped(
     state: State<'_, AppState>,
     new_key: String,
 ) -> Result<bool, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SETTINGS_EDIT).await?;
     let _session = state.resolve_session(&session_token)?;
     renew_license(state, new_key).await
 }
@@ -803,6 +808,9 @@ pub async fn pause_subscription_scoped(
     state: State<'_, AppState>,
     pause_months: u8,
 ) -> Result<PauseResumeDto, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SETTINGS_EDIT).await?;
     let _session = state.resolve_session(&session_token)?;
     pause_subscription(state, pause_months).await
 }
@@ -813,6 +821,9 @@ pub async fn resume_subscription_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<PauseResumeDto, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SETTINGS_EDIT).await?;
     let _session = state.resolve_session(&session_token)?;
     resume_subscription(state).await
 }

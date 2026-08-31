@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tools/types"
 )
 
 const (
@@ -47,17 +46,22 @@ const defaultAdminEmail = "adikaradwiatmaja@gmail.com"
 // ensurePasswordRotationStateCollection creates the password_rotation_state
 // collection if it doesn't exist (idempotent migration).
 func ensurePasswordRotationStateCollection(app core.App) error {
-	_, err := app.FindCollectionByNameOrId("password_rotation_state")
+	existing, err := app.FindCollectionByNameOrId("password_rotation_state")
 	if err == nil {
-		return nil // already exists
+		// LSE-5 repair: legacy migrations created this collection with
+		// empty-string rules on all five actions, which PocketBase treats
+		// as PUBLIC guest access (nil is superuser-only). Anonymous writes
+		// could suppress or forge rotation reminders.
+		return ensureSuperuserOnlyRules(app, existing)
 	}
 
 	collection := core.NewBaseCollection("password_rotation_state")
-	collection.ListRule = types.Pointer("")   // server-only
-	collection.ViewRule = types.Pointer("")   // server-only
-	collection.CreateRule = types.Pointer("") // server-only
-	collection.UpdateRule = types.Pointer("") // server-only
-	collection.DeleteRule = types.Pointer("") // server-only
+	// Superuser-only (LSE-5): nil rules; "" would be PUBLIC guest access.
+	collection.ListRule = nil
+	collection.ViewRule = nil
+	collection.CreateRule = nil
+	collection.UpdateRule = nil
+	collection.DeleteRule = nil
 
 	collection.Fields.Add(&core.TextField{
 		Name:     "email",

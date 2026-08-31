@@ -33,30 +33,30 @@ export interface UpdateStoreArgs {
   timezone: string;
 }
 
-/** List all store profiles. */
-export const listStores = (): Promise<StoreProfile[]> =>
-  loggedInvoke<StoreProfile[]>('list_store_profiles');
+/** List all store profiles for the session's tenant (scoped — ADR #7). */
+export const listStoresScoped = (sessionToken: string): Promise<StoreProfile[]> =>
+  loggedInvoke<StoreProfile[]>('list_store_profiles_scoped', { sessionToken });
 
-/** Get a single store profile by its identifier. */
-export const getStore = (id: string): Promise<StoreProfile | null> =>
-  loggedInvoke<StoreProfile | null>('get_store_profile', { id });
+/** Get a single store profile by its identifier (scoped — ADR #7). */
+export const getStoreProfileScoped = (sessionToken: string, id: string): Promise<StoreProfile | null> =>
+  loggedInvoke<StoreProfile | null>('get_store_profile_scoped', { sessionToken, id });
 
-/** Get the primary store profile. */
-export const getPrimaryStore = (): Promise<StoreProfile | null> =>
-  loggedInvoke<StoreProfile | null>('get_primary_store');
+/** Get the primary store profile (scoped — ADR #7). */
+export const getPrimaryStoreScoped = (sessionToken: string): Promise<StoreProfile | null> =>
+  loggedInvoke<StoreProfile | null>('get_primary_store_scoped', { sessionToken });
 
-/** Create a new store profile. */
-export const createStore = (args: CreateStoreArgs): Promise<StoreProfile> =>
-  loggedInvoke<StoreProfile>('create_store_profile', { args });
+/** Create a new store profile (scoped — ADR #7). */
+export const createStoreProfileScoped = (sessionToken: string, args: CreateStoreArgs): Promise<StoreProfile> =>
+  loggedInvoke<StoreProfile>('create_store_profile_scoped', { sessionToken, args });
 
-/** Update an existing store profile. */
-export const updateStore = (args: UpdateStoreArgs): Promise<StoreProfile> =>
-  loggedInvoke<StoreProfile>('update_store_profile', { args });
+/** Update an existing store profile (scoped — ADR #7). */
+export const updateStoreProfileScoped = (sessionToken: string, args: UpdateStoreArgs): Promise<StoreProfile> =>
+  loggedInvoke<StoreProfile>('update_store_profile_scoped', { sessionToken, args });
 
-/** Set a store as the primary store. */
-export const setPrimaryStore = (id: string): Promise<StoreProfile> =>
-  loggedInvoke<StoreProfile>('set_primary_store', { id });
+/** Set a store as the primary store (scoped — ADR #7). */
+export const setPrimaryStoreScoped = (sessionToken: string, id: string): Promise<StoreProfile> =>
+  loggedInvoke<StoreProfile>('set_primary_store_scoped', { sessionToken, id });
 
-/** Delete a store profile by its identifier. */
-export const deleteStore = (id: string): Promise<void> =>
-  loggedInvoke<void>('delete_store_profile', { id });
+/** Delete a store profile by its identifier (scoped — ADR #7). */
+export const deleteStoreProfileScoped = (sessionToken: string, id: string): Promise<void> =>
+  loggedInvoke<void>('delete_store_profile_scoped', { sessionToken, id });

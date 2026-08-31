@@ -20,6 +20,7 @@ use crate::error::CoreError;
 use crate::popularity::{DayCount, compute_score, decayed_sum, total_events};
 
 use super::Store;
+use super::reports::{check_date_bound, parse_utc_offset};
 
 /// Settings keys caching the catalog means computed by the last full pass.
 const MEAN_SALES: &str = "popularity.mean.sales";
@@ -228,19 +229,31 @@ impl Store<'_> {
         granularity: &str,
         top_categories: i64,
     ) -> Result<Vec<CategoryTrendPoint>, CoreError> {
+        // REP-03: period buckets are store-local. The tz string is validated
+        // by parse_utc_offset (contract in db::reports), so embedding it in
+        // the period expressions cannot inject SQL. Popularity SCORING
+        // windows below stay UTC — they are rolling decay windows, not
+        // calendar buckets.
+        check_date_bound("start_date", start_date)?;
+        check_date_bound("end_date", end_date)?;
+        let tz = self.tz_modifier();
+        debug_assert!(parse_utc_offset(&tz).is_some());
         // Qualified period expressions: the sales query joins `sales s` and
         // the activity query joins `products p` (which also has a
         // `created_at`), so the column must be explicit per query.
         let (s_period, a_period) = match granularity {
             "weekly" => (
-                "DATE(s.created_at, 'weekday 0', '-7 days')",
-                "DATE(a.created_at, 'weekday 0', '-7 days')",
+                format!("DATE(s.created_at, '{tz}', 'weekday 0', '-7 days')"),
+                format!("DATE(a.created_at, '{tz}', 'weekday 0', '-7 days')"),
             ),
             "monthly" => (
-                "strftime('%Y-%m', s.created_at)",
-                "strftime('%Y-%m', a.created_at)",
+                format!("strftime('%Y-%m', s.created_at, '{tz}')"),
+                format!("strftime('%Y-%m', a.created_at, '{tz}')"),
             ),
-            _ => ("DATE(s.created_at)", "DATE(a.created_at)"),
+            _ => (
+                format!("DATE(s.created_at, '{tz}')"),
+                format!("DATE(a.created_at, '{tz}')"),
+            ),
         };
 
         // The most popular categories by current mean score — the chart's
@@ -286,7 +299,7 @@ impl Store<'_> {
                  FROM sale_lines sl
                  JOIN sales s ON sl.sale_id = s.id
                  JOIN products p ON sl.sku = p.sku
-                 WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
+                 WHERE s.status = 'completed' AND DATE(s.created_at, '{tz}') BETWEEN ?1 AND ?2
                  GROUP BY period_start, p.category_id"
             ))?;
             let rows = stmt.query_map(params![start_date, end_date], |r| {
@@ -310,7 +323,7 @@ impl Store<'_> {
                 "SELECT {a_period} AS period_start, p.category_id, a.event_type, COUNT(*) AS cnt
                  FROM product_activity a
                  JOIN products p ON a.sku = p.sku
-                 WHERE DATE(a.created_at) BETWEEN ?1 AND ?2
+                 WHERE DATE(a.created_at, '{tz}') BETWEEN ?1 AND ?2
                  GROUP BY period_start, p.category_id, a.event_type"
             ))?;
             let rows = stmt.query_map(params![start_date, end_date], |r| {

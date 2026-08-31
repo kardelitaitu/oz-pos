@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-crm slice A: service verified)
+crate: modules-crm | status: SAFE | lint: CLEAN
+findings: clean thin service facade
+next: none | perf: N/A
+*/
 //! CRM Service — customer workflows and relationship management.
 
 use crate::error::CrmError;

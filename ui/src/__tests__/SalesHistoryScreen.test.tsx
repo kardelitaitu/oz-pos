@@ -9,8 +9,8 @@ vi.mock('@/api/sales', () => ({
   listSales: vi.fn(),
   getSale: vi.fn(),
   printSalesReceipt: vi.fn(),
-  listRefunds: vi.fn(),
-  voidSale: vi.fn(),
+  listRefundsScoped: vi.fn(),
+  voidSaleScoped: vi.fn(),
 }));
 
 vi.mock('@/api/staff', () => ({
@@ -41,13 +41,13 @@ vi.mock('@/features/sales/RefundModal', () => ({
 }));
 
 import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
-import { listSales, getSale, listRefunds } from '@/api/sales';
+import { listSales, getSale, listRefundsScoped } from '@/api/sales';
 import { listStaffScoped } from '@/api/staff';
 import { getSaleLineMarginsScoped } from '@/api/reports';
 
 const mockListSales = listSales as ReturnType<typeof vi.fn>;
 const mockGetSale = getSale as ReturnType<typeof vi.fn>;
-const mockListRefunds = listRefunds as ReturnType<typeof vi.fn>;
+const mockListRefunds = listRefundsScoped as ReturnType<typeof vi.fn>;
 const mockListStaff = listStaffScoped as ReturnType<typeof vi.fn>;
 const mockGetSaleLineMargins = getSaleLineMarginsScoped as ReturnType<typeof vi.fn>;
 

@@ -1,3 +1,10 @@
+/*
+last audited 31-08-26 by RSA-Agent (user-role campaign, FINAL verification pass)
+crate: modules-staff | status: SAFE | lint: CLEAN
+findings: E-1 / MSL-6 CLOSED — builtin_roles::STAFF doc now states checkout-only (preset-pinned) and cross-references the authoritative platform-core taxonomy; accepted convention drift remains: builtin_roles here lists 4 of the 6 platform ids (ADMIN/AUDITOR unused by this module's seeds — deliberate subset, documented) and top-level test fns at the file bottom sit outside mod tests (cosmetic; all 52 tests green via the module target)
+next: none — campaign closed for this file; optional cosmetic relocation of top-level tests into mod tests in a future chore pass | perf: N/A
+*/
+
 //! Staff & Role domain models.
 
 use platform_core::rbac::{AuthorizationError, has_permission};
@@ -129,12 +136,18 @@ impl User {
 }
 
 /// Well-known role ids used by the seed data.
+///
+/// The authoritative taxonomy is `platform_core::rbac::builtin_roles`
+/// (six ids incl. ADMIN/AUDITOR); this subset covers the seeds this
+/// module owns. STAFF is checkout-only per the preset (40+ negative
+/// assertions) — NOT "Manager minus settings" as an earlier revision
+/// of this doc claimed (MSL-6 / E-1).
 pub mod builtin_roles {
     /// Owner — full access to all features and settings.
     pub const OWNER: &str = "role-owner";
-    /// Manager — can manage products, categories, and view reports.
+    /// Manager — can manage products, inventory, sales, staff, and settings.
     pub const MANAGER: &str = "role-manager";
-    /// Staff — operational role with Manager-level access minus settings.
+    /// Staff — checkout-only operational role (preset-pinned).
     pub const STAFF: &str = "role-staff";
     /// Custom — fully flexible role with no preset permissions.
     pub const CUSTOM: &str = "role-custom";

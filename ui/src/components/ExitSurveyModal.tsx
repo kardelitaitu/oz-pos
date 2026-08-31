@@ -3,7 +3,7 @@ import { useState, useCallback } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { Button } from '@/components/Button';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
-import { loggedInvoke } from '@/utils/logged-invoke';
+import { setSettingScoped } from '@/api/settings';
 import './ExitSurveyModal.css';
 
 /**
@@ -43,14 +43,21 @@ export default function ExitSurveyModal({ open, onClose, onConfirm }: ExitSurvey
 
     setSubmitting(true);
     try {
-      // Best-effort: store the feedback reason via the settings API.
+      // Best-effort: store the feedback reason via the settings API
+      // (F-007/F-006: the previous code invoked a `set_exit_survey_response`
+      // command that does not exist in either shell — the response was
+      // silently dropped). Persisted as a JSON blob under one settings key.
       // If this fails, we still proceed with the pause.
       try {
-        await loggedInvoke('set_exit_survey_response', {
+        await setSettingScoped(
           sessionToken,
-          reason: selectedReason,
-          detail: selectedReason === 'other' ? otherText : undefined,
-        });
+          'exit_survey.last_response',
+          JSON.stringify({
+            reason: selectedReason,
+            detail: selectedReason === 'other' ? otherText : undefined,
+            at: new Date().toISOString(),
+          }),
+        );
       } catch {
         // Non-critical — log and continue
         console.warn('Failed to save exit survey response');

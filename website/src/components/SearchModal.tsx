@@ -164,47 +164,59 @@ export default function SearchModal({ isOpen, onClose, locale }: Props) {
         </div>
 
         {/* Search Results List */}
-        <div className="mt-3 max-h-80 overflow-y-auto space-y-1">
+        <div className="mt-3 max-h-80 overflow-y-auto space-y-1" role="listbox" aria-label={t(locale, 'search.quickSearch')}>
           {filteredItems.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted">
               {t(locale, 'search.noResults')} <span className="font-semibold text-ink">"{query}"</span>
             </div>
           ) : (
-            filteredItems.map((item, idx) => (
-              <a
-                key={item.id}
-                role="option"
-                aria-selected={selectedIndex === idx}
-                href={item.url}
-                onMouseEnter={() => setSelectedIndex(idx)}
-                className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm transition ${
-                  selectedIndex === idx
-                    ? 'bg-accent/15 text-link'
-                    : 'text-ink hover:bg-ink/5'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="text-muted">
-                    {item.category === 'docs' ? (
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                      </svg>
-                    ) : (
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polygon points="12 2 2 7 12 12 22 7 12 2" />
-                        <polyline points="2 17 12 22 22 17" />
-                        <polyline points="2 12 12 17 22 12" />
-                      </svg>
-                    )}
-                  </span>
-                  <span className="font-medium">{item.title}</span>
-                </div>
-                <span className="text-xs uppercase tracking-wider text-muted font-mono">
-                  {item.category}
-                </span>
-              </a>
-            ))
+            <>
+              <p className="sr-only">{t(locale, 'search.quickSearch')}</p>
+              {filteredItems.map((item, idx) => (
+                <React.Fragment key={item.id}>
+                  {idx === 0 && (
+                    <p className="px-2 pt-1 text-xs font-semibold uppercase tracking-wider text-muted">{t(locale, item.category === 'docs' ? 'search.docsTitle' : 'search.pagesTitle')}</p>
+                  )}
+                  {idx > 0 && filteredItems[idx - 1].category !== item.category && (
+                    <p className="px-2 pt-1 text-xs font-semibold uppercase tracking-wider text-muted">
+                      {t(locale, item.category === 'docs' ? 'search.docsTitle' : 'search.pagesTitle')}
+                    </p>
+                  )}
+                  <a
+                    role="option"
+                    aria-selected={selectedIndex === idx}
+                    href={item.url}
+                    onMouseEnter={() => setSelectedIndex(idx)}
+                    className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm transition ${
+                      selectedIndex === idx
+                        ? 'bg-accent/15 text-link'
+                        : 'text-ink hover:bg-ink/5'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-muted">
+                        {item.category === 'docs' ? (
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                            <polyline points="2 17 12 22 22 17" />
+                            <polyline points="2 12 12 17 22 12" />
+                          </svg>
+                        )}
+                      </span>
+                      <span className="font-medium">{item.title}</span>
+                    </div>
+                    <span className="text-xs uppercase tracking-wider text-muted font-mono">
+                      {item.category}
+                    </span>
+                  </a>
+                </React.Fragment>
+              ))}
+            </>
           )}
         </div>
 

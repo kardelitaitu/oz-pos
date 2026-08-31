@@ -59,6 +59,7 @@ const { invokeMock, defaultImpl } = vi.hoisted(() => {
       case 'list_exchange_rates':
         return Promise.resolve([]);
       case 'list_exchange_rates_scoped':
+      case 'list_latest_exchange_rates_scoped':
         return Promise.resolve([]);
       case 'get_default_currency':
         return Promise.resolve('USD');
@@ -132,8 +133,7 @@ vi.mock('@/api/loyalty', () => ({
   redeemLoyaltyPoints: mockRedeemLoyaltyPoints,
 }));
 
-import { listCustomers, listCustomersScoped } from '@/api/customers';
-const mockListCustomers = listCustomers as ReturnType<typeof vi.fn>;
+import { listCustomersScoped } from '@/api/customers';
 const mockListCustomersScoped = listCustomersScoped as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
@@ -146,7 +146,6 @@ beforeEach(() => {
     { id: 'cust-1', name: 'John Doe', phone: '555-0100', email: 'john@example.com' },
     { id: 'cust-2', name: 'Jane Smith', phone: '555-0200', email: 'jane@example.com' },
   ];
-  mockListCustomers.mockResolvedValue(customers);
   mockListCustomersScoped.mockResolvedValue(customers);
 });
 
@@ -156,10 +155,12 @@ afterEach(() => {
 });
 
 function setProcessingMock() {
-  // Make complete_sale never resolve so processing stays true
+  // Make the completion never resolve so processing stays true. The
+  // component calls the SCOPED command (ADR #7); intercept both names so
+  // the guard holds regardless of which the component reaches.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   invokeMock.mockImplementation((cmd: string): any => {
-    if (cmd === 'complete_sale') return new Promise(() => {});
+    if (cmd === 'complete_sale' || cmd === 'complete_sale_scoped') return new Promise(() => {});
     if (cmd === 'start_sale') return Promise.resolve({ cartId: 'test-cart' });
     if (cmd === 'add_line') return Promise.resolve({ lineId: 'test-line', lineTotal: null });
     if (cmd === 'print_sales_receipt') return Promise.resolve({ printed: true });
@@ -184,7 +185,7 @@ function setProcessingMock() {
 function setErrorMock() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   invokeMock.mockImplementation((cmd: string): any => {
-    if (cmd === 'complete_sale') return Promise.reject(new Error('Payment gateway timeout'));
+    if (cmd === 'complete_sale' || cmd === 'complete_sale_scoped') return Promise.reject(new Error('Payment gateway timeout'));
     if (cmd === 'start_sale') return Promise.resolve({ cartId: 'test-cart' });
     if (cmd === 'add_line') return Promise.resolve({ lineId: 'test-line', lineTotal: null });
     if (cmd === 'print_sales_receipt') return Promise.resolve({ printed: true });
@@ -340,7 +341,7 @@ describe('PaymentModal — edge cases', () => {
     let callCount = 0;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     invokeMock.mockImplementation((cmd: string): any => {
-      if (cmd === 'complete_sale') {
+      if (cmd === 'complete_sale' || cmd === 'complete_sale_scoped') {
         callCount++;
         if (callCount === 1) return Promise.reject(new Error('Payment gateway timeout'));
         return Promise.resolve({ saleId: 'sale-1', total: null, lineCount: 1 });
@@ -359,6 +360,7 @@ describe('PaymentModal — edge cases', () => {
       ]);
       if (cmd === 'list_exchange_rates') return Promise.resolve([]);
       if (cmd === 'list_exchange_rates_scoped') return Promise.resolve([]);
+      if (cmd === 'list_latest_exchange_rates_scoped') return Promise.resolve([]);
       if (cmd === 'get_default_currency') return Promise.resolve('USD');
       if (cmd === 'get_default_currency_scoped') return Promise.resolve('USD');
       if (cmd === 'get_latest_exchange_rate_scoped') return Promise.resolve(null);
@@ -491,7 +493,6 @@ describe('PaymentModal — edge cases', () => {
     await userEvent.click(screen.getByText(/select customer/i));
     await screen.findByPlaceholderText(/search by name/i);
 
-    expect(mockListCustomers).not.toHaveBeenCalled();
     expect(mockListCustomersScoped).not.toHaveBeenCalled();
     expect(document.querySelectorAll('button.payment-customer-search-item')).toHaveLength(0);
   });

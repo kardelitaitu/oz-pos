@@ -4,15 +4,18 @@ import { CurrencyProvider, useCurrency } from '@/contexts/CurrencyContext';
 import type { ReactNode } from 'react';
 
 const mockGetDefaultCurrency = vi.fn();
+const mockGetDefaultCurrencyScoped = vi.fn();
 const mockSetDefaultCurrency = vi.fn();
 
 vi.mock('@/api/currency', () => ({
   getDefaultCurrency: (...args: unknown[]) => mockGetDefaultCurrency(...args),
+  getDefaultCurrencyScoped: (...args: unknown[]) => mockGetDefaultCurrencyScoped(...args),
   setDefaultCurrency: (...args: unknown[]) => mockSetDefaultCurrency(...args),
 }));
 
 beforeEach(() => {
   mockGetDefaultCurrency.mockReset();
+  mockGetDefaultCurrencyScoped.mockReset();
   mockSetDefaultCurrency.mockReset();
 });
 
@@ -137,6 +140,51 @@ describe('CurrencyContext', () => {
       await act(async () => {
         resolvePromise('IDR');
       });
+    });
+  });
+
+  // CurrencyContext reload: the provider fetched the GLOBAL bootstrap
+  // default once at mount; per-store scoped defaults (CUR-03) and
+  // out-of-band changes never reached consumers. refresh() re-reads —
+  // scoped when a session token is given, global otherwise — and an
+  // error must keep the last good value (never reset to fallback).
+  describe('refresh', () => {
+    it('refresh(token) loads the scoped store default', async () => {
+      mockGetDefaultCurrency.mockResolvedValue('USD');
+      mockGetDefaultCurrencyScoped.mockResolvedValue('IDR');
+      const { result } = renderHook(() => useCurrency(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      await act(async () => {
+        await result.current.refresh('tok-1');
+      });
+      expect(mockGetDefaultCurrencyScoped).toHaveBeenCalledWith('tok-1');
+      expect(result.current.currency).toBe('IDR');
+    });
+
+    it('refresh() without token loads the global default', async () => {
+      mockGetDefaultCurrency.mockResolvedValue('EUR');
+      const { result } = renderHook(() => useCurrency(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      mockGetDefaultCurrency.mockResolvedValue('JPY');
+      await act(async () => {
+        await result.current.refresh();
+      });
+      expect(mockGetDefaultCurrency).toHaveBeenCalledTimes(2);
+      expect(result.current.currency).toBe('JPY');
+    });
+
+    it('refresh error keeps the current currency', async () => {
+      mockGetDefaultCurrency.mockResolvedValue('USD');
+      const { result } = renderHook(() => useCurrency(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      mockGetDefaultCurrencyScoped.mockRejectedValue(new Error('offline'));
+      await act(async () => {
+        await result.current.refresh('tok-1');
+      });
+      expect(result.current.currency).toBe('USD');
     });
   });
 

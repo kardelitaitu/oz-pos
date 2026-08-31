@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · pb_schema.json verified to contain all 4 collections (license_keys, tenants, subscriptions, tenant_machines) + the listed fields (key, tier_key, status, expires_at, email, api_key, api_key_lookup, signed_payload, signature, grace_until, first_seen_at, last_seen_at); the "simplified authenticator" framing is consistent with the field subset vs ADR #9's fuller schema · NOTE (2026-08-14): tenants.api_key is now a bcrypt hash + tenants.api_key_lookup is the indexed SHA-256 lookup (see §2) · NOTE (2026-08-16): subscriptions now carries the tier quota block (max_stores, max_pos_instances, allowed_types) mirrored from license_keys (see §3) · NOTE (2026-08-17): tier_key select values still lack `plus` — the approved lineup is Free/Plus/Pro/Premium/Enterprise (subscription-tiers.md); tracked by TODO.md C0.2, add `plus` to both tier_key selects here when it lands -->
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · pb_schema.json verified to contain all 4 collections (license_keys, tenants, subscriptions, tenant_machines) + the listed fields (key, tier_key, status, expires_at, email, api_key, api_key_lookup, signed_payload, signature, grace_until, first_seen_at, last_seen_at); the "simplified authenticator" framing is consistent with the field subset vs ADR #9's fuller schema · NOTE (2026-08-14): tenants.api_key is now a bcrypt hash + tenants.api_key_lookup is the indexed SHA-256 lookup (see §2) · NOTE (2026-08-16): subscriptions now carries the tier quota block (max_stores, max_pos_instances, allowed_types) mirrored from license_keys (see §3) · NOTE (2026-08-17 → RESOLVED 2026-08-31 by docs-auditor): `plus` has landed — both `tier_key` selects (license_keys, subscriptions) now read free/plus/pro/premium/enterprise (TODO.md C0.2 done); §1 and §3 field rows updated accordingly. Re-audit also confirmed all newer fields present in pb_schema.json: is_trial, bundle_id, payment_provider, midtrans_sub_id, midtrans_order_id, paddle_sub_id, api_key_lookup -->
 
 # License Server Schema Documentation
 
@@ -12,7 +12,7 @@ Stores the license keys generated for customers. You create these manually in th
 | Field Name | Type | Requirement | Description |
 |---|---|---|---|
 | `key` | Text | **Mandatory** | The actual license string (e.g. `OZ-PRO-ABCD-EFGH`). Must be unique. |
-| `tier_key` | Select | **Mandatory** | The subscription tier this key grants (`free`, `pro`, `premium`, `enterprise`). |
+| `tier_key` | Select | **Mandatory** | The subscription tier this key grants (`free`, `plus`, `pro`, `premium`, `enterprise`). |
 | `status` | Select | **Mandatory** | Current state of the key (`unused`, `activated`, `expired`, `revoked`). |
 | `expires_at` | Date | **Mandatory** | The baseline expiration date granted when this key is activated. |
 | `activated_at` | Date | *Auto-filled* | Populated by the server upon first activation. |
@@ -59,7 +59,7 @@ Stores the cryptographically signed subscription payload. This record is automat
 | Field Name | Type | Requirement | Description |
 |---|---|---|---|
 | `tenant_id` | Relation | **Mandatory** | Links back to the `tenants` collection. |
-| `tier_key` | Select | **Mandatory** | The active tier (`free`, `pro`, `premium`, `enterprise`). |
+| `tier_key` | Select | **Mandatory** | The active tier (`free`, `plus`, `pro`, `premium`, `enterprise`). |
 | `status` | Select | **Mandatory** | State of the subscription (`active`, `expired`, `grace_period`, `revoked`). |
 | `starts_at` | Date | **Mandatory** | Start date of the current subscription cycle. |
 | `expires_at` | Date | **Mandatory** | Expiration date of the current subscription cycle. |

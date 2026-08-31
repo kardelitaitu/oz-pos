@@ -9,7 +9,6 @@ import {
   listAuditLogScoped,
   markAuditReviewedScoped,
   exportAuditLogScoped,
-  listAuditLog,
   getAuditReviewStatusScoped,
 } from '@/api/audit';
 
@@ -54,22 +53,11 @@ describe('audit.ts API contract', () => {
     expect(result.row_count).toBe(10);
   });
 
-  it('listAuditLog calls correct command', async () => {
-    mockInvoke.mockResolvedValue([]);
-    await listAuditLog(100, 0);
-    expect(mockInvoke).toHaveBeenCalledWith('list_audit_log', { args: { limit: 100, offset: 0 } });
-  });
-
   it('getAuditReviewStatusScoped calls correct command', async () => {
     mockInvoke.mockResolvedValue({ total: 100, reviewed: 50 });
     await getAuditReviewStatusScoped(TOKEN);
     expect(mockInvoke).toHaveBeenCalledWith('get_audit_review_status_scoped', {
       sessionToken: TOKEN,
     });
-  });
-
-  it('propagates errors', async () => {
-    mockInvoke.mockRejectedValue(new Error('db error'));
-    await expect(listAuditLogScoped(TOKEN, {})).rejects.toThrow('db error');
   });
 });

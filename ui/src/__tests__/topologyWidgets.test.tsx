@@ -44,8 +44,10 @@ describe('TopologyRelationshipPicker', () => {
   const picker: TopologyPickerState = {
     fromNodeId: 'a',
     fromPort: 'right',
+    fromVariantIndex: 0,
     toNodeId: 'b',
     toPort: 'left',
+    toVariantIndex: 0,
     options: [optionA, optionB],
   };
   const toNode: TopologyNodeData = { id: 'b', type: 'warehouse', name: 'B', x: 300, y: 200 };

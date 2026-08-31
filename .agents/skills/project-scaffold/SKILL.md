@@ -3,7 +3,7 @@ name: project-scaffold
 description: Project scaffolding, Cargo workspace layout, CI configuration, and Git conventions for OZ-POS. Use when setting up the initial repo, adding a new crate, configuring GitHub Actions, or committing changes.
 ---
 
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (6 noted findings, doc-staleness) · F1: workspace rust-version shown as 1.85 -> actual 1.88 (Cargo.toml) · F2: workspace version shown as 0.0.1 -> actual 0.0.19 (and CHANGELOG/AGENTS say 0.0.18; user-owned divergence) · F3: members list shows 8 crates+2 apps -> actual 29 workspace members · F4: license shown as MIT -> actual "SEE LICENSE IN LICENSE" (proprietary; matches CONTRIBUTING/README) · F5 (wrong path): shows migrations/ at repo root -> no such dir; migrations live in crates/oz-core/migrations/ · F6: CI node-version '20' -> ui/package.json engines requires >=22 (same Node drift as QUICKSTART) · verified accurate: resolver=2, edition=2024, rusqlite 0.31, .github/workflows ci/security/release present, Conventional Commits + branch rules, spec _active/_done workflow, Cargo.lock committed for binaries -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (workspace-layout example repaired) · FIXED 31-08: license MIT -> "SEE LICENSE IN LICENSE" (proprietary — an agent scaffolding with MIT would mislicense the codebase); version 0.0.1 -> 0.0.33 (locked); rust-version 1.85 -> 1.88 (axum/time require >=1.88); members explicit-8 -> real globs (crates/*, modules/*, platform/*, foundation, apps listed explicitly since Go license-server breaks an apps/* glob); rusqlite features +backup; migrations moved from phantom repo-root to crates/oz-core/migrations/; oz-lua rlua -> mlua · verified against HEAD Cargo.toml + ui/package.json · F6 (node-version) not present in skill body (it lives in .github/workflows) -->
 
 # Project Scaffold, CI & Git
 
@@ -42,29 +42,28 @@ OZ-POS is a multi-crate Cargo workspace with a Tauri front-end, a strict style p
 [workspace]
 resolver = "2"
 members = [
-    "crates/oz-core",
-    "crates/oz-hal",
-    "crates/oz-lua",
-    "crates/oz-security",
-    "crates/oz-payment",
-    "crates/oz-reporting",
-    "crates/oz-logging",
-    "crates/oz-cli",
+    "crates/*",          # utility crates (globbed — a new crate auto-joins)
+    "modules/*",         # domain modules (globbed)
+    "platform/*",        # kernel, core, sync, startup (globbed)
+    "foundation",
+    "apps/cloud-server",
     "apps/desktop-client",
     "apps/tablet-client",
+    # apps/license-server is Go (no Cargo.toml) — excluded; a glob over
+    # apps/* would break `cargo metadata`, so apps are listed explicitly
 ]
 
 [workspace.package]
-version = "0.0.1"
+version = "0.0.33"          # locked — do not bump without an explicit order
 edition = "2024"
-rust-version = "1.85"   # edition 2024 requires Rust 1.85+
-license = "MIT"
+rust-version = "1.88"       # axum/tower-http deps (time 0.3.47+) require ≥ 1.88
+license = "SEE LICENSE IN LICENSE"   # proprietary — NOT open source
 
 [workspace.dependencies]
 # all crates import from here: oz-core = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-rusqlite = { version = "0.31", features = ["bundled"] }
+rusqlite = { version = "0.31", features = ["bundled", "backup"] }
 thiserror = "1"
 anyhow = "1"
 tracing = "0.1"
@@ -75,9 +74,9 @@ tracing-subscriber = "0.3"
 oz-pos/
 ├── Cargo.toml                  # workspace root
 ├── crates/
-│   ├── oz-core/                # money, currency, cart, sale, inventory domain
+│   ├── oz-core/                # money, currency, cart, sale, inventory domain; migrations/ (init.sql + init.pg.sql, embedded via include_str!)
 │   ├── oz-hal/                 # hardware abstraction + drivers
-│   ├── oz-lua/                 # rlua runtime + script bindings
+│   ├── oz-lua/                 # mlua runtime + script bindings
 │   ├── oz-security/            # encryption, secrets, PCI helpers
 │   ├── oz-payment/             # Stripe, Square, EMV abstraction
 │   ├── oz-reporting/           # analytics + CSV export
@@ -97,9 +96,6 @@ oz-pos/
 │   ├── package.json
 │   ├── tsconfig.json
 │   └── src/
-├── migrations/                 # SQL migration files
-│   ├── 20260628_0001_init.sql
-│   └── ...
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   ├── ROADMAP.md
@@ -416,4 +412,4 @@ When a spec finishes, move its folder from `_active/` to `_done/`.
 
 ---
 
-> last audited 19-08-26 by skill-drift-guard
+> last audited 31-08-26 by docs-auditor

@@ -124,7 +124,7 @@ async fn metrics_returns_prometheus_text() {
 }
 
 /// Smoke test for the observability counters added with the operations
-/// runbook (unify-auth-and-sync.md §11.5 item 9): drive a REAL 429 from
+/// runbook (docs/archived/2026-08-15-unify-auth-and-sync.md §11.5 item 9): drive a REAL 429 from
 /// the token-mint rate limiter and a REAL 5xx from an unconfigured
 /// webhook secret, then assert the /metrics endpoint renders both
 /// counters at their expected values.
@@ -755,10 +755,18 @@ async fn lifecycle_free_tenant_upgraded_via_webhook_can_sync() {
 }
 
 /// HMAC-SHA256 Stripe signature helper for the lifecycle test.
+///
+/// Uses the CURRENT unix timestamp: the verifier enforces a ±5 minute
+/// freshness window (CS-2 fix), so a fixed historical timestamp would be
+/// rejected as stale.
 fn lifecycle_stripe_signature(payload: &[u8], secret: &str) -> String {
     use hmac::{Hmac, Mac};
     use sha2::Sha256;
-    let timestamp = "1719000000";
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        .to_string();
     let mut signed_bytes = Vec::with_capacity(timestamp.len() + 1 + payload.len());
     signed_bytes.extend_from_slice(timestamp.as_bytes());
     signed_bytes.push(b'.');

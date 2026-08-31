@@ -213,22 +213,31 @@ describe('browser.ts API contract', () => {
 describe('gateway.ts API contract', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('getGatewayStatus reads settings for each gateway', async () => {
-    mockInvoke.mockResolvedValue('sk_test_key');
+  // UI-1 fix: the command is now the single `gateway_status` IPC (the
+  // backend computes configured/online server-side so raw credential
+  // values never reach the renderer) — the old per-key `get_setting`
+  // assertions were updated to match.
+  it('getGatewayStatus calls the gateway_status command (no args)', async () => {
+    mockInvoke.mockResolvedValue([
+      { name: 'stripe', configured: true, online: false },
+    ]);
     const result = await getGatewayStatus();
-    expect(mockInvoke).toHaveBeenCalledWith('get_setting', { key: 'stripe.api_key' });
-    expect(mockInvoke).toHaveBeenCalledWith('get_setting', { key: 'square.api_key' });
-    expect(mockInvoke).toHaveBeenCalledWith('get_setting', { key: 'midtrans.server_key' });
-    expect(Array.isArray(result)).toBe(true);
+    // This file forwards loggedInvoke args verbatim, so a no-arg call
+    // arrives as a single argument (same convention as the other
+    // no-arg contract tests above).
+    expect(mockInvoke).toHaveBeenCalledWith('gateway_status');
+    expect(result).toHaveLength(1);
   });
 
-  it('getGatewayStatus handles null keys as unconfigured', async () => {
-    mockInvoke.mockResolvedValue(null);
+  it('getGatewayStatus propagates the backend result array as-is', async () => {
+    const payload = [
+      { name: 'stripe', configured: true, online: true },
+      { name: 'square', configured: false, online: false },
+      { name: 'midtrans', configured: true, online: false },
+    ];
+    mockInvoke.mockResolvedValue(payload);
     const result = await getGatewayStatus();
-    expect(result.length).toBe(3);
-    result.forEach((gw: { configured: boolean; online: boolean }) => {
-      expect(gw.configured).toBe(false);
-      expect(gw.online).toBe(false);
-    });
+    expect(result).toEqual(payload);
+    expect(result.every((gw: { name: string }) => typeof gw.name === 'string')).toBe(true);
   });
 });

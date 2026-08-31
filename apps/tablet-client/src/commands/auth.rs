@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (tablet-client slice A: auth verified)
+crate: tablet-client | status: SAFE | lint: CLEAN
+findings: auth surface mirrors desktop-client: STAFF-06 uniform pre-auth, STAFF-07 layered persistent rate limiting via record_login_attempt_scoped, picker-ticket identity binding; NO verify_pin command here (DC-3 does not exist on tablet). Coverage note: risk-ranked sampling
+next: none | perf: N/A
+*/
 //! Staff authentication commands — login, logout, session verification.
 //!
 //! These commands are the IPC surface for `ui/src/features/auth/`. PIN
@@ -11,6 +17,7 @@ use tauri::{State, command};
 use oz_core::auth::LoginSession;
 use oz_core::db::Store;
 use oz_core::session::SessionContext;
+use oz_security::mask::mask_token;
 
 use crate::commands::picker_ticket;
 use crate::error::AppError;
@@ -368,7 +375,7 @@ pub async fn create_session(
         }
 
         if session_store.contains_key(&token) {
-            tracing::warn!(token = %token, "session token collision detected — overwriting");
+            tracing::warn!(token = %mask_token(&token), "session token collision detected — overwriting");
         }
 
         // Deterministic LRU eviction: find the oldest session by created_at.
@@ -382,7 +389,7 @@ pub async fn create_session(
             if let Some(old_token) = oldest_entry {
                 session_store.remove(&old_token);
                 tracing::warn!(
-                    old_token = %old_token,
+                    old_token = %mask_token(&old_token),
                     "session store full — evicted oldest session by created_at"
                 );
             }

@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-hal slice A: verified)
+crate: oz-hal | status: SAFE | lint: CLEAN
+findings: clean
+next: none | perf: N/A
+*/
 //! TCP (raw / port 9100) connection helpers for network receipt printers.
 //!
 //! Many POS receipt printers (Epson TM-i series, Star mC-Print3, Bixolon)

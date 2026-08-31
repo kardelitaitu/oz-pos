@@ -9,7 +9,7 @@ import { t, dict } from '../../i18n';
 const locale = Astro.currentLocale ?? 'en';
 const pageTitle = `OZ-POS — ${t(locale, 'support.title')}`;
 const faq = (dict(locale).support as { faq: { q: string; a: string }[] }).faq;
-const email = (dict(locale).support as { email: string }).email;
+const email = t(locale, 'support.email');
 ---
 
 <Base title={pageTitle} description={t(locale, 'pageDesc.support')}>
@@ -30,7 +30,7 @@ const email = (dict(locale).support as { email: string }).email;
       </p>
     </div>
 
-    <div data-reveal class="mt-14">
+    <div data-reveal class="mt-14" data-i18n-key={t(locale, 'support.faq')}>
       <h2 class="text-2xl font-bold">{t(locale, 'support.faqTitle')}</h2>
       <div class="mt-6 space-y-3">
         {

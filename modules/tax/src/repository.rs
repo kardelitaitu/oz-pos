@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-tax slice A: repository verified)
+crate: modules-tax | status: SAFE | lint: CLEAN
+findings: clean — TAX-03 soft-delete honoured at the module boundary with cross-layer parity test (modules/tax/tests/boundary_contract.rs); parameterized SQL
+next: none | perf: N/A
+*/
 //! Tax Repository — database persistence layer for tax configuration.
 
 use crate::error::TaxError;

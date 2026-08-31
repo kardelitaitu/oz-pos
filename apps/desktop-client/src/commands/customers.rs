@@ -7,10 +7,10 @@ use tauri::State;
 
 use oz_core::Customer;
 use oz_core::db::Store;
-
-use foundation::validate_not_empty;
-
 use oz_core::permissions;
+
+use crate::commands::authz::require_permission_for_session;
+use foundation::validate_not_empty;
 
 use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
@@ -517,6 +517,9 @@ pub async fn get_customer_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Option<CustomerDto>, AppError> {
+    // F-017: enforce per-domain permission on this scoped command.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::CUSTOMERS_VIEW).await?;
     let (_session, _conn) = state.resolve_scope(&session_token)?;
     let db = _conn
         .lock()

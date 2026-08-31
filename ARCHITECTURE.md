@@ -1,6 +1,6 @@
 # OZ-POS Architecture
 
-<!-- Audit stamp: 2026-08-29 · docs-auditor · status: ACCURATE (counts refreshed) · F1: 14/14 modules active (was 10 — giftcards/kitchen/promotions/purchasing added) · F2: 61 ADRs in docs/decisions/ (was 58) · F3: 13 crates + 4 platform + 1 foundation + 14 modules + 3 apps = 35 workspace members (was 29) · F4: 14/14 modules have README · re-audited 2026-08-29: module/crate/ADR counts refreshed to current tree -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (5 structural majors repaired) · FIXED 31-08: Core Traits rewritten verbatim from foundation/src/contracts.rs (Module id/dependencies/on_load/on_start/on_stop->ModuleResult; Service id/start/stop; EventHandler<E> generic; DomainEvent added; invented `trait Integration` removed); Platform Core Services tree trimmed to the 6 real services (auth/rbac/rbac_presets/permission_registry/database/settings/terminal_profile) with a note that logging/audit/cache live elsewhere; permission delimiter domain.action -> domain:action with real keys (sales:process/view/refund); Event Flow invented names (stock.updated/customer.history.updated/points.awarded/report.data.changed) replaced with real handlers (SaleSyncEnqueuer/InventorySyncEnqueuer/AuditLogHandler/LoyaltyEarnHandler) incl. the Rule-2 diagram; ADR #31 -> #43 (react-only); foundation/ -> foundation/src/; HAL/payment/reporting device lists synced; module tree corrected to the 14 active modules (loyalty/purchasing were wrongly marked 'planned', 8 real modules omitted); apps/unified added; foundation contracts list +DomainEvent · REMAINING (minor backlog, not falsehoods): no dedicated HAL/driver-trait section (EdcTerminal detail lives in crates/oz-hal/README.md); manifest example now complete (description+permissions); scoped-IPC (ADR #7) noted at commands/; remaining: PROMO-3/CUR-11/LOY-03/COR-7 not shown in any flow · counts (35 members / 13 crates / 14 modules / 61 ADRs) verified accurate -->
 
 **Version:** 2.0 (Post-Restructuring)
 **Status:** Active — restructuring complete
@@ -42,7 +42,7 @@ codebase from a flat monolith to the modular architecture described below.
 
 
 The architecture was originally designed to be framework-agnostic but was unified
-under React exclusively per ADR #31 (2026-07-24 react-only-decision).
+under React exclusively per ADR #43 (2026-07-24 react-only-decision).
 
 ---
 
@@ -74,7 +74,7 @@ transitional findings are explicitly baselined with owners and expiry dates.
   └──────────────────────────┘
     |                    |
     ▼                    ▼
-  sale.completed      stock.updated
+  sale.completed      stock.adjusted
 ```
 
 ### Rule 3 — Platform Provides Infrastructure Only
@@ -113,7 +113,8 @@ oz-pos/
 │   ├─ cloud-server/    Cloud HTTP API (axum, for hosted tenants)
 │   ├─ desktop-client/  Windows + Linux (keyboard/mouse, Tauri v2)
 │   ├─ license-server/  License activation & validation (Go)
-│   └─ tablet-client/   Android + iPad (touch, Tauri v2)
+│   ├─ tablet-client/   Android + iPad (touch, Tauri v2)
+│   └─ unified/         Containerized all-in-one deployment (Caddy + supervisord)
 │
 ├─ platform/          System infrastructure
 │   ├─ kernel/         Module system (load, unload, lifecycle)
@@ -122,27 +123,32 @@ oz-pos/
 │   ├─ api/            Backend HTTP API (today: crates/oz-api/)
 │   └─ ui/             Frontend infrastructure (today: ui/src/frontend/)
 │
-├─ modules/           Business features (14 exist today; top 14 shown)
+├─ modules/           Business features (14 active, all registered in the kernel)
 │   ├─ sales/
 │   ├─ inventory/
 │   ├─ crm/
-│   ├─ loyalty/        ← planned
+│   ├─ loyalty/
+│   ├─ promotions/
+│   ├─ currency/
+│   ├─ tax/
 │   ├─ reporting/
-│   ├─ accounting/     ← planned
-│   ├─ purchasing/     ← planned
-│   ├─ warehouse/      ← planned
-│   ├─ restaurant/     ← planned
-│   └─ ecommerce/      ← planned
+│   ├─ purchasing/
+│   ├─ giftcards/
+│   ├─ kitchen/
+│   ├─ settings/
+│   ├─ staff/
+│   └─ terminal/
+│   (planned, not yet a crate: accounting, warehouse, restaurant, ecommerce)
 │
 ├─ integrations/      External adapters (planned; today in crates/oz-hal, crates/oz-payment)
 │   ├─ payments/       (cash, stripe, midtrans, xendit)
-│   ├─ hardware/       (printers, scanners, cash-drawers, scales)
+│   ├─ hardware/       (printers, scanners, cash-drawers, customer displays, scales, EDC terminals)
 │   ├─ messaging/      (whatsapp, email, telegram)
 │   ├─ shipping/
 │   └─ tax/
 │
 ├─ foundation/        Reusable zero-business-logic code
-│   ├─ contracts/      Core traits (Module, Service, EventHandler)
+│   ├─ contracts/      Core traits (Module, Service, EventHandler, DomainEvent)
 │   ├─ dto/            Shared DTOs                 (planned)
 │   ├─ value-objects/  Money, Currency, Email, etc. (today: money.rs)
 │   ├─ errors/         Shared error types
@@ -205,7 +211,13 @@ modules/inventory/  (today: Cargo.toml · README.md · manifest.json · src/{lib
   "id": "inventory",
   "name": "Inventory",
   "version": "1.0.0",
-  "dependencies": []
+  "description": "Product catalog and stock management module: product CRUD, barcode lookup, variants, categories, stock adjustments, inventory tracking.",
+  "dependencies": [],
+  "permissions": [
+    "inventory:view",
+    "inventory:edit",
+    "inventory:adjust"
+  ]
 }
 ```
 
@@ -214,28 +226,27 @@ modules/inventory/  (today: Cargo.toml · README.md · manifest.json · src/{lib
 ## Platform Core Services
 
 ```
-platform/core/
+platform/core/src/
 │
-├─ auth/              Authentication (login, logout, sessions, password reset)
-├─ rbac/              Authorization (roles, permissions, policies)
-├─ database/          SQLite management (connection, transactions, migrations)
-├─ settings/          Application configuration (store name, tax, currency)
-├─ logging/           System logs (errors, warnings, performance)
-├─ audit/             Immutable audit trail (refund issued, price changed)
-├─ storage/           File management (product images, reports, exports)
-├─ cache/             In-memory caching layer
-├─ notifications/     Notification dispatching (WhatsApp, email, push)
-├─ scheduler/         Background jobs (backup, sync, report generation)
-├─ localization/      i18n infrastructure
-└─ tenancy/           Multi-tenant support (tenant, store, terminal)
+├─ auth.rs               Authentication (login, logout, sessions, PIN verify)
+├─ rbac.rs               Authorization (roles, permissions, policies)
+├─ rbac_presets.rs       Seeded role/permission presets
+├─ permission_registry.rs Canonical permission keys (domain:action)
+├─ database/             SQLite management (connection, transactions, migrations)
+├─ settings/             Application configuration (store name, tax, currency)
+└─ terminal_profile.rs   Terminal profile resolution
 ```
+
+> Logging lives in `crates/oz-logging`; audit trail and caching live in
+> `crates/oz-core`. Notifications, scheduler, localization, and tenancy are
+> **not** implemented as platform/core services.
 
 ### Permission Examples
 
-Permissions follow a `domain.action` pattern:
-- `inventory.read`
-- `inventory.write`
-- `sales.refund`
+Permissions follow a `domain:action` pattern (colon delimiter):
+- `sales:process`
+- `sales:view`
+- `sales:refund`
 
 ---
 
@@ -247,36 +258,49 @@ other modules subscribe. No module ever imports another module directly.
 ### Event Flow Example
 
 ```
-Sale Completed
+Sale Completed   (DomainEvent: "sale.completed")
      │
      ▼
 Event Bus
      │
-     ├── Inventory   → stock.updated
-     ├── CRM         → customer.history.updated
-     ├── Loyalty     → points.awarded
-     └── Reporting   → report.data.changed
+     ├── Sales       → SaleSyncEnqueuer      (enqueue for cloud sync)
+     ├── Inventory   → InventorySyncEnqueuer (stock movement + sync)
+     ├── Audit       → AuditLogHandler       (immutable trail)
+     └── Loyalty     → LoyaltyEarnHandler    (points awarded)
 ```
+
+Foundation domain events (`foundation/src/events.rs`) are `SaleCompleted`,
+`ProductCreated`, and `StockAdjusted`; `SettingsUpdated` is published from the
+platform layer. Handlers are registered at startup in
+`platform/startup/src/event_handlers.rs`.
 
 ### Core Traits
 
 ```rust
-trait Module {
-    fn id(&self) -> &str;
-    fn load(&mut self, kernel: &Kernel) -> Result<()>;
-    fn unload(&mut self) -> Result<()>;
+type ModuleId = &'static str;
+type ModuleResult<T = ()> = Result<T, anyhow::Error>;
+
+trait Module: Debug + Send + Sync {
+    fn id(&self) -> ModuleId;
+    fn dependencies(&self) -> &'static [ModuleId] { &[] }
+    fn on_load(&mut self) -> ModuleResult { Ok(()) }
+    fn on_start(&mut self) -> ModuleResult { Ok(()) }
+    fn on_stop(&mut self) -> ModuleResult { Ok(()) }
 }
 
-trait Service {
-    fn name(&self) -> &str;
+trait Service: Debug + Send + Sync {
+    fn id(&self) -> &'static str;
+    fn start(&mut self) -> ModuleResult;
+    fn stop(&mut self) -> ModuleResult;
 }
 
-trait EventHandler {
-    fn handle(&self, event: &Event) -> Result<()>;
+trait EventHandler<E>: Send + Sync
+where E: Send + Sync + 'static {
+    fn handle(&self, event: &E) -> ModuleResult;
 }
 
-trait Integration {
-    fn name(&self) -> &str;
+trait DomainEvent: Send + Sync + 'static {
+    fn event_name(&self) -> &'static str;
 }
 ```
 
@@ -335,7 +359,7 @@ oz-pos/
 │   ├─ cloud-server/    Cloud HTTP API (axum, for hosted tenants)
 │   ├─ desktop-client/  Windows + Linux (moved from src-tauri/)
 │   │   └─ src/
-│   │       ├─ commands/  IPC command handlers
+│   │       ├─ commands/  IPC command handlers (store-scoped `*_scoped` variants per ADR #7 Data Scope Guard)
 │   │       ├─ error.rs
 │   │       ├─ lib.rs     (uses platform_startup::init_module_system)
 │   │       ├─ main.rs
@@ -373,18 +397,18 @@ oz-pos/
 │   ├─ oz-api/         HTTP API server (axum) — now injects config via AppState
 │   ├─ oz-cli/         CLI tool for data import/export and maintenance
 │   ├─ oz-crypto/      Cryptographic primitives (key generation, hashing, encryption)
-│   ├─ oz-hal/         Hardware abstraction layer (printers, scanners, cash drawers, scales)
+│   ├─ oz-hal/         Hardware abstraction layer (printers, scanners, cash drawers, customer displays, scales, EDC payment terminals)
 │   ├─ oz-logging/     Structured logging setup
 │   ├─ oz-lua/         Lua scripting integration
 │   ├─ oz-media/       Media/image handling
 │   ├─ oz-notification/ Email & push notification dispatching
-│   ├─ oz-payment/     Card payment processing (Stripe, QRIS, Square, mock)
+│   ├─ oz-payment/     Card payment processing (Stripe, QRIS, Square, Paddle, mock)
 │   ├─ oz-plugin/      Plugin sandbox & lifecycle (Lua scripting bridge)
-│   ├─ oz-reporting/   Report generation (PDF, CSV)
+│   ├─ oz-reporting/   Report generation (CSV export, daily summaries, menu engineering)
 │   └─ oz-security/    Auth, hashing, encryption
 │
-├─ foundation/        Reusable zero-business-logic code
-│   ├─ contracts.rs    Core traits (Module, Service, EventHandler)
+├─ foundation/src/    Reusable zero-business-logic code
+│   ├─ contracts.rs    Core traits (Module, Service, EventHandler, DomainEvent)
 │   ├─ errors.rs       Shared error types (MoneyError, SkuError)
 │   ├─ enums.rs        Shared enumerations (SaleStatus, PaymentMethod)
 │   ├─ money.rs        Money, Currency value objects
@@ -513,7 +537,7 @@ For the full list see the `docs/decisions/` directory.
 not hard deadlines. Every PR should move the codebase closer to the target
 architecture.*
 
-> last audited 29-08-26 by docs-auditor
+> last audited 31-08-26 by docs-auditor
 
-> status: ACCURATE (verified against actual codebase) · verified accurate: 35 workspace members (13 crates + 4 platform + 1 foundation + 14 modules + 3 apps); 61 ADRs in docs/decisions/; foundation crate verified; cloud-server config consolidation; OpenAPI spec; N+1 SKU lookup fix; all clippy warnings resolved workspace-wide
+> status: ACCURATE (5 structural majors repaired 31-08-26) · Core Traits rewritten verbatim from foundation/src/contracts.rs (invented `Integration` removed, `DomainEvent` added); Platform Core Services trimmed to the 6 real services; permission delimiter corrected to `domain:action`; Event Flow invented names replaced with real handlers; ADR #43 and foundation/src/ corrected; counts verified accurate (35 members / 13 crates / 14 modules / 61 ADRs). Minor backlog in the top audit comment (no dedicated HAL section; feature flows not shown).
 

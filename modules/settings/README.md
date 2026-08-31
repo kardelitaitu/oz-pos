@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings, 1 low-severity observe) · all owned paths verified: crates/oz-core/src/settings.rs + db/settings.rs, commands/{settings,setup,sync}.rs, features/{settings,setup}, api/settings.ts, ui/src/locales/settings.ftl; modules/settings/src/lib.rs has SettingsModule; manifest deps [] match · observe: Overview says settings owns "currency/exchange rate configuration" while modules/currency owns the ISO table + rates — a doc overlap (settings = default-currency config, currency = table/rates), not a false claim · Kernel API matches -->
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings, 1 low-severity observe) · all owned paths verified: crates/oz-core/src/settings.rs + db/settings.rs, commands/{settings,setup,sync}.rs, features/{settings,setup}, api/settings.ts, ui/src/locales/settings.ftl; modules/settings/src/lib.rs has SettingsModule; manifest deps [] match · observe: Overview says settings owns "currency/exchange rate configuration" while modules/currency owns the ISO table + rates — a doc overlap (settings = default-currency config, currency = table/rates), not a false claim · Kernel API matches · RE-AUDITED 31-08 by docs-auditor: manifest.json re-verified (id settings, v1.0.0, deps [], perms view/edit); on_load/on_start/on_stop are stubs (log + "future phases will register handlers") — Lifecycle corrected (previously implied they validate/prepare/clean up); crate has repository.rs/service.rs (SettingsRepository/SettingsService) NOT wired into runtime and NOT parity-tested (no tests/boundary_contract.rs); the currency-ownership observe (settings = default-currency config, currency = ISO table/rates) still holds; normalized footer -->
 
 # Settings Module
 
@@ -25,15 +25,15 @@ The Settings module owns the store configuration vertical. It handles store name
 - **API** — TypeScript API client (`ui/src/api/settings.ts`)
 - **Locale** — Fluent translation strings (`ui/src/locales/settings.ftl`)
 
-In the current phase, these files remain in their original locations. They will be physically moved into `modules/settings/` in subsequent phases.
+In the current phase the runtime settings path still runs through the files above (notably `crates/oz-core/src/settings.rs` and `db/settings.rs`). The crate now also carries a mirror — `repository.rs` (`SettingsRepository`) and `service.rs` (`SettingsService`) — but these are **not yet wired into the runtime** and, unlike tax/inventory, there is no `tests/boundary_contract.rs` pinning them. A subsequent phase will move the implementation fully into `modules/settings/`.
 
 ## Lifecycle
 
-The module implements `foundation::contracts::Module` and follows the standard lifecycle:
+The module implements `foundation::contracts::Module`. Its lifecycle hooks are currently **stubs** — each logs a message and returns `Ok(())`; none touch the database or event bus yet:
 
-1. **`on_load`** — Validates configuration
-2. **`on_start`** — Prepares settings for access
-3. **`on_stop`** — Cleans up resources
+1. **`on_load`** — logs "validating configuration" (a future phase will register event handlers to react to setting changes)
+2. **`on_start`** — logs "ready to manage configuration"
+3. **`on_stop`** — logs "cleaning up"
 
 ## Registration
 
@@ -61,6 +61,4 @@ kernel.start_all()?;
 }
 ```
 
-> last audited 09-08-26 by buffy
-> audit: Phase 3 Module-Level Documentation Audit
-> status: ACCURATE (verified against actual codebase)
+> last audited 31-08-26 by docs-auditor

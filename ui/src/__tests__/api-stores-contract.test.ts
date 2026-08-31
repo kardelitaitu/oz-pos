@@ -6,68 +6,70 @@ vi.mock('@/utils/logged-invoke', () => ({
 }));
 
 import {
-  listStores,
-  getStore,
-  getPrimaryStore,
-  createStore,
-  updateStore,
-  setPrimaryStore,
-  deleteStore,
+  listStoresScoped,
+  getStoreProfileScoped,
+  getPrimaryStoreScoped,
+  createStoreProfileScoped,
+  updateStoreProfileScoped,
+  setPrimaryStoreScoped,
+  deleteStoreProfileScoped,
 } from '@/api/stores';
 
 describe('stores.ts API contract', () => {
+  const TOKEN = 'tok_store';
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('listStores calls correct command (no args)', async () => {
+  it('listStoresScoped calls correct command', async () => {
     mockInvoke.mockResolvedValue([]);
-    await listStores();
-    expect(mockInvoke).toHaveBeenCalledWith('list_store_profiles');
+    await listStoresScoped(TOKEN);
+    expect(mockInvoke).toHaveBeenCalledWith('list_store_profiles_scoped', { sessionToken: TOKEN });
   });
 
-  it('getStore calls correct command', async () => {
+  it('getStoreProfileScoped calls correct command', async () => {
     mockInvoke.mockResolvedValue({ id: 's1', name: 'Main Store' });
-    const result = await getStore('s1');
-    expect(mockInvoke).toHaveBeenCalledWith('get_store_profile', { id: 's1' });
+    const result = await getStoreProfileScoped(TOKEN, 's1');
+    expect(mockInvoke).toHaveBeenCalledWith('get_store_profile_scoped', { sessionToken: TOKEN, id: 's1' });
     expect(result?.id).toBe('s1');
   });
 
-  it('getPrimaryStore calls correct command (no args)', async () => {
+  it('getPrimaryStoreScoped calls correct command', async () => {
     mockInvoke.mockResolvedValue(null);
-    await getPrimaryStore();
-    expect(mockInvoke).toHaveBeenCalledWith('get_primary_store');
+    await getPrimaryStoreScoped(TOKEN);
+    expect(mockInvoke).toHaveBeenCalledWith('get_primary_store_scoped', { sessionToken: TOKEN });
   });
 
-  it('createStore calls correct command', async () => {
+  it('createStoreProfileScoped calls correct command', async () => {
     const args = { id: 's2', name: 'New Store', address: '123 Main St', tax_id: '123', currency: 'IDR', timezone: 'Asia/Jakarta' };
     mockInvoke.mockResolvedValue({ ...args });
-    const result = await createStore(args);
-    expect(mockInvoke).toHaveBeenCalledWith('create_store_profile', { args });
+    const result = await createStoreProfileScoped(TOKEN, args);
+    expect(mockInvoke).toHaveBeenCalledWith('create_store_profile_scoped', { sessionToken: TOKEN, args });
     expect(result.id).toBe('s2');
   });
 
-  it('updateStore calls correct command', async () => {
+  it('updateStoreProfileScoped calls correct command', async () => {
     const args = { id: 's1', name: 'Updated Store', address: '456 New', tax_id: '456', currency: 'IDR', timezone: 'Asia/Jakarta' };
     mockInvoke.mockResolvedValue(args);
-    await updateStore(args);
-    expect(mockInvoke).toHaveBeenCalledWith('update_store_profile', { args });
+    await updateStoreProfileScoped(TOKEN, args);
+    expect(mockInvoke).toHaveBeenCalledWith('update_store_profile_scoped', { sessionToken: TOKEN, args });
   });
 
-  it('setPrimaryStore calls correct command', async () => {
+  it('setPrimaryStoreScoped calls correct command', async () => {
     mockInvoke.mockResolvedValue({ id: 's1' });
-    await setPrimaryStore('s1');
-    expect(mockInvoke).toHaveBeenCalledWith('set_primary_store', { id: 's1' });
+    await setPrimaryStoreScoped(TOKEN, 's1');
+    expect(mockInvoke).toHaveBeenCalledWith('set_primary_store_scoped', { sessionToken: TOKEN, id: 's1' });
   });
 
-  it('deleteStore calls correct command', async () => {
+  it('deleteStoreProfileScoped calls correct command', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await deleteStore('s1');
-    expect(mockInvoke).toHaveBeenCalledWith('delete_store_profile', { id: 's1' });
+    await deleteStoreProfileScoped(TOKEN, 's1');
+    expect(mockInvoke).toHaveBeenCalledWith('delete_store_profile_scoped', { sessionToken: TOKEN, id: 's1' });
   });
 
   it('propagates errors', async () => {
     mockInvoke.mockRejectedValue(new Error('store not found'));
-    await expect(getStore('bad')).rejects.toThrow('store not found');
+    await expect(getStoreProfileScoped(TOKEN, 'bad')).rejects.toThrow('store not found');
   });
 });

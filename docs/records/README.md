@@ -14,7 +14,7 @@ Unified registry for architectural decisions (ADRs), audits, verifications, and 
 | 2 | module-system | [ADR #2: Event Bus Design](../decisions/2026-02-01-event-bus-design.md) | Implemented (2026-07-15) |
 | 3 | ui | [ADR #3: Frontend Restructure](../decisions/2026-03-01-frontend-restructure.md) | Implemented (2026-07-15) |
 | 4 | architecture | [ADR #4: Store-First Tenancy & Workspace Type/Instance Architecture](../decisions/2026-07-10-workspace-type-instance-design.md) | Implemented (2026-07-10) |
-| 5 | subscription | [ADR #5: Subscription Tier & Entitlement Architecture](../decisions/2026-07-10-subscription-tier-entitlement.md) | Implemented (2026-07-10) — ⚠️ **SUPERSEDED for tier lineup & quotas by `subscription-tiers.md` (FINAL, approved 2026-08-17)** |
+| 5 | subscription | [ADR #5: Subscription Tier & Entitlement Architecture](../decisions/archived/2026-07-10-subscription-tier-entitlement.md) | Archived — Superseded (2026-07-10) — tier lineup & quotas superseded by `subscription-tiers.md` (FINAL, approved 2026-08-17) |
 | 6 | sync | [ADR #6: CRDT Delta Ledger & Offline Sync](../decisions/2026-07-10-crdt-delta-ledger-offline-sync.md) | Implemented (2026-07-15) |
 | 7 | architecture | [ADR #7: Data Scope Guard & Query Enforcement](../decisions/2026-07-10-data-scope-guard.md) | Implemented (2026-07-10) |
 | 8 | module-system | [ADR #8: Scoped Real-Time Event Bus](../decisions/2026-07-10-scoped-event-bus.md) | Implemented (2026-07-10) |
@@ -23,29 +23,30 @@ Unified registry for architectural decisions (ADRs), audits, verifications, and 
 | 11 | release | [ADR #11: Zero-Downtime VPS Migration Strategy](../decisions/2026-07-13-zero-downtime-vps-migration.md) | Implemented (2026-07-15) |
 | 12 | theming | [ADR #12: Whitelabel Branding System — Manifest-Driven Asset Pipeline & Multi-Tenant Theming](../decisions/2026-07-15-whitelabel-branding-system.md) | Implemented (2026-07-15) |
 | 13 | release | [ADR #13: Desktop App Updater — Tauri Plugin + Settings Page Integration](../decisions/2026-07-16-desktop-app-updater.md) | Partially Implemented (2026-07-16) — Settings About page UI is live; see ADR #14 for release automation |
-| 14 | release | [ADR #14: Release Automation — GitHub Actions Build & Publish Pipeline](../decisions/2026-07-16-release-automation.md) | Planned (2026-07-16) |
+| 14 | release | [ADR #14: Release Automation — GitHub Actions Build & Publish Pipeline](../decisions/2026-07-16-release-automation.md) | Proposed (2026-07-16) |
 | 15 | theming | [ADR #15: Shadow Banding Mitigation — Single-Layer Uniform Blur & CSS Noise Dithering](../decisions/2026-07-18-shadow-banding-css-dither.md) | Implemented (2026-07-26) |
 | 17 | kds | [ADR #17: KDS Multi-Layout System — Switchable Kitchen Display Layouts with Per-User Preferences](../decisions/2026-07-18-kds-multi-layout-system.md) | Implemented (2026-07-26) |
 | 18 | inventory | [ADR #18: Multi-Location Inventory — Workspace-Bound Stock Locations for Wholesale & Retail](../decisions/2026-07-18-multi-location-inventory.md) | Implemented (2026-07-19) |
-| 19 | inventory | [ADR #19: Sale-Deduction Flow for Multi-Location Inventory](../decisions/2026-07-19-sale-deduction-multi-location.md) | Implemented (2026-07-19) (see [status](./2026-07-19-sale-deduction-multi-location.status.md)) |
-| 20 | payments | [ADR #20: Payment-Capture Ordering — Stock Reservation Before Payment Capture](../decisions/2026-07-19-payment-capture-ordering.md) | Implemented (2026-07-19) (see [status](./2026-07-19-payment-capture-ordering.status.md)) |
-| 21 | sync | [ADR #21: Sync Conflict Resolution Strategy](../decisions/2026-07-20-sync-conflict-resolution-strategy.md) | Phase 1 ✅ implemented — all four resolvers + `resolve_conflict()` dispatch are live in `platform/sync/src/conflict.rs`. Phase 2 ❌ **not shipped** — there is no `sync_conflicts` table, `log_conflict`, or `list_sync_conflicts` anywhere in the codebase (checked 2026-08-08). Phase 3 (tombstones) remains future work. |
+| 19 | inventory | [ADR #19: Sale-Deduction Flow for Multi-Location Inventory](../decisions/2026-07-19-sale-deduction-multi-location.md) | Implemented (2026-07-19) (see [status](../decisions/2026-07-19-sale-deduction-multi-location.status.md)) |
+| 20 | payments | [ADR #20: Payment-Capture Ordering — Stock Reservation Before Payment Capture](../decisions/2026-07-19-payment-capture-ordering.md) | Implemented (2026-07-19) (see [status](../decisions/2026-07-19-payment-capture-ordering.status.md)) |
+| 21 | sync | [ADR #21: Sync Conflict Resolution Strategy](../decisions/2026-07-20-sync-conflict-resolution-strategy.md) | Approved — Phase 1 implemented (2026-07-20; re-audited 2026-08-08 by docs-auditor) |
 | 22 | topology | [ADR #22: Visual Node-Based Store & Workspace Topology Builder](../decisions/2026-07-20-node-based-store-topology-builder.md) | Implemented (2026-07-22) — Amended (2026-07-23) |
-| 23 | subscription | [ADR #23: Free Trial Lifecycle & License Activation Workflow](../decisions/2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md) | — |
+| 23 | subscription | [ADR #23: Free Trial Lifecycle & License Activation Workflow](../decisions/archived/2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md) | Archived — Re-scoped — superseded by subscription-tiers.md §4 (FINAL, approved 2026-08-17) |
 | 30 | module-system | [ADR #30: Domain Module Extraction & oz-core Decomposition](../decisions/2026-07-24-domain-module-extraction.md) | Accepted — Phase 4 (Currency) Complete (2026-07-25) |
-| 30 | ui | [ADR 30 – React‑only UI decision](../decisions/2026-07-24-react-only-decision.md) | — |
 | 31 | module-system | [ADR #31: Decentralized UI Feature Module Registration](../decisions/2026-07-24-decentralized-ui-module-registration.md) | Accepted (2026-07-24) |
-| 32 | database | [ADR #32: DB Layer Extraction (R2) & Platform File Split (R5)](../decisions/2026-07-25-db-extraction-and-platform-split.md) | Draft — Planned |
+| 32 | database | [ADR #32: DB Layer Extraction (R2) & Platform File Split (R5)](../decisions/2026-07-25-db-extraction-and-platform-split.md) | Proposed |
 | 33 | architecture | [ADR #33: Panic Policy & Production unwrap/expect Enforcement](../decisions/2026-08-03-panic-policy.md) | Implemented (2026-08-03) |
 | 34 | topology | [ADR #34: Topology Editor as the Business Logic Builder](../decisions/2026-08-07-business-logic-topology-builder.md) | Proposed |
-| 34 | topology | [ADR #34: Typed Connection Gating & Live Validation (Implementation)](../decisions/2026-08-08-adr34-typed-connection-gating.md) | Implemented (2026-08-08)  \ |
 | 35 | staff | [ADR #35: RBAC — Role Assignments with Branch/Workspace Scopes and User Profile Data](../decisions/2026-08-11-adr35-rbac-role-assignments-user-profile.md) | Accepted (ratified 2026-08-11; implementation sequence in D9) |
 | 36 | products | [ADR #36: Retail POS Product Attributes — Cost, Brand, Rack, Notes + Configurable Columns](../decisions/2026-08-11-adr36-retail-product-attributes.md) | Implemented (2026-08-12) |
 | 37 | products | [ADR #37: Product Popularity Index — Weighted Activity Score for Retail Sorting](../decisions/2026-08-11-adr37-product-popularity-index.md) | Implemented (2026-08-12) |
 | 38 | products | [ADR #38: Retail POS Row Context Menu — View Product Images in Browser](../decisions/2026-08-11-adr38-retail-row-context-menu-browser-images.md) | Implemented (2026-08-12) |
 | 39 | subscription | [ADR #39: Midtrans QRIS Subscription Payments (Phase 2)](../decisions/2026-08-18-adr39-midtrans-subscription-payments.md) | Approved — implementation tracked in `TODO.md` C3.1 |
 | 40 | topology | [ADR #40: Multi-Terminal Peer Model](../decisions/2026-08-20-adr40-multi-terminal-peer-model.md) | Implemented (2026-08-20) |
-| 41 | lifecycle / gating | [ADR #41: App Lifecycle, Device Onboarding, Dynamic Topology Workspaces, and Two-Layer Gated Home (Tier & RBAC)](../decisions/2026-08-28-adr41-app-lifecycle-device-onboarding-topology-home-gating.md) | Accepted (2026-08-28) |
+| 41 | topology | [ADR #41: App Lifecycle, Device Onboarding, Dynamic Topology Workspaces, and Two-Layer Gated Home Experience (Tier & RBAC)](../decisions/2026-08-28-adr41-app-lifecycle-device-onboarding-topology-home-gating.md) | Accepted (2026-08-28) |
+| 42 | website | [ADR #42: Website Admin Dashboard & User Dashboard (Subdomain Architecture)](../decisions/2026-08-28-adr42-website-admin-and-user-dashboard.md) | Partially Implemented — subdomain routing + auth gate + password rotation + dashboard/admin SPAs complete (2026-08-28); invoice history and webhook delivery log remain future work (see §5 Open Questions) |
+| 43 | ui | [ADR #43 – React‑only UI decision](../decisions/2026-07-24-react-only-decision.md) | Accepted (2026-07-24) |
+| 44 | topology | [ADR #44: Typed Connection Gating & Live Validation (Implementation)](../decisions/2026-08-08-adr34-typed-connection-gating.md) | Implemented (2026-08-08) |
 
 ### Research Notes
 
@@ -84,17 +85,20 @@ The per-sector audit reports were consolidated into [**Audit Open Findings**](./
 
 ## Scattered Audit Reports (`docs/`)
 
-- **theming** — [Retail POS Theming Audit — 2026-07-28](../2026-07-28-retail-pos-theming-audit.md)
-- **ui** — [Retail POS UX Audit — 2026-07-29](../2026-07-29-retail-pos-ux-audit.md)
-- **quality** — [Code Quality Audit — 0.0.14](../code-quality-2026-07-20.md)
-- **database** — [Database Optimization Audit — 2026-07-20](../database-optimization-2026-07-20.md)
-- **quality** — [Developer Experience Audit — 2026-07-20](../dev-experience-2026-07-20.md)
-- **ui** — [Dev-Mock Reload-State Audit](../dev-mock-state-audit.md)
-- **ui** — [UI State Audit — 0.0.14](../ui-state-audit-2026-07-20.md)
-- **ui** — [Modal & Overlay Audit Checklist](../modal-audit-checklist.md)
-- **theming** — [Shadow Banding Audit — Task List](../TODO-shadow-audit.md)
-- **products** — [Product Image Storage Plan - Review Summary](../plan-product-images-review.md)
-- **general** — [OZ-POS Design Exceptions Register](../design-exceptions.md)
+- **theming** — [Retail POS Theming Audit — 2026-07-28](../archived/2026-07-28-retail-pos-theming-audit.md)
+- **ui** — [Retail POS UX Audit — 2026-07-29](../archived/2026-07-29-retail-pos-ux-audit.md)
+- **sync** — [Unify Auth & Sync to Northflank](../archived/2026-08-15-unify-auth-and-sync.md)
+- **architecture** — [GLM-5.3 Tauri App Review — Journal](../archived/2026-08-30-glm-5.3-tauri-app-review.md)
+- **architecture** — [OZ-POS Full Crate Audit — GLM 5.3-Flash (RSA)](../archived/2026-08-31-glm-5.3f-crates-audit.md)
+- **quality** — [Code Quality Audit — 0.0.14](../archived/code-quality-2026-07-20.md)
+- **database** — [Database Optimization Audit — 2026-07-20](../archived/database-optimization-2026-07-20.md)
+- **quality** — [Developer Experience Audit — 2026-07-20](../archived/dev-experience-2026-07-20.md)
+- **ui** — [Dev-Mock Reload-State Audit](../archived/dev-mock-state-audit.md)
+- **ui** — [UI State Audit — 0.0.14](../archived/ui-state-audit-2026-07-20.md)
+- **ui** — [Modal & Overlay Audit Checklist](../archived/modal-audit-checklist.md)
+- **theming** — [Shadow Banding Audit — Task List](../archived/TODO-shadow-audit.md)
+- **products** — [Product Image Storage Plan - Review Summary](../archived/plan-product-images-review.md)
+- **general** — [OZ-POS Design Exceptions Register](../archived/design-exceptions.md)
 
 ## System Analysis / Observability (`docs/observability/`)
 

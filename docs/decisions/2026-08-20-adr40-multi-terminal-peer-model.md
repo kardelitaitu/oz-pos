@@ -1,3 +1,9 @@
+---
+num: 40
+area: topology
+title: ADR #40: Multi-Terminal Peer Model
+status: Implemented (2026-08-20)
+---
 # ADR #40: Multi-Terminal Peer Model
 
 **Status:** Implemented (2026-08-20)

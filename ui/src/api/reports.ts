@@ -12,6 +12,10 @@ export interface DailyRevenueRow {
   gross_profit_minor: number;
   /** Gross margin as a percentage of revenue. */
   gross_margin_percent: number;
+  /** Refunds processed on this date, minor units, same currency (REP-04). */
+  refund_minor?: number;
+  /** Net revenue: gross − refunds; negative on refund-only days (REP-04). */
+  net_revenue_minor?: number;
 }
 
 /** Weekly revenue aggregate for a date range. */
@@ -26,6 +30,10 @@ export interface WeeklyRevenueRow {
   gross_profit_minor: number;
   /** Gross margin as a percentage of revenue. */
   gross_margin_percent: number;
+  /** Refunds processed in this week, minor units, same currency (REP-04). */
+  refund_minor?: number;
+  /** Net revenue: gross − refunds (REP-04). */
+  net_revenue_minor?: number;
 }
 
 /** Monthly revenue aggregate for a date range. */
@@ -40,10 +48,16 @@ export interface MonthlyRevenueRow {
   gross_profit_minor: number;
   /** Gross margin as a percentage of revenue. */
   gross_margin_percent: number;
+  /** Refunds processed in this month, minor units, same currency (REP-04). */
+  refund_minor?: number;
+  /** Net revenue: gross − refunds (REP-04). */
+  net_revenue_minor?: number;
 }
 
 /** Top-selling product within a date range. */
 export interface TopProductRow {
+  /** ISO-4217 code — rows are per product AND currency (REP-06). */
+  currency: string;
   product_id: string;
   sku: string;
   name: string;
@@ -56,6 +70,8 @@ export interface TopProductRow {
 
 /** Sales volume by day-of-week and hour for heatmap visualisation. */
 export interface HourlyHeatmapRow {
+  /** ISO-4217 code — one row per cell AND currency (REP-06). */
+  currency: string;
   day_of_week: number;
   hour: number;
   total_minor: number;
@@ -78,6 +94,8 @@ export interface LowStockAlert {
 
 /** Sales breakdown by product category. */
 export interface CategoryBreakdownRow {
+  /** ISO-4217 code; `percentage` normalizes within it (REP-06). */
+  currency: string;
   category_id: string | null;
   category_name: string;
   total_minor: number;
@@ -279,6 +297,8 @@ export const getCategoryBreakdown = (
 
 /** Revenue split by payment method for a date range in the active store. */
 export interface PaymentMethodRow {
+  /** ISO-4217 code — one row per method AND currency (REP-06). */
+  currency: string;
   payment_method: string;
   total_minor: number;
   sale_count: number;
@@ -297,6 +317,8 @@ export const getPaymentMethodBreakdown = (
 
 /** Voided-sale totals for a date range in the active store. */
 export interface VoidedSummaryRow {
+  /** ISO-4217 code — one row per currency (REP-06). */
+  currency: string;
   void_count: number;
   void_total_minor: number;
 }
@@ -305,8 +327,8 @@ export const getVoidedSalesSummary = (
   startDate: string,
   endDate: string,
   sessionToken: string,
-): Promise<VoidedSummaryRow> =>
-  loggedInvoke<VoidedSummaryRow>('get_voided_sales_summary_scoped', {
+): Promise<VoidedSummaryRow[]> =>
+  loggedInvoke<VoidedSummaryRow[]>('get_voided_sales_summary_scoped', {
     sessionToken: sessionToken ?? '',
     startDate,
     endDate,

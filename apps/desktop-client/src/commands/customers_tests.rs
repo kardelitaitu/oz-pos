@@ -797,3 +797,45 @@ async fn delete_customer_scoped_succeeds_without_references() {
         .unwrap();
     assert!(store_b.is_empty());
 }
+
+#[tokio::test]
+async fn get_customer_scoped_denies_user_without_view_permission() {
+    // CRM-02: get_customer_scoped existed but was never exercised — pin
+    // the permission gate (the legacy unscoped get_customer is not
+    // registered, so this is the only reachable read-by-id path).
+    let conn = oz_core::migrations::fresh_db();
+    let store = Store::new(&conn);
+    store.seed_default_roles().unwrap();
+    conn.execute_batch(
+        "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+            ('role-lite', 'Lite', 'Limited', '[\"sales:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+         INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+         VALUES ('user-kitchen', 'kitchen', 'hash', 'Kitchen', 'role-lite', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+    )
+    .unwrap();
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut state = AppState::for_test_with_conn(conn);
+    state.db_manager =
+        StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+    state.session_store.write().unwrap().insert(
+        "kitchen-token".into(),
+        SessionContext::new(
+            "user-kitchen".into(),
+            "role-lite".into(),
+            "terminal-1".into(),
+            "store-kitchen".into(),
+            "instance-1".into(),
+            "pos".into(),
+            None,
+            0,
+        ),
+    );
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = get_customer_scoped("cust-1".into(), "kitchen-token".into(), app.state()).await;
+    assert!(matches!(result, Err(AppError::PermissionDenied(_))));
+}

@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · scripts/generate-license-keys.{ps1,sh} verified; Dockerfile uses golang:1.25-alpine -> alpine:3.20; health.go (GET /api/health, returns status: ok) + healthcheck.go present; pb_schema.json present; go.mod is go 1.25.0; all build/deploy/env-var claims match the Go code -->
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · scripts/generate-license-keys.{ps1,sh} verified; Dockerfile uses golang:1.25-alpine -> alpine:3.22 (was 3.20, bumped for Trivy EOL); health.go (GET /api/health, returns status: ok) + healthcheck.go present; pb_schema.json present; go.mod is go 1.25.0; all build/deploy/env-var claims match the Go code · RE-AUDITED 2026-08-31 by docs-auditor: go.mod still 1.25.0, /api/health present, oz-license.key.pub committed; env-var section confirmed current (Midtrans/ADR #39, PADDLE_PRICE_TIERS six sandbox prices catalogued 08-31); corrected the body's alpine 3.20 -> 3.22 -->
 
 # OZ-POS License Server — Northflank Deployment Guide
 
@@ -86,7 +86,7 @@ $env:OZ_LICENSE_PRIVATE_KEY = (Get-Content -Raw ../../crates/oz-core/oz-license-
 
 ## 3. Build the Docker Image
 
-The `Dockerfile` uses a **multi-stage build**: `golang:1.25-alpine` compiles the binary, then copies it into `alpine:3.20` for a ~25 MB final image.
+The `Dockerfile` uses a **multi-stage build**: `golang:1.25-alpine` compiles the binary, then copies it into `alpine:3.22` for a ~25 MB final image.
 
 ### 3.1 Build locally
 
@@ -243,13 +243,13 @@ The license server requires the RSA private key as an environment variable. **Ne
    - **Key:** `OZ_WEB_SESSION_TTL` — Go duration, default `24h` (e.g. `72h` to extend dashboard sessions).
 8. Add the **billing webhook** secrets (required for the checkout → provisioning flow — Paddle for global, Midtrans for Indonesia, ADR #39):
    - **Key:** `PADDLE_WEBHOOK_SECRET` — the endpoint secret key from Paddle → Developer tools → Notifications → Edit destination. Without it the webhook answers `503 not configured`. **Boot gate:** the server fails fast at startup if this (or `PADDLE_PRICE_TIERS`) is missing or malformed, so a misconfigured deploy can never silently answer 503/500 on every event.
-   - **Key:** `PADDLE_PRICE_TIERS` — comma-separated `price_id:tier_key:period[:bundle_id]` pairs mapping every Paddle price to a tier, e.g. `pri_01h7abc123:pro,pri_01h7def456:premium` (the `:period` segment is "month" or "year" — the webhook cross-checks it against billing_cycle.interval; the optional `:bundle_id` segment marks a vertical-bundle price, C3.2 — see below). **The six real prices are NOT catalogued yet** — the website still carries `pri_placeholder_*` ids (degrading checkout to the mailto fallback). When the catalog lands, replace the placeholders with the six real ids in this exact shape (Plus/Pro/Premium × monthly/yearly, subscription-tiers.md §2):
+   - **Key:** `PADDLE_PRICE_TIERS` — comma-separated `price_id:tier_key:period[:bundle_id]` pairs mapping every Paddle price to a tier, e.g. `pri_01h7abc123:pro,pri_01h7def456:premium` (the `:period` segment is "month" or "year" — the webhook cross-checks it against billing_cycle.interval; the optional `:bundle_id` segment marks a vertical-bundle price, C3.2 — see below). **The six sandbox prices are catalogued (2026-08-31)** — the website carries the real ids for Plus/Pro/Premium × monthly/yearly; only the bundle and the Pro A/B variant still use `pri_placeholder_*` ids (degrading those checkouts to the mailto fallback). Current sandbox map (see also `docs/operations/go-live-checklist.md`):
 
      ```
-     PADDLE_PRICE_TIERS=pri_<plus_monthly>:plus:month,pri_<plus_yearly>:plus:year,pri_<pro_monthly>:pro:month,pri_<pro_yearly>:pro:year,pri_<premium_monthly>:premium:month,pri_<premium_yearly>:premium:year
+     PADDLE_PRICE_TIERS=pro_01m1amcb41qkbr7zzd1kxa3qnd:plus:month,pro_01m1amdj2swb3q21r2mwcy3krh:plus:year,pro_01m1amdwp700jp6183k9zjsgaz:pro:month,pro_01m1ame8ckw8vzjnf8y4q15mww:pro:year,pro_01m1amema8yj6w5mfm8wx8jwhm:premium:month,pro_01m1amf0vpbyfndg5rkvxvyqj4:premium:year
      ```
 
-     Copy the real price IDs from the Paddle dashboard (Catalog → Prices). Do NOT ship the two legacy sandbox prices (`pri_01m05gdnqp30xze6db73qcracp` = old $19/mo Pro, `pri_01m05gdpk4hmnm0k8e6vxm8cec` = old $49/mo Premium) — they charge the superseded amounts. Unmapped prices make provisioning fail with 500 (Paddle retries) until this is fixed. For the Restaurant Starter bundle (C3.2), add a Plus+ bundle price: `pri_<plus_bundle_yearly>:plus:year:restaurant_starter` — the webhook cross-checks `custom_data.bundle` against the price's bundle segment and mints the kds-widened quota block; adding the entry makes the bundle purchasable.
+     Do NOT ship the two legacy sandbox prices (`pri_01m05gdnqp30xze6db73qcracp` = old $19/mo Pro, `pri_01m05gdpk4hmnm0k8e6vxm8cec` = old $49/mo Premium) — they charge the superseded amounts. Unmapped prices make provisioning fail with 500 (Paddle retries) until this is fixed. For the Restaurant Starter bundle (C3.2), add a Plus+ bundle price: `pri_<plus_bundle_yearly>:plus:year:restaurant_starter` — the webhook cross-checks `custom_data.bundle` against the price's bundle segment and mints the kds-widened quota block; adding the entry makes the bundle purchasable.
    - **Key:** `PADDLE_API_KEY` (optional) — server-side Paddle API key. Only needed when the customer email isn't passed in `custom_data` at checkout; the webhook falls back to fetching it via `GET /customers/{id}`.
    - **Key:** `PADDLE_API_URL` (optional) — defaults to `https://api.paddle.com`.
    - **Key:** `MIDTRANS_SERVER_KEY` — the **server key** from Midtrans → Settings → Access Keys (production keys start `Mid-server-…`, sandbox `SB-Mid-server-…`). The key must belong to the **same account that owns the webhook URL** — sandbox notifications are signed with the sandbox key and production with the production key, so a mismatched key answers **401** on every notification (never 503). When the key is **unset**, the webhook answers `503 not configured` and Midtrans retries forever. **Boot gate:** the server fails fast at startup if this (or `MIDTRANS_PRICE_TIERS`) is missing or malformed.

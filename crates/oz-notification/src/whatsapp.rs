@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-notification slice A: whatsapp deep read; N-1 + N-2 FIXED 25-07-26)
+crate: oz-notification | status: SAFE | lint: CLEAN
+findings: N-1 FIXED — the currency template arm now maps the real code and amount_1000 carried on TemplateParameter (new currency_code/amount_1000 fields; currency() converts minor units to the API 1/1000 scale) instead of the hardcoded IDR/0 stub. N-2 FIXED — 429 handling honours the Retry-After header (captured before the body consumes the response; falls back to 60s) and validate_phone's doc now matches the 7-digit minimum. Mock client and handler call sites unchanged (currency constructor keeps its signature)
+next: none | perf: N/A
+*/
 //! WhatsApp Cloud API client implementation.
 //!
 //! Uses the Meta Graph API v21.0+ to send template messages, text messages,
@@ -19,6 +25,35 @@ use crate::{
 };
 
 type HmacSha256 = Hmac<Sha256>;
+
+/// Build the bounded HTTP client used for every Meta Graph call.
+///
+/// COR-31: both constructors used a bare `reqwest::Client::new()`, which has
+/// no timeout of any kind. A Meta endpoint that accepts the TCP connection
+/// and then never answers parks the send forever — the caller is awaiting
+/// `send()`, so the queued notification neither completes nor fails, and the
+/// only symptom is a message that silently never arrives.
+///
+/// 10s connect / 30s total. This is a small JSON POST to a well-known API,
+/// not a bulk transfer, so it follows the 30s convention already used by
+/// `sync_client.rs` rather than the 120s budget the export path needs.
+fn http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        // The builder only fails if the TLS backend cannot initialise,
+        // which is fatal for any HTTPS use anyway. Falling back to
+        // Client::new() would quietly restore the unbounded hang, so it is
+        // logged rather than swallowed.
+        .unwrap_or_else(|e| {
+            tracing::error!(
+                error = %e,
+                "could not build bounded HTTP client for WhatsApp; requests are unbounded"
+            );
+            reqwest::Client::new()
+        })
+}
 
 /// WhatsApp Cloud API client for sending messages via the Meta Graph API.
 ///
@@ -54,7 +89,7 @@ impl WhatsAppClient {
             phone_number_id: phone_number_id.into(),
             access_token: access_token.into(),
             app_secret: None,
-            http_client: reqwest::Client::new(),
+            http_client: http_client(),
             base_url: "https://graph.facebook.com/v21.0".into(),
         }
     }
@@ -78,7 +113,7 @@ impl WhatsAppClient {
             phone_number_id,
             access_token,
             app_secret,
-            http_client: reqwest::Client::new(),
+            http_client: http_client(),
             base_url: "https://graph.facebook.com/v21.0".into(),
         })
     }
@@ -103,7 +138,8 @@ impl WhatsAppClient {
                 "phone number must be in international format (e.g., +6281234567890): {to}"
             )));
         }
-        // Must have at least 10 digits after the +
+        // Must have at least 7 digits after the + (shortest valid country
+        // numbering plans); the doc comment previously claimed 10.
         let digits: String = to.chars().filter(|c| c.is_ascii_digit()).collect();
         if digits.len() < 7 {
             return Err(NotificationError::InvalidPhoneNumber(format!(
@@ -157,14 +193,22 @@ impl NotificationClient for WhatsAppClient {
                             "type": "text",
                             "text": p.text.as_deref().unwrap_or("")
                         }),
-                        "currency" => serde_json::json!({
-                            "type": "currency",
-                            "currency": {
-                                "fallback_value": p.text.as_deref().unwrap_or(""),
-                                "code": "IDR",
-                                "amount_1000": 0
-                            }
-                        }),
+                        // N-1 fix: map the real currency code and amount
+                        // (1/1000 scale per the Cloud API) instead of the
+                        // previous hardcoded "IDR"/0 stub that made Meta
+                        // render the fallback text for every currency.
+                        "currency" => {
+                            let code = p.currency_code.as_deref().unwrap_or("IDR");
+                            let amount_1000 = p.amount_1000.unwrap_or(0);
+                            serde_json::json!({
+                                "type": "currency",
+                                "currency": {
+                                    "fallback_value": p.text.as_deref().unwrap_or(""),
+                                    "code": code,
+                                    "amount_1000": amount_1000
+                                }
+                            })
+                        }
                         _ => serde_json::json!({
                             "type": "text",
                             "text": p.text.as_deref().unwrap_or("")
@@ -197,6 +241,12 @@ impl NotificationClient for WhatsAppClient {
             .await?;
 
         let status = response.status();
+        // N-2 fix: capture Retry-After before the body consumes the response.
+        let retry_after_header = response
+            .headers()
+            .get(reqwest::header::RETRY_AFTER)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.trim().parse::<u64>().ok());
         let body: serde_json::Value = response.json().await.unwrap_or_default();
 
         if status.is_success() {
@@ -205,8 +255,11 @@ impl NotificationClient for WhatsAppClient {
             let error = body["error"]["message"].as_str().unwrap_or("unknown error");
 
             if status.as_u16() == 429 {
+                // N-2 fix: honour the server-supplied Retry-After header
+                // when present instead of hardcoding 60 seconds; fall back
+                // to 60 when the header is missing or unparseable.
                 Err(NotificationError::RateLimited {
-                    retry_after_seconds: 60,
+                    retry_after_seconds: retry_after_header.unwrap_or(60),
                     message: error.to_string(),
                 })
             } else if body["error"]["code"].as_i64() == Some(100) {

@@ -1,6 +1,12 @@
+---
+num: 32
+area: database
+title: ADR #32: DB Layer Extraction (R2) & Platform File Split (R5)
+status: Proposed
+---
 # ADR #32: DB Layer Extraction (R2) & Platform File Split (R5)
 
-**Status:** Draft — Planned  
+**Status:** Proposed
 **Date:** 2026-07-25  
 **Author:** Architecture Team  
 **Tags:** architecture, refactoring, oz-core, platform, monolith-split  

@@ -156,3 +156,39 @@ fn qr_code_empty_data_produces_command() {
         "empty QR data should produce a valid command sequence"
     );
 }
+
+// ── HAL-1 regression: column widths are character cells, not bytes ────
+
+#[test]
+fn cell_width_counts_characters_for_every_multibyte_currency_symbol() {
+    // Exactly the symbols receipt::currency_symbol returns as 2-3 byte
+    // UTF-8. Under the old str::len() arithmetic each of these reported
+    // 2-3 cells and stole that much padding from the price column.
+    for symbol in ["€", "£", "¥", "₱", "฿", "₩"] {
+        assert!(
+            symbol.len() > 1,
+            "{symbol} must be multi-byte or this test proves nothing"
+        );
+        assert_eq!(cell_width(symbol), 1, "{symbol} occupies one cell");
+    }
+}
+
+#[test]
+fn byte_based_padding_misaligns_and_cell_based_padding_does_not() {
+    let s = "café"; // 4 cells, 5 bytes
+    assert_ne!(s.len(), cell_width(s), "precondition: the two differ");
+
+    // What the old code computed for a 10-cell column: pad spaces derived
+    // from the byte length, then the value appended (the shape the line-item
+    // rows use — `{:>pad$}` applied to an empty string, then the text).
+    let old_line = format!("{}{}", " ".repeat(10 - s.len()), s);
+    assert_ne!(
+        cell_width(&old_line),
+        10,
+        "byte-based pad must land off-column (that was HAL-1)"
+    );
+
+    // What it computes now.
+    let new_line = format!("{}{}", " ".repeat(10 - cell_width(s)), s);
+    assert_eq!(cell_width(&new_line), 10, "cell-based pad aligns");
+}

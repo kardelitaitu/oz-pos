@@ -1,3 +1,8 @@
+/*
+last audited 31-08-26 by RSA-Agent (user-role campaign, FINAL verification pass)
+findings: H-1 CLOSED — this is now the single production copy: AppLayout imports it and the stale shell duplicate is deleted; five-variant normalizeRole badge with logout, fail-closed to staff; 23 tests green across RoleBadge/ShellLayout-a11y/keyboardNavigation suites
+next: none — campaign closed | perf: n/a (presentational)
+*/
 import { useLocalization } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleIcon } from '@/components/RoleIcon';

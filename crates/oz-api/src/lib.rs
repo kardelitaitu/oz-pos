@@ -1,8 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent (oz-api slice A: lib deep read)
+last audited 25-07-26 by RSA-Agent (oz-api slice A: lib deep read; API-1 FIXED 25-07-26)
 crate: oz-api | status: SAFE | lint: CLEAN
-findings: clean server scaffold — security headers on every response (nosniff/DENY/CSP, prod-only HSTS), CORS fail-closed parse with documented dev opt-in, RUST-07 startup Results; API-1 MED: auth::signing_secret falls back to a hard-coded dev constant when OZ_API_SECRET unset — known-constant JWT forgery on a misconfigured public server (no startup enforcement; propose refuse-to-serve with OZ_PRODUCTION); settings+plan routes sit in the public router but each handler admin-key-gates internally (verified)
-next: enforce secret presence in production mode (API-1) | perf: Arc<Mutex<Connection>> standard pattern
+findings: clean server scaffold — security headers on every response (nosniff/DENY/CSP, prod-only HSTS), CORS fail-closed parse with documented dev opt-in, RUST-07 startup Results; API-1 FIXED — serve() validates production secret requirements (validate_production_secrets) and refuses to boot when OZ_PRODUCTION=1 without OZ_API_SECRET/OZ_ADMIN_KEY, closing the known-constant JWT forgery path on misconfigured deployments; settings+plan routes sit in the public router but each handler admin-key-gates internally (verified)
+next: none | perf: N/A
 */
 
 //! OZ-POS OpenAPI REST server.
@@ -88,11 +88,12 @@ pub struct AppState {
     /// CORS allowlist (origins that may call this API). An empty list
     /// denies every cross-origin request (fail closed); `"*"` allows any
     /// origin (explicit dev opt-in). Defaults to the documented allowlist
-    /// in `unify-auth-and-sync.md` §11; overridable via `OZ_CORS_ORIGINS`.
+    /// in `docs/archived/2026-08-15-unify-auth-and-sync.md` §11; overridable via `OZ_CORS_ORIGINS`.
     pub cors_origins: Vec<String>,
 }
 
-/// Default CORS allowlist — the documented origins in `unify-auth-and-sync.md`
+/// Default CORS allowlist — the documented origins in
+/// `docs/archived/2026-08-15-unify-auth-and-sync.md`
 /// §11: the website (global + Indonesia), the website dev server, and the
 /// Tauri POS app. The Tauri webview origin differs per platform: `tauri://`
 /// on macOS/Linux, `http://tauri.localhost` on Windows (WebView2) — both are
@@ -154,7 +155,8 @@ pub fn security_header_value(production: bool) -> Option<&'static str> {
     production.then_some("max-age=31536000")
 }
 
-/// Security headers applied to every response (unify-auth-and-sync.md §11):
+/// Security headers applied to every response
+/// (`docs/archived/2026-08-15-unify-auth-and-sync.md` §11):
 /// `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
 /// `Content-Security-Policy: default-src 'self'`, and — when
 /// `OZ_PRODUCTION=1` — `Strict-Transport-Security: max-age=31536000`.
@@ -250,6 +252,22 @@ pub fn router(state: AppState) -> Router {
             post(routes::tax_rates::create_tax_rate),
         )
         .route(
+            "/api/v1/exchange-rates",
+            get(routes::exchange_rates::list_rates).post(routes::exchange_rates::create_rate),
+        )
+        .route(
+            "/api/v1/exchange-rates/latest",
+            get(routes::exchange_rates::list_latest_rates),
+        )
+        .route(
+            "/api/v1/exchange-rates/latest/{from}/{to}",
+            get(routes::exchange_rates::latest_rate),
+        )
+        .route(
+            "/api/v1/exchange-rates/{id}",
+            axum::routing::delete(routes::exchange_rates::delete_rate),
+        )
+        .route(
             "/api/v1/tenants/me/plan",
             get(routes::plans::get_my_plan_handler),
         )
@@ -269,6 +287,32 @@ pub fn router(state: AppState) -> Router {
         .layer(cors)
         .layer(middleware::from_fn(security_headers_middleware))
         .layer(TraceLayer::new_for_http())
+}
+
+/// Validate production-mode secret requirements (API-1 fix).
+///
+/// Returns `Err` when production mode is enabled but a required secret is
+/// missing, so a misconfigured public server refuses to serve instead of
+/// falling back to the hard-coded dev signing secret (known-constant JWT
+/// forgery) or running an open token mint (no admin key). Mirrors the
+/// cloud-server boot gate (`OZ_PRODUCTION=1 requires ...`).
+fn validate_production_secrets(
+    production: bool,
+    api_secret: Option<&str>,
+    admin_key: Option<&str>,
+) -> Result<(), String> {
+    if !production {
+        return Ok(());
+    }
+    if api_secret.is_none_or(|s| s.trim().is_empty()) {
+        return Err(
+            "OZ_PRODUCTION=1 requires OZ_API_SECRET to be set (no dev-secret fallback)".into(),
+        );
+    }
+    if admin_key.is_none_or(|k| k.trim().is_empty()) {
+        return Err("OZ_PRODUCTION=1 requires OZ_ADMIN_KEY to be set (no open token mint)".into());
+    }
+    Ok(())
 }
 
 /// Start the server, binding to the port from `OZ_API_PORT` (default 3099).
@@ -293,11 +337,19 @@ pub async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let admin_key = std::env::var("OZ_ADMIN_KEY")
         .ok()
         .filter(|key| !key.trim().is_empty());
+    let api_secret_env = std::env::var("OZ_API_SECRET").ok();
+    let production = std::env::var("OZ_PRODUCTION")
+        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "on" | "ON"))
+        .unwrap_or(false);
+    // API-1 fix: refuse to serve a misconfigured production deployment
+    // before any request can hit the dev-secret fallback.
+    validate_production_secrets(production, api_secret_env.as_deref(), admin_key.as_deref())
+        .map_err(|e| format!("startup rejected: {e}"))?;
     let state = AppState {
         db: Arc::new(Mutex::new(conn)),
         pg: None,
         admin_key,
-        api_secret: std::env::var("OZ_API_SECRET").ok().unwrap_or_default(),
+        api_secret: api_secret_env.unwrap_or_default(),
         db_path: db_path.clone(),
         port: std::env::var("OZ_API_PORT")
             .ok()

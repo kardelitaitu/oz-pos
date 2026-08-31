@@ -161,3 +161,52 @@ fn payment_dto_deserialize() {
     assert_eq!(p.method, "CASH");
     assert!(p.change.is_some());
 }
+
+// ── scanner preference ───────────────────────────────────────────────
+
+fn ids(list: &[&str]) -> Vec<ScannerInfo> {
+    list.iter()
+        .map(|id| ScannerInfo { id: (*id).into() })
+        .collect()
+}
+
+fn ordered(scanners: &[ScannerInfo]) -> Vec<&str> {
+    scanners.iter().map(|s| s.id.as_str()).collect()
+}
+
+#[test]
+fn the_saved_scanner_is_moved_to_the_front_for_the_autodetect() {
+    // useBarcodeScanner.ts takes scanners[0]; this is the only place the
+    // saved scanner_device_id can influence which device that is.
+    let got = prefer_first(ids(&["scanner:a", "scanner:b", "scanner:c"]), "scanner:c");
+    assert_eq!(ordered(&got), ["scanner:c", "scanner:a", "scanner:b"]);
+}
+
+#[test]
+fn moving_the_preferred_scanner_keeps_the_rest_in_order() {
+    // A swap would leave the tail unordered, so the second device would
+    // depend on where the preferred one happened to sit.
+    let got = prefer_first(ids(&["a", "b", "c", "d"]), "c");
+    assert_eq!(ordered(&got), ["c", "a", "b", "d"]);
+}
+
+#[test]
+fn an_unset_preference_leaves_discovery_order_alone() {
+    // Settings::get_scanner_device_id returns "" when never written, which
+    // is every install that has not been through a wizard.
+    let got = prefer_first(ids(&["b", "a"]), "");
+    assert_eq!(ordered(&got), ["b", "a"]);
+}
+
+#[test]
+fn a_preference_naming_an_absent_scanner_changes_nothing() {
+    // The saved id may point at a device that has since been unplugged;
+    // that must not empty the list or invent an entry.
+    let got = prefer_first(ids(&["a", "b"]), "scanner:gone");
+    assert_eq!(ordered(&got), ["a", "b"]);
+}
+
+#[test]
+fn preference_survives_an_empty_registry() {
+    assert!(prefer_first(vec![], "a").is_empty());
+}

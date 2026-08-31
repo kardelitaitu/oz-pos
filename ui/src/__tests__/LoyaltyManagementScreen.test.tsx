@@ -29,9 +29,10 @@ const mockListCustomers = listCustomersScoped as ReturnType<typeof vi.fn>;
 
 
 const sampleTiers = [
-  { id: 'tier-bronze', name: 'Bronze', min_points: 0, points_per_unit: 10, earn_multiplier: 1.0, colour: '#cd7f32', sort_order: 1, created_at: '2025-01-01T00:00:00.000Z' },
-  { id: 'tier-silver', name: 'Silver', min_points: 500, points_per_unit: 10, earn_multiplier: 1.25, colour: '#c0c0c0', sort_order: 2, created_at: '2025-01-01T00:00:00.000Z' },
-  { id: 'tier-gold', name: 'Gold', min_points: 2500, points_per_unit: 10, earn_multiplier: 1.5, colour: '#ffd700', sort_order: 3, created_at: '2025-01-01T00:00:00.000Z' },
+  // LOYALTY-01: the wire carries fixed-point millionths, never a float.
+  { id: 'tier-bronze', name: 'Bronze', min_points: 0, points_per_unit: 10, earn_multiplier_millionths: 1_000_000, colour: '#cd7f32', sort_order: 1, created_at: '2025-01-01T00:00:00.000Z' },
+  { id: 'tier-silver', name: 'Silver', min_points: 500, points_per_unit: 10, earn_multiplier_millionths: 1_250_000, colour: '#c0c0c0', sort_order: 2, created_at: '2025-01-01T00:00:00.000Z' },
+  { id: 'tier-gold', name: 'Gold', min_points: 2500, points_per_unit: 10, earn_multiplier_millionths: 1_500_000, colour: '#ffd700', sort_order: 3, created_at: '2025-01-01T00:00:00.000Z' },
 ];
 
 const sampleAccounts = [
@@ -355,6 +356,67 @@ describe('LoyaltyManagementScreen', () => {
     await waitFor(() => {
       expect(mockUpdateTier).toHaveBeenCalled();
     });
+  });
+
+  // ── LOYALTY-01: fixed-point multiplier ─────────────────────────────
+
+  it('prefills the multiplier field from millionths (no float artifacts)', async () => {
+    const user = userEvent.setup();
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
+    await waitFor(() => expect(screen.getByText('Tiers')).toBeInTheDocument());
+    await user.click(screen.getByText('Tiers'));
+    await waitFor(() => expect(screen.getAllByText('Edit').length).toBeGreaterThan(0));
+    // Silver is 1_250_000 millionths → the field must show exactly "1.25".
+    await user.click(screen.getAllByText('Edit')[1]!);
+    await waitFor(() => expect(screen.getByText('Save')).toBeInTheDocument());
+    // Raw .value string — toHaveValue() coerces number inputs to a JS
+    // number, which would hide a float-formatting artifact like "1.2500000000000002".
+    expect((screen.getByLabelText('Earn multiplier') as HTMLInputElement).value).toBe('1.25');
+  });
+
+  it('saves the multiplier as fixed-point millionths', async () => {
+    const user = userEvent.setup();
+    mockUpdateTier.mockResolvedValue({ ...sampleTiers[0], name: 'Bronze' });
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
+    await waitFor(() => expect(screen.getByText('Tiers')).toBeInTheDocument());
+    await user.click(screen.getByText('Tiers'));
+    await waitFor(() => expect(screen.getAllByText('Edit').length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText('Edit')[0]!);
+    await waitFor(() => expect(screen.getByText('Save')).toBeInTheDocument());
+
+    const multInput = screen.getByLabelText('Earn multiplier');
+    await user.clear(multInput);
+    await user.type(multInput, '1.4');
+    await user.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      // "1.4" must reach the wire as the integer 1_400_000 — the exact
+      // value the backend needs; a float 1.4 there is the LOYALTY-01 bug.
+      expect(mockUpdateTier).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ earn_multiplier_millionths: 1_400_000 }),
+      );
+    });
+  });
+
+  it('rejects a zero multiplier without sending a request', async () => {
+    // A type="number" field already blocks text garbage ("1e3" rejection
+    // is pinned at the parseMinorUnits unit level); the reachable invalid
+    // classes are empties and zero.
+    const user = userEvent.setup();
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
+    await waitFor(() => expect(screen.getByText('Tiers')).toBeInTheDocument());
+    await user.click(screen.getByText('Tiers'));
+    await waitFor(() => expect(screen.getAllByText('Edit').length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText('Edit')[0]!);
+    await waitFor(() => expect(screen.getByText('Save')).toBeInTheDocument());
+
+    await user.clear(screen.getByLabelText('Earn multiplier'));
+    await user.type(screen.getByLabelText('Earn multiplier'), '0');
+    await user.click(screen.getByText('Save'));
+
+    await waitFor(() => expect(screen.getByText('Save')).toBeInTheDocument());
+    expect(mockUpdateTier).not.toHaveBeenCalled();
   });
 
   it('shows validation error when tier form has empty name', async () => {

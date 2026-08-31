@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pocketbase/pocketbase/core"
 )
@@ -34,34 +35,18 @@ type GenerateCodeResponse struct {
 // handleGenerateEnterpriseCode returns an HTTP handler for creating enterprise
 // trial approval codes (admin-only).
 //
-// Requires Authorization: Bearer <admin_api_key> header. In production,
-// the admin key should be validated against a known admin set. For now,
-// any valid tenant API key is accepted (the admin panel authenticates
-// separately).
+// Requires Authorization: Bearer <admin_key> (OZ_ADMIN_KEY) or a web session
+// belonging to the admin tenant (OZ_ADMIN_EMAIL) — the same gate as the
+// admin dashboard endpoints. LSE-9 fix: this previously accepted ANY valid
+// tenant api_key, letting any activated customer mint approval codes.
 //
 // POST /api/v1/admin/enterprise-codes
 func handleGenerateEnterpriseCode(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		// ── Authenticate ──────────────────────────────────────
-		authHeader := e.Request.Header.Get("Authorization")
-		if !strings.HasPrefix(authHeader, bearerPrefix) {
+		if !authenticateAdmin(app, e) {
 			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "Authorization: Bearer <api_key> header required",
-			})
-		}
-		apiKey := strings.TrimSpace(strings.TrimPrefix(authHeader, bearerPrefix))
-		if apiKey == "" {
-			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "api_key must not be empty",
-			})
-		}
-
-		// Verify the API key belongs to a valid tenant
-		lookup := apiKeyLookup(apiKey)
-		_, err := app.FindFirstRecordByData("tenants", "api_key_lookup", lookup)
-		if err != nil {
-			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "invalid api_key",
+				"error": "Authorization: Bearer <admin_key> header required",
 			})
 		}
 
@@ -83,6 +68,31 @@ func handleGenerateEnterpriseCode(app core.App) func(e *core.RequestEvent) error
 			})
 		}
 
+		// B42: mirror the schema's field caps (ensureEnterpriseApprovals:
+		// code Max:64, email Max:254, prospect_name Max:256). PocketBase
+		// validates by RUNE count ("casted to []rune to count multi-byte
+		// chars as one"), so the pre-check must too — otherwise oversized
+		// input sails past the handler and fails at Save, surfacing a 500
+		// for plainly bad client data (same class as B30's unknown
+		// tier_key).
+		if utf8.RuneCountInString(code) > 64 {
+			return e.JSON(http.StatusBadRequest, map[string]any{
+				"error": "custom_code must be at most 64 characters",
+			})
+		}
+		email := strings.ToLower(strings.TrimSpace(req.Email))
+		if utf8.RuneCountInString(email) > 254 {
+			return e.JSON(http.StatusBadRequest, map[string]any{
+				"error": "email must be at most 254 characters",
+			})
+		}
+		prospect := strings.TrimSpace(req.ProspectName)
+		if utf8.RuneCountInString(prospect) > 256 {
+			return e.JSON(http.StatusBadRequest, map[string]any{
+				"error": "prospect_name must be at most 256 characters",
+			})
+		}
+
 		// Check for uniqueness
 		existing, _ := app.FindFirstRecordByData("enterprise_approvals", "code", code)
 		if existing != nil {
@@ -100,9 +110,14 @@ func handleGenerateEnterpriseCode(app core.App) func(e *core.RequestEvent) error
 		}
 		rec := core.NewRecord(coll)
 		rec.Set("code", code)
-		rec.Set("email", strings.ToLower(strings.TrimSpace(req.Email)))
-		rec.Set("prospect_name", req.ProspectName)
+		rec.Set("email", email)
+		rec.Set("prospect_name", prospect)
 		rec.Set("status", "unused")
+		// B43: the schema has created_by for attribution; the handler
+		// never filled it, so every privileged code was minted
+		// anonymously. Record which admin credential created it.
+		who := adminIdentity(app, e)
+		rec.Set("created_by", who)
 
 		if saveErr := app.Save(rec); saveErr != nil {
 			log.Printf("enterprise-admin: failed to save approval code: %v", saveErr)
@@ -111,8 +126,8 @@ func handleGenerateEnterpriseCode(app core.App) func(e *core.RequestEvent) error
 			})
 		}
 
-		log.Printf("enterprise-admin: generated approval code %s for %s", code[:4]+"****",
-			strings.TrimSpace(req.Email))
+		log.Printf("enterprise-admin: generated approval code %s for %s (by %s)", code[:4]+"****",
+			email, who)
 
 		return e.JSON(http.StatusOK, GenerateCodeResponse{
 			Code:         code,
@@ -131,29 +146,16 @@ func handleGenerateEnterpriseCode(app core.App) func(e *core.RequestEvent) error
 func handleListEnterpriseCodes(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		// ── Authenticate ──────────────────────────────────────
-		authHeader := e.Request.Header.Get("Authorization")
-		if !strings.HasPrefix(authHeader, bearerPrefix) {
+		if !authenticateAdmin(app, e) {
 			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "Authorization: Bearer <api_key> header required",
-			})
-		}
-		apiKey := strings.TrimSpace(strings.TrimPrefix(authHeader, bearerPrefix))
-		if apiKey == "" {
-			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "api_key must not be empty",
-			})
-		}
-		lookup := apiKeyLookup(apiKey)
-		_, err := app.FindFirstRecordByData("tenants", "api_key_lookup", lookup)
-		if err != nil {
-			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "invalid api_key",
+				"error": "Authorization: Bearer <admin_key> header required",
 			})
 		}
 
 		// ── List codes (optionally filtered by status) ─────────
 		statusFilter := e.Request.URL.Query().Get("status")
 		var records []*core.Record
+		var err error
 		if statusFilter != "" {
 			records, err = app.FindRecordsByFilter("enterprise_approvals",
 				"status = {:status}", "-created", 100, 0,
@@ -196,8 +198,38 @@ func handleListEnterpriseCodes(app core.App) func(e *core.RequestEvent) error {
 // generateApprovalCode creates a random alphanumeric code in the format
 // ENT-XXXXXXXX (8 hex chars after the prefix). The prefix makes enterprise
 // codes visually distinguishable from license keys.
+//
+// LSE-19: a crypto/rand failure is fatal (same policy as generateAPIKey) —
+// ignoring the error would deterministically mint ENT-00000000 on a broken
+// entropy source.
 func generateApprovalCode() string {
 	b := make([]byte, 4)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		log.Fatalf("crypto/rand.Read failed: %v — cannot generate secure approval code", err)
+	}
 	return "ENT-" + strings.ToUpper(hex.EncodeToString(b))
+}
+
+// adminIdentity labels WHICH admin credential authorized the current
+// request, for audit fields like enterprise_approvals.created_by (B43).
+// It mirrors authenticateAdmin's two accepted forms (addon_admin.go)
+// without re-deciding authorization — callers must already have passed
+// that gate, so "unknown" only labels an unexpected shape.
+func adminIdentity(app core.App, e *core.RequestEvent) string {
+	if adminKeyOK(e) {
+		return "admin_key"
+	}
+	token, err := extractBearerToken(e)
+	if err != nil {
+		return "unknown"
+	}
+	tenantID := webOtpStore.getSession(hashWebToken(token))
+	if tenantID == "" {
+		return "unknown"
+	}
+	tenant, err := app.FindRecordById("tenants", tenantID)
+	if err != nil {
+		return "unknown"
+	}
+	return tenant.GetString("email")
 }

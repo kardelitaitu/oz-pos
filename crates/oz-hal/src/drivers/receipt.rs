@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-hal slice B: receipt deep read)
+crate: oz-hal | status: SAFE | lint: CLEAN
+findings: HAL-1 FIXED 31-08-26 — layout padding/centering counted UTF-8 bytes (str::len()) where the column formatter counts characters, so multi-byte text stole padding from its own column. The original INFO severity understated this: currency_symbol returns € £ ¥ ₱ ฿ ₩ (2-3 bytes each), so EVERY price column shifted on EUR/GBP/JPY/PHP/THB/KRW receipts — not just Unicode store/product names as first recorded. All 8 sites now route through escpos::cell_width, and truncate() takes max-1 chars (inherently boundary-safe, replacing the old char_indices byte-slicing). East-Asian double-width remains unmodelled — needs a unicode-width dep, out of scope for Latin-script receipts. Otherwise exemplary: Money/format_minor delegation, documented PaperWidth/DecimalSeparator, per-store ReceiptConfig from settings, Indonesian NPWP/tax-id footer support, payment-link QR config hook
+next: none | perf: N/A
+*/
 //! Receipt data types and ESC/POS formatting.
 //!
 //! Defines structured receipt models (`SalesReceipt`) and the
@@ -31,7 +37,7 @@
 
 use oz_core::{Money, format_minor};
 
-use super::escpos;
+use super::escpos::{self, cell_width};
 
 // ── Paper width ──────────────────────────────────────────
 
@@ -251,23 +257,17 @@ fn currency_symbol(currency: &oz_core::Currency) -> &'static str {
     }
 }
 
-/// Truncate a string to at most `max` bytes, appending `…` if truncated.
+/// Truncate a string to at most `max` character cells, appending `…` if cut.
 ///
-/// The cut lands on a UTF-8 char boundary (floor-char-boundary logic via
-/// `char_indices`), so multibyte text (e.g. "café") never panics or renders
-/// a broken char.
+/// Taking `max - 1` *characters* rather than slicing bytes is inherently
+/// UTF-8 boundary-safe, so a multi-byte name like "café" can never be split
+/// mid-codepoint.
 fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max {
+    if cell_width(s) <= max {
         s.to_owned()
     } else if max > 1 {
-        let cut = max.saturating_sub(1);
-        let end = s
-            .char_indices()
-            .map(|(i, _)| i)
-            .take_while(|&i| i <= cut)
-            .last()
-            .unwrap_or(0);
-        format!("{}…", &s[..end])
+        let kept: String = s.chars().take(max - 1).collect();
+        format!("{kept}…")
     } else {
         "…".to_owned()
     }
@@ -426,7 +426,7 @@ pub fn format_sales_receipt(r: &SalesReceipt, config: &ReceiptConfig) -> Vec<u8>
     // ── Date / receipt number ─────────────────────────
     let right_text = format!("#{}", r.receipt_number);
     let left_text = &r.date;
-    let gap = " ".repeat(w.saturating_sub(left_text.len() + right_text.len() + 1));
+    let gap = " ".repeat(w.saturating_sub(cell_width(left_text) + cell_width(&right_text) + 1));
     b.text(&format!("{left_text}{gap}{right_text}"));
 
     // ── Table number (optional) ────────────────────────
@@ -434,7 +434,7 @@ pub fn format_sales_receipt(r: &SalesReceipt, config: &ReceiptConfig) -> Vec<u8>
         && let Some(ref tn) = r.table_number
     {
         let table_line = format!("Table: {tn}");
-        let table_gap = " ".repeat(w.saturating_sub(table_line.len()));
+        let table_gap = " ".repeat(w.saturating_sub(cell_width(&table_line)));
         b.text(&format!("{table_gap}{table_line}"));
     }
 
@@ -462,9 +462,9 @@ pub fn format_sales_receipt(r: &SalesReceipt, config: &ReceiptConfig) -> Vec<u8>
         let price_s = format_money(&item.unit_price, config);
         let total_s = format_money(&item.total_price, config);
 
-        let qty_pad = cols.qty.saturating_sub(qty_s.len());
-        let price_pad = cols.price.saturating_sub(price_s.len());
-        let total_pad = cols.total.saturating_sub(total_s.len());
+        let qty_pad = cols.qty.saturating_sub(cell_width(&qty_s));
+        let price_pad = cols.price.saturating_sub(cell_width(&price_s));
+        let total_pad = cols.total.saturating_sub(cell_width(&total_s));
 
         let line = format!(
             "{:<name$}{sep}{:>qty_pad$}{qty_s}{sep}{:>price_pad$}{price_s}{sep}{:>total_pad$}{total_s}",
@@ -483,18 +483,18 @@ pub fn format_sales_receipt(r: &SalesReceipt, config: &ReceiptConfig) -> Vec<u8>
             && let Some(ref tax) = item.tax_amount
         {
             let indent = cols.name
-                + cols.sep.len()
+                + cell_width(cols.sep)
                 + cols.qty
-                + cols.sep.len()
+                + cell_width(cols.sep)
                 + cols.price
-                + cols.sep.len();
+                + cell_width(cols.sep);
             let tax_str = format_money(tax, config);
             let tax_line = format!(
                 "{:indent$}Tax: {:>tax_pad$}{tax_str}",
                 "",
                 "",
                 indent = indent,
-                tax_pad = cols.total.saturating_sub(tax_str.len() + 5)
+                tax_pad = cols.total.saturating_sub(cell_width(&tax_str) + 5)
             );
             b.text(&tax_line);
         }
@@ -559,21 +559,28 @@ pub fn format_sales_receipt(r: &SalesReceipt, config: &ReceiptConfig) -> Vec<u8>
 
 /// Right-pad a string to at least `width` characters with leading spaces.
 fn right_pad(s: &str, width: usize) -> String {
-    if s.len() >= width {
+    if cell_width(s) >= width {
         s.to_owned()
     } else {
         format!("{:>width$}", s, width = width)
     }
 }
 
-/// Line with right-aligned value: `"LABEL         12.50"`
+/// Line with the value right-aligned so it ends exactly on the margin:
+/// `"LABEL         12.50"`.
+///
+/// The gap is `width - label - value` cells. The previous version added a
+/// `+ 1` to the content width for a separator space that the padding branch
+/// then never emitted, so every totals line landed one cell short of the
+/// margin that [`right_pad`]-padded line items and `separator()` reach —
+/// visible as the `Total` column edge jagging against the item rows.
 fn right_line(label: &str, value: &str, width: usize) -> String {
-    let content_w = label.len() + 1 + value.len();
-    if content_w >= width {
+    let gap_cells = width.saturating_sub(cell_width(label) + cell_width(value));
+    if gap_cells == 0 {
+        // No room to align: emit a single space and let the line overflow.
         format!("{label} {value}")
     } else {
-        let gap = " ".repeat(width - content_w);
-        format!("{label}{gap}{value}")
+        format!("{label}{}{value}", " ".repeat(gap_cells))
     }
 }
 

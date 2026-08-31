@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-media slice A: pipeline deep read; M-1 FIXED 25-07-26)
+crate: oz-media | status: SAFE | lint: CLEAN
+findings: M-1 FIXED — transform() now probes image dimensions header-only (ImageReader::into_dimensions, no pixel allocation) BEFORE any decode and enforces BOTH MediaLimits.max_side and max_pixels, closing the decompression-bomb gap (previously only max_input_bytes was checked). 2 new guard tests use shrunken limits so no large allocations happen in tests (26 tests pass). M-2 FIXED — transform() now decodes the source exactly ONCE into a DynamicImage and runs crop/compress/thumbnails on in-memory frames via the new auto_crop_img/compress_img/thumbnail_img stage variants (pre-fix: crop 1x, compress 1x, dims 1x, then 2x per preset, each stage re-encoded to JPEG and re-decoded by the next). Storage stub returns NotImplemented everywhere; promotion note: enforce key sanitization (no path separators/dotdot) when LocalStorage lands
+next: M-2 INFO | perf: decode once when perf matters
+*/
 //! Media pipeline orchestrator.
 //!
 //! The pipeline composes the media stages in the canonical order:
@@ -119,15 +125,53 @@ impl<S: MediaStorage> MediaPipeline<S> {
             )));
         }
 
+        // M-1 fix: enforce the decompression-bomb dimension caps BEFORE any
+        // full decode. `max_input_bytes` alone left dimension bombs to the
+        // image crate's default allocation cap; this header-only probe
+        // (`ImageReader::into_dimensions` reads no pixel data) rejects
+        // oversized frames without allocating the pixel buffer.
+        {
+            let cursor = std::io::Cursor::new(input_bytes);
+            let (width, height) = image::ImageReader::new(cursor)
+                .with_guessed_format()
+                .map_err(|e| MediaError::InvalidImage(format!("reading format: {e}")))?
+                .into_dimensions()
+                .map_err(|e| MediaError::InvalidImage(format!("reading dimensions: {e}")))?;
+            if width > self.limits.max_side || height > self.limits.max_side {
+                return Err(MediaError::InvalidDimensions(format!(
+                    "image dimensions {width}x{height} exceed max_side {}",
+                    self.limits.max_side
+                )));
+            }
+            let pixels = width as u64 * height as u64;
+            if pixels > self.limits.max_pixels {
+                return Err(MediaError::InvalidDimensions(format!(
+                    "image has {pixels} pixels, exceeding max_pixels {}",
+                    self.limits.max_pixels
+                )));
+            }
+        }
+
+        // M-2 fix: decode the source exactly ONCE into a `DynamicImage`
+        // and run every stage on in-memory frames — the pre-fix flow
+        // re-encoded each stage to JPEG and re-decoded it in the next
+        // (crop 1×, compress 1×, dims 1×, then 2× per preset), wasting
+        // CPU and quantising the frame through repeated JPEG cycles.
+        // The M-1 header-only probe above still runs first, so the full
+        // decode only happens on frames that already passed the
+        // decompression-bomb guardrails.
+        let img = image::load_from_memory(input_bytes)
+            .map_err(|e| MediaError::InvalidImage(format!("decode: {e}")))?;
+
         // 1. Crop (normalise the frame first — cheap when no crop needed).
-        let (cropped, _) = crate::crop::auto_crop(input_bytes, crop_mode, None)?;
+        let cropped = crate::crop::auto_crop_img(img, crop_mode, None)?;
+        let dims = ImageDimensions::new(cropped.width(), cropped.height());
 
         // 2. Original variant at the target format/quality.
         // PLANNED: the compressed bytes will be persisted with the variant
         // once the storage backends land; for now the encode itself is
-        // exercised so decode/encode errors surface here.
-        let _original_bytes = crate::compress::compress(&cropped, target_format, quality)?;
-        let dims = original_dims(&cropped)?;
+        // exercised so encode errors surface here.
+        let _original_bytes = crate::compress::compress_img(&cropped, target_format, quality)?;
 
         let mut variants = Vec::with_capacity(presets.len() + 1);
         variants.push(MediaVariant {
@@ -138,11 +182,11 @@ impl<S: MediaStorage> MediaPipeline<S> {
 
         // 3. One thumbnail per preset.
         for preset in presets {
-            let (thumb_bytes, thumb_dims) =
-                crate::thumbnail::generate_thumbnail(&cropped, preset.max_dimensions())?;
+            let (thumb_img, thumb_dims) =
+                crate::thumbnail::thumbnail_img(&cropped, preset.max_dimensions())?;
             // PLANNED: persist the compressed thumbnail bytes with the
             // variant once storage lands.
-            let _thumb_bytes = crate::compress::compress(&thumb_bytes, target_format, quality)?;
+            let _thumb_bytes = crate::compress::compress_img(&thumb_img, target_format, quality)?;
             let suffix = preset_suffix(*preset);
             variants.push(MediaVariant {
                 key: format!("{file_name}{suffix}"),
@@ -185,13 +229,6 @@ impl<S: MediaStorage> MediaPipeline<S> {
             presets,
         )
     }
-}
-
-/// Decode just the dimensions of a JPEG/PNG/WebP byte buffer.
-fn original_dims(bytes: &[u8]) -> Result<ImageDimensions, MediaError> {
-    let img = image::load_from_memory(bytes)
-        .map_err(|e| MediaError::InvalidImage(format!("decode: {e}")))?;
-    Ok(ImageDimensions::new(img.width(), img.height()))
 }
 
 /// Map a preset to its file-name suffix.

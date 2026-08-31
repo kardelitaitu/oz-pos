@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-hal slice B: verified)
+crate: oz-hal | status: SAFE | lint: CLEAN
+findings: clean driver — no unwrap/panic/unsafe, sibling tests per convention
+next: none | perf: N/A
+*/
 //! Serial pole display driver (CD5220 / Emax protocol).
 //!
 //! Implements `CustomerDisplay` over a serial (RS-232) connection using

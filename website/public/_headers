@@ -15,6 +15,10 @@
   #   (runbook §8); connect-src allows any *.code.run host so a Northflank
   #   URL change needs no rebuild. Connect-src allows any *.code.run host so a
   #   Northflank URL change needs no rebuild.
+  # - fonts.googleapis.com (style-src) + fonts.gstatic.com (font-src) cover
+  #   the Google Fonts (Inter/JetBrains Mono) loaded by Base.astro.
+  # - static.cloudflareinsights.com (script-src) covers the Cloudflare Web
+  #   Analytics beacon auto-injected on the account/dashboard pages.
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.paddle.com https://sandbox-cdn.paddle.com https://app.midtrans.com https://app.sandbox.midtrans.com; style-src 'self' 'unsafe-inline' https://*.paddle.com; img-src 'self' data: https://*.paddle.com; font-src 'self'; frame-src https://*.paddle.com https://app.midtrans.com https://app.sandbox.midtrans.com; connect-src 'self' https://*.code.run https://*.paddle.com https://*.ozpos.my.id https://app.midtrans.com https://app.sandbox.midtrans.com; object-src 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.paddle.com https://sandbox-cdn.paddle.com https://app.midtrans.com https://app.sandbox.midtrans.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://*.paddle.com https://fonts.googleapis.com; img-src 'self' data: https://*.paddle.com; font-src 'self' https://fonts.gstatic.com; frame-src https://*.paddle.com https://app.midtrans.com https://app.sandbox.midtrans.com; connect-src 'self' https://*.code.run https://*.paddle.com https://*.ozpos.my.id https://app.midtrans.com https://app.sandbox.midtrans.com; object-src 'none'; base-uri 'self'; form-action 'self'

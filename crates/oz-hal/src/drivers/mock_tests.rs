@@ -227,3 +227,129 @@ fn scale_mock_default_implements_weight_scale_trait() {
     let s = MockWeightScale::new();
     accept_scale(&s);
 }
+
+// --- EDC payment terminal mock -------------------------------------------
+
+fn usd(minor: i64) -> Money {
+    Money {
+        minor_units: minor,
+        currency: "USD".parse::<oz_core::Currency>().unwrap(),
+    }
+}
+
+#[tokio::test]
+async fn edc_mock_fails_closed_until_armed() {
+    // The property that matters for a money-accepting device: an unarmed
+    // mock must never look like an approved card.
+    let m = MockEdcTerminal::new();
+    assert!(!m.is_armed());
+    assert!(matches!(m.status().await, Err(HalError::Unsupported(_))));
+    assert!(matches!(
+        m.authorize(usd(1000)).await,
+        Err(HalError::Unsupported(_))
+    ));
+    assert!(matches!(
+        m.sale(usd(1000)).await,
+        Err(HalError::Unsupported(_))
+    ));
+    assert!(matches!(
+        m.print_receipt("txn-1").await,
+        Err(HalError::Unsupported(_))
+    ));
+}
+
+#[tokio::test]
+async fn edc_mock_approved_sale_carries_card_details() {
+    let m = MockEdcTerminal::new();
+    m.set_success();
+    let r = m.sale(usd(1320)).await.unwrap();
+    assert!(r.success);
+    assert_eq!(r.transaction_id.as_deref(), Some("mock-txn-001"));
+    assert_eq!(r.auth_code.as_deref(), Some("MOCKAUTH"));
+    assert_eq!(r.card_scheme.as_deref(), Some("Visa"));
+    assert_eq!(r.card_last4.as_deref(), Some("1111"));
+}
+
+#[tokio::test]
+async fn edc_mock_sale_chains_through_authorize_and_capture() {
+    let m = MockEdcTerminal::new();
+    m.set_success();
+    m.sale(usd(500)).await.unwrap();
+    assert_eq!(m.sale_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        m.authorize_calls.load(Ordering::SeqCst),
+        1,
+        "sale must go through authorize"
+    );
+    assert_eq!(
+        m.capture_calls.load(Ordering::SeqCst),
+        1,
+        "sale must go through capture"
+    );
+}
+
+#[tokio::test]
+async fn edc_mock_disarm_returns_it_to_failing_closed() {
+    let m = MockEdcTerminal::new();
+    m.set_success();
+    assert!(m.sale(usd(500)).await.is_ok());
+    m.set_failure();
+    assert!(matches!(
+        m.sale(usd(500)).await,
+        Err(HalError::Unsupported(_))
+    ));
+}
+
+#[tokio::test]
+async fn edc_mock_forced_status_overrides_arming() {
+    // The receipt UI needs to show "terminal out of paper" independently of
+    // whether a sale would succeed.
+    let m = MockEdcTerminal::new();
+    m.set_status(Some(TerminalStatus::PaperError));
+    assert_eq!(m.status().await.unwrap(), TerminalStatus::PaperError);
+    assert!(
+        !m.is_armed(),
+        "forcing a status must not arm the money path"
+    );
+
+    m.set_success();
+    m.set_status(Some(TerminalStatus::Busy));
+    assert_eq!(m.status().await.unwrap(), TerminalStatus::Busy);
+
+    m.set_status(None);
+    assert_eq!(m.status().await.unwrap(), TerminalStatus::Ready);
+}
+
+#[tokio::test]
+async fn edc_mock_print_receipt_returns_raw_device_bytes() {
+    let m = MockEdcTerminal::new();
+    m.set_success();
+    let bytes = m.print_receipt("txn-77").await.unwrap();
+    assert_eq!(&bytes[..2], &[0x1B, 0x40], "should open with ESC @");
+    assert!(
+        String::from_utf8_lossy(&bytes).contains("txn-77"),
+        "receipt should carry the transaction id"
+    );
+}
+
+#[tokio::test]
+async fn edc_mock_refund_and_void_report_distinct_ids() {
+    let m = MockEdcTerminal::new();
+    m.set_success();
+    let refund = m.refund("txn-1", None).await.unwrap();
+    assert_eq!(refund.transaction_id.as_deref(), Some("mock-refund-001"));
+    assert_eq!(refund.card_scheme, None, "a refund has no card scheme");
+    let void = m.void("txn-1").await.unwrap();
+    assert_eq!(void.transaction_id.as_deref(), Some("mock-void-001"));
+    assert_eq!(void.auth_code, None, "a void has no auth code");
+    assert_eq!(m.refund_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(m.void_calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn edc_mock_default_implements_edc_terminal_trait() {
+    fn accept_terminal(_t: &dyn EdcTerminal) {}
+    let m = MockEdcTerminal::default();
+    accept_terminal(&m);
+    assert_eq!(m.device_info().model, "MockEDC");
+}

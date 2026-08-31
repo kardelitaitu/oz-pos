@@ -8,7 +8,7 @@ use tauri::State;
 
 use oz_core::permissions;
 
-use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -33,29 +33,6 @@ pub struct VoidSaleScopedArgs {
     pub sale_id: String,
     /// Reason.
     pub reason: String,
-}
-
-/// Void an active (completed) sale using the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `void_sale_scoped`
-/// with a `session_token` instead. The `user_id` is read from the
-/// resolved session, not passed as a frontend parameter.
-#[tauri::command]
-pub async fn void_sale(
-    args: VoidSaleArgs,
-    state: State<'_, AppState>,
-) -> Result<oz_core::Sale, AppError> {
-    let db = state.db.lock().await;
-    let store = oz_core::db::Store::new(&db);
-
-    // Permission check: caller must have sales:void (derived from user_id).
-    require_permission_for_user(&store, &args.user_id, permissions::SALES_VOID)?;
-
-    let sale = store.void_sale(&args.sale_id, &args.user_id, &args.reason)?;
-    drop(db);
-
-    tracing::info!(sale_id = %args.sale_id, reason = %args.reason, "sale voided");
-    Ok(sale)
 }
 
 /// Void a sale within the store resolved from a session token.

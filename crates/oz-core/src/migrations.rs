@@ -95,6 +95,22 @@ pub const ALL: &[Migration] = &[
         id: "20260825_payment_infra.sql",
         sql: include_str!("../migrations/20260825_payment_infra.sql"),
     },
+    Migration {
+        id: "20260826_sale_line_snapshots.sql",
+        sql: include_str!("../migrations/20260826_sale_line_snapshots.sql"),
+    },
+    Migration {
+        id: "20260827_refunds_tenant.sql",
+        sql: include_str!("../migrations/20260827_refunds_tenant.sql"),
+    },
+    Migration {
+        id: "20260831_loyalty_multiplier_fixedpoint.sql",
+        sql: include_str!("../migrations/20260831_loyalty_multiplier_fixedpoint.sql"),
+    },
+    Migration {
+        id: "20260831_per_tenant_unique_rebuild.sql",
+        sql: include_str!("../migrations/20260831_per_tenant_unique_rebuild.sql"),
+    },
 ];
 
 /// Postgres DDL for the full schema, parallel to the SQLite `init.sql`.

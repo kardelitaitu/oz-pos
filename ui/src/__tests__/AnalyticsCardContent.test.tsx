@@ -6,7 +6,15 @@ import { AnalyticsCardContent, ExportCsvButton } from '@/features/analytics/Anal
 
 vi.mock('echarts-for-react/lib/core', () => ({
   default: ({ option }: { option?: Record<string, unknown> }) => (
-    <div data-testid="echarts" data-keys={option ? Object.keys(option).join(',') : ''} />
+    <div
+      data-testid="echarts"
+      data-keys={option ? Object.keys(option).join(',') : ''}
+      data-series={JSON.stringify(
+        ((option?.['series'] as { data?: { name: string }[] }[] | undefined)?.[0]?.data ?? []).map(
+          (d) => d.name,
+        ),
+      )}
+    />
   ),
 }));
 
@@ -171,5 +179,69 @@ describe('AnalyticsCardContent', () => {
     });
     render(<AnalyticsCardContent {...baseProps} cardKey="aov" expanded={true} />);
     expect(screen.getByTestId('echarts')).toBeInTheDocument();
+  });
+});
+
+// REP-06 follow-up (a): the category pie previously drew one slice per
+// (category, currency) row — IDR minor units (×10⁴ larger) dwarfed USD
+// slices and the within-currency percentages became meaningless when
+// mixed. The pie is now per-currency tabs; the display currency (from
+// CurrencyContext, mocked 'USD' here) picks the default tab.
+describe('CategoryCard — per-currency pie tabs (REP-06a)', () => {
+  const q = {
+    granularity: 'daily' as const,
+    workspaceView: 'retail' as const,
+    from: '2026-08-01',
+    to: '2026-08-19',
+    sessionToken: 'test-token',
+    title: 'Categories',
+  };
+  const rows = [
+    { currency: 'USD', category_id: 'c1', category_name: 'Drinks', total_minor: 6000, sale_count: 6, percentage: 60 },
+    { currency: 'USD', category_id: 'c2', category_name: 'Food', total_minor: 4000, sale_count: 4, percentage: 40 },
+    { currency: 'IDR', category_id: 'c1', category_name: 'Drinks', total_minor: 90000000, sale_count: 9, percentage: 90 },
+    { currency: 'IDR', category_id: 'c3', category_name: 'Retail', total_minor: 10000000, sale_count: 1, percentage: 10 },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseAnalyticsQuery.mockReturnValue({ data: rows, isLoading: false, error: null });
+  });
+
+  it('renders one tab per currency present in the rows', () => {
+    render(<AnalyticsCardContent {...q} cardKey="category" />);
+    expect(screen.getByRole('button', { name: 'USD' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'IDR' })).toBeInTheDocument();
+  });
+
+  it('defaults to the display currency and draws only its slices', () => {
+    render(<AnalyticsCardContent {...q} cardKey="category" />);
+    const usd = screen.getByRole('button', { name: 'USD' });
+    expect(usd).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('echarts').getAttribute('data-series')).toBe(
+      JSON.stringify(['Drinks', 'Food']),
+    );
+  });
+
+  it('switching the tab re-renders the pie with that currency only', () => {
+    render(<AnalyticsCardContent {...q} cardKey="category" />);
+    fireEvent.click(screen.getByRole('button', { name: 'IDR' }));
+    expect(screen.getByRole('button', { name: 'IDR' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('echarts').getAttribute('data-series')).toBe(
+      JSON.stringify(['Drinks', 'Retail']),
+    );
+  });
+
+  it('single-currency rows render no tab strip', () => {
+    mockUseAnalyticsQuery.mockReturnValue({
+      data: rows.filter((r) => r.currency === 'USD'),
+      isLoading: false,
+      error: null,
+    });
+    render(<AnalyticsCardContent {...q} cardKey="category" />);
+    expect(screen.queryByRole('button', { name: 'USD' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('echarts').getAttribute('data-series')).toBe(
+      JSON.stringify(['Drinks', 'Food']),
+    );
   });
 });

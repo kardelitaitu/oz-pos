@@ -1,8 +1,8 @@
 ---
 title: User Roles
 description: Five permission presets decide what each staff account can do and see.
-category: guides
-order: 9
+category: gettingStarted
+order: 5
 updated: "2026-08-16"
 ---
 

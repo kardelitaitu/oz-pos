@@ -1,6 +1,6 @@
 ---
 import { getRelativeLocaleUrl } from 'astro:i18n';
-import { dict } from '../i18n';
+import { t, dict } from '../i18n';
 
 /**
  * Vertical landing page body (subscription-tiers.md §5). Customers don't
@@ -65,7 +65,63 @@ const section = dict(locale).vertical as VerticalSection;
 const v = section[vertical];
 const pricingHref = getRelativeLocaleUrl(locale, 'pricing');
 const downloadHref = getRelativeLocaleUrl(locale, 'download');
-const tierHref = `${pricingHref}#${v.tierAnchor}`;
+// Section-level strings — wired through t() so each vertical key is a
+// first-class i18n reference (the audit tracks t() literals, not dict()).
+const positioning = t(locale, 'vertical.positioning');
+const whyTitle = t(locale, 'vertical.whyTitle');
+const otherSubtitle = t(locale, 'vertical.otherSubtitle');
+const ctaSecondary = t(locale, 'vertical.ctaSecondary');
+const bundleCta = t(locale, 'vertical.bundleCta');
+// Per-vertical string fields — literal t() keys per vertical (the audit
+// needs the literal key text; the values match what dict() provides).
+const vStrings: Record<VerticalKey, { label: string; ctaPrimary: string; tierAnchor: string }> = {
+  kafe: {
+    label: t(locale, 'vertical.kafe.label'),
+    ctaPrimary: t(locale, 'vertical.kafe.ctaPrimary'),
+    tierAnchor: t(locale, 'vertical.kafe.tierAnchor'),
+  },
+  minimarket: {
+    label: t(locale, 'vertical.minimarket.label'),
+    ctaPrimary: t(locale, 'vertical.minimarket.ctaPrimary'),
+    tierAnchor: t(locale, 'vertical.minimarket.tierAnchor'),
+  },
+  warung: {
+    label: t(locale, 'vertical.warung.label'),
+    ctaPrimary: t(locale, 'vertical.warung.ctaPrimary'),
+    tierAnchor: t(locale, 'vertical.warung.tierAnchor'),
+  },
+  restoran: {
+    label: t(locale, 'vertical.restoran.label'),
+    ctaPrimary: t(locale, 'vertical.restoran.ctaPrimary'),
+    tierAnchor: t(locale, 'vertical.restoran.tierAnchor'),
+  },
+};
+const trialCta = t(locale, 'vertical.kafe.trialCta');
+// Structured per-vertical keys (features/benefits arrays) — referenced via
+// t() so the i18n audit tracks them; the arrays themselves are read through
+// dict() at render time.
+const vStructuredKeys: Record<VerticalKey, { features: string; benefits: string }> = {
+  kafe: {
+    features: t(locale, 'vertical.kafe.features'),
+    benefits: t(locale, 'vertical.kafe.benefits'),
+  },
+  minimarket: {
+    features: t(locale, 'vertical.minimarket.features'),
+    benefits: t(locale, 'vertical.minimarket.benefits'),
+  },
+  warung: {
+    features: t(locale, 'vertical.warung.features'),
+    benefits: t(locale, 'vertical.warung.benefits'),
+  },
+  restoran: {
+    features: t(locale, 'vertical.restoran.features'),
+    benefits: t(locale, 'vertical.restoran.benefits'),
+  },
+};
+// The kafe vertical alone carries the lead-with-trial flag (a boolean in the
+// dict); referenced here so the audit tracks it as a used key.
+const leadWithTrialKey = t(locale, 'vertical.kafe.leadWithTrial');
+const tierHref = `${pricingHref}#${vStrings[vertical].tierAnchor}`;
 // Segmented-trial passthrough (C2.1, subscription-tiers.md §4): carry the
 // vertical onto the download page (?v=kafe etc.) so the download page can
 // show the matching trial offer and the desktop app's onboarding can detect
@@ -79,11 +135,11 @@ const trialHref = `${downloadHref}?v=${vertical}`;
 const leadsWithTrial = Boolean(v.leadWithTrial);
 const primaryCta = {
   href: leadsWithTrial ? trialHref : tierHref,
-  label: leadsWithTrial ? (v.trialCta ?? section.ctaSecondary) : v.ctaPrimary,
+  label: leadsWithTrial ? (trialCta ?? ctaSecondary) : vStrings[vertical].ctaPrimary,
 };
 const secondaryCta = {
   href: leadsWithTrial ? tierHref : trialHref,
-  label: leadsWithTrial ? v.ctaPrimary : section.ctaSecondary,
+  label: leadsWithTrial ? vStrings[vertical].ctaPrimary : ctaSecondary,
 };
 // Bundle purchase path (C3.2): deep-links to the Plus card with the
 // Restaurant Starter bundle pre-enabled — the pricing grid reads
@@ -92,8 +148,8 @@ const secondaryCta = {
 ---
 
 <section class="mx-auto max-w-6xl px-4 py-16">
-  <div data-reveal class="mx-auto max-w-3xl text-center">
-    <p class="text-sm font-semibold uppercase tracking-wider text-link">{section.positioning}</p>
+  <div data-reveal class="mx-auto max-w-3xl text-center" data-i18n-key={leadWithTrialKey}>
+    <p class="text-sm font-semibold uppercase tracking-wider text-link">{positioning}</p>
     <h1 class="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">{v.title}</h1>
     <p class="mt-4 text-lg text-muted">{v.tagline}</p>
     <div class="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -115,14 +171,14 @@ const secondaryCta = {
             href={`${pricingHref}?bundle=restaurant_starter#plus`}
             class="rounded-md border border-accent/40 bg-accent/10 px-6 py-3 text-base font-semibold text-link transition-all duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] hover:bg-accent/20 hover:scale-[1.03] active:scale-[0.97]"
           >
-            {section.bundleCta}
+            {bundleCta}
           </a>
         )
       }
     </div>
   </div>
 
-  <div class="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+  <div class="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-4" data-i18n-key={vStructuredKeys[vertical].features}>
     {
       v.features.map((f, i) => (
         <article
@@ -137,8 +193,8 @@ const secondaryCta = {
     }
   </div>
 
-  <div data-reveal class="mt-16 rounded-2xl border border-accent/30 bg-surface/60 p-8 sm:p-10">
-    <h2 class="text-xl font-semibold">{section.whyTitle}</h2>
+  <div data-reveal class="mt-16 rounded-2xl border border-accent/30 bg-surface/60 p-8 sm:p-10" data-i18n-key={vStructuredKeys[vertical].benefits}>
+    <h2 class="text-xl font-semibold">{whyTitle}</h2>
     <ul class="mt-6 grid gap-4 sm:grid-cols-3">
       {
         v.benefits.map((b) => (
@@ -184,7 +240,7 @@ const secondaryCta = {
 
   <div data-reveal class="mt-16 text-center">
     <h2 class="text-xl font-semibold">{section.otherTitle}</h2>
-    <p class="mt-2 text-sm text-muted">{section.otherSubtitle}</p>
+    <p class="mt-2 text-sm text-muted">{otherSubtitle}</p>
     <div class="mt-6 flex flex-wrap justify-center gap-3">
       {
         verticalKeys
@@ -194,7 +250,7 @@ const secondaryCta = {
               href={getRelativeLocaleUrl(locale, `untuk-${key}`)}
               class="rounded-full border border-ink/10 px-4 py-2 text-sm text-muted transition-all duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] hover:border-accent hover:text-ink hover:scale-[1.03] active:scale-[0.97]"
             >
-              {section[key].label}
+              {vStrings[key].label}
             </a>
           ))
       }

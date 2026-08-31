@@ -1,3 +1,10 @@
+/*
+last audited 31-08-26 by RSA-Agent (user-role campaign, Section E)
+crate: modules-staff | status: SAFE | lint: CLEAN
+findings: clean read-only user/role lookups, fully parameterized queries, Option-returning (no row-loss panics)
+next: none | perf: indexed PK lookups
+*/
+
 //! Staff Repository — database persistence for users and roles.
 
 use crate::error::StaffError;

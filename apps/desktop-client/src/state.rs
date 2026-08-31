@@ -1,4 +1,9 @@
 /*
+last audited 25-07-26 by RSA-Agent (desktop-client slice C: state verified)
+crate: desktop-client | status: SAFE | lint: CLEAN
+findings: DB connection with foreign_keys ON + WAL (documented); kernel Drop with bounded lock-retry; test-only in-memory mock constructor. Prior C-2 stamp notes preserved: unsafe env::set_var removed, terminal_id typed field, M-4 logging, M-5 plugin task handle; next: SQLCipher; perf note: Arc-clones on checkout hot path
+next: SQLCipher (carried) | perf: Arc-clones on checkout hot path (carried)
+*//*
 last audited 12-07-27 by C-2 env-var fix
 crate: oz-pos-app | status: SAFE (C-2 resolved; M-4, M-5 fixed) | lint: CLEAN
 findings: unsafe env::set_var removed; terminal_id typed field added; Drop bounded retry applied; M-4 logging; M-5 plugin task handle | next: SQLCipher | perf: Arc-clones on checkout hot path
@@ -13,9 +18,12 @@ findings: unsafe env::set_var removed; terminal_id typed field added; Drop bound
 //! - The Tauri `AppHandle` for emitting events back to the front-end.
 //!
 //! `AppState::new` opens the local SQLite database, runs migrations, and
-//! creates an empty `DriverRegistry`. Hardware is registered at runtime
-//! via the setup wizard (or a future `init_hardware` command); the front
-//! end never assumes a particular device is plugged in at startup.
+//! creates an empty `DriverRegistry`. `AppState::new` does not populate it:
+//! the registry is filled after `manage()` by the hardware bootstrap daemon
+//! in `lib.rs`, which reads the saved `TerminalProfile` through
+//! `platform_startup::hardware`. The field starts empty so a failure to read
+//! the profile cannot prevent the app from starting, and the front end never
+//! assumes a particular device is present.
 //!
 //! # Connection pooling
 //!
@@ -44,6 +52,8 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
+
+use oz_security::mask::mask_token;
 
 use notify::Watcher as _;
 use oz_core::cache::Cache;
@@ -170,15 +180,6 @@ pub struct AppState {
     /// spans the global and store databases, so concurrent Applies cannot
     /// safely compare revisions or recover partial work independently.
     pub topology_apply_lock: Mutex<()>,
-
-    /// Card-present EDC payment terminal.
-    ///
-    /// Wired to a [`MockEdcTerminal`] (success mode) so the cashier flow
-    /// can exercise card payments end-to-end without physical hardware.
-    /// A real wired/wireless terminal — driven by the protocol codecs in
-    /// `oz_payment::drivers::edc::protocol` — replaces this when the
-    /// hardware support lands.
-    pub edc_terminal: Arc<dyn oz_payment::drivers::edc::EdcTerminal>,
 }
 
 impl AppState {
@@ -350,13 +351,6 @@ impl AppState {
             terminal_id,
             picker_ticket_secret: uuid::Uuid::new_v4().as_bytes().to_vec(),
             topology_apply_lock: Mutex::new(()),
-            edc_terminal: {
-                // Mock EDC terminal in success mode: authorize + capture
-                // both succeed, so the cashier flow can run end-to-end.
-                let mock = oz_payment::drivers::edc::MockEdcTerminal::new();
-                mock.set_success();
-                Arc::new(mock)
-            },
         })
     }
 }
@@ -467,7 +461,11 @@ impl AppState {
             && ctx.is_expired()
         {
             store.remove(token);
-            tracing::info!(token = %token, "session expired — removed from store");
+            // Masked, not raw: this fires on ordinary use of a stale token,
+            // and a session token is a bearer credential — anyone who reads
+            // it off a console or a support capture can act as that session
+            // without knowing the PIN.
+            tracing::info!(token = %mask_token(token), "session expired — removed from store");
         }
 
         Err(AppError::InvalidSession)
@@ -496,7 +494,7 @@ impl AppState {
             tracing::info!(
                 user_id = %user_id,
                 removed = %removed,
-                keep_token = %keep_token,
+                keep_token = %mask_token(keep_token),
                 "sessions invalidated after PIN rotation"
             );
         }
@@ -519,7 +517,7 @@ impl AppState {
         let before = store.len();
         store.retain(|token, ctx| {
             if ctx.is_expired() {
-                tracing::trace!(token = %token, "pruning expired session");
+                tracing::trace!(token = %mask_token(token), "pruning expired session");
                 false
             } else {
                 true
@@ -788,11 +786,6 @@ impl AppState {
             terminal_id: Arc::new(Mutex::new(None)),
             picker_ticket_secret: b"test-picker-ticket-secret".to_vec(),
             topology_apply_lock: Mutex::new(()),
-            edc_terminal: {
-                let mock = oz_payment::drivers::edc::MockEdcTerminal::new();
-                mock.set_success();
-                Arc::new(mock)
-            },
         }
     }
 

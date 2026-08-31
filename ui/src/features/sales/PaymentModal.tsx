@@ -6,20 +6,19 @@ import { openUpgradePricing } from '@/utils/upgrade';
 import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { Skeleton } from '@/components/Skeleton';
-import { startSale, startSaleScoped, addLine, addLineScoped, completeSale, completeSaleScoped, printSalesReceipt, getSale, setCartDiscount, setCartDiscountScoped, holdCart, finalizeSale, voidPendingSale, type SetCartDiscountArgs, type SetCartDiscountScopedArgs, type CompleteSaleScopedArgs, type PaymentSplitArg, type SerialNumberArg, type PartialStockResult } from '@/api/sales';
+import { startSaleScoped, addLineScoped, completeSaleScoped, printSalesReceipt, getSale, setCartDiscountScoped, holdCartScoped, finalizeSale, voidPendingSale, previewPromotedTotalFromLinesScoped, type SetCartDiscountScopedArgs, type CompleteSaleScopedArgs, type PaymentSplitArg, type SerialNumberArg, type PartialStockResult, type PreviewPromotedTotalResult } from '@/api/sales';
 import { createKdsOrderFromSale, createKdsOrderFromSaleScoped } from '@/api/kds';
 import { Button } from '@/components/Button';
-import { formatMoney, minorUnitExponent, type Money, type CartLine } from '@/types/domain';
+import { formatMoney, minorUnitExponent, parseMinorUnits, type Money, type CartLine } from '@/types/domain';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import {
-  listCurrencies,
   listCurrenciesScoped,
-  listExchangeRates,
-  listExchangeRatesScoped,
-  getDefaultCurrency,
+  listLatestExchangeRatesScoped,
   getDefaultCurrencyScoped,
   getLatestExchangeRateScoped,
   exchangeRateToDecimal,
+  convertMinorUnits,
+  reciprocalMillionths,
   type CurrencyDto,
   type ExchangeRateDto,
 } from '@/api/currency';
@@ -67,6 +66,13 @@ export interface PaymentModalProps {
   tipMinor?: number;
   /** Service-charge amount in minor units collected at checkout (default 0). Persisted on the sale. */
   serviceChargeMinor?: number;
+  /**
+   * PROMO-3: promotion ids selected in the picker. The backend engine
+   * applies them against the post-tax sale at checkout; this modal previews
+   * the reduced total so the displayed amount and the payment splits cover
+   * exactly what the checkout call will validate against.
+   */
+  promotionIds?: string[];
 }
 
 /** Payment processing modal — method selection (cash, card, QRIS, open bill, credit), split tender, customer/loyalty, multi-currency, and change calculation. */
@@ -87,6 +93,7 @@ export default function PaymentModal({
   tenderPresets,
   tipMinor = 0,
   serviceChargeMinor = 0,
+  promotionIds,
 }: PaymentModalProps) {
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
@@ -108,6 +115,11 @@ export default function PaymentModal({
   const [redeemPoints, setRedeemPoints] = useState(false);
   const [loyaltyDiscount, setLoyaltyDiscount] = useState(0n);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
+  // PROMO-3: engine-exact preview of the promotion-reduced payable, from
+  // the displayed cart lines. Null when no promotions are selected (or the
+  // preview failed — the checkout call then validates against the
+  // un-promoted total and fails closed if the splits no longer cover it).
+  const [promoPreview, setPromoPreview] = useState<PreviewPromotedTotalResult | null>(null);
   const [pointsWorthMinor, setPointsWorthMinor] = useState<number | null>(null);
 
   const notifyCustomerChange = useCallback(
@@ -140,6 +152,27 @@ export default function PaymentModal({
   const leaveCb = useRef<(() => void) | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const customerSearchPanelRef = useRef<HTMLDivElement>(null);
+
+  // One id per checkout *attempt*, so the backend can make completion
+  // idempotent: a replay returns the receipt that already exists instead of
+  // ringing up a second sale.
+  //
+  // Mount-scoped is the right lifetime here, and it is load-bearing rather
+  // than convenient — RetailPosScreen renders this component conditionally
+  // (`if (showPayment && total)`), so it unmounts between sales. Every
+  // submission of one attempt carries the same value: the first tap, the
+  // shortfall-resolution retry (the dialog renders inside this tree, so the
+  // component stays mounted across it), and any re-tap after a lost response.
+  // The next customer's sale gets a fresh id because it gets a fresh mount.
+  //
+  // Lazy init, not `useRef(crypto.randomUUID())`: the eager form evaluates on
+  // every render and discards the result, which reads as a bug waiting to be
+  // "fixed" by moving it into state — and re-minting per render would silently
+  // defeat the whole mechanism.
+  const attemptIdRef = useRef<string | null>(null);
+  if (attemptIdRef.current === null) {
+    attemptIdRef.current = crypto.randomUUID();
+  }
 
   const MS_200 = animDuration(200);
 
@@ -220,17 +253,13 @@ export default function PaymentModal({
         Promise<CurrencyDto[]>,
         Promise<ExchangeRateDto[]>,
         Promise<string | null>,
-      ] = sessionToken
-        ? [
-            listCurrenciesScoped(sessionToken),
-            listExchangeRatesScoped(sessionToken),
-            getDefaultCurrencyScoped(sessionToken),
-          ]
-        : [
-            listCurrencies(),
-            listExchangeRates(),
-            getDefaultCurrency(),
-          ];
+      ] = [
+        listCurrenciesScoped(sessionToken!),
+        // CUR-11: the picker needs the CURRENT rate per pair, not the
+        // whole history — bounded query, no first-match ambiguity.
+        listLatestExchangeRatesScoped(sessionToken!),
+        getDefaultCurrencyScoped(sessionToken!),
+      ];
       Promise.all(loads)
         .then(([currs, rates, base]) => {
           setCurrencies(currs);
@@ -247,7 +276,7 @@ export default function PaymentModal({
       (r) => r.from_currency === total.currency && r.to_currency === selectedCurrency,
     );
     if (rate) {
-      return { ...rate, rate: exchangeRateToDecimal(rate) };
+      return { ...rate, rate: exchangeRateToDecimal(rate), inverted: false };
     }
     const inverse = exchangeRates.find(
       (r) => r.from_currency === selectedCurrency && r.to_currency === total.currency,
@@ -258,6 +287,9 @@ export default function PaymentModal({
         rate: 1 / exchangeRateToDecimal(inverse),
         from_currency: total.currency,
         to_currency: selectedCurrency,
+        // MONEY-01: the conversion must know the stored rate is the
+        // reciprocal — `rate` here is float display math only.
+        inverted: true,
       };
     }
     return null;
@@ -287,6 +319,9 @@ export default function PaymentModal({
     return {
       ...latestRate,
       rate: exchangeRateToDecimal(latestRate),
+      // The backend query is pair-specific (base→charge), so a hit is
+      // always the direct direction.
+      inverted: false,
     };
   }, [sessionToken, latestRate, exchangeRateInfo]);
 
@@ -418,10 +453,14 @@ export default function PaymentModal({
   }, [pointsToRedeem, redeemPoints, totalMinor, sessionToken]);
 
   const effectiveTotal = useMemo(() => {
-    const base = totalMinor;
+    // PROMO-3: when promotions are selected the base is the engine-exact
+    // previewed total (post-tax, post-cart-discount, promotions applied);
+    // otherwise the cart total prop. Loyalty discount subtracts on top in
+    // both cases.
+    const base = promoPreview ? BigInt(promoPreview.totalMinor) : totalMinor;
     const discount = loyaltyDiscount;
     return base - discount >= 0n ? base - discount : 0n;
-  }, [totalMinor, loyaltyDiscount]);
+  }, [promoPreview, totalMinor, loyaltyDiscount]);
 
   const effectiveTotalMoney = useMemo<Money>(() => ({
     minor_units: Number(effectiveTotal),
@@ -429,10 +468,10 @@ export default function PaymentModal({
   }), [effectiveTotal, total.currency]);
 
   const tenderedMinor = useMemo(() => {
-    const num = parseFloat(tendered);
-    if (Number.isNaN(num) || num < 0) return 0n;
-    const exp = minorUnitExponent(total.currency);
-    return BigInt(Math.round(num * 10 ** exp));
+    // MONEY-02: exact decimal parse (parseFloat mis-rounded "1.005").
+    const parsed = parseMinorUnits(tendered, minorUnitExponent(total.currency));
+    if (parsed === null || parsed < 0) return 0n;
+    return BigInt(parsed);
   }, [tendered, total.currency]);
 
   // Convert base currency amount to selected charge currency using exchange rate
@@ -441,13 +480,17 @@ export default function PaymentModal({
       if (selectedCurrency === total.currency || !effectiveRateInfo) {
         return typeof minorUnits === 'bigint' ? Number(minorUnits) : minorUnits;
       }
-      const baseMinor = typeof minorUnits === 'bigint' ? Number(minorUnits) : minorUnits;
-      const baseExponent = minorUnitExponent(total.currency);
-      const chargeExponent = minorUnitExponent(selectedCurrency);
-      // Convert: base major units * rate = charge major units, then to charge minor units
-      const baseMajor = baseMinor / 10 ** baseExponent;
-      const chargeMajor = baseMajor * effectiveRateInfo.rate;
-      return Math.round(chargeMajor * 10 ** chargeExponent);
+      // MONEY-01: exact fixed-point conversion. The old float chain
+      // (divide to major, multiply by a binary-float rate, scale back)
+      // mis-rounded every product landing on the .5 minor boundary
+      // (0.03 USD @ 149.5 → 448 instead of 449).
+      return convertMinorUnits({
+        baseMinor: typeof minorUnits === 'bigint' ? Number(minorUnits) : minorUnits,
+        baseExponent: minorUnitExponent(total.currency),
+        rateMillionths: effectiveRateInfo.rate_millionths,
+        chargeExponent: minorUnitExponent(selectedCurrency),
+        inverse: effectiveRateInfo.inverted,
+      });
     },
     [selectedCurrency, total.currency, effectiveRateInfo],
   );
@@ -455,11 +498,29 @@ export default function PaymentModal({
   // Get the currency to use for the cart (charge currency if multi-currency, else base)
   const cartCurrency = multiCurrency && selectedCurrency !== total.currency ? selectedCurrency : total.currency;
 
-  // Get the effective total in the cart currency
-  const effectiveTotalInCartCurrency = useMemo(() => {
+  // PROMO-3: the charge total when promotions are selected — the engine
+  // preview result (already in cart currency) minus the loyalty discount
+  // converted into cart currency. Null when no preview (no promotions).
+  const promotedChargeTotal = useMemo(() => {
+    if (!promoPreview) return null;
+    const loyaltyInCart = cartCurrency === total.currency
+      ? Number(loyaltyDiscount)
+      : convertToChargeCurrency(loyaltyDiscount);
+    return Math.max(0, promoPreview.totalMinor - loyaltyInCart);
+  }, [promoPreview, loyaltyDiscount, cartCurrency, total.currency, convertToChargeCurrency]);
+
+  // Get the effective total in the cart currency — WITHOUT promotions.
+  // The StockShortfallDialog retry needs this unpromoted base: the backend
+  // shortfall command re-applies the promotions itself, so passing the
+  // promoted total here would discount twice.
+  const unpromotedTotalInCartCurrency = useMemo(() => {
     if (cartCurrency === total.currency) return Number(effectiveTotal);
     return convertToChargeCurrency(effectiveTotal);
   }, [effectiveTotal, cartCurrency, total.currency, convertToChargeCurrency]);
+
+  // The charge total the cashier sees and pays: engine-promoted when a
+  // preview is active, the loyalty-adjusted cart total otherwise.
+  const effectiveTotalInCartCurrency = promotedChargeTotal ?? unpromotedTotalInCartCurrency;
 
   // Convert line item unit prices to cart currency
   const lineItemsInCartCurrency = useMemo(() => {
@@ -473,14 +534,78 @@ export default function PaymentModal({
     }));
   }, [lineItems, cartCurrency, total.currency, convertToChargeCurrency]);
 
+  // PROMO-3: keep the engine preview in sync with the displayed cart.
+  // The backend cart doesn't exist yet (it is materialized at the confirm
+  // step), so the preview runs over the raw lines — the same cart → sale →
+  // tax → engine sequence the checkout call performs.
+  useEffect(() => {
+    if (!open || !sessionToken || !promotionIds || promotionIds.length === 0) {
+      setPromoPreview(null);
+      return;
+    }
+    let cancelled = false;
+    const args = {
+      lines: lineItemsInCartCurrency.map((l) => ({
+        sku: l.sku,
+        qty: l.qty,
+        unitPriceMinor: l.unit_price.minor_units,
+        unitPriceCurrency: l.unit_price.currency,
+      })),
+      discountPercent,
+      promotionIds,
+    };
+    if (args.lines.length === 0) {
+      setPromoPreview(null);
+      return;
+    }
+    previewPromotedTotalFromLinesScoped(sessionToken, args)
+      .then((r) => {
+        if (!cancelled) setPromoPreview(r);
+      })
+      .catch(() => {
+        // Preview is best-effort display support: fall back to the
+        // un-promoted total. The checkout call re-validates everything
+        // server-side and fails closed on any mismatch.
+        if (!cancelled) setPromoPreview(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, sessionToken, promotionIds, lineItemsInCartCurrency, discountPercent]);
+
   // Convert tendered amount to cart currency
   const tenderedMinorInCartCurrency = useMemo(() => {
     if (cartCurrency === total.currency) return Number(tenderedMinor);
-    const num = parseFloat(tendered);
-    if (Number.isNaN(num) || num < 0) return 0;
-    const chargeExponent = minorUnitExponent(cartCurrency);
-    return Math.round(num * 10 ** chargeExponent);
+    // MONEY-02: exact decimal parse at the charge currency's exponent.
+    const parsed = parseMinorUnits(tendered, minorUnitExponent(cartCurrency));
+    if (parsed === null || parsed < 0) return 0;
+    return parsed;
   }, [tendered, cartCurrency, tenderedMinor, total.currency]);
+
+  // CUR-02: snapshot of what the customer actually paid — tip/service are
+  // always sent; base-currency fields appear only when the charge
+  // currency differs from the sale's base currency. Shared by the QRIS
+  // path, the main path, and the FRONTEND-04 shortfall retry so all three
+  // settle with identical tender metadata.
+  const tenderSnapshot = useMemo(
+    () => ({
+      tipMinor,
+      serviceChargeMinor,
+      ...(cartCurrency !== total.currency && effectiveRateInfo
+        ? {
+            baseCurrency: total.currency,
+            baseTotalMinor: total.minor_units,
+            // MONEY-01: persist the ORIGINAL fixed-point integer (or its
+            // exact reciprocal for inverse pairs) instead of round-tripping
+            // the float display rate through 1e6.
+            tenderRateMillionths: effectiveRateInfo.inverted
+              ? reciprocalMillionths(effectiveRateInfo.rate_millionths)
+              : effectiveRateInfo.rate_millionths,
+          }
+        : {}),
+    }),
+    [tipMinor, serviceChargeMinor, cartCurrency, total.currency, total.minor_units, effectiveRateInfo],
+  );
 
   const { sufficient, change } = useMemo(() => {
     if (method !== 'cash') return { sufficient: true, change: null };
@@ -494,10 +619,10 @@ export default function PaymentModal({
 
   // Parse split amounts using cart currency exponent
   const parseSplitMinor = useCallback((val: string): bigint => {
-    const num = parseFloat(val);
-    if (Number.isNaN(num) || num < 0) return 0n;
-    const exp = minorUnitExponent(cartCurrency);
-    return BigInt(Math.round(num * 10 ** exp));
+    // MONEY-02: exact decimal parse (parseFloat mis-rounded "1.005").
+    const parsed = parseMinorUnits(val, minorUnitExponent(cartCurrency));
+    if (parsed === null || parsed < 0) return 0n;
+    return BigInt(parsed);
   }, [cartCurrency]);
 
   const splitTotals = useMemo(() => {
@@ -529,20 +654,12 @@ export default function PaymentModal({
     setProcessing(true);
 
     try {
-      const { cartId } = sessionToken
-        ? await startSaleScoped(sessionToken, { currency: cartCurrency })
-        : await startSale({ currency: cartCurrency });
+      const { cartId } = await startSaleScoped(sessionToken!, { currency: cartCurrency });
 
       if (discountPercent > 0) {
-        if (sessionToken) {
-          const scopedArgs: SetCartDiscountScopedArgs = { cartId, percent: discountPercent };
-          if (discountLabel) scopedArgs.label = discountLabel;
-          await setCartDiscountScoped(sessionToken, scopedArgs);
-        } else {
-          const discountArgs: SetCartDiscountArgs = { cartId, percent: discountPercent, userId };
-          if (discountLabel) discountArgs.label = discountLabel;
-          await setCartDiscount(discountArgs);
-        }
+        const scopedArgs: SetCartDiscountScopedArgs = { cartId, percent: discountPercent };
+        if (discountLabel) scopedArgs.label = discountLabel;
+        await setCartDiscountScoped(sessionToken!, scopedArgs);
       }
 
       for (const line of lineItemsInCartCurrency) {
@@ -551,12 +668,12 @@ export default function PaymentModal({
           sku: line.sku,
           qty: line.qty,
           unitPriceMinor: line.unit_price.minor_units,
+          // FRONTEND-03: carry the line's own currency across IPC so the
+          // backend can reject a mismatch instead of silently re-stamping
+          // it to the cart currency.
+          unitPriceCurrency: line.unit_price.currency,
         };
-        if (sessionToken) {
-          await addLineScoped(sessionToken, lineArgs);
-        } else {
-          await addLine(lineArgs);
-        }
+        await addLineScoped(sessionToken!, lineArgs);
       }
 
       const serialNumberArgs: SerialNumberArg[] | undefined = serialNumbers
@@ -569,19 +686,8 @@ export default function PaymentModal({
         : undefined;
       // CUR-02: snapshot the base currency / total / rate for the QRIS
       // settlement payload too. Tip/service always sent.
-      const qrisTenderMetadata = {
-        tipMinor,
-        serviceChargeMinor,
-        ...(cartCurrency !== total.currency && effectiveRateInfo
-          ? {
-              baseCurrency: total.currency,
-              baseTotalMinor: total.minor_units,
-              tenderRateMillionths: Math.round(effectiveRateInfo.rate * 1_000_000),
-            }
-          : {}),
-      };
-      const saleResult = sessionToken
-        ? await completeSaleScoped(sessionToken, {
+      // FRONTEND-04: shared tenderSnapshot memo (see component scope).
+      const saleResult = await completeSaleScoped(sessionToken!, {
             cartId,
             paymentMethod: 'QRIS',
             tenderedMinor: null,
@@ -596,26 +702,10 @@ export default function PaymentModal({
                 gatewayResponse: 'QRIS payment confirmed',
               },
             ],
-            ...(qrisTenderMetadata ? qrisTenderMetadata : {}),
-          } as CompleteSaleScopedArgs)
-        : await completeSale({
-            cartId,
-            paymentMethod: 'QRIS',
-            tenderedMinor: null,
-            userId,
-            ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
-            ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
-            paymentSplits: [
-              {
-                method: 'QRIS',
-                amountMinor: effectiveTotalInCartCurrency,
-                gatewayReference: qrReference,
-                gatewayStatus: 'completed',
-                gatewayResponse: 'QRIS payment confirmed',
-              },
-            ],
-            ...(qrisTenderMetadata ? qrisTenderMetadata : {}),
-          });
+            // PROMO-3: the engine re-applies and re-validates server-side.
+            ...(promotionIds && promotionIds.length > 0 ? { promotionIds } : {}),
+            ...tenderSnapshot,
+          } as CompleteSaleScopedArgs);
 
       try {
         const completedSale = await getSale(saleResult.saleId);
@@ -710,7 +800,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [lineItems, discountPercent, discountLabel, userId, sessionToken, qrReference, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, classifyError, addToast, cartCurrency, lineItemsInCartCurrency, effectiveTotalInCartCurrency]);
+  }, [lineItems, discountPercent, discountLabel, userId, sessionToken, qrReference, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, classifyError, addToast, cartCurrency, lineItemsInCartCurrency, effectiveTotalInCartCurrency, tenderSnapshot]);
 
   const addSplit = useCallback(() => {
     setSplits((prev) => [
@@ -778,7 +868,7 @@ export default function PaymentModal({
           discountLabel,
           tableNumber,
         });
-        await holdCart({
+        await holdCartScoped(sessionToken!, {
           label: customerName.trim() || `Open Bill #${Date.now()}`,
           cart_data: cartData,
           item_count: lineItems.length,
@@ -792,20 +882,12 @@ export default function PaymentModal({
       }
 
 
-      const { cartId } = sessionToken
-        ? await startSaleScoped(sessionToken, { currency: cartCurrency })
-        : await startSale({ currency: cartCurrency });
+      const { cartId } = await startSaleScoped(sessionToken!, { currency: cartCurrency });
 
       if (discountPercent > 0) {
-        if (sessionToken) {
-          const scopedArgs: SetCartDiscountScopedArgs = { cartId, percent: discountPercent };
-          if (discountLabel) scopedArgs.label = discountLabel;
-          await setCartDiscountScoped(sessionToken, scopedArgs);
-        } else {
-          const discountArgs: SetCartDiscountArgs = { cartId, percent: discountPercent, userId };
-          if (discountLabel) discountArgs.label = discountLabel;
-          await setCartDiscount(discountArgs);
-        }
+        const scopedArgs: SetCartDiscountScopedArgs = { cartId, percent: discountPercent };
+        if (discountLabel) scopedArgs.label = discountLabel;
+        await setCartDiscountScoped(sessionToken!, scopedArgs);
       }
 
       for (const line of lineItemsInCartCurrency) {
@@ -814,12 +896,12 @@ export default function PaymentModal({
           sku: line.sku,
           qty: line.qty,
           unitPriceMinor: line.unit_price.minor_units,
+          // FRONTEND-03: carry the line's own currency across IPC so the
+          // backend can reject a mismatch instead of silently re-stamping
+          // it to the cart currency.
+          unitPriceCurrency: line.unit_price.currency,
         };
-        if (sessionToken) {
-          await addLineScoped(sessionToken, lineArgs);
-        } else {
-          await addLine(lineArgs);
-        }
+        await addLineScoped(sessionToken!, lineArgs);
       }
 
       let paymentSplits: PaymentSplitArg[] | undefined;
@@ -828,7 +910,7 @@ export default function PaymentModal({
         const exp = minorUnitExponent(cartCurrency);
         paymentSplits = splits.map((s) => ({
           method: s.method === 'other' ? s.otherLabel.trim() || 'OTHER' : s.method.toUpperCase(),
-          amountMinor: Math.round(parseFloat(s.amountMinor || '0') * 10 ** exp),
+          amountMinor: parseMinorUnits(s.amountMinor || '0', exp) ?? 0,
         }));
       }
 
@@ -852,20 +934,9 @@ export default function PaymentModal({
       // audit/refund/reconciliation. Omitted entirely for single-currency
       // sales (the common case). Tip and service charge are always sent so
       // the backend records what the customer actually paid.
-      const tenderMetadata = {
-        tipMinor,
-        serviceChargeMinor,
-        ...(cartCurrency !== total.currency && effectiveRateInfo
-          ? {
-              baseCurrency: total.currency,
-              baseTotalMinor: total.minor_units,
-              tenderRateMillionths: Math.round(effectiveRateInfo.rate * 1_000_000),
-            }
-          : {}),
-      };
+      // FRONTEND-04: shared tenderSnapshot memo (see component scope).
 
-      const saleResult = sessionToken
-        ? await completeSaleScoped(sessionToken, {
+      const saleResult = await completeSaleScoped(sessionToken!, {
             cartId,
             paymentMethod: methodLabel,
             tenderedMinor: method === 'cash' && !splitMode ? tenderedMinorInCartCurrency : null,
@@ -873,19 +944,11 @@ export default function PaymentModal({
             ...(paymentSplits ? { paymentSplits } : {}),
             ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
             ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
-            ...(tenderMetadata ? tenderMetadata : {}),
-          } as CompleteSaleScopedArgs)
-        : await completeSale({
-            cartId,
-            paymentMethod: methodLabel,
-            tenderedMinor: method === 'cash' && !splitMode ? tenderedMinorInCartCurrency : null,
-            userId,
-            ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
-            ...(paymentSplits ? { paymentSplits } : {}),
-            ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
-            ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
-            ...(tenderMetadata ? tenderMetadata : {}),
-          });
+            // PROMO-3: the engine re-applies and re-validates server-side.
+            ...(promotionIds && promotionIds.length > 0 ? { promotionIds } : {}),
+            attemptId: attemptIdRef.current ?? undefined,
+            ...tenderSnapshot,
+          } as CompleteSaleScopedArgs);
 
       // ADR-20: Finalize the pending sale (transitions 'pending' → 'completed')
       // For cash/credit/other/split methods, capture is instantaneous — finalize immediately.
@@ -1003,7 +1066,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [method, customerName, lineItems, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, sessionToken, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, addToast, classifyError, cartCurrency, effectiveTotalInCartCurrency, lineItemsInCartCurrency, tenderedMinorInCartCurrency, total.currency, total.minor_units]);
+  }, [method, customerName, lineItems, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, sessionToken, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, addToast, classifyError, cartCurrency, effectiveTotalInCartCurrency, lineItemsInCartCurrency, tenderedMinorInCartCurrency, total.currency, total.minor_units, tenderSnapshot]);
 
   useEffect(() => {
     if (!done) return;
@@ -1051,7 +1114,7 @@ export default function PaymentModal({
     const exp = minorUnitExponent(total.currency);
     return splits.map((s) => ({
       method: s.method === 'other' ? s.otherLabel.trim() || 'OTHER' : s.method.toUpperCase(),
-      amountMinor: Math.round(parseFloat(s.amountMinor || '0') * 10 ** exp),
+      amountMinor: parseMinorUnits(s.amountMinor || '0', exp) ?? 0,
     }));
   }, [splitMode, splits, total.currency]);
 
@@ -1086,23 +1149,99 @@ export default function PaymentModal({
       {shortfallResult && (
         <StockShortfallDialog
           shortfallResult={shortfallResult}
-          cartLines={lineItems.map((l) => ({
+          // FRONTEND-04: the retry must settle in the SAME currency the
+          // first command used (cartCurrency, with converted lines) — not
+          // the base currency — and forward the CUR-02 tender snapshot
+          // (tip/service + base fields when converted) so the second
+          // command records what the customer actually paid.
+          cartLines={lineItemsInCartCurrency.map((l) => ({
             sku: l.sku,
             qty: l.qty,
             unitPriceMinor: l.unit_price.minor_units,
+            // FRONTEND-03 follow-up: carry the line's own currency so the
+            // backend can enforce it on reconstruction.
+            unitPriceCurrency: l.unit_price.currency,
           }))}
-          totalMinor={total.minor_units}
-          currency={total.currency}
+          // PROMO-3: the retry total must be the UNPROMOTED one — the
+          // backend shortfall command re-applies the promotions itself
+          // (reducing the sale total from this base), so the promoted
+          // charge total would discount twice.
+          totalMinor={unpromotedTotalInCartCurrency}
+          currency={cartCurrency}
+          {...tenderSnapshot}
+          // PROMO-3: the SAME promotion list the first submission carried,
+          // in the same order, so the retry re-applies identical discounts.
+          promotionIds={promotionIds && promotionIds.length > 0 ? promotionIds : null}
           paymentMethod={splitMode ? 'split' : method === 'other' ? otherLabel.trim() || 'OTHER' : method.toUpperCase()}
-          tenderedMinor={method === 'cash' && !splitMode ? Number(tenderedMinor) : null}
+          tenderedMinor={method === 'cash' && !splitMode ? tenderedMinorInCartCurrency : null}
           paymentSplits={paymentSplitsFromState() ?? null}
           customerId={selectedCustomer?.id ?? null}
           customerName={customerName.trim() || null}
           serialNumbers={serialNumberArgsFromState() ?? null}
+          // The retry of THIS attempt, so it must carry the attempt's id —
+          // not a fresh one. If the first submission committed and only its
+          // response was lost, a new id here would let the backend ring up a
+          // second sale, which is the exact case the guard exists for.
+          attemptId={attemptIdRef.current ?? undefined}
           discountPercent={discountPercent}
           discountLabel={discountLabel ?? null}
-          onComplete={() => {
+          onComplete={async (result) => {
             setShortfallResult(null);
+            if (!result?.saleId) {
+              // No committed sale to describe — fall back to the old
+              // bare completion (also keeps partially-mocked flows safe).
+              setDone(true);
+              return;
+            }
+            // Shortfall receipt parity: the retry committed a REAL sale,
+            // so show the same print preview the normal path does. Items
+            // come from the COMMITTED sale lines — resolutions may have
+            // reduced quantities or substituted SKUs, the local cart no
+            // longer describes what sold.
+            try {
+              const completedSale = await getSale(result.saleId);
+              const shortfallTotalMinor = result.total?.minor_units ?? completedSale?.total.minor_units ?? effectiveTotalInCartCurrency;
+              const shortfallCurrency = result.total?.currency ?? completedSale?.total.currency ?? cartCurrency;
+              const receiptData: PrintSalesReceiptArgs = {
+                date: new Date().toLocaleDateString('en-US', {
+                  year: 'numeric', month: 'short', day: 'numeric',
+                }),
+                receiptNumber: `SALE-${result.saleId}`,
+                items: (completedSale?.lines ?? []).map((line) => ({
+                  name: line.name || line.sku,
+                  quantity: line.qty,
+                  unitPrice: { minorUnits: line.unit_price.minor_units, currency: line.unit_price.currency },
+                  totalPrice: { minorUnits: line.total_minor, currency: line.unit_price.currency },
+                  ...(line.tax_amount
+                    ? { taxAmount: { minorUnits: line.tax_amount.minor_units, currency: line.tax_amount.currency } }
+                    : {}),
+                })),
+                subtotal: completedSale
+                  ? { minorUnits: completedSale.subtotal.minor_units, currency: cartCurrency }
+                  : { minorUnits: shortfallTotalMinor, currency: shortfallCurrency },
+                ...(completedSale && completedSale.taxTotal && completedSale.taxTotal.minor_units > 0
+                  ? { tax: { minorUnits: completedSale.taxTotal.minor_units, currency: cartCurrency } }
+                  : {}),
+                total: { minorUnits: shortfallTotalMinor, currency: shortfallCurrency },
+                payments: paymentSplitsFromState()
+                  ? paymentSplitsFromState()!.map((ps) => ({
+                      method: ps.method,
+                      amount: { minorUnits: ps.amountMinor, currency: cartCurrency },
+                      change: null,
+                    }))
+                  : [
+                      {
+                        method: splitMode ? 'split' : method === 'other' ? otherLabel.trim() || 'OTHER' : method.toUpperCase(),
+                        amount: { minorUnits: shortfallTotalMinor, currency: shortfallCurrency },
+                        change: null,
+                      },
+                    ],
+                ...(tableNumber ? { tableNumber } : {}),
+              };
+              setReceiptArgs(receiptData);
+            } catch {
+              // Receipt preview is non-blocking — mirrors the normal path.
+            }
             setDone(true);
           }}
           onCancel={() => {
@@ -1186,9 +1325,24 @@ export default function PaymentModal({
                 <span className="payment-total-label">Total Due</span>
               </Localized>
               <span className="payment-total-amount">
-                {loyaltyDiscount > 0n ? formatMoney(effectiveTotalMoney) : formatMoney(total)}
+                {promoPreview
+                  ? formatMoney({ minor_units: effectiveTotalInCartCurrency, currency: cartCurrency })
+                  : loyaltyDiscount > 0n ? formatMoney(effectiveTotalMoney) : formatMoney(total)}
               </span>
             </div>
+
+            {promoPreview && promoPreview.discounts.length > 0 && (
+              <div className="payment-promotions-row">
+                {promoPreview.discounts.map((d) => (
+                  <div key={d.promotionId} className="payment-promotions-item">
+                    <span className="payment-promotions-label">{d.description}</span>
+                    <span className="payment-promotions-amount">
+                      −{formatMoney({ minor_units: d.discountMinor, currency: cartCurrency })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {multiCurrency && (
               <div className="payment-currency-selector">

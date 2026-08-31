@@ -1,5 +1,7 @@
 # Docker Deployment Guide — Full-Stack OZ-POS
 
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (structural claims + all references verified) · verified against HEAD: all 4 services defined in docker-compose*.yml (pos-cloud-server/license-server/redis/pos-cloud-db); ports 3099/8080 match prod compose; scripts/generate-license-keys.{sh,ps1}, Dockerfile.server, apps/license-server/Dockerfile exist; ADR #10 + #11 links resolve with correct numbers. Scope: structural/reference claims verified; step-by-step deployment procedures not exhaustively executed -->
+
 > **ADR:** [ADR #11](../decisions/2026-07-13-zero-downtime-vps-migration.md)
 > **Status:** Implemented (2026-07-20)
 > **Target audience:** DevOps / system administrators
@@ -106,7 +108,7 @@ an empty or well-known authentication secret.
    | Service | Endpoint | Response |
    |---------|----------|----------|
    | Cloud server | `GET /api/v1/health` | `{"status":"ok","version":"0.0.13",...}` |
-   | License server | `GET /api/health` | `{"status":"ok","uptime_seconds":...}` |
+   | License server | `GET /api/health` | `{"status":"ok","db_connected":true,"uptime_secs":...}` |
 
 5. **Test license activation** — Once running, activate a license:
 
@@ -222,7 +224,7 @@ services:
 ### 2. Start Caddy
 
 Copy and edit the example config in
-[`gateway/Caddyfile.example`](../../gateway/Caddyfile.example) — replace
+[`gateway/Caddyfile.example`](https://github.com/kardelitaitu/oz-pos/blob/main/gateway/Caddyfile.example) — replace
 `example.com` with your real domains:
 
 ```bash
@@ -516,6 +518,8 @@ path-looking argument.
 - [VPS Migration Guide](./vps-migration.md) — Zero-downtime server migration
 - [ADR #11: VPS Migration Strategy](../decisions/2026-07-13-zero-downtime-vps-migration.md)
 - [ADR #10: Sync Performance Strategy](../decisions/2026-07-13-sync-performance-compression-batching.md)
-- [`Dockerfile.server`](../../Dockerfile.server) — Cloud server Docker build
-- [`apps/license-server/Dockerfile`](../../apps/license-server/Dockerfile) — License server Docker build
-- [`scripts/generate-license-keys.sh`](../../scripts/generate-license-keys.sh) — License key generation
+- [`Dockerfile.server`](https://github.com/kardelitaitu/oz-pos/blob/main/Dockerfile.server) — Cloud server Docker build
+- [`apps/license-server/Dockerfile`](https://github.com/kardelitaitu/oz-pos/blob/main/apps/license-server/Dockerfile) — License server Docker build
+- [`scripts/generate-license-keys.sh`](https://github.com/kardelitaitu/oz-pos/blob/main/scripts/generate-license-keys.sh) — License key generation
+
+> last audited 31-08-26 by docs-auditor

@@ -617,6 +617,118 @@ async fn scoped_update_staff_protects_last_active_owner() {
     );
 }
 
+/// STAFF-10 branch pin: the self-deactivation guard must fire on its own —
+/// the last-owner test above is satisfied by EITHER branch (both return
+/// `PermissionDenied`), so removing the last-owner check would not be
+/// caught there. Here the caller is not an Owner at all: only the
+/// self-deactivation rule can reject this update.
+#[tokio::test]
+async fn scoped_update_staff_denies_self_deactivation_by_manager() {
+    let conn = oz_core::migrations::fresh_db();
+    let store = Store::new(&conn);
+    store.seed_default_roles().unwrap();
+    conn.execute_batch(
+        "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+            ('role-hr', 'HR', 'Staff updater', '[\"staff:update\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+         INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+            ('user-hr', 'hr', 'hash', 'HR Admin', 'role-hr', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+    )
+    .unwrap();
+    let state = scoped_state_with_token(conn, "hr-token", "user-hr", "role-hr", "store-a");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    // HR admin deactivates their OWN account, role unchanged.
+    let result = update_staff_scoped(
+        "hr-token".into(),
+        UpdateStaffScopedArgs {
+            id: "user-hr".into(),
+            username: "hr".into(),
+            display_name: "HR Admin".into(),
+            role_id: "role-hr".into(),
+            is_active: false,
+            pin: None,
+            profile: None,
+            assignment: None,
+        },
+        app.state(),
+    )
+    .await;
+    match result {
+        Err(AppError::PermissionDenied(msg)) => {
+            assert!(
+                msg.contains("your own account"),
+                "expected the self-deactivation message, got: {msg}"
+            );
+        }
+        other => panic!(
+            "expected self-deactivation denial, got ok={}",
+            other.is_ok()
+        ),
+    }
+}
+
+/// Last-owner branch pin: caller is a non-Owner admin who legitimately
+/// holds `staff:manage_roles` (so the Owner-role gate passes) editing a
+/// DIFFERENT user — the self-change guard cannot fire. Only the
+/// last-active-Owner protection can reject this update.
+#[tokio::test]
+async fn scoped_update_staff_protects_last_owner_from_other_admin() {
+    let conn = oz_core::migrations::fresh_db();
+    let store = Store::new(&conn);
+    store.seed_default_roles().unwrap();
+    conn.execute_batch(
+        "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+            ('role-hrboss', 'HR Boss', 'Can manage staff incl. roles', '[\"staff:update\",\"staff:manage_roles\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+         INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+            ('user-hrboss', 'hrboss', 'hash', 'HR Boss', 'role-hrboss', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
+            ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+    )
+    .unwrap();
+    let state = scoped_state_with_token(
+        conn,
+        "hrboss-token",
+        "user-hrboss",
+        "role-hrboss",
+        "store-a",
+    );
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    // Admin deactivates the ONLY active Owner (caller is not an Owner).
+    let result = update_staff_scoped(
+        "hrboss-token".into(),
+        UpdateStaffScopedArgs {
+            id: "user-owner".into(),
+            username: "owner".into(),
+            display_name: "Owner".into(),
+            role_id: "role-owner".into(),
+            is_active: false,
+            pin: None,
+            profile: None,
+            assignment: None,
+        },
+        app.state(),
+    )
+    .await;
+    match result {
+        Err(AppError::PermissionDenied(msg)) => {
+            assert!(
+                msg.contains("last active Owner"),
+                "expected the last-owner message, got: {msg}"
+            );
+        }
+        other => panic!(
+            "expected last-owner protection denial, got ok={}",
+            other.is_ok()
+        ),
+    }
+}
+
 // ── STAFF-03 — PIN rotation ───────────────────────────────────────
 
 #[tokio::test]

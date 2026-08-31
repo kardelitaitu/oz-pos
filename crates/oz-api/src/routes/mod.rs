@@ -1,4 +1,5 @@
 pub mod categories;
+pub mod exchange_rates;
 pub mod health;
 pub mod plans;
 pub mod products;

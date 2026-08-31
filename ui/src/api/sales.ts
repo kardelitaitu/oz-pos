@@ -24,6 +24,12 @@ export interface AddLineArgs {
   sku: string;
   qty: number;
   unitPriceMinor: number;
+  /**
+   * FRONTEND-03: ISO-4217 code the line is priced in. When present the
+   * backend builds the line in this currency and rejects it if it differs
+   * from the cart's currency; omitted lines fall back to the cart currency.
+   */
+  unitPriceCurrency?: string;
 }
 
 /** Result of adding a line item to a cart. */
@@ -70,6 +76,14 @@ export interface CompleteSaleArgs {
   tipMinor?: number;
   /** Service-charge amount in minor units collected at checkout (default 0). */
   serviceChargeMinor?: number;
+  /**
+   * PROMO-3 checkout integration: promotions to engine-apply against the
+   * post-tax sale. Each reduces the payable total (stacking); the application
+   * rows persist inside the checkout transaction and payment splits are
+   * validated against the reduced total. Use `previewPromotedTotalScoped` to
+   * compute split amounts before invoking.
+   */
+  promotionIds?: string[];
 }
 
 /** Result of completing a sale. */
@@ -87,10 +101,6 @@ export interface SetCartDiscountArgs {
   userId: string;
 }
 
-/** Start a new sale and return the new cart identifier. */
-export const startSale = (args: StartSaleArgs): Promise<StartSaleResult> =>
-  loggedInvoke<StartSaleResult>('start_sale', { args });
-
 /** ADR #7: Start a new sale in the store resolved from a session token. */
 export const startSaleScoped = (sessionToken: string, args: StartSaleArgs): Promise<StartSaleResult> =>
   loggedInvoke<StartSaleResult>('start_sale_scoped', { sessionToken, args });
@@ -107,17 +117,9 @@ export interface DeductionLocationInfo {
 export const getCartDeductionLocation = (cartId: string): Promise<DeductionLocationInfo | null> =>
   loggedInvoke<DeductionLocationInfo | null>('get_cart_deduction_location', { cartId });
 
-/** Add a line item to a cart. */
-export const addLine = (args: AddLineArgs): Promise<AddLineResult> =>
-  loggedInvoke<AddLineResult>('add_line', { args });
-
 /** ADR #7: Add a line to a cart in the store resolved from a session token. */
 export const addLineScoped = (sessionToken: string, args: AddLineArgs): Promise<AddLineResult> =>
   loggedInvoke<AddLineResult>('add_line_scoped', { sessionToken, args });
-
-/** Complete a sale with the given payment details and return the sale record. */
-export const completeSale = (args: CompleteSaleArgs): Promise<CompleteSaleResult> =>
-  loggedInvoke<CompleteSaleResult>('complete_sale', { args });
 
 /** Arguments for completing a sale scoped to the session store. `userId` is read from session, not args. ADR #7. */
 export interface CompleteSaleScopedArgs {
@@ -138,10 +140,98 @@ export interface CompleteSaleScopedArgs {
   tipMinor?: number;
   /** Service-charge amount in minor units collected at checkout (default 0). */
   serviceChargeMinor?: number;
+  /**
+   * Identifies one checkout *attempt*, so the backend can make completion
+   * idempotent. Minted once when the payment modal mounts and reused by every
+   * submission of that attempt — including the shortfall-resolution retry and
+   * any re-tap after a response was lost.
+   *
+   * A replay then returns the receipt that was already created instead of
+   * ringing up a second sale.
+   *
+   * It must NOT be generated per call: a fresh id on every submission dedups
+   * nothing, because the two requests that represent the same sale would
+   * carry different keys. Equally, it must not outlive the attempt — an id
+   * reused across two different sales would make the second one collide with
+   * the first and block a legitimate sale.
+   */
+  attemptId?: string;
+  /**
+   * PROMO-3 checkout integration: promotions to engine-apply against the
+   * post-tax sale (see `CompleteSaleArgs.promotionIds`).
+   */
+  promotionIds?: string[];
 }
 
 export const completeSaleScoped = (sessionToken: string, args: CompleteSaleScopedArgs): Promise<CompleteSaleResult> =>
   loggedInvoke<CompleteSaleResult>('complete_sale_scoped', { sessionToken, args });
+
+/** PROMO-3: one promotion's discount in the checkout preview. */
+export interface PromotionDiscountPreview {
+  promotionId: string;
+  discountMinor: number;
+  description: string;
+}
+
+/** Arguments for previewing the promotion-reduced payable of a cart. */
+export interface PreviewPromotedTotalArgs {
+  cartId: string;
+  /** Promotions to preview, in application order (they stack). */
+  promotionIds: string[];
+}
+
+/** Result of previewing the promotion-reduced payable of a cart. */
+export interface PreviewPromotedTotalResult {
+  /** Cart total after cart discount + tax, before promotions. */
+  baseTotalMinor: number;
+  /** Final payable after promotions — what payment splits must cover. */
+  totalMinor: number;
+  /** Per-promotion discounts in application order. */
+  discounts: PromotionDiscountPreview[];
+}
+
+/**
+ * PROMO-3 checkout integration: preview the promotion-reduced payable for a
+ * cart without consuming it. The checkout call re-validates splits against
+ * the freshly computed total, so if the cart changed between preview and
+ * completion the backend rejects and the caller re-previews.
+ */
+export const previewPromotedTotalScoped = (
+  sessionToken: string,
+  args: PreviewPromotedTotalArgs
+): Promise<PreviewPromotedTotalResult> =>
+  loggedInvoke<PreviewPromotedTotalResult>('preview_promoted_total_scoped', { sessionToken, args });
+
+/** One cart line for the lines-based promotion preview (already in cart currency). */
+export interface PreviewLineArg {
+  sku: string;
+  qty: number;
+  unitPriceMinor: number;
+  /** ISO-4217 code of the unit price currency. */
+  unitPriceCurrency: string;
+}
+
+/** Arguments for previewing the promotion-reduced payable from raw lines. */
+export interface PreviewPromotedTotalFromLinesArgs {
+  /** Cart lines, in cart order (already in cart currency). */
+  lines: PreviewLineArg[];
+  /** Cart discount percent already applied client-side (0-100). */
+  discountPercent: number;
+  /** Promotions to preview, in application order (they stack). */
+  promotionIds: string[];
+}
+
+/**
+ * PROMO-3 checkout integration: preview the promotion-reduced payable from
+ * raw cart lines — no backend cart needed. The client materializes its cart
+ * only at the confirm step, so the payment modal uses this to show the
+ * engine-exact promoted total and let split payments be entered against it.
+ */
+export const previewPromotedTotalFromLinesScoped = (
+  sessionToken: string,
+  args: PreviewPromotedTotalFromLinesArgs
+): Promise<PreviewPromotedTotalResult> =>
+  loggedInvoke<PreviewPromotedTotalResult>('preview_promoted_total_from_lines_scoped', { sessionToken, args });
 
 // ── Shortfall Resolution — complete_sale_with_resolved_shortfalls ──
 
@@ -159,6 +249,13 @@ export interface CartLineData {
   sku: string;
   qty: number;
   unitPriceMinor: number;
+  /**
+   * FRONTEND-03 follow-up: ISO-4217 code the line is priced in. When
+   * present the backend builds the reconstructed line in this currency and
+   * rejects it if it differs from the sale currency; omitted lines fall
+   * back to the sale currency.
+   */
+  unitPriceCurrency?: string;
 }
 
 export interface CompleteSaleWithResolvedShortfallsArgs {
@@ -181,6 +278,31 @@ export interface CompleteSaleWithResolvedShortfallsArgs {
   discountLabel?: string;
   /** Cashier-resolved shortfalls: per-SKU allocation to specific locations. */
   resolutions: ResolvedShortfall[];
+  /** CUR-02: tip collected at checkout (backend defaults to 0 when absent). */
+  tipMinor?: number;
+  /** CUR-02: service charge collected at checkout (defaults to 0). */
+  serviceChargeMinor?: number;
+  /** CUR-02: original sale currency when multi-currency checkout is used. */
+  baseCurrency?: string;
+  /** CUR-02: original sale total in `baseCurrency` minor units. */
+  baseTotalMinor?: number;
+  /** CUR-02: fixed-point rate (millionths) `baseCurrency → sale currency`. */
+  tenderRateMillionths?: number;
+  /**
+   * The SAME value the original `complete_sale_scoped` submission carried.
+   *
+   * This call is a retry of that attempt after the cashier resolved a stock
+   * shortfall, so reusing the id is the whole point: if the first submission
+   * actually committed and only its response was lost, a fresh id here would
+   * let the backend ring up a second sale. See CompleteSaleScopedArgs.attemptId.
+   */
+  attemptId?: string;
+  /**
+   * The same promotion list the original `complete_sale_scoped` submission
+   * carried, in the same order — the retry must re-apply identical discounts
+   * (see CompleteSaleScopedArgs.promotionIds).
+   */
+  promotionIds?: string[];
 }
 
 /** Complete a sale with cashier-resolved shortfalls (split fulfillment).
@@ -261,10 +383,6 @@ export const getProductTrackSerialBatch = (skus: string[]): Promise<SerialTrackR
 export const getProductTrackSerialBatchScoped = (sessionToken: string, skus: string[]): Promise<SerialTrackRow[]> =>
   loggedInvoke<SerialTrackRow[]>('get_product_track_serial_batch_scoped', { sessionToken, skus });
 
-/** Apply a percentage-based discount to a cart. */
-export const setCartDiscount = (args: SetCartDiscountArgs): Promise<void> =>
-  loggedInvoke<void>('set_cart_discount', { args });
-
 /** ADR #7: Scoped cart discount — `userId` is read from session. */
 export interface SetCartDiscountScopedArgs {
   cartId: string;
@@ -282,10 +400,6 @@ export interface OverrideLinePriceArgs {
   newPriceMinor: number;
   userId: string;
 }
-
-/** Override the unit price of a line item in a cart. */
-export const overrideLinePrice = (args: OverrideLinePriceArgs): Promise<void> =>
-  loggedInvoke<void>('override_line_price', { args });
 
 /** ADR #7: Scoped line price override — `userId` is read from session. */
 export const overrideLinePriceScoped = (sessionToken: string, cartId: string, lineId: string, newPriceMinor: number): Promise<void> =>
@@ -382,10 +496,6 @@ export interface VoidSaleResult {
   created_at: string;
 }
 
-/** Void a completed sale with a reason. */
-export const voidSale = (args: VoidSaleArgs): Promise<VoidSaleResult> =>
-  loggedInvoke<VoidSaleResult>('void_sale', { args });
-
 /** ADR #7: Void a sale in the store resolved from a session token. */
 export const voidSaleScoped = (sessionToken: string, saleId: string, reason: string): Promise<VoidSaleResult> =>
   loggedInvoke<VoidSaleResult>('void_sale_scoped', { sessionToken, args: { saleId, reason } });
@@ -432,41 +542,21 @@ export interface HeldCartFull {
   deduction_location_id: string | null;
 }
 
-/** Park the current cart for later retrieval. */
-export const holdCart = (args: HoldCartArgs): Promise<{ id: string }> =>
-  loggedInvoke<{ id: string }>('hold_cart', { args });
-
 /** ADR #7: Hold a cart in the store resolved from a session token. */
 export const holdCartScoped = (sessionToken: string, args: HoldCartArgs): Promise<{ id: string }> =>
   loggedInvoke<{ id: string }>('hold_cart_scoped', { sessionToken, args });
-
-/** List all held (parked) carts. */
-export const listHeldCarts = (): Promise<HeldCartRow[]> =>
-  loggedInvoke<HeldCartRow[]>('list_held_carts');
 
 /** ADR #7: Scoped held carts listing. */
 export const listHeldCartsScoped = (sessionToken: string): Promise<HeldCartRow[]> =>
   loggedInvoke<HeldCartRow[]>('list_held_carts_scoped', { sessionToken });
 
-/** List all open bills (table-based held carts). */
-export const listOpenBills = (): Promise<HeldCartRow[]> =>
-  loggedInvoke<HeldCartRow[]>('list_open_bills');
-
 /** ADR #7: Scoped open bills listing. */
 export const listOpenBillsScoped = (sessionToken: string): Promise<HeldCartRow[]> =>
   loggedInvoke<HeldCartRow[]>('list_open_bills_scoped', { sessionToken });
 
-/** Fetch the full detail of a held cart by its identifier. */
-export const getHeldCart = (id: string): Promise<HeldCartFull | null> =>
-  loggedInvoke<HeldCartFull | null>('get_held_cart', { id });
-
 /** ADR #7: Scoped held cart retrieval. */
 export const getHeldCartScoped = (sessionToken: string, id: string): Promise<HeldCartFull | null> =>
   loggedInvoke<HeldCartFull | null>('get_held_cart_scoped', { sessionToken, id });
-
-/** Delete a held cart by its identifier. */
-export const deleteHeldCart = (id: string): Promise<void> =>
-  loggedInvoke('delete_held_cart', { id });
 
 /** ADR #7: Scoped held cart deletion. */
 export const deleteHeldCartScoped = (sessionToken: string, id: string): Promise<void> =>
@@ -522,17 +612,9 @@ export interface RefundLineDto {
   lineTotal: Money;
 }
 
-/** Look up a completed sale by its receipt barcode. */
-export const lookupSaleByReceiptBarcode = (barcode: string): Promise<SaleDetail | null> =>
-  loggedInvoke<SaleDetail | null>('lookup_sale_by_receipt_barcode', { barcode });
-
 /** ADR #7: Scoped receipt barcode lookup using session token. */
 export const lookupSaleByReceiptBarcodeScoped = (sessionToken: string, barcode: string): Promise<SaleDetail | null> =>
   loggedInvoke<SaleDetail | null>('lookup_sale_by_receipt_barcode_scoped', { sessionToken, barcode });
-
-/** Process a refund against a completed sale. */
-export const processRefund = (args: ProcessRefundArgs): Promise<ProcessRefundResult> =>
-  loggedInvoke<ProcessRefundResult>('process_refund', { args });
 
 /** Arguments for processing a refund scoped to the session store. `userId` is read from session, not args. ADR #7. */
 export interface ProcessRefundScopedArgs {
@@ -544,10 +626,6 @@ export interface ProcessRefundScopedArgs {
 
 export const processRefundScoped = (sessionToken: string, args: ProcessRefundScopedArgs): Promise<ProcessRefundResult> =>
   loggedInvoke<ProcessRefundResult>('process_refund_scoped', { sessionToken, args });
-
-/** List all refunds for a given sale. */
-export const listRefunds = (saleId: string): Promise<RefundDto[]> =>
-  loggedInvoke<RefundDto[]>('list_refunds', { saleId });
 
 /** ADR #7: Scoped refund listing using session token. */
 export const listRefundsScoped = (sessionToken: string, saleId: string): Promise<RefundDto[]> =>

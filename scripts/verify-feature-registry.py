@@ -155,6 +155,12 @@ def extract_registration_features() -> dict[str, list[tuple[str, int]]]:
 
     for path in sorted(UI_SRC.rglob("*.tsx")) + sorted(UI_SRC.rglob("*.ts")):
         relpath = path.relative_to(ROOT).as_posix()
+        # Unit tests register pages/widgets with fictional feature keys
+        # (e.g. `page('a', { feature: 'pro' })` in pageRegistry.test.ts) to
+        # exercise gating logic — they have no Rust Feature counterpart.
+        # Rust parity applies to production registrations only.
+        if "/__tests__/" in relpath or relpath.endswith((".test.ts", ".test.tsx")):
+            continue
         text = path.read_text(encoding="utf-8")
         for m in FEATURE_ATTR_PATTERN.finditer(text):
             key = m.group(1)

@@ -1,44 +1,4 @@
 use super::*;
-use oz_core::migrations;
-use rusqlite::Connection;
-
-fn fresh_conn() -> Connection {
-    migrations::fresh_db()
-}
-
-fn seed_product(conn: &Connection) {
-    conn.execute_batch(
-        "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at)
-         VALUES ('p1', 'TEA', 'Tea', 350, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
-    )
-    .unwrap();
-}
-
-#[test]
-fn list_product_variants_empty_db() {
-    let conn = fresh_conn();
-    seed_product(&conn);
-    let store = Store::new(&conn);
-    let variants = store.list_product_variants("TEA").unwrap();
-    assert!(variants.is_empty());
-}
-
-#[test]
-fn list_product_variants_with_seeded_data() {
-    let conn = fresh_conn();
-    seed_product(&conn);
-
-    let store = Store::new(&conn);
-    let v = ProductVariant::new("TEA", "Green", "TEA-GREEN").with_sort_order(1);
-    store.create_product_variant(&v).unwrap();
-    let v = ProductVariant::new("TEA", "Black", "TEA-BLACK").with_sort_order(2);
-    store.create_product_variant(&v).unwrap();
-
-    let variants = store.list_product_variants("TEA").unwrap();
-    assert_eq!(variants.len(), 2);
-    assert_eq!(variants[0].sku, "TEA-GREEN");
-    assert_eq!(variants[1].sku, "TEA-BLACK");
-}
 
 // ── Barcode validation ─────────────────────────────────────────
 

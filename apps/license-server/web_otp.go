@@ -218,6 +218,24 @@ func (wl *windowLimiter) allow(key string) bool {
 	return true
 }
 
+// remainingSeconds reports how long until the key's current window closes
+// (0 when there is no active window). Read-only: it does not consume
+// budget. Used by callers that must tell a client how long a cooldown
+// (e.g. the LSE-11 api_key rotation cap) still lasts.
+func (wl *windowLimiter) remainingSeconds(key string) int {
+	wl.mu.Lock()
+	defer wl.mu.Unlock()
+	e, ok := wl.entries[key]
+	if !ok {
+		return 0
+	}
+	rem := wl.window - time.Since(e.start)
+	if rem < 0 {
+		return 0
+	}
+	return int(rem.Seconds() + 0.999)
+}
+
 // sweep drops entries whose window has fully passed.
 func (wl *windowLimiter) sweep() {
 	wl.mu.Lock()
@@ -239,10 +257,13 @@ func windowSweepLoop() {
 		otpRequestLimiter.sweep()
 		otpVerifyLimiter.sweep()
 		otpIPLimiter.sweep()
+		apiRotationLimiter.sweep()
+		recoverLimiter.sweep()
 		webLoginLimiter.sweep()
 		webRegisterLimiter.sweep()
 		webResetRequestLimiter.sweep()
 		webResetVerifyLimiter.sweep()
+		exchangeConsumeLimiter.sweep()
 	}
 }
 
@@ -758,43 +779,15 @@ func handleVerifyOTP(app core.App) func(e *core.RequestEvent) error {
 //
 // Returns the tenant profile + license + subscription summary, or a
 // generic 401 for a missing/unknown/expired token (never reveals which).
+// Session resolution is shared with the dashboard endpoints
+// (resolveWebSession in web_dashboard.go) — including the active-use TTL
+// refresh (hardening F6), so an operator who keeps the dashboard open
+// stays signed in without re-authenticating.
 func handleMe(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
-		if !webOriginAllowed(e) {
-			return e.JSON(http.StatusForbidden, map[string]any{
-				"error": "origin not allowed",
-			})
-		}
-
-		token, err := extractBearerToken(e)
-		if err != nil {
-			e.Response.Header().Set("WWW-Authenticate", `Bearer realm="web"`)
-			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "missing or invalid session token",
-			})
-		}
-
-		tenantID := webOtpStore.getSession(hashWebToken(token))
-		if tenantID == "" {
-			e.Response.Header().Set("WWW-Authenticate", `Bearer realm="web"`)
-			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "invalid or expired session",
-			})
-		}
-
-		// Active-use refresh: every /me call extends the session TTL so an
-		// operator who keeps the dashboard open stays signed in without
-		// re-authenticating (hardening F6).
-		webOtpStore.touchSession(hashWebToken(token))
-
-		tenant, err := app.FindRecordById("tenants", tenantID)
-		if err != nil {
-			// Tenant deleted mid-session — treat as expired, not a leak.
-			webOtpStore.deleteSession(hashWebToken(token))
-			e.Response.Header().Set("WWW-Authenticate", `Bearer realm="web"`)
-			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "invalid or expired session",
-			})
+		tenant, ok := resolveWebSession(app, e)
+		if !ok {
+			return nil // response already sent
 		}
 
 		return e.JSON(http.StatusOK, map[string]any{
@@ -878,6 +871,21 @@ func tenantSummary(tenant *core.Record) map[string]any {
 	}
 }
 
+// formatDateField serializes a record's date field as RFC3339 UTC (the
+// contract the website frontend parses: "2027-01-01T00:00:00Z"). PocketBase
+// GetString on a DateField returns its internal storage form
+// ("2027-01-01 00:00:00.000Z" — space-separated), which is NOT RFC3339 and
+// breaks strict parsers. Empty/zero values return "" so the JSON omits the
+// timestamp rather than emitting an invalid one.
+func formatDateField(rec *core.Record, field string) string {
+	dt := rec.GetDateTime(field)
+	t := dt.Time()
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}
+
 // licenseSummary returns the tenant's latest activated license key
 // record, or nil when none exists (account page shows the fallback).
 func licenseSummary(app core.App, tenantID string) any {
@@ -924,7 +932,7 @@ func licenseSummary(app core.App, tenantID string) any {
 		"key":       k.GetString("key"),
 		"tierKey":   k.GetString("tier_key"),
 		"status":    k.GetString("status"),
-		"expiresAt": k.GetString("expires_at"),
+		"expiresAt": formatDateField(k, "expires_at"),
 	}
 }
 
@@ -948,9 +956,9 @@ func subscriptionSummary(app core.App, tenantID string) any {
 	return map[string]any{
 		"tierKey":    s.GetString("tier_key"),
 		"status":     s.GetString("status"),
-		"startsAt":   s.GetString("starts_at"),
-		"expiresAt":  s.GetString("expires_at"),
-		"graceUntil": s.GetString("grace_until"),
+		"startsAt":   formatDateField(s, "starts_at"),
+		"expiresAt":  formatDateField(s, "expires_at"),
+		"graceUntil": formatDateField(s, "grace_until"),
 		// Vertical-bundle id (C3.2) the subscription was purchased with — the
 		// account dashboard uses it to hide the bundle upgrade card once the
 		// subscriber already owns the bundle (restaurant_starter).

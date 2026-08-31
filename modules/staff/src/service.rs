@@ -1,3 +1,10 @@
+/*
+last audited 31-08-26 by RSA-Agent (user-role campaign, Section E)
+crate: modules-staff | status: SAFE | lint: CLEAN
+findings: clean thin service facade over StaffRepository (get_user/get_role only — no mutation surface, no authz responsibility by design; enforcement lives in the centralized gate)
+next: none | perf: N/A
+*/
+
 //! Staff Service — user and role business workflows.
 
 use crate::error::StaffError;

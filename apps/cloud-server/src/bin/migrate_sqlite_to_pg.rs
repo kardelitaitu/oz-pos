@@ -8,9 +8,28 @@
 //!
 //! - sync function: `offline_queue`, `tenant_plans`
 //! - REST / snapshots: `products`, `categories`, `tax_rates`, `users`,
-//!   `roles`, `assignments`, `sales`, `sale_lines`, `payments`,
+//!   `roles`, `assignments`, `sales`, `sale_lines`, `refunds`, `payments`,
 //!   `sync_terminals`, `settings`
 //! - webhooks: `processed_webhooks`, `stripe_customers`
+//!
+//! # Memory envelope
+//!
+//! Every table is read **entirely into memory** (`Vec<Row>`) for both the
+//! source and the verification read-back. A production `sales` table with,
+//! say, 1M rows × ~15 columns ≲ 250 MB on the heap — acceptable for a
+//! one-shot tool on a dedicated host but worth sizing before cutover.
+//! There is no streaming / LIMIT-OFFSET paging: the checksum fold requires
+//! the full set.
+//!
+//! # Verification
+//!
+//! Every table is verified by row count + FNV-1a content checksum. The
+//! count tolerates `pg >= src` so a concurrent writer does not cause a
+//! spurious failure (the `ON CONFLICT DO NOTHING` insert never removes
+//! rows). The checksum requires exact XOR equality, so a concurrent writer
+//! that adds a row mid-verify surfaces as `CHECKSUM-DIFF` — a **false
+//! alarm**, not a silent pass. If the final output shows `CHECKSUM-DIFF`
+//! on any table, quiesce writers and re-run to confirm.
 //!
 //! # Usage
 //!
@@ -58,6 +77,7 @@ const DEFAULT_TABLES: &[&str] = &[
     "assignments",
     "sales",
     "sale_lines",
+    "refunds",
     "payments",
     "sync_terminals",
     "processed_webhooks",
@@ -208,9 +228,21 @@ fn read_sqlite_rows(conn: &Connection, table: &str) -> Result<Vec<Row>, String> 
     Ok(out)
 }
 
-/// Insert a batch of rows into Postgres with `ON CONFLICT DO NOTHING`.
+/// Insert a batch of rows into Postgres with `ON CONFLICT DO NOTHING`,
+/// as ONE multi-row `VALUES` statement inside the caller's transaction.
+///
+/// Multi-row VALUES cuts the cutover cost from one round-trip + fsync per
+/// row (each `execute` previously autocommitted) to one round-trip per
+/// batch; wrapping each table in a single transaction makes the copy
+/// atomic per table — a mid-table failure rolls the whole table back, so
+/// a re-run never sees half-copied state.
+///
+/// Every cell binds with its natural type; NULLs bind as a wildcard null (a
+/// typed int8 null fails client-side with "error serializing parameter N"
+/// when Postgres infers a TEXT parameter, e.g. a NULL `category_id` on
+/// products).
 async fn insert_pg_batch(
-    client: &tokio_postgres::Client,
+    tx: &tokio_postgres::Transaction<'_>,
     table: &str,
     columns: &[String],
     rows: &[Row],
@@ -218,44 +250,93 @@ async fn insert_pg_batch(
     if rows.is_empty() {
         return Ok(());
     }
+    let col_count = columns.len();
     let col_list = columns
         .iter()
         .map(|c| format!("\"{c}\""))
         .collect::<Vec<_>>()
         .join(", ");
+    // One placeholder group per row: ($1..$N), ($N+1..$2N), …
+    let value_groups = (0..rows.len())
+        .map(|r| {
+            let base = r * col_count;
+            format!(
+                "({})",
+                (1..=col_count)
+                    .map(|c| format!("${}", base + c))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
     let sql = format!(
-        "INSERT INTO \"{table}\" ({col_list}) VALUES ({}) ON CONFLICT DO NOTHING",
-        (1..=columns.len())
-            .map(|i| format!("${i}"))
-            .collect::<Vec<_>>()
-            .join(", ")
+        "INSERT INTO \"{table}\" ({col_list}) VALUES {value_groups} ON CONFLICT DO NOTHING"
     );
 
-    for row in rows {
-        // Bind every cell: NULLs as a wildcard null (a typed int8 null fails
-        // client-side with "error serializing parameter N" when Postgres
-        // infers a TEXT parameter, e.g. a NULL `category_id` on products),
-        // values with their natural type.
-        let params: Vec<Box<dyn ToSql + Sync>> = row
-            .cells
-            .iter()
-            .map(|cell| -> Box<dyn ToSql + Sync> {
-                match cell {
-                    Cell::Null => Box::new(WildcardNull),
-                    Cell::Int(i) => Box::new(*i),
-                    Cell::Real(f) => Box::new(*f),
-                    Cell::Text(t) => Box::new(t.clone()),
-                    Cell::Blob(b) => Box::new(b.clone()),
-                }
-            })
-            .collect();
-        let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
-        client
-            .execute(&sql, &param_refs)
-            .await
-            .map_err(|e| format!("insert into {table}: {e}"))?;
-    }
+    let params: Vec<Box<dyn ToSql + Sync>> = rows
+        .iter()
+        .flat_map(|row| row.cells.iter())
+        .map(|cell| -> Box<dyn ToSql + Sync> {
+            match cell {
+                Cell::Null => Box::new(WildcardNull),
+                Cell::Int(i) => Box::new(*i),
+                Cell::Real(f) => Box::new(*f),
+                Cell::Text(t) => Box::new(t.clone()),
+                Cell::Blob(b) => Box::new(b.clone()),
+            }
+        })
+        .collect();
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+    tx.execute(&sql, &param_refs)
+        .await
+        .map_err(|e| format!("insert into {table}: {e}"))?;
     Ok(())
+}
+
+/// Decode one Postgres cell as a normalized [`Cell`] by probing the runtime
+/// type in the same order `read_sqlite_rows` emits them (int → real → text →
+/// blob). Extracted from the read loop so the type-sniffing chain is a
+/// flat, independently testable function.
+fn decode_pg_cell(
+    row: &tokio_postgres::Row,
+    i: usize,
+    col: &str,
+    table: &str,
+) -> Result<Cell, String> {
+    if let Ok(Some(i)) = row.try_get::<_, Option<i64>>(i) {
+        return Ok(Cell::Int(i));
+    }
+    if row.try_get::<_, Option<i64>>(i).is_ok() {
+        return Ok(Cell::Null);
+    }
+    if let Ok(Some(f)) = row.try_get::<_, Option<f64>>(i) {
+        return Ok(Cell::Real(f));
+    }
+    if row.try_get::<_, Option<f64>>(i).is_ok() {
+        return Ok(Cell::Null);
+    }
+    if let Ok(Some(t)) = row.try_get::<_, Option<String>>(i) {
+        return Ok(Cell::Text(t));
+    }
+    if row.try_get::<_, Option<String>>(i).is_ok() {
+        return Ok(Cell::Null);
+    }
+    if let Ok(Some(b)) = row.try_get::<_, Option<Vec<u8>>>(i) {
+        return Ok(Cell::Blob(b));
+    }
+    if row.try_get::<_, Option<Vec<u8>>>(i).is_ok() {
+        return Ok(Cell::Null);
+    }
+    // Every probe failed — the value has a type none of the four probes can
+    // decode (e.g. an array or a custom domain). Surface the raw driver error.
+    Err(format!(
+        "decode {table}.{col}: {}",
+        row.try_get::<_, Option<Vec<u8>>>(i)
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_else(|| "unrecognized value type".to_string())
+    ))
 }
 
 /// Read every row of a Postgres table (same column order) as normalized
@@ -276,36 +357,7 @@ async fn read_pg_rows(pool: &Pool, table: &str, columns: &[String]) -> Result<Ve
     for row in rows {
         let mut cells = Vec::with_capacity(columns.len());
         for (i, col) in columns.iter().enumerate() {
-            let v = row.try_get::<_, Option<i64>>(i);
-            match v {
-                Ok(Some(i)) => cells.push(Cell::Int(i)),
-                Ok(None) => cells.push(Cell::Null),
-                Err(_) => {
-                    // Not an integer column — try f64, then text, then blob.
-                    let vf = row.try_get::<_, Option<f64>>(i);
-                    match vf {
-                        Ok(Some(f)) => cells.push(Cell::Real(f)),
-                        Ok(None) => cells.push(Cell::Null),
-                        Err(_) => {
-                            let vt = row.try_get::<_, Option<String>>(i);
-                            match vt {
-                                Ok(Some(t)) => cells.push(Cell::Text(t)),
-                                Ok(None) => cells.push(Cell::Null),
-                                Err(_) => {
-                                    let vb = row.try_get::<_, Option<Vec<u8>>>(i);
-                                    match vb {
-                                        Ok(Some(b)) => cells.push(Cell::Blob(b)),
-                                        Ok(None) => cells.push(Cell::Null),
-                                        Err(e) => {
-                                            return Err(format!("decode {table}.{col}: {e}"));
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            cells.push(decode_pg_cell(&row, i, col, table)?);
         }
         out.push(Row { cells });
     }
@@ -436,7 +488,26 @@ struct Args {
     dry_run: bool,
 }
 
-fn parse_args() -> Result<Args, String> {
+const USAGE: &str = "\
+migrate_sqlite_to_pg — copy the cloud server's SQLite DB to Postgres and verify
+
+USAGE:
+    migrate_sqlite_to_pg [OPTIONS]
+
+OPTIONS:
+    --sqlite <path>    SQLite database file (default: $OZ_DB_PATH or 'oz-pos.db')
+    --pg <url>         Postgres connection URL (default: $DATABASE_URL)
+    --tables <list>    Comma-separated table list (default: the full copy surface)
+    --batch <n>        Rows per INSERT batch (default: 500)
+    --dry-run          Verify connectivity and table metadata without writing
+    --help             Show this help and exit
+
+The destination schema (PG_INIT) is applied first; rows are copied with
+ON CONFLICT DO NOTHING so re-runs are safe. Every table is verified by
+row count + content checksum. See the module docs for the memory envelope
+and CHECKSUM-DIFF semantics.";
+
+fn parse_args() -> Result<Option<Args>, String> {
     let mut sqlite = env::var("OZ_DB_PATH").unwrap_or_else(|_| "oz-pos.db".into());
     let mut pg: Option<String> = env::var("DATABASE_URL").ok();
     let mut tables: Vec<String> = DEFAULT_TABLES.iter().map(|s| s.to_string()).collect();
@@ -446,6 +517,7 @@ fn parse_args() -> Result<Args, String> {
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "--help" | "-h" => return Ok(None),
             "--sqlite" => sqlite = args.next().ok_or("--sqlite needs a path")?,
             "--pg" => pg = Some(args.next().ok_or("--pg needs a URL")?),
             "--tables" => {
@@ -460,17 +532,17 @@ fn parse_args() -> Result<Args, String> {
                     .map_err(|_| "invalid --batch")?;
             }
             "--dry-run" => dry_run = true,
-            other => return Err(format!("unknown argument: {other}")),
+            other => return Err(format!("unknown argument: {other}\n\n{USAGE}")),
         }
     }
     let pg = pg.ok_or("DATABASE_URL must be set or --pg provided")?;
-    Ok(Args {
+    Ok(Some(Args {
         sqlite: PathBuf::from(sqlite),
         pg,
         tables,
         batch,
         dry_run,
-    })
+    }))
 }
 
 #[tokio::main]
@@ -482,7 +554,13 @@ async fn main() {
 }
 
 async fn run() -> Result<(), String> {
-    let args = parse_args()?;
+    let args = match parse_args()? {
+        Some(a) => a,
+        None => {
+            println!("{USAGE}");
+            return Ok(());
+        }
+    };
 
     // 1. Open the SQLite source (the old cloud DB).
     if !args.sqlite.exists() {
@@ -511,6 +589,49 @@ async fn run() -> Result<(), String> {
         return Err(format!("{failures} table(s) failed verification"));
     }
     Ok(())
+}
+
+/// Verify one table after copying: re-read the Postgres rows and compare row
+/// count + content checksum against the source. Prints the per-table status
+/// line and returns `true` when verification passed.
+///
+/// `count_ok` tolerates `pg >= src` (a concurrent writer may legitimately
+/// add a row mid-migration; `ON CONFLICT DO NOTHING` never removes rows).
+/// `checksum_ok` requires exact equality, so a concurrent writer surfaces
+/// as `CHECKSUM-DIFF` — a false alarm, not a silent pass — and the run
+/// should be repeated once writers are quiesced.
+async fn verify_table(
+    pool: &Pool,
+    table: &str,
+    columns: &[String],
+    src_rows: &[Row],
+) -> Result<bool, String> {
+    let pg_rows = read_pg_rows(pool, table, columns).await?;
+    let src_checksum: u64 = src_rows
+        .iter()
+        .map(|r| fnv1a(&r.checksum_fragment()))
+        .fold(0u64, |acc, h| acc ^ h);
+    let pg_checksum: u64 = pg_rows
+        .iter()
+        .map(|r| fnv1a(&r.checksum_fragment()))
+        .fold(0u64, |acc, h| acc ^ h);
+
+    let count_ok = pg_rows.len() >= src_rows.len();
+    let checksum_ok = src_checksum == pg_checksum;
+    let status = if count_ok && checksum_ok {
+        "OK"
+    } else if count_ok {
+        "CHECKSUM-DIFF"
+    } else {
+        "COUNT-DIFF"
+    };
+    println!(
+        "  {table:<24} src={:<6} pg={:<6} checksum={:<20} {status}",
+        src_rows.len(),
+        pg_rows.len(),
+        format!("{src_checksum:016x}"),
+    );
+    Ok(status == "OK")
 }
 
 /// Copy the given tables from SQLite to Postgres (FK-topological order) and
@@ -577,44 +698,29 @@ async fn copy_and_verify(
         // 4. Read source rows.
         let src_rows = read_sqlite_rows(conn, table)?;
 
-        // 5. Write (unless dry-run), in batches.
+        // 5. Write (unless dry-run), in batches, inside ONE transaction per
+        // table so a mid-table failure rolls the whole table back (a re-run
+        // never sees half-copied state; `ON CONFLICT DO NOTHING` still makes
+        // re-runs safe against rows already synced).
         if !dry_run {
-            let client = pool.get().await.map_err(|e| e.to_string())?;
+            let mut client = pool.get().await.map_err(|e| e.to_string())?;
+            let tx = client
+                .transaction()
+                .await
+                .map_err(|e| format!("begin tx for {table}: {e}"))?;
             for chunk in src_rows.chunks(batch) {
-                insert_pg_batch(&client, table, &pg_cols, chunk).await?;
+                insert_pg_batch(&tx, table, &pg_cols, chunk).await?;
             }
+            tx.commit()
+                .await
+                .map_err(|e| format!("commit {table}: {e}"))?;
         }
         total_copied += src_rows.len();
 
         // 6. Verify: row count + checksum on both sides.
-        let pg_rows = read_pg_rows(pool, table, &pg_cols).await?;
-        let src_checksum: u64 = src_rows
-            .iter()
-            .map(|r| fnv1a(&r.checksum_fragment()))
-            .fold(0u64, |acc, h| acc ^ h);
-        let pg_checksum: u64 = pg_rows
-            .iter()
-            .map(|r| fnv1a(&r.checksum_fragment()))
-            .fold(0u64, |acc, h| acc ^ h);
-
-        let count_ok = pg_rows.len() >= src_rows.len();
-        let checksum_ok = src_checksum == pg_checksum;
-        let status = if count_ok && checksum_ok {
-            "OK"
-        } else if count_ok {
-            "CHECKSUM-DIFF"
-        } else {
-            "COUNT-DIFF"
-        };
-        if status != "OK" {
+        if !verify_table(pool, table, &pg_cols, &src_rows).await? {
             failures += 1;
         }
-        println!(
-            "  {table:<24} src={:<6} pg={:<6} checksum={:<20} {status}",
-            src_rows.len(),
-            pg_rows.len(),
-            format!("{src_checksum:016x}"),
-        );
     }
 
     Ok((total_copied, order.len(), failures))

@@ -2,10 +2,10 @@
 //! permission key means, which family it belongs to, and whether it is
 //! sensitive (ADR #35 D3 / spec 0046).
 /*
-last audited 25-07-26 by RSA-Agent (platform-core slice B: permission_registry deep read)
+last audited 31-08-26 by RSA-Agent (user-role campaign, FINAL verification pass)
 crate: platform-core | status: SAFE | lint: CLEAN
-findings: exemplary — single source of truth with family/sensitivity classification; sensitive keys (voids, refunds, settlement, role mgmt, staff deletion, bulk export) never grantable through family wildcards (validate_grants enforces + tests); global * reserved for the Owner seed; duplicate-key invariant pinned
-next: none | perf: linear registry scan
+findings: exemplary — 83-key registry with family/sensitivity classification per ADR #35 D2/D3 (14 sensitive keys); validate_grant fail-closed (unregistered key, sensitive-under-family-wildcard, global * reserved for the Owner seed); G-3 CLOSED: staff:delete is documented RESERVED (no enforcement consumer; deactivation rides staff:update; any future hard-delete surface must gate on this key) in both the registry entry and the rbac.rs catalog constant; the Section-D verification held — hand-edited DB rows carrying a family wildcard for a sensitive key still deny at the registry-aware gate (db/staff.rs:122-125), so the creation-time-only sensitivity invariant has an enforcement-side backstop
+next: none — campaign closed for this file | perf: linear registry scan — fine at 83 entries
 */
 //!
 //! Growing the system means adding keys here — never editing roles. Sensitive
@@ -190,7 +190,7 @@ pub const REGISTRY: &[PermissionEntry] = &[
         key: "staff:delete",
         family: "staff",
         sensitive: true,
-        description: "Delete / deactivate a staff member.",
+        description: "Delete / deactivate a staff member. RESERVED (G-3): no enforcement consumer yet across desktop/tablet/cloud/CLI — deactivation rides staff:update; any future hard-delete IPC must gate on this key.",
     },
     PermissionEntry {
         key: "staff:manage_roles",
@@ -488,6 +488,12 @@ pub const REGISTRY: &[PermissionEntry] = &[
         sensitive: false,
         description: "Delete / unregister a terminal.",
     },
+    PermissionEntry {
+        key: "terminals:read",
+        family: "terminals",
+        sensitive: false,
+        description: "View terminal, profile, override, and device-binding state.",
+    },
     // ── categories ───────────────────────────────────────────────
     PermissionEntry {
         key: "categories:manage",
@@ -501,6 +507,59 @@ pub const REGISTRY: &[PermissionEntry] = &[
         family: "plugins",
         sensitive: false,
         description: "Manage plugins (install, enable, disable, remove).",
+    },
+    // ── purchasing ───────────────────────────────────────────────
+    PermissionEntry {
+        key: "purchasing:view",
+        family: "purchasing",
+        sensitive: false,
+        description: "View suppliers and purchase orders.",
+    },
+    PermissionEntry {
+        key: "purchasing:manage",
+        family: "purchasing",
+        sensitive: false,
+        description: "Create/update suppliers and purchase orders, and receive deliveries.",
+    },
+    // ── giftcards ────────────────────────────────────────────────
+    PermissionEntry {
+        key: "giftcards:issue",
+        family: "giftcards",
+        sensitive: true,
+        description: "Issue a new gift card or top up stored value (creates money).",
+    },
+    PermissionEntry {
+        key: "giftcards:redeem",
+        family: "giftcards",
+        sensitive: false,
+        description: "Redeem gift card stored value as payment.",
+    },
+    PermissionEntry {
+        key: "giftcards:manage",
+        family: "giftcards",
+        sensitive: false,
+        description: "Freeze, unfreeze, and inspect gift cards.",
+    },
+    // ── sync ─────────────────────────────────────────────────────
+    PermissionEntry {
+        key: "sync:manage",
+        family: "sync",
+        sensitive: false,
+        description: "Configure, trigger, and manage data synchronization.",
+    },
+    // ── security ─────────────────────────────────────────────────
+    PermissionEntry {
+        key: "security:manage",
+        family: "security",
+        sensitive: true,
+        description: "Rotate at-rest encryption keys and inspect key state.",
+    },
+    // ── data ─────────────────────────────────────────────────────
+    PermissionEntry {
+        key: "data:export",
+        family: "data",
+        sensitive: true,
+        description: "Create a full data backup (bulk export of all records).",
     },
 ];
 
@@ -569,191 +628,5 @@ pub fn validate_grants(grants: &[String], allow_global: bool) -> Result<(), Vec<
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::rbac::{ALL_ENFORCED, permissions};
-
-    /// The sensitive keys per ADR #35 D2: voids, refunds, settlement,
-    /// role management, and bulk export are never wildcard-eligible.
-    fn is_expected_sensitive(key: &str) -> bool {
-        matches!(
-            key,
-            permissions::SALES_VOID
-                | permissions::SALES_REFUND
-                | permissions::PAYMENTS_REFUND
-                | permissions::PAYMENTS_SETTLE
-                | permissions::STAFF_MANAGE_ROLES
-                | permissions::STAFF_DELETE
-                | permissions::STAFF_READ_IDENTITY
-                | permissions::STAFF_READ_PAYROLL
-                | permissions::STAFF_EDIT_NOTES
-                | permissions::REPORTS_EXPORT
-                | permissions::AUDIT_EXPORT
-        )
-    }
-
-    #[test]
-    fn every_permission_constant_is_registered() {
-        for &p in ALL_ENFORCED {
-            assert!(is_registered(p), "unregistered enforced key: {p}");
-        }
-    }
-
-    #[test]
-    fn every_registry_key_is_a_known_constant() {
-        for e in REGISTRY {
-            assert!(
-                ALL_ENFORCED.contains(&e.key),
-                "registry key not in the constant inventory: {}",
-                e.key
-            );
-        }
-    }
-
-    #[test]
-    fn sensitive_classification_is_explicit() {
-        for &p in ALL_ENFORCED {
-            let entry = lookup(p).expect("every enforced key must be registered");
-            assert_eq!(
-                entry.sensitive,
-                is_expected_sensitive(p),
-                "sensitive flag mismatch for {p}"
-            );
-        }
-    }
-
-    /// ADR #35 D6 / spec 0049: the profile sensitive keys are registered,
-    /// classified sensitive (never wildcard-eligible), granted to every
-    /// management preset, and deliberately withheld from Auditor.
-    #[test]
-    fn profile_sensitive_keys_are_registered_and_granted() {
-        for key in [
-            permissions::STAFF_READ_IDENTITY,
-            permissions::STAFF_READ_PAYROLL,
-            permissions::STAFF_EDIT_NOTES,
-        ] {
-            assert!(is_registered(key), "{key} must be registered");
-            assert!(ALL_ENFORCED.contains(&key), "{key} must be in ALL_ENFORCED");
-            let entry = lookup(key).expect("registered");
-            assert!(entry.sensitive, "{key} must be classified sensitive");
-            // Sensitive keys can never ride a family wildcard.
-            assert!(
-                validate_grant("staff:*", false).is_err(),
-                "staff:* must reject {key}"
-            );
-        }
-
-        // Management presets grant them; Staff (checkout-only) and Auditor
-        // (read-only) are excluded.
-        for preset in crate::rbac::ROLE_PRESETS {
-            let grants = preset.permissions;
-            match preset.id {
-                crate::rbac::builtin_roles::MANAGER | crate::rbac::builtin_roles::ADMIN => {
-                    for key in [
-                        permissions::STAFF_READ_IDENTITY,
-                        permissions::STAFF_READ_PAYROLL,
-                        permissions::STAFF_EDIT_NOTES,
-                    ] {
-                        assert!(
-                            grants.contains(&key),
-                            "{} preset must grant {key}",
-                            preset.id
-                        );
-                    }
-                }
-                crate::rbac::builtin_roles::STAFF => {
-                    for key in [
-                        permissions::STAFF_READ_IDENTITY,
-                        permissions::STAFF_READ_PAYROLL,
-                        permissions::STAFF_EDIT_NOTES,
-                    ] {
-                        assert!(!grants.contains(&key), "Staff must NOT grant {key}");
-                    }
-                }
-                crate::rbac::builtin_roles::AUDITOR => {
-                    for key in [
-                        permissions::STAFF_READ_IDENTITY,
-                        permissions::STAFF_READ_PAYROLL,
-                        permissions::STAFF_EDIT_NOTES,
-                    ] {
-                        assert!(!grants.contains(&key), "Auditor must NOT grant {key}");
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
-    /// Every family present in the registry, sorted for stable output.
-    fn families() -> Vec<&'static str> {
-        let mut families: Vec<&'static str> = REGISTRY.iter().map(|e| e.family).collect();
-        families.sort_unstable();
-        families.dedup();
-        families
-    }
-
-    #[test]
-    fn wildcard_is_rejected_for_every_family_with_a_sensitive_key() {
-        for family in families() {
-            let wildcard = format!("{family}:*");
-            let has_sensitive = REGISTRY.iter().any(|e| e.family == family && e.sensitive);
-            if has_sensitive {
-                assert!(
-                    validate_grant(&wildcard, false).is_err(),
-                    "wildcard {wildcard} must be rejected: the family contains sensitive keys"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn wildcard_is_accepted_for_every_family_without_sensitive_keys() {
-        for family in families() {
-            let wildcard = format!("{family}:*");
-            let has_sensitive = REGISTRY.iter().any(|e| e.family == family && e.sensitive);
-            if !has_sensitive {
-                assert!(
-                    validate_grant(&wildcard, false).is_ok(),
-                    "operational wildcard {wildcard} must be allowed"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn unknown_key_is_rejected() {
-        assert_eq!(
-            validate_grant("sales:typo", false),
-            Err(RegistryError::UnknownKey("sales:typo".into()))
-        );
-        assert_eq!(
-            validate_grant("unknown:*", false),
-            Err(RegistryError::UnknownKey("unknown:*".into()))
-        );
-    }
-
-    #[test]
-    fn exact_sensitive_key_is_allowed() {
-        // Explicit grants are the sanctioned way to carry sensitive keys.
-        assert!(validate_grant(permissions::SALES_VOID, false).is_ok());
-        assert!(validate_grant(permissions::SALES_REFUND, false).is_ok());
-        assert!(validate_grant(permissions::STAFF_MANAGE_ROLES, false).is_ok());
-    }
-
-    #[test]
-    fn global_wildcard_denied_unless_explicit() {
-        assert_eq!(
-            validate_grant("*", false),
-            Err(RegistryError::GlobalWildcardDenied)
-        );
-        assert!(validate_grant("*", true).is_ok());
-    }
-
-    #[test]
-    fn registry_has_no_duplicate_keys() {
-        let mut seen = std::collections::HashSet::new();
-        for e in REGISTRY {
-            assert!(seen.insert(e.key), "duplicate registry key: {}", e.key);
-        }
-    }
-}
+#[path = "permission_registry_tests.rs"]
+mod tests;

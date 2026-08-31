@@ -1,4 +1,9 @@
 /*
+last audited 25-07-26 by RSA-Agent (modules-crm slice A: lib re-verify)
+crate: modules-crm | status: SAFE | lint: CLEAN
+findings: clean Module registration layer
+next: none | perf: N/A
+*//*
 last audited 19-07-26 by RSA-Agent
 crate: modules-crm | status: SAFE | lint: CLEAN
 findings: Transitional module implementing Module trait. No unsafe code. Re-exports Customer from
@@ -40,7 +45,6 @@ next: Migrate DB CRUD + Tauri commands into this module | perf: N/A — no hot p
 //! ```
 
 pub mod error;
-pub mod handlers;
 pub mod models;
 pub mod repository;
 pub mod service;

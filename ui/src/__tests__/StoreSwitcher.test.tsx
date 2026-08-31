@@ -13,8 +13,8 @@ const { mockListStores, mockSetPrimaryStore } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/api/stores', () => ({
-  listStores: () => mockListStores(),
-  setPrimaryStore: (id: string) => mockSetPrimaryStore(id),
+  listStoresScoped: () => mockListStores(),
+  setPrimaryStoreScoped: (_sessionToken: string, id: string) => mockSetPrimaryStore(id),
 }));
 
 // ADR #4 Phase 2b: StoreSwitcher now calls switchStore from WorkspaceContext.

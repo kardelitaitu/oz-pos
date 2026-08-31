@@ -4,11 +4,12 @@ import { Localized } from '@/frontend/shared/Localized';
 import {
   listSales,
   getSale,
-  voidSale,
+  voidSaleScoped,
   type SaleListItem,
   type SaleDetail,
 } from '@/api/sales';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { formatMoney } from '@/types/domain';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -74,6 +75,7 @@ interface VoidOrdersScreenProps {
 export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProps) {
   const { l10n } = useLocalization();
   const { session } = useAuth();
+  const { sessionToken } = useWorkspace();
 
   // Data
   const [sales, setSales] = useState<SaleListItem[]>([]);
@@ -184,11 +186,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
     setVoidSuccess(null);
 
     try {
-      await voidSale({
-        saleId: activeSaleId,
-        userId: session?.user_id ?? 'admin',
-        reason,
-      });
+      await voidSaleScoped(sessionToken!, activeSaleId, reason);
       setVoidSuccess(l10n.getString('void-orders-success-voided'));
       setVoidError(null);
       setVoidReason('');

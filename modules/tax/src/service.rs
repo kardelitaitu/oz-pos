@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-tax slice A: service verified)
+crate: modules-tax | status: SAFE | lint: CLEAN
+findings: clean thin service facade
+next: none | perf: N/A
+*/
 //! Tax Service — tax calculation and rate management workflows.
 
 use crate::error::TaxError;

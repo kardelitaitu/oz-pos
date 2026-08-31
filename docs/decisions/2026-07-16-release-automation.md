@@ -1,8 +1,14 @@
+---
+num: 14
+area: release
+title: ADR #14: Release Automation — GitHub Actions Build & Publish Pipeline
+status: Proposed (2026-07-16)
+---
 <!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: RESOLVED (AUDIT-28 2026-08-03) · F1: pipeline is SHIPPED and release.yml is now the single tag-triggered orchestrator (version gate → Tauri installer builds for Linux/Windows/macOS → signed latest.json/beta.json → draft release → inventory → publish). F2: release.yml now references scripts/generate-latest-json.mjs (via --merge) and scripts/verify-updater-signature.mjs; the ADR's Windows-NSIS/MSI + latest.json-on-every-release design is implemented. · verified accurate: ADR#13 existing infra (plugin/tauri.conf.json/pubkey/capabilities/UpdateBanner) all present; SettingsPage updater UI live; FTL strings present -->
 
 # ADR #14: Release Automation — GitHub Actions Build & Publish Pipeline
 
-**Status:** Planned (2026-07-16)
+**Status:** Proposed (2026-07-16)
 **Date:** 2026-07-16
 **Author:** OZ-POS Contributors
 **Tags:** release, ci, github-actions, build, signing, updater

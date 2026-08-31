@@ -3,7 +3,7 @@ name: onboarding-guide
 description: Meta-skill that routes tasks to the right OZ-POS skill. Use when starting a new task and unsure which specialized skill applies. Read this first when joining the project or picking up an unfamiliar area.
 ---
 
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (2 noted findings, doc-staleness) · F1: 'Skills to defer (no code yet)' section (lines 66-72) says oz-lua/oz-payment/oz-security/oz-reporting are pre-code / do-not-create-skills — but all four crates now exist (verified), so the deferral is obsolete (cloud-sync -> apps/cloud-server also exists) · F2 (wrong path): line 91 says mock lives in crates/oz-hal/src/drivers/mock.rs; actual path is crates/oz-hal/src/drivers/mock.rs (same crates/oz-hal/ -> crates/oz-hal/ drift as hal-drivers skill) · verified accurate: exit-animation-pattern skill exists, scripts verify-bundle-parity.py + dedupe-ftl.py + lint-i18n.sh + check.sh exist, ui/src/api/pos.ts exists, .githooks/pre-commit 4-gate description matches -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (obsolete-defer + convention refs repaired) · FIXED 31-08: 'Skills to defer (no code yet)' was obsolete — oz-lua/oz-payment/oz-security/cloud-sync/oz-reporting all ship code now; rewritten to 'Areas with code but no dedicated skill yet' pointing at each crate README; nonexistent PaymentTerminal trait -> EdcTerminal (hal-drivers); rlua -> mlua; pos.ts -> per-domain ui/src/api/<feature>.ts (router + workflow); device list NFC -> real (customer display, weight scale, EDC); embedded-hal -> async-trait · verified accurate: exit-animation-pattern skill exists, scripts verify-bundle-parity.py + dedupe-ftl.py + lint-i18n.sh + check.sh exist, .githooks/pre-commit 4-gate description matches -->
 
 # OZ-POS Onboarding Guide
 
@@ -35,7 +35,7 @@ For comprehensive local validation that mirrors the entire CI matrix (not just t
 - **Hardware**: `oz-hal` (drivers behind `async` traits, mandatory mocks).
 - **UI**: Tauri v2 + React 18 + TypeScript, strict, accessible, localized.
 - **IPC**: Rust commands in `apps/desktop-client/src/commands/`, front-end wrappers in `ui/src/api/` (per-domain files).
-- **Scripting**: `rlua` runtime in `oz-lua` for runtime business rules.
+- **Scripting**: `mlua` runtime in `oz-lua` for runtime business rules.
 - **Payment**: PCI-aware, swappable processors in `oz-payment`.
 - **CI**: GitHub Actions matrix (Linux, Windows, macOS), blocking fmt/clippy/test/UI lint.
 
@@ -51,10 +51,10 @@ What do you want to do?
 |---|---|
 | Add or change Rust code in any `oz-*` crate, work with the `Money` struct, write SQL transactions, define error types, or add a `#[cfg(test)]` block | **`rust-backend`** |
 | Write or review tests, drive a change test-first (red-green-refactor), or run the fast TDD loop (`scripts/test-tdd.sh`) | **`tdd`** |
-| Add a new Tauri command on the backend, register it, and call it from the front-end via `pos.ts` | **`tauri-ipc`** |
+| Add a new Tauri command on the backend, register it, and call it from the front-end via a per-domain `ui/src/api/<feature>.ts` wrapper | **`tauri-ipc`** |
 | Add or change React component, screen, hook, or any user-visible string; review accessibility, i18n, or strict TypeScript | **`ui-components`** |
 | Add a symmetric CSS entry/exit animation (mirror keyframe + class toggle + useRef cleanup + ID-set-compare race guard) on a pill, badge, banner, modal, or any dismissable UI element | **`exit-animation-pattern`** |
-| Add a new device category or vendor driver (barcode, printer, NFC, payment terminal, cash drawer); write the **mandatory mock** | **`hal-drivers`** |
+| Add a new device category or transport driver (barcode scanner, receipt printer, cash drawer, customer display, weight scale, EDC payment terminal); write the **mandatory mock** | **`hal-drivers`** |
 | Scaffold the workspace, add a new crate, configure CI, write commit messages, set up the GitHub Actions matrix | **`project-scaffold`** |
 | Detect or patch drift between a skill and the code (broken paths, renamed crates, stale `last audited` dates, outdated dependency versions) | **`skill-drift-guard`** |
 | Audit any project document (README, ARCHITECTURE.md, api-reference, spec, admin guide) against the current codebase — verify claims, classify drift, patch the doc, stamp it audited | **`docs-auditor`** |
@@ -67,17 +67,17 @@ If your task touches more than one layer, read each relevant skill in the order 
 
 ---
 
-## Skills to defer (no code yet)
+## Areas with code but no dedicated skill yet
 
-These areas are real but the project is pre-code. **Do not create skills for them yet** — wait until the code exists and the boundaries are stable.
+These crates now ship real code (they were "pre-code" when this guide was first written). There is still no dedicated skill for each, so read **`rust-backend`** plus the crate's own `README.md` for conventions:
 
-- **`oz-lua` scripting** — defer until `oz-core` exposes the functions the Lua runtime will bind to.
-- **`oz-payment` processors** (Stripe, Square, EMV) — defer until the `oz-hal` `PaymentTerminal` trait is in place.
-- **`oz-security` (encryption, PCI-DSS)** — defer until the first secret is actually being stored.
-- **Cloud sync (PostgreSQL/CockroachDB, Redis)** — defer until local sync is implemented and a real outbox exists.
-- **Reporting / analytics (oz-reporting)** — defer until the SQLite schema stabilizes. Reports aggregate over the cart, sale, payment, and inventory tables; writing the skill before those tables exist will require frequent rewrites.
+- **`oz-lua` scripting** — `mlua` runtime; discount/tax/validation rules. See `crates/oz-lua/README.md`.
+- **`oz-payment` processors** — Stripe, Square, QRIS, Paddle, mock. Card-present terminals are the `oz-hal` **`EdcTerminal`** trait (see `hal-drivers`). See `crates/oz-payment/README.md`.
+- **`oz-security`** — encryption, PAN masking, platform keychains. See `crates/oz-security/README.md`.
+- **Cloud sync** — `platform/sync` + `apps/cloud-server` (PostgreSQL). See `ARCHITECTURE.md`.
+- **Reporting / analytics** — `crates/oz-reporting` + `crates/oz-core/src/db/reports.rs` (REP-03: store-timezone bucketing). See `crates/oz-reporting/README.md`.
 
-When a skill becomes relevant, this guide should be updated to point to it.
+When one of these grows a dedicated skill, add it to the router table above.
 
 ---
 
@@ -86,7 +86,7 @@ When a skill becomes relevant, this guide should be updated to point to it.
 ### "I'm adding a new feature end-to-end"
 
 1. Read `rust-backend`. Add the domain type and the `Money` flow.
-2. Read `tauri-ipc`. Add the command and the `pos.ts` wrapper.
+2. Read `tauri-ipc`. Add the command and the per-domain `ui/src/api/<feature>.ts` wrapper.
 3. Read `ui-components`. Add the screen, hook, and Fluent strings.
 4. Read `hal-drivers` only if the feature needs hardware.
 5. Read `project-scaffold` to confirm the branch name and commit format.
@@ -135,7 +135,7 @@ If any of those describe the task, the right move is to ask the user which codeb
 |---|---|
 | "What does this Rust trait do?" | Read the `///` docs on the trait itself. The skills are guides, not the source of truth — the code is. |
 | "How should this work in OZ-POS?" | Read the matching skill. If the skill doesn't cover it, ask Buffy (the AI agent) to extend the skill. |
-| "How should this work in general?" | The relevant upstream docs (`embedded-hal`, `rusqlite`, Tauri, React, Fluent). The skills assume familiarity with these. |
+| "How should this work in general?" | The relevant upstream docs (`async-trait`, `rusqlite`, Tauri, React, Fluent). The skills assume familiarity with these. |
 | "Is this a security concern?" | Read `AGENTS.md` first. If still unclear, spawn a security review — OZ-POS handles money and (eventually) card data. |
 
 ---
@@ -161,4 +161,4 @@ If this passes locally, the PR is ready.
 
 ---
 
-> last audited 29-08-26 by skill-drift-guard
+> last audited 31-08-26 by docs-auditor

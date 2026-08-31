@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-lua slice A: bridge verified)
+crate: oz-lua | status: SAFE | lint: CLEAN
+findings: clean event bridge — owner-scoped registration and dispatch, no unwrap/panic/unsafe
+next: none | perf: N/A
+*/
 //! Lua event bridge — exposes event subscription callbacks to Lua scripts.
 //!
 //! Provides the `oz.on()` and `oz.off()` APIs that let Lua plugins subscribe

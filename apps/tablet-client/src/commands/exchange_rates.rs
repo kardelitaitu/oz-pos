@@ -110,6 +110,14 @@ fn run_list_exchange_rates(conn: &rusqlite::Connection) -> Result<Vec<ExchangeRa
     Ok(rows.into_iter().map(ExchangeRateDto::from).collect())
 }
 
+fn run_list_latest_exchange_rates(
+    conn: &rusqlite::Connection,
+) -> Result<Vec<ExchangeRateDto>, AppError> {
+    let repo = CurrencyRepository::new(conn);
+    let rows = repo.list_latest_exchange_rates()?;
+    Ok(rows.into_iter().map(ExchangeRateDto::from).collect())
+}
+
 /// List exchange rates in the store resolved from a session token. ADR #7.
 ///
 /// CUR-03: resolves the store from the session and enforces
@@ -133,6 +141,35 @@ pub async fn list_exchange_rates_scoped(
         oz_core::permissions::SETTINGS_READ,
     )?;
     let out = run_list_exchange_rates(&db)?;
+    drop(db);
+    Ok(out)
+}
+
+/// The current rate for every pair (CUR-11), store resolved from a
+/// session token. ADR #7.
+///
+/// Bounded counterpart to `list_exchange_rates_scoped`: one row per
+/// currency pair (newest effective date), so rate-overview consumers
+/// never ship the full history over IPC. Same `SETTINGS_READ` gate.
+#[command]
+pub async fn list_latest_exchange_rates_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<ExchangeRateDto>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    require_permission_for_user(
+        &Store::new(&db),
+        &session.user_id,
+        oz_core::permissions::SETTINGS_READ,
+    )?;
+    let out = run_list_latest_exchange_rates(&db)?;
     drop(db);
     Ok(out)
 }

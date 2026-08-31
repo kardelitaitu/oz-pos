@@ -1,7 +1,7 @@
 ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/kardelitaitu/oz-pos?style=flat-square) ![GitHub repo size](https://img.shields.io/github/repo-size/kardelitaitu/oz-pos?style=flat-square) [![Nightly CI](https://github.com/kardelitaitu/oz-pos/actions/workflows/nightly.yml/badge.svg)](https://github.com/kardelitaitu/oz-pos/actions/workflows/nightly.yml)
 
 
-<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE · ADR #30 domain modularization complete across modules/* · ADR #31 decentralized UI self-registration active via registerAllFeatures() · F1: 101 .sql migration files · F2: 5,212 Rust tests; 228 UI test files (3,476 tests) · F3: 48 .ftl Fluent translation files (5,700+ IDs) · F4: payment drivers (Stripe, Mock, QRIS, Square) · F5: 618 #[tauri::command] IPC endpoints · re-audited 2026-08-08 by docs-auditor: 117 .sql migrations, 5,860 Rust test markers, 265 UI test files, 48 .ftl (7,152 IDs), 435 #[tauri::command] endpoints, release v0.0.25 -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (6 major + 2 minor repaired) · F1: migration count 117 -> 19 files (131 squashed into init.sql, db6198a3) · F2: repointed 3 broken links docs/archived/{QUICKSTART,ROADMAP,MODULAR_APP_PLAN}.md -> docs/guides/ · F3: crate inventory 11 -> 13 (added oz-crypto, oz-media) · F4: "future CRM module" -> CRM ships (modules/crm registered in kernel) · F5: architecture diagram "Restaurant" (no such module) -> "Promotions" (real module) · F6: HAL device lists now include EDC payment terminals + weight scales (traits/edc.rs, drivers/scale.rs) · m1: oz-payment drivers add Paddle · m2: footer version 0.0.25 -> 0.0.33 · NOTE: test-file/ID counts kept approximate (volatile — parallel session adds tests continuously) · RE-AUDITED 31-08: reconciled internally inconsistent counts (UI files listed as both 228 and 265; Rust as both 5,200+ and 5,800+) to consistent approximate figures (400+ UI files, ~6,700 UI tests, 5,800+ Rust); corrected non-volatile structural counts — IPC 435+ -> 505 unique (matches api-reference.md), locales 48 -> 50 files (25 bundles x 2, matches ROADMAP/ui-README); migrations 19 re-confirmed -->
 
 # OZ-POS
 
@@ -31,8 +31,8 @@ Modern POS systems often suffer from vendor lock-in, expensive subscriptions, cl
 - **Offline-first** — Operates without internet connectivity; sync when available
 - **Modular by design** — Independent modules for inventory, CRM, reporting, etc.
 - **Secure by default** — Encrypted backups, PAN masking, platform keychains
-- **Hardware abstraction** — Vendor-independent drivers for printers, scanners, displays
-- **Enterprise-grade code quality** — 5,200+ Rust tests, 3,476 frontend tests (228 files), strict Clippy, typed Money, transactional DB
+- **Hardware abstraction** — Vendor-independent drivers for printers, scanners, displays, payment terminals, scales
+- **Enterprise-grade code quality** — 5,800+ Rust tests, ~6,700 frontend tests (400+ files), strict Clippy, typed Money, transactional DB
 
 ---
 
@@ -42,10 +42,10 @@ Modern POS systems often suffer from vendor lock-in, expensive subscriptions, cl
 |------|-------------|
 | **Sales** | Fast checkout, barcode scanning, receipt printing, multiple payments, refunds, discounts |
 | **Inventory** | Product management, categories, stock adjustments, purchase tracking, movement history |
-| **Customer Management** | Profiles, purchase history, loyalty support, future CRM module |
+| **Customer Management** | Profiles, purchase history, loyalty support, CRM (dedicated module) |
 | **Reporting** | Daily sales, product performance, cash reconciliation, inventory reports, export |
 | **Security** | Encrypted backups (Argon2id + AES-256-GCM), PAN masking, TLS, platform keychain, audit logging |
-| **Hardware** | Receipt printers, barcode scanners, cash drawers, customer displays — USB, Bluetooth, TCP, serial, plus mock drivers for testing |
+| **Hardware** | Receipt printers, barcode scanners, cash drawers, customer displays, EDC payment terminals, weight scales — USB, Bluetooth, TCP, serial, plus mock drivers for testing |
 
 ---
 
@@ -75,7 +75,7 @@ Modern POS systems often suffer from vendor lock-in, expensive subscriptions, cl
  │ Cart         │                    │ Reporting       │
  │ Contracts    │                    │ CRM             │
  └──────────────┘                    │ Tax / Discounts │
-                                     │ Restaurant      │
+                                     │ Promotions      │
       │                              │ Loyalty         │
       ▼                              └─────────────────┘
  Infrastructure
@@ -102,11 +102,13 @@ oz-pos/
 │   ├── oz-api/             # HTTP API server (axum)
 │   ├── oz-cli/             # CLI tool (backup, export/import .ozpkg, migrations)
 │   ├── oz-core/            # Domain models, SQLite Store, migrations, settings
-│   ├── oz-hal/             # Hardware Abstraction Layer (printer, scanner, drawer, display)
+│   ├── oz-crypto/          # Cryptographic primitives (secret encryption at rest)
+│   ├── oz-hal/             # Hardware Abstraction Layer (printer, scanner, drawer, display, scale, EDC terminal)
 │   ├── oz-logging/         # Structured logging (console, file, syslog, eventlog)
 │   ├── oz-lua/             # Lua scripting engine (mlua — discount, tax, validation)
+│   ├── oz-media/           # Media pipeline (compress, crop, thumbnail)
 │   ├── oz-notification/    # Email & push notification dispatching
-│   ├── oz-payment/         # Payment gateway integrations (Stripe, Square, QRIS, mock)
+│   ├── oz-payment/         # Payment gateway integrations (Stripe, Square, QRIS, Paddle, mock)
 │   ├── oz-plugin/          # Plugin sandbox & lifecycle (Lua scripting bridge)
 │   ├── oz-reporting/       # Report generation (EOD, sales summaries)
 │   └── oz-security/        # TLS config, PAN masking, platform keychains
@@ -118,8 +120,8 @@ oz-pos/
 │       ├── api/            # Per-domain invoke() wrappers — no invoke() in components
 │       ├── frontend/       # Shared components, shell layout, design tokens
 │       ├── features/       # 55+ audited screen components by domain
-│       ├── locales/        # Fluent (.ftl) files — 5,700+ IDs across 48 files
-│       └── __tests__/      # Vitest + testing-library (228 files, 3,476 tests)
+│       ├── locales/        # Fluent (.ftl) files — 5,700+ IDs across 50 files
+│       └── __tests__/      # Vitest + testing-library (400+ files, ~6,700 tests)
 ├── docs/                   # ROADMAP.md, ADRs, specs, whitepaper
 ├── scripts/                # Example Lua business rule scripts, coverage scripts
 └── packaging/              # MSI, .deb, .AppImage build configs
@@ -134,7 +136,7 @@ oz-pos/
 | Backend | Rust | Domain logic, DB access, hardware control |
 | Desktop Shell | Tauri v2 | Native window, IPC bridge, updater |
 | Frontend | React 18 + TypeScript + Vite 6 | POS UI |
-| Database | SQLite (rusqlite) | On-device persistence, 117 migrations |
+| Database | SQLite (rusqlite) | On-device persistence, 19 migration files (131 squashed into init.sql) |
 | Localization | @fluent/react | All UI strings in `.ftl` files |
 | Hardware | oz-hal traits | USB/TCP/BT/serial/mock drivers |
 | Money | `i64` minor units | Never `f32`/`f64` — `Currency`, `Money` structs |
@@ -153,7 +155,7 @@ cd ui && npm ci --no-audit --no-fund && cd ..  # see ui/README.md#install-script
 cd apps/desktop-client && cargo tauri dev
 ```
 
-See [docs/QUICKSTART.md](./docs/archived/QUICKSTART.md) for detailed setup instructions.
+See [docs/guides/QUICKSTART.md](./docs/guides/QUICKSTART.md) for detailed setup instructions.
 
 ---
 
@@ -168,7 +170,7 @@ See [docs/QUICKSTART.md](./docs/archived/QUICKSTART.md) for detailed setup instr
 | `npm run build` | Production build |
 | `npm run typecheck` | TypeScript validation |
 | `npm run lint` | ESLint + jsx-a11y |
-| `npm run test` | Vitest (228 files, 3,476 tests) |
+| `npm run test` | Vitest (400+ files, ~6,700 tests) |
 | `npm run e2e` | Full E2E suite: Docker → Vite → Playwright → cleanup |
 | `npm run e2e:headed` | E2E with browser visible |
 | `npm run e2e:api` | API integration tests only |
@@ -182,7 +184,7 @@ See [docs/QUICKSTART.md](./docs/archived/QUICKSTART.md) for detailed setup instr
 |---|---|
 | `cargo fmt --all` | Format Rust code |
 | `cargo clippy --all-targets -- -D warnings` | Lint |
-| `cargo test --workspace` | Run tests (5,200+) |
+| `cargo test --workspace` | Run tests (5,800+) |
 | `bash scripts/check.sh` | Full local pre-push gate (Rust + UI + migrations) |
 | `bash scripts/coverage.sh` | Rust + UI coverage reports |
 | `bash scripts/reset-dev-pg.sh` | Reset the dev PostgreSQL container to the committed PG_INIT schema (`.ps1` twin on Windows) |
@@ -203,7 +205,7 @@ Every PR must pass `cargo fmt`, Clippy, `tsc --noEmit`, and all tests before mer
 
 ## Status
 
-**Phase 4 (CRM, Restaurant, Accounting) in progress.** 117 migrations, 435+ IPC commands, 55+ audited screen components, 265 front-end test files, 5,800+ Rust tests.
+**Phase 4 (CRM, Restaurant, Accounting) in progress.** 19 migration files, 505 IPC commands, 55+ audited screen components, 400+ front-end test files, 5,800+ Rust tests.
 
 | Phase | Status | Focus |
 |---|---|---|
@@ -215,7 +217,7 @@ Every PR must pass `cargo fmt`, Clippy, `tsc --noEmit`, and all tests before mer
 
 Latest release: **v0.0.33** (on branch `0.0.33`).
 
-See [ROADMAP.md](./docs/archived/ROADMAP.md) for the full phased delivery plan, and [MODULAR_APP_PLAN.md](./docs/archived/MODULAR_APP_PLAN.md) for detailed granular checklists covering feature presets, restaurant workflows, LAN KDS discovery, and Docker cloud server containerization (`apps/cloud-server`).
+See [ROADMAP.md](./docs/guides/ROADMAP.md) for the full phased delivery plan, and [MODULAR_APP_PLAN.md](./docs/guides/MODULAR_APP_PLAN.md) for detailed granular checklists covering feature presets, restaurant workflows, LAN KDS discovery, and Docker cloud server containerization (`apps/cloud-server`).
 
 ---
 
@@ -241,8 +243,5 @@ This software (`oz-pos`) is **NOT open source**. No part of this codebase, assoc
 
 See [LICENSE](./LICENSE) for terms and restrictions. For commercial licensing and pricing inquiries, contact: **adikaradwiatmaja@gmail.com**.
 
-> last audited 09-08-26 by buffy
-> audit: Phase 1 Core Architecture & API Docs Audit
-
-> status: ACCURATE (verified against actual codebase) · verified accurate: all test counts, modules, crates, security features, and feature capabilities confirmed; version 0.0.25 matches Cargo.toml
+> last audited 31-08-26 by docs-auditor
 

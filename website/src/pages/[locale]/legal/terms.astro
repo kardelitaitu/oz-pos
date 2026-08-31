@@ -26,7 +26,7 @@ const { Content } = await render(doc);
         {t(locale, 'legal.effective')} {doc.data.effective} · {t(locale, 'legal.version')} {doc.data.version}
       </p>
     )}
-    <div class="docs-content mt-8">
+    <div class="docs-content mt-8" data-i18n-key={t(locale, 'legal.placeholder')}>
       <Content />
     </div>
   </section>

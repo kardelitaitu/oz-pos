@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-hal slice C: verified)
+crate: oz-hal | status: SAFE | lint: CLEAN
+findings: clean driver — no unsafe. Covers all 6 HAL traits as of the EDC move (31-08-26): barcode, printer, drawer, display, scale, edc, so the mandatory-mock rule in AGENTS.md still holds crate-wide. MockEdcTerminal fails closed until set_success(): an unarmed mock cannot exercise an approved-payment path, which is the property worth having on a money device. The lock().expect("mock poisoned") calls are the only panic paths and are confined to test doubles, matching the pre-existing style here.
+next: none | perf: N/A — test doubles only
+*/
 //! Mock implementations of every HAL trait.
 //!
 //! Mocks are **stateful** and **programmable**: tests push inputs, then
@@ -8,15 +14,17 @@
 //! "mock mode" in business code.
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
+use oz_core::Money;
 
 use crate::error::HalError;
 use crate::traits::barcode::BarcodeScanner;
 use crate::traits::cash_drawer::CashDrawer;
 use crate::traits::customer_display::{CustomerDisplay, DisplayContent};
+use crate::traits::edc::{EdcPaymentResult, EdcTerminal, TerminalStatus};
 use crate::traits::printer::{PaperStatus, PrinterStatus, ReceiptPrinter};
 use crate::traits::weight_scale::{WeightReading, WeightScale};
 use crate::types::{Barcode, DeviceInfo};
@@ -431,6 +439,197 @@ impl WeightScale for MockWeightScale {
             weight_grams: 0.0,
             stable: true,
         })
+    }
+
+    fn device_info(&self) -> DeviceInfo {
+        self.info.clone()
+    }
+}
+
+// --- EDC payment terminal mock --------------------------------------------
+
+/// Programmable mock for `EdcTerminal`.
+///
+/// **Fails closed:** until [`set_success`](Self::set_success) is called,
+/// every operation returns `HalError::Unsupported`. A test that forgets to
+/// arm the mock therefore cannot accidentally walk an approved-payment path,
+/// which is the property that matters for a money-accepting device.
+///
+/// [`set_status`](Self::set_status) forces a specific [`TerminalStatus`] so
+/// the offline / paper-error / busy UI states can be exercised without
+/// hardware.
+#[derive(Clone)]
+pub struct MockEdcTerminal {
+    success: Arc<AtomicBool>,
+    forced_status: Arc<Mutex<Option<TerminalStatus>>>,
+    /// Number of times `authorize` has been called.
+    pub authorize_calls: Arc<AtomicUsize>,
+    /// Number of times `capture` has been called.
+    pub capture_calls: Arc<AtomicUsize>,
+    /// Number of times `sale` has been called.
+    pub sale_calls: Arc<AtomicUsize>,
+    /// Number of times `refund` has been called.
+    pub refund_calls: Arc<AtomicUsize>,
+    /// Number of times `void` has been called.
+    pub void_calls: Arc<AtomicUsize>,
+    /// Number of times `print_receipt` has been called.
+    pub print_calls: Arc<AtomicUsize>,
+    /// Device identity reported by `device_info()`.
+    pub info: DeviceInfo,
+}
+
+impl MockEdcTerminal {
+    /// Construct an unarmed mock (every operation fails closed) with default
+    /// identity `("mock", "MockEDC", "0000")`.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::with_info(DeviceInfo::new("mock", "MockEDC", "0000"))
+    }
+
+    /// Construct an unarmed mock with custom identity.
+    #[must_use]
+    pub fn with_info(info: DeviceInfo) -> Self {
+        Self {
+            success: Arc::new(AtomicBool::new(false)),
+            forced_status: Arc::new(Mutex::new(None)),
+            authorize_calls: Arc::new(AtomicUsize::new(0)),
+            capture_calls: Arc::new(AtomicUsize::new(0)),
+            sale_calls: Arc::new(AtomicUsize::new(0)),
+            refund_calls: Arc::new(AtomicUsize::new(0)),
+            void_calls: Arc::new(AtomicUsize::new(0)),
+            print_calls: Arc::new(AtomicUsize::new(0)),
+            info,
+        }
+    }
+
+    /// Arm the mock: authorize, capture, sale, refund and void now succeed.
+    pub fn set_success(&self) {
+        self.success.store(true, Ordering::SeqCst);
+    }
+
+    /// Disarm the mock, returning it to the fail-closed default.
+    pub fn set_failure(&self) {
+        self.success.store(false, Ordering::SeqCst);
+    }
+
+    /// Whether the mock is armed.
+    #[must_use]
+    pub fn is_armed(&self) -> bool {
+        self.success.load(Ordering::SeqCst)
+    }
+
+    /// Force [`status`](Self::status) to report `Some(status)` regardless of
+    /// arming; pass `None` to go back to the derived behaviour.
+    pub fn set_status(&self, status: Option<TerminalStatus>) {
+        *self.forced_status.lock().expect("mock poisoned") = status;
+    }
+
+    fn approved(&self, id: &str, auth: &str, message: &str) -> EdcPaymentResult {
+        EdcPaymentResult {
+            success: true,
+            transaction_id: Some(id.to_owned()),
+            auth_code: Some(auth.to_owned()),
+            card_scheme: Some("Visa".into()),
+            card_last4: Some("1111".into()),
+            message: message.to_owned(),
+        }
+    }
+
+    fn unsupported(&self, method: &str) -> HalError {
+        HalError::Unsupported(format!("mock EDC {method} — not armed; call set_success()"))
+    }
+}
+
+impl Default for MockEdcTerminal {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl EdcTerminal for MockEdcTerminal {
+    async fn status(&self) -> Result<TerminalStatus, HalError> {
+        if let Some(forced) = *self.forced_status.lock().expect("mock poisoned") {
+            return Ok(forced);
+        }
+        if self.is_armed() {
+            Ok(TerminalStatus::Ready)
+        } else {
+            Err(self.unsupported("status"))
+        }
+    }
+
+    async fn authorize(&self, _amount: Money) -> Result<String, HalError> {
+        self.authorize_calls.fetch_add(1, Ordering::SeqCst);
+        if self.is_armed() {
+            Ok("mock-txn-001".into())
+        } else {
+            Err(self.unsupported("authorize"))
+        }
+    }
+
+    async fn capture(&self, transaction_id: &str) -> Result<EdcPaymentResult, HalError> {
+        self.capture_calls.fetch_add(1, Ordering::SeqCst);
+        if self.is_armed() {
+            Ok(self.approved(transaction_id, "MOCKAUTH", "approved"))
+        } else {
+            Err(self.unsupported("capture"))
+        }
+    }
+
+    async fn sale(&self, amount: Money) -> Result<EdcPaymentResult, HalError> {
+        self.sale_calls.fetch_add(1, Ordering::SeqCst);
+        let txn_id = self.authorize(amount).await?;
+        self.capture(&txn_id).await
+    }
+
+    async fn refund(
+        &self,
+        _transaction_id: &str,
+        _amount: Option<Money>,
+    ) -> Result<EdcPaymentResult, HalError> {
+        self.refund_calls.fetch_add(1, Ordering::SeqCst);
+        if self.is_armed() {
+            Ok(EdcPaymentResult {
+                success: true,
+                transaction_id: Some("mock-refund-001".into()),
+                auth_code: Some("MOCKREF".into()),
+                card_scheme: None,
+                card_last4: None,
+                message: "refund approved".into(),
+            })
+        } else {
+            Err(self.unsupported("refund"))
+        }
+    }
+
+    async fn void(&self, _transaction_id: &str) -> Result<EdcPaymentResult, HalError> {
+        self.void_calls.fetch_add(1, Ordering::SeqCst);
+        if self.is_armed() {
+            Ok(EdcPaymentResult {
+                success: true,
+                transaction_id: Some("mock-void-001".into()),
+                auth_code: None,
+                card_scheme: None,
+                card_last4: None,
+                message: "void approved".into(),
+            })
+        } else {
+            Err(self.unsupported("void"))
+        }
+    }
+
+    async fn print_receipt(&self, transaction_id: &str) -> Result<Vec<u8>, HalError> {
+        self.print_calls.fetch_add(1, Ordering::SeqCst);
+        if self.is_armed() {
+            // ESC/POS init followed by the transaction id — a plausible raw
+            // device receipt without pretending to model a printer.
+            let mut buf = vec![0x1B, 0x40];
+            buf.extend_from_slice(transaction_id.as_bytes());
+            Ok(buf)
+        } else {
+            Err(self.unsupported("print_receipt"))
+        }
     }
 
     fn device_info(&self) -> DeviceInfo {

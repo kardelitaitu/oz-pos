@@ -16,9 +16,17 @@
  *   cd ui && npm run e2e -- --no-docker     # skip Docker (use existing servers)
  *   cd ui && npm run e2e -- e2e/auth.spec.ts  # single spec
  *   cd ui && npm run e2e -- --project=desktop # one Playwright project only
+ *   cd ui && npm run e2e -- --build         # rebuild stale E2E images first
+ *
+ * Image freshness: `compose up --pull=missing` never rebuilds a tag that
+ * already exists, so a stale e2e-{cloud,license}-server:latest would silently
+ * test outdated binaries. The runner therefore refuses to start when a
+ * locally-built image predates its own sources — pass --build to rebuild them.
+ * Skipped under CI, where the workflow builds the images from the checkout.
  */
 
 import { execSync, spawn } from 'child_process';
+import { existsSync } from 'node:fs';
 import { generateKeyPairSync } from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
@@ -36,6 +44,9 @@ const API_ONLY = args.includes('--api-only');
 const UI_ONLY = args.includes('--ui-only');
 const NO_DOCKER = args.includes('--no-docker');
 const CHANGED_ONLY = args.includes('--changed-only');
+// Rebuild the locally-built E2E images that the freshness guard judges stale,
+// instead of aborting. See assertImagesFresh() for the staleness rule.
+const BUILD = args.includes('--build');
 // Optional --project=<name> passthrough (e.g. --project=desktop) so CI
 // can shard the suite by Playwright project (desktop / tablet) instead
 // of running the full matrix in a single job. Forwarded verbatim.
@@ -129,6 +140,172 @@ function dockerAvailable() {
   }
 }
 
+/* ── E2E image freshness guard ─────────────────────────────────────── */
+
+/**
+ * The two E2E services whose images are built from this repository rather
+ * than pulled from a registry. `paths` is the set of tracked paths that can
+ * actually change each image, mirroring the Dockerfile COPY lines and
+ * .dockerignore — deliberately NOT the whole repo, so an unrelated edit
+ * (docs, ui/) never demands a multi-minute Rust rebuild.
+ */
+const LOCAL_BUILD_CONTEXTS = [
+  {
+    service: 'e2e-license-server',
+    image: 'e2e-license-server:latest',
+    paths: ['apps/license-server'],
+  },
+  {
+    service: 'e2e-cloud-server',
+    image: 'e2e-cloud-server:latest',
+    // Dockerfile.server: context is the repo root, but .dockerignore drops
+    // ui/, docs/, apps/desktop-client and apps/tablet-client, and cargo only
+    // builds the oz-cloud-server package — so apps/license-server and
+    // apps/unified cannot change this binary.
+    paths: [
+      'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml',
+      'Dockerfile.server', '.dockerignore',
+      'crates', 'foundation', 'platform', 'modules',
+      'apps/cloud-server',
+      'scripts/docker-entrypoint.sh', 'scripts/updater-compat-check',
+    ],
+  },
+];
+
+/** Creation time of a local image in ms, or null when the image is absent. */
+function imageCreatedMs(image) {
+  try {
+    const out = execSync(`docker image inspect ${image} --format "{{.Created}}"`, {
+      stdio: 'pipe', timeout: 15_000,
+    }).toString().trim();
+    const ms = Date.parse(out);
+    return Number.isNaN(ms) ? null : ms;
+  } catch {
+    return null; // no such image locally
+  }
+}
+
+/** Timestamp of the last commit touching any of `paths`, in ms (0 if unknown). */
+function lastCommittedChangeMs(paths) {
+  try {
+    const quoted = paths.map(p => `"${p}"`).join(' ');
+    const out = execSync(`git log -1 --format=%ct -- ${quoted}`, {
+      stdio: 'pipe', timeout: 15_000, cwd: ROOT,
+    }).toString().trim();
+    return out ? Number(out) * 1000 : 0;
+  } catch {
+    return 0; // shallow clone / no matching history — treat as fresh
+  }
+}
+
+/** True when `paths` has uncommitted or untracked changes. */
+function hasUncommittedChanges(paths) {
+  try {
+    const quoted = paths.map(p => `"${p}"`).join(' ');
+    const out = execSync(`git status --porcelain -- ${quoted}`, {
+      stdio: 'pipe', timeout: 15_000, cwd: ROOT,
+    }).toString().trim();
+    return out.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+const iso = ms => new Date(ms).toISOString().slice(0, 19) + 'Z';
+
+/**
+ * Classify the locally-built services into `missing` (no image at all) and
+ * `stale` (an image that predates its own sources).
+ *
+ * Why this exists: `compose up --pull=missing` only fetches tags that are
+ * missing — it NEVER rebuilds a tag that already exists. A long-lived
+ * `e2e-license-server:latest` therefore keeps serving the bytes from whenever
+ * it was last built, and a green E2E run silently means "tested an outdated
+ * binary". This bit us on 2026-08-31: a local image from 08-03 answered
+ * /api/health with PocketBase's built-in envelope while CI (which builds
+ * fresh) returned the bindHealthOverride payload, making a correct test look
+ * wrong. The guard turns that invisible trap into a loud, actionable stop.
+ *
+ * `missing` is kept separate because it carries no stale-bytes risk — compose
+ * builds an absent image during `up` anyway — so the runner just does that
+ * up front instead of adding first-run friction.
+ */
+function classifyImages() {
+  const missing = [];
+  const stale = [];
+  for (const ctx of LOCAL_BUILD_CONTEXTS) {
+    const created = imageCreatedMs(ctx.image);
+    if (created === null) {
+      missing.push({ ...ctx, reason: 'image has not been built yet' });
+      continue;
+    }
+    const changed = lastCommittedChangeMs(ctx.paths);
+    if (created < changed) {
+      stale.push({
+        ...ctx,
+        reason: `built ${iso(created)} predates the last change to its `
+              + `build context (${iso(changed)})`,
+      });
+      continue;
+    }
+    if (hasUncommittedChanges(ctx.paths)) {
+      stale.push({
+        ...ctx,
+        reason: `has uncommitted changes in its build context (image built `
+              + `${iso(created)})`,
+      });
+    }
+  }
+  return { missing, stale };
+}
+
+/** Build the named compose services from the E2E compose file. */
+function buildServices(services) {
+  for (const { service, reason } of services) {
+    log('Docker', `Building ${service} — ${reason}`);
+    execSync(
+      `docker compose -f "${ROOT}/docker-compose.e2e.yml" build ${service}`,
+      { stdio: 'inherit', timeout: 2_400_000 },
+    );
+  }
+}
+
+/**
+ * Abort unless every locally-built E2E image is at least as new as its
+ * sources. With --build, rebuild the stale ones in place instead.
+ *
+ * Skipped under CI: both E2E workflows build these images from the exact
+ * checkout immediately before running the suite, so the guard is a no-op
+ * there — and it must never become a new way to fail a green pipeline.
+ */
+function assertImagesFresh() {
+  if (process.env.CI) {
+    log('Docker', 'CI detected — trusting the images built by the workflow.');
+    return;
+  }
+  const { missing, stale } = classifyImages();
+  // Absent images are built unconditionally: there are no stale bytes to
+  // test, and this is what `compose up` would have done anyway.
+  if (missing.length > 0) buildServices(missing);
+  if (stale.length === 0) return;
+
+  if (BUILD) {
+    buildServices(stale);
+    log('Docker', 'Stale images rebuilt.');
+    return;
+  }
+
+  log('Docker', `${RED}E2E images are stale — refusing to run tests against `
+    + `outdated binaries.${NC}`);
+  for (const { image, reason } of stale) {
+    console.log(`    ${YELLOW}•${NC} ${image}: ${reason}`);
+  }
+  console.log('');
+  log('Docker', `Rebuild them and re-run:  ${BOLD}npm run e2e -- --build${NC}`);
+  log('Docker', `Or build one directly:    docker compose -f docker-compose.e2e.yml build ${stale[0].service}`);
+  throw new Error('stale E2E images');
+}
+
 /**
  * Ensure OZ_LICENSE_PRIVATE_KEY is set for the license server.
  *
@@ -184,6 +361,25 @@ function dumpContainerLogs() {
 /** Start Docker E2E services. */
 function startDocker() {
   log('Docker', 'Starting E2E services...');
+  // Pre-flight: compose auto-reads the repo-root .env and dies with a
+  // terse "key cannot contain a space" on a poisoned line (2026-08-31
+  // outage). Fail here instead, with every offending line numbered.
+  const envPath = `${ROOT}/.env`;
+  if (existsSync(envPath)) {
+    try {
+      execSync(`node "${ROOT}/scripts/validate-env.mjs" "${envPath}"`, {
+        stdio: 'inherit',
+        timeout: 15_000,
+      });
+    } catch {
+      log('Docker', `${RED}.env failed validation — fix the lines above (comment out note lines; a # prefix is always safe).${NC}`);
+      process.exit(1);
+    }
+  }
+  // Freshness guard runs BEFORE the compose try/catch: its own message is
+  // the actionable one, and must not be relabelled "Failed to start
+  // services" with a container-log dump.
+  assertImagesFresh();
   try {
     prePullRedis();
     execSync(
@@ -199,7 +395,6 @@ function startDocker() {
     throw new Error(`Docker compose failed: ${err.message || err}`);
   }
 }
-
 /** Stop Docker E2E services. */
 function stopDocker() {
   if (!dockerStarted) return;
@@ -472,6 +667,9 @@ async function main() {
 
   } catch (err) {
     console.error(`\n${RED}${BOLD}✘ Error:${NC} ${err.message || err}`);
+    // Setup failed before Playwright ran — distinct from a test failure so
+    // the banner never claims "some tests failed" when zero tests executed.
+    status = 'error';
   } finally {
     cleanup();
   }
@@ -484,6 +682,9 @@ async function main() {
     // AUDIT-27 CI-02: distinct result for zero executed tests.
     console.log(`${YELLOW}${BOLD}✖ SKIPPED-NO-SPEC: no E2E specs changed — 0 tests executed (distinct from all-pass)${NC}`);
     process.exit(2);
+  } else if (status === 'error') {
+    console.log(`${RED}${BOLD}✘ E2E SETUP FAILED — 0 tests executed (backend/Vite never came up; not a test failure)${NC}`);
+    process.exit(3);
   } else {
     console.log(`${RED}${BOLD}✘ Some E2E tests failed — check output above${NC}`);
     process.exit(1);

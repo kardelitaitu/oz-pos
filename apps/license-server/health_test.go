@@ -65,7 +65,7 @@ func TestHealth_SMTPNotConfigured(t *testing.T) {
 
 func TestHealth_SMTPVerified(t *testing.T) {
 	resetSMTPHealthCache()
-	addr, _ := runSMTPServer(t, nil, false) // accepts MAIL FROM
+	addr, _ := runSMTPServer(t, nil, false, testTLSCertPtr(t)) // accepts MAIL FROM
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		t.Fatalf("split: %v", err)
@@ -87,7 +87,7 @@ func TestHealth_SMTPVerified(t *testing.T) {
 
 func TestHealth_SMTPRejected(t *testing.T) {
 	resetSMTPHealthCache()
-	addr, _ := runSMTPServer(t, nil, true) // 550 on MAIL FROM
+	addr, _ := runSMTPServer(t, nil, true, testTLSCertPtr(t)) // 550 on MAIL FROM
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		t.Fatalf("split: %v", err)

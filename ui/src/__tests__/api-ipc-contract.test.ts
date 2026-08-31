@@ -24,11 +24,8 @@ vi.mock('@tauri-apps/api/core', () => ({
 // ── sales.ts ───────────────────────────────────────────────────────
 
 import {
-  startSale,
   startSaleScoped,
-  addLine,
   addLineScoped,
-  completeSale,
   completeSaleScoped,
   voidSaleScoped,
   holdCartScoped,
@@ -44,14 +41,6 @@ import {
 describe('sales.ts IPC contract', () => {
   beforeEach(() => mockInvoke.mockReset());
 
-  it('startSale invokes "start_sale" with args', async () => {
-    mockInvoke.mockResolvedValue({ cartId: 'cart-1' as CartId });
-    await startSale({ currency: 'USD' });
-    expect(mockInvoke).toHaveBeenCalledWith('start_sale', {
-      args: { currency: 'USD' },
-    });
-  });
-
   it('startSaleScoped invokes "start_sale_scoped" with sessionToken + args', async () => {
     mockInvoke.mockResolvedValue({ cartId: 'cart-1' as CartId });
     await startSaleScoped('tok', { currency: 'IDR' });
@@ -61,38 +50,12 @@ describe('sales.ts IPC contract', () => {
     });
   });
 
-  it('addLine invokes "add_line" with camelCase args', async () => {
-    mockInvoke.mockResolvedValue({ lineId: 'l1', lineTotal: null });
-    await addLine({ cartId: 'c1' as CartId, sku: 'SKU-1', qty: 2, unitPriceMinor: 500 });
-    expect(mockInvoke).toHaveBeenCalledWith('add_line', {
-      args: { cartId: 'c1' as CartId, sku: 'SKU-1', qty: 2, unitPriceMinor: 500 },
-    });
-  });
-
   it('addLineScoped invokes "add_line_scoped" with sessionToken + args', async () => {
     mockInvoke.mockResolvedValue({ lineId: 'l1', lineTotal: null });
     await addLineScoped('tok', { cartId: 'c1' as CartId, sku: 'SKU-1', qty: 1, unitPriceMinor: 100 });
     expect(mockInvoke).toHaveBeenCalledWith('add_line_scoped', {
       sessionToken: 'tok',
       args: { cartId: 'c1' as CartId, sku: 'SKU-1', qty: 1, unitPriceMinor: 100 },
-    });
-  });
-
-  it('completeSale invokes "complete_sale" with full args', async () => {
-    mockInvoke.mockResolvedValue({ saleId: 's1', total: null, lineCount: 1 });
-    await completeSale({
-      cartId: 'c1' as CartId,
-      paymentMethod: 'cash',
-      tenderedMinor: 1000,
-      userId: 'u1',
-    });
-    expect(mockInvoke).toHaveBeenCalledWith('complete_sale', {
-      args: {
-        cartId: 'c1' as CartId,
-        paymentMethod: 'cash',
-        tenderedMinor: 1000,
-        userId: 'u1',
-      },
     });
   });
 
@@ -211,7 +174,7 @@ describe('sales.ts IPC contract', () => {
 
   it('propagates errors from the backend (does not swallow)', async () => {
     mockInvoke.mockRejectedValueOnce(new Error('DB locked'));
-    await expect(startSale({ currency: 'USD' })).rejects.toThrow('DB locked');
+    await expect(startSaleScoped('tok', { currency: 'USD' })).rejects.toThrow('DB locked');
   });
 });
 

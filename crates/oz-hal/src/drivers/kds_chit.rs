@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-hal slice B: verified)
+crate: oz-hal | status: SAFE | lint: CLEAN
+findings: HAL-1 instance found here 31-08-26 and fixed — center_text() padded by byte .len(), so a multi-byte item name shifted the chit's centering. The 25-07-26 slice-B pass recorded this file as "clean"; it was verified structurally only, and the byte-vs-char defect is invisible without reading the padding arithmetic. Now uses escpos::cell_width. Otherwise clean: no unwrap/panic/unsafe, sibling tests per convention
+next: none | perf: N/A
+*/
 //! KDS kitchen chit formatting — produces ESC/POS bytes for thermal
 //! printers in the kitchen.
 //!
@@ -105,8 +111,10 @@ pub fn format_kds_chit(
 }
 
 /// Center text by padding with spaces to the given width.
+///
+/// Pads by character cells, not bytes — see [`escpos::cell_width`] (HAL-1).
 fn center_text(s: &str, width: usize) -> String {
-    let len = s.len();
+    let len = escpos::cell_width(s);
     if len >= width {
         s.to_owned()
     } else {

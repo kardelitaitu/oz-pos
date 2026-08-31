@@ -54,17 +54,39 @@ license_health="$(wget -qO- http://localhost:8080/api/health 2>/dev/null)" || {
 # The probe is a STATUS field — a broken relay does NOT fail the HTTP
 # check (only a DB outage does) — so it needs its own gate here. SMTP that
 # is not configured at all is skipped (request-otp answers 503 by design).
+# P5: parse with jq when available (the unified runtime image ships it);
+# fall back to the grep extractor on hosts without jq (local dev, tests).
+# Semantics preserved from the grep version: an absent smtp block is
+# skipped; a present-but-unconfigured block resets the counter; a
+# configured-but-unverified block counts a failure.
 max_smtp_fails="${OZ_HEALTH_SMTP_MAX_FAILS:-3}"
 smtp_fail_state="/tmp/oz-health-smtp-fails"
 
-smtp_block="$(printf '%s' "$license_health" | grep -o '"smtp":{[^}]*}' || true)"
-if [ -n "$smtp_block" ]; then
-    smtp_configured="$(printf '%s' "$smtp_block" | grep -c '"configured":true' || true)"
-    smtp_verified="$(printf '%s' "$smtp_block" | grep -c '"verified":true' || true)"
+smtp_present=0
+smtp_configured=0
+smtp_verified=0
+if command -v jq >/dev/null 2>&1; then
+    smtp_present="$(printf '%s' "$license_health" | jq -r 'has("smtp")' 2>/dev/null)"
+    smtp_configured="$(printf '%s' "$license_health" | jq -r '.smtp.configured // false' 2>/dev/null)"
+    smtp_verified="$(printf '%s' "$license_health" | jq -r '.smtp.verified // false' 2>/dev/null)"
+else
+    smtp_block="$(printf '%s' "$license_health" | grep -o '"smtp":{[^}]*}' || true)"
+    if [ -n "$smtp_block" ]; then
+        smtp_present=1
+        smtp_configured="$(printf '%s' "$smtp_block" | grep -c '"configured":true' || true)"
+        smtp_verified="$(printf '%s' "$smtp_block" | grep -c '"verified":true' || true)"
+    fi
+fi
 
-    if [ "$smtp_configured" -eq 1 ] && [ "$smtp_verified" -ne 1 ]; then
-        count_consecutive "$smtp_fail_state" "$max_smtp_fails" "SMTP sender identity not verified"
+if [ "$smtp_present" = "1" ] || [ "$smtp_present" = "true" ]; then
+    if [ "$smtp_configured" = "1" ] || [ "$smtp_configured" = "true" ]; then
+        if [ "$smtp_verified" != "1" ] && [ "$smtp_verified" != "true" ]; then
+            count_consecutive "$smtp_fail_state" "$max_smtp_fails" "SMTP sender identity not verified"
+        else
+            reset_consecutive "$smtp_fail_state"
+        fi
     else
+        # Present but not configured — reset any prior failure counter.
         reset_consecutive "$smtp_fail_state"
     fi
 fi
@@ -78,11 +100,21 @@ fi
 max_paddle_fails="${OZ_HEALTH_PADDLE_MAX_FAILS:-3}"
 paddle_fail_state="/tmp/oz-health-paddle-fails"
 
-paddle_block="$(printf '%s' "$license_health" | grep -o '"paddle":{[^}]*}' || true)"
-if [ -n "$paddle_block" ]; then
-    paddle_secret="$(printf '%s' "$paddle_block" | grep -c '"secret_configured":true' || true)"
+paddle_present=0
+paddle_secret=0
+if command -v jq >/dev/null 2>&1; then
+    paddle_present="$(printf '%s' "$license_health" | jq -r 'has("paddle")' 2>/dev/null)"
+    paddle_secret="$(printf '%s' "$license_health" | jq -r '.paddle.secret_configured // false' 2>/dev/null)"
+else
+    paddle_block="$(printf '%s' "$license_health" | grep -o '"paddle":{[^}]*}' || true)"
+    if [ -n "$paddle_block" ]; then
+        paddle_present=1
+        paddle_secret="$(printf '%s' "$paddle_block" | grep -c '"secret_configured":true' || true)"
+    fi
+fi
 
-    if [ "$paddle_secret" -ne 1 ]; then
+if [ "$paddle_present" = "1" ] || [ "$paddle_present" = "true" ]; then
+    if [ "$paddle_secret" != "1" ] && [ "$paddle_secret" != "true" ]; then
         count_consecutive "$paddle_fail_state" "$max_paddle_fails" "Paddle webhook secret not configured"
     else
         reset_consecutive "$paddle_fail_state"

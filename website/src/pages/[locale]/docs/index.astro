@@ -39,7 +39,7 @@ const targets = [
   '/docs-portal/api/rust/',
   '/docs-portal/api/ts/',
 ];
-const subtitle = (dict(locale).docs as { hub: { subtitle: string } }).hub.subtitle;
+const subtitle = t(locale, 'docs.hub.subtitle');
 ---
 
 <Base title={`OZ-POS — ${t(locale, 'docs.title')}`} description={subtitle}>
@@ -49,7 +49,7 @@ const subtitle = (dict(locale).docs as { hub: { subtitle: string } }).hub.subtit
       <p class="mt-3 text-muted">{subtitle}</p>
     </div>
 
-    <div class="mt-12 grid gap-6 sm:grid-cols-2">
+    <div class="mt-12 grid gap-6 sm:grid-cols-2" data-i18n-key={t(locale, 'docs.hub.cards')}>
       {
         cards.map((card, i) => (
           <a

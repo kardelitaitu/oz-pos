@@ -3,7 +3,7 @@ name: rust-backend
 description: Rust & database standards for the OZ-POS framework — Money struct, rusqlite transactions, thiserror/anyhow, clippy, doc comments. Use when adding or modifying Rust code in any `oz-*` crate.
 ---
 
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (3 noted findings, doc-staleness) · F1 (wrong path, recurring): line 134 says migrations live in migrations/<timestamp>_<name>.sql; no root migrations/ exists, actual crates/oz-core/migrations/NNN_*.sql (98 .sql files, e.g. 001_sales.sql) · F2 (wrong claim, recurring): line 231 says mocks gated by #[cfg(test)] or a mock feature; oz-hal/Cargo.toml has no [features] section at all (no mock feature; mocks not feature-gated — same drift as hal-drivers) · F3 (advisory): line 135 suggests r2d2_sqlite/deadpool-sqlite pooling; not present in workspace Cargo.toml · verified accurate: Money/Currency struct shape matches foundation/src/money.rs (minor_units:i64, currency:Currency, Currency(pub [u8;3])), i64-minor-units + thiserror conventions hold -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (F1-F3 repaired) · FIXED 31-08: F1 migrations path root migrations/ -> crates/oz-core/migrations/; F2 mocks are a plain pub mod always compiled (no #[cfg(test)]/mock-feature gate — matches hal-drivers); F3 removed the r2d2_sqlite/deadpool-sqlite pooling directive (neither is in the workspace; the runtime shares a single Arc<Mutex<Connection>>) · verified accurate: Money/Currency struct shape matches foundation/src/money.rs (minor_units:i64, currency:Currency, Currency(pub [u8;3])), i64-minor-units + thiserror conventions hold -->
 
 # Rust Backend & Database Standards
 
@@ -133,8 +133,8 @@ pub fn record_sale(
 **Rules:**
 - A function that writes must take `&mut Connection` (or `&Transaction`) — never `&Connection`.
 - Use `?` everywhere; let `tx.commit()` happen only on the happy path. A `?` before `commit()` triggers `Drop`, which rolls back automatically.
-- Migrations live in `migrations/<timestamp>_<name>.sql` and are run by `oz-cli migrate`.
-- Use `r2d2_sqlite` or `deadpool-sqlite` for connection pooling in the Tauri runtime.
+- Migrations live in `crates/oz-core/migrations/<timestamp>_<name>.sql` and are run by `oz-cli migrate`.
+- The Tauri runtime shares a single `Arc<Mutex<Connection>>` (see `apps/desktop-client/src/state.rs`); there is no connection pool (no `r2d2`/`deadpool` in the workspace).
 - For read-only queries, you may use `&Connection` and skip the transaction.
 
 ---
@@ -239,7 +239,7 @@ cargo test --workspace --all-features
 - One public type per file when it's a major domain entity (`money.rs`, `currency.rs`, `cart.rs`).
 - Re-export from `mod.rs` so external code can do `use oz_core::Money;`.
 - Use `#[cfg(test)] mod tests { ... }` at the bottom of every file with testable logic.
-- Mock implementations of traits live in `crates/oz-hal/src/drivers/mock.rs` and are gated by `#[cfg(test)]` or a `mock` feature.
+- Mock implementations of traits live in `crates/oz-hal/src/drivers/mock.rs` — a plain `pub mod`, always compiled (not gated by `#[cfg(test)]` or a `mock` feature).
 
 ---
 
@@ -262,4 +262,4 @@ cargo test --workspace --all-features
 
 ---
 
-> last audited 29-08-26 by skill-drift-guard
+> last audited 31-08-26 by docs-auditor

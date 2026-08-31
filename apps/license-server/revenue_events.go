@@ -25,14 +25,20 @@ import (
 
 // revenueEvent is the data needed to persist one payment record.
 type revenueEvent struct {
-	Provider       string  // "paddle" | "midtrans"
-	EventID        string  // provider event/transaction id (dedup key)
-	TenantID       string  // tenants record id
-	TierKey        string  // plus/pro/premium/enterprise ("" if unknown)
-	NativeAmount   float64 // amount in the native currency
-	NativeCurrency string  // "USD" | "IDR"
-	SubscriptionID string  // paddle_sub_id or midtrans_sub_id (optional)
-	Notes          string  // metadata (payment_type, bundle, etc.)
+	Provider string // "paddle" | "midtrans"
+	EventID  string // provider event/transaction id (dedup key)
+	TenantID string // tenants record id
+	TierKey  string // plus/pro/premium/enterprise ("" if unknown)
+	// NativeAmountMinor carries the amount as an integer in the native
+	// currency's minor units — USD cents for Paddle, whole rupiah for
+	// Midtrans (IDR pricing never uses sen, and the stored amount_idr is
+	// already whole rupiah). LSE-7: monetary values stay i64 end-to-end;
+	// float64 appears only inside the FX conversion and the amount_usd
+	// display field.
+	NativeAmountMinor int64
+	NativeCurrency    string // "USD" | "IDR"
+	SubscriptionID    string // paddle_sub_id or midtrans_sub_id (optional)
+	Notes             string // metadata (payment_type, bundle, etc.)
 }
 
 // saveRevenueEvent persists a completed payment idempotently. Returns
@@ -53,15 +59,16 @@ func saveRevenueEvent(app core.App, ev revenueEvent) (bool, error) {
 	}
 
 	// Normalize amounts into both currencies. Midtrans gross_amount is an
-	// integer string in IDR; Paddle totals are decimal in USD.
+	// integer string in IDR; Paddle totals are decimal in USD. The native
+	// amount arrives in minor units (LSE-7): USD cents, IDR whole rupiah.
 	var amountUsd, amountIdr float64
 	switch strings.ToUpper(ev.NativeCurrency) {
 	case "USD":
-		amountUsd = ev.NativeAmount
+		amountUsd = float64(ev.NativeAmountMinor) / 100.0
 		fx, _, _ := getFxRate()
 		amountIdr = amountUsd * fx
 	case "IDR":
-		amountIdr = ev.NativeAmount
+		amountIdr = float64(ev.NativeAmountMinor)
 		fx, _, _ := getFxRate()
 		if fx > 0 {
 			amountUsd = amountIdr / fx
@@ -91,24 +98,30 @@ func saveRevenueEvent(app core.App, ev revenueEvent) (bool, error) {
 	if err := app.Save(rec); err != nil {
 		return false, err
 	}
-	log.Printf("revenue_events: recorded %s event=%s amount=%s %.2f",
-		ev.Provider, ev.EventID, ev.NativeCurrency, ev.NativeAmount)
+	log.Printf("revenue_events: recorded %s event=%s amount=%d %s (minor units)",
+		ev.Provider, ev.EventID, ev.NativeAmountMinor, ev.NativeCurrency)
 	return true, nil
 }
 
-// parseMidtransGrossAmount converts a Midtrans gross_amount string
-// (integer IDR, e.g. "199000") to a float64. Returns 0 on parse failure.
-func parseMidtransGrossAmount(gross string) float64 {
+// parseMidtransGrossAmountMinor converts a Midtrans gross_amount string
+// (IDR with two decimals, e.g. "199000" or "199000.00") to an int64 in
+// whole rupiah (LSE-7 minor units; IDR pricing never uses sen). Returns 0
+// on parse failure.
+func parseMidtransGrossAmountMinor(gross string) int64 {
 	g := strings.TrimSpace(gross)
 	if g == "" {
 		return 0
 	}
+	if i, err := strconv.ParseInt(g, 10, 64); err == nil {
+		return i
+	}
+	// Decimal form: round half-up to the nearest whole rupiah.
 	v, err := strconv.ParseFloat(g, 64)
 	if err != nil {
 		log.Printf("midtrans: unparseable gross_amount=%q", gross)
 		return 0
 	}
-	return v
+	return int64(v + 0.5)
 }
 
 // revenueEventCreatedAt returns the settlement time if parseable, else now.

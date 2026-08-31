@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-reporting slice A: models verified)
+crate: modules-reporting | status: SAFE | lint: CLEAN
+findings: clean DailyReport model
+next: none | perf: N/A
+*/
 //! Reporting domain models.
 
 use foundation::Money;

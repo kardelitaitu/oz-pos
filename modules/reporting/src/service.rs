@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-reporting slice A: service verified)
+crate: modules-reporting | status: SAFE | lint: CLEAN
+findings: clean thin service facade (see MSL-7 on repository)
+next: none | perf: N/A
+*/
 //! Reporting Service — sales and operational reporting workflows.
 
 use crate::error::ReportingError;

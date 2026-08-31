@@ -196,11 +196,24 @@ fn truncate_long_string() {
 }
 
 #[test]
-fn truncate_multibyte_does_not_panic() {
-    // `&s[..n]` panics when n splits a UTF-8 char — "café" is c,a,f,é(2 bytes),
-    // so a byte cut at 4 lands inside é. Truncation is byte-max ("max" bytes of
-    // content + "…") but must land on a char boundary: 4 content bytes → "caf".
-    assert_eq!(truncate("café latte", 5), "caf…");
+fn truncate_multibyte_never_splits_a_codepoint() {
+    // "café latte" is c,a,f,é(2 bytes),space,… — a byte cut at 5 lands inside
+    // é and used to yield "caf…" (4 bytes of content + ellipsis). That was
+    // HAL-1: the budget is a COLUMN width, so it must be counted in cells.
+    // Taking max-1 *characters* is inherently boundary-safe, so the
+    // panic-safety this test was written for still holds, now at the right
+    // width: 5 cells = "café" + "…".
+    assert_eq!(truncate("café latte", 5), "café…");
+    assert_eq!(cell_width(&truncate("café latte", 5)), 5);
+    // A cut that lands mid-codepoint in byte space still yields valid UTF-8.
+    for width in 1..12 {
+        let cut = truncate("café ☕ latte", width);
+        assert!(
+            cell_width(&cut) <= width.max(1),
+            "width {width} produced a {}-cell result",
+            cell_width(&cut)
+        );
+    }
 }
 
 #[test]
@@ -594,4 +607,67 @@ fn barcode_and_qr_both_appear_when_configured() {
         data.windows(3).any(|w| w == [0x1D, 0x28, 0x6B]),
         "QR command missing"
     );
+}
+
+// ── HAL-1 regression: multi-byte text must not steal column padding ───
+
+#[test]
+fn truncate_returns_exactly_max_cells_for_multibyte_text() {
+    for name in [
+        "ayam gepuk",
+        "kopi ☕☕☕ latte",
+        "sate padang",
+        "es teh manis",
+    ] {
+        let cut = truncate(name, 8);
+        assert_eq!(
+            cell_width(&cut),
+            8,
+            "truncating {name:?} to 8 cells gave {cut:?}"
+        );
+    }
+    // Under-width text is returned untouched.
+    assert_eq!(truncate("short", 10), "short");
+    // Degenerate widths still fit the budget.
+    assert_eq!(cell_width(&truncate("ab", 1)), 1);
+    assert_eq!(truncate("", 4), "");
+}
+
+#[test]
+fn right_pad_pads_to_cells_not_bytes() {
+    for s in ["€1,00", "₩12,345", "Rp 50.000", "฿25.50"] {
+        assert_eq!(
+            cell_width(&right_pad(s, 12)),
+            12,
+            "{s:?} did not land on a 12-cell column"
+        );
+    }
+    // Already at or over the column: returned unchanged.
+    assert_eq!(right_pad("₩12,345", 3), "₩12,345");
+}
+
+#[test]
+fn right_line_ends_the_value_exactly_on_the_margin() {
+    // Regression: the old content width reserved a separator space the
+    // padding branch never emitted, so every totals line landed one cell
+    // short of the margin the line-item rows and separator() reach.
+    for (label, value) in [
+        ("Total", "Rp 1.320"),
+        ("Subtotal", "€12.50"),
+        ("Tax", "₩1,000"),
+        ("Change", "$6.80"),
+    ] {
+        let line = right_line(label, value, 32);
+        assert_eq!(
+            cell_width(&line),
+            32,
+            "{label}/{value} did not end on the 32-cell margin"
+        );
+    }
+}
+
+#[test]
+fn right_line_overflows_gracefully_when_nothing_fits() {
+    let line = right_line("A very long label", "123456", 10);
+    assert_eq!(line, "A very long label 123456");
 }

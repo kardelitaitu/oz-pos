@@ -12,7 +12,11 @@ if [ "$(id -u)" = "0" ]; then
     if command -v su-exec >/dev/null 2>&1; then
         exec su-exec pb "$@"
     else
-        exec su -s /bin/sh pb -c "$*"
+        # P7: su-exec passes "$@" verbatim, but `su -c "$*"` collapses
+        # args into one string and breaks quoted-argument CMDS. The shim
+        # `-c 'exec "$@"' -- "$@"` re-executes the original command with
+        # each argument preserved as a separate word.
+        exec su -s /bin/sh pb -c 'exec "$@"' -- "$@"
     fi
 fi
 

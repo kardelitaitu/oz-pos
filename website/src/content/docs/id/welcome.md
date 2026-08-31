@@ -3,7 +3,7 @@ title: Selamat Datang di OZ-POS
 description: Apa itu OZ-POS dan bagaimana dokumentasi ini disusun.
 category: gettingStarted
 order: 1
-updated: "2026-08-17"
+updated: "2026-08-30"
 ---
 
 ## Apa itu OZ-POS?
@@ -65,6 +65,14 @@ otomasi. Lihat [Lisensi & Paket](../licensing/).
 3. [Transaksi pertama Anda](../first-sale/) — bahkan tanpa internet.
 4. [Aktifkan kunci lisensi](../activation/) saat siap membuka lebih banyak
    toko, pembayaran QRIS, dan sinkron cloud.
+
+## Instal ulang atau terkunci?
+
+Register baru, disk direset, atau aplikasi meminta **kode pemulihan**? Itu
+normal dan aman: mengaktifkan ulang dengan email + kunci lisensi tetap
+menjalankan POS, dan kode 6 digit dari email Anda memulihkan manajemen
+lisensi. Setiap rotasi kunci juga mengirim pemberitahuan email, maksimal
+sekali per 24 jam. Lihat [Instal ulang atau pemulihan lisensi](../activation/#instal-ulang-atau-pemulihan-lisensi).
 
 ## Cara dokumentasi disusun
 

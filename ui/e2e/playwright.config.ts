@@ -42,8 +42,13 @@ export default defineConfig({
   timeout: process.env['CI'] ? 90_000 : 30_000,
 
   // Reporters: list output in terminal, produce JSON + HTML on CI.
+  // Paths are resolved against this config's directory (ui/e2e/), NOT the
+  // CWD (ui/) — so they must step up one level to land in ui/e2e-results/,
+  // which is what .gitignore, scripts/run-e2e.sh and the e2e-pr.yml
+  // "Upload E2E test results" artifact path all point at. Without the ../
+  // the artifact upload silently ships nothing (observed 2026-08-31).
   reporter: process.env['CI']
-    ? [['list'], ['json', { outputFile: 'e2e-results/results.json' }], ['html', { outputFolder: 'e2e-results/html' }]]
+    ? [['list'], ['json', { outputFile: '../e2e-results/results.json' }], ['html', { outputFolder: '../e2e-results/html' }]]
     : [['list'], ['html', { open: 'never' }]],
 
   // Shared base URL — override with BASE_URL env var for custom dev ports.

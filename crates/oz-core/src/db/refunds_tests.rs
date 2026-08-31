@@ -153,6 +153,92 @@ fn create_refund_rejects_over_refund() {
     );
 }
 
+/// COR-26: the persistence guard must not trust its callers. A refund whose
+/// currency differs from the sale's recorded currency must be rejected at
+/// `create_refund` — otherwise the over-refund guard (which sums refunds
+/// `WHERE currency = <refund currency>`) can be bypassed by refunding the
+/// same sale once per currency, and cross-currency minor-unit amounts are
+/// compared against the wrong unit entirely.
+#[test]
+fn create_refund_rejects_currency_mismatch() {
+    let conn = fresh();
+    seed_completed_sale(&conn);
+    let s = store(&conn);
+
+    let eur: Currency = "EUR".parse().unwrap();
+    let line = RefundLine::new(
+        "ref-sl-1",
+        "COFFEE",
+        2,
+        Money {
+            minor_units: 350,
+            currency: eur,
+        },
+        Money {
+            minor_units: 700,
+            currency: eur,
+        },
+    );
+    let refund = Refund::new(
+        "ref-sale-1",
+        Money {
+            minor_units: 700,
+            currency: eur,
+        },
+        "wrong currency",
+        "",
+        "user-1",
+        vec![line],
+    );
+
+    let err = s.create_refund(&refund).unwrap_err();
+    assert!(
+        matches!(err, CoreError::CurrencyMismatch(..)),
+        "a refund in a currency other than the sale's must be rejected, got: {err:?}"
+    );
+}
+
+/// COR-25: the over-refund guard must fail CLOSED. The cumulative SUM read
+/// used `.unwrap_or(0)`, so a read error — e.g. an integer SUM overflowing
+/// to float and failing the i64 decode — was silently read as "no refunds
+/// yet" and the guard let the refund through. Seed a sale totalling
+/// `i64::MAX` with two recorded refunds of `i64::MAX/2 + 1` each (the shape
+/// sync replay or a direct write can produce), making the SUM unreadable,
+/// then attempt a third refund: it must be rejected, not treated as the
+/// first one.
+#[test]
+fn over_refund_guard_fails_closed_when_cumulative_sum_unreadable() {
+    let conn = fresh();
+    let half = i64::MAX / 2 + 1; // 4_611_686_018_427_387_904
+    conn.execute_batch(&format!(
+        "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at)
+         VALUES ('ovf-sale', {max}, 'USD', 0, 'completed', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+         INSERT INTO refunds (id, sale_id, total_minor, currency, reason, processed_by, created_at) VALUES
+             ('ovf-r1', 'ovf-sale', {half}, 'USD', 'replayed', 'user-1', '2025-01-01T00:00:00.000Z'),
+             ('ovf-r2', 'ovf-sale', {half}, 'USD', 'replayed', 'user-1', '2025-01-01T00:00:00.000Z');",
+        max = i64::MAX
+    ))
+    .unwrap();
+    let s = store(&conn);
+
+    let refund = Refund::new("ovf-sale", price(1), "third", "", "user-1", vec![]);
+    let result = s.create_refund(&refund);
+    assert!(
+        result.is_err(),
+        "guard must fail closed when the cumulative refunded SUM cannot be read, \
+         got Ok — the refund was accepted against an unknown refunded balance"
+    );
+
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM refunds WHERE sale_id = 'ovf-sale'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 2, "the rejected refund must not be persisted");
+}
+
 #[test]
 fn multiple_partial_refunds() {
     let conn = fresh();
@@ -671,4 +757,152 @@ fn refund_partial_exact_qty_treated_as_full_forward_fifo() {
     // Forward FIFO: loc-store gets 2, loc-wh-a gets 3.
     assert_eq!(get_stock_at(&conn, "CHO-001", "loc-store"), 2);
     assert_eq!(get_stock_at(&conn, "CHO-001", "loc-wh-a"), 3);
+}
+
+// ── LOY-03 wiring: create_refund reverses loyalty in-tx ────────
+
+#[test]
+fn create_refund_reverses_loyalty_proportionally() {
+    let conn = fresh();
+    seed_completed_sale(&conn); // total 700 USD
+    conn.execute(
+        "INSERT INTO customers (id, name, notes, created_at, updated_at)
+         VALUES ('cust-ref', 'Bob', '', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE sales SET customer_id = 'cust-ref' WHERE id = 'ref-sale-1'",
+        [],
+    )
+    .unwrap();
+    let s = store(&conn);
+    // Bronze: 700 earns 70 points.
+    s.earn_points("cust-ref", "ref-sale-1", 700).unwrap();
+
+    let line = RefundLine::new("ref-sl-1", "COFFEE", 1, price(350), price(350));
+    let refund = Refund::new(
+        "ref-sale-1",
+        price(350),
+        "one of two cups",
+        "",
+        "user-1",
+        vec![line],
+    );
+    s.create_refund(&refund).unwrap();
+
+    // 350/700 of 70 points = 35 reversed.
+    let reversed: i64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(points), 0) FROM loyalty_transactions WHERE sale_id = 'ref-sale-1' AND txn_type = 'refund_reversal'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(reversed, -35);
+    let points: i64 = conn
+        .query_row(
+            "SELECT points FROM loyalty_accounts WHERE customer_id = 'cust-ref'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(points, 35);
+}
+
+#[test]
+fn create_refund_without_loyalty_still_succeeds() {
+    let conn = fresh();
+    seed_completed_sale(&conn);
+    let s = store(&conn);
+    let line = RefundLine::new("ref-sl-1", "COFFEE", 2, price(350), price(700));
+    let refund = Refund::new(
+        "ref-sale-1",
+        price(700),
+        "changed mind",
+        "",
+        "user-1",
+        vec![line],
+    );
+    // No earn txn on this sale: reversal is a no-op, refund unaffected.
+    s.create_refund(&refund).unwrap();
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM loyalty_transactions", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[test]
+fn create_refund_reduces_customer_lifetime_spend() {
+    let conn = fresh();
+    seed_completed_sale(&conn); // total 700 USD
+    conn.execute(
+        "INSERT INTO customers (id, name, notes, total_spent_minor, created_at, updated_at)
+         VALUES ('cust-ref', 'Bob', '', 700, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE sales SET customer_id = 'cust-ref' WHERE id = 'ref-sale-1'",
+        [],
+    )
+    .unwrap();
+    let s = store(&conn);
+    let line = RefundLine::new("ref-sl-1", "COFFEE", 1, price(350), price(350));
+    let refund = Refund::new(
+        "ref-sale-1",
+        price(350),
+        "half back",
+        "",
+        "user-1",
+        vec![line],
+    );
+    s.create_refund(&refund).unwrap();
+    let spent: i64 = conn
+        .query_row(
+            "SELECT total_spent_minor FROM customers WHERE id = 'cust-ref'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(spent, 350, "lifetime spend drops by the refunded amount");
+}
+
+#[test]
+fn create_refund_spend_reversal_floors_at_zero() {
+    let conn = fresh();
+    seed_completed_sale(&conn); // total 700 USD
+    // Legacy customer whose spend was never accrued (projection gap).
+    conn.execute(
+        "INSERT INTO customers (id, name, notes, total_spent_minor, created_at, updated_at)
+         VALUES ('cust-ref', 'Bob', '', 0, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE sales SET customer_id = 'cust-ref' WHERE id = 'ref-sale-1'",
+        [],
+    )
+    .unwrap();
+    let s = store(&conn);
+    let line = RefundLine::new("ref-sl-1", "COFFEE", 2, price(350), price(700));
+    let refund = Refund::new(
+        "ref-sale-1",
+        price(700),
+        "full refund",
+        "",
+        "user-1",
+        vec![line],
+    );
+    s.create_refund(&refund).unwrap();
+    let spent: i64 = conn
+        .query_row(
+            "SELECT total_spent_minor FROM customers WHERE id = 'cust-ref'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(spent, 0, "spend floors at zero, never negative");
 }

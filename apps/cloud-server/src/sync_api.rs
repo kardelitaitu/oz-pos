@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (cloud-server slice B: sync_api deep read)
+crate: cloud-server | status: SAFE | lint: CLEAN
+findings: CS-3 FIXED — the SQLite arm of sync_store push_batch now wraps the batch in one unchecked_transaction (commit at the end; UNIQUE failures stay statement-level so per-item outcomes are unchanged) SQLite arm of sync_store push_batch loops per-item in autocommit (no BEGIN/COMMIT), so a mid-batch failure persists partial items; proposed: unchecked_transaction around the loop to match the documented contract. Otherwise exemplary: tenant_id always from JWT claims (never request body, spoofing prevention documented), plan middleware fail-closed, per-tenant rate limiting, TTL caches for snapshot and tenant count with documented staleness rationale, index-order-preserving outcome reassembly, optional UUID-validation skip documented as a measured perf lever
+next: none | perf: batch transaction also fixes per-item autocommit latency
+*/
 //! Sync API — server-side handlers for the offline-sync push/pull protocol.
 //!
 //! These endpoints mirror the client-side [`platform_sync::transport`] types:

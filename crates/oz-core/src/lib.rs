@@ -2,8 +2,8 @@
 last audited 25-07-26 by RSA-Agent (slice A: lib/error/session/audit/events/rate_limiter/config_validator/payment/cash_payout/crypto)
 crate: oz-core | status: SAFE | lint: CLEAN
 findings: zero unsafe verified by source sweep (#![deny(unsafe_code)] holds); baseline 2,536 tests pass (2,026 unit + 510 integration, 0 warnings); COR-1 stale UUID-v4 docs on v7-generating constructors; COR-3 config validator may log credential-bearing DATABASE_URL/REDIS_URL; domain shims are honest re-exports (canonical Money in foundation — CRY-3 machine_id follow-up resolves there)
-next: slices B (db/ 46k lines), C (sync/topology/features), D (export + remainder) pending — see glm5.3f-crates-audit.md
-perf: N/A for shims; db layer under slice B
+next: none — slices B/C/D are complete; the crate-audit campaign closed 2026-08-31 (§4 oz-core stamped COMPLETE) — see docs/archived/2026-08-31-glm-5.3f-crates-audit.md
+perf: N/A for shims; db layer audited under slice B
 */
 
 //! Domain types for OZ-POS.
@@ -90,6 +90,8 @@ pub mod product_bundle;
 pub mod product_variant;
 /// Discount and promotion rules.
 pub mod promotion;
+/// Promotion discount engine — pure, fail-closed discount computation.
+pub mod promotion_engine;
 /// Purchase orders — order stock from suppliers.
 pub mod purchase_order;
 /// Sliding-window rate limiter for login PIN attempts.
@@ -216,6 +218,7 @@ pub use product::{Product, ProductType};
 pub use product_bundle::{BundleItem, BundleWithItems, ProductBundle};
 pub use product_variant::ProductVariant;
 pub use promotion::{Promotion, PromotionApplication, PromotionType};
+pub use promotion_engine::{compute_discount, compute_discount_unscoped};
 pub use purchase_order::{PurchaseOrder, PurchaseOrderLine, PurchaseOrderWithLines};
 pub use rate_limiter::LoginRateLimiter;
 pub use recipe::RecipeItem;

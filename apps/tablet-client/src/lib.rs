@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (tablet-client slice A: verified)
+crate: tablet-client | status: SAFE | lint: CLEAN
+findings: clean — matches desktop-client guarded patterns. Coverage note: verified under the risk-ranked sampling protocol (global sweep clean), not line-by-line deep read
+next: none | perf: N/A
+*/
 //! OZ-POS tablet shell (Tauri v2 mobile).
 //!
 //! Registers the same business modules as the desktop client but
@@ -77,6 +83,82 @@ pub fn run() {
                 // isn't available yet.
                 let app_handle = app.handle().clone();
                 app.manage(state);
+
+                // ── Hardware registry bootstrap ───────────────────────────
+                // Same gap the desktop client had: AppState builds an empty
+                // DriverRegistry and nothing registered into it, so every
+                // printer, drawer and display command resolved None at
+                // runtime. Config-driven only — DriverRegistry::discover()
+                // is not called, because it binds whatever is attached under
+                // hardware-derived ids and opens ports nobody named.
+                {
+                    let hardware_app_handle = app.handle().clone();
+                    platform_startup::spawn_daemon("hardware bootstrap", async move {
+                        let state = hardware_app_handle.state::<AppState>();
+                        let registry = state.registry.clone();
+                        let base_dir = state
+                            .db_path
+                            .parent()
+                            .unwrap_or(std::path::Path::new("."))
+                            .to_path_buf();
+                        let terminal_id = state
+                            .terminal_id
+                            .lock()
+                            .await
+                            .clone()
+                            .unwrap_or_else(|| "unknown".to_string());
+                        let (profile, terminals) = {
+                            let conn = state.db.lock().await;
+                            let store = oz_core::db::Store::new(&conn);
+                            (
+                                platform_startup::hardware::load_profile(
+                                    &conn,
+                                    &terminal_id,
+                                    &base_dir,
+                                ),
+                                store.list_active_edc_terminals().unwrap_or_else(|e| {
+                                    tracing::warn!(
+                                        error = %e,
+                                        "could not read configured card terminals; \
+                                         the card tender will fail closed"
+                                    );
+                                    Vec::new()
+                                }),
+                            )
+                        }; // Connection is !Send; guard dropped before any await.
+
+                        let mut report = match profile {
+                            Some(profile) => {
+                                platform_startup::hardware::register_hardware(&registry, &profile)
+                                    .await
+                            }
+                            None => {
+                                tracing::info!(
+                                    terminal_id = %terminal_id,
+                                    "no hardware profile saved yet; nothing to register"
+                                );
+                                oz_hal::BootstrapReport::default()
+                            }
+                        };
+                        let terminals = platform_startup::hardware::register_card_terminals(
+                            &registry,
+                            &terminals,
+                        )
+                        .await;
+                        report.registered.extend(terminals.registered);
+                        report.skipped.extend(terminals.skipped);
+                        report.rejected.extend(terminals.rejected);
+
+                        tracing::info!(%report, "hardware registry bootstrap complete");
+                        for (id, reason) in &report.rejected {
+                            tracing::warn!(
+                                device = %id,
+                                reason = %reason,
+                                "configured device could not be registered"
+                            );
+                        }
+                    });
+                }
 
                 // ── Background session cleanup daemon (TTL expiry) ──────
                 // Runs every 5 minutes to sweep expired sessions from the
@@ -234,7 +316,7 @@ pub fn run() {
                 commands::customers::list_customers_scoped,
                 commands::customers::search_customers_scoped,
                 commands::customers::get_customer_history_scoped,
-                commands::customers::get_customer,
+                commands::customers::get_customer_scoped,
                 commands::customers::create_customer_scoped,
                 commands::customers::update_customer_scoped,
                 commands::customers::delete_customer_scoped,
@@ -259,9 +341,15 @@ pub fn run() {
                 commands::categories::delete_category_scoped,
                 commands::currencies::currency_info,
                 commands::currencies::list_currencies_scoped,
+                // Bootstrap: get_default_currency/set_default_currency are
+                // pre-session commands — CurrencyProvider sits above
+                // AuthProvider/WorkspaceProvider and has no session token.
+                commands::currencies::get_default_currency,
                 commands::currencies::get_default_currency_scoped,
+                commands::currencies::set_default_currency,
                 commands::currencies::set_default_currency_scoped,
                 commands::exchange_rates::list_exchange_rates_scoped,
+                commands::exchange_rates::list_latest_exchange_rates_scoped,
                 commands::exchange_rates::create_exchange_rate_scoped,
                 commands::exchange_rates::delete_exchange_rate_scoped,
                 commands::exchange_rates::get_latest_exchange_rate_scoped,
@@ -292,6 +380,8 @@ pub fn run() {
                 commands::health::get_local_ip,
                 commands::pos::start_sale_scoped,
                 commands::pos::add_line_scoped,
+                commands::pos::preview_promoted_total_scoped,
+                commands::pos::preview_promoted_total_from_lines_scoped,
                 commands::pos::complete_sale_scoped,
                 commands::pos::complete_sale_with_resolved_shortfalls_scoped,
                 commands::pos::set_cart_discount_scoped,
@@ -346,6 +436,7 @@ pub fn run() {
                 commands::settings::get_user_preferences_scoped,
                 commands::settings::set_user_preferences_scoped,
                 commands::settings::get_setting,
+            commands::settings::gateway_status,
                 commands::settings::set_setting,
                 commands::setup::get_enabled_features,
                 commands::setup::complete_setup,
@@ -488,6 +579,10 @@ pub fn run() {
                 commands::hardware::print_sales_receipt_scoped,
                 commands::hardware::start_scanner_scoped,
                 commands::hardware::stop_scanner_scoped,
+                commands::hardware::list_displays_scoped,
+                commands::hardware::display_show_scoped,
+                commands::hardware::display_clear_scoped,
+                commands::hardware::discover_hardware_scoped,
                 commands::history::export_daily_summary_scoped,
                 commands::history::export_eod_report_scoped,
                 commands::history::export_sales_by_hour_scoped,

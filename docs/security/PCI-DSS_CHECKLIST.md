@@ -26,7 +26,7 @@ OZ-POS processes, transmits, and stores cardholder data when processing credit/d
 | 3.2.1 Do not store full PAN, CVV, or PIN after authorization | ✅ Application | OZ-POS never stores PAN, CVV, or PIN. Payment tokens only. |
 | 3.3.0 Mask PAN when displayed (first 6 + last 4) | ✅ Implemented | `mask_pan()` helper in `oz-security` |
 | 3.4.0 Render PAN unreadable when stored (encryption, tokenization) | ✅ Implemented | `oz-security` provides encryption helpers |
-| 3.5.1 Document key management procedures | ✅ Implemented | Key rotation policy — P12-1: `rotate_key()` implemented in `oz-security::Keyring`. Old key archived as `{name}-prev`. See `docs/decisions/2026-07-10-subscription-tier-entitlement.md`. |
+| 3.5.1 Document key management procedures | ✅ Implemented | Key rotation policy — P12-1: `rotate_key()` implemented in `oz-security::Keyring`. Old key archived as `{name}-prev`. See `docs/decisions/archived/2026-07-10-subscription-tier-entitlement.md`. |
 | 3.6.1 Secure cryptographic key storage | ✅ Implemented | OS keyring via `oz-security::Keyring` |
 
 ## Maintain a Vulnerability Management Program
@@ -55,7 +55,7 @@ OZ-POS processes, transmits, and stores cardholder data when processing credit/d
 |-------------|--------|-------|
 | 10.2.1 Audit log captures user ID, event type, date/time, success/failure | ✅ Implemented | `AuditLog` feature with immutable append-only log |
 | 10.3.1 Audit logs cannot be modified | ✅ Implemented | Immutable audit log (no UPDATE/DELETE) |
-| 10.4.1 Audit log review at least daily | ✅ Implemented | P12-3: `AuditLogScreen` has `REVIEW_STORAGE_KEY`, `countUnreviewed()`, unreviewed badge, and "Mark Reviewed" button. See `docs/decisions/2026-07-10-subscription-tier-entitlement.md`. |
+| 10.4.1 Audit log review at least daily | ✅ Implemented | P12-3: `AuditLogScreen` has `REVIEW_STORAGE_KEY`, `countUnreviewed()`, unreviewed badge, and "Mark Reviewed" button. See `docs/decisions/archived/2026-07-10-subscription-tier-entitlement.md`. |
 | 10.7.1 Log retention for at least 12 months | 📋 Planned | Log rotation + retention in `oz-logging` |
 | 11.3.1 External vulnerability scans quarterly | N/A | Infrastructure-level |
 | 11.3.2 Internal vulnerability scans quarterly | N/A | Infrastructure-level |
@@ -65,7 +65,7 @@ OZ-POS processes, transmits, and stores cardholder data when processing credit/d
 
 | Requirement | Status | Notes |
 |-------------|--------|-------|
-| 12.1.1 Information security policy | ✅ Implemented | See `docs/security/` and `docs/archived/WHITEPAPER.md` |
+| 12.1.1 Information security policy | ✅ Implemented | See `docs/security/` and `docs/guides/WHITEPAPER.md` |
 | 12.3.1 Usage policies for critical technologies | ✅ Implemented | `AGENTS.md` coding standards |
 | 12.5.1 Incident response plan | ✅ Implemented | P12-2: Full incident response plan at `docs/security/INCIDENT_RESPONSE.md` — P1-P4 severity matrix, containment procedures, evidence preservation, escalation matrix, post-mortem template. |
 | 12.8.1 Manage service providers with access to CDE | N/A | No third-party service providers |

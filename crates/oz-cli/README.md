@@ -1,6 +1,6 @@
 # oz-cli
 
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · fully verified against tree: all 13 subcommands present (migrate, init-db/init_db, product/category/inventory/sale/customer/user CRUD, backup, restore, export, export-ozpkg, import-ozpkg, --version); presets simple-retail/restaurant/full-store/custom present; "39 currencies" seed confirmed; --db global flag (default oz-pos.db) confirmed; i64 minor-units convention noted -->
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · fully verified against tree: all 13 subcommands present (migrate, init-db/init_db, product/category/inventory/sale/customer/user CRUD, backup, restore, export, export-ozpkg, import-ozpkg, --version); presets simple-retail/restaurant/full-store/custom present; "39 currencies" seed confirmed; --db global flag (default oz-pos.db) confirmed; i64 minor-units convention noted · RE-AUDITED 2026-08-31 by docs-auditor: 13 subcommands + presets (hyphenated CLI --preset values, distinct from the feature-system's underscored presets) + --version re-confirmed against post-CLI-5 source; FIXED stale claim — import-ozpkg now WRITES the decrypted payload in a single tx (CLI-1 fix via create_sale_in_tx), no longer "dry-run only / write pending" -->
 
 CLI tool for OZ-POS maintenance — migrations, backup, export, and data CRUD.
 
@@ -27,6 +27,6 @@ CLI tool for OZ-POS maintenance — migrations, backup, export, and data CRUD.
 
 - DB path defaults to `./oz-pos.db`; use `--db <path>` (global flag) to override.
 - Prices and monetary values are `i64` minor units (e.g. `350` for $3.50).
-- `oz import-ozpkg` currently supports dry-run inspection only; write logic is pending.
+- `oz import-ozpkg` writes the decrypted payload (products, categories, sales, customers, users, settings) inside a single transaction (sale imports go through the tx-aware `Store::create_sale_in_tx`); `--dry-run` prints metadata and writes nothing.
 
-> last audited 29-08-26 by docs-auditor
+> last audited 31-08-26 by docs-auditor

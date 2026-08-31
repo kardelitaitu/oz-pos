@@ -7,7 +7,9 @@ use oz_core::db::{
 };
 use oz_core::{PurchaseOrderLine, PurchaseOrderWithLines, Supplier};
 
+use crate::commands::authz::require_permission_for_session;
 use foundation::validate_not_empty;
+use oz_core::permissions;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -462,7 +464,9 @@ pub async fn list_suppliers_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<SupplierDto>, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::PURCHASING_VIEW).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -479,7 +483,9 @@ pub async fn get_supplier_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Option<SupplierDto>, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::PURCHASING_VIEW).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -499,7 +505,11 @@ pub async fn create_supplier_scoped(
     validate_not_empty("name", &args.name).map_err(|e| AppError::Invalid(e.to_string()))?;
     validate_not_empty("code", &args.code).map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+
+    // F-017: enforce per-domain permission on this scoped command.
+
+    require_permission_for_session(&state, &session, permissions::PURCHASING_MANAGE).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -529,7 +539,11 @@ pub async fn update_supplier_scoped(
     validate_not_empty("name", &args.name).map_err(|e| AppError::Invalid(e.to_string()))?;
     validate_not_empty("code", &args.code).map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+
+    // F-017: enforce per-domain permission on this scoped command.
+
+    require_permission_for_session(&state, &session, permissions::PURCHASING_MANAGE).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -557,7 +571,9 @@ pub async fn list_purchase_orders_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<PurchaseOrderDto>, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::PURCHASING_MANAGE).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -574,7 +590,9 @@ pub async fn get_purchase_order_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Option<PurchaseOrderDto>, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::PURCHASING_VIEW).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -594,7 +612,11 @@ pub async fn create_purchase_order_scoped(
     validate_not_empty("po_number", &args.po_number)
         .map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+
+    // F-017: enforce per-domain permission on this scoped command.
+
+    require_permission_for_session(&state, &session, permissions::PURCHASING_MANAGE).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -628,7 +650,9 @@ pub async fn update_po_status_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<PurchaseOrderDto, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::PURCHASING_MANAGE).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -645,7 +669,9 @@ pub async fn receive_purchase_order_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<PurchaseOrderDto, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::PURCHASING_MANAGE).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -663,7 +689,9 @@ pub async fn receive_purchase_order_with_lines_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<PurchaseOrderDto, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::PURCHASING_VIEW).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;

@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-loyalty slice A: models deep read)
+crate: modules-loyalty | status: SAFE | lint: CLEAN
+findings: MSL-10 FIXED — pin is skip_serializing+default (JSON responses omit it) and Debug is a manual impl redacting it: any JSON serialization of a GiftCard (Tauri command response, log dump) emits the PIN, and Debug prints it; consistent with COR-17 plaintext-at-rest but adds wire/log exposure. Proposed: serde(skip_serializing) on pin plus a redacted Debug or manual impl. LoyaltyTier.earn_multiplier_millionths is fixed-point i64 (LOYALTY-01: was f64, migrated to millionths — points math never touches a float); earn/redeem service logic lives in oz-core db/loyalty.rs (audited exemplary: idempotent per account+sale+txn, redeem validates server-side)
+next: redact GiftCard pin in fix-order phase | perf: N/A
+*/
 //! Loyalty & Gift Card domain models.
 
 use serde::{Deserialize, Serialize};
@@ -13,8 +19,11 @@ pub struct LoyaltyTier {
     pub min_points: i64,
     /// Base points earned per minor unit of spend.
     pub points_per_unit: i64,
-    /// Multiplier applied on top of base earnings (e.g. 1.5 = 1.5x).
-    pub earn_multiplier: f64,
+    /// Multiplier applied on top of base earnings, in fixed-point
+    /// millionths (LOYALTY-01): 1.4× is `1_400_000`, never an f64. The
+    /// old float column corrupted intent at write time and mis-rounded
+    /// every exact .5 boundary in the points formula.
+    pub earn_multiplier_millionths: i64,
     /// Hex colour for UI badge.
     pub colour: String,
     /// Display ordering (lower = higher priority).
@@ -77,13 +86,23 @@ pub struct LoyaltyAccountWithDetails {
 }
 
 /// A gift card with current balance and status.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// MSL-10 fix: `pin` is a secret — it is excluded from serialization
+/// (`skip_serializing`, with `default` so payloads from older clients
+/// that still send it deserialize cleanly) and the manual `Debug` impl
+/// redacts it, so neither a Tauri command response nor a log dump of the
+/// struct can emit the plain PIN. Issuance takes the PIN through
+/// [`IssueGiftCardInput::pin`]; the repository persists and reads it
+/// directly.
+#[derive(Clone, Serialize, Deserialize)]
 pub struct GiftCard {
     /// Unique identifier.
     pub id: String,
     /// Human-readable card number (scannable barcode).
     pub card_number: String,
-    /// PIN for balance checks (optional).
+    /// PIN for balance checks (optional). Never serialized; see the
+    /// struct-level MSL-10 note.
+    #[serde(default, skip_serializing)]
     pub pin: String,
     /// Initial loaded value in minor units.
     pub initial_balance_minor: i64,
@@ -103,6 +122,25 @@ pub struct GiftCard {
     pub created_by: Option<String>,
     /// ISO-8601 last-update timestamp.
     pub updated_at: String,
+}
+
+impl std::fmt::Debug for GiftCard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GiftCard")
+            .field("id", &self.id)
+            .field("card_number", &self.card_number)
+            .field("pin", &"<redacted>")
+            .field("initial_balance_minor", &self.initial_balance_minor)
+            .field("current_balance_minor", &self.current_balance_minor)
+            .field("currency", &self.currency)
+            .field("status", &self.status)
+            .field("issued_to", &self.issued_to)
+            .field("issue_date", &self.issue_date)
+            .field("expiry_date", &self.expiry_date)
+            .field("created_by", &self.created_by)
+            .field("updated_at", &self.updated_at)
+            .finish()
+    }
 }
 
 /// A single gift card transaction — issue, redeem, topup, refund.
@@ -189,7 +227,7 @@ mod tests {
             name: "Gold".into(),
             min_points: 1000,
             points_per_unit: 2,
-            earn_multiplier: 1.5,
+            earn_multiplier_millionths: 1_500_000,
             colour: "#FFD700".into(),
             sort_order: 1,
             created_at: "2025-01-01T00:00:00Z".into(),
@@ -198,7 +236,7 @@ mod tests {
         let back: LoyaltyTier = serde_json::from_str(&json).unwrap();
         assert_eq!(back.name, "Gold");
         assert_eq!(back.min_points, 1000);
-        assert_eq!(back.earn_multiplier, 1.5);
+        assert_eq!(back.earn_multiplier_millionths, 1_500_000);
         assert_eq!(back.points_per_unit, 2);
     }
 
@@ -363,7 +401,7 @@ mod tests {
                 name: "Gold".into(),
                 min_points: 1000,
                 points_per_unit: 2,
-                earn_multiplier: 1.5,
+                earn_multiplier_millionths: 1_500_000,
                 colour: "#FFD700".into(),
                 sort_order: 1,
                 created_at: "".into(),
@@ -487,4 +525,50 @@ mod tests {
         assert_eq!(back.card.current_balance_minor, 5000);
         assert_eq!(back.transaction.amount_minor, -5000);
     }
+}
+
+#[test]
+fn gift_card_pin_is_never_serialized_or_debugged() {
+    // MSL-10 fix: the plain PIN must not reach JSON responses or Debug
+    // output (Tauri command responses, log dumps).
+    let card = GiftCard {
+        id: "gc-1".into(),
+        card_number: "9999".into(),
+        pin: "1234".into(),
+        initial_balance_minor: 25000,
+        current_balance_minor: 25000,
+        currency: "USD".into(),
+        status: "active".into(),
+        issued_to: "Jane".into(),
+        issue_date: "2026-08-30".into(),
+        expiry_date: None,
+        created_by: Some("user-1".into()),
+        updated_at: "2026-08-30T00:00:00Z".into(),
+    };
+
+    let json = serde_json::to_string(&card).unwrap();
+    assert!(
+        !json.contains("1234"),
+        "serialized JSON must not contain the PIN"
+    );
+    assert!(
+        !json.contains("\"pin\""),
+        "serialized JSON must omit the pin field"
+    );
+
+    let dbg = format!("{card:?}");
+    assert!(
+        !dbg.contains("1234"),
+        "Debug output must not contain the PIN"
+    );
+    assert!(
+        dbg.contains("<redacted>"),
+        "Debug output must redact the pin"
+    );
+
+    // Deserialization defaults the omitted pin to empty (older payloads
+    // keep working; issuance carries the PIN via IssueGiftCardInput).
+    let back: GiftCard = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.id, "gc-1");
+    assert_eq!(back.pin, "");
 }

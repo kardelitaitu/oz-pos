@@ -37,6 +37,13 @@ fn invalid_card_display() {
 }
 
 #[test]
+fn expired_display() {
+    // PAY-8: expiry is its own variant, distinct from InvalidCard.
+    let err = PaymentError::Expired("QRIS transaction expired".into());
+    assert_eq!(err.to_string(), "payment expired: QRIS transaction expired");
+}
+
+#[test]
 fn duplicate_display() {
     let err = PaymentError::Duplicate("idempotency key already used".into());
     assert_eq!(

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, useRef, Profiler } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
-import { listen } from '@tauri-apps/api/event';
+import { listen } from '@/api/tauri';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useKdsOffline } from '@/hooks/useKdsOffline';
 import { useWorkspaceScope, useWorkspace } from '@/contexts/WorkspaceContext';

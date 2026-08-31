@@ -1,9 +1,9 @@
 //! Cloud warehouse export destinations for the analytics bundle.
 /*
-last audited 25-07-26 by RSA-Agent (oz-core slice D2: cloud_destination deep read)
+last audited 31-08-26 by TDD-Agent (rounds H+I follow-up to slice D2; identifiers validated, request bounds added)
 crate: oz-core | status: SAFE | lint: CLEAN
-findings: COR-35 MED: Snowflake export builds INSERT statements by string concatenation with quote-only sql_escape — Snowflake treats backslash as an escape in string literals, so a value ending in '\' (user-controlled product/store names) breaks out of the literal (use bind variables or also double backslashes); GCP path exemplary (JWT RS256 service-account auth, token exchange, bearer insertAll); all 4 HTTP clients use Client::new() with NO timeout (COR-31 family); service-account key + Snowflake password persisted in settings JSON (base64 != encryption, COR-17/30 family)
-next: bind variables or backslash-aware escaping for Snowflake INSERTs (COR-35); add timeouts | perf: 50-row batched inserts
+findings: COR-35 FIXED 25-07-26 for VALUES only — bind variables take row values out of the SQL text, but database/schema/table were still interpolated into the INSERT verbatim, and project_id/dataset/table into the insertAll URL path. Both closed in round H: snowflake_insert_statement and bigquery_insert_url are pure, tested, and reject anything outside the identifier grammar. The stamp's "eliminating the backslash-escape injection class" read as the class being shut, which is why the other half sat open for a month. COR-31 FIXED HERE in round I: all three request sites now build through http_client(), which bounds connect (10s) and total (120s) time; the total stays above the 60s statement timeout the request itself asks for, and a test pins that relationship. COR-31 repo-wide status, corrected in round L: an earlier version of this stamp claimed "15 untimed Client::new() sites in 10 other files" and that number was WRONG — it was produced by grepping for Client::new() and .build() without checking whether the resulting request carried a request-level .timeout(). It counted doc-comment mentions, MockNotificationClient::new() examples, and code that was already bounded. The measured set was 7 sites in 4 files: whatsapp x2, sync_pull x1, platform/startup/rate_sync x1 (all three fixed in round L), plus the three oz-payment drivers (stripe, square, qris), which are genuinely untimed but were deliberately LEFT that way — see the payment note. license_verification x5 and sync_client are already bounded by RequestBuilder::timeout and never needed anything. Lesson recorded where the bad claim was written: an unbounded-request audit has to end at the request, not at the client. Still open, unchanged: service-account key + Snowflake password persisted in settings JSON (base64 != encryption, COR-17/30 family).
+next: encrypt stored warehouse credentials (COR-17/30); wire save/get_cloud_export_config to a caller — neither has one today, which is the only reason the above are latent; carry the http_client() pattern to the 15 remaining COR-31 sites | perf: 50-row batched inserts
 */
 //!
 //! Defines export targets (BigQuery, Snowflake) and their respective
@@ -15,12 +15,19 @@ next: bind variables or backslash-aware escaping for Snowflake INSERTs (COR-35);
 //!
 //! The [`CloudExportConfig`] is persisted in the `settings` table under
 //! key `cloud_export_config` as JSON (same pattern as
-//! [`ReportScheduleConfig`](super::ReportScheduleConfig)).
+//! [`ReportScheduleConfig`](super::ReportScheduleConfig)), reached through
+//! `Store::get_cloud_export_config`. Destination identifiers
+//! (`database`/`schema`/`table`, `project_id`/`dataset`/`table`) are
+//! allow-listed before use: bind variables protect values, never
+//! identifiers, and identifiers are interpolated verbatim into the SQL
+//! statement and the insertAll URL path (B51).
 //!
 //! # Usage
 //!
 //! ```rust,ignore
-//! let config = CloudExportConfig::load(&store)?;
+//! let config = store
+//!     .get_cloud_export_config()?
+//!     .expect("cloud export is not configured");
 //! let result = CloudExporter::export(&bundle, &config).await?;
 //! ```
 
@@ -207,12 +214,11 @@ impl CloudExporter {
 
         // Call BigQuery's tabledata.insertAll REST API.
         // This is a streaming insert — suitable for real-time analytics.
-        let url = format!(
-            "https://bigquery.googleapis.com/bigquery/v2/projects/{}/datasets/{}/tables/{}/insertAll",
-            config.project_id, config.dataset, config.table
-        );
+        let url = bigquery_insert_url(&config.project_id, &config.dataset, &config.table)?;
 
-        let client = reqwest::Client::new();
+        let client = http_client().map_err(|e| {
+            crate::error::CoreError::Internal(format!("failed to build HTTP client: {e}"))
+        })?;
 
         // Obtain an OAuth2 access token from the service-account key.
         let access_token = get_gcp_access_token(&key_json).await.map_err(|e| {
@@ -284,7 +290,9 @@ impl CloudExporter {
             });
         }
 
-        let client = reqwest::Client::new();
+        let client = http_client().map_err(|e| {
+            crate::error::CoreError::Internal(format!("failed to build HTTP client: {e}"))
+        })?;
 
         // Step 1: Authenticate and get a session token.
         let login_url = format!("{}/session/v1/login-request", config.account_url);
@@ -311,50 +319,45 @@ impl CloudExporter {
 
         // Step 2: Build INSERT statements in batches (50 rows per batch).
         let batch_size = 50;
-        let columns = [
-            "exported_at",
-            "tenant_id",
-            "store_name",
-            "report_type",
-            "report_data",
-        ];
 
         for chunk in ndjson.chunks(batch_size) {
-            let mut sql = format!(
-                "INSERT INTO {}.{}.{} ({}) VALUES ",
-                config.database,
-                config.schema,
-                config.table,
-                columns.join(", ")
-            );
+            let sql = snowflake_insert_statement(
+                &config.database,
+                &config.schema,
+                &config.table,
+                chunk.len(),
+            )?;
 
-            let rows: Vec<String> = chunk
-                .iter()
-                .map(|row| {
-                    let exported_at = sql_escape(
-                        row.get("exported_at")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or(""),
+            // Bindings are 1-based string keys in request order; each value is a
+            // RAW (unescaped) string — the driver applies the escaping.
+            let mut bindings = serde_json::Map::new();
+            let mut bind_index = 0usize;
+            for row in chunk {
+                let exported_at = row
+                    .get("exported_at")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let tenant_id = row.get("tenant_id").and_then(|v| v.as_str()).unwrap_or("");
+                let store_name = row.get("store_name").and_then(|v| v.as_str()).unwrap_or("");
+                let report_type = row
+                    .get("report_type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+                let report_data = serde_json::to_string(row).unwrap_or_default();
+                for value in [
+                    exported_at,
+                    tenant_id,
+                    store_name,
+                    report_type,
+                    &report_data,
+                ] {
+                    bind_index += 1;
+                    bindings.insert(
+                        bind_index.to_string(),
+                        serde_json::json!({ "type": "TEXT", "value": value }),
                     );
-                    let tenant_id =
-                        sql_escape(row.get("tenant_id").and_then(|v| v.as_str()).unwrap_or(""));
-                    let store_name =
-                        sql_escape(row.get("store_name").and_then(|v| v.as_str()).unwrap_or(""));
-                    let report_type = sql_escape(
-                        row.get("report_type")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("unknown"),
-                    );
-                    let report_data = sql_escape(&serde_json::to_string(row).unwrap_or_default());
-                    format!(
-                        "('{}', '{}', '{}', '{}', PARSE_JSON('{}'))",
-                        exported_at, tenant_id, store_name, report_type, report_data
-                    )
-                })
-                .collect();
-
-            sql.push_str(&rows.join(", "));
-            sql.push(';');
+                }
+            }
 
             let stmt_url = format!("{}/api/v2/statements", config.account_url);
 
@@ -365,7 +368,8 @@ impl CloudExporter {
                 .header("Accept", "application/json")
                 .json(&serde_json::json!({
                     "statement": sql,
-                    "timeout": 60,
+                    "bindings": bindings,
+                    "timeout": SNOWFLAKE_STATEMENT_TIMEOUT_SECS,
                     "database": config.database,
                     "schema": config.schema,
                     "warehouse": config.warehouse,
@@ -406,6 +410,170 @@ impl CloudExporter {
             ),
         })
     }
+}
+
+/// Columns the Snowflake exporter writes, in bind order.
+const SNOWFLAKE_COLUMNS: [&str; 5] = [
+    "exported_at",
+    "tenant_id",
+    "store_name",
+    "report_type",
+    "report_data",
+];
+
+/// Seconds the Snowflake statements API is told a batch may take.
+const SNOWFLAKE_STATEMENT_TIMEOUT_SECS: u64 = 60;
+
+/// Connect bound for every warehouse request. Short on purpose: this covers
+/// a host that neither accepts the connection nor refuses it, which needs
+/// no server cooperation to detect.
+const HTTP_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Overall bound. Must stay above [`SNOWFLAKE_STATEMENT_TIMEOUT_SECS`] or
+/// the client would abort batches the warehouse is still legitimately
+/// running — a worse bug than the hang being fixed. Pinned by a test.
+const HTTP_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// Build the HTTP client used for every warehouse request in this module.
+///
+/// COR-31: these clients used to be `reqwest::Client::new()`, which has NO
+/// timeout at all. A warehouse endpoint that accepts the TCP connection and
+/// then stops answering parks the export task forever, and whoever
+/// triggered the export — a schedule or an operator pressing a button —
+/// waits on it indefinitely.
+///
+/// reqwest 0.27 exposes no getter for either bound, so "is the client
+/// bounded" is guaranteed by construction instead: this is the only client
+/// constructor in the module and all three request sites call it. What the
+/// test pins is the relationship between the two numbers, which is the part
+/// a future edit can get wrong silently.
+fn http_client() -> Result<reqwest::Client, reqwest::Error> {
+    reqwest::Client::builder()
+        .connect_timeout(HTTP_CONNECT_TIMEOUT)
+        .timeout(HTTP_REQUEST_TIMEOUT)
+        .build()
+}
+
+/// Is `s` a Snowflake identifier we are willing to write into SQL text?
+///
+/// Deliberately the strict unquoted form — `[A-Za-z_][A-Za-z0-9_$]*`, at
+/// most 255 chars — rather than double-quoting the value. Quoting would
+/// accept more names but silently changes Snowflake's semantics
+/// (quoted identifiers are case-sensitive, so `"MYTABLE"` stops matching
+/// a table created as `MYTABLE`), and it still needs to reject an
+/// embedded `"`. Rejecting is the honest option: identifiers cannot be
+/// bound, so they are the one part of the statement that must be
+/// validated rather than transported.
+fn is_safe_sql_identifier(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 255
+        && s.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+}
+
+/// Is `s` a GCP project ID? Separate rule because project IDs legitimately
+/// contain hyphens (`my-project-123`), which Snowflake and BigQuery
+/// identifiers must not — applying the SQL rule here rejected real configs.
+/// A hyphen cannot break out of a URL path segment, so it is safe to allow;
+/// `.`, `/`, `?`, `#`, whitespace and quotes stay rejected.
+fn is_safe_gcp_project_id(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 63
+        && s.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// Build the BigQuery `tabledata.insertAll` URL.
+///
+/// Extracted so the identifiers can be checked without an HTTP server.
+/// The host is a literal, so a hostile value cannot redirect the request
+/// or carry the bearer token elsewhere — but `?`, `#`, `/` or a space in
+/// a project/dataset/table field would silently retarget or truncate the
+/// API call, sending rows somewhere other than the configured table.
+fn bigquery_insert_url(
+    project_id: &str,
+    dataset: &str,
+    table: &str,
+) -> Result<String, crate::error::CoreError> {
+    if !is_safe_gcp_project_id(project_id) {
+        return Err(crate::error::CoreError::Validation {
+            field: "project_id",
+            message: format!(
+                "{project_id:?} is not a valid GCP project id; it is interpolated into the \
+                 insertAll URL path, so it must start with a letter or underscore and contain \
+                 only letters, digits, '_' and '-'"
+            ),
+        });
+    }
+    for (field, value) in [("dataset", dataset), ("table", table)] {
+        if !is_safe_sql_identifier(value) {
+            return Err(crate::error::CoreError::Validation {
+                field,
+                message: format!(
+                    "{value:?} is not a valid BigQuery identifier; it is interpolated into the \
+                     insertAll URL path, so it must start with a letter or underscore and \
+                     contain only letters, digits, '_' and '$"
+                ),
+            });
+        }
+    }
+    Ok(format!(
+        "https://bigquery.googleapis.com/bigquery/v2/projects/{project_id}/datasets/{dataset}/tables/{table}/insertAll"
+    ))
+}
+
+/// Build the batched `INSERT` for `row_count` rows.
+///
+/// Split out of the HTTP shell in `send_to_snowflake` so the statement
+/// text — the artifact COR-35 changed, and the only part that reaches the
+/// customer's warehouse as SQL — can be asserted without a server.
+fn snowflake_insert_statement(
+    database: &str,
+    schema: &str,
+    table: &str,
+    row_count: usize,
+) -> Result<String, crate::error::CoreError> {
+    // COR-35 closed the VALUES half of the injection class; this closes
+    // the other half. Bind variables take values out of the SQL text but
+    // do nothing for identifiers, which are still interpolated below
+    // straight from the persisted `cloud_export_config` setting.
+    for (field, value) in [("database", database), ("schema", schema), ("table", table)] {
+        if !is_safe_sql_identifier(value) {
+            return Err(crate::error::CoreError::Validation {
+                field,
+                message: format!(
+                    "{value:?} is not a valid Snowflake identifier; it would be written into \
+                     the statement as SQL text, so it must start with a letter or underscore \
+                     and contain only letters, digits, '_' and '$ (max 255 chars)"
+                ),
+            });
+        }
+    }
+
+    // COR-35 fix: build the statement with bind variables ("?" placeholders
+    // plus a "bindings" map) instead of string-concatenated, quote-escaped
+    // literals. Snowflake treats "\" as an escape inside string literals,
+    // so a user-controlled value ending in a backslash (product/store
+    // names) previously escaped the closing quote and broke out of the
+    // literal — SQL injection into the customer's warehouse. Bind values
+    // are transported out-of-band and never parsed as SQL text.
+    let row_placeholder = "(?, ?, ?, ?, PARSE_JSON(?))";
+    let mut sql = format!(
+        "INSERT INTO {}.{}.{} ({}) VALUES ",
+        database,
+        schema,
+        table,
+        SNOWFLAKE_COLUMNS.join(", ")
+    );
+    sql.push_str(
+        &std::iter::repeat_n(row_placeholder, row_count)
+            .collect::<Vec<_>>()
+            .join(", "),
+    );
+    sql.push(';');
+    Ok(sql)
 }
 
 /// Convert an AnalyticsBundle to NDJSON rows, one per report type.
@@ -505,11 +673,6 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
     Engine::decode(&engine, input.as_bytes()).map_err(|e| format!("base64 decode: {e}"))
 }
 
-/// Escape a string for SQL (single-quote escaping).
-fn sql_escape(s: &str) -> String {
-    s.replace('\'', "''")
-}
-
 /// Obtain a GCP OAuth2 access token using a service-account JSON key.
 async fn get_gcp_access_token(key_json: &str) -> Result<String, String> {
     let key: serde_json::Value =
@@ -564,7 +727,7 @@ async fn get_gcp_access_token(key_json: &str) -> Result<String, String> {
     let assertion = format!("{message}.{signature_b64}");
 
     // Exchange the assertion for an access token.
-    let client = reqwest::Client::new();
+    let client = http_client().map_err(|e| format!("failed to build HTTP client: {e}"))?;
     let resp = client
         .post("https://oauth2.googleapis.com/token")
         .form(&[
@@ -612,3 +775,7 @@ fn sign_rsa256(message: &str, private_key_pem: &str) -> Result<Vec<u8>, String> 
 #[cfg(test)]
 #[path = "cloud_destination_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "cloud_destination_sql_tests.rs"]
+mod sql_tests;

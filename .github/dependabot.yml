@@ -1,0 +1,21 @@
+# Dependabot keeps the CICD-05 SHA pins current.
+#
+# Every `uses:` in .github/workflows/*.yml is pinned to a full commit SHA
+# (audit CICD-05), annotated with the original version tag comment:
+#   uses: actions/checkout@11d5960a... # v4
+# Dependabot resolves the `# vX` annotation, bumps the SHA when a new
+# version of that major line is published, and rewrites the comment —
+# so supply-chain integrity is preserved while updates stay routine.
+
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Batch all action bumps into one PR per week — the workflows are
+    # re-validated by CI on the PR branch before merge.
+    groups:
+      github-actions:
+        patterns:
+          - "*"

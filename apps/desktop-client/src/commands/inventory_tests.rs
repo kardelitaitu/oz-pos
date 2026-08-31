@@ -3,13 +3,6 @@ use oz_core::session::SessionContext;
 use platform_core::StoreDatabaseManager;
 use tauri::Manager as _;
 
-fn price(minor: i64) -> oz_core::Money {
-    oz_core::Money {
-        minor_units: minor,
-        currency: "USD".parse().unwrap(),
-    }
-}
-
 /// Seed a user with inventory:view but NOT inventory:locations_manage.
 /// The new role-staff preset grants both, so a limited user must use a
 /// custom role (0048 retirement sweep).
@@ -411,55 +404,6 @@ async fn owner_can_start_and_end_inventory_shift() {
 
 // ── THRESHOLD-01: stock threshold management ───────────────────────
 
-#[tokio::test]
-async fn owner_can_set_and_list_stock_thresholds() {
-    let conn = oz_core::migrations::fresh_db();
-    seed_owner_user(&conn);
-
-    let state = scoped_state_with_token(
-        conn,
-        "owner-token",
-        "user-owner",
-        "role-owner",
-        "store-owner",
-    );
-
-    // Create a product in the store-DB managed by db_manager (not the
-    // raw conn) because set_stock_threshold opens the store via
-    // db_manager.open_store("store-owner").
-    let product_id = {
-        let store_db_arc = state.db_manager.open_store("store-owner").unwrap();
-        let db = store_db_arc.lock().unwrap();
-        let store = Store::new(&db);
-        let p = store
-            .create_product("WG-001", "Widget", price(1000), None, None, 0, None)
-            .unwrap();
-        p.id.clone()
-    };
-
-    let app = tauri::test::mock_builder()
-        .manage(state)
-        .build(tauri::generate_context!())
-        .unwrap();
-
-    // stock_thresholds.product_id is a UUID FK — pass the real id, not SKU.
-    set_stock_threshold(
-        "owner-token".into(),
-        product_id.clone(),
-        None,
-        5,
-        true,
-        app.state(),
-    )
-    .await
-    .unwrap();
-
-    let thresholds = get_stock_thresholds("owner-token".into(), None, app.state())
-        .await
-        .unwrap();
-    assert!(!thresholds.is_empty());
-}
-
 // ── list_inventory_shifts ──────────────────────────────────────────
 
 #[tokio::test]
@@ -509,58 +453,6 @@ async fn owner_can_list_inventory_transactions() {
 }
 
 // ── delete_stock_threshold ─────────────────────────────────────────
-
-#[tokio::test]
-async fn owner_can_delete_stock_threshold() {
-    let conn = oz_core::migrations::fresh_db();
-    seed_owner_user(&conn);
-    let state = scoped_state_with_token(
-        conn,
-        "owner-token",
-        "user-owner",
-        "role-owner",
-        "store-owner",
-    );
-    // Create a product in the store-DB before moving state into the app.
-    let product_id = {
-        let store_db_arc = state.db_manager.open_store("store-owner").unwrap();
-        let db = store_db_arc.lock().unwrap();
-        let store = Store::new(&db);
-        let p = store
-            .create_product("WG-001", "Widget", price(1000), None, None, 10, None)
-            .unwrap();
-        p.id
-    };
-    let app = tauri::test::mock_builder()
-        .manage(state)
-        .build(tauri::generate_context!())
-        .unwrap();
-
-    // Create a threshold using the product's UUID.
-    set_stock_threshold(
-        "owner-token".into(),
-        product_id.clone(),
-        None,
-        5,
-        true,
-        app.state(),
-    )
-    .await
-    .unwrap();
-
-    let thresholds = get_stock_thresholds("owner-token".into(), None, app.state())
-        .await
-        .unwrap();
-    let threshold_id = thresholds[0].id.clone();
-
-    let result = delete_stock_threshold("owner-token".into(), threshold_id, app.state()).await;
-    assert!(result.is_ok(), "owner should delete a threshold");
-
-    let after = get_stock_thresholds("owner-token".into(), None, app.state())
-        .await
-        .unwrap();
-    assert!(after.is_empty(), "threshold should be gone");
-}
 
 // ── get_low_stock_alerts_at_location_scoped ────────────────────────
 

@@ -1,9 +1,9 @@
 //! Cloud settings administration — per-tenant SMTP / report-schedule
 //! provisioning.
 /*
-last audited 25-07-26 by RSA-Agent (oz-api slice A: settings routes deep read)
+last audited 25-07-26 by RSA-Agent (oz-api slice A: settings routes deep read; API-2 documented 25-07-26)
 crate: oz-api | status: SAFE | lint: CLEAN
-findings: clean — both handlers admin-key-gate first despite the public-router placement (verified); tenant ids charset-validated; field ops resolved before any write (no half-applied config); SMTP password encrypted at rest on write, DECRYPTED in GET responses (admin round-trip; contributes to API-2 dev-open exposure); PG and SQLite paths mirror each other
+findings: clean — both handlers admin-key-gate first despite the public-router placement (verified); tenant ids charset-validated; field ops resolved before any write (no half-applied config); SMTP password encrypted at rest on write, DECRYPTED in GET responses — API-2: the decrypted-GET tradeoff is now documented on get_settings_handler (safe because admin-gated with constant-time compare + OZ_ADMIN_KEY mandatory behind OZ_PRODUCTION=1; redaction path specified if either guard is ever relaxed); PG and SQLite paths mirror each other
 next: none here | perf: N/A
 */
 //!
@@ -145,18 +145,44 @@ fn scoped_key(base: &str, tenant: &str) -> String {
 }
 
 /// Deserialize a stored SMTP config, decrypting the password (legacy
-/// plaintext passes through unchanged). `None` on malformed storage.
+/// plaintext passes through unchanged). `None` on malformed storage or
+/// tampered ciphertext (F-029: decryption now fails closed — a
+/// well-formed value that no longer authenticates is NOT returned as
+/// if it were the stored secret).
 fn parse_smtp_config(raw: &str) -> Option<SmtpConfig> {
     let mut config: SmtpConfig = serde_json::from_str(raw).ok()?;
     if let Some(ref pwd) = config.password
         && !pwd.is_empty()
     {
-        config.password = Some(oz_core::crypto::decrypt_smtp_at_rest(pwd));
+        match oz_core::crypto::decrypt_smtp_at_rest(pwd) {
+            Ok(plaintext) => config.password = Some(plaintext),
+            Err(e) => {
+                tracing::error!(error = %e, "smtp at-rest ciphertext failed authentication");
+                return None;
+            }
+        }
     }
     Some(config)
 }
 
 /// `GET /api/v1/settings` — read a tenant's effective cloud settings.
+///
+/// # API-2 security note (decrypted SMTP password)
+///
+/// The response contains the tenant's SMTP password **decrypted** so the
+/// admin client can round-trip the full configuration. This is a
+/// deliberate tradeoff, safe only because:
+///
+/// 1. the endpoint is gated by the admin key with a constant-time compare
+///    (`admin_key_authorised`), and
+/// 2. `OZ_ADMIN_KEY` **must** be set in production (`validate_production_secrets`
+///    in [`crate::serve`] refuses to start without it) — the dev-open mode
+///    that would expose decrypted credentials to anyone is unreachable
+///    behind `OZ_PRODUCTION=1`.
+///
+/// Do not relax either guard without first switching the GET response to
+/// redact the password (e.g. return a `has_password: true` marker and
+/// accept "leave unchanged" semantics on PUT).
 pub async fn get_settings_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -232,10 +258,22 @@ pub async fn put_settings_handler(
             Ok(mut config) => {
                 // Encrypt the password at rest like the rest of the cloud
                 // path expects (decrypt on read is lossless).
+                // F-029: encryption is fail-closed — an encrypt failure
+                // must never store the plaintext password.
                 if let Some(ref pwd) = config.password
                     && !pwd.is_empty()
                 {
-                    config.password = Some(oz_core::crypto::encrypt_smtp_at_rest(pwd));
+                    match oz_core::crypto::encrypt_smtp_at_rest(pwd) {
+                        Ok(encrypted) => config.password = Some(encrypted),
+                        Err(e) => {
+                            tracing::error!(error = %e, "smtp at-rest encryption failed");
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(serde_json::json!({"error": "settings_write_failed"})),
+                            )
+                                .into_response();
+                        }
+                    }
                 }
                 match serde_json::to_string(&config) {
                     Ok(json) => Op::Write(json),

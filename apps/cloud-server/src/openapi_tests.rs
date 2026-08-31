@@ -123,6 +123,22 @@ async fn openapi_json_documents_all_paths() {
         "missing categories"
     );
     assert!(paths.contains_key("/api/v1/tax-rates"), "missing tax rates");
+    assert!(
+        paths.contains_key("/api/v1/exchange-rates"),
+        "missing exchange rates"
+    );
+    assert!(
+        paths.contains_key("/api/v1/exchange-rates/latest"),
+        "missing exchange rates latest listing"
+    );
+    assert!(
+        paths.contains_key("/api/v1/exchange-rates/latest/{from}/{to}"),
+        "missing exchange rates pair lookup"
+    );
+    assert!(
+        paths.contains_key("/api/v1/exchange-rates/{id}"),
+        "missing exchange rate delete"
+    );
     assert!(paths.contains_key("/api/v1/users"), "missing users");
     assert!(paths.contains_key("/api/v1/sales"), "missing sales");
     assert!(
@@ -216,6 +232,11 @@ fn all_protected_routes_have_security() {
         ("/api/v1/products/{sku}/stock", "patch"),
         ("/api/v1/categories", "get"),
         ("/api/v1/tax-rates", "post"),
+        ("/api/v1/exchange-rates", "get"),
+        ("/api/v1/exchange-rates", "post"),
+        ("/api/v1/exchange-rates/latest", "get"),
+        ("/api/v1/exchange-rates/latest/{from}/{to}", "get"),
+        ("/api/v1/exchange-rates/{id}", "delete"),
         ("/api/v1/users", "post"),
         ("/api/v1/sales", "post"),
         ("/api/v1/sales/{id}", "get"),

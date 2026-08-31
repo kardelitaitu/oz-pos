@@ -46,7 +46,7 @@ vi.mock('@/components/StockAlertBell', () => ({
   default: () => null,
 }));
 
-vi.mock('@/frontend/shell/RoleBadge', () => ({
+vi.mock('@/components/RoleBadge', () => ({
   default: () => null,
 }));
 

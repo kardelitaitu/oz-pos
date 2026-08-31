@@ -30,10 +30,6 @@ export interface UpdateCustomerScopedArgs {
   notes?: string;
 }
 
-/** List all customers. */
-export const listCustomers = (): Promise<CustomerDto[]> =>
-  loggedInvoke<CustomerDto[]>('list_customers');
-
 /** List all customers for the store resolved from a session token. ADR #7. */
 export const listCustomersScoped = (sessionToken: string): Promise<CustomerDto[]> =>
   loggedInvoke<CustomerDto[]>('list_customers_scoped', { sessionToken });
@@ -104,9 +100,12 @@ export const getCustomerHistoryScoped = (
     offset,
   });
 
-/** Get a single customer by their identifier. */
-export const getCustomer = (id: string): Promise<CustomerDto | null> =>
-  loggedInvoke<CustomerDto | null>('get_customer', { id });
+/** Get a single customer by id, scoped to the session's store (CRM-02). */
+export const getCustomerScoped = (
+  sessionToken: string,
+  id: string,
+): Promise<CustomerDto | null> =>
+  loggedInvoke<CustomerDto | null>('get_customer_scoped', { sessionToken, id });
 
 /** Create a customer in the store resolved from a session token. ADR #7. */
 export const createCustomerScoped = (

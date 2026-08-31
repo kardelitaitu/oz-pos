@@ -273,6 +273,8 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		}
 
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
+		// LSE-11 phase A: recovery-code endpoint — mirror production boot.
+		se.Router.POST("/api/v1/license/recover", handleLicenseRecover(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
 		// Hardware-fingerprint trial lock (SPEC-2026-TRIAL-LOCK) — mirror
 		// production boot.
@@ -1052,6 +1054,9 @@ func resetLimiterBuckets() {
 	webResetVerifyLimiter.mu.Lock()
 	webResetVerifyLimiter.entries = make(map[string]*windowEntry)
 	webResetVerifyLimiter.mu.Unlock()
+	exchangeConsumeLimiter.mu.Lock()
+	exchangeConsumeLimiter.entries = make(map[string]*windowEntry)
+	exchangeConsumeLimiter.mu.Unlock()
 }
 
 // ── Test infrastructure: shared-app helpers ──────────────────────
@@ -1114,6 +1119,9 @@ func resetRateLimiters() {
 	webResetVerifyLimiter.mu.Lock()
 	webResetVerifyLimiter.entries = make(map[string]*windowEntry)
 	webResetVerifyLimiter.mu.Unlock()
+	exchangeConsumeLimiter.mu.Lock()
+	exchangeConsumeLimiter.entries = make(map[string]*windowEntry)
+	exchangeConsumeLimiter.mu.Unlock()
 
 	// Escalating brute-force login lockout (login_lockout.go) — clear so
 	// tests that exercise repeated failed attempts start from a clean slate.
@@ -1122,9 +1130,29 @@ func resetRateLimiters() {
 	loginLockoutTrackerInst.db = nil
 	loginLockoutTrackerInst.mu.Unlock()
 
+	// LSE-11 limiters: the rotation cooldown and recovery budget clear too.
+	// Tests that must preserve one across a reset (e.g. the recovery cycle
+	// test asserting the 24h rotation cooldown) use targeted resets instead.
+	apiRotationLimiter.mu.Lock()
+	apiRotationLimiter.entries = make(map[string]*windowEntry)
+	apiRotationLimiter.mu.Unlock()
+	recoverLimiter.mu.Lock()
+	recoverLimiter.entries = make(map[string]*windowEntry)
+	recoverLimiter.mu.Unlock()
+
 	ipRateLimiter.startCleanup()
 	keyFailTracker.startCleanup()
 	contactRateLimiter.startCleanup()
+}
+
+// resetIPBudget clears only the per-IP activation token bucket, leaving
+// webOtpStore.codes and the apiRotationLimiter/recoverLimiter state intact.
+// Used by the LSE-11 recovery-cycle test, which must keep the stored
+// recovery code and the 24h rotation cooldown across phases.
+func resetIPBudget() {
+	ipRateLimiter.mu.Lock()
+	ipRateLimiter.buckets = make(map[string]*tokenBucket)
+	ipRateLimiter.mu.Unlock()
 }
 
 func TestRenewHandler_NoSubscription(t *testing.T) {
@@ -3691,13 +3719,55 @@ func TestActivateHandler_Lifecycle(t *testing.T) {
 		if _, ok := resp2["signed_payload"]; !ok {
 			t.Error("expected signed_payload on reuse without api_key")
 		}
-		// Losing the api_key triggers a rotation: the server can't re-emit
-		// the bcrypt hash, so it issues a fresh key to restore renew/status
-		// access. The new key must differ from the original.
-		if v, ok := resp2["api_key"]; !ok {
-			t.Error("expected a rotated api_key on reuse without api_key")
-		} else if s := v.(string); s == apiKey || !strings.HasPrefix(s, "oz_") {
-			t.Errorf("expected a fresh rotated api_key, got %q", s)
+		// LSE-11 phase A: losing the api_key no longer triggers an instant
+		// rotation. The caller still gets the signed subscription (enough
+		// to run the POS) but the api_key is re-emitted only after inbox
+		// proof (a recovery code).
+		if v, ok := resp2["api_key"]; ok {
+			t.Errorf("api_key must NOT be re-emitted without a recovery code, got %v", v)
+		}
+		rot, ok := resp2["api_key_rotation"].(map[string]any)
+		if !ok {
+			t.Errorf("expected api_key_rotation hint on reuse without api_key, got %v", resp2["api_key_rotation"])
+		} else if rot["status"] != "recovery_required" {
+			t.Errorf("expected api_key_rotation.status=recovery_required, got %v", rot["status"])
+		}
+	})
+
+	// ── Step 2c: LSE-11 phase A — repeat re-activation stays safe ──
+	// A THIRD re-activation without api_key or recovery code must keep
+	// answering 200 + recovery_required: no rotation, no api_key, no
+	// throttling ping-pong — the caller just keeps the signed payload.
+	t.Run("step2c_recovery_required_repeat", func(t *testing.T) {
+		resetRateLimiters() // isolate from the IP bucket
+		body := strings.NewReader(fmt.Sprintf(`{
+			"key": "%s",
+			"email": "%s",
+			"machine_id": "%s"
+		}`, key1, email, "lifecycmac002c"))
+		req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 (recovery_required), got %d: %s", rec.Code, rec.Body.String())
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+		if _, ok := resp["signed_payload"]; !ok {
+			t.Error("expected signed_payload on repeat reuse")
+		}
+		if _, ok := resp["api_key"]; ok {
+			t.Error("api_key must NOT be re-emitted without a recovery code")
+		}
+		rot, ok := resp["api_key_rotation"].(map[string]any)
+		if !ok {
+			t.Errorf("expected api_key_rotation hint, got %v", resp["api_key_rotation"])
+		} else if rot["status"] != "recovery_required" {
+			t.Errorf("expected api_key_rotation.status=recovery_required, got %v", rot["status"])
 		}
 	})
 
@@ -3731,6 +3801,7 @@ func TestActivateHandler_Lifecycle(t *testing.T) {
 	// ── Step 4: new key on existing tenant WITHOUT api_key ─────
 	// Should be rejected with 401 "api_key required" (H1 gate).
 	t.Run("step4_new_key_no_api_key_rejected", func(t *testing.T) {
+		resetRateLimiters()
 		body := strings.NewReader(fmt.Sprintf(`{
 			"key": "%s",
 			"email": "%s",

@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · all owned paths verified: crates/oz-core/src/db/customers.rs, apps/desktop-client/src/commands/customers.rs, ui/src/features/customers/, ui/src/api/customers.ts, ui/src/locales/{customers,customers.id,customers.th}.ftl; modules/crm/manifest.json present and matches spec schema; registration code (Kernel::register/load_all/start_all) matches platform/kernel API · Status "Phase 2.4 POC" consistent with files still in original locations -->
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · all owned paths verified: crates/oz-core/src/db/customers.rs, apps/desktop-client/src/commands/customers.rs, ui/src/features/customers/, ui/src/api/customers.ts, ui/src/locales/{customers,customers.id}.ftl; modules/crm/manifest.json present and matches spec schema; registration code (Kernel::register/load_all/start_all) matches platform/kernel API · Status "Phase 2.4 POC" consistent with files still in original locations · RE-AUDITED 2026-08-31 by docs-auditor: manifest deps [] + perms [crm:view,crm:edit] and all "Currently Owns" paths re-confirmed against current HEAD (module changed 9 commits since the 08-09 footer, none moved the files — still a POC thin wrapper); CORRECTED stale stamp — the old note listed customers.th.ftl, but the Thai locale was removed repo-wide (6088a975 "remove Thai locale — not a target market"; zero .th.ftl files remain). The body Locale row was always correct (lists only customers.ftl) · 31-08 (cont): noted the crate's CrmRepository/CrmService are a not-yet-wired mirror (no boundary_contract, not the runtime path) — L28 updated to say so (previously only claimed files 'remain in their original locations'); lifecycle hooks are stubs but the README's generic phrasing matches their log messages, so left as-is -->
 
 # CRM Module
 
@@ -25,7 +25,7 @@ The CRM module owns the customer relationship management vertical. It handles cu
 - **API** — TypeScript API client (`ui/src/api/customers.ts`)
 - **Locale** — Fluent translation strings (`ui/src/locales/customers.ftl`)
 
-In the current phase, these files remain in their original locations. They will be physically moved into `modules/crm/` in subsequent phases.
+In the current phase the runtime customer CRUD still runs through the files above (notably `crates/oz-core/src/db/customers.rs`). The crate also contains `repository.rs` (`CrmRepository`) and `service.rs` (`CrmService`) as a not-yet-wired mirror (no `tests/boundary_contract.rs`), so the module remains a thin wrapper over the `oz-core` implementation. A subsequent phase will move the implementation fully into `modules/crm/`.
 
 ## Lifecycle
 
@@ -61,6 +61,4 @@ kernel.start_all()?;
 }
 ```
 
-> last audited 09-08-26 by buffy
-> audit: Phase 3 Module-Level Documentation Audit
-> status: ACCURATE (verified against actual codebase)
+> last audited 31-08-26 by docs-auditor

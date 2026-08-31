@@ -196,13 +196,12 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
-		// ── Mark old subscription as expired ──────────────────────
-		currentSub.Set("status", "expired")
-		if err := app.Save(currentSub); err != nil {
-			log.Printf("WARNING: failed to mark old subscription as expired: %v", err)
-		}
-
-		// ── Save new subscription ─────────────────────────────────
+		// ── Save new subscription FIRST (crash-safety ordering) ───
+		// The old subscription is expired only after the replacement is
+		// durably saved. The previous order (expire old → save new) left
+		// the tenant with ZERO active subscriptions when the new-sub save
+		// failed mid-renewal; the swapped order's worst case is two active
+		// subs, which activate/renew/status all resolve by -starts_at.
 		subColl, err := app.FindCollectionByNameOrId("subscriptions")
 		if err != nil {
 			return e.JSON(http.StatusInternalServerError, map[string]any{
@@ -229,12 +228,18 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
+		// ── Mark old subscription as expired ──────────────────────
+		currentSub.Set("status", "expired")
+		if err := app.Save(currentSub); err != nil {
+			log.Printf("WARNING: failed to mark old subscription as expired: %v", err)
+		}
+
 		// ── Mark key as activated ─────────────────────────────────
 		keyRecord.Set("status", "activated")
 		keyRecord.Set("activated_at", time.Now().UTC().Format(time.RFC3339))
 		keyRecord.Set("activated_by", req.TenantID)
 		if err := app.Save(keyRecord); err != nil {
-			log.Printf("WARNING: failed to mark key %s as activated: %v", req.Key, err)
+			log.Printf("WARNING: failed to mark key %s as activated: %v", maskLicenseKey(req.Key), err)
 		}
 
 		// ── Clear failure tracking for this key ─────────────────

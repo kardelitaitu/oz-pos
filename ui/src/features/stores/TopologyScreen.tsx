@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useLocalization } from '@fluent/react';
-import { listStores, createStore, updateStore, deleteStore, type StoreProfile } from '@/api/stores';
+import { listStoresScoped, createStoreProfileScoped, updateStoreProfileScoped, deleteStoreProfileScoped, type StoreProfile } from '@/api/stores';
 import {
   listWorkspacesScoped,
   updateWorkspaceInstanceScoped,
@@ -10,6 +10,7 @@ import {
   loadTopology,
   type TopologyApplyResult,
 } from '@/api/topology';
+import { isTopologyInstance } from './topologyContract';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
@@ -37,24 +38,6 @@ import {
   type TopologyOverlay,
   type BranchTopologyComparison,
 } from './topologyBranchCompare';
-
-/**
- * Workspace instances that are physical nodes in the store topology.
- *
- * The 'admin' instance is a system workspace surfaced automatically for
- * owner/manager roles — it is NOT a store node. It must never seed the
- * topology canvas, and it must never reach the save diff's archive sweep
- * either: the sweep archives any instance missing from the canvas, so an
- * unseeded admin instance would be archived on every save.
- */
-const isTopologyInstance = (w: Pick<WorkspaceDto, 'type_key'>) =>
-  // Admin workspaces are app management, not routing endpoints. Inventory
-  // Management workspaces are likewise excluded: the topology's storage
-  // concept is the Warehouse node (the stock-routing target), and two
-  // storage-flavored cards on one canvas confused users. The instance row
-  // itself still exists — it just never seeds the canvas (and the save
-  // sweep never sees it, so it is never archived).
-  w.type_key !== 'admin' && w.type_key !== 'inventory';
 
 /**
  * Dedicated topology screen — the single home for the node-based store
@@ -155,7 +138,7 @@ export default function TopologyScreen() {
       .catch(() => { setLicenseTier('free'); });
 
     try {
-      const storeData = await listStores();
+      const storeData = await listStoresScoped(sessionToken!);
       setStores(storeData);
       setStoresUnavailable(false);
       storesResolvedRef.current = true;
@@ -354,7 +337,7 @@ export default function TopologyScreen() {
     if (!name) return;
     if (atStoreLimit) return; // the inline banner explains why
     try {
-      const created = await createStore({ id: `store-${crypto.randomUUID()}`, name });
+      const created = await createStoreProfileScoped(sessionToken!, { id: `store-${crypto.randomUUID()}`, name });
       setStores((prev) => [...prev, created]);
       setSelectedBranchId(created.id);
       setAddingBranch(false);
@@ -378,7 +361,7 @@ export default function TopologyScreen() {
     const remaining = stores.filter((s) => s.id !== id);
     setDeleteBranchSaving(true);
     try {
-      await deleteStore(id);
+      await deleteStoreProfileScoped(sessionToken!, id);
       setStores(remaining);
       setSelectedBranchId(remaining[0]?.id ?? null);
       // No branches left: nothing owns the graph — clear the instances so
@@ -409,7 +392,7 @@ export default function TopologyScreen() {
     const trimmed = name.trim();
     if (!trimmed || trimmed === store.name) return false;
     try {
-      const updated = await updateStore({
+      const updated = await updateStoreProfileScoped(sessionToken!, {
         id: store.id,
         name: trimmed,
         address: store.address,

@@ -181,3 +181,105 @@ fn message_visitor_combines_fields() {
     assert!(output.contains("stock adjusted"));
     assert!(output.contains("sku=XYZ"));
 }
+
+// ── L-1: WorkerGuard retention ────────────────────────────────────
+
+/// Serialises the L-1 tests: the global subscriber and the guard registry
+/// are process-global, so these tests must not run concurrently.
+static L1_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[test]
+fn l1_guard_retained_after_text_file_init() {
+    let _l1 = L1_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = std::env::temp_dir().join(format!("oz-logging-l1a-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let before = crate::retained_file_log_guards();
+    // A second subscriber in the same process would fail try_init; the
+    // registry must still grow ONLY on success — so call via the registry
+    // helper directly for determinism.
+    let guard_count_before = before;
+    let result = crate::try_init_with_file(dir.to_str().unwrap(), "l1a", 0);
+    match result {
+        Ok(()) => {
+            assert_eq!(
+                crate::retained_file_log_guards(),
+                guard_count_before + 1,
+                "successful file init must retain its WorkerGuard"
+            );
+        }
+        Err(_) => {
+            // Another test already set the global subscriber; the guard must
+            // NOT be retained on failure.
+            assert_eq!(
+                crate::retained_file_log_guards(),
+                guard_count_before,
+                "failed init must not retain a guard"
+            );
+        }
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn l1_guard_retained_after_json_file_init() {
+    let _l1 = L1_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = std::env::temp_dir().join(format!("oz-logging-l1b-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let before = crate::retained_file_log_guards();
+    let result = crate::try_init_json_with_file(dir.to_str().unwrap(), "l1b", 0);
+    match result {
+        Ok(()) => {
+            assert_eq!(
+                crate::retained_file_log_guards(),
+                before + 1,
+                "successful JSON file init must retain its WorkerGuard"
+            );
+        }
+        Err(_) => {
+            assert_eq!(
+                crate::retained_file_log_guards(),
+                before,
+                "failed init must not retain a guard"
+            );
+        }
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn l1_file_writer_writes_after_init_returns() {
+    let _l1 = L1_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    // The behavioural regression test: log an event AFTER init returns and
+    // verify it reaches the file (pre-fix, the writer was shut down at init
+    // exit so nothing was written).
+    let dir = std::env::temp_dir().join(format!("oz-logging-l1c-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let result = crate::try_init_json_with_file(dir.to_str().unwrap(), "l1c", 0);
+    if result.is_err() {
+        // Global subscriber already taken by a sibling test — behavioural
+        // check covered by whichever init won; skip here.
+        std::fs::remove_dir_all(&dir).ok();
+        return;
+    }
+    let marker = format!("l1-marker-{}", uuid_like());
+    tracing::info!("{marker}");
+    // Give the non-blocking writer a moment to flush (worker thread).
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let found = std::fs::read_dir(&dir)
+        .unwrap()
+        .flatten()
+        .filter_map(|e| std::fs::read_to_string(e.path()).ok())
+        .any(|content| content.contains(&marker));
+    assert!(found, "event logged after init must reach the log file");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Cheap unique marker (no uuid dependency in this crate).
+fn uuid_like() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos()
+        .to_string()
+}

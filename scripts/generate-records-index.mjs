@@ -49,6 +49,7 @@ const AREA_KEYWORDS = [
   ['release', ['release', 'ci', 'docker', 'updater', 'migration', 'deploy', 'vps']],
   ['database', ['database', 'migration', 'db-', 'sql']],
   ['observability', ['logging', 'error-handling', 'observability', 'diagnostics']],
+  ['website', ['website', 'dashboard', 'admin-dashboard', 'user-dashboard', 'subdomain']],
   ['general', []],
 ];
 
@@ -67,7 +68,7 @@ function frontMatter(file) {
   const out = {};
   while (i < text.length && text[i] !== '---') {
     const m = text[i].match(/^([A-Za-z_-]+):\s*(.*)$/);
-    if (m) out[m[1].toLowerCase()] = m[2].trim();
+    if (m) out[m[1].toLowerCase()] = m[2].trim().replace(/^(['"])(.*)\1$/, '$2');
     i++;
   }
   return out;
@@ -102,52 +103,14 @@ function readRecord(filePath) {
   return {
     file: filePath,
     slug: basename(filePath),
+    // num comes from front matter (Option A phase 5) — the registry number
+    // lives in the ADR, not a separate map. Absent → not a numbered ADR.
+    num: fm?.num !== undefined ? parseInt(fm.num, 10) : undefined,
     title: extractTitle(filePath, text),
     status: extractStatus(text),
     area: fm?.area ?? areaFromSlug(slug),
   };
 }
-
-// ── ADR number mapping (filename → registry #) ─────────────────────────────
-// Kept here because several ADRs predate the `adrNN` filename convention and
-// carry their number only in the title. Update when a new numbered ADR lands.
-const ADR_NUMBERS = {
-  '2026-01-15-module-system-design.md': 1,
-  '2026-02-01-event-bus-design.md': 2,
-  '2026-03-01-frontend-restructure.md': 3,
-  '2026-07-10-workspace-type-instance-design.md': 4,
-  '2026-07-10-subscription-tier-entitlement.md': 5,
-  '2026-07-10-crdt-delta-ledger-offline-sync.md': 6,
-  '2026-07-10-data-scope-guard.md': 7,
-  '2026-07-10-scoped-event-bus.md': 8,
-  '2026-07-10-license-server.md': 9,
-  '2026-07-13-sync-performance-compression-batching.md': 10,
-  '2026-07-13-zero-downtime-vps-migration.md': 11,
-  '2026-07-15-whitelabel-branding-system.md': 12,
-  '2026-07-16-desktop-app-updater.md': 13,
-  '2026-07-16-release-automation.md': 14,
-  '2026-07-18-shadow-banding-css-dither.md': 15,
-  '2026-07-18-kds-multi-layout-system.md': 17,
-  '2026-07-18-multi-location-inventory.md': 18,
-  '2026-07-19-sale-deduction-multi-location.md': 19,
-  '2026-07-19-payment-capture-ordering.md': 20,
-  '2026-07-20-sync-conflict-resolution-strategy.md': 21,
-  '2026-07-20-node-based-store-topology-builder.md': 22,
-  '2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md': 23,
-  '2026-07-24-domain-module-extraction.md': 30,
-  '2026-07-24-react-only-decision.md': 30,
-  '2026-07-24-decentralized-ui-module-registration.md': 31,
-  '2026-07-25-db-extraction-and-platform-split.md': 32,
-  '2026-08-03-panic-policy.md': 33,
-  '2026-08-07-business-logic-topology-builder.md': 34,
-  '2026-08-08-adr34-typed-connection-gating.md': 34,
-  '2026-08-11-adr35-rbac-role-assignments-user-profile.md': 35,
-  '2026-08-11-adr36-retail-product-attributes.md': 36,
-  '2026-08-11-adr37-product-popularity-index.md': 37,
-  '2026-08-11-adr38-retail-row-context-menu-browser-images.md': 38,
-  '2026-08-18-adr39-midtrans-subscription-payments.md': 39,
-  '2026-08-20-adr40-multi-terminal-peer-model.md': 40,
-};
 
 const md = (p) => p.replace(/\\/g, '/');
 
@@ -167,20 +130,31 @@ const audits = [];
 const observability = [];
 
 if (existsSync(decisionsDir)) {
-  for (const f of readdirSync(decisionsDir).filter((f) => f.endsWith('.md'))) {
-    if (f === 'README.md' || f.endsWith('.status.md')) continue;
-    const rec = readRecord(join(decisionsDir, f));
-    const num = ADR_NUMBERS[f];
-    if (num) {
-      const statusFile = join(decisionsDir, f.replace(/\.md$/, '.status.md'));
-      const statusLink = existsSync(statusFile)
-        ? `${rec.status} (see [status](./${f.replace(/\.md$/, '.status.md')}))`
-        : rec.status;
-      numbered.push({ ...rec, num, status: statusLink });
-    } else if (f.includes('research')) {
-      research.push(rec);
-    } else {
-      phases.push(rec);
+  // Scan the base directory AND the archived/ subdirectory (superseded /
+  // re-scoped ADRs live there). Archived ADRs keep their number and title
+  // but get an "Archived — " status prefix so the index shows their state.
+  const scans = [['', false], ['archived', true]];
+  for (const [sub, isArchived] of scans) {
+    const dir = join(decisionsDir, sub);
+    if (!existsSync(dir)) continue;
+    for (const f of readdirSync(dir).filter((f) => f.endsWith('.md'))) {
+      if (f === 'README.md' || f.endsWith('.status.md')) continue;
+      const rec = readRecord(join(dir, f));
+      if (rec.num !== undefined && Number.isFinite(rec.num)) {
+        const statusFile = join(dir, f.replace(/\.md$/, '.status.md'));
+        const statusLink = existsSync(statusFile)
+          ? `${rec.status} (see [status](${relFromRecords(statusFile)}))`
+          : rec.status;
+        numbered.push({
+          ...rec,
+          num: rec.num,
+          status: isArchived ? `Archived — ${statusLink}` : statusLink,
+        });
+      } else if (f.includes('research')) {
+        research.push(rec);
+      } else {
+        phases.push(rec);
+      }
     }
   }
 }
@@ -208,18 +182,26 @@ if (existsSync(observabilityDir)) {
 }
 
 // ── scattered docs list (kept explicit — they have no folder pattern) ──────
+// 2026-08-31 audit: the standalone audit reports moved from docs/ root to
+// docs/archived/ (retirement pass). Update the list here when one moves.
+// 2026-08-31 retirement pass #2: the three remaining repo-root docs
+// (unify-auth-and-sync, the GLM-5.3 crates audit, and the GLM-5.3 Tauri app
+// review journal) joined them; every citation was rewritten to the new path.
 const scattered = [
-  'docs/2026-07-28-retail-pos-theming-audit.md',
-  'docs/2026-07-29-retail-pos-ux-audit.md',
-  'docs/code-quality-2026-07-20.md',
-  'docs/database-optimization-2026-07-20.md',
-  'docs/dev-experience-2026-07-20.md',
-  'docs/dev-mock-state-audit.md',
-  'docs/ui-state-audit-2026-07-20.md',
-  'docs/modal-audit-checklist.md',
-  'docs/TODO-shadow-audit.md',
-  'docs/plan-product-images-review.md',
-  'docs/design-exceptions.md',
+  'docs/archived/2026-07-28-retail-pos-theming-audit.md',
+  'docs/archived/2026-07-29-retail-pos-ux-audit.md',
+  'docs/archived/2026-08-15-unify-auth-and-sync.md',
+  'docs/archived/2026-08-30-glm-5.3-tauri-app-review.md',
+  'docs/archived/2026-08-31-glm-5.3f-crates-audit.md',
+  'docs/archived/code-quality-2026-07-20.md',
+  'docs/archived/database-optimization-2026-07-20.md',
+  'docs/archived/dev-experience-2026-07-20.md',
+  'docs/archived/dev-mock-state-audit.md',
+  'docs/archived/ui-state-audit-2026-07-20.md',
+  'docs/archived/modal-audit-checklist.md',
+  'docs/archived/TODO-shadow-audit.md',
+  'docs/archived/plan-product-images-review.md',
+  'docs/archived/design-exceptions.md',
 ].filter((p) => existsSync(join(ROOT, p))).map((p) => readRecord(join(ROOT, p)));
 
 // ── emit ───────────────────────────────────────────────────────────────────

@@ -1,5 +1,7 @@
 # First-Release Runbook — OZ-POS
 
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (0 findings) · verified against HEAD: workflows release.yml/android.yml/ios.yml + jobs release-validate/release-build/release-publish present; scripts check-release-version.mjs, check-updater-compat.mjs, generate-latest-json.mjs exist; plugins.updater.pubkey in tauri.conf.json; concurrency groups release-/release-android-/release-ios-<ref> match; UPDATER_CERT_PASSWORD caveat confirmed (only in header comment release.yml:23, not consumed by any step); SignPath step continue-on-error:true confirmed (degrades to unsigned fallback) -->
+
 > **Purpose:** take a repository through its **first** real release, end to
 > end: the secrets that must exist, the `release` environment approval gate,
 > cutting the tag, and inspecting the draft before it goes public. Follow in
@@ -293,3 +295,5 @@ Summary of the one-time setup:
    next release (it's Windows-target only and skipped when the token is
    unset). The step is `continue-on-error: true`, so a SignPath outage
    degrades to the unsigned fallback upload instead of failing the release.
+
+> last audited 31-08-26 by docs-auditor

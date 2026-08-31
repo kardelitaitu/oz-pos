@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-reporting slice A: verified)
+crate: oz-reporting | status: SAFE | lint: CLEAN
+findings: clean — parameterized queries, integer minor units, sibling tests per convention
+next: none | perf: N/A
+*/
 //! Daily Sales Summary Analytics — count, revenue, average ticket, hourly
 //! breakdown, and top products for a given date range.
 //!

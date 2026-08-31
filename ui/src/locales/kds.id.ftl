@@ -1,4 +1,5 @@
 kds-title = Tampilan Dapur
+kds-screen-title = Tampilan Dapur
 kds-screen-aria = Sistem Tampilan Dapur
 kds-pending = Tertunda
 kds-preparing = Disiapkan
@@ -22,6 +23,7 @@ kds-item-status-served = Tersaji
 kds-item-status-cancelled = Dibatalkan
 kds-tap-to-advance-label = Pesanan { $number }, ketuk untuk lanjut
 kds-order-count = { $count } pesanan
+kds-column-count = { $count } pesanan
 kds-time-ago-now = sekarang
 kds-time-ago = { $minutes }m
 kds-urgent-badge = URGENT

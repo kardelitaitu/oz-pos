@@ -1,9 +1,28 @@
 //! Caching layer for frequently-accessed POS data.
 /*
-last audited 25-07-26 by RSA-Agent (oz-core slice D3: cache deep read)
+last audited 31-08-26 by Antigravity (oz-core: pub/sub filtering, connect path, lock policy)
 crate: oz-core | status: SAFE | lint: CLEAN
-findings: clean — Cache trait + NoopCache + feature-gated RedisCache; every Redis error degrades to miss/noop (fail-safe direction); pub/sub listener uses 5s read timeouts, skips own-terminal messages, exits cleanly on shutdown signal; create_cache falls back to noop with a warn; no secrets in keys
-next: none | perf: single mutex-guarded connection
+findings: 3 fixed — B48 a subscriber whose terminal_id was unknown compared ""
+against "" and classified EVERY notification as its own write, ignoring all
+invalidations (rule extracted to inventory_invalidation_target, outside the
+cache-redis gate, so it is testable without a server); B49 RedisCache::connect
+used the untimed get_connection(), so an unreachable-but-non-refusing
+redis.url stalled terminal startup ~21s (Windows) before create_cache could
+fall back (now CONNECT_TIMEOUT, shared with the pub/sub path); a poisoned conn
+mutex silently turned every operation into a permanent no-op — including
+invalidate_* and publish_negative_stock_event — while is_healthy() is sampled
+once at startup and never polled (now reported by lock_or_report, which
+REFUSES a poisoned guard rather than recovering it).
+Still true: every Redis error degrades to miss/noop, the fail-safe direction;
+no secrets in keys; the listener exits cleanly on its shutdown signal.
+next: create_cache logs nothing when the feature is simply not compiled, so a
+startup cache_healthy=false cannot be told apart from a dead server; the
+pub/sub listener breaks permanently on its first non-timeout error with no
+reconnect, and the returned Sender cannot tell its owner it died; neither is
+reachable today — nothing calls start_inventory_pubsub or
+publish_inventory_change.
+perf: single mutex-guarded connection — one dead or slow connection serialises
+every caller; reconnect and backoff need a real server to test.
 */
 //!
 //! Provides a [`Cache`] trait, a [`NoopCache`] fallback, and an optional
@@ -147,16 +166,31 @@ pub mod redis_cache {
         ttl_seconds: u64,
     }
 
+    /// Longest we will wait for a Redis connection.
+    ///
+    /// Both users of this live on paths where blocking for the OS TCP
+    /// default is worse than failing and degrading: `connect()` runs
+    /// during terminal startup against the user-editable `redis.url`
+    /// setting, and the pub/sub listener must keep polling its shutdown
+    /// channel. Shared so the two cannot drift apart.
+    const CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
     impl RedisCache {
         /// Connect to a Redis instance at the given URL.
+        ///
+        /// The attempt is bounded by [`CONNECT_TIMEOUT`]. An
+        /// unreachable-but-non-refusing host (firewalled, VLAN ACL,
+        /// reassigned DHCP address) would otherwise stall the caller for
+        /// the OS TCP connect default — measured ~21s on Windows, up to
+        /// ~2min on Linux — before `create_cache` could fall back.
         ///
         /// # Errors
         ///
         /// Returns a `RedisError` when the URL is invalid or the
-        /// connection cannot be established.
+        /// connection cannot be established within [`CONNECT_TIMEOUT`].
         pub fn connect(url: &str, ttl_seconds: u64) -> Result<Self, redis::RedisError> {
             let client = redis::Client::open(url)?;
-            let conn = client.get_connection()?;
+            let conn = client.get_connection_with_timeout(CONNECT_TIMEOUT)?;
             Ok(Self {
                 client,
                 conn: Mutex::new(conn),
@@ -186,19 +220,19 @@ pub mod redis_cache {
             // `redis::Client` is `Clone` (wraps an Arc internally), so we can cheaply
             // share it with the spawned thread.
             std::thread::spawn(move || {
-                // Connect with a 5-second timeout so the shutdown signal can be
-                // checked regularly even when no messages arrive.
-                let mut conn =
-                    match client.get_connection_with_timeout(std::time::Duration::from_secs(5)) {
-                        Ok(c) => c,
-                        Err(e) => {
-                            tracing::error!(
-                                error = %e,
-                                "failed to connect for inventory pub/sub"
-                            );
-                            return;
-                        }
-                    };
+                // Connect with a bounded timeout so the shutdown signal can
+                // be checked regularly even when no messages arrive, and so
+                // a dead Redis cannot strand this thread in connect.
+                let mut conn = match client.get_connection_with_timeout(CONNECT_TIMEOUT) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::error!(
+                            error = %e,
+                            "failed to connect for inventory pub/sub"
+                        );
+                        return;
+                    }
+                };
 
                 // Set read timeout on the TCP stream so `get_message()` unblocks.
                 let _ = conn.set_read_timeout(Some(std::time::Duration::from_secs(5)));
@@ -224,22 +258,14 @@ pub mod redis_cache {
                     match pubsub.get_message() {
                         Ok(msg) => {
                             let payload: String = msg.get_payload().unwrap_or_default();
-                            if let Ok(notification) =
-                                serde_json::from_str::<serde_json::Value>(&payload)
+                            if let Some(pid) =
+                                super::inventory_invalidation_target(&payload, &own_id)
                             {
-                                let msg_terminal_id =
-                                    notification["terminal_id"].as_str().unwrap_or("");
-                                // Skip own messages.
-                                if own_id == msg_terminal_id {
-                                    continue;
-                                }
-                                if let Some(pid) = notification["product_id"].as_str() {
-                                    cache.invalidate_inventory(pid);
-                                    tracing::debug!(
-                                        product_id = pid,
-                                        "invalidated inventory cache from pub/sub"
-                                    );
-                                }
+                                cache.invalidate_inventory(&pid);
+                                tracing::debug!(
+                                    product_id = %pid,
+                                    "invalidated inventory cache from pub/sub"
+                                );
                             }
                         }
                         Err(e) => {
@@ -263,7 +289,7 @@ pub mod redis_cache {
     impl Cache for RedisCache {
         fn get_product(&self, sku: &str) -> Option<ProductWithDetails> {
             let key = format!("product:{sku}");
-            let mut conn = self.conn.lock().ok()?;
+            let mut conn = super::lock_or_report(self.conn.lock(), "get_product")?;
             let data: Option<String> = redis::cmd("GET").arg(&key).query(&mut *conn).ok()?;
             data.and_then(|s| serde_json::from_str(&s).ok())
         }
@@ -273,7 +299,7 @@ pub mod redis_cache {
             let Ok(data) = serde_json::to_string(product) else {
                 return;
             };
-            let Ok(mut conn) = self.conn.lock() else {
+            let Some(mut conn) = super::lock_or_report(self.conn.lock(), "set_product") else {
                 return;
             };
             let _: Result<(), _> = redis::cmd("SETEX")
@@ -285,7 +311,8 @@ pub mod redis_cache {
 
         fn invalidate_product(&self, sku: &str) {
             let key = format!("product:{sku}");
-            let Ok(mut conn) = self.conn.lock() else {
+            let Some(mut conn) = super::lock_or_report(self.conn.lock(), "invalidate_product")
+            else {
                 return;
             };
             let _: Result<(), _> = redis::cmd("DEL").arg(&key).query(&mut *conn);
@@ -293,13 +320,13 @@ pub mod redis_cache {
 
         fn get_inventory(&self, product_id: &str) -> Option<i64> {
             let key = format!("inventory:{product_id}");
-            let mut conn = self.conn.lock().ok()?;
+            let mut conn = super::lock_or_report(self.conn.lock(), "get_inventory")?;
             redis::cmd("GET").arg(&key).query(&mut *conn).ok()
         }
 
         fn set_inventory(&self, product_id: &str, qty: i64) {
             let key = format!("inventory:{product_id}");
-            let Ok(mut conn) = self.conn.lock() else {
+            let Some(mut conn) = super::lock_or_report(self.conn.lock(), "set_inventory") else {
                 return;
             };
             let _: Result<(), _> = redis::cmd("SETEX")
@@ -311,14 +338,15 @@ pub mod redis_cache {
 
         fn invalidate_inventory(&self, product_id: &str) {
             let key = format!("inventory:{product_id}");
-            let Ok(mut conn) = self.conn.lock() else {
+            let Some(mut conn) = super::lock_or_report(self.conn.lock(), "invalidate_inventory")
+            else {
                 return;
             };
             let _: Result<(), _> = redis::cmd("DEL").arg(&key).query(&mut *conn);
         }
 
         fn is_healthy(&self) -> bool {
-            let Ok(mut conn) = self.conn.lock() else {
+            let Some(mut conn) = super::lock_or_report(self.conn.lock(), "is_healthy") else {
                 return false;
             };
             redis::cmd("PING").query::<String>(&mut *conn).is_ok()
@@ -362,7 +390,9 @@ pub mod redis_cache {
             let Ok(msg) = serde_json::to_string(&payload) else {
                 return;
             };
-            let Ok(mut conn) = self.conn.lock() else {
+            let Some(mut conn) =
+                super::lock_or_report(self.conn.lock(), "publish_inventory_change")
+            else {
                 return;
             };
             let _: Result<(), _> = redis::cmd("PUBLISH").arg(key).arg(&msg).query(&mut *conn);
@@ -392,12 +422,94 @@ pub mod redis_cache {
             let Ok(msg) = serde_json::to_string(&payload) else {
                 return;
             };
-            let Ok(mut conn) = self.conn.lock() else {
+            let Some(mut conn) =
+                super::lock_or_report(self.conn.lock(), "publish_negative_stock_event")
+            else {
                 return;
             };
             let _: Result<(), _> = redis::cmd("PUBLISH").arg(key).arg(&msg).query(&mut *conn);
         }
     }
+}
+
+/// Borrow the shared Redis connection, refusing it if the lock is poisoned.
+///
+/// `Some(guard)` when the mutex is healthy; `None` when a previous holder
+/// panicked, with the fact logged at error level instead of swallowed.
+///
+/// The deliberate choice is NOT to recover the guard via
+/// `PoisonError::into_inner()`. Every critical section here sits around a
+/// request/response exchange, so a panic between sending a RESP command
+/// and reading its reply can leave the socket mid-conversation. Handing
+/// that connection to the next caller makes it read a reply meant for
+/// someone else — turning a cache miss into a *wrong cache hit*, which is
+/// the one outcome a cache must not produce. Refusing the lock degrades
+/// to a miss, the fail-safe direction.
+///
+/// The cost of refusing is that poisoning is permanent, so it must never
+/// be silent: without the log a terminal quietly stops invalidating
+/// products, stops publishing negative-stock warnings, and serves stale
+/// rows until the TTL, while `is_healthy()` — sampled exactly once at
+/// startup (`apps/desktop-client/src/state.rs:331`) and never polled —
+/// keeps reporting whatever it saw at boot.
+///
+/// Lives outside the `cache-redis` gate: it is generic over the guard, so
+/// the policy is testable with a plain `Mutex<i32>` and no Redis. That also
+/// means its only production caller (`RedisCache`) is compiled out in a
+/// default build, where the tests are the sole user — hence the conditional
+/// `allow`, rather than gating the function and losing the coverage.
+#[cfg_attr(not(feature = "cache-redis"), allow(dead_code))]
+pub(crate) fn lock_or_report<T>(
+    result: Result<T, std::sync::PoisonError<T>>,
+    operation: &str,
+) -> Option<T> {
+    match result {
+        Ok(guard) => Some(guard),
+        Err(_) => {
+            tracing::error!(
+                operation,
+                "Redis connection lock is poisoned; this operation is being \
+                 skipped and the cache will stay degraded until the process restarts"
+            );
+            None
+        }
+    }
+}
+
+/// Decide what one `inventory:updates` pub/sub notification means for the
+/// local cache: `Some(product_id)` to invalidate, `None` to ignore.
+///
+/// Deliberately lives OUTSIDE the `cache-redis` gate: the filtering rules
+/// are pure, and extracting them is what makes the subscriber — which
+/// otherwise needs a live Redis plus a background thread — testable at
+/// all. `RedisCache`'s listener thread is the only caller.
+///
+/// Because that only caller is gated, the function is dead code in a default
+/// build and the tests are its sole user. The conditional `allow` keeps the
+/// coverage without gating the function itself, and without silencing the
+/// warning in the configuration where it would actually mean something.
+///
+/// `own_terminal_id` is this terminal's identity, `""` when unknown;
+/// messages carrying the same non-empty id are our own writes and must not
+/// bounce back as invalidations.
+#[cfg_attr(not(feature = "cache-redis"), allow(dead_code))]
+pub(crate) fn inventory_invalidation_target(
+    payload: &str,
+    own_terminal_id: &str,
+) -> Option<String> {
+    let notification: serde_json::Value = serde_json::from_str(payload).ok()?;
+    let msg_terminal_id = notification["terminal_id"].as_str().unwrap_or("");
+    // Skip our own messages — but only when we actually HAVE an identity
+    // to compare. publish_inventory_change() writes "" for an unknown
+    // remote terminal and a None local terminal_id also arrives as "", so
+    // treating "" == "" as "our own write" made a terminal with unknown
+    // identity ignore EVERY notification and serve stale inventory until
+    // the TTL (B48). The trait documents the opposite: "Pass None if
+    // terminal identity is unknown (all messages will be processed)."
+    if !own_terminal_id.is_empty() && own_terminal_id == msg_terminal_id {
+        return None;
+    }
+    notification["product_id"].as_str().map(str::to_owned)
 }
 
 /// Create a cache, attempting Redis first and falling back to no-op.
@@ -421,3 +533,15 @@ pub fn create_cache(redis_url: &str, ttl_seconds: u64) -> Arc<dyn Cache> {
 #[cfg(test)]
 #[path = "cache_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "cache_create_tests.rs"]
+mod create_tests;
+
+#[cfg(test)]
+#[path = "cache_lock_tests.rs"]
+mod lock_tests;
+
+#[cfg(test)]
+#[path = "cache_pubsub_tests.rs"]
+mod pubsub_tests;

@@ -24,7 +24,6 @@ import {
   createKdsOrderFromSaleScoped,
   getKdsOrder,
   getKdsOrderScoped,
-  updateKdsOrderItems,
   updateKdsOrderItemsScoped,
   printKdsChitScoped,
   getKdsOrderLinesScoped,
@@ -122,13 +121,7 @@ describe('kds.ts IPC contract', () => {
     expect(mockInvoke).toHaveBeenCalledWith('get_kds_order_scoped', { sessionToken: 'tok', id: 'o1' });
   });
 
-  // ── Update Items ──────────────────────────────────────────
-
-  it('updateKdsOrderItems → update_kds_order_items with userId + args', async () => {
-    mockInvoke.mockResolvedValue({ id: 'o1' });
-    await updateKdsOrderItems('u1', { id: 'o1', items_summary: '2x Espresso', item_count: 2 });
-    expect(mockInvoke).toHaveBeenCalledWith('update_kds_order_items', { userId: 'u1', args: { id: 'o1', items_summary: '2x Espresso', item_count: 2 } });
-  });
+  // ── Update Items (scoped — ADR #7) ──────────────────────────
 
   it('updateKdsOrderItemsScoped → update_kds_order_items_scoped with sessionToken', async () => {
     mockInvoke.mockResolvedValue({ id: 'o1' });

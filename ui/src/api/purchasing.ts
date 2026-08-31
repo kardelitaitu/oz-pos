@@ -152,13 +152,6 @@ export const updatePoStatus = (args: UpdatePoStatusArgs): Promise<PurchaseOrderD
 export const receivePurchaseOrder = (id: string): Promise<PurchaseOrderDto> =>
   loggedInvoke<PurchaseOrderDto>('receive_purchase_order', { id });
 
-/** Receive a purchase order with per-line received/damaged quantities (warehouse Phase 2). */
-export const receivePurchaseOrderWithLines = (
-  id: string,
-  lines: ReceivePoLineInput[],
-): Promise<PurchaseOrderDto> =>
-  loggedInvoke<PurchaseOrderDto>('receive_purchase_order_with_lines', { id, lines });
-
 // ── Scoped variants (ADR #7) ──────────────────────────────────────────
 // Review F-005: the unscoped purchasing commands above are not registered
 // on the desktop shell — production screens must call the *_scoped ones.

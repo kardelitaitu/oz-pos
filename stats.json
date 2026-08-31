@@ -1,35 +1,35 @@
 {
   "schemaVersion": 1,
   "label": "code size",
-  "message": "281.5k lines",
+  "message": "625.7k lines",
   "color": "blue",
   "stats": {
-    "totalLines": 281538,
-    "totalFiles": 1374,
+    "totalLines": 625714,
+    "totalFiles": 2117,
     "languages": {
-      "go": {
-        "lines": 6541,
-        "files": 10
+      "typescript": {
+        "lines": 248382,
+        "files": 945
       },
       "sql": {
-        "lines": 1773,
-        "files": 74
+        "lines": 4007,
+        "files": 20
       },
       "css": {
-        "lines": 31707,
-        "files": 92
+        "lines": 49222,
+        "files": 180
       },
       "html": {
-        "lines": 29208,
-        "files": 488
+        "lines": 6227,
+        "files": 12
       },
-      "typescript": {
-        "lines": 89827,
-        "files": 375
+      "go": {
+        "lines": 29312,
+        "files": 66
       },
       "rust": {
-        "lines": 122482,
-        "files": 335
+        "lines": 288564,
+        "files": 894
       }
     }
   }

@@ -1,15 +1,27 @@
 #!/usr/bin/env python3
-"""Verify the Dockerfile.server cache-priming stage covers every workspace member.
+"""Verify the Dockerfile cache-priming stages cover every workspace member.
 
-DOCKER-09: `Dockerfile.server` manually copies each workspace member's
-Cargo.toml into the builder stage to prime the dependency cache. If a member
-is added to the root Cargo.toml but forgotten in the Dockerfile, the priming
-build silently fails (it is best-effort) and the cache layer is dead weight.
+DOCKER-09: each Dockerfile (server and unified) manually copies every
+workspace member's Cargo.toml into the builder stage to prime the
+dependency cache, and creates dummy src dirs so `cargo build -p
+oz-cloud-server` can resolve the whole workspace. If a member is added to
+the root Cargo.toml but forgotten in a Dockerfile, the priming build
+silently fails (it is best-effort) and the cache layer is dead weight —
+every image build then recompiles the full dependency tree.
+
+P2: the unified image (Dockerfile.unified) had drifted from Dockerfile.server
+— missing oz-crypto / oz-media (both in cloud-server's dependency graph),
+scripts/updater-compat-check (a workspace member cargo must resolve), and
+four modules (giftcards/kitchen/promotions/purchasing — not in the
+cloud-server graph, but cargo still parses every member manifest). Its
+prime stage always failed, so every unified build paid the full compile.
 
 This script parses the workspace `members` list from the root Cargo.toml and
 asserts each member's manifest (or the inline dummy fallback for
-apps/desktop-client and apps/tablet-client) is present in Dockerfile.server's
-cache stage. Exit code 0 = consistent, 1 = drift.
+apps/desktop-client and apps/tablet-client) is present in EVERY Dockerfile's
+cache stage. A per-file exclusion set allows an image to intentionally omit
+members it can still resolve — but the default requires the full list.
+Exit code 0 = consistent, 1 = drift.
 
 Usage:
     python scripts/verify-dockerfile-workspace.py
@@ -21,7 +33,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CARGO_TOML = ROOT / "Cargo.toml"
-DOCKERFILE = ROOT / "Dockerfile.server"
+
+# Dockerfiles to validate, with members they are ALLOWED to omit. Both images
+# build `oz-cloud-server`; currently both carry the full member list so the
+# exclusion sets are empty — kept so a future image can intentionally prune
+# members without breaking the check.
+DOCKERFILES: dict[str, set[str]] = {
+    "Dockerfile.server": set(),
+    "Dockerfile.unified": set(),
+}
 
 # These workspace members are NOT copied as manifests: the cache stage
 # synthesizes inline dummy Cargo.tomls for them (they are excluded from the
@@ -63,41 +83,57 @@ def workspace_members() -> list[str]:
     return sorted(set(expanded))
 
 
-def dockerfile_text() -> str:
-    return DOCKERFILE.read_text(encoding="utf-8")
+def dockerfile_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
 
 
-def main() -> int:
-    members = workspace_members()
-    dockerfile = dockerfile_text()
+def check_dockerfile(name: str, members: list[str]) -> list[str]:
+    path = ROOT / name
+    if not path.exists():
+        return [f"{name}: Dockerfile not found"]
+    dockerfile = dockerfile_text(path)
+    exclusions = DOCKERFILES.get(name, set())
     errors: list[str] = []
 
     for member in members:
         if member in SKIP_MEMBERS:
+            continue
+        if member in exclusions:
             continue
         if member in INLINE_DUMMY_MEMBERS:
             # Inline dummy Cargo.toml is generated for these (printf ...)
             # because their real manifests are excluded from the build context.
             if f"> {member}/src/main.rs" not in dockerfile and f"> {member}/src/lib.rs" not in dockerfile:
                 errors.append(
-                    f"{member}: expected inline dummy src in Dockerfile.server cache stage"
+                    f"{name}: {member}: expected inline dummy src in cache stage"
                 )
             continue
         if f"COPY {member}/Cargo.toml" not in dockerfile:
-            errors.append(f"{member}: missing 'COPY {member}/Cargo.toml' in Dockerfile.server")
+            errors.append(f"{name}: missing 'COPY {member}/Cargo.toml' in cache stage")
         if member.startswith("crates/") or member.startswith("modules/") or member.startswith("platform/"):
             src_dir = f"{member}/src"
             if src_dir not in dockerfile:
-                errors.append(f"{member}: missing dummy src dir '{src_dir}' in cache stage")
+                errors.append(f"{name}: missing dummy src dir '{src_dir}' in cache stage")
 
-    if errors:
-        print("DOCKER-09 drift: Dockerfile.server cache-priming stage is out of sync with Cargo.toml workspace members:")
-        for e in errors:
+    return errors
+
+
+def main() -> int:
+    members = workspace_members()
+    all_errors: list[str] = []
+
+    for name in DOCKERFILES:
+        all_errors.extend(check_dockerfile(name, members))
+
+    if all_errors:
+        print("DOCKER-09 drift: cache-priming stage is out of sync with Cargo.toml workspace members:")
+        for e in all_errors:
             print(f"  - {e}")
-        print("Add the member's manifest COPY + dummy src dir to Dockerfile.server (see DOCKER-09).")
+        print("Add the member's manifest COPY + dummy src dir to the failing Dockerfile (see DOCKER-09).")
         return 1
 
-    print(f"OK: all {len(members)} workspace members are represented in Dockerfile.server's cache stage.")
+    for name in DOCKERFILES:
+        print(f"OK: all {len(members)} workspace members are represented in {name}'s cache stage.")
     return 0
 
 

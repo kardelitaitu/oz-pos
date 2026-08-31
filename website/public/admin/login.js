@@ -6,7 +6,8 @@ const API = isSubdomain
   : ((window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'https://license.ozpos.my.id');
 
 let currentMode = 'otp'; // default to 'otp' since admin accounts start without a password
-let otpTimer = null;
+// B18: the OTP cooldown timer is no longer a module global — it lives on
+// the cooldown node via admin-utils.startCountdown (see startOtpCooldown).
 
 function showError(msg) {
   hideSuccess();
@@ -50,63 +51,37 @@ function setLoading(l, msg) {
 }
 
 function setAuthMode(mode) {
+  // B21 fix: the mode logic now lives in admin-utils.setAuthMode
+  // (unit-tested), with an in-flight veto — clicking the other tab while
+  // a login request is pending used to flip currentMode under the
+  // response handler, which then wrote the wrong mode's button label and
+  // could start the OTP cooldown on the password tab. A refused flip
+  // leaves the form exactly as it was until the request settles.
+  const els = {
+    tabOtp: document.getElementById('tab-otp'),
+    tabPwd: document.getElementById('tab-password'),
+    pwdGroup: document.getElementById('password-group'),
+    otpGroup: document.getElementById('otp-group'),
+    loginBtn: document.getElementById('login-btn'),
+    cd: document.getElementById('otp-cooldown'),
+  };
+  if (!window.AdminUtils.setAuthMode(mode, els, { isSubmitting: () => isSubmitting })) return;
   currentMode = mode;
   hideError();
   hideSuccess();
-
-  const tabOtp = document.getElementById('tab-otp');
-  const tabPwd = document.getElementById('tab-password');
-  const pwdGroup = document.getElementById('password-group');
-  const otpGroup = document.getElementById('otp-group');
-  const loginBtn = document.getElementById('login-btn');
-  const cd = document.getElementById('otp-cooldown');
-
-  if (mode === 'otp') {
-    if (tabOtp) tabOtp.classList.add('active');
-    if (tabPwd) tabPwd.classList.remove('active');
-    if (pwdGroup) pwdGroup.classList.add('hidden');
-    
-    // Check if code was already sent
-    const isCodeActive = otpGroup && !otpGroup.classList.contains('hidden');
-    if (isCodeActive) {
-      if (loginBtn) loginBtn.textContent = t('login.verifyCode');
-    } else {
-      if (otpGroup) otpGroup.classList.add('hidden');
-      if (loginBtn) loginBtn.textContent = t('login.sendCode');
-    }
-  } else {
-    if (tabOtp) tabOtp.classList.remove('active');
-    if (tabPwd) tabPwd.classList.add('active');
-    if (pwdGroup) pwdGroup.classList.remove('hidden');
-    if (otpGroup) otpGroup.classList.add('hidden');
-    if (cd) cd.classList.add('hidden');
-    if (loginBtn) loginBtn.textContent = t('login.signInPassword');
-  }
 }
 
-// Make setAuthMode available globally
-window.setAuthMode = setAuthMode;
-
 function startOtpCooldown(seconds = 60) {
-  let sec = seconds;
   const cd = document.getElementById('otp-cooldown');
   if (!cd) return;
   cd.classList.remove('hidden');
-  cd.textContent = t('login.resendIn') + sec + t('login.seconds');
-  if (otpTimer) clearInterval(otpTimer);
-  otpTimer = setInterval(() => {
-    sec--;
-    if (sec <= 0) {
-      clearInterval(otpTimer);
-      cd.textContent = t('login.resendPrompt');
-      const loginBtn = document.getElementById('login-btn');
-      if (loginBtn && currentMode === 'otp') {
-        // Allow resend
-      }
-    } else {
-      cd.textContent = t('login.resendIn') + sec + t('login.seconds');
-    }
-  }, 1000);
+  // B18 fix: timer now tracked on the node via admin-utils.startCountdown
+  // (the old module-global otpTimer kept running when setAuthMode hid the
+  // element, and switching back never re-showed it — a live server-side
+  // resend cooldown ran invisibly until the user walked into a 429).
+  startCountdown(cd, seconds,
+    (s) => t('login.resendIn') + s + t('login.seconds'),
+    () => { cd.textContent = t('login.resendPrompt'); });
 }
 
 // ── Exchange token for a one-time code (hardening F1) ──────────
@@ -117,13 +92,22 @@ async function exchangeForCode(token) {
   });
   if (!res.ok) throw new Error('exchange failed');
   const body = await res.json();
-  window.location.href = '/?code=' + encodeURIComponent(body.code);
+  // B13 fix: validated via admin-utils.exchangeUrlFrom — the old code
+  // navigated to /?code=undefined when the response lacked a code,
+  // producing a silent login redirect loop with no error shown.
+  window.location.href = exchangeUrlFrom(body);
 }
 
 let isSubmitting = false;
 
 async function handleLogin() {
   if (isSubmitting) return;
+  // B22 fix: the button is type=submit inside the form — Enter in any
+  // text input triggers IMPLICIT form submission regardless of the
+  // button's disabled state (HTML only blocks clicks on disabled
+  // buttons). Without this guard, the 429 lockout countdown was pure
+  // theatre: press Enter and keep hammering the rate limiter.
+  if (isLockoutActive(document.getElementById('login-btn'))) return;
   isSubmitting = true;
   hideError();
   hideSuccess();
@@ -215,7 +199,7 @@ async function handleLogin() {
         }
         showError(body.error || t('login.invalidOrExpiredCode'));
       } catch (err) {
-        showError(t('login.couldNotConnect'));
+        showError(err && err.exchangeFailed ? t('login.exchangeFailed') : t('login.couldNotConnect'));
       }
       setLoading(false);
       return;
@@ -265,20 +249,25 @@ async function handleLogin() {
 // ── Lockout countdown (429 with retry_after) ─────────────────
 function showLockoutCountdown(seconds) {
   const btn = document.getElementById('login-btn');
-  if (!btn) return;
-  btn.disabled = true;
-  let remaining = seconds;
-  btn.textContent = t('login.tryAgainIn') + remaining + t('login.seconds');
-  const timer = setInterval(() => {
-    remaining--;
-    if (remaining <= 0) {
-      clearInterval(timer);
-      btn.disabled = false;
-      btn.textContent = currentMode === 'otp' ? t('login.sendCode') : t('login.signIn');
-      return;
+  // B7 fix: delegates to admin-utils.startLockoutCountdown, which keeps
+  // one tracked timer per button. The old inline version created a NEW
+  // setInterval per 429 without clearing the previous one, so a second
+  // rate-limited response left two timers racing: the shorter one
+  // re-enabled the button early and the other zombie-rewrote the label.
+  startLockoutCountdown(
+    btn, seconds,
+    function (s) { return t('login.tryAgainIn') + s + t('login.seconds'); },
+    function () {
+      // Restore the label the mode's own rules would show: in OTP mode
+      // the label depends on whether the code input is already visible
+      // (Verify vs Send), and the password label must match setAuthMode
+      // exactly — the old version said 'Sign In' on a tab whose button
+      // otherwise reads 'Sign In with Password'.
+      if (currentMode !== 'otp') return t('login.signInPassword');
+      const og = document.getElementById('otp-group');
+      return og && !og.classList.contains('hidden') ? t('login.verifyCode') : t('login.sendCode');
     }
-    btn.textContent = t('login.tryAgainIn') + remaining + t('login.seconds');
-  }, 1000);
+  );
 }
 
 // Wire single submit event on form

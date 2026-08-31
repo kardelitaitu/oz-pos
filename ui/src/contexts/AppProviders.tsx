@@ -6,6 +6,7 @@ import { LocaleProvider } from '@/i18n/LocaleContext';
 import { BrandProvider } from '@/contexts/BrandContext';
 import { ThemeProvider } from '@/frontend/shell/ThemeProvider';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
+import CurrencyWorkspaceSync from '@/contexts/CurrencyWorkspaceSync';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import { WorkspaceProvider } from '@/contexts/WorkspaceContext';
@@ -60,6 +61,10 @@ export function AppProviders({ children }: AppProvidersProps) {
                   can surface a recoverable notification. */}
               <GlobalErrorReporter />
               <WorkspaceProvider>
+                {/* CurrencyContext reload bridge: pushes each new session
+                    token into refresh() so per-store defaults (CUR-03)
+                    reach useCurrency consumers without a page reload. */}
+                <CurrencyWorkspaceSync />
                 <SubscriptionProvider>
                   <ZoomProvider>
                     <HardwareAccelProvider>

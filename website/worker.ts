@@ -44,11 +44,28 @@ const SESSION_PATH = '/__oz/session';
 const LOGOUT_PATH = '/__oz/logout';
 const COOKIE_NAME = 'oz_session';
 
-/** Dashboard subdomains that require authentication. */
-const DASHBOARD_HOSTS = new Set(['dashboard.ozpos.my.id', 'admin.ozpos.my.id']);
+/** Subdomains that require authentication (admin-only). */
+const DASHBOARD_HOSTS = new Set(['admin.ozpos.my.id']);
+
+/** Customer dashboard subdomain — redirects to the marketing account portal. */
+const CUSTOMER_DASHBOARD_HOST = 'dashboard.ozpos.my.id';
 
 /** Marketing site domain — no auth required. */
 const MARKETING_HOST = 'ozpos.my.id';
+
+/** Origins the /api/v1/ proxy will echo as Access-Control-Allow-Origin
+ * (WEB-2): the marketing host and the two auth-gated subdomains. Any
+ * other Origin falls back to the marketing host. */
+const ALLOWED_CORS_ORIGINS = new Set([
+  'https://ozpos.my.id',
+  'https://dashboard.ozpos.my.id',
+  'https://admin.ozpos.my.id',
+]);
+
+/** URL the customer dashboard subdomain redirects to for account management. */
+const CUSTOMER_ACCOUNT_URL = 'https://ozpos.my.id/en/account/';
+/** URL the customer dashboard subdomain redirects to for login. */
+const CUSTOMER_LOGIN_URL = 'https://ozpos.my.id/en/login';
 
 /** Parse a named cookie value from the Cookie header. */
 function getCookie(headers: Headers, name: string): string | null {
@@ -73,17 +90,23 @@ function setCookieHeader(token: string, maxAge: number, domain: string): string 
 
 /**
  * Wrap a response with the strict CSP for admin/dashboard subdomains
- * (hardening F2): no inline scripts, no framing, no referrer leak.
- * Applied to the SPA pages and the admin login page — never the marketing
- * site (which needs 'unsafe-inline' for its Astro inline scripts).
+ * (hardening F2): no framing, no referrer leak. Applied to the SPA pages
+ * and the admin login page — never the marketing site (which needs
+ * 'unsafe-inline' for its Astro inline scripts).
+ *
+ * R3: `script-src` no longer carries 'unsafe-inline'. The retired
+ * dashboard SPA bootstrapped through inline islands, but the remaining
+ * auth-gated pages (website/public/admin/*) load every script from an
+ * external file (theme.js, admin-utils.js, admin.js, login.js), so inline
+ * script injection is blocked outright.
  */
 function withStrictCSP(resp: Response): Response {
   const strictCSP = [
     "default-src 'none'",
-    "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
-    "style-src 'self' 'unsafe-inline'",
+    "script-src 'self' https://static.cloudflareinsights.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "img-src 'self' data:",
-    "font-src 'self'",
+    "font-src 'self' https://fonts.gstatic.com",
     "connect-src 'self' https://*.code.run https://*.ozpos.my.id https://open.er-api.com",
     "object-src 'none'",
     "base-uri 'self'",
@@ -110,6 +133,25 @@ export default {
     const url = new URL(request.url);
     const hostname = url.hostname;
 
+    // ── Customer dashboard subdomain redirect ─────────────────────────
+    // dashboard.ozpos.my.id is no longer a separate SPA; it redirects
+    // transparently to the fully-featured account portal on the marketing
+    // host (ozpos.my.id/en/account/). This eliminates the cookie isolation
+    // problem (separate Domain=dashboard.ozpos.my.id) and removes the
+    // fragile vanilla-JS duplicate of AccountView.tsx.
+    if (hostname === CUSTOMER_DASHBOARD_HOST) {
+      const isLoginPath = url.pathname.includes('login');
+      const target = isLoginPath ? CUSTOMER_LOGIN_URL : CUSTOMER_ACCOUNT_URL;
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: target,
+          'Cache-Control': 'no-store',
+          'Referrer-Policy': 'no-referrer',
+        },
+      });
+    }
+
     // ── Hostname-based auth gate ──────────────────────────────────
     if (DASHBOARD_HOSTS.has(hostname)) {
       // ── API Proxy to license server (resolves CORS and in-handler Origin checks) ──
@@ -117,6 +159,11 @@ export default {
         const targetUrl = (env.LICENSE_API_URL ?? 'https://license.ozpos.my.id') + url.pathname + url.search;
         const reqHeaders = new Headers(request.headers);
         reqHeaders.set('Origin', 'https://ozpos.my.id');
+        // WEB-2: never forward the dashboard host's Cookie header to the
+        // backend — the SPA authenticates with a Bearer token obtained
+        // same-origin from /__oz/session, so Cookie here is pure
+        // cross-service leakage.
+        reqHeaders.delete('Cookie');
         const res = await fetch(targetUrl, {
           method: request.method,
           headers: reqHeaders,
@@ -124,9 +171,27 @@ export default {
           redirect: 'follow',
         });
         const respHeaders = new Headers(res.headers);
-        respHeaders.set('Access-Control-Allow-Origin', '*');
+        // WEB-2: echo a fixed allow-list origin instead of `*`. The
+        // subdomain login pages call the API same-origin (relative URL),
+        // so the echo must match the requesting host — a plain wildcard
+        // would still work for non-credentialed fetches but makes every
+        // token-bearing response readable from any origin that obtains a
+        // token, which buys nothing and widens the surface.
+        const requestOrigin = request.headers.get('Origin') ?? '';
+        const corsOrigin = ALLOWED_CORS_ORIGINS.has(requestOrigin)
+          ? requestOrigin
+          : 'https://ozpos.my.id';
+        respHeaders.set('Access-Control-Allow-Origin', corsOrigin);
+        respHeaders.set('Vary', 'Origin');
         return new Response(res.body, { status: res.status, headers: respHeaders });
       }
+
+      // ── Redirect marketing auth pages to the marketing host (fixes 404s) ──
+      if (url.pathname.startsWith('/en/login') || url.pathname.startsWith('/id/login')) {
+        const target = `https://${MARKETING_HOST}${url.pathname}${url.search}`;
+        return new Response(null, { status: 302, headers: { Location: target } });
+      }
+
 
       const sessionCookie = getCookie(request.headers, COOKIE_NAME);
 
@@ -139,7 +204,11 @@ export default {
       const codeParam = url.searchParams.get('code');
       if (codeParam) {
         url.searchParams.delete('code');
-        const cleanUrl = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
+        // B24: the redirect path is forced single-slash — '//evil.com' or
+        // '/\evil.com' would otherwise resolve as a protocol-relative
+        // OPEN REDIRECT (both 302s below use this URL raw).
+        const safePath = '/' + url.pathname.replace(/^[/\\]+/, '');
+        const cleanUrl = safePath + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
         const apiUrl = (env.LICENSE_API_URL ?? 'https://license.ozpos.my.id') + '/api/v1/web/exchange-consume';
         try {
           const res = await fetch(apiUrl, {
@@ -165,12 +234,16 @@ export default {
         } catch {
           // Exchange failed — fall through to redirect to login below.
         }
-        // Code invalid or exchange failed — redirect to login so the user
-        // re-authenticates (never leaves them on a broken state).
-        const loginUrl = hostname === 'admin.ozpos.my.id'
-          ? `https://${MARKETING_HOST}/admin/login`
-          : `https://${MARKETING_HOST}/en/login?redirect=${encodeURIComponent(cleanUrl)}`;
-        return new Response(null, { status: 302, headers: { Location: loginUrl } });
+        // Code invalid or exchange failed — send the browser back through
+        // the login flow. B24 fix: the old code 302'd to the MARKETING
+        // host's /admin/login — but login.js computes API='' for any
+        // *.ozpos.my.id host and POSTs relative /api/v1/... calls, and
+        // the proxy is gated to DASHBOARD_HOSTS. On the marketing host
+        // those calls 404: the user was stranded on a dead login form.
+        // Redirect to the clean URL on THIS host instead — the no-session
+        // gate below serves the login page locally (with the proxy), and
+        // the original destination survives the re-login round-trip.
+        return new Response(null, { status: 302, headers: { Location: cleanUrl } });
       }
 
       // Step 1b: The dashboard SPA calls /__oz/session to obtain the JWT
@@ -200,9 +273,7 @@ export default {
         // the same host. The marketing host (ozpos.my.id) does NOT have it.
         const loginUrl = hostname === 'admin.ozpos.my.id'
           ? 'https://admin.ozpos.my.id/'
-          : hostname === 'dashboard.ozpos.my.id'
-            ? 'https://dashboard.ozpos.my.id/'
-            : `https://${MARKETING_HOST}/en/login`;
+          : `https://${MARKETING_HOST}/en/login`;
         return new Response(null, {
           status: 302,
           headers: {
@@ -220,17 +291,16 @@ export default {
       // → /dashboard/login), so the login.js relative API calls go through
       // the Worker's /api/v1/ proxy. The marketing host has no proxy.
       if (!sessionCookie) {
-        if (hostname === 'admin.ozpos.my.id' || hostname === 'dashboard.ozpos.my.id') {
+        if (hostname === 'admin.ozpos.my.id') {
           const isStatic = /\.(css|js|svg|png|jpg|jpeg|webp|gif|ico|woff2?|ttf|map)$/i.test(url.pathname);
           if (isStatic) {
             const asset = new URL(request.url);
             asset.hostname = MARKETING_HOST;
             return env.ASSETS.fetch(new Request(asset.toString(), request));
           }
-          const loginPath = hostname === 'admin.ozpos.my.id' ? '/admin/login' : '/dashboard/login';
           const rewritten = new URL(request.url);
           rewritten.hostname = MARKETING_HOST;
-          rewritten.pathname = loginPath;
+          rewritten.pathname = '/admin/login';
           rewritten.search = '';
           return withStrictCSP(await env.ASSETS.fetch(new Request(rewritten.toString(), request)));
         }
@@ -242,30 +312,103 @@ export default {
         });
       }
 
-      // Step 3: Cookie present. Serve the dashboard/admin SPA. Rewrite the
-      // request path to the sub-app under /dashboard/ or /admin/ so the
-      // ASSETS binding returns the correct SPA (not the marketing site).
-      const isAdmin = hostname === 'admin.ozpos.my.id';
-      const appBase = isAdmin ? '/admin' : '/dashboard';
+      // Step 3: Cookie present — only admin.ozpos.my.id reaches here now.
+      // Rewrite the request path to /admin/* so ASSETS returns the admin SPA.
       const rewritten = new URL(request.url);
       rewritten.hostname = MARKETING_HOST;
-      // The SPA HTML references its assets with the absolute /dashboard/ or
-      // /admin/ prefix (e.g. /dashboard/dashboard.css). Don't double-prefix:
-      // only add appBase for paths that don't already carry it.
       const p = url.pathname;
-      rewritten.pathname = (p === '/' || !p.startsWith(appBase)) ? appBase + p : p;
-      // Preserve the query string for static assets so ?v=<version> cache
-      // busting actually works (a different ?v= is a different edge cache
-      // key). Only the HTML entry point needs a clean URL — strip search
-      // there so /__oz/exchange and ?code= handling stays deterministic.
       const isAsset = /\.(css|js|svg|png|jpg|jpeg|webp|gif|ico|woff2?|ttf|map)$/i.test(p);
+      // Static assets carry their correct /admin/* path already. Only prepend /admin for HTML paths.
+      rewritten.pathname = isAsset ? p : (p === '/' || !p.startsWith('/admin') ? '/admin' + p : p);
       rewritten.search = isAsset ? url.search : '';
       const spaResp = await env.ASSETS.fetch(new Request(rewritten.toString(), request));
       return withStrictCSP(spaResp);
     }
 
     // ── Marketing site (ozpos.my.id) — no auth required ───────────
-    // Serve the runtime config, contact form API, and static assets.
+    // Serve the runtime config, contact form API, static assets, plus the
+    // account-portal session endpoints (R1): the account dashboard reads
+    // its session from the httpOnly cookie instead of XSS-readable
+    // sessionStorage, so the Worker must expose /__oz/session and
+    // /__oz/logout on the marketing host too (the account portal lives at
+    // ozpos.my.id/en/account).
+
+    // One-time exchange code (hardening F1, R1): the login page
+    // authenticates, gets a short-lived single-use code via
+    // /exchange-issue, and redirects to the account portal with ?code=<code>.
+    // The Worker POSTs the code to /exchange-consume to receive the real
+    // session token, sets the httpOnly cookie on the marketing host, and
+    // redirects to a clean URL. The real session token never appears in a
+    // URL. Guarded to 48-hex exchange codes so a coincidental `code` query
+    // param on other marketing pages (search, docs) is never misread.
+    const codeParam = url.searchParams.get('code');
+    if (codeParam && /^[0-9a-f]{48}$/.test(codeParam)) {
+      url.searchParams.delete('code');
+      const cleanUrl = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
+      const apiUrl = (env.LICENSE_API_URL ?? 'https://license.ozpos.my.id') + '/api/v1/web/exchange-consume';
+      try {
+        const res = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: codeParam }),
+        });
+        if (res.status === 200) {
+          const body = await res.json() as { token?: string };
+          if (body.token) {
+            return new Response(null, {
+              status: 302,
+              headers: {
+                Location: cleanUrl,
+                'Set-Cookie': setCookieHeader(body.token, 30 * 24 * 3600, hostname),
+                'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+                'Referrer-Policy': 'no-referrer',
+                'Pragma': 'no-cache',
+              },
+            });
+          }
+        }
+      } catch {
+        // Exchange failed — fall through to the login redirect below.
+      }
+      // Code invalid or exchange failed — redirect to login so the user
+      // re-authenticates (never left on a broken state).
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `https://${MARKETING_HOST}/en/login`, 'Cache-Control': 'no-store' },
+      });
+    }
+
+    // /__oz/session — expose the httpOnly cookie token same-origin so the
+    // account dashboard can authenticate to the license API with a Bearer
+    // header without ever holding the token in JS-readable storage.
+    if (url.pathname === SESSION_PATH) {
+      const sessionCookie = getCookie(request.headers, COOKIE_NAME);
+      if (!sessionCookie) {
+        return new Response(JSON.stringify({ error: 'not signed in' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+        });
+      }
+      return new Response(JSON.stringify({ token: sessionCookie }), {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+      });
+    }
+
+    // /__oz/logout — clear the httpOnly cookie and redirect to login. The
+    // cookie is HttpOnly so page JS cannot delete it; the Worker must
+    // expire it here (Max-Age=0).
+    if (url.pathname === LOGOUT_PATH) {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: `https://${MARKETING_HOST}/en/login`,
+          'Set-Cookie': `${COOKIE_NAME}=; Domain=${hostname}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          'Referrer-Policy': 'no-referrer',
+          'Pragma': 'no-cache',
+        },
+      });
+    }
 
     // Serve the runtime config. no-store: the value can change (a var edit)
     // without a new bundle, so a cached stale config would defeat the point.
@@ -315,12 +458,18 @@ export default {
             headers: { 'Content-Type': 'application/json', ...corsHeaders },
           });
         }
-        // Format Discord embed
+        // Format Discord embed. WEB-4: every embed field is capped —
+        // Discord rejects embeds whose field values exceed 1024 chars,
+        // so unbounded name/email input would turn a valid support
+        // message into a 502. (Abuse/rate-limiting for this endpoint is
+        // handled at the edge: a Cloudflare WAF rate-limit rule on
+        // /api/contact — see the runbook; the Worker itself stays
+        // stateless.)
         const embed = {
           title: '📩 New Support Message',
           fields: [
-            { name: 'Name', value: name, inline: true },
-            { name: 'Email', value: email, inline: true },
+            { name: 'Name', value: name.slice(0, 100), inline: true },
+            { name: 'Email', value: email.slice(0, 200), inline: true },
             { name: 'Message', value: message.slice(0, 1024) },
           ],
           color: 0x147efb, // OZ-POS blue

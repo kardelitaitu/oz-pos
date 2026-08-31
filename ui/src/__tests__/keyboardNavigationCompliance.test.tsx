@@ -42,15 +42,15 @@ vi.mock('@/frontend/shell/StatusBar', () => ({
 }));
 vi.mock('@/frontend/shell/UpdateBanner', () => ({ default: () => null }));
 vi.mock('@/components/StockAlertBell', () => ({ default: () => null }));
-vi.mock('@/frontend/shell/RoleBadge', () => ({ default: () => null }));
+vi.mock('@/components/RoleBadge', () => ({ default: () => null }));
 
 // ── StoreSwitcher API + workspace mocks (mirrors StoreSwitcher.test.tsx) ──
 const { mockListStores } = vi.hoisted(() => ({
   mockListStores: vi.fn(),
 }));
 vi.mock('@/api/stores', () => ({
-  listStores: () => mockListStores(),
-  setPrimaryStore: vi.fn(() => Promise.resolve({ id: 's' })),
+  listStoresScoped: () => mockListStores(),
+  setPrimaryStoreScoped: vi.fn(() => Promise.resolve({ id: 's' })),
 }));
 vi.mock('@/contexts/WorkspaceContext', () => ({
   useWorkspace: () => ({

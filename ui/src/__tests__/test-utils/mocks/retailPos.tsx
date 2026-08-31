@@ -103,6 +103,7 @@ export function createRetailCurrencyApiMock() {
     // Scoped versions (ADR #7) — used by PaymentModal when sessionToken is present
     listCurrenciesScoped: vi.fn(() => Promise.resolve([])),
     listExchangeRatesScoped: vi.fn(() => Promise.resolve([])),
+    listLatestExchangeRatesScoped: vi.fn(() => Promise.resolve([])),
     getDefaultCurrencyScoped: vi.fn(() => Promise.resolve('IDR')),
   };
 }
@@ -112,10 +113,11 @@ export function createRetailCurrencyApiMock() {
 /** `@/api/customers` mock returning an empty customer list. */
 export function createRetailCustomersApiMock() {
   return {
-    listCustomers: vi.fn(() => Promise.resolve([])),
-    createCustomer: vi.fn(),
-    updateCustomer: vi.fn(),
-    deleteCustomer: vi.fn(),
+    listCustomersScoped: vi.fn(() => Promise.resolve([])),
+    getCustomerScoped: vi.fn(() => Promise.resolve(null)),
+    createCustomerScoped: vi.fn(),
+    updateCustomerScoped: vi.fn(),
+    deleteCustomerScoped: vi.fn(),
   };
 }
 

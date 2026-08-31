@@ -1,5 +1,7 @@
 # Purchasing Module
 
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (0 findings) · verified against HEAD: PurchasingModule is a documented lifecycle-only stub (registers, declares inventory dep, no tables/commands); manifest.json declares purchasing:view/order/receive/manage; Feature::PurchaseOrders maps to 'purchase-orders' (features.rs:98,449); every_module_manifest_is_registered parity test referenced in modules/README.md -->
+
 **Status:** Stub (lifecycle only — no domain logic yet)
 
 ## Overview
@@ -46,3 +48,5 @@ cross-cutting one.
 
 All monetary amounts use `Money` (`i64` minor units) — unit cost, landed cost,
 and PO totals included. See `modules/README.md` for the full promotion path.
+
+> last audited 31-08-26 by docs-auditor

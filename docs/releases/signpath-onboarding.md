@@ -1,5 +1,7 @@
 # SignPath Onboarding — Free Windows Code Signing
 
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (0 findings) · verified against HEAD: LICENSE §2 "NO OPEN SOURCE OR PUBLIC LICENSE" confirms the proprietary-license qualification caveat (doc correctly states the repo does NOT currently qualify for free OSS signing); SignPath action pinned @v2 (release.yml:296); upload-artifact @v4 (SHA-pinned :280/308/319); step names "Upload unsigned installers (SignPath candidate)" (:277) + "Upload signed installers" (:306) match; release-build permissions {contents:read, actions:read} confirmed (:76); workflow does NOT pass artifact-configuration-slug (project default used, as stated); SignPath step continue-on-error:true + gated on SIGNPATH_API_TOKEN != '' confirmed. Portal steps §2-§6 are external-service procedure -->
+
 > **Goal:** make the `release.yml` workflow actually sign the NSIS/MSI
 > installers with a **publicly-trusted** certificate, so end users see a real
 > publisher and **no SmartScreen "unknown publisher" warning** — at zero cost
@@ -249,3 +251,5 @@ The release workflow is tag-triggered, so the first verification is a real
   workflow change needed.
 - **Cancel the OSS subscription:** contact the SignPath Foundation; the
   certificate is revoked on their side.
+
+> last audited 31-08-26 by docs-auditor

@@ -21,6 +21,11 @@
 //! | `OZ_SYNC_REDIRECT_URL` | — | New server URL for migration redirect. When set, all `/api/sync/*` requests return `{"error":"server_migrated","new_url":"<url>"}` with HTTP 421. |
 //! | `RUST_LOG` | `info` | Log level filter (e.g. `debug`, `oz_cloud_server=debug`) |
 
+// serde_json's `json!` recurses once per key/value pair, and the OpenAPI
+// spec's `paths` object is one long literal (exchange-rates endpoints,
+// 2026-08-31, pushed it past the default 128).
+#![recursion_limit = "512"]
+
 mod config;
 mod db;
 mod email;
@@ -435,7 +440,8 @@ pub fn build_router(
     config: &config::CloudServerConfig,
     pg: Option<deadpool_postgres::Pool>,
 ) -> Router {
-    // CORS allowlist shared with the oz-api router (unify-auth-and-sync.md
+    // CORS allowlist shared with the oz-api router
+    // (docs/archived/2026-08-15-unify-auth-and-sync.md
     // §11): documented defaults, overridable via OZ_CORS_ORIGINS.
     let cors_origins = oz_api::cors_origins_from_env();
     let cors = oz_api::build_cors(&cors_origins);

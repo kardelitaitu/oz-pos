@@ -924,9 +924,9 @@ func TestWebhookLifecycle_MeTracksCancelAndResume(t *testing.T) {
 		t.Errorf("after update: expected record grace_until %s, got %s",
 			wantGrace.Format(time.RFC3339), got.Format(time.RFC3339))
 	}
-	if sub["graceUntil"] != subRec.GetString("grace_until") {
-		t.Errorf("after update: /me graceUntil (%v) must match the record (%s)",
-			sub["graceUntil"], subRec.GetString("grace_until"))
+	if sub["graceUntil"] != subRec.GetDateTime("grace_until").Time().UTC().Format(time.RFC3339) {
+		t.Errorf("after update: /me graceUntil (%v) must be RFC3339 UTC (%s)",
+			sub["graceUntil"], subRec.GetDateTime("grace_until").Time().UTC().Format(time.RFC3339))
 	}
 
 	// 3. canceled → grace_period until the scheduled change (whole-second
@@ -958,9 +958,9 @@ func TestWebhookLifecycle_MeTracksCancelAndResume(t *testing.T) {
 		t.Errorf("after cancel: expected grace_until %s, got %s",
 			effective.Format(time.RFC3339), got.Format(time.RFC3339))
 	}
-	if sub["graceUntil"] != subRec.GetString("grace_until") {
-		t.Errorf("after cancel: /me graceUntil (%v) must match the record (%s)",
-			sub["graceUntil"], subRec.GetString("grace_until"))
+	if sub["graceUntil"] != subRec.GetDateTime("grace_until").Time().UTC().Format(time.RFC3339) {
+		t.Errorf("after cancel: /me graceUntil (%v) must be RFC3339 UTC (%s)",
+			sub["graceUntil"], subRec.GetDateTime("grace_until").Time().UTC().Format(time.RFC3339))
 	}
 
 	// 4. resumed → back to active with a fresh grace window.
@@ -980,9 +980,9 @@ func TestWebhookLifecycle_MeTracksCancelAndResume(t *testing.T) {
 		t.Errorf("after resume: expected record grace_until %s, got %s",
 			wantGrace.Format(time.RFC3339), got.Format(time.RFC3339))
 	}
-	if sub["graceUntil"] != subRec.GetString("grace_until") {
-		t.Errorf("after resume: /me graceUntil (%v) must match the record (%s)",
-			sub["graceUntil"], subRec.GetString("grace_until"))
+	if sub["graceUntil"] != subRec.GetDateTime("grace_until").Time().UTC().Format(time.RFC3339) {
+		t.Errorf("after resume: /me graceUntil (%v) must be RFC3339 UTC (%s)",
+			sub["graceUntil"], subRec.GetDateTime("grace_until").Time().UTC().Format(time.RFC3339))
 	}
 	keyRec, err := app.FindFirstRecordByData("license_keys", "paddle_sub_id", "sub_life_001")
 	if err != nil {

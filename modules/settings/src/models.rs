@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-settings slice A: models verified)
+crate: modules-settings | status: SAFE | lint: CLEAN
+findings: clean SettingItem key-value record
+next: none | perf: N/A
+*/
 //! Settings domain models.
 
 use serde::{Deserialize, Serialize};

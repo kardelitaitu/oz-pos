@@ -1,5 +1,7 @@
 # Development Checklist — OZ-POS Desktop
 
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (0 findings) · verified against HEAD: has_users (auth.rs:490, registered lib.rs:417) + hasUsers() (api/staff.ts:76); get_subscription_capabilities (commands/subscription.rs); debug Free->Premium override (subscription.rs:63); all 5 UI gate screens + 3 quota screens exist; package name oz-pos-app; the 3 'missing from dev-mock' commands exist in Rust. CAVEAT: dev-mock/tauri-api.ts is actively changing (in-flight) — the §4 missing-from-mock list is point-in-time vs committed HEAD -->
+
 A checklist to ensure the app is fully functional during development. Run through this after any DB migration, subscription tier change, or dev-mock update.
 
 ---
@@ -130,3 +132,5 @@ cd ui && npx vitest run
 | Warehouse workspace shows old product list | Workspace-to-route mapping still points to `inventory` instead of `warehouse` | Change `warehouse: 'inventory'` → `warehouse: 'warehouse'` in AppShell |
 | Home screen opens wrong page (e.g. analytics instead of settings) | Stale `#/analytics` hash from shortcut persists across workspace switches | Clear hash after consuming it in AppShell workspace routing effect |
 | Home screen looks like old settings page | WorkspaceHome renders stale analytics/reports shortcuts inline instead of using tools section | Ensure WorkspaceHome uses `.workspace-home-content` with two `.workspace-section` divs (Workspaces + Tools) |
+
+> last audited 31-08-26 by docs-auditor

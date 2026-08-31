@@ -8,8 +8,10 @@ use oz_core::subscription::TenantSubscription;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
+use oz_core::permissions;
 
 // ── DTOs ───────────────────────────────────────────────────────────
 
@@ -88,29 +90,6 @@ pub struct UpdateStoreProfileArgs {
 
 // ── Commands ───────────────────────────────────────────────────────
 
-/// List all store profiles.
-#[tauri::command]
-pub async fn list_store_profiles(
-    state: State<'_, AppState>,
-) -> Result<Vec<StoreProfileDto>, AppError> {
-    let conn = state.db.lock().await;
-    let store = oz_core::Store::new(&conn);
-    let profiles = store.list_store_profiles()?;
-    Ok(profiles.into_iter().map(StoreProfileDto::from).collect())
-}
-
-/// Get a single store profile by id.
-#[tauri::command]
-pub async fn get_store_profile(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<Option<StoreProfileDto>, AppError> {
-    let conn = state.db.lock().await;
-    let store = oz_core::Store::new(&conn);
-    let profile = store.get_store_profile(&id)?;
-    Ok(profile.map(StoreProfileDto::from))
-}
-
 /// Get the primary store profile.
 #[tauri::command]
 pub async fn get_primary_store(
@@ -120,87 +99,6 @@ pub async fn get_primary_store(
     let store = oz_core::Store::new(&conn);
     let profile = store.get_primary_store()?;
     Ok(profile.map(StoreProfileDto::from))
-}
-
-/// Create a new store profile (non-primary by default).
-///
-/// ADR #4 Phase 2: Also creates the per-store SQLite database file
-/// with all migrations applied.
-#[tauri::command]
-pub async fn create_store_profile(
-    args: CreateStoreProfileArgs,
-    state: State<'_, AppState>,
-) -> Result<StoreProfileDto, AppError> {
-    // Create the store's database file before inserting the profile.
-    // If DB creation fails, we still insert the profile — the DB can
-    // be created lazily by open_store() later.
-    let _ = state.db_manager.create_store_db(&args.id);
-
-    let conn = state.db.lock().await;
-    let store = oz_core::Store::new(&conn);
-
-    // C1.2: enforce the subscription tier's store-count limit before creating
-    // a new store — Free/Plus allow 1, Pro allows 2, Premium allows 10.
-    let sub = TenantSubscription::load(&conn, "default")?
-        .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?;
-    sub.verify_signature()?;
-    store.enforce_store_quota(&sub.effective_tier())?;
-
-    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-
-    let profile = StoreProfile {
-        id: args.id,
-        name: args.name,
-        address: args.address.unwrap_or_default(),
-        tax_id: args.tax_id.unwrap_or_default(),
-        currency: args.currency.unwrap_or_else(|| "USD".into()),
-        timezone: args.timezone.unwrap_or_else(|| "UTC".into()),
-        is_primary: false,
-        created_at: now.clone(),
-        updated_at: now,
-    };
-    let created = store.create_store_profile(&profile)?;
-    Ok(StoreProfileDto::from(created))
-}
-
-/// Update a store profile's mutable fields.
-#[tauri::command]
-pub async fn update_store_profile(
-    args: UpdateStoreProfileArgs,
-    state: State<'_, AppState>,
-) -> Result<StoreProfileDto, AppError> {
-    let conn = state.db.lock().await;
-    let store = oz_core::Store::new(&conn);
-    let updated = store.update_store_profile(
-        &args.id,
-        &args.name,
-        &args.address,
-        &args.tax_id,
-        &args.currency,
-        &args.timezone,
-    )?;
-    Ok(StoreProfileDto::from(updated))
-}
-
-/// Promote a store to primary (demoting the current primary).
-#[tauri::command]
-pub async fn set_primary_store(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<StoreProfileDto, AppError> {
-    let conn = state.db.lock().await;
-    let store = oz_core::Store::new(&conn);
-    let profile = store.set_primary_store(&id)?;
-    Ok(StoreProfileDto::from(profile))
-}
-
-/// Delete a non-primary store profile.
-#[tauri::command]
-pub async fn delete_store_profile(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
-    let conn = state.db.lock().await;
-    let store = oz_core::Store::new(&conn);
-    store.delete_store_profile(&id)?;
-    Ok(())
 }
 
 // The core store profile CRUD logic is tested in oz-core's
@@ -218,7 +116,9 @@ pub async fn list_store_profiles_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<StoreProfileDto>, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::SETTINGS_READ).await?;
     let conn = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -234,7 +134,9 @@ pub async fn get_store_profile_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Option<StoreProfileDto>, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::SETTINGS_READ).await?;
     let conn = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -249,7 +151,9 @@ pub async fn get_primary_store_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Option<StoreProfileDto>, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::SETTINGS_READ).await?;
     let conn = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -270,7 +174,11 @@ pub async fn create_store_profile_scoped(
     // be created lazily by open_store() later.
     let _ = state.db_manager.create_store_db(&args.id);
 
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+
+    // F-017: enforce per-domain permission on this scoped command.
+
+    require_permission_for_session(&state, &session, permissions::SETTINGS_EDIT).await?;
     let conn = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -307,7 +215,9 @@ pub async fn update_store_profile_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<StoreProfileDto, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::SETTINGS_EDIT).await?;
     let conn = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -330,7 +240,9 @@ pub async fn set_primary_store_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<StoreProfileDto, AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::SETTINGS_EDIT).await?;
     let conn = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -346,7 +258,9 @@ pub async fn delete_store_profile_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let (session, _conn) = state.resolve_scope(&session_token)?;
+    // F-017: enforce per-domain permission on this scoped command.
+    require_permission_for_session(&state, &session, permissions::SETTINGS_EDIT).await?;
     let conn = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;

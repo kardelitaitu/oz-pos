@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-hal slice A: verified)
+crate: oz-hal | status: SAFE | lint: CLEAN
+findings: clean — 15 driver modules, all declared, none orphaned. (The dead drivers/scanner.rs that sat here uncompiled was deleted 31-08-26.) drivers/edc/ arrived the same day from oz-payment as part of the HAL unification; its drivers are stubs, so nothing here opens a device that the trait does not model. bt_printer.rs is now an alias for serial_printer.rs rather than a second implementation — see its header for why.
+next: none | perf: N/A
+*/
 //! Hardware drivers.
 //!
 //! Every real driver implements one of the traits in `crate::traits`.
@@ -10,6 +16,8 @@ pub mod bt_printer;
 pub mod bt_scanner;
 /// Cash drawer driver (serial / USB).
 pub mod drawer;
+/// EDC card-payment terminal drivers and vendor protocol codecs.
+pub mod edc;
 /// ESC/POS command builder for receipt printers.
 pub mod escpos;
 /// KDS kitchen chit formatter.
@@ -22,6 +30,8 @@ pub mod receipt;
 pub mod scale;
 /// Serial-attached customer display driver.
 pub mod serial_display;
+/// Serial receipt printer — RS-232, USB-serial and Bluetooth SPP alike.
+pub mod serial_printer;
 /// Serial-attached barcode scanner driver.
 pub mod serial_scanner;
 /// TCP/IP network receipt printer driver.

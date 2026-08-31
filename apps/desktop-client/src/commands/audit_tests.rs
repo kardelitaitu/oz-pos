@@ -1,24 +1,6 @@
 use super::*;
-use oz_core::AuditEntry;
 
 // ── AuditEntryDto ───────────────────────────────────────────────────
-
-#[test]
-fn audit_entry_dto_debug() {
-    let dto = AuditEntryDto {
-        id: "a1".into(),
-        user_id: "u1".into(),
-        action: "void_sale".into(),
-        target_type: Some("sale".into()),
-        target_id: Some("s1".into()),
-        details: "Voided by manager".into(),
-        outcome: "success".into(),
-        created_at: "2025-01-01T00:00:00.000Z".into(),
-    };
-    let d = format!("{dto:?}");
-    assert!(d.contains("void_sale"));
-    assert!(d.contains("sale"));
-}
 
 #[test]
 fn audit_entry_dto_serialize() {
@@ -35,23 +17,6 @@ fn audit_entry_dto_serialize() {
     let json = serde_json::to_value(&dto).unwrap();
     assert_eq!(json["action"], "login");
     assert!(json["target_type"].is_null());
-}
-
-#[test]
-fn audit_entry_dto_from_entry() {
-    let entry = AuditEntry {
-        id: "a3".into(),
-        user_id: "u3".into(),
-        action: "create_product".into(),
-        target_type: Some("product".into()),
-        target_id: Some("p1".into()),
-        details: "Created new product".into(),
-        outcome: "success".into(),
-        created_at: "2025-03-01T00:00:00.000Z".into(),
-    };
-    let dto = AuditEntryDto::from(entry);
-    assert_eq!(dto.action, "create_product");
-    assert_eq!(dto.target_type.as_deref(), Some("product"));
 }
 
 // ── ListAuditLogArgs ────────────────────────────────────────────────

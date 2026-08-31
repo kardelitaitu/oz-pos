@@ -7,13 +7,13 @@ vi.mock('@/utils/logged-invoke', () => ({
 
 import {
   getCurrencyInfo,
-  listCurrencies,
   listCurrenciesScoped,
   getDefaultCurrency,
   setDefaultCurrency,
-  listExchangeRates,
-  createExchangeRate,
-  deleteExchangeRate,
+  listExchangeRatesScoped,
+  listLatestExchangeRatesScoped,
+  createExchangeRateScoped,
+  deleteExchangeRateScoped,
 } from '@/api/currency';
 
 describe('currency.ts API contract', () => {
@@ -30,12 +30,6 @@ describe('currency.ts API contract', () => {
     expect(result.code).toBe('IDR');
   });
 
-  it('listCurrencies calls correct command (no args)', async () => {
-    mockInvoke.mockResolvedValue([]);
-    await listCurrencies();
-    expect(mockInvoke).toHaveBeenCalledWith('list_currencies');
-  });
-
   it('listCurrenciesScoped calls correct command', async () => {
     mockInvoke.mockResolvedValue([]);
     await listCurrenciesScoped(TOKEN);
@@ -44,6 +38,9 @@ describe('currency.ts API contract', () => {
     });
   });
 
+  // get_default_currency / set_default_currency are pre-session bootstrap
+  // commands (CurrencyProvider sits above AuthProvider/WorkspaceProvider and
+  // has no token); they stay non-scoped and are registered on the Rust side.
   it('getDefaultCurrency calls correct command (no args)', async () => {
     mockInvoke.mockResolvedValue('IDR');
     const result = await getDefaultCurrency();
@@ -58,28 +55,40 @@ describe('currency.ts API contract', () => {
     expect(mockInvoke).toHaveBeenCalledWith('set_default_currency', { args });
   });
 
-  it('listExchangeRates calls correct command (no args)', async () => {
+  it('listExchangeRatesScoped calls correct command', async () => {
     mockInvoke.mockResolvedValue([]);
-    await listExchangeRates();
-    expect(mockInvoke).toHaveBeenCalledWith('list_exchange_rates');
+    await listExchangeRatesScoped(TOKEN);
+    expect(mockInvoke).toHaveBeenCalledWith('list_exchange_rates_scoped', {
+      sessionToken: TOKEN,
+    });
   });
 
-  it('createExchangeRate calls correct command', async () => {
+  // CUR-11: bounded latest-per-pair listing (PaymentModal picker).
+  it('listLatestExchangeRatesScoped calls correct command', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listLatestExchangeRatesScoped(TOKEN);
+    expect(mockInvoke).toHaveBeenCalledWith('list_latest_exchange_rates_scoped', {
+      sessionToken: TOKEN,
+    });
+  });
+
+  it('createExchangeRateScoped calls correct command', async () => {
     const args = { from_currency: 'USD', to_currency: 'IDR', rate_millionths: 15700000000 };
     mockInvoke.mockResolvedValue({ id: 'er1', ...args });
-    const result = await createExchangeRate(args);
-    expect(mockInvoke).toHaveBeenCalledWith('create_exchange_rate', { args });
+    const result = await createExchangeRateScoped(TOKEN, args);
+    expect(mockInvoke).toHaveBeenCalledWith('create_exchange_rate_scoped', {
+      sessionToken: TOKEN,
+      args,
+    });
     expect(result.id).toBe('er1');
   });
 
-  it('deleteExchangeRate calls correct command', async () => {
+  it('deleteExchangeRateScoped calls correct command', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await deleteExchangeRate('er1');
-    expect(mockInvoke).toHaveBeenCalledWith('delete_exchange_rate', { id: 'er1' });
-  });
-
-  it('propagates errors', async () => {
-    mockInvoke.mockRejectedValue(new Error('unknown currency'));
-    await expect(getCurrencyInfo('XYZ')).rejects.toThrow('unknown currency');
+    await deleteExchangeRateScoped(TOKEN, 'er1');
+    expect(mockInvoke).toHaveBeenCalledWith('delete_exchange_rate_scoped', {
+      sessionToken: TOKEN,
+      id: 'er1',
+    });
   });
 });

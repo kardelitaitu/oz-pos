@@ -79,43 +79,73 @@ export interface AnalyticsQuery {
 
 // ── Date-range helper ───────────────────────────────────────────────
 
-function isoDay(d: Date): string {
-  // Local calendar date — `toISOString()` is UTC and can shift a day for
-  // late-evening local times, which would query the wrong range.
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+/**
+ * Parse the store-timezone contract (REP-03, mirrored in Rust at
+ * `db/reports.rs::parse_utc_offset`): a fixed UTC offset `'+HH:MM'` /
+ * `'-HH:MM'` → milliseconds; `'UTC'`, IANA names, and anything else
+ * unparseable → 0. IANA names are deliberately NOT interpreted — the
+ * report buckets are fixed-offset too, so the UI must agree with the
+ * backend rather than resolve a possibly-different DST rule client-side.
+ */
+export function storeOffsetMs(tz: string | null | undefined): number {
+  const m = /^([+-])(\d{2}):(\d{2})$/.exec(tz ?? '');
+  if (!m) return 0;
+  const hh = Number(m[2]);
+  const mm = Number(m[3]);
+  if (hh > 23 || mm > 59) return 0;
+  return (hh * 3_600_000 + mm * 60_000) * (m[1] === '-' ? -1 : 1);
 }
 
 /**
  * The inclusive `[from, to]` window for a granularity. Daily/Weekly/
  * Monthly/Yearly are anchored at "now"; Custom uses the picked range.
+ * When `storeTz` is provided (the primary store's `timezone`, REP-03) the
+ * anchor is the STORE's calendar day, not the device's — a laptop in
+ * another region must still query "today" as the store sees it. Passing
+ * `null`/`undefined` keeps the legacy device-local anchor.
  */
 export function rangeForGranularity(
   g: Granularity,
   customFrom: string,
   customTo: string,
+  storeTz?: string | null,
 ): { from: string; to: string } {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth();
+  let y: number;
+  let m: number;
+  let d: number;
+  let dow: number; // 0 = Monday … 6 = Sunday
+  if (storeTz === undefined || storeTz === null || storeTz === '') {
+    const now = new Date();
+    y = now.getFullYear();
+    m = now.getMonth();
+    d = now.getDate();
+    dow = (now.getDay() + 6) % 7;
+  } else {
+    // UTC getters on the offset-shifted instant = the store's calendar.
+    const s = new Date(Date.now() + storeOffsetMs(storeTz));
+    y = s.getUTCFullYear();
+    m = s.getUTCMonth();
+    d = s.getUTCDate();
+    dow = (s.getUTCDay() + 6) % 7;
+  }
+  // Calendar-safe day construction (month/year rollover via Date.UTC).
+  const iso = (yy: number, mm: number, dd: number) =>
+    new Date(Date.UTC(yy, mm, dd)).toISOString().slice(0, 10);
   switch (g) {
     case 'daily': {
       // Daily shows the current week (Monday-first), bucketed per day — the
       // same window the heatmap's weekday view covers. A single-day window
       // would produce a one-point series where Peak == Low.
-      const dow = (now.getDay() + 6) % 7;
-      const start = new Date(y, m, now.getDate() - dow);
-      return { from: isoDay(start), to: isoDay(now) };
+      return { from: iso(y, m, d - dow), to: iso(y, m, d) };
     }
     case 'weekly': {
       // Monday-first week start.
-      const dow = (now.getDay() + 6) % 7;
-      const start = new Date(y, m, now.getDate() - dow);
-      return { from: isoDay(start), to: isoDay(now) };
+      return { from: iso(y, m, d - dow), to: iso(y, m, d) };
     }
     case 'monthly':
-      return { from: isoDay(new Date(y, m, 1)), to: isoDay(now) };
+      return { from: iso(y, m, 1), to: iso(y, m, d) };
     case 'yearly':
-      return { from: `${y}-01-01`, to: isoDay(now) };
+      return { from: `${y}-01-01`, to: iso(y, m, d) };
     case 'custom':
       return { from: customFrom, to: customTo };
   }
@@ -897,4 +927,34 @@ export type {
   VoidedSummaryRow,
   WeeklyRevenueRow,
 };
+
+// ── Heatmap label keys + calendar layout (shared by the heatmap card) ──
+
+/**
+ * Fluent keys for the heatmap's Monday-first day-of-week abbreviations,
+ * reused from reports.ftl (which already localizes them) so the analytics
+ * grid and the reports heatmap share one set of day labels.
+ */
+export const DAY_LABEL_KEYS = ['day-monday', 'day-tuesday', 'day-wednesday', 'day-thursday', 'day-friday', 'day-saturday', 'day-sunday'];
+
+/** Month-name key suffixes (0-based month index → `analytics-month-*`). */
+export const MONTH_LABEL_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+/**
+ * Calendar layout for the month containing `from` (an ISO `YYYY-MM-DD`
+ * date). `leading` counts the empty cells before day 1 (Monday-first),
+ * `days` the day cells, and `trailing` the empty cells after the last day
+ * so the grid always completes whole weeks (leading + days + trailing ≡ 0
+ * mod 7). Derived from the queried range's month — never "now" — so a
+ * custom range inside a past or future month renders that month's calendar.
+ */
+export function monthCalendarGrid(from: string): { leading: number; days: number; trailing: number } {
+  const [year, month] = from.split('-').map(Number); // month is 1-based
+  // Day 0 of month index `month` (one past the 1-based month) rolls back to
+  // that month's last day, yielding its day count.
+  const days = new Date(year!, month!, 0).getDate();
+  const leading = (new Date(year!, month! - 1, 1).getDay() + 6) % 7; // 0 = Monday
+  const trailing = (7 - ((leading + days) % 7)) % 7;
+  return { leading, days, trailing };
+}
 export type { StaffAnalyticsRow };

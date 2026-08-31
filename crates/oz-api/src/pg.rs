@@ -1,5 +1,5 @@
 //! Postgres data layer for the oz-api REST handlers (Phase 1.2 of
-//! `unify-auth-and-sync.md`).
+//! `docs/archived/2026-08-15-unify-auth-and-sync.md`).
 /*
 last audited 25-07-26 by RSA-Agent (oz-api slice B: pg deep read)
 crate: oz-api | status: SAFE | lint: CLEAN
@@ -988,10 +988,18 @@ pub async fn create_sale(pool: &Pool, tenant_id: &str, sale: &Sale) -> Result<()
     let cur_str = currency_str(&sale.currency)?;
     let status_str = sale.status.as_stored_str();
     tx.execute(
+        // CUR-02 cloud gap: the tender metadata (base currency/total/rate)
+        // and tip/service amounts must be written here — `get_sale` below
+        // already reads all five columns, so omitting them made every
+        // cloud-side sale show NULL tender info and lost the tip/service
+        // amounts for reconciliation.
         "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method, tendered_minor,
                             discount_percent, discount_label, user_id, created_at, updated_at,
-                            subtotal_minor, tax_total_minor, customer_id, version, tenant_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 1, $16)",
+                            subtotal_minor, tax_total_minor, customer_id, version, tenant_id,
+                            base_currency, base_total_minor, tender_rate_millionths,
+                            tip_minor, service_charge_minor)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 1, $16,
+                 $17, $18, $19, $20, $21)",
         &[
             &sale.id,
             &sale.total.minor_units,
@@ -1009,6 +1017,11 @@ pub async fn create_sale(pool: &Pool, tenant_id: &str, sale: &Sale) -> Result<()
             &sale.tax_total.minor_units,
             &sale.customer_id,
             &tenant_id,
+            &sale.base_currency,
+            &sale.base_total_minor,
+            &sale.tender_rate_millionths,
+            &sale.tip_minor,
+            &sale.service_charge_minor,
         ],
     )
     .await
@@ -1016,21 +1029,32 @@ pub async fn create_sale(pool: &Pool, tenant_id: &str, sale: &Sale) -> Result<()
 
     for line in &sale.lines {
         let line_cur = currency_str(&line.unit_price.currency)?;
-        // Freeze the product cost at write time (ADR #36 reporting).
-        let cost_minor: Option<i64> = tx
+        // Freeze the product cost at write time (ADR #36 reporting) and
+        // the product identity (REP-05): renaming a product, moving it
+        // between categories, or reusing a deleted sku must never
+        // relabel historical revenue in the email reports.
+        let (cost_minor, product_id, product_name, category_id): (Option<i64>, Option<String>, Option<String>, Option<String>) = tx
             .query_opt(
-                "SELECT cost_minor FROM products WHERE tenant_id = $1 AND sku = $2",
+                "SELECT cost_minor, id, name, category_id FROM products WHERE tenant_id = $1 AND sku = $2",
                 &[&tenant_id, &line.sku],
             )
             .await
             .map_err(|e| PgError::Db(e.to_string()))?
-            .map(|r| r.get::<_, i64>(0))
-            .filter(|&v| v > 0);
+            .map(|r| {
+                (
+                    Some(r.get::<_, i64>(0)).filter(|&v| v > 0),
+                    r.get::<_, Option<String>>(1),
+                    r.get::<_, Option<String>>(2),
+                    r.get::<_, Option<String>>(3),
+                )
+            })
+            .unwrap_or_default();
         tx.execute(
             "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position,
                                      tax_minor, tax_rate_id, tax_breakdown_json,
-                                     serial_number, course, modifiers_json, cost_minor)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
+                                     serial_number, course, modifiers_json, cost_minor,
+                                     product_id, product_name, category_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)",
             &[
                 &line.id,
                 &line.sale_id,
@@ -1047,6 +1071,9 @@ pub async fn create_sale(pool: &Pool, tenant_id: &str, sale: &Sale) -> Result<()
                 &line.course,
                 &line.modifiers_json,
                 &cost_minor,
+                &product_id,
+                &product_name,
+                &category_id,
             ],
         )
         .await
@@ -1306,6 +1333,235 @@ pub async fn update_sale_status(
         Some(sale) => Ok(sale),
         None => Err(PgError::NotFound),
     }
+}
+
+// ── Exchange rates ───────────────────────────────────────────────────
+//
+// ARCH-01-family repair (2026-08-31): the exchange-rate commands existed
+// only as Tauri IPC + dev-mock — the cloud had no REST counterpart, so
+// web deployments could not read or manage rates at all. The cloud
+// `exchange_rates` table is GLOBAL reference data (no `tenant_id`, no
+// RLS — same treatment as `categories`/`currencies`), so these handlers
+// are tenant-agnostic by schema design.
+
+/// Wire shape mirroring `modules_currency::ExchangeRateRow`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ExchangeRateDto {
+    /// Row id (UUID v7).
+    pub id: String,
+    /// ISO-4217 alpha-3 source currency code.
+    pub from_currency: String,
+    /// ISO-4217 alpha-3 target currency code.
+    pub to_currency: String,
+    /// Fixed-point rate at 6-decimal scale (strictly positive).
+    pub rate_millionths: i64,
+    /// Provenance label (`manual`, `api`, …).
+    pub source: String,
+    /// `YYYY-MM-DD` effective date.
+    pub effective_date: String,
+    /// RFC-3339 creation timestamp.
+    pub created_at: String,
+}
+
+const EXCHANGE_RATE_COLS: &str =
+    "id, from_currency, to_currency, rate_millionths, source, effective_date, created_at";
+
+fn row_to_exchange_rate(row: &tokio_postgres::Row) -> ExchangeRateDto {
+    ExchangeRateDto {
+        id: row.get(0),
+        from_currency: row.get(1),
+        to_currency: row.get(2),
+        rate_millionths: row.get(3),
+        source: row.get(4),
+        effective_date: row.get(5),
+        created_at: row.get(6),
+    }
+}
+
+/// Validate a create-rate request exactly like the desktop/tablet
+/// command layer (`validate_create_rate_args`, CUR-05) so the REST and
+/// IPC surfaces cannot drift: ISO-4217 codes, distinct pair, strictly
+/// positive rate, optional strict `YYYY-MM-DD` effective date.
+pub fn validate_exchange_rate_request(
+    from_currency: &str,
+    to_currency: &str,
+    rate_millionths: i64,
+    effective_date: Option<&str>,
+) -> Result<(), PgError> {
+    if from_currency.trim().is_empty() {
+        return Err(PgError::Validation(
+            "from_currency must not be empty".into(),
+        ));
+    }
+    if to_currency.trim().is_empty() {
+        return Err(PgError::Validation("to_currency must not be empty".into()));
+    }
+    if from_currency.parse::<Currency>().is_err() {
+        return Err(PgError::Validation(format!(
+            "invalid ISO-4217 from_currency: {from_currency}"
+        )));
+    }
+    if to_currency.parse::<Currency>().is_err() {
+        return Err(PgError::Validation(format!(
+            "invalid ISO-4217 to_currency: {to_currency}"
+        )));
+    }
+    if from_currency == to_currency {
+        return Err(PgError::Validation(
+            "from_currency and to_currency must differ".into(),
+        ));
+    }
+    if rate_millionths <= 0 {
+        return Err(PgError::Validation(
+            "rate_millionths must be strictly positive".into(),
+        ));
+    }
+    if let Some(d) = effective_date {
+        // Same parser as the command layer (CUR-05): chrono's %Y-%m-%d,
+        // which accepts non-zero-padded forms like "2026-8-1" — REST and
+        // IPC must not disagree on what a valid date is.
+        chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").map_err(|_| {
+            PgError::Validation(format!("effective_date must be YYYY-MM-DD, got {d}"))
+        })?;
+    }
+    Ok(())
+}
+
+/// Full rate history, ordered like the local repository (CUR-04):
+/// pair-major, newest effective date first WITHIN each pair.
+pub async fn list_exchange_rates_pg(pool: &Pool) -> Result<Vec<ExchangeRateDto>, PgError> {
+    let client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
+    let rows = client
+        .query(
+            &format!(
+                "SELECT {EXCHANGE_RATE_COLS} FROM exchange_rates
+                 ORDER BY from_currency, to_currency, effective_date DESC, created_at DESC"
+            ),
+            &[],
+        )
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    Ok(rows.iter().map(row_to_exchange_rate).collect())
+}
+
+/// The CURRENT rate for every pair (CUR-11) — one row per
+/// `(from_currency, to_currency)`. `UNIQUE(pair, effective_date)` makes
+/// within-pair ties impossible, so the ordering is deterministic without
+/// a rowid-style tail (PG has no rowid; ids are UUIDs).
+pub async fn list_latest_exchange_rates_pg(pool: &Pool) -> Result<Vec<ExchangeRateDto>, PgError> {
+    let client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
+    let rows = client
+        .query(
+            "SELECT er.id, er.from_currency, er.to_currency, er.rate_millionths,
+                    er.source, er.effective_date, er.created_at
+             FROM exchange_rates er
+             WHERE er.id = (
+                 SELECT e2.id FROM exchange_rates e2
+                 WHERE e2.from_currency = er.from_currency
+                   AND e2.to_currency = er.to_currency
+                 ORDER BY e2.effective_date DESC, e2.created_at DESC
+                 LIMIT 1
+             )
+             ORDER BY er.from_currency, er.to_currency",
+            &[],
+        )
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    Ok(rows.iter().map(row_to_exchange_rate).collect())
+}
+
+/// The newest rate for one pair, `NotFound` when the pair is unknown
+/// (mirrors `get_latest_exchange_rate_scoped`).
+pub async fn get_latest_exchange_rate_pg(
+    pool: &Pool,
+    from_currency: &str,
+    to_currency: &str,
+) -> Result<ExchangeRateDto, PgError> {
+    let client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
+    let row = client
+        .query_opt(
+            "SELECT id, from_currency, to_currency, rate_millionths, source, effective_date, created_at
+             FROM exchange_rates
+             WHERE from_currency = $1 AND to_currency = $2
+             ORDER BY effective_date DESC, created_at DESC
+             LIMIT 1",
+            &[&from_currency.to_string(), &to_currency.to_string()],
+        )
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    row.as_ref()
+        .map(row_to_exchange_rate)
+        .ok_or(PgError::NotFound)
+}
+
+/// Create a rate. Callers must run [`validate_exchange_rate_request`]
+/// first; a duplicate `(from, to, effective_date)` maps to 409 and an
+/// unseeded currency (FK on `currencies.code`) to 400.
+pub async fn create_exchange_rate_pg(
+    pool: &Pool,
+    from_currency: &str,
+    to_currency: &str,
+    rate_millionths: i64,
+    source: &str,
+    effective_date: &str,
+) -> Result<ExchangeRateDto, PgError> {
+    let client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
+    let id = uuid::Uuid::now_v7().to_string();
+    let now = now_rfc3339();
+    let source = if source.trim().is_empty() {
+        "manual"
+    } else {
+        source.trim()
+    }
+    .to_string();
+    let from = from_currency.trim().to_string();
+    let to = to_currency.trim().to_string();
+    let date = effective_date.to_string();
+    if let Err(e) = client
+        .execute(
+            "INSERT INTO exchange_rates (id, from_currency, to_currency, rate_millionths, source, effective_date, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            &[&id, &from, &to, &rate_millionths, &source, &date, &now],
+        )
+        .await
+    {
+        if is_unique_violation(&e) {
+            return Err(PgError::Conflict);
+        }
+        // FK violation on currencies(code) — a non-seeded currency.
+        if e.code() == Some(&SqlState::FOREIGN_KEY_VIOLATION) {
+            return Err(PgError::Validation(
+                "from_currency/to_currency must be seeded currencies".into(),
+            ));
+        }
+        return Err(PgError::Db(e.to_string()));
+    }
+    Ok(ExchangeRateDto {
+        id,
+        from_currency: from.clone(),
+        to_currency: to.clone(),
+        rate_millionths,
+        source,
+        effective_date: date,
+        created_at: now,
+    })
+}
+
+/// Delete a rate by id; `NotFound` when nothing matched (mirrors the
+/// scoped IPC command).
+pub async fn delete_exchange_rate_pg(pool: &Pool, id: &str) -> Result<(), PgError> {
+    let client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
+    let n = client
+        .execute(
+            "DELETE FROM exchange_rates WHERE id = $1",
+            &[&id.to_string()],
+        )
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    if n == 0 {
+        return Err(PgError::NotFound);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

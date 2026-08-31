@@ -29,14 +29,48 @@ const ALLOWED_EXT = ['.ts', '.tsx'];
 // Intentional functional-parse sites that READ raw messages for logic but
 // never display them: PaymentModal's error classification + PartialStockResult
 // extraction. Everything rendered goes through l10nErrorMessage/userErrorMessage.
-const WHITELISTED_RAW_PARSE: Array<{ file: string; line: number }> = [
-  // classifyError: reads err.message for retryable/terminal classification;
-  // the surfaced text goes through plainErrorMessage (ERR-05).
-  { file: path.join(SRC, 'features/sales/PaymentModal.tsx'), line: 150 },
-  // complete() catch: reads err.message to JSON-detect PartialStockResult;
-  // never displayed. Non-stock errors are classified for display below.
-  { file: path.join(SRC, 'features/sales/PaymentModal.tsx'), line: 992 },
+//
+// Anchored by CONTENT (the leak line plus a discriminating context line within
+// the next few) rather than by line number — the old numeric pins drifted
+// silently whenever an edit above the sites shifted the file (MONEY-01/02 hit
+// exactly that: 150→183, 992→1055 with the reviewed sites unchanged).
+const WHITELISTED_RAW_PARSE: Array<{ file: string; anchor: RegExp; context: RegExp }> = [
+  {
+    // classifyError: reads err.message for retryable/terminal classification;
+    // the surfaced text goes through plainErrorMessage (ERR-05).
+    file: path.join(SRC, 'features/sales/PaymentModal.tsx'),
+    anchor: /err instanceof Error \? err\.message : String\(err\)/,
+    context: /errMsg\.toLowerCase\(\)/,
+  },
+  {
+    // complete() catch: reads err.message to JSON-detect PartialStockResult;
+    // never displayed. Non-stock errors are classified for display below.
+    file: path.join(SRC, 'features/sales/PaymentModal.tsx'),
+    anchor: /err instanceof Error \? err\.message : String\(err\)/,
+    context: /tryParsePartialStockResult/,
+  },
 ];
+
+/** 1-based line numbers whitelisted for `file` (anchor + context match). */
+function whitelistedLines(file: string): Set<number> {
+  const cached = WHITELIST_CACHE.get(file);
+  if (cached) return cached;
+  const entries = WHITELISTED_RAW_PARSE.filter((w) => w.file === file);
+  const set = new Set<number>();
+  if (entries.length > 0) {
+    const lines = fs.readFileSync(file, 'utf-8').split(/\r?\n/);
+    lines.forEach((line, i) => {
+      for (const e of entries) {
+        if (!e.anchor.test(line)) continue;
+        const window = lines.slice(i + 1, i + 4).join('\n');
+        if (e.context.test(window)) set.add(i + 1);
+      }
+    });
+  }
+  WHITELIST_CACHE.set(file, set);
+  return set;
+}
+const WHITELIST_CACHE = new Map<string, Set<number>>();
 
 function collectFiles(): string[] {
   const files: string[] = [];
@@ -61,7 +95,7 @@ function collectFiles(): string[] {
 }
 
 function isWhitelisted(file: string, line: number): boolean {
-  return WHITELISTED_RAW_PARSE.some((w) => w.file === file && w.line === line);
+  return whitelistedLines(file).has(line);
 }
 
 describe('error-policy compliance (ERR-10)', () => {
@@ -125,11 +159,16 @@ describe('error-policy compliance (ERR-10)', () => {
   });
 
   it('flags nothing in the whitelisted PaymentModal parse sites (sanity)', () => {
-    // The whitelist entries must actually exist where we claim.
+    // Every whitelist entry must resolve to at least one real site — an
+    // entry that matches nothing is stale (the code it whitelisted moved
+    // or died) and must be updated or removed, not left to silently
+    // widen the hole.
     for (const w of WHITELISTED_RAW_PARSE) {
       const lines = fs.readFileSync(w.file, 'utf-8').split(/\r?\n/);
-      const line = lines[w.line - 1] ?? '';
-      expect(line, `${w.file}:${w.line}`).toMatch(/err\.message/);
+      const hit = lines.some(
+        (l, i) => w.anchor.test(l) && w.context.test(lines.slice(i + 1, i + 4).join('\n')),
+      );
+      expect(hit, `${w.file} ${String(w.context)}`).toBe(true);
     }
   });
 });

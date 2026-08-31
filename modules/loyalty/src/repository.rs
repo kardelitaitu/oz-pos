@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-loyalty slice A: repository verified)
+crate: modules-loyalty | status: SAFE | lint: CLEAN
+findings: clean parameterized loyalty/gift-card read queries
+next: none | perf: N/A
+*/
 //! Loyalty & Gift Card Repository — database persistence layer.
 
 use crate::error::LoyaltyError;

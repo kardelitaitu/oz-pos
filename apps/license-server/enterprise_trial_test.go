@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -27,6 +28,11 @@ func seedApprovalCode(t *testing.T, app *tests.TestApp, code, email, status stri
 
 func seedAdminTenant(t *testing.T, app *tests.TestApp, email, apiKey string) {
 	t.Helper()
+	// LSE-9: admin endpoints no longer accept any valid tenant api_key —
+	// they require OZ_ADMIN_KEY (or an admin-tenant web session). Tests
+	// that seed an "admin tenant" authorize via the bearer key, so seeding
+	// also arms the env with the SAME key the test will present.
+	t.Setenv("OZ_ADMIN_KEY", apiKey)
 	tenantColl, _ := app.FindCollectionByNameOrId("tenants")
 	tenant := core.NewRecord(tenantColl)
 	tenant.Set("email", email)
@@ -210,6 +216,26 @@ func TestGenerateEnterpriseTrialKey_Prefix(t *testing.T) {
 	}
 	if len(key) < 16 {
 		t.Errorf("key too short: %q (len=%d)", key, len(key))
+	}
+}
+
+// TestGenerateEnterpriseTrialKey_Uniqueness pins the LSE-17 fix: keys
+// must come from crypto/rand, not time.Now().UnixNano() jitter. The old
+// implementation walked the clock in 16 time.Sleep(1) steps per key, so
+// rapidly generated keys were trivially predictable (and mutually
+// correlated). 200 rapid keys must all be distinct and in-format.
+func TestGenerateEnterpriseTrialKey_Uniqueness(t *testing.T) {
+	seen := make(map[string]bool, 200)
+	re := regexp.MustCompile(`^OZ-ENTR-[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{11}$`)
+	for i := 0; i < 200; i++ {
+		key := generateEnterpriseTrialKey()
+		if !re.MatchString(key) {
+			t.Fatalf("key %d out of format: %q", i, key)
+		}
+		if seen[key] {
+			t.Fatalf("duplicate key after %d draws: %q (entropy source broken?)", i+1, key)
+		}
+		seen[key] = true
 	}
 }
 

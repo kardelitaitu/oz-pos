@@ -12,7 +12,7 @@ const paddleMock = vi.hoisted(() => ({
   isPaddleConfigured: vi.fn(() => true),
   isPlaceholderPriceId: vi.fn(() => false),
   openPaddleCheckout: vi.fn(),
-  getSessionEmail: vi.fn(async () => 'user@example.com'),
+  getSessionEmail: vi.fn<() => Promise<string | null>>(async () => 'user@example.com'),
 }));
 
 const midtransMock = vi.hoisted(() => ({
@@ -64,14 +64,23 @@ describe('CheckoutButton Component', () => {
     };
   }
 
-  it('renders mailto fallback when provider is unconfigured', async () => {
+  it('shows a "not available" message when provider is unconfigured (no mailto fallback)', async () => {
     paddleMock.isPaddleConfigured.mockReturnValue(false);
+    paddleMock.hasSession.mockReturnValue(true);
     const { container, unmount } = await renderBtn(sampleTier, 'en');
 
     const link = container.querySelector('a[href^="mailto:"]');
-    expect(link).not.toBeNull();
-    expect(link?.getAttribute('href')).toContain('sales@ozpos.my.id');
-    expect(link?.textContent).toContain('Get Pro');
+    expect(link).toBeNull();
+
+    const button = container.querySelector('button');
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(paddleMock.openPaddleCheckout).not.toHaveBeenCalled();
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert).not.toBeNull();
+    expect(alert?.textContent).toContain("isn't available to purchase online");
     await unmount();
   });
 
@@ -131,6 +140,71 @@ describe('CheckoutButton Component', () => {
       undefined,
       undefined
     );
+    await unmount();
+  });
+
+  it('opens Midtrans checkout when the saved region is id even on an en-locale button', async () => {
+    // Regression: payment routing follows the saved region (getExplicitRegion),
+    // not the URL locale. A user on /en/pricing with region=id must get
+    // Midtrans — the same bug class we fixed in AccountView.
+    localStorage.setItem('oz_region', 'id');
+    paddleMock.hasSession.mockReturnValue(true);
+    const { container, unmount } = await renderBtn(sampleTier, 'en');
+
+    const button = container.querySelector('button');
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(midtransMock.openMidtransCheckout).toHaveBeenCalled();
+    expect(paddleMock.openPaddleCheckout).not.toHaveBeenCalled();
+    await unmount();
+  });
+
+  it('shows a "not available" message when the price id is still a placeholder (no mailto fallback)', async () => {
+    // Regression: with placeholder price ids, the button must never open a
+    // dead Paddle overlay or hide behind a mailto link — it shows the
+    // actionable "not available to purchase online" message.
+    paddleMock.isPlaceholderPriceId.mockReturnValue(true);
+    paddleMock.hasSession.mockReturnValue(true);
+    const { container, unmount } = await renderBtn(sampleTier, 'en');
+
+    const link = container.querySelector('a[href^="mailto:"]');
+    expect(link).toBeNull();
+
+    const button = container.querySelector('button');
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(paddleMock.openPaddleCheckout).not.toHaveBeenCalled();
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert).not.toBeNull();
+    expect(alert?.textContent).toContain("isn't available to purchase online");
+    await unmount();
+  });
+
+  it('redirects to login when Paddle checkout has no session email', async () => {
+    // Regression: a signed-in session whose email cannot be resolved (cache
+    // cleared, /me down) must fall back to the login gate, not fail silently.
+    paddleMock.hasSession.mockReturnValue(true);
+    paddleMock.getSessionEmail.mockResolvedValue(null);
+    const { container, unmount } = await renderBtn(sampleTier, 'en');
+
+    const button = container.querySelector('button');
+    delete (window as { location?: unknown }).location;
+    Object.defineProperty(window, 'location', {
+      value: { href: '' },
+      writable: true,
+      configurable: true,
+    });
+
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(window.location.href).toContain('/en/login');
+    expect(paddleMock.openPaddleCheckout).not.toHaveBeenCalled();
     await unmount();
   });
 });

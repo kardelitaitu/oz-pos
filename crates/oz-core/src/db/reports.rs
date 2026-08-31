@@ -2,8 +2,8 @@
 /*
 last audited 25-07-26 by RSA-Agent (oz-core slice B5 part 2: reports deep read)
 crate: oz-core | status: SAFE | lint: CLEAN
-findings: COR-21 MEDIUM: ALL date/hour bucketing uses UTC (DATE(created_at), strftime('%H')) with zero localtime adjustment while timestamps are written Utc::now() and the primary market is UTC+7/+8 — daily/weekly/monthly revenue, heatmap, occupancy, trends mis-bucket transactions outside 00:00-07:00 local; HourlyOccupancyRow doc claims "local store time as stored" — drift. Also: top_products limit unclamped (voided_items clamps — inconsistent); deprecated low_stock_alerts reads legacy inventory (see COR-19); COGS uses current product cost by documented reporting-layer semantics
-next: add store-timezone setting + bucket via chrono/SQLite offset modifier; clamp top_products limit (COR-21) | perf: correlated COGS subqueries are deliberate anti-multiplication design, documented
+findings: COR-21 MEDIUM RESOLVED (REP-03, 2026-08-31): all date/hour bucketing now applies the primary store's fixed UTC offset — store_profiles.timezone holds '+HH:MM'/'-HH:MM'/'UTC' (IANA names fall back to UTC; no tzdata dep), threaded through reports/analytics/popularity-trend/sales-today/shift-hours, and date boundaries are validated as strict YYYY-MM-DD. Remaining from the original finding: top_products limit still unclamped (voided_items clamps — inconsistent, low impact); COGS uses current product cost by documented reporting-layer semantics
+next: none for COR-21 (cloud email parity for tz recorded as follow-up in audit-open-findings) | perf: correlated COGS subqueries are deliberate anti-multiplication design, documented
 */
 
 use rusqlite::params;
@@ -29,6 +29,14 @@ pub struct DailyRevenueRow {
     pub gross_profit_minor: i64,
     /// Gross margin as a percentage of revenue; 0.0 when revenue is 0.
     pub gross_margin_percent: f64,
+    /// Refunds processed on this date (minor units, same currency).
+    /// REP-04: refunds are attributed to the REFUND's own day, not the
+    /// original sale's — accounting convention, and the refund ledger is
+    /// otherwise invisible in reports.
+    pub refund_minor: i64,
+    /// Net revenue in minor units: gross revenue − refunds. Can be
+    /// negative on a day with only refunds (the row still appears).
+    pub net_revenue_minor: i64,
 }
 
 /// Weekly revenue aggregation.
@@ -49,6 +57,10 @@ pub struct WeeklyRevenueRow {
     pub gross_profit_minor: i64,
     /// Gross margin as a percentage of revenue; 0.0 when revenue is 0.
     pub gross_margin_percent: f64,
+    /// Refunds processed in this week (minor units, same currency; REP-04).
+    pub refund_minor: i64,
+    /// Net revenue in minor units: gross revenue − refunds (REP-04).
+    pub net_revenue_minor: i64,
 }
 
 /// Monthly revenue aggregation.
@@ -69,11 +81,18 @@ pub struct MonthlyRevenueRow {
     pub gross_profit_minor: i64,
     /// Gross margin as a percentage of revenue; 0.0 when revenue is 0.
     pub gross_margin_percent: f64,
+    /// Refunds processed in this month (minor units, same currency; REP-04).
+    pub refund_minor: i64,
+    /// Net revenue in minor units: gross revenue − refunds (REP-04).
+    pub net_revenue_minor: i64,
 }
 
 /// Top product ranking.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct TopProductRow {
+    /// ISO-4217 currency code (REP-06: rows are per product AND currency —
+    /// minor units must never be summed across currencies).
+    pub currency: String,
     /// Product unique identifier.
     pub product_id: String,
     /// Product SKU.
@@ -96,6 +115,8 @@ pub struct TopProductRow {
 /// Hourly sales heatmap entry.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct HourlyHeatmapRow {
+    /// ISO-4217 currency code (REP-06: one row per cell AND currency).
+    pub currency: String,
     /// Day of week (0=Sunday, 1=Monday, ...).
     pub day_of_week: i64,
     /// Hour of day (0–23).
@@ -161,6 +182,9 @@ pub struct StockAlertEvent {
 /// Category sales breakdown.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct CategoryBreakdownRow {
+    /// ISO-4217 currency code (REP-06: one row per category AND currency;
+    /// `percentage` normalizes within the currency).
+    pub currency: String,
     /// Category id (None for uncategorised products).
     pub category_id: Option<String>,
     /// Category display name.
@@ -176,6 +200,8 @@ pub struct CategoryBreakdownRow {
 /// Sales revenue split by payment method for a date range.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct PaymentMethodRow {
+    /// ISO-4217 currency code (REP-06: one row per method AND currency).
+    pub currency: String,
     /// Payment method key (`cash`, `card`, `qris`, `ewallet`, … or `other`).
     pub payment_method: String,
     /// Total revenue in minor units.
@@ -187,6 +213,9 @@ pub struct PaymentMethodRow {
 /// Voided-sale totals for a date range.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct VoidedSummaryRow {
+    /// ISO-4217 currency code (REP-06: one row per currency; the old
+    /// single-row shape summed void totals across currencies).
+    pub currency: String,
     /// Number of voided sales.
     pub void_count: i64,
     /// Sum of the voided sales' totals in minor units.
@@ -299,6 +328,66 @@ pub struct HourlyOccupancyRow {
     pub table_orders: i64,
 }
 
+/// Parse the REP-03 timezone contract: a fixed UTC offset string
+/// (`'+HH:MM'` / `'-HH:MM'`) or the literal `'UTC'`, normalized to
+/// `'+00:00'`. Anything else — including IANA zone names — returns
+/// `None` so the caller falls back to UTC semantics.
+///
+/// The normalization to `'+00:00'` is deliberate: SQLite's `'UTC'`
+/// *modifier* is not a no-op on bare values (in 3.45 `DATE('now','UTC')`
+/// reinterprets the UTC `now` as local time and can shift a whole day;
+/// 3.50 changed the behavior). A `±HH:MM` offset is pure arithmetic and
+/// version-stable.
+pub(crate) fn parse_utc_offset(raw: &str) -> Option<String> {
+    if raw == "UTC" {
+        return Some("+00:00".into());
+    }
+    let b = raw.as_bytes();
+    if b.len() != 6 || !matches!(b[0], b'+' | b'-') || b[3] != b':' {
+        return None;
+    }
+    if !(b[1].is_ascii_digit()
+        && b[2].is_ascii_digit()
+        && b[4].is_ascii_digit()
+        && b[5].is_ascii_digit())
+    {
+        return None;
+    }
+    let hh = (b[1] - b'0') * 10 + (b[2] - b'0');
+    let mm = (b[4] - b'0') * 10 + (b[5] - b'0');
+    if hh > 23 || mm > 59 {
+        return None;
+    }
+    Some(raw.to_string())
+}
+
+/// Validate a report date boundary as a strict `YYYY-MM-DD` calendar-ish
+/// string (REP-03). SQLite date functions silently return NULL for
+/// garbage, which would make a mistyped boundary vanish rows without an
+/// error — so malformed input is rejected at the door instead.
+pub(crate) fn check_date_bound(field: &'static str, v: &str) -> Result<(), CoreError> {
+    let bad = |msg: String| CoreError::Validation {
+        field,
+        message: msg,
+    };
+    let b = v.as_bytes();
+    if b.len() != 10
+        || b[4] != b'-'
+        || b[7] != b'-'
+        || ![0, 1, 2, 3, 5, 6, 8, 9]
+            .iter()
+            .all(|&i| b[i].is_ascii_digit())
+    {
+        return Err(bad(format!("expected YYYY-MM-DD, got {v:?}")));
+    }
+    let month: u8 = v[5..7].parse().map_err(|_| bad(String::new()))?;
+    let day: u8 = v[8..10].parse().map_err(|_| bad(String::new()))?;
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return Err(bad(format!("month must be 01-12 and day 01-31, got {v:?}")));
+    }
+    Ok(())
+}
+
 impl Store<'_> {
     /// Map the shared revenue/COGS columns of the aggregation rows.
     fn revenue_profit_fields(row: &rusqlite::Row<'_>) -> rusqlite::Result<(i64, i64, i64, f64)> {
@@ -318,34 +407,79 @@ impl Store<'_> {
         ))
     }
 
+    /// Resolve the primary store's fixed UTC offset for SQLite date
+    /// modifiers (REP-03). Shared by every date-bucketed query in the
+    /// `db` module tree (analytics, popularity, sales, shifts).
+    ///
+    /// Contract: `store_profiles.timezone` holds `'+HH:MM'` / `'-HH:MM'` /
+    /// `'UTC'`. IANA names are deliberately NOT interpreted — core carries
+    /// no tzdata dependency, and a misconfigured store must fall back to
+    /// UTC (the pre-REP-03 semantics) rather than guess. The returned
+    /// string is validated by [`parse_utc_offset`], so embedding it in
+    /// `format!`-built SQL cannot inject anything beyond a date modifier.
+    pub(crate) fn tz_modifier(&self) -> String {
+        let raw: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT timezone FROM store_profiles WHERE is_primary = 1 LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .ok();
+        raw.as_deref()
+            .and_then(parse_utc_offset)
+            .unwrap_or_else(|| "+00:00".into())
+    }
+
     /// Daily revenue for a date range.
     pub fn daily_revenue(
         &self,
         start_date: &str,
         end_date: &str,
     ) -> Result<Vec<DailyRevenueRow>, CoreError> {
+        // REP-03: every date/hour bucket uses the store's UTC offset.
+        check_date_bound("start_date", start_date)?;
+        check_date_bound("end_date", end_date)?;
+        let tz = self.tz_modifier();
         // COGS is a correlated subquery: joining sale_lines directly would
         // multiply revenue/count by the line count per sale, so revenue stays
         // on the sales table and only the cost side joins the lines. Costs
         // use the product's current cost_minor (reporting-layer semantics).
+        // REP-04: sales and refunds aggregate independently (CTEs) and join
+        // FULL OUTER on (date, currency) — a refund-only day must still
+        // produce a row, otherwise the refund silently vanishes from reports.
         let mut stmt = self.conn.prepare(
-            "SELECT DATE(s.created_at) AS date,
-                    SUM(s.total_minor) AS total_minor,
-                    s.currency AS currency,
-                    COUNT(*) AS sale_count,
-                    (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty), 0)
-                     FROM sale_lines sl2
-                     JOIN sales s2 ON sl2.sale_id = s2.id
-                     LEFT JOIN products p2 ON sl2.sku = p2.sku
-                     WHERE s2.status = 'completed'
-                       AND s2.currency = s.currency
-                       AND DATE(s2.created_at) = DATE(s.created_at)) AS cogs_minor
-             FROM sales s
-             WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
-             GROUP BY DATE(s.created_at), s.currency
+            "WITH s AS (
+                 SELECT DATE(s1.created_at, ?3) AS d, s1.currency AS c,
+                        SUM(s1.total_minor) AS t, COUNT(*) AS n,
+                        (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty), 0)
+                         FROM sale_lines sl2
+                         JOIN sales s2 ON sl2.sale_id = s2.id
+                         LEFT JOIN products p2 ON sl2.sku = p2.sku
+                         WHERE s2.status = 'completed'
+                           AND s2.currency = s1.currency
+                           AND DATE(s2.created_at, ?3) = DATE(s1.created_at, ?3)) AS cogs
+                 FROM sales s1
+                 WHERE s1.status = 'completed' AND DATE(s1.created_at, ?3) BETWEEN ?1 AND ?2
+                 GROUP BY DATE(s1.created_at, ?3), s1.currency
+             ),
+             r AS (
+                 SELECT DATE(created_at, ?3) AS d, currency AS c, SUM(total_minor) AS rf
+                 FROM refunds
+                 WHERE DATE(created_at, ?3) BETWEEN ?1 AND ?2
+                 GROUP BY DATE(created_at, ?3), currency
+             )
+             SELECT COALESCE(s.d, r.d) AS date,
+                    COALESCE(s.c, r.c) AS currency,
+                    COALESCE(s.t, 0) AS total_minor,
+                    COALESCE(s.n, 0) AS sale_count,
+                    COALESCE(s.cogs, 0) AS cogs_minor,
+                    COALESCE(r.rf, 0) AS refund_minor,
+                    COALESCE(s.t, 0) - COALESCE(r.rf, 0) AS net_revenue_minor
+             FROM s FULL OUTER JOIN r ON s.d = r.d AND s.c = r.c
              ORDER BY date ASC",
         )?;
-        let rows = stmt.query_map(params![start_date, end_date], |row| {
+        let rows = stmt.query_map(params![start_date, end_date, tz], |row| {
             let (total_minor, cogs_minor, gross_profit_minor, gross_margin_percent) =
                 Self::revenue_profit_fields(row)?;
             Ok(DailyRevenueRow {
@@ -356,6 +490,8 @@ impl Store<'_> {
                 cogs_minor,
                 gross_profit_minor,
                 gross_margin_percent,
+                refund_minor: row.get("refund_minor")?,
+                net_revenue_minor: row.get("net_revenue_minor")?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -367,6 +503,10 @@ impl Store<'_> {
         start_date: &str,
         end_date: &str,
     ) -> Result<Vec<WeeklyRevenueRow>, CoreError> {
+        // REP-03: store-offset shift applied BEFORE the week truncation.
+        check_date_bound("start_date", start_date)?;
+        check_date_bound("end_date", end_date)?;
+        let tz = self.tz_modifier();
         // Monday-first weeks, matching the UI's `weekStartKey` and
         // `rangeForGranularity('weekly')`. `'-6 days', 'weekday 1'` is the
         // correct boundary idiom: `'weekday 1', '-7 days'` would push a
@@ -374,23 +514,39 @@ impl Store<'_> {
         // keyed on the same week expression, so joining sale_lines never
         // multiplies revenue/count per sale line.
         let mut stmt = self.conn.prepare(
-            "SELECT DATE(s.created_at, '-6 days', 'weekday 1') AS week_start,
-                    SUM(s.total_minor) AS total_minor, s.currency AS currency,
-                    COUNT(*) AS sale_count,
-                    (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty), 0)
-                     FROM sale_lines sl2
-                     JOIN sales s2 ON sl2.sale_id = s2.id
-                     LEFT JOIN products p2 ON sl2.sku = p2.sku
-                     WHERE s2.status = 'completed'
-                       AND s2.currency = s.currency
-                       AND DATE(s2.created_at, '-6 days', 'weekday 1')
-                           = DATE(s.created_at, '-6 days', 'weekday 1')) AS cogs_minor
-             FROM sales s
-             WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
-             GROUP BY week_start, s.currency
+            "WITH s AS (
+                 SELECT DATE(s1.created_at, ?3, '-6 days', 'weekday 1') AS d, s1.currency AS c,
+                        SUM(s1.total_minor) AS t, COUNT(*) AS n,
+                        (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty), 0)
+                         FROM sale_lines sl2
+                         JOIN sales s2 ON sl2.sale_id = s2.id
+                         LEFT JOIN products p2 ON sl2.sku = p2.sku
+                         WHERE s2.status = 'completed'
+                           AND s2.currency = s1.currency
+                           AND DATE(s2.created_at, ?3, '-6 days', 'weekday 1')
+                               = DATE(s1.created_at, ?3, '-6 days', 'weekday 1')) AS cogs
+                 FROM sales s1
+                 WHERE s1.status = 'completed' AND DATE(s1.created_at, ?3) BETWEEN ?1 AND ?2
+                 GROUP BY DATE(s1.created_at, ?3, '-6 days', 'weekday 1'), s1.currency
+             ),
+             r AS (
+                 SELECT DATE(created_at, ?3, '-6 days', 'weekday 1') AS d, currency AS c,
+                        SUM(total_minor) AS rf
+                 FROM refunds
+                 WHERE DATE(created_at, ?3) BETWEEN ?1 AND ?2
+                 GROUP BY DATE(created_at, ?3, '-6 days', 'weekday 1'), currency
+             )
+             SELECT COALESCE(s.d, r.d) AS week_start,
+                    COALESCE(s.c, r.c) AS currency,
+                    COALESCE(s.t, 0) AS total_minor,
+                    COALESCE(s.n, 0) AS sale_count,
+                    COALESCE(s.cogs, 0) AS cogs_minor,
+                    COALESCE(r.rf, 0) AS refund_minor,
+                    COALESCE(s.t, 0) - COALESCE(r.rf, 0) AS net_revenue_minor
+             FROM s FULL OUTER JOIN r ON s.d = r.d AND s.c = r.c
              ORDER BY week_start ASC",
         )?;
-        let rows = stmt.query_map(params![start_date, end_date], |row| {
+        let rows = stmt.query_map(params![start_date, end_date, tz], |row| {
             let (total_minor, cogs_minor, gross_profit_minor, gross_margin_percent) =
                 Self::revenue_profit_fields(row)?;
             Ok(WeeklyRevenueRow {
@@ -401,6 +557,8 @@ impl Store<'_> {
                 cogs_minor,
                 gross_profit_minor,
                 gross_margin_percent,
+                refund_minor: row.get("refund_minor")?,
+                net_revenue_minor: row.get("net_revenue_minor")?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -412,25 +570,45 @@ impl Store<'_> {
         start_date: &str,
         end_date: &str,
     ) -> Result<Vec<MonthlyRevenueRow>, CoreError> {
+        // REP-03: the YYYY-MM bucket key is derived from the store-local
+        // date, not the raw UTC prefix.
+        check_date_bound("start_date", start_date)?;
+        check_date_bound("end_date", end_date)?;
+        let tz = self.tz_modifier();
         // COGS is a correlated subquery keyed on the same YYYY-MM expression,
         // so joining sale_lines never multiplies revenue/count per line.
         let mut stmt = self.conn.prepare(
-            "SELECT SUBSTR(s.created_at, 1, 7) AS month,
-                    SUM(s.total_minor) AS total_minor, s.currency AS currency,
-                    COUNT(*) AS sale_count,
-                    (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty), 0)
-                     FROM sale_lines sl2
-                     JOIN sales s2 ON sl2.sale_id = s2.id
-                     LEFT JOIN products p2 ON sl2.sku = p2.sku
-                     WHERE s2.status = 'completed'
-                       AND s2.currency = s.currency
-                       AND SUBSTR(s2.created_at, 1, 7) = SUBSTR(s.created_at, 1, 7)) AS cogs_minor
-             FROM sales s
-             WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
-             GROUP BY month, s.currency
+            "WITH s AS (
+                 SELECT strftime('%Y-%m', s1.created_at, ?3) AS d, s1.currency AS c,
+                        SUM(s1.total_minor) AS t, COUNT(*) AS n,
+                        (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty), 0)
+                         FROM sale_lines sl2
+                         JOIN sales s2 ON sl2.sale_id = s2.id
+                         LEFT JOIN products p2 ON sl2.sku = p2.sku
+                         WHERE s2.status = 'completed'
+                           AND s2.currency = s1.currency
+                           AND strftime('%Y-%m', s2.created_at, ?3) = strftime('%Y-%m', s1.created_at, ?3)) AS cogs
+                 FROM sales s1
+                 WHERE s1.status = 'completed' AND DATE(s1.created_at, ?3) BETWEEN ?1 AND ?2
+                 GROUP BY strftime('%Y-%m', s1.created_at, ?3), s1.currency
+             ),
+             r AS (
+                 SELECT strftime('%Y-%m', created_at, ?3) AS d, currency AS c, SUM(total_minor) AS rf
+                 FROM refunds
+                 WHERE DATE(created_at, ?3) BETWEEN ?1 AND ?2
+                 GROUP BY strftime('%Y-%m', created_at, ?3), currency
+             )
+             SELECT COALESCE(s.d, r.d) AS month,
+                    COALESCE(s.c, r.c) AS currency,
+                    COALESCE(s.t, 0) AS total_minor,
+                    COALESCE(s.n, 0) AS sale_count,
+                    COALESCE(s.cogs, 0) AS cogs_minor,
+                    COALESCE(r.rf, 0) AS refund_minor,
+                    COALESCE(s.t, 0) - COALESCE(r.rf, 0) AS net_revenue_minor
+             FROM s FULL OUTER JOIN r ON s.d = r.d AND s.c = r.c
              ORDER BY month ASC",
         )?;
-        let rows = stmt.query_map(params![start_date, end_date], |row| {
+        let rows = stmt.query_map(params![start_date, end_date, tz], |row| {
             let (total_minor, cogs_minor, gross_profit_minor, gross_margin_percent) =
                 Self::revenue_profit_fields(row)?;
             Ok(MonthlyRevenueRow {
@@ -441,6 +619,8 @@ impl Store<'_> {
                 cogs_minor,
                 gross_profit_minor,
                 gross_margin_percent,
+                refund_minor: row.get("refund_minor")?,
+                net_revenue_minor: row.get("net_revenue_minor")?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -455,30 +635,44 @@ impl Store<'_> {
         limit: i64,
         order_by: &str,
     ) -> Result<Vec<TopProductRow>, CoreError> {
+        // REP-03: the range filter is evaluated in store-local dates.
+        check_date_bound("start_date", start_date)?;
+        check_date_bound("end_date", end_date)?;
+        let tz = self.tz_modifier();
         let order_clause = if order_by == "profit" {
             "gross_profit_minor DESC"
         } else {
             "total_minor DESC"
         };
         let mut stmt = self.conn.prepare(&format!(
-            "SELECT p.id AS product_id, p.sku, p.name,
+            // REP-05: identity comes from the sale-line snapshot first; the
+            // products join is only a fallback for legacy NULL rows. Grouping
+            // by the resolved id/name keeps each sale era of a reused sku on
+            // its own correctly-labelled row instead of relabelling history.
+            "SELECT COALESCE(sl.product_id, p.id, sl.sku) AS product_id,
+                    sl.sku AS sku,
+                    COALESCE(sl.product_name, p.name, sl.sku) AS name,
+                    sl.currency AS currency,
                     SUM(sl.qty) AS total_qty,
                     SUM(sl.line_minor) AS total_minor,
                     SUM(COALESCE(sl.cost_minor, p.cost_minor, 0) * sl.qty) AS cogs_minor,
                     (SUM(sl.line_minor) - SUM(COALESCE(sl.cost_minor, p.cost_minor, 0) * sl.qty)) AS gross_profit_minor
              FROM sale_lines sl
              JOIN sales s ON sl.sale_id = s.id
-             JOIN products p ON sl.sku = p.sku
-             WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
-             GROUP BY p.id
-             ORDER BY {order_clause}, p.sku
+             LEFT JOIN products p ON sl.sku = p.sku
+             WHERE s.status = 'completed' AND DATE(s.created_at, ?4) BETWEEN ?1 AND ?2
+             GROUP BY sl.sku, sl.currency,
+                      COALESCE(sl.product_id, p.id, sl.sku),
+                      COALESCE(sl.product_name, p.name, sl.sku)
+             ORDER BY {order_clause}, sl.sku
              LIMIT ?3"
         ))?;
-        let rows = stmt.query_map(params![start_date, end_date, limit], |row| {
+        let rows = stmt.query_map(params![start_date, end_date, limit, tz], |row| {
             let total_minor = row.get::<_, i64>("total_minor")?;
             let cogs_minor = row.get::<_, i64>("cogs_minor")?;
             let gross_profit_minor = row.get::<_, i64>("gross_profit_minor")?;
             Ok(TopProductRow {
+                currency: row.get("currency")?,
                 product_id: row.get("product_id")?,
                 sku: row.get("sku")?,
                 name: row.get("name")?,
@@ -502,18 +696,24 @@ impl Store<'_> {
         start_date: &str,
         end_date: &str,
     ) -> Result<Vec<HourlyHeatmapRow>, CoreError> {
+        // REP-03: day-of-week and hour cells are store-local.
+        check_date_bound("start_date", start_date)?;
+        check_date_bound("end_date", end_date)?;
+        let tz = self.tz_modifier();
         let mut stmt = self.conn.prepare(
-            "SELECT CAST(strftime('%w', created_at) AS INTEGER) AS day_of_week,
-                    CAST(strftime('%H', created_at) AS INTEGER) AS hour,
+            "SELECT CAST(strftime('%w', created_at, ?3) AS INTEGER) AS day_of_week,
+                    CAST(strftime('%H', created_at, ?3) AS INTEGER) AS hour,
+                    currency,
                     SUM(total_minor) AS total_minor,
                     COUNT(*) AS sale_count
              FROM sales
-             WHERE status = 'completed' AND DATE(created_at) BETWEEN ?1 AND ?2
-             GROUP BY day_of_week, hour
+             WHERE status = 'completed' AND DATE(created_at, ?3) BETWEEN ?1 AND ?2
+             GROUP BY day_of_week, hour, currency
              ORDER BY day_of_week, hour",
         )?;
-        let rows = stmt.query_map(params![start_date, end_date], |row| {
+        let rows = stmt.query_map(params![start_date, end_date, tz], |row| {
             Ok(HourlyHeatmapRow {
+                currency: row.get("currency")?,
                 day_of_week: row.get("day_of_week")?,
                 hour: row.get("hour")?,
                 total_minor: row.get("total_minor")?,
@@ -682,21 +882,32 @@ impl Store<'_> {
         start_date: &str,
         end_date: &str,
     ) -> Result<Vec<CategoryBreakdownRow>, CoreError> {
+        // REP-03: range filter in store-local dates.
+        check_date_bound("start_date", start_date)?;
+        check_date_bound("end_date", end_date)?;
+        let tz = self.tz_modifier();
         let mut stmt = self.conn.prepare(
-            "SELECT p.category_id, COALESCE(c.name, 'Uncategorised') AS category_name,
+            // REP-05: the category is resolved from the sale-line snapshot
+            // first, so moving a product between categories after the sale
+            // no longer relabels (or moves) historical revenue. Legacy NULL
+            // rows fall back to the products join.
+            "SELECT COALESCE(sl.category_id, p.category_id) AS category_id,
+                    COALESCE(c.name, 'Uncategorised') AS category_name,
+                    sl.currency AS currency,
                     SUM(sl.line_minor) AS total_minor,
                     COUNT(DISTINCT s.id) AS sale_count
              FROM sale_lines sl
              JOIN sales s ON sl.sale_id = s.id
-             JOIN products p ON sl.sku = p.sku
-             LEFT JOIN categories c ON p.category_id = c.id
-             WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
-             GROUP BY p.category_id
-             ORDER BY total_minor DESC",
+             LEFT JOIN products p ON sl.sku = p.sku
+             LEFT JOIN categories c ON c.id = COALESCE(sl.category_id, p.category_id)
+             WHERE s.status = 'completed' AND DATE(s.created_at, ?3) BETWEEN ?1 AND ?2
+             GROUP BY COALESCE(sl.category_id, p.category_id), sl.currency
+             ORDER BY sl.currency, total_minor DESC",
         )?;
         let mut rows: Vec<CategoryBreakdownRow> = stmt
-            .query_map(params![start_date, end_date], |row| {
+            .query_map(params![start_date, end_date, tz], |row| {
                 Ok(CategoryBreakdownRow {
+                    currency: row.get("currency")?,
                     category_id: row.get("category_id")?,
                     category_name: row.get("category_name")?,
                     total_minor: row.get("total_minor")?,
@@ -706,10 +917,16 @@ impl Store<'_> {
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
-        let grand_total: f64 = rows.iter().map(|r| r.total_minor as f64).sum();
-        if grand_total > 0.0 {
-            for row in &mut rows {
-                row.percentage = (row.total_minor as f64 / grand_total) * 100.0;
+        // REP-06: percentages normalize WITHIN each currency — a share of
+        // the grand total summed across currencies is meaningless.
+        let mut totals: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+        for row in &rows {
+            *totals.entry(row.currency.clone()).or_insert(0) += row.total_minor;
+        }
+        for row in &mut rows {
+            let grand = totals.get(&row.currency).copied().unwrap_or(0);
+            if grand > 0 {
+                row.percentage = (row.total_minor as f64 / grand as f64) * 100.0;
             }
         }
 
@@ -722,17 +939,23 @@ impl Store<'_> {
         start_date: &str,
         end_date: &str,
     ) -> Result<Vec<PaymentMethodRow>, CoreError> {
+        // REP-03: range filter in store-local dates.
+        check_date_bound("start_date", start_date)?;
+        check_date_bound("end_date", end_date)?;
+        let tz = self.tz_modifier();
         let mut stmt = self.conn.prepare(
             "SELECT COALESCE(payment_method, 'other') AS payment_method,
+                    currency,
                     SUM(total_minor) AS total_minor,
                     COUNT(*) AS sale_count
              FROM sales
-             WHERE status = 'completed' AND DATE(created_at) BETWEEN ?1 AND ?2
-             GROUP BY payment_method
-             ORDER BY total_minor DESC",
+             WHERE status = 'completed' AND DATE(created_at, ?3) BETWEEN ?1 AND ?2
+             GROUP BY payment_method, currency
+             ORDER BY currency, total_minor DESC",
         )?;
-        let rows = stmt.query_map(params![start_date, end_date], |row| {
+        let rows = stmt.query_map(params![start_date, end_date, tz], |row| {
             Ok(PaymentMethodRow {
+                currency: row.get("currency")?,
                 payment_method: row.get("payment_method")?,
                 total_minor: row.get("total_minor")?,
                 sale_count: row.get("sale_count")?,
@@ -741,26 +964,33 @@ impl Store<'_> {
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
-    /// Voided-sale totals for a date range.
+    /// Voided-sale totals for a date range, one row per currency (REP-06).
     pub fn voided_sales_summary(
         &self,
         start_date: &str,
         end_date: &str,
-    ) -> Result<VoidedSummaryRow, CoreError> {
-        let row = self.conn.query_row(
-            "SELECT COUNT(*) AS void_count,
+    ) -> Result<Vec<VoidedSummaryRow>, CoreError> {
+        // REP-03: range filter in store-local dates.
+        check_date_bound("start_date", start_date)?;
+        check_date_bound("end_date", end_date)?;
+        let tz = self.tz_modifier();
+        let mut stmt = self.conn.prepare(
+            "SELECT currency,
+                    COUNT(*) AS void_count,
                     COALESCE(SUM(total_minor), 0) AS void_total_minor
              FROM sales
-             WHERE status = 'voided' AND DATE(created_at) BETWEEN ?1 AND ?2",
-            params![start_date, end_date],
-            |row| {
-                Ok(VoidedSummaryRow {
-                    void_count: row.get("void_count")?,
-                    void_total_minor: row.get("void_total_minor")?,
-                })
-            },
+             WHERE status = 'voided' AND DATE(created_at, ?3) BETWEEN ?1 AND ?2
+             GROUP BY currency
+             ORDER BY currency",
         )?;
-        Ok(row)
+        let rows = stmt.query_map(params![start_date, end_date, tz], |row| {
+            Ok(VoidedSummaryRow {
+                currency: row.get("currency")?,
+                void_count: row.get("void_count")?,
+                void_total_minor: row.get("void_total_minor")?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     /// Top product lines found on voided sales for a date range.
@@ -770,18 +1000,22 @@ impl Store<'_> {
         end_date: &str,
         limit: i64,
     ) -> Result<Vec<VoidedItemRow>, CoreError> {
+        // REP-03: range filter in store-local dates.
+        check_date_bound("start_date", start_date)?;
+        check_date_bound("end_date", end_date)?;
+        let tz = self.tz_modifier();
         let limit = limit.clamp(1, 100);
         let mut stmt = self.conn.prepare(
             "SELECT COALESCE(p.name, sl.sku) AS name, SUM(sl.qty) AS qty
              FROM sale_lines sl
              JOIN sales s ON sl.sale_id = s.id
              LEFT JOIN products p ON sl.sku = p.sku
-             WHERE s.status = 'voided' AND DATE(s.created_at) BETWEEN ?1 AND ?2
+             WHERE s.status = 'voided' AND DATE(s.created_at, ?4) BETWEEN ?1 AND ?2
              GROUP BY sl.sku
              ORDER BY qty DESC
              LIMIT ?3",
         )?;
-        let rows = stmt.query_map(params![start_date, end_date, limit], |row| {
+        let rows = stmt.query_map(params![start_date, end_date, limit, tz], |row| {
             Ok(VoidedItemRow {
                 name: row.get("name")?,
                 qty: row.get("qty")?,
@@ -796,12 +1030,16 @@ impl Store<'_> {
         start_date: &str,
         end_date: &str,
     ) -> Result<BasketSizeRow, CoreError> {
+        // REP-03: range filter in store-local dates.
+        check_date_bound("start_date", start_date)?;
+        check_date_bound("end_date", end_date)?;
+        let tz = self.tz_modifier();
         let row = self.conn.query_row(
             "SELECT COUNT(*) AS sale_count,
                     COALESCE(AVG(line_count), 0) AS avg_line_count
              FROM sales
-             WHERE status = 'completed' AND DATE(created_at) BETWEEN ?1 AND ?2",
-            params![start_date, end_date],
+             WHERE status = 'completed' AND DATE(created_at, ?3) BETWEEN ?1 AND ?2",
+            params![start_date, end_date, tz],
             |row| {
                 Ok(BasketSizeRow {
                     sale_count: row.get("sale_count")?,
@@ -818,16 +1056,20 @@ impl Store<'_> {
         start_date: &str,
         end_date: &str,
     ) -> Result<Vec<BasketTrendRow>, CoreError> {
+        // REP-03: day buckets in store-local dates.
+        check_date_bound("start_date", start_date)?;
+        check_date_bound("end_date", end_date)?;
+        let tz = self.tz_modifier();
         let mut stmt = self.conn.prepare(
-            "SELECT DATE(created_at) AS date,
+            "SELECT DATE(created_at, ?3) AS date,
                     COUNT(*) AS sale_count,
                     COALESCE(AVG(line_count), 0) AS avg_line_count
              FROM sales
-             WHERE status = 'completed' AND DATE(created_at) BETWEEN ?1 AND ?2
-             GROUP BY DATE(created_at)
+             WHERE status = 'completed' AND DATE(created_at, ?3) BETWEEN ?1 AND ?2
+             GROUP BY DATE(created_at, ?3)
              ORDER BY date ASC",
         )?;
-        let rows = stmt.query_map(params![start_date, end_date], |row| {
+        let rows = stmt.query_map(params![start_date, end_date, tz], |row| {
             Ok(BasketTrendRow {
                 date: row.get("date")?,
                 sale_count: row.get("sale_count")?,
@@ -843,24 +1085,28 @@ impl Store<'_> {
         start_date: &str,
         end_date: &str,
     ) -> Result<CustomerSplitRow, CoreError> {
+        // REP-03: "new vs returning" is decided on store-local days.
+        check_date_bound("start_date", start_date)?;
+        check_date_bound("end_date", end_date)?;
+        let tz = self.tz_modifier();
         let row = self.conn.query_row(
             "WITH range_customers AS (
                 SELECT DISTINCT customer_id FROM sales
                 WHERE status = 'completed' AND customer_id IS NOT NULL
-                  AND DATE(created_at) BETWEEN ?1 AND ?2
+                  AND DATE(created_at, ?3) BETWEEN ?1 AND ?2
              )
              SELECT
                 (SELECT COUNT(*) FROM range_customers rc
                  WHERE NOT EXISTS (
                    SELECT 1 FROM sales s
                    WHERE s.customer_id = rc.customer_id AND s.status = 'completed'
-                     AND DATE(s.created_at) < ?1)) AS new_count,
+                     AND DATE(s.created_at, ?3) < ?1)) AS new_count,
                 (SELECT COUNT(*) FROM range_customers rc
                  WHERE EXISTS (
                    SELECT 1 FROM sales s
                    WHERE s.customer_id = rc.customer_id AND s.status = 'completed'
-                     AND DATE(s.created_at) < ?1)) AS returning_count",
-            params![start_date, end_date],
+                     AND DATE(s.created_at, ?3) < ?1)) AS returning_count",
+            params![start_date, end_date, tz],
             |row| {
                 Ok(CustomerSplitRow {
                     new_count: row.get("new_count")?,
@@ -878,13 +1124,17 @@ impl Store<'_> {
         start_date: &str,
         end_date: &str,
     ) -> Result<DiscountsSummaryRow, CoreError> {
+        // REP-03: range filter in store-local dates.
+        check_date_bound("start_date", start_date)?;
+        check_date_bound("end_date", end_date)?;
+        let tz = self.tz_modifier();
         let (sale_count, discounted_sale_count): (i64, i64) = self.conn.query_row(
             "SELECT COUNT(*) AS sale_count,
                     COALESCE(SUM(CASE WHEN discount_percent > 0 THEN 1 ELSE 0 END), 0)
                         AS discounted_sale_count
              FROM sales
-             WHERE status = 'completed' AND DATE(created_at) BETWEEN ?1 AND ?2",
-            params![start_date, end_date],
+             WHERE status = 'completed' AND DATE(created_at, ?3) BETWEEN ?1 AND ?2",
+            params![start_date, end_date, tz],
             |row| Ok((row.get("sale_count")?, row.get("discounted_sale_count")?)),
         )?;
         let mut stmt = self.conn.prepare(
@@ -892,13 +1142,13 @@ impl Store<'_> {
                     COUNT(*) AS redeemed_count
              FROM sales
              WHERE status = 'completed' AND discount_percent > 0
-               AND DATE(created_at) BETWEEN ?1 AND ?2
+               AND DATE(created_at, ?3) BETWEEN ?1 AND ?2
              GROUP BY discount_label
              ORDER BY redeemed_count DESC
              LIMIT 5",
         )?;
         let codes = stmt
-            .query_map(params![start_date, end_date], |row| {
+            .query_map(params![start_date, end_date, tz], |row| {
                 Ok(DiscountCodeRow {
                     label: row.get("label")?,
                     redeemed_count: row.get("redeemed_count")?,
@@ -926,16 +1176,20 @@ impl Store<'_> {
         end_date: &str,
         location_id: &str,
     ) -> Result<InventoryTurnoverRow, CoreError> {
+        // REP-03: units-sold window is store-local; `?3` stays the location.
+        check_date_bound("start_date", start_date)?;
+        check_date_bound("end_date", end_date)?;
+        let tz = self.tz_modifier();
         let row = self.conn.query_row(
             "SELECT
                 (SELECT COALESCE(SUM(sl.qty), 0) FROM sale_lines sl
                  JOIN sales s ON sl.sale_id = s.id
-                 WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2)
+                 WHERE s.status = 'completed' AND DATE(s.created_at, ?4) BETWEEN ?1 AND ?2)
                     AS units_sold,
                 (SELECT COALESCE(SUM(COALESCE(qty, 0)), 0) FROM stock_summary
                  WHERE location_id = ?3) AS stock_on_hand,
                 (SELECT COUNT(*) FROM products) AS sku_count",
-            params![start_date, end_date, location_id],
+            params![start_date, end_date, location_id, tz],
             |row| {
                 Ok(InventoryTurnoverRow {
                     units_sold: row.get("units_sold")?,
@@ -957,16 +1211,20 @@ impl Store<'_> {
         start_date: &str,
         end_date: &str,
     ) -> Result<Vec<InventoryTrendRow>, CoreError> {
+        // REP-03: day buckets in store-local dates.
+        check_date_bound("start_date", start_date)?;
+        check_date_bound("end_date", end_date)?;
+        let tz = self.tz_modifier();
         let mut stmt = self.conn.prepare(
-            "SELECT DATE(s.created_at) AS date,
+            "SELECT DATE(s.created_at, ?3) AS date,
                     COALESCE(SUM(sl.qty), 0) AS units_sold
              FROM sale_lines sl
              JOIN sales s ON sl.sale_id = s.id
-             WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
-             GROUP BY DATE(s.created_at)
+             WHERE s.status = 'completed' AND DATE(s.created_at, ?3) BETWEEN ?1 AND ?2
+             GROUP BY DATE(s.created_at, ?3)
              ORDER BY date ASC",
         )?;
-        let rows = stmt.query_map(params![start_date, end_date], |row| {
+        let rows = stmt.query_map(params![start_date, end_date, tz], |row| {
             Ok(InventoryTrendRow {
                 date: row.get("date")?,
                 units_sold: row.get("units_sold")?,
@@ -984,18 +1242,22 @@ impl Store<'_> {
         start_date: &str,
         end_date: &str,
     ) -> Result<Vec<TableTurnoverRow>, CoreError> {
+        // REP-03: day buckets in store-local dates.
+        check_date_bound("start_date", start_date)?;
+        check_date_bound("end_date", end_date)?;
+        let tz = self.tz_modifier();
         let mut stmt = self.conn.prepare(
-            "SELECT DATE(s.created_at) AS date,
+            "SELECT DATE(s.created_at, ?3) AS date,
                     COUNT(*) AS table_orders
              FROM kds_orders k
              JOIN sales s ON k.sale_id = s.id
              WHERE s.status = 'completed'
                AND k.table_number IS NOT NULL AND k.table_number != ''
-               AND DATE(s.created_at) BETWEEN ?1 AND ?2
-             GROUP BY DATE(s.created_at)
+               AND DATE(s.created_at, ?3) BETWEEN ?1 AND ?2
+             GROUP BY DATE(s.created_at, ?3)
              ORDER BY date ASC",
         )?;
-        let rows = stmt.query_map(params![start_date, end_date], |row| {
+        let rows = stmt.query_map(params![start_date, end_date, tz], |row| {
             Ok(TableTurnoverRow {
                 date: row.get("date")?,
                 table_orders: row.get("table_orders")?,
@@ -1011,18 +1273,22 @@ impl Store<'_> {
         start_date: &str,
         end_date: &str,
     ) -> Result<Vec<HourlyOccupancyRow>, CoreError> {
+        // REP-03: hour-of-day cells are store-local.
+        check_date_bound("start_date", start_date)?;
+        check_date_bound("end_date", end_date)?;
+        let tz = self.tz_modifier();
         let mut stmt = self.conn.prepare(
-            "SELECT CAST(strftime('%H', s.created_at) AS INTEGER) AS hour,
+            "SELECT CAST(strftime('%H', s.created_at, ?3) AS INTEGER) AS hour,
                     COUNT(*) AS table_orders
              FROM kds_orders k
              JOIN sales s ON k.sale_id = s.id
              WHERE s.status = 'completed'
                AND k.table_number IS NOT NULL AND k.table_number != ''
-               AND DATE(s.created_at) BETWEEN ?1 AND ?2
+               AND DATE(s.created_at, ?3) BETWEEN ?1 AND ?2
              GROUP BY hour
              ORDER BY hour ASC",
         )?;
-        let rows = stmt.query_map(params![start_date, end_date], |row| {
+        let rows = stmt.query_map(params![start_date, end_date, tz], |row| {
             Ok(HourlyOccupancyRow {
                 hour: row.get("hour")?,
                 table_orders: row.get("table_orders")?,

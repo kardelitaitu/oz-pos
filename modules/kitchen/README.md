@@ -1,5 +1,7 @@
 # Kitchen Module
 
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (0 findings) · verified against HEAD: KitchenModule is a documented lifecycle-only stub (registers, declares sales+terminal deps); manifest.json declares kitchen:view/bump/route/manage; Feature::KitchenDisplay and Feature::TableManagement both depend on Restaurant (features.rs:147-148); the kitchen-display disable-guard coupling is accurately described -->
+
 **Status:** Stub (lifecycle only — no domain logic yet)
 
 ## Overview
@@ -44,3 +46,5 @@ is promoted, that guard should ask this module instead.
 - [ ] Gate the UI on `kitchen-display` / `table-management`
 
 See `modules/README.md` for the full promotion path.
+
+> last audited 31-08-26 by docs-auditor

@@ -1,6 +1,6 @@
 use super::*;
 use crate::migrations;
-use crate::{Cart, CartLine, Sku};
+use crate::{Cart, CartLine, SaleStatus, Sku};
 use rusqlite::Connection;
 use std::collections::HashSet;
 
@@ -1714,6 +1714,7 @@ fn complete_sale_deduction_topology_allocates_across_routes_atomically() {
             &tender(8000),
             "cashier-1",
             None,
+            &[],
         )
         .unwrap();
     assert_eq!(result.status, SaleStatus::Pending);
@@ -1924,6 +1925,87 @@ fn complete_sale_deduction_with_payment_splits() {
     assert_eq!(payment_count, 1, "one payment row created");
 }
 
+/// COR-7: the sale-path payment insert omitted the `idempotency_key` column,
+/// so a key supplied by a caller was silently dropped here even though
+/// `create_payments` (db/payments.rs) persists it. The same `PaymentSplitArg`
+/// therefore produced different rows depending on which writer ran, and the
+/// `UNIQUE idx_payments_idempotency_key` index could never protect a checkout.
+#[test]
+fn complete_sale_deduction_persists_the_payment_idempotency_key() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product_with_stock(&conn, "COFFEE", 10);
+
+    let sale = make_single_line_sale("COFFEE", 2, 350);
+    let mut splits = tender(700);
+    splits[0].idempotency_key = Some("idem-cor7-0001".into());
+
+    s.complete_sale_deduction(&sale, None, &splits, "cashier-1", None)
+        .unwrap();
+
+    let stored = s.list_payments_for_sale(&sale.id).unwrap();
+    assert_eq!(stored.len(), 1, "one payment row expected");
+    assert_eq!(
+        stored[0].idempotency_key.as_deref(),
+        Some("idem-cor7-0001"),
+        "the sale-path insert must persist the caller's idempotency key"
+    );
+}
+
+/// COR-7 follow-on: the payment insert runs inside the same transaction as the
+/// sale insert and the stock deduction, so persisting the key turns
+/// `idx_payments_idempotency_key` (migrations/20260813_init.sql:1204) into a
+/// whole-checkout replay guard. A second completion carrying the same key must
+/// fail and leave no trace — not merely skip the payment row.
+///
+/// Pins behaviour rather than mechanism: if a future change moved the payment
+/// insert out of the transaction, or started swallowing constraint errors, the
+/// assertions below fail even though the key is still being written.
+#[test]
+fn complete_sale_deduction_rejects_a_replayed_idempotency_key_without_side_effects() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product_with_stock(&conn, "COFFEE", 10);
+
+    let mut splits = tender(700);
+    splits[0].idempotency_key = Some("idem-cor7-replay".into());
+
+    let sale = make_single_line_sale("COFFEE", 2, 350);
+    s.complete_sale_deduction(&sale, None, &splits, "cashier-1", None)
+        .unwrap();
+
+    // A replay. Sale::from_cart mints a fresh id per call, so the second
+    // attempt is a different sale carrying the same key — which is exactly
+    // what a double-tapped checkout looks like once it reaches this layer.
+    let replay = make_single_line_sale("COFFEE", 2, 350);
+    let result = s.complete_sale_deduction(&replay, None, &splits, "cashier-1", None);
+    assert!(
+        result.is_err(),
+        "a replayed idempotency key must not complete a second sale"
+    );
+
+    let sale_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM sales", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(sale_count, 1, "the replayed sale must not persist");
+
+    let pay_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM payments", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(pay_count, 1, "the replayed payment must not persist");
+
+    let coffee_qty: i64 = conn
+        .query_row(
+            "SELECT qty FROM stock_summary \
+             WHERE item_id = (SELECT id FROM products WHERE sku = 'COFFEE') \
+             AND location_id = ?1",
+            rusqlite::params![crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(coffee_qty, 8, "stock deducted once, not twice");
+}
+
 /// One full-tender cash split for the given amount (MONEY-04 tests).
 fn tender(amount_minor: i64) -> Vec<crate::PaymentSplitArg> {
     vec![crate::PaymentSplitArg {
@@ -2078,8 +2160,15 @@ fn complete_sale_with_resolved_shortfalls_rejects_underpaid_payment_splits() {
     seed_product_with_stock(&conn, "COFFEE", 10);
 
     let sale = make_single_line_sale("COFFEE", 2, 350); // total 700
-    let result =
-        s.complete_sale_with_resolved_shortfalls(&sale, None, &tender(500), "cashier-1", None, &[]);
+    let result = s.complete_sale_with_resolved_shortfalls(
+        &sale,
+        None,
+        &tender(500),
+        "cashier-1",
+        None,
+        &[],
+        &[],
+    );
 
     match result {
         Err(CoreError::Validation { field, .. }) => {
@@ -2189,8 +2278,15 @@ fn complete_sale_with_resolved_shortfalls_rejects_negative_line_qty() {
     seed_product_with_stock(&conn, "COFFEE", 10);
 
     let sale = make_single_line_sale("COFFEE", -2, 350);
-    let result =
-        s.complete_sale_with_resolved_shortfalls(&sale, None, &tender(700), "cashier-1", None, &[]);
+    let result = s.complete_sale_with_resolved_shortfalls(
+        &sale,
+        None,
+        &tender(700),
+        "cashier-1",
+        None,
+        &[],
+        &[],
+    );
 
     match result {
         Err(CoreError::Validation { field, .. }) => {
@@ -2233,9 +2329,13 @@ fn complete_sale_with_resolved_shortfalls_splits_across_locations() {
             "cashier-1",
             None,
             &[resolution],
+            &[],
         )
         .unwrap();
-    assert_eq!(result.status, SaleStatus::Pending);
+    // SF-01: the retry settles a captured payment — the sale must reach
+    // 'completed', not linger as 'pending' (invisible to reports, and a
+    // void time-bomb once the stale-pending reaper is wired).
+    assert_eq!(result.status, SaleStatus::Completed);
 
     // Verify stock deducted correctly from both locations
     let stock_a: i64 = conn
@@ -2276,6 +2376,99 @@ fn complete_sale_with_resolved_shortfalls_splits_across_locations() {
     );
 }
 
+/// SF-01: the shortfall retry writes a terminal status and clears the
+/// pending-expiry window.
+#[test]
+fn complete_sale_with_resolved_shortfalls_marks_sale_completed() {
+    let conn = fresh();
+    let s = store(&conn);
+    setup_locations_with_stock(&conn, "COFFEE", "loc-a", 5, "loc-b", 10);
+
+    let sale = make_single_line_sale("COFFEE", 12, 350);
+    let resolution = crate::sale_deduction::ResolvedShortfall {
+        sku: "COFFEE".into(),
+        allocations: vec![
+            crate::sale_deduction::LocationAllocation {
+                location_id: crate::inventory::LocationId::from("loc-a"),
+                qty: 5,
+            },
+            crate::sale_deduction::LocationAllocation {
+                location_id: crate::inventory::LocationId::from("loc-b"),
+                qty: 7,
+            },
+        ],
+    };
+    s.complete_sale_with_resolved_shortfalls(
+        &sale,
+        None,
+        &tender(4200),
+        "cashier-1",
+        None,
+        &[resolution],
+        &[],
+    )
+    .unwrap();
+
+    let (status, expires): (String, Option<String>) = conn
+        .query_row(
+            "SELECT status, pending_expires_at FROM sales WHERE id = ?1",
+            rusqlite::params![sale.id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(status, "completed", "retry sale must be terminal");
+    assert!(
+        expires.is_none(),
+        "a completed sale must not carry a pending-expiry deadline"
+    );
+}
+
+/// LOY-06: the shortfall retry is a completion path too — it must award
+/// loyalty points like finalize_sale does.
+#[test]
+fn complete_sale_with_resolved_shortfalls_awards_loyalty_points() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_customer_row(&conn, "cust-1");
+    setup_locations_with_stock(&conn, "COFFEE", "loc-a", 5, "loc-b", 10);
+
+    let mut sale = make_single_line_sale("COFFEE", 12, 350); // total 4200
+    sale.customer_id = Some("cust-1".into());
+    let resolution = crate::sale_deduction::ResolvedShortfall {
+        sku: "COFFEE".into(),
+        allocations: vec![
+            crate::sale_deduction::LocationAllocation {
+                location_id: crate::inventory::LocationId::from("loc-a"),
+                qty: 5,
+            },
+            crate::sale_deduction::LocationAllocation {
+                location_id: crate::inventory::LocationId::from("loc-b"),
+                qty: 7,
+            },
+        ],
+    };
+    s.complete_sale_with_resolved_shortfalls(
+        &sale,
+        None,
+        &tender(4200),
+        "cashier-1",
+        None,
+        &[resolution],
+        &[],
+    )
+    .unwrap();
+
+    let points: Option<i64> = conn
+        .query_row(
+            "SELECT points FROM loyalty_transactions WHERE sale_id = ?1 AND txn_type = 'earn'",
+            rusqlite::params![sale.id],
+            |row| row.get(0),
+        )
+        .ok();
+    // Bronze: 4200 * 10 / 100 = 420.
+    assert_eq!(points, Some(420), "retry completion must award tier points");
+}
+
 /// Resolution sum validation rejects mismatch.
 #[test]
 fn complete_sale_with_resolved_shortfalls_rejects_bad_allocation_sum() {
@@ -2294,7 +2487,15 @@ fn complete_sale_with_resolved_shortfalls_rejects_bad_allocation_sum() {
         }],
     };
     let err = s
-        .complete_sale_with_resolved_shortfalls(&sale, None, &[], "cashier-1", None, &[resolution])
+        .complete_sale_with_resolved_shortfalls(
+            &sale,
+            None,
+            &[],
+            "cashier-1",
+            None,
+            &[resolution],
+            &[],
+        )
         .unwrap_err();
     assert!(
         matches!(&err, CoreError::Validation { field, .. } if field == &"resolutions"),
@@ -2320,7 +2521,15 @@ fn complete_sale_with_resolved_shortfalls_fails_on_second_check() {
         }],
     };
     let err = s
-        .complete_sale_with_resolved_shortfalls(&sale, None, &[], "cashier-1", None, &[resolution])
+        .complete_sale_with_resolved_shortfalls(
+            &sale,
+            None,
+            &[],
+            "cashier-1",
+            None,
+            &[resolution],
+            &[],
+        )
         .unwrap_err();
     assert!(
         matches!(&err, CoreError::InsufficientStockAtLocation { .. }),
@@ -2387,7 +2596,8 @@ fn complete_sale_with_resolved_shortfalls_bom_quantity_overflow_returns_validati
 
     // No resolutions: the non-resolution BOM path runs.
     let sale = make_single_line_sale("BURGER", i64::MAX / 2, 1);
-    let result = s.complete_sale_with_resolved_shortfalls(&sale, None, &[], "cashier-1", None, &[]);
+    let result =
+        s.complete_sale_with_resolved_shortfalls(&sale, None, &[], "cashier-1", None, &[], &[]);
 
     match result {
         Err(CoreError::Validation { field, message }) => {
@@ -2464,9 +2674,11 @@ fn complete_sale_with_resolved_shortfalls_deducts_unresolved_lines_at_primary() 
             "cashier-1",
             None,
             &[resolution],
+            &[],
         )
         .unwrap();
-    assert_eq!(result.status, SaleStatus::Pending);
+    // SF-01: retry completion is terminal.
+    assert_eq!(result.status, SaleStatus::Completed);
 
     // COFFEE deducted 3 from loc-wh (50 → 47)
     let coffee_wh: i64 = conn
@@ -2507,9 +2719,18 @@ fn complete_sale_with_resolved_shortfalls_empty_resolutions_deducts_at_primary()
 
     let sale = make_single_line_sale("COFFEE", 3, 350);
     let result = s
-        .complete_sale_with_resolved_shortfalls(&sale, None, &tender(1050), "cashier-1", None, &[])
+        .complete_sale_with_resolved_shortfalls(
+            &sale,
+            None,
+            &tender(1050),
+            "cashier-1",
+            None,
+            &[],
+            &[],
+        )
         .unwrap();
-    assert_eq!(result.status, SaleStatus::Pending);
+    // SF-01: retry completion is terminal.
+    assert_eq!(result.status, SaleStatus::Completed);
 
     // COFFEE deducted 3 from canonical default
     let stock: i64 = conn
@@ -2611,6 +2832,12 @@ fn complete_sale_partial_shortfall_rolls_back_sale_row() {
 
 /// Void of a multi-location pending sale credits stock back to
 /// each original deduction source (ADR-19 §5.3 / §16.2).
+///
+/// SF-01 note: this used to build the multi-location `deduction_locations`
+/// JSON via the shortfall retry — but retry sales are now terminal
+/// (`completed`) and `void_pending_sale` correctly rejects them. The
+/// route-order checkout path produces the same multi-location JSON on a
+/// genuinely pending sale, which is what this test is about.
 #[test]
 fn void_sale_credits_back_to_original_deduction_source() {
     let conn = fresh();
@@ -2618,33 +2845,24 @@ fn void_sale_credits_back_to_original_deduction_source() {
     let loc_a = "loc-v-a";
     let loc_b = "loc-v-b";
 
-    // ── create a sale with split-location deduction_locations ───
+    // ── pending sale with split-location deduction_locations ─────
     setup_locations_with_stock(&conn, "TEA", loc_a, 10, loc_b, 5);
-    let sale = make_single_line_sale("TEA", 8, 200);
-    let resolution = crate::sale_deduction::ResolvedShortfall {
-        sku: "TEA".into(),
-        allocations: vec![
-            crate::sale_deduction::LocationAllocation {
-                location_id: crate::inventory::LocationId::from(loc_a),
-                qty: 5,
-            },
-            crate::sale_deduction::LocationAllocation {
-                location_id: crate::inventory::LocationId::from(loc_b),
-                qty: 3,
-            },
-        ],
-    };
-    s.complete_sale_with_resolved_shortfalls(
+    let sale = make_single_line_sale("TEA", 12, 200);
+    s.complete_sale_deduction_with_locations(
         &sale,
         None,
-        &tender(1600),
+        &[
+            crate::inventory::LocationId::from(loc_a),
+            crate::inventory::LocationId::from(loc_b),
+        ],
+        &tender(2400),
         "cashier-1",
         None,
-        &[resolution],
+        &[],
     )
     .unwrap();
 
-    // Confirm stock was deducted.
+    // Confirm stock was deducted (route order: 10 from a, 2 from b).
     let stock_a_before: i64 = conn
         .query_row(
             "SELECT COALESCE(qty, 0) FROM stock_summary WHERE item_id = \
@@ -2653,7 +2871,7 @@ fn void_sale_credits_back_to_original_deduction_source() {
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(stock_a_before, 5, "loc-a had 10, deducted 5 → 5");
+    assert_eq!(stock_a_before, 0, "loc-a had 10, deducted 10 → 0");
 
     let stock_b_before: i64 = conn
         .query_row(
@@ -2663,7 +2881,7 @@ fn void_sale_credits_back_to_original_deduction_source() {
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(stock_b_before, 2, "loc-b had 5, deducted 3 → 2");
+    assert_eq!(stock_b_before, 3, "loc-b had 5, deducted 2 → 3");
 
     // ── void the pending sale ───────────────────────────────────
     s.void_pending_sale(&sale.id).unwrap();
@@ -3261,4 +3479,331 @@ fn list_sales_by_user_filters_correctly() {
     // Filter by unknown user — should get 0.
     let unknown = s.list_sales_by_user("nobody").unwrap();
     assert!(unknown.is_empty());
+}
+
+// ── CRM-06: lifetime spend projection maintained at completion ─
+//
+// The projection's old owner was the event-bus CrmHistoryHandler
+// (subscribed in platform/startup): a read-modify-write with NO
+// idempotency guard (event re-delivery double-counted) and NO currency
+// validation (foreign-currency sales added raw). It moved into the
+// completion transition (base currency, statement-level atomic
+// increment, replay-safe via the changed==1 gate) and the subscription
+// was removed — both writers at once would double-count every sale.
+
+fn seed_customer_for_spend(conn: &Connection, id: &str) {
+    conn.execute(
+        "INSERT INTO customers (id, name, notes, created_at, updated_at)
+         VALUES (?1, 'Spend Tester', '', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        params![id],
+    )
+    .unwrap();
+}
+
+fn spend_of(conn: &Connection, id: &str) -> i64 {
+    conn.query_row(
+        "SELECT total_spent_minor FROM customers WHERE id = ?1",
+        params![id],
+        |r| r.get(0),
+    )
+    .unwrap()
+}
+
+#[test]
+fn finalize_sale_adds_base_currency_total_to_customer_spend() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_customer_for_spend(&conn, "cust-spend");
+    // Multi-currency sale: charged 1,650,000 IDR, base 10,000 USD minor.
+    conn.execute(
+        "INSERT INTO sales (id, customer_id, total_minor, currency, base_total_minor, base_currency, line_count, status, created_at, updated_at)
+         VALUES ('sp-1', 'cust-spend', 1650000, 'IDR', 10000, 'USD', 0, 'pending', '2026-07-10T09:00:00Z', '2026-07-10T09:00:00Z')",
+        [],
+    )
+    .unwrap();
+    s.finalize_sale("sp-1").unwrap();
+    assert_eq!(
+        spend_of(&conn, "cust-spend"),
+        10000,
+        "spend accrues in BASE currency, not the charged currency"
+    );
+}
+
+#[test]
+fn finalize_replay_does_not_double_count_spend() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_customer_for_spend(&conn, "cust-spend");
+    conn.execute(
+        "INSERT INTO sales (id, customer_id, total_minor, currency, line_count, status, created_at, updated_at)
+         VALUES ('sp-2', 'cust-spend', 5000, 'USD', 0, 'pending', '2026-07-10T09:00:00Z', '2026-07-10T09:00:00Z')",
+        [],
+    )
+    .unwrap();
+    s.finalize_sale("sp-2").unwrap();
+    // Replay: the pending→completed CAS matches zero rows, so no accrual.
+    s.finalize_sale("sp-2").unwrap();
+    assert_eq!(spend_of(&conn, "cust-spend"), 5000);
+}
+
+#[test]
+fn finalize_sale_without_customer_leaves_spend_untouched() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_customer_for_spend(&conn, "cust-spend");
+    conn.execute(
+        "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at)
+         VALUES ('sp-3', 5000, 'USD', 0, 'pending', '2026-07-10T09:00:00Z', '2026-07-10T09:00:00Z')",
+        [],
+    )
+    .unwrap();
+    s.finalize_sale("sp-3").unwrap();
+    assert_eq!(spend_of(&conn, "cust-spend"), 0);
+}
+
+// ── Checkout promotions (PROMO-3 integration) ──────────────────────
+
+fn checkout_promo(id: &str, promo_type: &str, value_minor: i64) -> crate::Promotion {
+    crate::Promotion {
+        id: id.into(),
+        name: "Checkout Promo".into(),
+        description: String::new(),
+        promo_type: promo_type.into(),
+        value_minor,
+        min_qty: None,
+        trigger_sku: None,
+        reward_sku: None,
+        reward_qty: None,
+        starts_at: None,
+        ends_at: None,
+        min_order_minor: 0,
+        category_id: None,
+        active: true,
+        created_at: "2026-01-01T00:00:00.000Z".into(),
+        updated_at: "2026-01-01T00:00:00.000Z".into(),
+    }
+}
+
+/// Compute checkout promotions for `sale`, then run the deduction
+/// checkout with a single `tender_minor` split — the full backend
+/// sequence the scoped command performs (minus tax, which is 0 here).
+fn complete_with_promos(
+    s: &Store<'_>,
+    mut sale: Sale,
+    promos: &[crate::Promotion],
+    tender_minor: i64,
+) -> Result<crate::sale_deduction::CompleteSaleResult, crate::error::CoreError> {
+    let ids: Vec<String> = promos.iter().map(|p| p.id.clone()).collect();
+    for p in promos {
+        s.create_promotion(p).unwrap();
+    }
+    let apps = s.compute_checkout_promotions(&mut sale, &ids, chrono::Utc::now())?;
+    s.complete_sale_deduction_with_locations(
+        &sale,
+        None,
+        &[],
+        &tender(tender_minor),
+        "cashier-1",
+        None,
+        &apps,
+    )
+}
+
+#[test]
+fn checkout_promotions_reduce_total_and_persist_applications() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product_with_stock(&conn, "COFFEE", 10);
+
+    let sale = make_single_line_sale("COFFEE", 2, 350); // total 700
+    let promos = vec![checkout_promo("cp-1", "percentage", 10)];
+    let result = complete_with_promos(&s, sale.clone(), &promos, 630).unwrap();
+    assert_eq!(result.status, SaleStatus::Pending);
+
+    let stored_total: i64 = conn
+        .query_row(
+            "SELECT total_minor FROM sales WHERE id = ?1",
+            [&sale.id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(stored_total, 630, "sale row carries the promoted total");
+
+    let (discount, promotion_id): (i64, String) = conn
+        .query_row(
+            "SELECT discount_minor, promotion_id FROM promotion_applications WHERE sale_id = ?1",
+            [&sale.id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(promotion_id, "cp-1");
+    assert_eq!(discount, 70);
+
+    let paid: i64 = conn
+        .query_row(
+            "SELECT amount_minor FROM payments WHERE sale_id = ?1",
+            [&sale.id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(paid, 630);
+}
+
+#[test]
+fn checkout_promotions_reject_splits_below_reduced_total() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product_with_stock(&conn, "COFFEE", 10);
+
+    let sale = make_single_line_sale("COFFEE", 2, 350); // 700 - 10% = 630
+    let promos = vec![checkout_promo("cp-low", "percentage", 10)];
+    let err = complete_with_promos(&s, sale, &promos, 600).unwrap_err();
+    assert!(err.to_string().contains("payment"), "got {err:?}");
+}
+
+#[test]
+fn checkout_bxgy_promotion_makes_third_item_free() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product_with_stock(&conn, "COFFEE", 10);
+
+    let sale = make_single_line_sale("COFFEE", 3, 350); // 1050
+    let mut promo = checkout_promo("cp-bxgy", "buy_x_get_y", 100);
+    promo.trigger_sku = Some("COFFEE".into());
+    promo.reward_sku = Some("COFFEE".into());
+    promo.min_qty = Some(2);
+    promo.reward_qty = Some(1);
+    // Buy 2 get 1 with 3 in cart → 1 free unit = 350 off.
+    let result = complete_with_promos(&s, sale.clone(), &[promo], 700).unwrap();
+    assert_eq!(result.status, SaleStatus::Pending);
+
+    let stored_total: i64 = conn
+        .query_row(
+            "SELECT total_minor FROM sales WHERE id = ?1",
+            [&sale.id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(stored_total, 700);
+}
+
+#[test]
+fn checkout_rejects_unknown_promotion() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product_with_stock(&conn, "COFFEE", 10);
+
+    let mut sale = make_single_line_sale("COFFEE", 2, 350);
+    let err = s
+        .compute_checkout_promotions(&mut sale, &["nope".into()], chrono::Utc::now())
+        .unwrap_err();
+    assert!(
+        matches!(err, crate::error::CoreError::NotFound { ref entity, .. } if entity == &"promotion")
+    );
+}
+
+#[test]
+fn checkout_rejects_duplicate_promotion_ids() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product_with_stock(&conn, "COFFEE", 10);
+
+    let mut sale = make_single_line_sale("COFFEE", 2, 350);
+    s.create_promotion(&checkout_promo("cp-dup", "percentage", 10))
+        .unwrap();
+    let err = s
+        .compute_checkout_promotions(
+            &mut sale,
+            &["cp-dup".into(), "cp-dup".into()],
+            chrono::Utc::now(),
+        )
+        .unwrap_err();
+    assert!(err.to_string().contains("already selected"));
+}
+
+#[test]
+fn checkout_promotions_stack() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product_with_stock(&conn, "COFFEE", 10);
+
+    let sale = make_single_line_sale("COFFEE", 2, 350); // 700 → 630 → 530
+    let promos = vec![
+        checkout_promo("cp-pct", "percentage", 10),
+        checkout_promo("cp-fix", "fixed_amount", 100),
+    ];
+    complete_with_promos(&s, sale.clone(), &promos, 530).unwrap();
+
+    let stored_total: i64 = conn
+        .query_row(
+            "SELECT total_minor FROM sales WHERE id = ?1",
+            [&sale.id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(stored_total, 530);
+
+    let apps: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM promotion_applications WHERE sale_id = ?1",
+            [&sale.id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(apps, 2);
+}
+
+/// COR-7 safety: the command layer keys splits as `{attempt}:{n}`. If it ever
+/// reused one key for every row, a two-tender sale would collide with itself on
+/// its own second payment and reject a legitimate sale — strictly worse than
+/// the double-charge the guard exists to prevent, because it stops the till
+/// trading. This pins that a split tender under one attempt persists both rows.
+#[test]
+fn complete_sale_deduction_persists_every_split_keyed_to_one_attempt() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product_with_stock(&conn, "COFFEE", 10);
+
+    let sale = make_single_line_sale("COFFEE", 2, 350); // total 700
+    let splits = vec![
+        crate::PaymentSplitArg {
+            method: "cash".into(),
+            amount_minor: 400,
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+            idempotency_key: Some("attempt-a:0".into()),
+        },
+        crate::PaymentSplitArg {
+            method: "card".into(),
+            amount_minor: 300,
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+            idempotency_key: Some("attempt-a:1".into()),
+        },
+    ];
+
+    s.complete_sale_deduction(&sale, None, &splits, "cashier-1", None)
+        .expect("a split tender must not collide with itself");
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT idempotency_key, method FROM payments WHERE sale_id = ?1
+             ORDER BY idempotency_key",
+        )
+        .unwrap();
+    let rows: Vec<(Option<String>, String)> = stmt
+        .query_map(rusqlite::params![sale.id], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+
+    assert_eq!(
+        rows.iter().filter(|(k, _)| k.is_some()).count(),
+        2,
+        "both splits must persist with their own key, got {rows:?}"
+    );
+    let keys: Vec<&str> = rows.iter().map(|(k, _)| k.as_deref().unwrap()).collect();
+    assert_eq!(keys, vec!["attempt-a:0", "attempt-a:1"]);
 }

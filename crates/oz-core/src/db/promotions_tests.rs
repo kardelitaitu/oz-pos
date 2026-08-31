@@ -196,7 +196,7 @@ fn update_changes_all_fields() {
 
     p.name = "All Updated".into();
     p.description = "New desc".into();
-    p.promo_type = "fixed".into();
+    p.promo_type = "fixed_amount".into();
     p.value_minor = 500;
     p.min_qty = Some(2);
     p.trigger_sku = Some("SKU-TRIGGER".into());
@@ -211,7 +211,7 @@ fn update_changes_all_fields() {
     let found = store.get_promotion("all").unwrap().unwrap();
     assert_eq!(found.name, "All Updated");
     assert_eq!(found.description, "New desc");
-    assert_eq!(found.promo_type, "fixed");
+    assert_eq!(found.promo_type, "fixed_amount");
     assert_eq!(found.value_minor, 500);
     assert_eq!(found.min_qty, Some(2));
     assert_eq!(found.trigger_sku, Some("SKU-TRIGGER".to_owned()));
@@ -409,4 +409,257 @@ fn record_application_negative_discount_rejected() {
     };
     let err = store.record_promotion_application(&app).unwrap_err();
     assert!(matches!(err, CoreError::Validation { field, .. } if field == "discount_minor"));
+}
+
+// ── Validation hardening (PROMO-8) ──────────────────────────────────
+
+#[test]
+fn create_rejects_percentage_value_over_100() {
+    let store = setup();
+    let mut p = test_promo("v-over");
+    p.value_minor = 150;
+    let err = store.create_promotion(&p).unwrap_err();
+    assert!(matches!(err, CoreError::Validation { field, .. } if field == "value_minor"));
+    assert!(store.get_promotion("v-over").unwrap().is_none());
+}
+
+#[test]
+fn create_rejects_percentage_value_zero() {
+    let store = setup();
+    let mut p = test_promo("v-zero");
+    p.value_minor = 0;
+    let err = store.create_promotion(&p).unwrap_err();
+    assert!(matches!(err, CoreError::Validation { field, .. } if field == "value_minor"));
+}
+
+#[test]
+fn create_rejects_buy_x_get_y_without_trigger_sku() {
+    let store = setup();
+    let mut p = test_promo("v-bxgy");
+    p.promo_type = "buy_x_get_y".into();
+    p.trigger_sku = None;
+    let err = store.create_promotion(&p).unwrap_err();
+    assert!(matches!(err, CoreError::Validation { field, .. } if field == "trigger_sku"));
+}
+
+#[test]
+fn create_rejects_buy_x_get_y_non_positive_quantities() {
+    let store = setup();
+    let mut p = test_promo("v-bxgy-qty");
+    p.promo_type = "buy_x_get_y".into();
+    p.trigger_sku = Some("COFFEE".into());
+    p.min_qty = Some(0);
+    p.reward_qty = Some(1);
+    let err = store.create_promotion(&p).unwrap_err();
+    assert!(matches!(err, CoreError::Validation { field, .. } if field == "min_qty"));
+
+    p.min_qty = Some(2);
+    p.reward_qty = Some(-3);
+    let err = store.create_promotion(&p).unwrap_err();
+    assert!(matches!(err, CoreError::Validation { field, .. } if field == "reward_qty"));
+}
+
+#[test]
+fn create_accepts_valid_buy_x_get_y() {
+    let store = setup();
+    let mut p = test_promo("v-bxgy-ok");
+    p.promo_type = "buy_x_get_y".into();
+    p.value_minor = 100;
+    p.trigger_sku = Some("COFFEE".into());
+    p.reward_sku = Some("COOKIE".into());
+    p.min_qty = Some(2);
+    p.reward_qty = Some(1);
+    store.create_promotion(&p).unwrap();
+    assert!(store.get_promotion("v-bxgy-ok").unwrap().is_some());
+}
+
+#[test]
+fn create_accepts_fixed_amount_any_non_negative_value() {
+    let store = setup();
+    let mut p = test_promo("v-fixed");
+    p.promo_type = "fixed_amount".into();
+    p.value_minor = 0; // fixed discount may be zero or any amount
+    store.create_promotion(&p).unwrap();
+    let mut p2 = test_promo("v-fixed-big");
+    p2.promo_type = "fixed_amount".into();
+    p2.value_minor = 999_999;
+    store.create_promotion(&p2).unwrap();
+}
+
+#[test]
+fn update_rejects_invalid_value_even_when_name_valid() {
+    // COR-12 asymmetry: update used to validate only the name.
+    let store = setup();
+    let mut p = test_promo("v-upd");
+    store.create_promotion(&p).unwrap();
+    p.value_minor = 500; // percentage percent out of range
+    let err = store.update_promotion(&p).unwrap_err();
+    assert!(matches!(err, CoreError::Validation { field, .. } if field == "value_minor"));
+    // The stored row is untouched.
+    let stored = store.get_promotion("v-upd").unwrap().unwrap();
+    assert_eq!(stored.value_minor, 10);
+}
+
+// ── Atomic apply-to-payable (PROMO-3/4) ─────────────────────────────
+
+use crate::foundation::Money;
+use crate::sale::Sale;
+use crate::{Cart, CartLine, Sku};
+
+fn usd() -> crate::foundation::Currency {
+    "USD".parse().unwrap()
+}
+
+fn usd_money(minor: i64) -> Money {
+    Money {
+        minor_units: minor,
+        currency: usd(),
+    }
+}
+
+/// Cart: 2x COFFEE @ 350 + 1x BAGEL @ 450 = 1150.
+fn cart_sale(store: &Store<'_>) -> Sale {
+    let mut cart = Cart::new(usd());
+    cart.add_line(CartLine::new(Sku::new("COFFEE"), 2, usd_money(350)))
+        .unwrap();
+    cart.add_line(CartLine::new(Sku::new("BAGEL"), 1, usd_money(450)))
+        .unwrap();
+    let sale = Sale::from_cart(&cart).unwrap();
+    store.create_sale(&sale).unwrap();
+    sale
+}
+
+#[test]
+fn apply_reduces_sale_total_and_records_application() {
+    let store = setup();
+    let sale = cart_sale(&store);
+    let p = test_promo("ap-1"); // percentage 10
+    store.create_promotion(&p).unwrap();
+
+    let app = store
+        .apply_promotion_to_sale(&sale.id, "ap-1", chrono::Utc::now())
+        .unwrap();
+    assert_eq!(app.discount_minor, 115);
+
+    let updated = store.get_sale(&sale.id).unwrap().unwrap();
+    assert_eq!(updated.total.minor_units, 1035);
+
+    let apps = store.get_promotion_applications_for_sale(&sale.id).unwrap();
+    assert_eq!(apps.len(), 1);
+    assert_eq!(apps[0].promotion_id, "ap-1");
+}
+
+#[test]
+fn apply_rejects_second_application_of_same_promotion() {
+    let store = setup();
+    let sale = cart_sale(&store);
+    let p = test_promo("ap-dup");
+    store.create_promotion(&p).unwrap();
+
+    store
+        .apply_promotion_to_sale(&sale.id, "ap-dup", chrono::Utc::now())
+        .unwrap();
+    let err = store
+        .apply_promotion_to_sale(&sale.id, "ap-dup", chrono::Utc::now())
+        .unwrap_err();
+    assert!(
+        matches!(err, CoreError::Validation { field, .. } if field == "promotion_id"),
+        "expected duplicate-application rejection, got {err:?}"
+    );
+    // Total was reduced exactly once; one application row exists.
+    let updated = store.get_sale(&sale.id).unwrap().unwrap();
+    assert_eq!(updated.total.minor_units, 1035);
+    assert_eq!(
+        store
+            .get_promotion_applications_for_sale(&sale.id)
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn apply_rejects_completed_sale() {
+    let store = setup();
+    let sale = cart_sale(&store);
+    store.finalize_sale(&sale.id).unwrap();
+    let p = test_promo("ap-done");
+    store.create_promotion(&p).unwrap();
+
+    let err = store
+        .apply_promotion_to_sale(&sale.id, "ap-done", chrono::Utc::now())
+        .unwrap_err();
+    assert!(err.to_string().contains("not modifiable"));
+
+    let updated = store.get_sale(&sale.id).unwrap().unwrap();
+    assert_eq!(updated.total.minor_units, 1150);
+    assert!(
+        store
+            .get_promotion_applications_for_sale(&sale.id)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn apply_different_promotions_stack() {
+    let store = setup();
+    let sale = cart_sale(&store);
+    let mut pct = test_promo("ap-pct");
+    pct.promo_type = "percentage".into();
+    pct.value_minor = 10;
+    store.create_promotion(&pct).unwrap();
+    let mut fixed = test_promo("ap-fixed");
+    fixed.promo_type = "fixed_amount".into();
+    fixed.value_minor = 100;
+    store.create_promotion(&fixed).unwrap();
+
+    store
+        .apply_promotion_to_sale(&sale.id, "ap-pct", chrono::Utc::now())
+        .unwrap();
+    store
+        .apply_promotion_to_sale(&sale.id, "ap-fixed", chrono::Utc::now())
+        .unwrap();
+    // 1150 - 115 (10%) - 100 (fixed) = 935.
+    let updated = store.get_sale(&sale.id).unwrap().unwrap();
+    assert_eq!(updated.total.minor_units, 935);
+    assert_eq!(
+        store
+            .get_promotion_applications_for_sale(&sale.id)
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn apply_zero_discount_records_row_without_changing_total() {
+    let store = setup();
+    let sale = cart_sale(&store);
+    // BXGY never satisfied (no trigger SKU in cart) → 0 discount.
+    let mut p = test_promo("ap-zero");
+    p.promo_type = "buy_x_get_y".into();
+    p.value_minor = 100;
+    p.trigger_sku = Some("TEA".into());
+    p.reward_sku = Some("TEA".into());
+    p.min_qty = Some(2);
+    p.reward_qty = Some(1);
+    store.create_promotion(&p).unwrap();
+
+    let app = store
+        .apply_promotion_to_sale(&sale.id, "ap-zero", chrono::Utc::now())
+        .unwrap();
+    assert_eq!(app.discount_minor, 0);
+    let updated = store.get_sale(&sale.id).unwrap().unwrap();
+    assert_eq!(updated.total.minor_units, 1150);
+}
+
+#[test]
+fn apply_missing_promotion_is_not_found() {
+    let store = setup();
+    let sale = cart_sale(&store);
+    let err = store
+        .apply_promotion_to_sale(&sale.id, "nope", chrono::Utc::now())
+        .unwrap_err();
+    assert!(matches!(err, CoreError::NotFound { ref entity, .. } if entity == &"promotion"));
 }

@@ -23,13 +23,13 @@ import { hasGrantedPermission } from '@/platform/ui/page-registry';
 import { openProductImagesScoped } from '@/api/browser';
 import { loadCatalog, invalidateCatalog } from '@/utils/catalog-cache';
 import { usePagedList } from '@/hooks/usePagedList';
-import { listCustomers, type CustomerDto } from '@/api/customers';
+import { listCustomersScoped, type CustomerDto } from '@/api/customers';
 import { getActiveShiftScoped, openShiftScoped, closeShiftScoped, type ShiftDto } from '@/api/shifts';
 import { holdCartScoped, listHeldCartsScoped, getHeldCartScoped, deleteHeldCartScoped, type HeldCartRow, type SaleDetail } from '@/api/sales';
 import { getStoreSettingsScoped, listCreditSalesScoped, settleCreditScoped, type StoreSettingsDto, type CreditSaleDto } from '@/api/settings';
 import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
 import { recordMark } from '@/utils/perf-metrics';
-import { DEFAULT_LOW_STOCK_THRESHOLD, type CartId, type CartLine, type CourseId, type LineId, type ModifierSelection, type Money, type Product, type Sku } from '@/types/domain';
+import { DEFAULT_LOW_STOCK_THRESHOLD, minorUnitExponent, parseMinorUnits, type CartId, type CartLine, type CourseId, type LineId, type ModifierSelection, type Money, type Product, type Sku } from '@/types/domain';
 import { useSound } from '@/frontend/shared/useSound';
 import { useOptionalTheme } from '@/frontend/shell/ThemeProvider';
 import RetailFnBar from './RetailFnBar';
@@ -889,8 +889,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   }, [sessionToken]);
 
   const handleOpenShift = useCallback(async () => {
-    const val = Math.round(parseFloat(openingBalance) * 100);
-    if (Number.isNaN(val) || val < 0) return;
+    // MONEY-02: exact decimal parse; MONEY-05: scale by the STORE
+    // currency's exponent — the drawer holds store currency, and the
+    // old hardcoded ×100 inflated IDR (exponent 0) 100x.
+    const val = parseMinorUnits(openingBalance, minorUnitExponent(storeSettings.currency));
+    if (val === null || val < 0) return;
     setOpeningShift(true);
     try {
       const s = await openShiftScoped(sessionToken, val);
@@ -902,12 +905,13 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } finally {
       setOpeningShift(false);
     }
-  }, [openingBalance, addToast, l10n, sessionToken]);
+  }, [openingBalance, addToast, l10n, sessionToken, storeSettings.currency]);
 
   const handleCloseShift = useCallback(async () => {
     if (!activeShift) return;
-    const val = Math.round(parseFloat(closingBalance) * 100);
-    if (Number.isNaN(val) || val < 0) return;
+    // MONEY-02 + MONEY-05: exact parse at the store currency exponent.
+    const val = parseMinorUnits(closingBalance, minorUnitExponent(storeSettings.currency));
+    if (val === null || val < 0) return;
     setClosingShift(true);
     setCloseShiftError(null);
     try {
@@ -919,7 +923,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } finally {
       setClosingShift(false);
     }
-  }, [activeShift, closingBalance, shiftNotes, l10n, sessionToken]);
+  }, [activeShift, closingBalance, shiftNotes, l10n, sessionToken, storeSettings.currency]);
 
   // ── Live tax preview ────────────────────────────────────────
 
@@ -963,10 +967,14 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   }, [discountInput, setDiscount]);
 
   const handleApplyDiscountRp = useCallback(() => {
-    const rp = parseFloat(discountRpInput);
-    if (Number.isNaN(rp) || rp <= 0 || !subtotal || subtotal.minor_units === 0) return;
-    const rpMinor = Math.min(subtotal.minor_units, Math.round(rp * 100));
-    const pct = Math.round((rpMinor / subtotal.minor_units) * 100 * 100) / 100;
+    // MONEY-04: scale by the CART currency's minor-unit exponent — the
+    // old hardcoded ×100 inflated IDR (exponent 0) ratios 100x, so any
+    // Rp discount ≥ 1% of the subtotal clamped to 100% off. Exact
+    // decimal parse via parseMinorUnits (MONEY-02) replaces parseFloat.
+    const rpMinor = parseMinorUnits(discountRpInput, minorUnitExponent(subtotal?.currency ?? 'IDR'));
+    if (rpMinor === null || rpMinor <= 0 || !subtotal || subtotal.minor_units === 0) return;
+    const capped = Math.min(subtotal.minor_units, rpMinor);
+    const pct = Math.round((capped / subtotal.minor_units) * 100 * 100) / 100;
     setDiscount(pct, '');
     setShowDiscount(false);
     setDiscountRpInput('');
@@ -1042,7 +1050,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     if (!showCustomerSearch) { setCustomerSearchResults([]); return; }
     let cancelled = false;
     setLoadingCustomers(true);
-    listCustomers()
+    listCustomersScoped(sessionToken)
       .then((customers) => {
         if (cancelled) return;
         allCustomersRef.current = customers;

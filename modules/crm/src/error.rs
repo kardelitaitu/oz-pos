@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (modules-crm slice A: error verified)
+crate: modules-crm | status: SAFE | lint: CLEAN
+findings: clean thiserror crm error taxonomy
+next: none | perf: N/A
+*/
 //! Error type for the CRM domain.
 
 use thiserror::Error;

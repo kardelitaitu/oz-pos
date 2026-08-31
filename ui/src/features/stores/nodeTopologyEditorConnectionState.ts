@@ -23,8 +23,12 @@ import type { WireRelationshipOption } from './topologyCard';
 export type TopologyPickerState = {
   fromNodeId: string;
   fromPort: PortName;
+  /** Semantic row index on the source (round 174 stacked ports). */
+  fromVariantIndex: number;
   toNodeId: string;
   toPort: PortName;
+  /** Semantic row index on the target. */
+  toVariantIndex: number;
   options: WireRelationshipOption[];
 };
 
@@ -33,12 +37,15 @@ export type TopologyConnectionState = {
   fromNodeId: string | null;
   /** Source port of the in-flight connection, or null. */
   fromPort: PortName | null;
+  /** Semantic row index of the source socket (round 174: each row is one
+   *  semantic, so the source's meaning is known at click time). */
+  fromVariantIndex: number;
   /** Open relationship picker, or null. */
   picker: TopologyPickerState | null;
 };
 
 export type TopologyConnectionAction =
-  | { type: 'begin'; fromNodeId: string; fromPort: PortName }
+  | { type: 'begin'; fromNodeId: string; fromPort: PortName; fromVariantIndex: number }
   | { type: 'open-picker'; picker: TopologyPickerState }
   | { type: 'cancel' }
   | { type: 'dismiss-picker' };
@@ -46,6 +53,7 @@ export type TopologyConnectionAction =
 export const initialTopologyConnectionState: TopologyConnectionState = {
   fromNodeId: null,
   fromPort: null,
+  fromVariantIndex: 0,
   picker: null,
 };
 
@@ -57,19 +65,24 @@ export function topologyConnectionReducer(
     case 'begin':
       // A fresh connection attempt always closes any open picker — the old
       // pending choice belongs to the abandoned gesture.
-      return { fromNodeId: action.fromNodeId, fromPort: action.fromPort, picker: null };
+      return {
+        fromNodeId: action.fromNodeId,
+        fromPort: action.fromPort,
+        fromVariantIndex: action.fromVariantIndex,
+        picker: null,
+      };
     case 'open-picker':
       return { ...state, picker: action.picker };
     case 'cancel':
       // Clearing the picker ALWAYS clears the armed connection too — the
       // ghost and stale source must not survive a dismissed choice.
-      return { fromNodeId: null, fromPort: null, picker: null };
+      return { fromNodeId: null, fromPort: null, fromVariantIndex: 0, picker: null };
     case 'dismiss-picker':
       // Dismissing an OPEN picker is a full cancel (same as Escape / the
       // Cancel button); a plain armed connection with no picker survives a
       // canvas click — the user may be panning to a distant target.
       return state.picker
-        ? { fromNodeId: null, fromPort: null, picker: null }
+        ? { fromNodeId: null, fromPort: null, fromVariantIndex: 0, picker: null }
         : state;
   }
 }
@@ -83,8 +96,8 @@ export function topologyConnectionReducer(
 export function useTopologyEditorConnection() {
   const [state, dispatch] = useReducer(topologyConnectionReducer, initialTopologyConnectionState);
 
-  const beginConnection = useCallback((fromNodeId: string, fromPort: PortName) => {
-    dispatch({ type: 'begin', fromNodeId, fromPort });
+  const beginConnection = useCallback((fromNodeId: string, fromPort: PortName, fromVariantIndex = 0) => {
+    dispatch({ type: 'begin', fromNodeId, fromPort, fromVariantIndex });
   }, []);
   const openPicker = useCallback((picker: TopologyPickerState) => {
     dispatch({ type: 'open-picker', picker });

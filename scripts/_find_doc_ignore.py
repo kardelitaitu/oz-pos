@@ -1,6 +1,10 @@
 """Find all ```ignore blocks in Rust files with context."""
 import os
 
+# Repo root = parent of scripts/, resolved from this file's location, so the
+# script finds its targets no matter which checkout/worktree CWD it runs from.
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 files_to_check = [
     'modules/crm/src/lib.rs',
     'modules/inventory/src/lib.rs',
@@ -29,10 +33,11 @@ files_to_check = [
 MARKER = '```ignore'
 
 for filepath in files_to_check:
-    if not os.path.exists(filepath):
+    full = os.path.join(ROOT, filepath)
+    if not os.path.exists(full):
         print(f"SKIP: {filepath} (not found)")
         continue
-    with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+    with open(full, 'r', encoding='utf-8', errors='replace') as f:
         lines = f.readlines()
 
     for i, line in enumerate(lines, 1):

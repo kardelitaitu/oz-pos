@@ -4,25 +4,27 @@ import { useCustomerDisplay } from '@/features/sales/useCustomerDisplay';
 import type { Money } from '@/types/domain';
 
 const mocks = vi.hoisted(() => ({
-  listDisplays: vi.fn(),
-  displayShow: vi.fn(),
-  displayClear: vi.fn(),
+  listDisplaysScoped: vi.fn(),
+  displayShowScoped: vi.fn(),
+  displayClearScoped: vi.fn(),
 }));
 
 vi.mock('@/api/hardware', () => ({
-  listDisplays: (...args: unknown[]) => mocks.listDisplays(...args),
-  displayShow: (...args: unknown[]) => mocks.displayShow(...args),
-  displayClear: (...args: unknown[]) => mocks.displayClear(...args),
+  listDisplaysScoped: (...args: unknown[]) => mocks.listDisplaysScoped(...args),
+  displayShowScoped: (...args: unknown[]) => mocks.displayShowScoped(...args),
+  displayClearScoped: (...args: unknown[]) => mocks.displayClearScoped(...args),
 }));
 
 function makeTotal(overrides: Partial<Money> = {}): Money {
   return { minor_units: 1250, currency: 'USD', ...overrides };
 }
 
+const TOKEN = 'session-token';
+
 beforeEach(() => {
-  mocks.listDisplays.mockResolvedValue(['display-1']);
-  mocks.displayShow.mockResolvedValue(undefined);
-  mocks.displayClear.mockResolvedValue(undefined);
+  mocks.listDisplaysScoped.mockResolvedValue(['display-1']);
+  mocks.displayShowScoped.mockResolvedValue(undefined);
+  mocks.displayClearScoped.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -32,34 +34,34 @@ afterEach(() => {
 describe('useCustomerDisplay', () => {
   describe('display detection', () => {
     it('auto-detects the first display on mount', async () => {
-      await renderHookInAct(() => useCustomerDisplay({ lines: [], total: null }));
+      await renderHookInAct(() => useCustomerDisplay({ sessionToken: TOKEN, lines: [], total: null }));
 
-      expect(mocks.listDisplays).toHaveBeenCalled();
+      expect(mocks.listDisplaysScoped).toHaveBeenCalledWith(TOKEN);
     });
 
     it('returns the detected display id', async () => {
       const { result } = await renderHookInAct(() =>
-        useCustomerDisplay({ lines: [], total: null }),
+        useCustomerDisplay({ sessionToken: TOKEN, lines: [], total: null }),
       );
 
       expect(result.current.displayId).toBe('display-1');
     });
 
     it('returns null displayId when no displays are registered', async () => {
-      mocks.listDisplays.mockResolvedValue([]);
+      mocks.listDisplaysScoped.mockResolvedValue([]);
 
       const { result } = await renderHookInAct(() =>
-        useCustomerDisplay({ lines: [], total: null }),
+        useCustomerDisplay({ sessionToken: TOKEN, lines: [], total: null }),
       );
 
       expect(result.current.displayId).toBeNull();
     });
 
     it('returns null displayId when listDisplays throws', async () => {
-      mocks.listDisplays.mockRejectedValue(new Error('no backend'));
+      mocks.listDisplaysScoped.mockRejectedValue(new Error('no backend'));
 
       const { result } = await renderHookInAct(() =>
-        useCustomerDisplay({ lines: [], total: null }),
+        useCustomerDisplay({ sessionToken: TOKEN, lines: [], total: null }),
       );
 
       expect(result.current.displayId).toBeNull();
@@ -69,10 +71,11 @@ describe('useCustomerDisplay', () => {
   describe('cart state updates', () => {
     it('shows total and item count on display when items are in cart', async () => {
       await renderHookInAct(() =>
-        useCustomerDisplay({ lines: [{ qty: 3 }], total: makeTotal() }),
+        useCustomerDisplay({ sessionToken: TOKEN, lines: [{ qty: 3 }], total: makeTotal() }),
       );
 
-      expect(mocks.displayShow).toHaveBeenCalledWith(
+      expect(mocks.displayShowScoped).toHaveBeenCalledWith(
+        TOKEN,
         expect.objectContaining({ displayId: 'display-1' }),
       );
     });
@@ -80,44 +83,44 @@ describe('useCustomerDisplay', () => {
     it('clears display when cart is empty', async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (renderHookInAct as any)(() =>
-        useCustomerDisplay({ lines: [], total: null }),
+        useCustomerDisplay({ sessionToken: TOKEN, lines: [], total: null }),
       );
 
-      expect(mocks.displayClear).toHaveBeenCalledWith('display-1');
+      expect(mocks.displayClearScoped).toHaveBeenCalledWith(TOKEN, 'display-1');
     });
 
     it('clears display when item count reaches zero', async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { rerender } = await (renderHookInAct as any)(
         ({ lines, total }: { lines: { qty: number }[]; total: Money | null }) =>
-          useCustomerDisplay({ lines, total }),
+          useCustomerDisplay({ sessionToken: TOKEN, lines, total }),
         { initialProps: { lines: [{ qty: 3 }], total: makeTotal() } },
       );
 
-      mocks.displayClear.mockClear();
+      mocks.displayClearScoped.mockClear();
       rerender({ lines: [], total: makeTotal() });
 
-      expect(mocks.displayClear).toHaveBeenCalledWith('display-1');
+      expect(mocks.displayClearScoped).toHaveBeenCalledWith(TOKEN, 'display-1');
     });
 
     it('does not display when no display is connected', async () => {
-      mocks.listDisplays.mockResolvedValue([]);
+      mocks.listDisplaysScoped.mockResolvedValue([]);
 
       await renderHookInAct(() =>
-        useCustomerDisplay({ lines: [{ qty: 3 }], total: makeTotal() }),
+        useCustomerDisplay({ sessionToken: TOKEN, lines: [{ qty: 3 }], total: makeTotal() }),
       );
 
-      expect(mocks.displayShow).not.toHaveBeenCalled();
+      expect(mocks.displayShowScoped).not.toHaveBeenCalled();
     });
 
     it('uses singular "item" when count is 1', async () => {
       // The hook passes line2 as padded text to displayShow — we verify
       // the raw string passed to the API contains the singular form.
       await renderHookInAct(() =>
-        useCustomerDisplay({ lines: [{ qty: 1 }], total: makeTotal() }),
+        useCustomerDisplay({ sessionToken: TOKEN, lines: [{ qty: 1 }], total: makeTotal() }),
       );
 
-      expect(mocks.displayShow).toHaveBeenCalledWith({
+      expect(mocks.displayShowScoped).toHaveBeenCalledWith(TOKEN, {
         displayId: 'display-1',
         line1: expect.any(String),
         line2: expect.stringContaining('1 item'),
@@ -126,10 +129,10 @@ describe('useCustomerDisplay', () => {
 
     it('uses plural "items" when count is not 1', async () => {
       await renderHookInAct(() =>
-        useCustomerDisplay({ lines: [{ qty: 3 }], total: makeTotal() }),
+        useCustomerDisplay({ sessionToken: TOKEN, lines: [{ qty: 3 }], total: makeTotal() }),
       );
 
-      expect(mocks.displayShow).toHaveBeenCalledWith({
+      expect(mocks.displayShowScoped).toHaveBeenCalledWith(TOKEN, {
         displayId: 'display-1',
         line1: expect.any(String),
         line2: expect.stringContaining('3 items'),
@@ -143,34 +146,33 @@ describe('useCustomerDisplay', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { rerender } = await (renderHookInAct as any)(
         ({ lines: l, total: t }: { lines: { qty: number }[]; total: Money | null }) =>
-          useCustomerDisplay({ lines: l, total: t }),
+          useCustomerDisplay({ sessionToken: TOKEN, lines: l, total: t }),
         { initialProps: { lines, total } },
       );
 
-      mocks.displayShow.mockClear();
+      mocks.displayShowScoped.mockClear();
       rerender({ lines, total });
 
-      expect(mocks.displayShow).not.toHaveBeenCalled();
+      expect(mocks.displayShowScoped).not.toHaveBeenCalled();
     });
   });
 
   describe('handlePaymentComplete', () => {
     it('clears the display', async () => {
       const { result } = await renderHookInAct(() =>
-        useCustomerDisplay({ lines: [{ qty: 3 }], total: makeTotal() }),
+        useCustomerDisplay({ sessionToken: TOKEN, lines: [{ qty: 3 }], total: makeTotal() }),
       );
 
       result.current.handlePaymentComplete();
 
-      expect(mocks.displayClear).toHaveBeenCalledWith('display-1');
+      expect(mocks.displayClearScoped).toHaveBeenCalledWith(TOKEN, 'display-1');
     });
 
     it('calls onPaymentComplete callback', async () => {
       const onPaymentComplete = vi.fn();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { result } = await (renderHookInAct as any)(() =>
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        useCustomerDisplay({ lines: [{ qty: 3 }], total: makeTotal(), onPaymentComplete } as any),
+        useCustomerDisplay({ sessionToken: TOKEN, lines: [{ qty: 3 }], total: makeTotal(), onPaymentComplete }),
       );
 
       result.current.handlePaymentComplete();
@@ -180,21 +182,21 @@ describe('useCustomerDisplay', () => {
 
     it('does not throw when onPaymentComplete is not provided', async () => {
       const { result } = await renderHookInAct(() =>
-        useCustomerDisplay({ lines: [{ qty: 3 }], total: makeTotal() }),
+        useCustomerDisplay({ sessionToken: TOKEN, lines: [{ qty: 3 }], total: makeTotal() }),
       );
 
       expect(() => result.current.handlePaymentComplete()).not.toThrow();
     });
 
     it('does not call displayClear when no display is connected', async () => {
-      mocks.listDisplays.mockResolvedValue([]);
+      mocks.listDisplaysScoped.mockResolvedValue([]);
       const { result } = await renderHookInAct(() =>
-        useCustomerDisplay({ lines: [{ qty: 3 }], total: makeTotal() }),
+        useCustomerDisplay({ sessionToken: TOKEN, lines: [{ qty: 3 }], total: makeTotal() }),
       );
 
       result.current.handlePaymentComplete();
 
-      expect(mocks.displayClear).not.toHaveBeenCalled();
+      expect(mocks.displayClearScoped).not.toHaveBeenCalled();
     });
   });
 });

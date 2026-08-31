@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-plugin slice A: loader deep read)
+crate: oz-plugin | status: SAFE | lint: CLEAN
+findings: exemplary — PLG-02 script resolution: structural rejection of absolute/drive/UNC/dotdot and non-canonical paths, canonical containment check defeats symlink escape (in-directory symlinks permitted as documented), optional scripts tolerated, regular-file check; documented asymmetry: unsafe script path skips only that plugin (loud warn) while a manifest schema violation aborts the whole registry load (fail-closed, PLG-08 rationale: a typo must never look like loaded-and-doing-nothing)
+next: none | perf: N/A
+*/
 use std::path::{Path, PathBuf};
 
 use crate::error::PluginError;

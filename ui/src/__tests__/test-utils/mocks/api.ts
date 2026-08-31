@@ -368,7 +368,7 @@ export interface LoyaltyApiOverrides {
 
 const loyaltyTier = {
   id: 'tier-1', name: 'Silver', min_points: 0,
-  points_per_unit: 10, earn_multiplier: 1.0,
+  points_per_unit: 10, earn_multiplier_millionths: 1_000_000,
   colour: '#C0C0C0', sort_order: 1,
   created_at: new Date().toISOString(),
 };

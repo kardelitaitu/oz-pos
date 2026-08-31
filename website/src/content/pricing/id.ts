@@ -13,9 +13,12 @@ import type { FeatureRow, PricingTier } from './types';
 // Rp figures on this page are the display price — the checkout shows the
 // USD amount. True fixed-Rp billing needs the local provider phase
 // (Midtrans — see subscription-tiers.md §2 Payment routing), not Paddle.
-// Until the six new Paddle prices are catalogued, paid tiers carry
-// placeholder ids (pri_placeholder_…) so checkout degrades to the mailto
-// fallback instead of charging the old (wrong) amounts.
+// The six real Paddle prices (Plus/Pro/Premium × monthly/yearly) are now
+// catalogued from the Paddle dashboard. The IDs are shared by both locales
+// (Paddle has no IDR billing currency — the id locale only differs in the
+// displayed Rp amount). The bundle option (restaurant_starter) and the Pro
+// A/B variant still use placeholder ids until those Paddle prices are
+// created — checkout degrades to the mailto fallback for them.
 export const pricing: PricingTier[] = [
   {
     id: 'free',
@@ -45,8 +48,8 @@ export const pricing: PricingTier[] = [
     description: 'Paket awal untuk toko tunggal yang siap berkembang.',
     cta: 'Pilih Plus',
     prices: {
-      monthly: { price: 'Rp 49.000', period: '/m', priceId: 'pri_placeholder_plus_monthly_usd' },
-      yearly: { price: 'Rp 500.000', period: '/y', priceId: 'pri_placeholder_plus_yearly_usd' },
+      monthly: { price: 'Rp 49.000', period: '/m', priceId: 'pro_01m1amcb41qkbr7zzd1kxa3qnd' },
+      yearly: { price: 'Rp 500.000', period: '/y', priceId: 'pro_01m1amdj2swb3q21r2mwcy3krh' },
     },
     bundle: {
       id: 'restaurant_starter',
@@ -77,12 +80,14 @@ export const pricing: PricingTier[] = [
     prices: {
       monthly: {
         price: 'Rp 99.000', period: '/m',
-        priceId: 'pri_placeholder_pro_monthly_usd',
-        // C4.1: A/B variant — Rp 79.000 vs Rp 99.000 (controlled by ?ab=pro_price)
+        priceId: 'pro_01m1amdwp700jp6183k9zjsgaz',
+        // C4.1: A/B variant — Rp 79.000 vs Rp 99.000 (controlled by ?ab=pro_price).
+        // The variant price is NOT created on Paddle yet — placeholder keeps
+        // the variant checkout on the mailto fallback.
         variantPriceId: 'pri_pro_monthly_usd_variant_799',
         variantPrice: 'Rp 79.000',
       },
-      yearly: { price: 'Rp 1.000.000', period: '/y', priceId: 'pri_placeholder_pro_yearly_usd' },
+      yearly: { price: 'Rp 1.000.000', period: '/y', priceId: 'pro_01m1ame8ckw8vzjnf8y4q15mww' },
     },
     features: [
       { label: '2 toko', included: true },
@@ -101,8 +106,8 @@ export const pricing: PricingTier[] = [
     description: 'Untuk jaringan multi-toko — whitelabel, loyalitas, dan otomatisasi.',
     cta: 'Pilih Premium',
     prices: {
-      monthly: { price: 'Rp 399.000', period: '/m', priceId: 'pri_placeholder_premium_monthly_usd' },
-      yearly: { price: 'Rp 3.999.000', period: '/y', priceId: 'pri_placeholder_premium_yearly_usd' },
+      monthly: { price: 'Rp 399.000', period: '/m', priceId: 'pro_01m1amema8yj6w5mfm8wx8jwhm' },
+      yearly: { price: 'Rp 3.999.000', period: '/y', priceId: 'pro_01m1amf0vpbyfndg5rkvxvyqj4' },
     },
     features: [
       { label: '5 toko', included: true },

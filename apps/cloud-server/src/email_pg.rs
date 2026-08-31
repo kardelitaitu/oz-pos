@@ -1,6 +1,6 @@
 //! Postgres backend for the scheduled report-sender email loop.
 //!
-//! Phase 1.5 of `unify-auth-and-sync.md`: the SQLite loop in [`crate::email`]
+//! Phase 1.5 of `docs/archived/2026-08-15-unify-auth-and-sync.md`: the SQLite loop in [`crate::email`]
 //! reads its config from the synchronous `rusqlite` `Store`; this module is
 //! the parallel async Postgres implementation used on the cloud branch. It
 //! covers the exact surface the loop touches:
@@ -8,7 +8,7 @@
 //! - the `settings` table (`smtp_config`, `report_schedule`,
 //!   `last_report_sent_at`, `store.name`) — read per tenant via scoped
 //!   `{key}:{tenant}` keys with bare-key fallback (see §11.5 of
-//!   `unify-auth-and-sync.md`)
+//!   `docs/archived/2026-08-15-unify-auth-and-sync.md`)
 //! - the analytics bundle (`export_analytics_bundle_pg`) — the ten report
 //!   queries ported from `oz_core::db::reports` / `oz_core::db::popularity`,
 //!   every one tenant-filtered (`AND s.tenant_id = $n` / `AND p.tenant_id = $n`)
@@ -474,7 +474,12 @@ async fn get_smtp_config_pg(pool: &Pool, tenant: &str) -> Result<Option<SmtpConf
     if let Some(ref pwd) = config.password
         && !pwd.is_empty()
     {
-        config.password = Some(oz_core::crypto::decrypt_smtp_at_rest(pwd));
+        // F-029: fails closed — legacy plaintext passes through inside
+        // decrypt_smtp_at_rest, tampered ciphertext surfaces as an error.
+        config.password = Some(
+            oz_core::crypto::decrypt_smtp_at_rest(pwd)
+                .map_err(|e| format!("stored SMTP password failed authentication: {e}"))?,
+        );
     }
     Ok(Some(config))
 }
@@ -652,24 +657,49 @@ async fn daily_revenue_pg(
     let end = parse_date(end_date)?;
     let rows = tx
         .query(
-            "SELECT d.date, d.total_minor, d.currency, d.sale_count,
-                    (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty)::bigint, 0)
-                     FROM sale_lines sl2
-                     JOIN sales s2 ON sl2.sale_id = s2.id
-                     LEFT JOIN products p2 ON p2.sku = sl2.sku AND p2.tenant_id = s2.tenant_id
-                     WHERE s2.status = 'completed'
-                       AND s2.tenant_id = $3
-                       AND s2.currency = d.currency
-                       AND s2.created_at::date = d.date::date) AS cogs_minor
-             FROM (SELECT to_char(s.created_at::date, 'YYYY-MM-DD') AS date,
-                          SUM(s.total_minor)::bigint AS total_minor,
-                          s.currency AS currency,
-                          COUNT(*) AS sale_count
-                   FROM sales s
-                   WHERE s.status = 'completed'
-                     AND s.tenant_id = $3
-                     AND s.created_at::date BETWEEN $1 AND $2
-                   GROUP BY to_char(s.created_at::date, 'YYYY-MM-DD'), s.currency) d
+            // REP-04 cloud parity: sales and refunds aggregate independently
+            // and join FULL OUTER on (date, currency) — a refund-only day
+            // must still produce a row, mirroring the local daily_revenue
+            // semantics exactly. COGS is a pre-aggregated CTE rather than
+            // the local correlated subquery: PG rejects subqueries that
+            // reference ungrouped outer columns (E42803), and joining an
+            // aggregate keyed on (date, currency) cannot multiply rows.
+            "WITH s AS (
+                 SELECT to_char(s1.created_at::date, 'YYYY-MM-DD') AS d, s1.currency AS c,
+                        SUM(s1.total_minor)::bigint AS t, COUNT(*) AS n
+                 FROM sales s1
+                 WHERE s1.status = 'completed'
+                   AND s1.tenant_id = $3
+                   AND s1.created_at::date BETWEEN $1 AND $2
+                 GROUP BY s1.created_at::date, s1.currency
+             ),
+             c AS (
+                 SELECT to_char(s3.created_at::date, 'YYYY-MM-DD') AS d, s3.currency AS c,
+                        SUM(COALESCE(sl3.cost_minor, p3.cost_minor, 0) * sl3.qty)::bigint AS cogs
+                 FROM sale_lines sl3
+                 JOIN sales s3 ON sl3.sale_id = s3.id
+                 LEFT JOIN products p3 ON p3.sku = sl3.sku AND p3.tenant_id = s3.tenant_id
+                 WHERE s3.status = 'completed'
+                   AND s3.tenant_id = $3
+                   AND s3.created_at::date BETWEEN $1 AND $2
+                 GROUP BY s3.created_at::date, s3.currency
+             ),
+             r AS (
+                 SELECT to_char(created_at::date, 'YYYY-MM-DD') AS d, currency AS c,
+                        SUM(total_minor)::bigint AS rf
+                 FROM refunds
+                 WHERE tenant_id = $3 AND created_at::date BETWEEN $1 AND $2
+                 GROUP BY created_at::date, currency
+             )
+             SELECT COALESCE(s.d, r.d) AS date,
+                    COALESCE(s.t, 0)::bigint AS total_minor,
+                    COALESCE(s.c, r.c) AS currency,
+                    COALESCE(s.n, 0)::bigint AS sale_count,
+                    COALESCE(c.cogs, 0)::bigint AS cogs_minor,
+                    COALESCE(r.rf, 0)::bigint AS refund_minor,
+                    (COALESCE(s.t, 0) - COALESCE(r.rf, 0))::bigint AS net_revenue_minor
+             FROM s FULL OUTER JOIN r ON s.d = r.d AND s.c = r.c
+             LEFT JOIN c ON c.d = s.d AND c.c = s.c
              ORDER BY date ASC",
             &[&start, &end, &tenant],
         )
@@ -690,6 +720,8 @@ async fn daily_revenue_pg(
             cogs_minor,
             gross_profit_minor,
             gross_margin_percent,
+            refund_minor: row.get(5),
+            net_revenue_minor: row.get(6),
         });
     }
     Ok(out)
@@ -711,23 +743,49 @@ async fn weekly_revenue_pg(
     let end = parse_date(end_date)?;
     let rows = tx
         .query(
-            "SELECT d.week_start, d.total_minor, d.currency, d.sale_count,
-                    (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty)::bigint, 0)
-                     FROM sale_lines sl2
-                     JOIN sales s2 ON sl2.sale_id = s2.id
-                     LEFT JOIN products p2 ON p2.sku = sl2.sku AND p2.tenant_id = s2.tenant_id
-                     WHERE s2.status = 'completed'
-                       AND s2.tenant_id = $3
-                       AND s2.currency = d.currency
-                       AND to_char(date_trunc('week', s2.created_at::date)::date, 'YYYY-MM-DD') = d.week_start::date::text) AS cogs_minor
-             FROM (SELECT to_char(date_trunc('week', s.created_at::date)::date, 'YYYY-MM-DD') AS week_start,
-                          SUM(s.total_minor)::bigint AS total_minor, s.currency AS currency,
-                          COUNT(*) AS sale_count
-                   FROM sales s
-                   WHERE s.status = 'completed'
-                     AND s.tenant_id = $3
-                     AND s.created_at::date BETWEEN $1 AND $2
-                   GROUP BY to_char(date_trunc('week', s.created_at::date)::date, 'YYYY-MM-DD'), s.currency) d
+            // REP-04 cloud parity: FULL OUTER netting on (week_start,
+            // currency); a refund-only week still produces a row. COGS is
+            // a pre-aggregated CTE (PG forbids the correlated form over
+            // ungrouped outer columns).
+            "WITH s AS (
+                 SELECT to_char(date_trunc('week', s1.created_at::date)::date, 'YYYY-MM-DD') AS d,
+                        s1.currency AS c,
+                        SUM(s1.total_minor)::bigint AS t, COUNT(*) AS n
+                 FROM sales s1
+                 WHERE s1.status = 'completed'
+                   AND s1.tenant_id = $3
+                   AND s1.created_at::date BETWEEN $1 AND $2
+                 GROUP BY date_trunc('week', s1.created_at::date), s1.currency
+             ),
+             c AS (
+                 SELECT to_char(date_trunc('week', s3.created_at::date)::date, 'YYYY-MM-DD') AS d,
+                        s3.currency AS c,
+                        SUM(COALESCE(sl3.cost_minor, p3.cost_minor, 0) * sl3.qty)::bigint AS cogs
+                 FROM sale_lines sl3
+                 JOIN sales s3 ON sl3.sale_id = s3.id
+                 LEFT JOIN products p3 ON p3.sku = sl3.sku AND p3.tenant_id = s3.tenant_id
+                 WHERE s3.status = 'completed'
+                   AND s3.tenant_id = $3
+                   AND s3.created_at::date BETWEEN $1 AND $2
+                 GROUP BY date_trunc('week', s3.created_at::date), s3.currency
+             ),
+             r AS (
+                 SELECT to_char(date_trunc('week', created_at::date)::date, 'YYYY-MM-DD') AS d,
+                        currency AS c,
+                        SUM(total_minor)::bigint AS rf
+                 FROM refunds
+                 WHERE tenant_id = $3 AND created_at::date BETWEEN $1 AND $2
+                 GROUP BY date_trunc('week', created_at::date), currency
+             )
+             SELECT COALESCE(s.d, r.d) AS week_start,
+                    COALESCE(s.t, 0)::bigint AS total_minor,
+                    COALESCE(s.c, r.c) AS currency,
+                    COALESCE(s.n, 0)::bigint AS sale_count,
+                    COALESCE(c.cogs, 0)::bigint AS cogs_minor,
+                    COALESCE(r.rf, 0)::bigint AS refund_minor,
+                    (COALESCE(s.t, 0) - COALESCE(r.rf, 0))::bigint AS net_revenue_minor
+             FROM s FULL OUTER JOIN r ON s.d = r.d AND s.c = r.c
+             LEFT JOIN c ON c.d = s.d AND c.c = s.c
              ORDER BY week_start ASC",
             &[&start, &end, &tenant],
         )
@@ -748,6 +806,8 @@ async fn weekly_revenue_pg(
             cogs_minor,
             gross_profit_minor,
             gross_margin_percent,
+            refund_minor: row.get(5),
+            net_revenue_minor: row.get(6),
         });
     }
     Ok(out)
@@ -769,23 +829,46 @@ async fn monthly_revenue_pg(
     let end = parse_date(end_date)?;
     let rows = tx
         .query(
-            "SELECT d.month, d.total_minor, d.currency, d.sale_count,
-                    (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty)::bigint, 0)
-                     FROM sale_lines sl2
-                     JOIN sales s2 ON sl2.sale_id = s2.id
-                     LEFT JOIN products p2 ON p2.sku = sl2.sku AND p2.tenant_id = s2.tenant_id
-                     WHERE s2.status = 'completed'
-                       AND s2.tenant_id = $3
-                       AND s2.currency = d.currency
-                       AND LEFT(s2.created_at, 7) = d.month::text) AS cogs_minor
-             FROM (SELECT LEFT(s.created_at, 7) AS month,
-                          SUM(s.total_minor)::bigint AS total_minor, s.currency AS currency,
-                          COUNT(*) AS sale_count
-                   FROM sales s
-                   WHERE s.status = 'completed'
-                     AND s.tenant_id = $3
-                     AND s.created_at::date BETWEEN $1 AND $2
-                   GROUP BY LEFT(s.created_at, 7), s.currency) d
+            // REP-04 cloud parity: FULL OUTER netting on (month, currency);
+            // a refund-only month still produces a row. COGS is a
+            // pre-aggregated CTE (PG forbids the correlated form over
+            // ungrouped outer columns).
+            "WITH s AS (
+                 SELECT LEFT(s1.created_at, 7) AS d, s1.currency AS c,
+                        SUM(s1.total_minor)::bigint AS t, COUNT(*) AS n
+                 FROM sales s1
+                 WHERE s1.status = 'completed'
+                   AND s1.tenant_id = $3
+                   AND s1.created_at::date BETWEEN $1 AND $2
+                 GROUP BY LEFT(s1.created_at, 7), s1.currency
+             ),
+             c AS (
+                 SELECT LEFT(s3.created_at, 7) AS d, s3.currency AS c,
+                        SUM(COALESCE(sl3.cost_minor, p3.cost_minor, 0) * sl3.qty)::bigint AS cogs
+                 FROM sale_lines sl3
+                 JOIN sales s3 ON sl3.sale_id = s3.id
+                 LEFT JOIN products p3 ON p3.sku = sl3.sku AND p3.tenant_id = s3.tenant_id
+                 WHERE s3.status = 'completed'
+                   AND s3.tenant_id = $3
+                   AND s3.created_at::date BETWEEN $1 AND $2
+                 GROUP BY LEFT(s3.created_at, 7), s3.currency
+             ),
+             r AS (
+                 SELECT LEFT(created_at, 7) AS d, currency AS c,
+                        SUM(total_minor)::bigint AS rf
+                 FROM refunds
+                 WHERE tenant_id = $3 AND created_at::date BETWEEN $1 AND $2
+                 GROUP BY LEFT(created_at, 7), currency
+             )
+             SELECT COALESCE(s.d, r.d) AS month,
+                    COALESCE(s.t, 0)::bigint AS total_minor,
+                    COALESCE(s.c, r.c) AS currency,
+                    COALESCE(s.n, 0)::bigint AS sale_count,
+                    COALESCE(c.cogs, 0)::bigint AS cogs_minor,
+                    COALESCE(r.rf, 0)::bigint AS refund_minor,
+                    (COALESCE(s.t, 0) - COALESCE(r.rf, 0))::bigint AS net_revenue_minor
+             FROM s FULL OUTER JOIN r ON s.d = r.d AND s.c = r.c
+             LEFT JOIN c ON c.d = s.d AND c.c = s.c
              ORDER BY month ASC",
             &[&start, &end, &tenant],
         )
@@ -806,6 +889,8 @@ async fn monthly_revenue_pg(
             cogs_minor,
             gross_profit_minor,
             gross_margin_percent,
+            refund_minor: row.get(5),
+            net_revenue_minor: row.get(6),
         });
     }
     Ok(out)
@@ -833,19 +918,30 @@ async fn top_products_pg(
     let start = parse_date(start_date)?;
     let end = parse_date(end_date)?;
     let sql = format!(
-        "SELECT p.id AS product_id, p.sku, p.name,
+        // REP-06: include currency so rows are grouped per-product AND
+        // per-currency; minor units must never be summed across currencies.
+        // REP-05: identity comes from the sale-line snapshot first; the
+        // products join is only a fallback for legacy NULL rows. Grouping
+        // by the resolved expressions keeps each sale era of a reused sku
+        // on its own correctly-labelled row instead of relabelling history.
+        "SELECT COALESCE(sl.product_id, p.id, 'deleted:' || sl.sku) AS product_id,
+                sl.sku,
+                COALESCE(sl.product_name, p.name, sl.sku) AS name,
                 SUM(sl.qty)::bigint AS total_qty,
                 SUM(sl.line_minor)::bigint AS total_minor,
-                SUM(COALESCE(sl.cost_minor, p.cost_minor, 0) * sl.qty)::bigint AS cogs_minor,
-                (SUM(sl.line_minor) - SUM(COALESCE(sl.cost_minor, p.cost_minor, 0) * sl.qty))::bigint AS gross_profit_minor
+                SUM(sl.qty * COALESCE(sl.cost_minor, p.cost_minor, 0))::bigint AS cogs_minor,
+                (SUM(sl.line_minor) - SUM(sl.qty * COALESCE(sl.cost_minor, p.cost_minor, 0)))::bigint AS gross_profit_minor,
+                s.currency
          FROM sale_lines sl
          JOIN sales s ON sl.sale_id = s.id
-         JOIN products p ON p.sku = sl.sku AND p.tenant_id = s.tenant_id
+         LEFT JOIN products p ON p.sku = sl.sku AND p.tenant_id = s.tenant_id
          WHERE s.status = 'completed'
            AND s.tenant_id = $4
            AND s.created_at::date BETWEEN $1 AND $2
-         GROUP BY p.id
-         ORDER BY {order_clause}, p.sku
+         GROUP BY sl.sku, s.currency, p.cost_minor,
+                  COALESCE(sl.product_id, p.id, 'deleted:' || sl.sku),
+                  COALESCE(sl.product_name, p.name, sl.sku)
+         ORDER BY {order_clause}, sl.sku
          LIMIT $3"
     );
     let rows = tx
@@ -871,6 +967,7 @@ async fn top_products_pg(
             } else {
                 0.0
             },
+            currency: row.get(7),
         });
     }
     Ok(out)
@@ -892,15 +989,17 @@ async fn hourly_heatmap_pg(
     let end = parse_date(end_date)?;
     let rows = tx
         .query(
+            // REP-06: group by currency so minor units are never mixed.
             "SELECT EXTRACT(DOW FROM created_at::timestamp)::bigint AS day_of_week,
                     EXTRACT(HOUR FROM created_at::timestamp)::bigint AS hour,
                     SUM(total_minor)::bigint AS total_minor,
-                    COUNT(*) AS sale_count
+                    COUNT(*) AS sale_count,
+                    currency
              FROM sales
              WHERE status = 'completed'
                AND tenant_id = $3
                AND created_at::date BETWEEN $1 AND $2
-             GROUP BY day_of_week, hour
+             GROUP BY day_of_week, hour, currency
              ORDER BY day_of_week, hour",
             &[&start, &end, &tenant],
         )
@@ -914,6 +1013,7 @@ async fn hourly_heatmap_pg(
             hour: row.get(1),
             total_minor: row.get(2),
             sale_count: row.get(3),
+            currency: row.get(4),
         });
     }
     Ok(out)
@@ -935,17 +1035,24 @@ async fn category_breakdown_pg(
     let end = parse_date(end_date)?;
     let rows = tx
         .query(
-            "SELECT p.category_id, COALESCE(c.name, 'Uncategorised') AS category_name,
+            // REP-06: group by currency so per-currency percentage is correct.
+            // REP-05: category resolved from the sale-line snapshot first —
+            // moving a product between categories after the sale no longer
+            // relabels historical revenue; legacy NULL rows fall back to the
+            // products join.
+            "SELECT COALESCE(sl.category_id, p.category_id) AS category_id,
+                    COALESCE(c.name, 'Uncategorised') AS category_name,
                     SUM(sl.line_minor)::bigint AS total_minor,
-                    COUNT(DISTINCT s.id) AS sale_count
+                    COUNT(DISTINCT s.id) AS sale_count,
+                    s.currency
              FROM sale_lines sl
              JOIN sales s ON sl.sale_id = s.id
-             JOIN products p ON p.sku = sl.sku AND p.tenant_id = s.tenant_id
-             LEFT JOIN categories c ON p.category_id = c.id
+             LEFT JOIN products p ON p.sku = sl.sku AND p.tenant_id = s.tenant_id
+             LEFT JOIN categories c ON c.id = COALESCE(sl.category_id, p.category_id)
              WHERE s.status = 'completed'
                AND s.tenant_id = $3
                AND s.created_at::date BETWEEN $1 AND $2
-             GROUP BY p.category_id, c.name
+             GROUP BY COALESCE(sl.category_id, p.category_id), c.name, s.currency
              ORDER BY total_minor DESC",
             &[&start, &end, &tenant],
         )
@@ -960,12 +1067,20 @@ async fn category_breakdown_pg(
             total_minor: row.get(2),
             sale_count: row.get(3),
             percentage: 0.0,
+            currency: row.get(4),
         });
     }
 
-    let grand_total: f64 = out.iter().map(|r| r.total_minor as f64).sum();
-    if grand_total > 0.0 {
-        for row in &mut out {
+    // Percentage is normalised within each currency bucket.
+    // Group by currency and compute grand total per currency.
+    let mut currency_totals: std::collections::HashMap<String, f64> =
+        std::collections::HashMap::new();
+    for row in &out {
+        *currency_totals.entry(row.currency.clone()).or_insert(0.0) += row.total_minor as f64;
+    }
+    for row in &mut out {
+        let grand_total = currency_totals.get(&row.currency).copied().unwrap_or(0.0);
+        if grand_total > 0.0 {
             row.percentage = (row.total_minor as f64 / grand_total) * 100.0;
         }
     }

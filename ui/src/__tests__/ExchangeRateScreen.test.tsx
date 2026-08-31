@@ -10,16 +10,30 @@ import { minorUnitExponent } from '@/types/domain';
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
-const mockListExchangeRates = vi.fn();
-const mockListCurrencies = vi.fn();
-const mockCreateExchangeRate = vi.fn();
-const mockDeleteExchangeRate = vi.fn();
+const mockListExchangeRatesScoped = vi.fn();
+const mockListCurrenciesScoped = vi.fn();
+const mockCreateExchangeRateScoped = vi.fn();
+const mockDeleteExchangeRateScoped = vi.fn();
+
+// CUR-06: the screen must route through the session-scoped commands when a
+// workspace session is active, so multi-store deployments never read or
+// mutate the global currency configuration. The non-scoped wrappers were
+// removed from @/api/currency (8c21abeb) — the mock mirrors the real
+// module surface.
+const workspaceMock = vi.hoisted(() => ({ sessionToken: '' }));
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({
+    activeWorkspace: null,
+    sessionToken: workspaceMock.sessionToken,
+    swapSessionToken: vi.fn(),
+  }),
+}));
 
 vi.mock('@/api/currency', () => ({
-  listExchangeRates: (...args: unknown[]) => mockListExchangeRates(...args),
-  listCurrencies: (...args: unknown[]) => mockListCurrencies(...args),
-  createExchangeRate: (...args: unknown[]) => mockCreateExchangeRate(...args),
-  deleteExchangeRate: (...args: unknown[]) => mockDeleteExchangeRate(...args),
+  listExchangeRatesScoped: (...args: unknown[]) => mockListExchangeRatesScoped(...args),
+  listCurrenciesScoped: (...args: unknown[]) => mockListCurrenciesScoped(...args),
+  createExchangeRateScoped: (...args: unknown[]) => mockCreateExchangeRateScoped(...args),
+  deleteExchangeRateScoped: (...args: unknown[]) => mockDeleteExchangeRateScoped(...args),
   formatExchangeRate: (rate: { rate_millionths: number }) =>
     (rate.rate_millionths / 1_000_000).toString(),
 }));
@@ -54,15 +68,16 @@ function renderScreen() {
 
 describe('ExchangeRateScreen', () => {
   beforeEach(() => {
-    mockListExchangeRates.mockReset();
-    mockListCurrencies.mockReset();
-    mockCreateExchangeRate.mockReset();
-    mockDeleteExchangeRate.mockReset();
+    mockListExchangeRatesScoped.mockReset();
+    mockListCurrenciesScoped.mockReset();
+    mockCreateExchangeRateScoped.mockReset();
+    mockDeleteExchangeRateScoped.mockReset();
+    workspaceMock.sessionToken = '';
   });
 
   it('renders the title', async () => {
-    mockListExchangeRates.mockResolvedValue([makeRate()]);
-    mockListCurrencies.mockResolvedValue([makeCurrency('USD', 'US Dollar')]);
+    mockListExchangeRatesScoped.mockResolvedValue([makeRate()]);
+    mockListCurrenciesScoped.mockResolvedValue([makeCurrency('USD', 'US Dollar')]);
     renderScreen();
 
     await waitFor(() => {
@@ -71,8 +86,8 @@ describe('ExchangeRateScreen', () => {
   });
 
   it('renders the Add button', async () => {
-    mockListExchangeRates.mockResolvedValue([makeRate()]);
-    mockListCurrencies.mockResolvedValue([]);
+    mockListExchangeRatesScoped.mockResolvedValue([makeRate()]);
+    mockListCurrenciesScoped.mockResolvedValue([]);
     renderScreen();
 
     await waitFor(() => {
@@ -82,8 +97,8 @@ describe('ExchangeRateScreen', () => {
   });
 
   it('shows loading skeleton initially', () => {
-    mockListExchangeRates.mockImplementation(() => new Promise(() => {}));
-    mockListCurrencies.mockImplementation(() => new Promise(() => {}));
+    mockListExchangeRatesScoped.mockImplementation(() => new Promise(() => {}));
+    mockListCurrenciesScoped.mockImplementation(() => new Promise(() => {}));
     const { container } = renderScreen();
 
     const skeleton = container.querySelector('[aria-hidden="true"].exchange-rate-loading-skeleton');
@@ -92,8 +107,8 @@ describe('ExchangeRateScreen', () => {
   });
 
   it('shows error state with retry', async () => {
-    mockListExchangeRates.mockRejectedValue(new Error('Failed'));
-    mockListCurrencies.mockRejectedValue(new Error('Failed'));
+    mockListExchangeRatesScoped.mockRejectedValue(new Error('Failed'));
+    mockListCurrenciesScoped.mockRejectedValue(new Error('Failed'));
     renderScreen();
 
     await waitFor(() => {
@@ -102,8 +117,8 @@ describe('ExchangeRateScreen', () => {
   });
 
   it('shows empty state when no rates exist', async () => {
-    mockListExchangeRates.mockResolvedValue([]);
-    mockListCurrencies.mockResolvedValue([]);
+    mockListExchangeRatesScoped.mockResolvedValue([]);
+    mockListCurrenciesScoped.mockResolvedValue([]);
     renderScreen();
 
     await waitFor(() => {
@@ -112,11 +127,11 @@ describe('ExchangeRateScreen', () => {
   });
 
   it('renders a table with rate rows', async () => {
-    mockListExchangeRates.mockResolvedValue([
+    mockListExchangeRatesScoped.mockResolvedValue([
       makeRate({ id: 'r1', from_currency: 'USD', to_currency: 'IDR', rate_millionths: 16_000_000_000 }),
       makeRate({ id: 'r2', from_currency: 'EUR', to_currency: 'IDR', rate_millionths: 17_000_000_000 }),
     ]);
-    mockListCurrencies.mockResolvedValue([]);
+    mockListCurrenciesScoped.mockResolvedValue([]);
     renderScreen();
 
     await waitFor(() => {
@@ -134,8 +149,8 @@ describe('ExchangeRateScreen', () => {
   });
 
   it('shows manual source label', async () => {
-    mockListExchangeRates.mockResolvedValue([makeRate({ source: 'manual' })]);
-    mockListCurrencies.mockResolvedValue([]);
+    mockListExchangeRatesScoped.mockResolvedValue([makeRate({ source: 'manual' })]);
+    mockListCurrenciesScoped.mockResolvedValue([]);
     renderScreen();
 
     await waitFor(() => {
@@ -144,8 +159,8 @@ describe('ExchangeRateScreen', () => {
   });
 
   it('each row has a Delete button', async () => {
-    mockListExchangeRates.mockResolvedValue([makeRate()]);
-    mockListCurrencies.mockResolvedValue([]);
+    mockListExchangeRatesScoped.mockResolvedValue([makeRate()]);
+    mockListCurrenciesScoped.mockResolvedValue([]);
     renderScreen();
 
     await waitFor(() => {
@@ -155,8 +170,8 @@ describe('ExchangeRateScreen', () => {
   });
 
   it('opens the add modal when Add is clicked', async () => {
-    mockListExchangeRates.mockResolvedValue([]);
-    mockListCurrencies.mockResolvedValue([
+    mockListExchangeRatesScoped.mockResolvedValue([]);
+    mockListCurrenciesScoped.mockResolvedValue([
       makeCurrency('USD', 'US Dollar'),
       makeCurrency('IDR', 'Indonesian Rupiah'),
     ]);
@@ -176,8 +191,8 @@ describe('ExchangeRateScreen', () => {
   });
 
   it('closes the add modal with Cancel', async () => {
-    mockListExchangeRates.mockResolvedValue([]);
-    mockListCurrencies.mockResolvedValue([]);
+    mockListExchangeRatesScoped.mockResolvedValue([]);
+    mockListCurrenciesScoped.mockResolvedValue([]);
     renderScreen();
 
     await waitFor(() => {
@@ -199,12 +214,12 @@ describe('ExchangeRateScreen', () => {
   });
 
   it('saves a new exchange rate via the modal', async () => {
-    mockListExchangeRates.mockResolvedValue([]);
-    mockListCurrencies.mockResolvedValue([
+    mockListExchangeRatesScoped.mockResolvedValue([]);
+    mockListCurrenciesScoped.mockResolvedValue([
       makeCurrency('USD', 'US Dollar'),
       makeCurrency('IDR', 'Indonesian Rupiah'),
     ]);
-    mockCreateExchangeRate.mockResolvedValue(makeRate());
+    mockCreateExchangeRateScoped.mockResolvedValue(makeRate());
 
     renderScreen();
 
@@ -234,7 +249,7 @@ describe('ExchangeRateScreen', () => {
     await user.click(screen.getByText('Save'));
 
     await waitFor(() => {
-      expect(mockCreateExchangeRate).toHaveBeenCalledWith({
+      expect(mockCreateExchangeRateScoped).toHaveBeenCalledWith('', {
         from_currency: 'USD',
         to_currency: 'IDR',
         rate_millionths: 16_000_000_000,
@@ -244,10 +259,10 @@ describe('ExchangeRateScreen', () => {
   });
 
   it('deletes a rate on Delete click', async () => {
-    mockListExchangeRates.mockResolvedValueOnce([makeRate()]);
-    mockListExchangeRates.mockResolvedValueOnce([]);
-    mockListCurrencies.mockResolvedValue([]);
-    mockDeleteExchangeRate.mockResolvedValue(undefined);
+    mockListExchangeRatesScoped.mockResolvedValueOnce([makeRate()]);
+    mockListExchangeRatesScoped.mockResolvedValueOnce([]);
+    mockListCurrenciesScoped.mockResolvedValue([]);
+    mockDeleteExchangeRateScoped.mockResolvedValue(undefined);
 
     renderScreen();
 
@@ -266,7 +281,90 @@ describe('ExchangeRateScreen', () => {
     await user.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => {
-      expect(mockDeleteExchangeRate).toHaveBeenCalledWith('rate-1');
+      expect(mockDeleteExchangeRateScoped).toHaveBeenCalledWith('', 'rate-1');
+    });
+  });
+});
+
+// ── CUR-06: session-scoped routing ─────────────────────────────────────
+describe('ExchangeRateScreen — scoped session', () => {
+  beforeEach(() => {
+    mockListExchangeRatesScoped.mockReset();
+    mockListCurrenciesScoped.mockReset();
+    mockCreateExchangeRateScoped.mockReset();
+    mockDeleteExchangeRateScoped.mockReset();
+    workspaceMock.sessionToken = 'test-token';
+  });
+
+  it('loads rates and currencies through the scoped commands', async () => {
+    mockListExchangeRatesScoped.mockResolvedValue([]);
+    mockListCurrenciesScoped.mockResolvedValue([]);
+
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('No exchange rates configured')).toBeTruthy();
+    });
+    expect(mockListExchangeRatesScoped).toHaveBeenCalledWith('test-token');
+    expect(mockListCurrenciesScoped).toHaveBeenCalledWith('test-token');
+  });
+
+  it('creates through createExchangeRateScoped with the session token', async () => {
+    mockListExchangeRatesScoped.mockResolvedValue([]);
+    mockListCurrenciesScoped.mockResolvedValue([
+      makeCurrency('USD', 'US Dollar'),
+      makeCurrency('IDR', 'Indonesian Rupiah'),
+    ]);
+    mockCreateExchangeRateScoped.mockResolvedValue(makeRate());
+
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('No exchange rates configured')).toBeTruthy();
+    });
+
+    const user = userEvent.setup();
+    await user.click(screen.getAllByText('Add')[0]!);
+    await waitFor(() => {
+      expect(screen.getByText('Add Exchange Rate')).toBeTruthy();
+    });
+    const rateInput = document.querySelector('#er-field-rate') as HTMLInputElement | null;
+    await user.type(rateInput!, '16000');
+    const fromSelect = document.querySelector('#er-field-from') as HTMLSelectElement | null;
+    await user.selectOptions(fromSelect!, 'USD');
+    const toSelect = document.querySelector('#er-field-to') as HTMLSelectElement | null;
+    await user.selectOptions(toSelect!, 'IDR');
+    await user.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(mockCreateExchangeRateScoped).toHaveBeenCalledWith('test-token', {
+        from_currency: 'USD',
+        to_currency: 'IDR',
+        rate_millionths: 16_000_000_000,
+        effective_date: expect.any(String),
+      });
+    });
+  });
+
+  it('deletes through deleteExchangeRateScoped with the session token', async () => {
+    mockListExchangeRatesScoped.mockResolvedValueOnce([makeRate()]);
+    mockListExchangeRatesScoped.mockResolvedValueOnce([]);
+    mockListCurrenciesScoped.mockResolvedValue([]);
+    mockDeleteExchangeRateScoped.mockResolvedValue(undefined);
+
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('Delete')).toBeTruthy();
+    });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText('Delete'));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Delete' })).toBeTruthy();
+    });
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(mockDeleteExchangeRateScoped).toHaveBeenCalledWith('test-token', 'rate-1');
     });
   });
 });

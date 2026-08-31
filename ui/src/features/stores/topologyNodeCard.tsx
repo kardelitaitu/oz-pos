@@ -15,12 +15,11 @@ import type { TopologyNodeData, PortName } from './NodeTopologyEditor';
 import type { TopologyValidationError } from './topologyContract';
 import {
   NODE_TYPE_ICON,
-  leftPortLabelId,
-  portAriaLabelId,
-  portLabelId,
+  socketSemanticIds,
+  semanticPortLabelId,
   topologyUiString,
-  visiblePortsForNode,
 } from './topologyCard';
+import { nodeHeight } from './topologyMetrics';
 import Tooltip from '../../frontend/shell/Tooltip';
 
 interface TelemetryBadge {
@@ -34,13 +33,12 @@ export interface TopologyNodeCardProps {
   isConnectingSource: boolean;
   connectingFromNodeId: string | null;
   connectingFromPort: PortName | null;
-  /** Pre-computed per-port hover state: true when this card's left/right
-   *  port is the current connection target. Derived in the parent's
-   *  nodes.map so only cards whose boolean actually changes re-render
-   *  (the old hoveredTarget object caused ALL cards to re-render on
-   *  every hover change). */
-  isLeftPortHovered: boolean;
-  isRightPortHovered: boolean;
+  /** Semantic row index of the source socket (round 174 stacked ports). */
+  connectingFromVariantIndex: number;
+  /** The connection target currently hovered ON THIS CARD, or null. Derived
+   *  in the parent's nodes.map so only the card whose target changed
+   *  re-renders (null stays null for every unaffected card — memo-safe). */
+  hoveredTarget: { port: PortName; variantIndex: number } | null;
   nodeErrors: TopologyValidationError[];
   /** Compact excess-count chip (round 113): "N Stock Rooms — 1 allowed"
    *  / "N Branch Locations — 1 allowed", rendered inside the validation
@@ -68,7 +66,6 @@ export interface TopologyNodeCardProps {
   isRenameable: boolean;
   renaming: boolean;
   renameDraft: string;
-  connectedPortId: string | undefined;
   l10n: Pick<ReactLocalization, 'getString'>;
   renameInputRef: RefObject<HTMLInputElement>;
   renameBaselineRef: { current: string | null };
@@ -88,10 +85,10 @@ export interface TopologyNodeCardProps {
    *  error code alone. The editor persists the dismissal and the Apply
    *  gates (editor + screen) skip the resolved error. */
   onDismissNodeIssue?: (nodeId: string, messageId: string) => void;
-  onPortClick: (e: React.MouseEvent, nodeId: string, port: PortName) => void;
+  onPortClick: (e: React.MouseEvent, nodeId: string, port: PortName, variantIndex: number) => void;
   onHoverNode: Dispatch<SetStateAction<string | null>>;
   getTelemetry: (node: TopologyNodeData) => TelemetryBadge | null;
-  isPortCompatible: (nodeId: string, port: PortName) => boolean;
+  isPortCompatible: (nodeId: string, port: PortName, variantIndex: number) => boolean;
 }
 
 function TopologyNodeCardImpl({
@@ -100,8 +97,6 @@ function TopologyNodeCardImpl({
   isConnectingSource,
   connectingFromNodeId,
   connectingFromPort,
-  isLeftPortHovered,
-  isRightPortHovered,
   nodeErrors,
   countBadge,
   hasOverlap,
@@ -112,7 +107,6 @@ function TopologyNodeCardImpl({
   isRenameable,
   renaming,
   renameDraft,
-  connectedPortId,
   l10n,
   renameInputRef,
   renameBaselineRef,
@@ -131,7 +125,49 @@ function TopologyNodeCardImpl({
   onHoverNode,
   getTelemetry,
   isPortCompatible,
+  connectingFromVariantIndex,
+  hoveredTarget,
 }: TopologyNodeCardProps): ReactNode {
+  // ── Stacked per-semantic port rows (round 174) ─────────────────
+  // Each semantic a socket exposes becomes its own labeled row. Left
+  // (input) rows and right (output) rows are both top-aligned columns in
+  // the adaptive footer; the taller column sets the footer height.
+  const leftRows = socketSemanticIds(node, 'left');
+  const rightRows = socketSemanticIds(node, 'right');
+  const rowClass = (
+    port: PortName,
+    variantIndex: number,
+    semantics: string[],
+  ): string => {
+    const isActive = connectingFromNodeId === node.id
+      && connectingFromPort === port
+      && connectingFromVariantIndex === variantIndex;
+    const isHovered = hoveredTarget?.port === port && hoveredTarget.variantIndex === variantIndex;
+    const compatible = isPortCompatible(node.id, port, variantIndex);
+    const showHighlight = connectingFromNodeId && connectingFromNodeId !== node.id && isHovered && compatible;
+    return [
+      'node-port-row',
+      `node-port-row--${port}`,
+      semantics.length > 1 ? 'node-port-row--multi' : '',
+      isActive ? 'port-active' : '',
+      showHighlight ? 'port-highlight' : '',
+      compatible ? 'port-compatible' : '',
+      connectingFromNodeId && !compatible ? 'port-incompatible' : '',
+    ].filter(Boolean).join(' ');
+  };
+  const rowAria = (port: PortName, variantIndex: number): string => {
+    const semanticId = socketSemanticIds(node, port)[variantIndex];
+    const label = semanticId
+      ? topologyUiString(l10n, semanticPortLabelId(node, port, semanticId))
+      : topologyUiString(l10n, 'topology-port-aria', { name: node.name || '', port });
+    return `${node.name}: ${label}`;
+  };
+  const rowTitle = (port: PortName, variantIndex: number): string => {
+    const semanticId = socketSemanticIds(node, port)[variantIndex];
+    return semanticId
+      ? topologyUiString(l10n, semanticPortLabelId(node, port, semanticId))
+      : topologyUiString(l10n, 'topology-port-aria', { name: node.name || '', port });
+  };
   return (
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the canvas card is an interactive unit: selectable, draggable, keyboard-selectable (Enter/Space) and context-menuable; these are its purpose, not incidental handlers
     <div
@@ -141,7 +177,7 @@ function TopologyNodeCardImpl({
       }}
       data-node-id={node.id}
       className={`topology-node node-type-${node.type} ${isSelected ? 'node-selected' : ''} ${isConnectingSource ? 'node-connecting-source' : ''}${isFresh ? ' node-fresh' : ''}${isDimmed ? ' node-dimmed' : ''}${overlayMarker ? ` topology-node--overlay-${overlayMarker}` : ''}`}
-      style={{ left: `${node.x}px`, top: `${node.y}px` }}
+      style={{ left: `${node.x}px`, top: `${node.y}px`, height: `${nodeHeight(node)}px` }}
       // role=group — NOT aria-selected: group supports no selection state
       // and axe flagged every card (critical aria-allowed-attr). The card
       // also contains real controls (rename, enabled, port sockets), which
@@ -163,15 +199,13 @@ function TopologyNodeCardImpl({
       }}
     >
       <div className="node-header node-titlebar">
+        {/* Region 1: node type icon */}
+        <span className="node-type-icon">
+          {(() => { const Icon = NODE_TYPE_ICON[node.type]; return <Icon size={16} />; })()}
+        </span>
+
+        {/* Region 2: node title (flexible — grows to fill) */}
         <div className="node-title-wrapper">
-          <span className="node-type-icon">
-            {(() => { const Icon = NODE_TYPE_ICON[node.type]; return <Icon size={16} />; })()}
-          </span>
-          {node.type === 'store' && (
-            <span className="node-anchor-chip" title="Branch Location — permanent anchor, cannot be deleted">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="10" height="10"><circle cx="12" cy="5" r="2" /><path d="M12 7v10" /><path d="M8 21h8" /></svg>
-            </span>
-          )}
           {isRenameable && renaming ? (
             <input
               ref={renameInputRef}
@@ -190,44 +224,59 @@ function TopologyNodeCardImpl({
             <span className="node-title">{node.name}</span>
           )}
         </div>
-        {nodeErrors && nodeErrors.length > 0 && (
-          <>
-            <Tooltip
-              content={(
-                <span className="node-validation-tip">
-                <span className="node-validation-text">{l10n.getString(nodeErrors[0]!.messageId)}</span>
-                {countBadge && <span className="node-validation-count-badge">{countBadge}</span>}
-                {nodeErrors[0]!.code === 'warehouse-missing-stock-routing' && onDismissNodeIssue && (
-                  <button
-                    type="button"
-                    className="node-validation-note-dismiss"
-                    aria-label={topologyUiString(l10n, 'topology-validation-dismiss', null)}
-                    title={topologyUiString(l10n, 'topology-validation-dismiss', null)}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={() => onDismissNodeIssue(node.id, nodeErrors[0]!.messageId)}
-                  >
-                    <span aria-hidden="true">×</span>
-                  </button>
-                )}
-              </span>
-            )}
-            position="bottom"
-            portal
-            showDelay={300}
-          >
-            {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
-            <span
-              className="node-validation-note node-validation-chip"
-              role="status"
-              title={nodeErrors.map((e) => l10n.getString(e.messageId)).join('\n')}
-              onMouseDown={(e) => e.stopPropagation()}
+
+        {/* Region 3: status — validation notification, or a green dot when
+            the node is properly set up (no blocking errors). */}
+        <div className="node-header-status">
+          {nodeErrors && nodeErrors.length > 0 ? (
+            <>
+              <Tooltip
+                content={(
+                  <span className="node-validation-tip">
+                  <span className="node-validation-text">{l10n.getString(nodeErrors[0]!.messageId)}</span>
+                  {countBadge && <span className="node-validation-count-badge">{countBadge}</span>}
+                  {nodeErrors[0]!.code === 'warehouse-missing-stock-routing' && onDismissNodeIssue && (
+                    <button
+                      type="button"
+                      className="node-validation-note-dismiss"
+                      aria-label={topologyUiString(l10n, 'topology-validation-dismiss', null)}
+                      title={topologyUiString(l10n, 'topology-validation-dismiss', null)}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={() => onDismissNodeIssue(node.id, nodeErrors[0]!.messageId)}
+                    >
+                      <span aria-hidden="true">×</span>
+                    </button>
+                  )}
+                </span>
+              )}
+              position="bottom"
+              portal
+              showDelay={300}
             >
-              <span className="node-validation-icon" aria-hidden="true">!</span>
-            </span>
+              {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
+              <span
+                className="node-validation-note node-validation-chip"
+                role="status"
+                title={nodeErrors.map((e) => l10n.getString(e.messageId)).join('\n')}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <span className="node-validation-icon" aria-hidden="true">!</span>
+              </span>
             </Tooltip>
             <span className="node-validation-sr">{l10n.getString(nodeErrors[0]!.messageId)}</span>
-          </>
-        )}
+            </>
+          ) : (
+            <span
+              className="node-status-ok"
+              title={topologyUiString(l10n, 'topology-node-status-ok')}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                <circle cx="5" cy="5" r="5" fill="currentColor" />
+              </svg>
+              <span className="node-status-ok-sr">{topologyUiString(l10n, 'topology-node-status-ok')}</span>
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="node-body">
@@ -331,36 +380,38 @@ function TopologyNodeCardImpl({
         </div>
       )}
 
-      <div className="node-port-sockets-group">
-        {visiblePortsForNode(node).map((port) => {
-          const isActive = connectingFromNodeId === node.id && connectingFromPort === port;
-          const isHovered = port === 'left' ? isLeftPortHovered : isRightPortHovered;
-          const compatible = isPortCompatible(node.id, port);
-          const showHighlight = connectingFromNodeId && connectingFromNodeId !== node.id && isHovered && compatible;
-          // Inventory's single input is flexible: its label follows
-          // the wire actually attached ('location-in' → Location,
-          // 'operation-in' → Operation, nothing → Input).
-          const labelId = port === 'left'
-            ? leftPortLabelId(node, 0, connectedPortId)
-            : portLabelId(node, port);
-          return (
+      {/* ── Footer: stacked per-semantic port rows ──────────────── */}
+      <div className="node-footer" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="node-port-column node-port-column--left">
+          {leftRows.map((_semantic, variantIndex) => (
             <button
-              key={port}
-              className={`node-port-socket port-${port} ${isActive ? 'port-active' : ''} ${showHighlight ? 'port-highlight' : ''} ${compatible ? 'port-compatible' : ''} ${connectingFromNodeId && !compatible ? 'port-incompatible' : ''}`}
-              onClick={(e) => onPortClick(e, node.id, port)}
-              aria-label={topologyUiString(
-                l10n,
-                portAriaLabelId(node, port),
-                { name: node.name || '', port },
-              )}
-              title={topologyUiString(l10n, labelId)}
+              key={`left-${variantIndex}`}
+              type="button"
+              className={rowClass('left', variantIndex, leftRows)}
+              onClick={(e) => onPortClick(e, node.id, 'left', variantIndex)}
+              aria-label={rowAria('left', variantIndex)}
+              title={rowTitle('left', variantIndex)}
             >
-              <span className={`node-port-label node-port-label-${port}`}>
-                {topologyUiString(l10n, labelId)}
-              </span>
+              <span className="node-port-marker" aria-hidden="true" />
+              <span className="node-port-label">{rowTitle('left', variantIndex)}</span>
             </button>
-          );
-        })}
+          ))}
+        </div>
+        <div className="node-port-column node-port-column--right">
+          {rightRows.map((_semantic, variantIndex) => (
+            <button
+              key={`right-${variantIndex}`}
+              type="button"
+              className={rowClass('right', variantIndex, rightRows)}
+              onClick={(e) => onPortClick(e, node.id, 'right', variantIndex)}
+              aria-label={rowAria('right', variantIndex)}
+              title={rowTitle('right', variantIndex)}
+            >
+              <span className="node-port-label">{rowTitle('right', variantIndex)}</span>
+              <span className="node-port-marker" aria-hidden="true" />
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -1,18 +1,15 @@
 // ── gateway.ts error-propagation TDD test ─────────────────────────
 //
-// Bug: getGatewayStatus() catches ALL errors from the underlying
-// loggedInvoke('get_setting', ...) calls and returns a synthetic
-// fallback [{ name: 'Gateway', configured: false, online: false }].
-// This masks real backend failures (DB errors, auth/session expiry,
-// missing-settings-table) as "no gateways configured" — the caller
-// cannot distinguish a backend outage from a genuine empty-keys state.
+// Contract (after the UI-1 fix): getGatewayStatus() makes a SINGLE
+// loggedInvoke('gateway_status') call. The backend computes the
+// configured/online booleans server-side so raw credential values
+// (stripe.api_key, square.api_key, midtrans.server_key) never reach
+// the renderer — the keys are on the SECRET_KEY_DENY_LIST in both
+// clients.
 //
-// The contract violation: success returns 3 named gateways (Stripe,
-// Square, QRIS); failure returns 1 generic "Gateway" row. Callers
-// iterating the array get a different-length list with no error signal.
-//
-// This test proves the error is swallowed (RED) then guards the fix
-// that propagates the error instead (GREEN).
+// Error propagation: the function propagates backend errors instead
+// of returning a synthetic fallback — the caller can distinguish a
+// backend outage from a genuine empty-keys state.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -31,21 +28,29 @@ describe('getGatewayStatus error propagation', () => {
     mockInvoke.mockReset();
   });
 
-  it('returns 3 named gateways when all settings resolve', async () => {
-    // All three get_setting calls return a non-empty key.
-    mockInvoke.mockResolvedValue('sk_test_key');
+  it('invokes the backend gateway_status command exactly once', async () => {
+    mockInvoke.mockResolvedValue([
+      { name: 'Stripe', configured: true, online: true },
+      { name: 'Square', configured: false, online: false },
+      { name: 'QRIS (Midtrans)', configured: true, online: true },
+    ]);
     const result = await getGatewayStatus();
-    expect(result).toHaveLength(3);
+    expect(mockInvoke).toHaveBeenCalledTimes(1);
+    // loggedInvoke('gateway_status') forwards args as undefined.
+    expect(mockInvoke).toHaveBeenCalledWith('gateway_status', undefined);
     expect(result.map((g) => g.name)).toEqual(['Stripe', 'Square', 'QRIS (Midtrans)']);
-    expect(result.every((g) => g.configured && g.online)).toBe(true);
+    expect(result.map((g) => g.configured)).toEqual([true, false, true]);
   });
 
-  it('returns 3 gateways with configured=false when keys are null', async () => {
-    // No keys configured — get_setting returns null for all.
-    mockInvoke.mockResolvedValue(null);
-    const result = await getGatewayStatus();
-    expect(result).toHaveLength(3);
-    expect(result.every((g) => !g.configured && !g.online)).toBe(true);
+  it('never invokes get_setting with a payment credential key (UI-1)', async () => {
+    mockInvoke.mockResolvedValue([
+      { name: 'Stripe', configured: true, online: true },
+      { name: 'Square', configured: false, online: false },
+      { name: 'QRIS (Midtrans)', configured: true, online: true },
+    ]);
+    await getGatewayStatus();
+    const invokedCmds = mockInvoke.mock.calls.map((c) => c[0] as string);
+    expect(invokedCmds).not.toContain('get_setting');
   });
 
   it('PROPAGATES the error when the backend fails (does not swallow)', async () => {
@@ -53,8 +58,6 @@ describe('getGatewayStatus error propagation', () => {
     // The invoke rejects with a real error.
     mockInvoke.mockRejectedValue(new Error('database is locked'));
 
-    // The bug: getGatewayStatus currently catches this error and
-    // returns [{ name: 'Gateway', configured: false, online: false }].
     // The fix: propagate the error so callers can surface it
     // (error toast, retry UI) instead of silently showing "offline".
     await expect(getGatewayStatus()).rejects.toThrow('database is locked');
@@ -62,7 +65,6 @@ describe('getGatewayStatus error propagation', () => {
 
   it('does not return a synthetic "Gateway" fallback on error', async () => {
     mockInvoke.mockRejectedValue(new Error('backend unreachable'));
-    // The current bug returns a 1-element array with name 'Gateway'.
     // After the fix, the function throws, so no array is returned at all.
     let threw = false;
     let caught: unknown = null;

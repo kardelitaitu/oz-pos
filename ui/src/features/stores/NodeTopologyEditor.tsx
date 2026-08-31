@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useCallback, memo, type ReactNode } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback, type ReactNode } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -10,20 +10,11 @@ import { useSettings } from '@/contexts/SettingsContext';
 import {
   type WorkspaceCardProps,
 } from '@/features/settings/workspace-cards';
-import { updateStore, getStore, type StoreProfile } from '@/api/stores';
+import { updateStoreProfileScoped, getStoreProfileScoped, type StoreProfile } from '@/api/stores';
 import {
-  StoreIcon,
-  WarehouseIcon,
-  PrinterIcon,
-  CartIcon,
-  UtensilsIcon,
   CheckIcon,
   TrashIcon,
   CloseIcon,
-  ChevronDownIcon,
-  LockIcon,
-  PlusIcon,
-  MinusIcon,
   NodesIcon,
   WarningIcon,
 } from './NodeTopologyIcons';
@@ -34,7 +25,6 @@ import {
   findFreeSpawnSpot,
   NODE_WIDTH,
   NODE_HEIGHT,
-  NODE_PORT_Y,
   nodeBoxesOverlap,
   resolveDropOverlaps,
   findOverlappingNodeIds,
@@ -51,7 +41,6 @@ import {
   deleteTemplate,
 } from './topologyExport';
 import { TopologyNodeCard } from './topologyNodeCard';
-import { TopologyShortcutsHelp } from './topologyShortcutsHelp';
 import { TopologyNodeFinder } from './topologyNodeFinder';
 import { TopologyMinimap } from './topologyMinimap';
 import { TopologyRelationshipPicker } from './topologyRelationshipPicker';
@@ -70,16 +59,14 @@ import { useTopologyEditorDrag } from './nodeTopologyEditorDragState';
 import { useTopologyEditorConnection } from './nodeTopologyEditorConnectionState';
 import { useTopologyEditorHover } from './nodeTopologyEditorHoverState';
 import {
-  normalizeTopologyGraph,
   normalizeWireDirection,
   topologyIssueKey,
-  validateTopologyGraph,
   type TopologyValidationError,
 } from './topologyContract';
 import {
-  leftPortVariants,
-  wireRelationshipOptions,
+  rowRelationshipOptions,
   legacyWireResolutionOptions,
+  socketSemanticIds,
   type WireRelationshipOption,
   NODE_TYPE_ICON,
   workspaceTypeLabel,
@@ -87,7 +74,51 @@ import {
   topologyUiString,
   sanitizeCopiedNode,
 } from './topologyCard';
+import { nodeHeight, portRowCenterY, semanticRowIndex } from './topologyMetrics';
 import './NodeTopologyEditor.css';
+
+// ── Extracted modules (Phase 1 split) ────────────────────────────────
+// Pure helpers and presentational sub-components moved out of this 6800-line
+// file. Re-exported here so every existing importer (tests, sibling
+// topology modules) keeps its `from './NodeTopologyEditor'` path working.
+import {
+  normalizeVisualPort,
+  elbowPoints,
+  polylineD,
+  canvasStateEqual,
+  computeAlignmentGuides,
+  diagramOverflowsCanvas,
+  isTopologyRevisionConflict,
+  validateEditorGraph,
+} from './topologyEditorHelpers';
+import { AlignGlyph, ALIGN_ACTIONS, type AlignMode } from './topologyAlignGlyph';
+import { CanvasCursorReadout } from './topologyCanvasCursorReadout';
+import { TopologyHeader, type TopologyPreset } from './topologyHeader';
+import { TopologyToolRack } from './topologyToolRack';
+import { TopologyContextMenu } from './topologyContextMenu';
+import { TopologyCanvasZoomControls } from './topologyCanvasZoomControls';
+
+/** Session-level "Remember PIN" cache. The editor is keyed by branch
+ *  (TopologyScreen remounts it on every branch switch), so a component-scoped
+ *  ref would forget the verified PIN on each switch — contradicting the
+ *  "Remember PIN for this session" label. A module-scope set keyed by session
+ *  token survives remounts for the app's lifetime, matching the label. */
+const PIN_VERIFIED_SESSIONS = new Set<string>();
+
+// Re-export the moved pure helpers so tests (nodeTopologyEditorHelpers,
+// canvasStateEqual) and runtime importers (topologyWarehouseCard) resolve
+// them from this module exactly as before the split.
+export {
+  normalizeVisualPort,
+  elbowPoints,
+  polylineD,
+  canvasStateEqual,
+  computeAlignmentGuides,
+  diagramOverflowsCanvas,
+  isTopologyRevisionConflict,
+  prefersReducedMotion,
+  validateEditorGraph,
+} from './topologyEditorHelpers';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -107,14 +138,6 @@ export type WireDirection = 'one-way' | 'reverse' | 'two-way';
 const WIRE_DIRECTION_CYCLE: WireDirection[] = ['one-way', 'reverse', 'two-way'];
 export type PortName = 'top' | 'right' | 'bottom' | 'left';
 
-/** Convert legacy vertical anchors to the UX's canonical left/right sides.
- *  Exported for unit tests. */
-export function normalizeVisualPort(port: string | null | undefined, fallback: PortName): PortName {
-  if (port === 'top' || port === 'bottom') return fallback;
-  if (port === 'left' || port === 'right') return port;
-  return fallback;
-}
-
 /** Restore-boundary integrity guard for Undo/Redo: drop any wire whose
  *  endpoint nodes are missing from the SAME entry before it lands on the
  *  canvas. Every history entry today is a full pre-mutation snapshot (or
@@ -127,83 +150,7 @@ export function normalizeVisualPort(port: string | null | undefined, fallback: P
  *  the only sane resolution; the canvas invariant stays "every wire's
  *  endpoints exist". */
 
-/** Alignment / distribution modes for the multi-select toolbar. */
-type AlignMode = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom' | 'dist-h' | 'dist-v';
-
-const ALIGN_ACTIONS: { mode: AlignMode; ariaId: string }[] = [
-  { mode: 'left', ariaId: 'topology-align-left' },
-  { mode: 'hcenter', ariaId: 'topology-align-hcenter' },
-  { mode: 'right', ariaId: 'topology-align-right' },
-  { mode: 'top', ariaId: 'topology-align-top' },
-  { mode: 'vcenter', ariaId: 'topology-align-vcenter' },
-  { mode: 'bottom', ariaId: 'topology-align-bottom' },
-  { mode: 'dist-h', ariaId: 'topology-distribute-h' },
-  { mode: 'dist-v', ariaId: 'topology-distribute-v' },
-];
-
 /** Node types offered by the right-click canvas context menu. */
-const CONTEXT_ADD_TYPES: NodeType[] = ['store', 'workspace', 'warehouse', 'hardware'];
-
-/** Orthogonal elbow routing: from the source port, run horizontally to the
- *  midpoint, drop/rise to the target row, then run into the target port.
- *  When the target sits BEHIND the source (reverse flows), detour right
- *  past the source before dropping, so the elbow never folds back through
- *  the source card. Returns the polyline vertices in canvas coords.
- *  Exported for unit tests. */
-export function elbowPoints(x1: number, y1: number, x2: number, y2: number): Array<[number, number]> {
-  if (x2 < x1) {
-    const detour = x1 + 48;
-    return [[x1, y1], [detour, y1], [detour, y2], [x2, y2]];
-  }
-  const mx = (x1 + x2) / 2;
-  return [[x1, y1], [mx, y1], [mx, y2], [x2, y2]];
-}
-
-/** SVG path for a polyline of H/V segments. Exported for unit tests. */
-export function polylineD(pts: Array<[number, number]>): string {
-  if (pts.length === 0) return '';
-  return `M ${pts[0]![0]} ${pts[0]![1]} ${pts.slice(1).map(([px, py]) => `L ${px} ${py}`).join(' ')}`;
-}
-
-/** Point at parameter t (0..1) along an axis-aligned polyline — drives the
- *  simulation pulse so it rides the elbow instead of a phantom curve. */
-/** Compact alignment glyphs — three bars whose arrangement encodes the
- *  mode (edges, centers, or even spacing), matching the standard diagram-
- *  tool icon language. */
-function AlignGlyph({ mode }: { mode: AlignMode }) {
-  let bars: JSX.Element[];
-  switch (mode) {
-    case 'left':
-      bars = [0, 4, 8].map((y) => <rect key={y} x={0} y={y} width={16 - y} height={3} rx={1} fill="currentColor" />);
-      break;
-    case 'hcenter':
-      bars = [0, 4, 8].map((y) => <rect key={y} x={y / 2} y={y} width={16 - y} height={3} rx={1} fill="currentColor" />);
-      break;
-    case 'right':
-      bars = [0, 4, 8].map((y) => <rect key={y} x={y} y={y} width={16 - y} height={3} rx={1} fill="currentColor" />);
-      break;
-    case 'top':
-      bars = [0, 4, 8].map((x) => <rect key={x} x={x} y={0} width={3} height={16 - x} rx={1} fill="currentColor" />);
-      break;
-    case 'vcenter':
-      bars = [0, 4, 8].map((x) => <rect key={x} x={x} y={x / 2} width={3} height={16 - x} rx={1} fill="currentColor" />);
-      break;
-    case 'bottom':
-      bars = [0, 4, 8].map((x) => <rect key={x} x={x} y={x} width={3} height={16 - x} rx={1} fill="currentColor" />);
-      break;
-    case 'dist-h':
-      bars = [0, 6.5, 13].map((x) => <rect key={x} x={x} y={6.5} width={3} height={3} rx={1} fill="currentColor" />);
-      break;
-    case 'dist-v':
-      bars = [0, 6.5, 13].map((y) => <rect key={y} x={6.5} y={y} width={3} height={3} rx={1} fill="currentColor" />);
-      break;
-  }
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      {bars}
-    </svg>
-  );
-}
 
 export type SemanticRelationshipType =
   | 'location'
@@ -400,177 +347,6 @@ const PRESET_RESTAURANT: { nodes: TopologyNodeData[]; wires: TopologyWireData[] 
   ],
 };
 
-/**
- * Exact dirty check: true when two canvas states differ in their PERSISTED
- * fields. Transient fields are excluded — telemetryBadge/telemetryStatus
- * (never edited), and metadata.persisted (an internal sync bookkeeping flag
- * flipped by the save-triggered instance reload, not user content).
- *
- * The persisted-field set is TRIPLE-COUPLED: it lives here, in the load
- * effect's backend mapping, and in the onSave serialization. Adding a new
- * persisted field must touch all three, or the dirty check silently weakens.
- *
- * Zero-allocation field-by-field comparison (replaced the original
- * projected-array + JSON.stringify approach to eliminate ~80 KB of
- * temporary objects per call during drag — the primary OOM vector).
- */
-/** Exported for zero-allocation regression tests. */
-export function canvasStateEqual(
-  aNodes: TopologyNodeData[],
-  aWires: TopologyWireData[],
-  bNodes: TopologyNodeData[],
-  bWires: TopologyWireData[],
-): boolean {
-  if (aNodes.length !== bNodes.length || aWires.length !== bWires.length) return false;
-  for (let i = 0; i < aNodes.length; i++) {
-    const a = aNodes[i]!;
-    const b = bNodes[i]!;
-    if (a.id !== b.id || a.type !== b.type || a.name !== b.name
-      || (a.subtitle ?? '') !== (b.subtitle ?? '')
-      || a.x !== b.x || a.y !== b.y) return false;
-    if ((a.tierRequirement ?? null) !== (b.tierRequirement ?? null)) return false;
-    // metadata is typed with an index signature — bracket access required.
-    const am = a.metadata;
-    const bm = b.metadata;
-    if ((am?.['typeKey'] ?? null) !== (bm?.['typeKey'] ?? null)) return false;
-    if ((am?.['purposeKey'] ?? null) !== (bm?.['purposeKey'] ?? null)) return false;
-    if ((am?.['enabled'] ?? null) !== (bm?.['enabled'] ?? null)) return false;
-    if ((am?.['capacity'] ?? null) !== (bm?.['capacity'] ?? null)) return false;
-    if ((am?.['lowStockThreshold'] ?? null) !== (bm?.['lowStockThreshold'] ?? null)) return false;
-    if ((am?.['stock'] ?? null) !== (bm?.['stock'] ?? null)) return false;
-  }
-  for (let i = 0; i < aWires.length; i++) {
-    const a = aWires[i]!;
-    const b = bWires[i]!;
-    if (a.id !== b.id || a.fromNodeId !== b.fromNodeId || a.toNodeId !== b.toNodeId
-      || a.direction !== b.direction) return false;
-    if ((a.fromPort ?? null) !== (b.fromPort ?? null)) return false;
-    if ((a.toPort ?? null) !== (b.toPort ?? null)) return false;
-    if ((a.label ?? null) !== (b.label ?? null)) return false;
-    const ab = a.bends;
-    const bb = b.bends;
-    const aLen = ab?.length ?? 0;
-    const bLen = bb?.length ?? 0;
-    if (aLen !== bLen) return false;
-    if (aLen > 0 && ab && bb) {
-      for (let j = 0; j < aLen; j++) {
-        if (ab[j]!.x !== bb[j]!.x || ab[j]!.y !== bb[j]!.y) return false;
-      }
-    }
-  }
-  return true;
-}
-
-/** Canvas px the dragged node's edge/center may drift from a stationary
- *  node's before the alignment guide snaps it (Figma-style). */
-const ALIGN_THRESHOLD = 6;
-
-interface AlignmentResult {
-  /** Guide line coordinate (canvas units) for a vertical (x) / horizontal
-   *  (y) guide — present only while that axis is actively aligned. */
-  x?: number;
-  y?: number;
-  /** Delta applied to every dragged node so the primary lands exactly on
-   *  the aligned axis (keeps the group rigid). Zero when not aligned. */
-  dx: number;
-  dy: number;
-  /** Whether each axis is under an active alignment — the aligned axis
-   *  skips grid snapping (guides beat the grid). */
-  alignedX: boolean;
-  alignedY: boolean;
-}
-
-/** Figma-style COLLECTIVE alignment snap: match ANY edge/center of ANY
- *  dragged node against ANY edge/center of every STATIONARY node (all 9
- *  combos per node pair — left↔left, right↔left, centerX↔centerX, …).
- *  Within the threshold, the closest match across ALL dragged members wins
- *  per axis — so a group can snap on a non-grabbed member's edge, exactly
- *  like Figma. The resulting delta shifts the whole group rigidly. The
- *  dragged set is excluded from the reference pool so a group never aligns
- *  to itself. Exported for unit tests. */
-export function computeAlignmentGuides(
-  targets: Map<string, { x: number; y: number }>,
-  draggedIds: Set<string>,
-  nodes: TopologyNodeData[],
-): AlignmentResult {
-  let bestX: { target: number; dist: number } | null = null;
-  let bestY: { target: number; dist: number } | null = null;
-  for (const other of nodes) {
-    if (draggedIds.has(other.id)) continue;
-    const rAxesX = [other.x, other.x + NODE_WIDTH / 2, other.x + NODE_WIDTH];
-    const rAxesY = [other.y, other.y + NODE_HEIGHT / 2, other.y + NODE_HEIGHT];
-    for (const target of targets.values()) {
-      const pAxesX = [target.x, target.x + NODE_WIDTH / 2, target.x + NODE_WIDTH];
-      const pAxesY = [target.y, target.y + NODE_HEIGHT / 2, target.y + NODE_HEIGHT];
-      for (const pAxis of pAxesX) {
-        for (const rAxis of rAxesX) {
-          const dx = pAxis - rAxis;
-          if (Math.abs(dx) <= ALIGN_THRESHOLD && (!bestX || Math.abs(dx) < bestX.dist)) {
-            bestX = { target: rAxis, dist: dx };
-          }
-        }
-      }
-      for (const pAxis of pAxesY) {
-        for (const rAxis of rAxesY) {
-          const dy = pAxis - rAxis;
-          if (Math.abs(dy) <= ALIGN_THRESHOLD && (!bestY || Math.abs(dy) < bestY.dist)) {
-            bestY = { target: rAxis, dist: dy };
-          }
-        }
-      }
-    }
-  }
-  return {
-    ...(bestX ? { x: bestX.target } : {}),
-    ...(bestY ? { y: bestY.target } : {}),
-    dx: bestX?.dist ?? 0,
-    dy: bestY?.dist ?? 0,
-    alignedX: bestX !== null,
-    alignedY: bestY !== null,
-  };
-}
-
-/** True when the diagram's bounding box (plus zoomToFit's breathing room)
- *  exceeds the MEASURED canvas viewport — the trigger for the one-shot
- *  load auto-fit. A zero/negative measured size (jsdom, pre-layout) returns
- *  false so the identity view is never yanked by a phantom constraint.
- *  Exported for unit tests. */
-export function diagramOverflowsCanvas(canvas: HTMLElement, nodes: TopologyNodeData[]): boolean {
-  const viewW = canvas.clientWidth;
-  const viewH = canvas.clientHeight;
-  if (viewW <= 0 || viewH <= 0 || nodes.length === 0) return false;
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const n of nodes) {
-    minX = Math.min(minX, n.x);
-    minY = Math.min(minY, n.y);
-    maxX = Math.max(maxX, n.x + NODE_WIDTH);
-    maxY = Math.max(maxY, n.y + NODE_HEIGHT);
-  }
-  const pad = 60;
-  return maxX - minX + pad * 2 > viewW || maxY - minY + pad * 2 > viewH;
-}
-
-/** Port offset from node origin (left, top) for each port name.
- *  Left/right wire endpoints sit on the card edge, exactly at the center
- *  of the visible connector circles. The hit areas may overhang, but the
- *  geometry contract never does. */
-const PORT_OFFSET: Record<PortName, { dx: number; dy: number }> = {
-  // Kept for legacy loaded wires. New UX renders and authorizes only left/right.
-  top:    { dx: NODE_WIDTH / 2, dy: -6 },
-  right:  { dx: NODE_WIDTH, dy: NODE_PORT_Y },
-  bottom: { dx: NODE_WIDTH / 2, dy: NODE_HEIGHT + 6 },
-  left:   { dx: 0,             dy: NODE_PORT_Y },
-};
-
-/** Canvas-space dy (top edge) for a left port — all nodes share the rail
- *  centerline now that stacked inputs are gone. */
-function leftPortDy(_node: TopologyNodeData, _variantIndex: number): number {
-  return NODE_PORT_Y;
-}
-
 /** Evaluate a cubic bezier at parameter t (0-1). */
 const GRID_SIZE = 24;
 
@@ -588,122 +364,16 @@ const snap = (v: number) => Math.round(v / GRID_SIZE) * GRID_SIZE;
 const issueKey = topologyIssueKey;
 const graphIssueKey = (messageId: string) => `graph:${messageId}`;
 
-/** True when the thrown error is the backend's topology-revision-conflict
- *  (round 133). A stale base revision can never retry successfully, so the
- *  editor treats it differently from a generic save failure: it reloads the
- *  authoritative topology instead of keeping a canvas that can never apply.
- *  The backend serializes TopologyValidation as
- *  { kind: 'topologyValidation', code: 'topology-revision-conflict', ... }.
- *  Exported for unit tests. */
-export function isTopologyRevisionConflict(err: unknown): boolean {
-  const typed = parseAppError(err);
-  return typed !== null
-    && (typed as { kind?: string }).kind === 'topologyValidation'
-    && (typed as { code?: string }).code === 'topology-revision-conflict';
-}
-
-/** True when the OS requests reduced motion (WCAG 2.3.3). The simulation
- *  pulse is JS-driven on a 30ms interval — CSS @media gates cannot stop
- *  the state churn — so the interval and the pulse position consult this
- *  directly. jsdom has no matchMedia: the safe default is false (animate),
- *  and the reduced-motion tests stub matchMedia to pin the gated path.
- *  Exported for unit tests. */
-export function prefersReducedMotion(): boolean {
-  return typeof window !== 'undefined'
-    && typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
 /** Milliseconds the selection-announcement waits after the LAST selection
  *  change before speaking. Long enough to absorb a marquee drag that
  *  flicks 1→2→3 (one announcement, on the final set), short enough that a
  *  click or keyboard select still feels immediate. */
 const SELECTION_ANNOUNCE_SETTLE_MS = 120;
 
-/** HUD cursor-position readout, isolated in its own memo component with
- *  its own document mousemove listener and rAF throttle. The readout is
- *  display-only, so a burst of moves coalesces into at most ONE state
- *  update per frame — and that update is LOCAL to this span, so pointer
- *  movement over a large diagram never re-renders the editor (which used
- *  to re-render every node card and wire path up to 60×/sec). pan/zoom
- *  come in as props so the conversion to canvas coords stays current. */
-const CanvasCursorReadout = memo(function CanvasCursorReadout({ pan, zoom }: { pan: { x: number; y: number }; zoom: number }) {
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const pendingRef = useRef<{ x: number; y: number } | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const elRef = useRef<HTMLSpanElement>(null);
-  // Mount-once listener: pan/zoom are read via refs inside the handler so a
-  // pan/zoom change never re-arms (and cancels a pending) rAF. Re-arming on
-  // every pan would ALSO cancel an in-flight frame — leaving the readout
-  // stuck until the next move re-schedules.
-  const panRef = useRef(pan);
-  panRef.current = pan;
-  const zoomRef = useRef(zoom);
-  zoomRef.current = zoom;
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      // The readout lives inside the canvas container; its rect is the
-      // viewport origin for the pan/zoom conversion.
-      const rect = elRef.current?.closest('.node-canvas-container')?.getBoundingClientRect();
-      if (!rect) return;
-      pendingRef.current = {
-        x: Math.round((e.clientX - rect.left - panRef.current.x) / zoomRef.current),
-        y: Math.round((e.clientY - rect.top - panRef.current.y) / zoomRef.current),
-      };
-      if (rafRef.current === null) {
-        rafRef.current = requestAnimationFrame(() => {
-          rafRef.current = null;
-          setPos(pendingRef.current);
-        });
-      }
-    };
-    document.addEventListener('mousemove', onMove);
-    return () => {
-      document.removeEventListener('mousemove', onMove);
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
-
-  return (
-    <span ref={elRef} className="canvas-hud-item canvas-hud-cursor">
-      {pos ? `${pos.x}, ${pos.y}` : '—'}
-    </span>
-  );
-});
-
-/** An ambiguous wire drop in flight: the source socket and the target
- *  socket admit MULTIPLE relationships (ADR #34), so the editor asks the
- *  user which one the wire means before drawing anything. */
-/** Validate the editor's RAW canvas under the Apply gate. Legacy/demo
- *  canvases (no canonical branch identity) keep their non-blocking path
- *  unless the real topology screen opts into strict validation
- *  (allowLegacyApply=false). Shared by the live badge surface AND the
- *  Apply handler so the two can never drift apart. Exported for unit tests. */
-export function validateEditorGraph(
-  nodes: TopologyNodeData[],
-  wires: TopologyWireData[],
-  allowLegacyApply: boolean,
-  tier: string,
-): TopologyValidationError[] {
-  const semanticGraph = normalizeTopologyGraph(nodes, wires);
-  const hasCanonicalBranchIdentity = semanticGraph.nodes.some(
-    (node) => node.kind === 'branch-location' && node.storeProfileId !== undefined,
-  );
-  // validateTopologyGraph owns the multi-warehouse tier cap (round 87) —
-  // it pushes warehouse-tier-limit below Pro and the pure contract stays
-  // strict by default. The creation paths still refuse a second warehouse
-  // on the way in (tool-card/duplicate, wouldExceedWarehouseCap); this
-  // gate catches the remaining routes (downgrade, loaded legacy, paste)
-  // so Apply can never persist 2+ warehouses on a non-Pro install.
-  return hasCanonicalBranchIdentity || !allowLegacyApply
-    ? validateTopologyGraph(semanticGraph, tier)
-    : [];
-}
-
 /** Branch Location profile fields — fetched lazily from the backend. */
-function BranchLocationFields({ nodeId, l10n, beginInspectorEdit }: {
+function BranchLocationFields({ nodeId, sessionToken, l10n, beginInspectorEdit }: {
   nodeId: string;
+  sessionToken: string;
   l10n: ReturnType<typeof useLocalization>['l10n'];
   beginInspectorEdit: (id: string) => void;
 }) {
@@ -711,23 +381,66 @@ function BranchLocationFields({ nodeId, l10n, beginInspectorEdit }: {
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<Partial<Pick<StoreProfile, 'address' | 'currency' | 'timezone' | 'tax_id'>> | null>(null);
   const active = draft && profile ? { ...profile, ...draft } : profile;
+  const { addToast } = useToast();
+
+  // ── Serialized blur-persist ─────────────────────────────────────
+  // The four fields each fire persist on blur. Naive per-field saves race:
+  // blurring Address then immediately Currency (before the first update
+  // resolves) builds the second payload from the STALE pre-Address profile,
+  // silently overwriting the Address change. Keep the latest profile and
+  // draft in refs, serialize the IPC calls, and loop until no queued edit
+  // remains — so every accumulated field change rides the final payload.
+  // The draft is only cleared once the whole chain settles, so a failed
+  // save keeps the user's edits visible (with an error toast) for a retry
+  // instead of reverting them silently.
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const saveInFlightRef = useRef(false);
+  const queuedRef = useRef(false);
+
+  const persist = useCallback(async () => {
+    if (!profileRef.current) return;
+    if (saveInFlightRef.current) {
+      // A save is running; mark a newer edit arrived so the loop re-reads
+      // the latest draft instead of the snapshot already in flight.
+      queuedRef.current = true;
+      return;
+    }
+    saveInFlightRef.current = true;
+    try {
+      // Drain the queue: each pass snapshots the CURRENT profile + draft.
+      // A blur arriving mid-save sets queuedRef, forcing another pass with
+      // the accumulated edits once the in-flight update commits.
+      while (true) {
+        queuedRef.current = false;
+        const currentDraft = draftRef.current;
+        if (!currentDraft) break;
+        const merged = { ...profileRef.current, ...currentDraft };
+        const updated = await updateStoreProfileScoped(sessionToken, merged);
+        profileRef.current = updated;
+        setProfile(updated);
+        if (queuedRef.current) continue;
+        setDraft(null);
+        break;
+      }
+    } catch {
+      // Keep the draft so the user's edits stay visible; surface the failure.
+      addToast({ message: l10n.getString('topology-inspector-save-error'), type: 'error' });
+    } finally {
+      saveInFlightRef.current = false;
+    }
+  }, [sessionToken, addToast, l10n]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getStore(nodeId)
+    getStoreProfileScoped(sessionToken, nodeId)
       .then((p) => { if (!cancelled) { setProfile(p); setLoading(false); } })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [nodeId]);
-
-  const persist = useCallback(() => {
-    if (draft && profile) {
-      const merged = { ...profile, ...draft };
-      updateStore(merged).then(setProfile).catch(() => {});
-      setDraft(null);
-    }
-  }, [draft, profile]);
+  }, [nodeId, sessionToken]);
 
   if (loading) {
     return (
@@ -1193,6 +906,7 @@ export default function NodeTopologyEditor({
   const {
     fromNodeId: connectingFromNodeId,
     fromPort: connectingFromPort,
+    fromVariantIndex: connectingFromVariantIndex,
     picker: relationshipPicker,
     beginConnection,
     openPicker,
@@ -1219,11 +933,11 @@ export default function NodeTopologyEditor({
   const toggleShortcuts = useCallback(() => setShowShortcuts((p) => !p), []);
   const closeShortcuts = useCallback(() => setShowShortcuts(false), []);
 
-  /** Right-side tool rack panel state. The add panel starts open so the
-   *  palette is immediately visible (matches the pre-redesign sidebar and
-   *  the test suite's invariant). The edit/view/share panels stay collapsed
-   *  and open on click. */
-  const [rackPanel, setRackPanel] = useState<string | null>('add');
+  /** Right-side tool rack panel state. Collapsed on mount so the editor
+   *  opens on a clean canvas — arriving from the home screen's "Add
+   *  Workspace" (or anywhere else) should not auto-expand the add-node
+   *  palette. Each panel opens on its rack-icon click. */
+  const [rackPanel, setRackPanel] = useState<string | null>(null);
   const toggleRackPanel = useCallback((key: string) => setRackPanel((p) => (p === key ? null : key)), []);
 
   // ── Apply confirmation popup ──────────────────────────────────────
@@ -1246,8 +960,11 @@ export default function NodeTopologyEditor({
   const [rememberPin, setRememberPin] = useState(false);
   /** Session-level PIN cache. When set, subsequent Apply calls skip the
    *  verifyPin prompt — the checkbox in the dialog controls whether the
-   *  flag is persisted to sessionStorage (cleared on tab close). */
-  const pinVerifiedRef = useRef(false);
+   *  flag is remembered for the session. The cache lives in a module-scope
+   *  set keyed by session token (not a component ref) so a branch switch —
+   *  which remounts this editor — keeps the remembered PIN, matching the
+   *  "for this session" label. */
+  const pinVerifiedRef = useRef(PIN_VERIFIED_SESSIONS.has(sessionToken ?? ''));
   const applyPinRef = useRef<HTMLInputElement>(null);
 
   /** Live canvas getter for the relationship picker's position clamp. */
@@ -1457,7 +1174,7 @@ export default function NodeTopologyEditor({
     const minX = Math.min(...sel.map((n) => n.x));
     const minY = Math.min(...sel.map((n) => n.y));
     const maxX = Math.max(...sel.map((n) => n.x + NODE_WIDTH));
-    const maxY = Math.max(...sel.map((n) => n.y + NODE_HEIGHT));
+    const maxY = Math.max(...sel.map((n) => n.y + nodeHeight(n)));
     return { minX, minY, maxX, maxY };
   }, [nodes, selectedNodeIds]);
 
@@ -1604,18 +1321,16 @@ export default function NodeTopologyEditor({
       if (!fromNode || !toNode) continue;
       const fromPort = wire.fromPort ?? 'right';
       const toPort = wire.toPort ?? 'left';
-      const fromOff = PORT_OFFSET[fromPort];
-      const toOff = PORT_OFFSET[toPort];
-      // Wires targeting a left input resolve the vertical slot from their
-      // recorded toPortId ('location-in' | 'operation-in') so they terminate
-      // on the exact socket (inventory nodes stack two left inputs).
-      const toVariantIndex = toPort === 'left'
-        ? leftPortVariants(toNode).indexOf(wire.toPortId ?? 'location-in')
-        : 0;
-      const x1 = fromNode.x + fromOff.dx;
-      const y1 = fromNode.y + fromOff.dy;
-      const x2 = toNode.x + toOff.dx;
-      const y2 = toNode.y + (toPort === 'left' ? leftPortDy(toNode, Math.max(0, toVariantIndex)) : toOff.dy);
+      // Round 174 stacked ports: each semantic is its own row, so a wire's
+      // endpoint Y is the portRowCenterY of the row its recorded semantic
+      // occupies (falling back to the primary row for untyped wires). This
+      // replaces the old constant NODE_PORT_Y single-rail endpoint.
+      const fromRowIndex = semanticRowIndex(fromNode, fromPort, wire.fromPortId);
+      const toRowIndex = semanticRowIndex(toNode, toPort, wire.toPortId);
+      const x1 = fromNode.x + (fromPort === 'right' ? NODE_WIDTH : 0);
+      const y1 = fromNode.y + portRowCenterY(fromNode, fromRowIndex);
+      const x2 = toNode.x + (toPort === 'right' ? NODE_WIDTH : 0);
+      const y2 = toNode.y + portRowCenterY(toNode, toRowIndex);
       const dx = Math.abs(x2 - x1) * 0.5;
       if (wire.bends && wire.bends.length > 0) {
         // User-authored bends take precedence over auto routing: the wire
@@ -1670,7 +1385,7 @@ export default function NodeTopologyEditor({
   const svgBounds = useMemo(() => {
     if (nodes.length === 0) return { width: 0, height: 0 };
     const maxX = nodes.reduce((acc, n) => Math.max(acc, n.x + NODE_WIDTH), -Infinity);
-    const maxY = nodes.reduce((acc, n) => Math.max(acc, n.y + NODE_HEIGHT), -Infinity);
+    const maxY = nodes.reduce((acc, n) => Math.max(acc, n.y + nodeHeight(n)), -Infinity);
     if (!isFinite(maxX) || !isFinite(maxY)) return { width: 0, height: 0 };
     return { width: maxX + 200, height: maxY + 200 };
   }, [nodes]);
@@ -2412,8 +2127,13 @@ export default function NodeTopologyEditor({
           setTimeout(() => applyPinRef.current?.focus(), 50);
           return;
         }
-        // Persist the verified flag for the rest of the session.
-        if (rememberPin) pinVerifiedRef.current = true;
+        // Persist the verified flag for the rest of the session. Write to
+        // the module-scope cache too so a branch-switch remount (new ref
+        // initialized from the set) keeps the remembered PIN.
+        if (rememberPin) {
+          pinVerifiedRef.current = true;
+          if (sessionToken) PIN_VERIFIED_SESSIONS.add(sessionToken);
+        }
       }
     } catch {
       setApplyPinError(true);
@@ -2765,7 +2485,7 @@ export default function NodeTopologyEditor({
       const minX = Math.min(...sel.map((n) => n.x));
       const maxX = Math.max(...sel.map((n) => n.x + NODE_WIDTH));
       const minY = Math.min(...sel.map((n) => n.y));
-      const maxY = Math.max(...sel.map((n) => n.y + NODE_HEIGHT));
+      const maxY = Math.max(...sel.map((n) => n.y + nodeHeight(n)));
       const aligned = prev.map((n) => {
         if (!ids.has(n.id)) return n;
         switch (mode) {
@@ -2988,7 +2708,7 @@ export default function NodeTopologyEditor({
     const minX = nodes.reduce((acc, n) => Math.min(acc, n.x), Infinity);
     const minY = nodes.reduce((acc, n) => Math.min(acc, n.y), Infinity);
     const maxX = nodes.reduce((acc, n) => Math.max(acc, n.x + NODE_WIDTH), -Infinity);
-    const maxY = nodes.reduce((acc, n) => Math.max(acc, n.y + NODE_HEIGHT), -Infinity);
+    const maxY = nodes.reduce((acc, n) => Math.max(acc, n.y + nodeHeight(n)), -Infinity);
     // Guard against degenerate bounding box with zero or negative dimensions
     if (!isFinite(minX) || !isFinite(maxX) || maxX <= minX || maxY <= minY) return;
     const padding = 60;
@@ -3016,7 +2736,7 @@ export default function NodeTopologyEditor({
     const minX = Math.min(...sel.map((n) => n.x));
     const minY = Math.min(...sel.map((n) => n.y));
     const maxX = Math.max(...sel.map((n) => n.x + NODE_WIDTH));
-    const maxY = Math.max(...sel.map((n) => n.y + NODE_HEIGHT));
+    const maxY = Math.max(...sel.map((n) => n.y + nodeHeight(n)));
     if (!isFinite(minX) || !isFinite(maxX) || maxX <= minX || maxY <= minY) return;
     const padding = 60;
     const viewW = (canvasRef.current?.clientWidth ?? 800) - padding * 2;
@@ -3038,11 +2758,19 @@ export default function NodeTopologyEditor({
     setZoom((prev) => Math.min(2.0, Math.max(0.4, prev * factor)));
   }, []);
 
-  /** Return to the identity transform (100%, no pan). */
+  /** Reset the view: 100% zoom, pan so the Branch Location node sits at
+   *  the top-left of the visible canvas (with a fixed margin). That way
+   *  the location anchor is always in view after a reset, regardless of
+   *  where the user has panned. Falls back to the identity transform when
+   *  no Branch Location exists. */
   const resetView = useCallback(() => {
+    const storeNode = nodes.find((n) => n.type === 'store');
+    const margin = 60;
     setZoom(1);
-    setPan({ x: 0, y: 0 });
-  }, []);
+    setPan(storeNode
+      ? { x: margin - storeNode.x, y: margin - storeNode.y }
+      : { x: 0, y: 0 });
+  }, [nodes]);
 
   /** One-shot load auto-fit: when a diagram's content first lands (the
    *  mount preset or an async load) on a MEASURED canvas, fit it if it
@@ -3949,13 +3677,15 @@ export default function NodeTopologyEditor({
       let closest: { nodeId: string; port: PortName; variantIndex: number; dist: number } | null = null;
       for (const n of nodes) {
         if (n.id === connectingFromNodeId) continue;
-    // Snap candidates mirror the visible sockets: one left input per node
-    // plus a single right output (stores expose output only).
-    const candidates: Array<{ port: PortName; variantIndex: number; off: { dx: number; dy: number } }> = [
-      { port: 'left', variantIndex: 0, off: { dx: PORT_OFFSET.left.dx, dy: leftPortDy(n, 0) } },
-    ];
-    if (n.type !== 'store') {
-      candidates.push({ port: 'right', variantIndex: 0, off: PORT_OFFSET.right });
+    // Snap candidates mirror the stacked port rows (round 174): every
+    // semantic row on the left (input) and right (output) column is a
+    // candidate, positioned at its own portRowCenterY.
+    const candidates: Array<{ port: PortName; variantIndex: number; off: { dx: number; dy: number } }> = [];
+    for (let i = 0; i < socketSemanticIds(n, 'left').length; i += 1) {
+      candidates.push({ port: 'left', variantIndex: i, off: { dx: 0, dy: portRowCenterY(n, i) } });
+    }
+    for (let i = 0; i < socketSemanticIds(n, 'right').length; i += 1) {
+      candidates.push({ port: 'right', variantIndex: i, off: { dx: NODE_WIDTH, dy: portRowCenterY(n, i) } });
     }
         for (const c of candidates) {
           const px = n.x + c.off.dx;
@@ -4463,12 +4193,16 @@ export default function NodeTopologyEditor({
     const target = nodeMap.get(nodeId);
     if (!source || !target) return false;
     // Compatibility is decided by the semantic pairing table (ADR #34): a
-    // drop is only completable into a target socket that admits at least
-    // one relationship with the source socket. Untyped sockets gate closed
-    // — no valid pair, no connection. A pair admitting MULTIPLE
-    // relationships stays compatible; the picker disambiguates at drop.
-    return wireRelationshipOptions(source, connectingFromPort, target, port, variantIndex).length > 0;
-  }, [connectingFromNodeId, connectingFromPort, nodeMap, portDirection]);
+    // drop is only completable into a target row that admits the source
+    // row's semantic. With stacked per-semantic rows (round 174) the source
+    // semantic is fixed by connectingFromVariantIndex, so the check resolves
+    // that specific pair — the legacy socket-wide enumeration is only used
+    // by the picker flow.
+    return rowRelationshipOptions(
+      source, connectingFromPort, connectingFromVariantIndex,
+      target, port, variantIndex,
+    ).length > 0;
+  }, [connectingFromNodeId, connectingFromPort, connectingFromVariantIndex, nodeMap, portDirection]);
 
   /** Live semantic validation of the CURRENT canvas (ADR #34 slice 2).
    *  Mirrors the Apply gate exactly — same normalize + validate, same
@@ -4767,18 +4501,6 @@ export default function NodeTopologyEditor({
     return m;
   }, [liveValidation, nodes, l10n]);
 
-  /** First-match 'left' input port wiring per node (the flexible inventory
-   *  label). Stable across hover/selection so the card memo holds. */
-  const connectedPortIdByNode = useMemo(() => {
-    const m = new Map<string, string | undefined>();
-    for (const w of wires) {
-      if ((w.toPort ?? 'left') === 'left' && w.toNodeId && !m.has(w.toNodeId)) {
-        m.set(w.toNodeId, w.toPortId);
-      }
-    }
-    return m;
-  }, [wires]);
-
   /** Pre-existing overlaps in the loaded diagram (round 143): the
    *  no-overlap invariant guards spawns, drops (140), nudges (141) and
    *  auto-layout (142), but old saved diagrams can still load stacked.
@@ -4953,7 +4675,7 @@ export default function NodeTopologyEditor({
         addToast({ message: l10n.getString('topology-port-input-only'), type: 'info' });
         return;
       }
-      beginConnection(nodeId, port);
+      beginConnection(nodeId, port, variantIndex);
       setPreviewCursor(null);
       return;
     }
@@ -4976,30 +4698,35 @@ export default function NodeTopologyEditor({
       return;
     }
 
-    const options = wireRelationshipOptions(fromNode, connectingFromPort!, toNode, port, variantIndex);
+    // With stacked per-semantic port rows (round 174), both source and
+    // target rows are known — resolve the specific pair. The picker is
+    // only needed for the rare case where a single semantic pair maps to
+    // multiple relationships (currently none in the pairing table).
+    const options = rowRelationshipOptions(
+      fromNode, connectingFromPort!, connectingFromVariantIndex,
+      toNode, port, variantIndex,
+    );
     if (options.length === 0) {
       addToast({ message: l10n.getString('topology-wire-incompatible'), type: 'warning' });
       cancelConnection();
       return;
     }
 
-    // A drop that admits MULTIPLE relationships must not draw a wire
-    // blindly — open the picker and let the user choose which one this
-    // wire means. The in-flight connection stays visible (ghost + source
-    // highlight) until the choice lands or is cancelled.
     if (options.length > 1) {
       openPicker({
         fromNodeId: connectingFromNodeId,
         fromPort: connectingFromPort!,
+        fromVariantIndex: connectingFromVariantIndex,
         toNodeId: nodeId,
         toPort: port,
+        toVariantIndex: variantIndex,
         options,
       });
       return;
     }
 
     commitWire(fromNode, connectingFromPort!, toNode, port, options[0]!);
-  }, [connectingFromNodeId, connectingFromPort, nodeMap, isPortCompatible, commitWire, addToast, l10n, beginConnection, cancelConnection, openPicker, setPreviewCursor, portDirection]);
+  }, [connectingFromNodeId, connectingFromPort, connectingFromVariantIndex, nodeMap, isPortCompatible, commitWire, addToast, l10n, beginConnection, cancelConnection, openPicker, setPreviewCursor, portDirection]);
 
   /** Cycle a wire's visual flow: one-way → reverse → two-way → one-way.
    *  Clicking the wire itself is the affordance; the from/to ownership is
@@ -5205,9 +4932,9 @@ export default function NodeTopologyEditor({
     if (!connectingFromNodeId || !connectingFromPort) return null;
     const fromNode = nodeMap.get(connectingFromNodeId);
     if (!fromNode) return null;
-    const portOff = PORT_OFFSET[connectingFromPort];
-    const x1 = fromNode.x + portOff.dx;
-    const y1 = fromNode.y + portOff.dy;
+    // Round 174: the source endpoint rides the exact semantic row.
+    const x1 = fromNode.x + (connectingFromPort === 'right' ? NODE_WIDTH : 0);
+    const y1 = fromNode.y + portRowCenterY(fromNode, connectingFromVariantIndex);
 
     // Snap the preview to a hovered target port; otherwise follow the
     // live cursor (previewCursor tracks every mousemove while connecting).
@@ -5216,10 +4943,8 @@ export default function NodeTopologyEditor({
     if (hoveredTarget) {
       const targetNode = nodes.find((n) => n.id === hoveredTarget.nodeId);
       if (targetNode) {
-        const targetOff = PORT_OFFSET[hoveredTarget.port];
-        const targetDy = hoveredTarget.port === 'left' ? leftPortDy(targetNode, hoveredTarget.variantIndex) : targetOff.dy;
-        mx = targetNode.x + targetOff.dx;
-        my = targetNode.y + targetDy;
+        mx = targetNode.x + (hoveredTarget.port === 'right' ? NODE_WIDTH : 0);
+        my = targetNode.y + portRowCenterY(targetNode, hoveredTarget.variantIndex);
       } else {
         mx = previewCursor?.x ?? mousePosRef.current.x;
         my = previewCursor?.y ?? mousePosRef.current.y;
@@ -5234,7 +4959,7 @@ export default function NodeTopologyEditor({
     }
     const dx = Math.abs(mx - x1) * 0.5;
     return { d: `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${mx - dx} ${my}, ${mx} ${my}` };
-  }, [connectingFromNodeId, connectingFromPort, nodeMap, nodes, hoveredTarget, previewCursor, wireRouting]);
+  }, [connectingFromNodeId, connectingFromPort, connectingFromVariantIndex, nodeMap, nodes, hoveredTarget, previewCursor, wireRouting]);
 
   const selectedNode = useMemo(() => nodes.find((n) => n.id === selectedNodeId), [nodes, selectedNodeId]);
 
@@ -5259,7 +4984,10 @@ export default function NodeTopologyEditor({
   /** Compute live telemetry for a node from SettingsContext. */
   const getTelemetry = useCallback((node: TopologyNodeData): { badge: string; status: 'online' | 'warning' | 'offline' } | null => {
     if (node.type === 'store') {
-      return { badge: settings.store.name ? 'Active' : 'Unconfigured', status: settings.store.name ? 'online' : 'warning' };
+      // The node's own name is the Branch Location display name — if it has
+      // one, the location is active regardless of whether the backend store
+      // profile settings have been loaded yet.
+      return { badge: node.name ? 'Active' : 'Unconfigured', status: node.name ? 'online' : 'warning' };
     }
     if (node.type === 'workspace') {
       const typeKey = (node.metadata?.['typeKey'] as string) ?? 'store-pos';
@@ -5300,6 +5028,126 @@ export default function NodeTopologyEditor({
   // math as the marquee (node position × zoom + pan, in canvas-container
   // coordinates).
   const pickerAnchor = relationshipPicker ? nodeMap.get(relationshipPicker.toNodeId) : null;
+
+  // ── Header actions (extracted JSX lives in topologyHeader.tsx) ─────
+  // The Apply gate: validate the raw canvas, then build the diff preview
+  // and open the PIN confirm popup. Same validation as the live badge
+  // surface — shared helper keeps the toast and badges in lockstep. A
+  // DISMISSED missing-stock-routing prompt (intentionally empty warehouse)
+  // is the one error that stops blocking once the user explicitly resolved
+  // it (round 81).
+  const handleApplyClick = useCallback(async () => {
+    const validationErrors = validateEditorGraph(nodes, wires, allowLegacyApply, currentTier).filter(
+      (e) => !(e.code === 'warehouse-missing-stock-routing' && e.nodeId && resolvedIssues.has(issueKey(e.nodeId, e.messageId))),
+    );
+    if (validationErrors.length > 0) {
+      // Open the issues panel so the user sees EVERY blocking issue at once
+      // instead of fixing them one at a time through the toast, then confirm
+      // what blocked Apply.
+      setValidationPanelOpen(true);
+      addToast({
+        message: l10n.getString('topology-apply-blocked', { count: String(validationErrors.length) }),
+        type: 'error',
+      });
+      return;
+    }
+    // Compute the diff preview and show the confirmation popup.
+    const snap = appliedSnapshotRef.current;
+    const beforeInstances = workspaceInstances !== undefined
+      ? workspaceInstances.map((s) => ({
+        instance_id: s.instanceId,
+        type_key: s.typeKey,
+        ...(s.purposeKey !== undefined ? { purpose_key: s.purposeKey } : {}),
+        name: s.name,
+      }))
+      : (snap?.nodes ?? [])
+        .filter((n) => n.type === 'workspace')
+        .map((n) => ({
+          instance_id: n.id,
+          type_key: (n.metadata?.['typeKey'] as string) ?? 'store-pos',
+          purpose_key: (n.metadata?.['purposeKey'] as string) ?? 'general',
+          name: n.name,
+        }));
+    const plan = planTopologyDiff(nodes, beforeInstances);
+    const wsNodes = new Map(nodes.filter((n) => n.type === 'workspace').map((n) => [n.id, n]));
+    const instanceMap = new Map((workspaceInstances ?? []).map((s) => [s.instanceId, s]));
+    const items = (ids: string[], map: Map<string, { name: string; typeKey?: string; type_key?: string }>): ApplyDiffItem[] =>
+      ids.map((id) => {
+        const entry = map.get(id);
+        return { id, name: entry?.name ?? id, typeKey: entry?.typeKey ?? entry?.type_key ?? 'store-pos' };
+      });
+    const createdItems = items(
+      plan.createNodeIds.filter((id) => !plan.typeChanges.has(id)),
+      wsNodes,
+    );
+    const typeChangedItems = [...plan.typeChanges.entries()].map(([id, ch]) => ({
+      id: ch.newId, name: wsNodes.get(id)?.name ?? id, typeKey: ch.newTypeKey,
+    }));
+    const updatedItems = items(plan.updateNodeIds, instanceMap);
+    const archivedItems = items(
+      plan.archiveIds.filter((id) => !plan.typeChanges.has(id)),
+      instanceMap,
+    );
+    // Resolve store IDs for the debug info panel.
+    const branchNode = nodes.find((n) => n.type === 'store');
+    const effectiveStoreId = branchNode?.storeProfileId
+      ?? (branchNode?.metadata?.['storeProfileId'] as string | undefined)
+      ?? sessionStoreId;
+    setApplyConfirmData({
+      created: createdItems,
+      updated: updatedItems,
+      archived: archivedItems,
+      typeChanged: typeChangedItems,
+      sessionStoreId,
+      effectiveStoreId,
+    });
+    setApplyPin('');
+    setApplyPinError(false);
+    setApplyConfirmOpen(true);
+    // Focus the PIN input after the popup renders.
+    setTimeout(() => applyPinRef.current?.focus(), 50);
+  }, [nodes, wires, allowLegacyApply, currentTier, resolvedIssues, workspaceInstances, sessionStoreId, addToast, l10n, setValidationPanelOpen, setApplyConfirmData, setApplyPin, setApplyPinError, setApplyConfirmOpen]);
+
+  /** Preset menu item click: close the popover, then dirty-gate the load. */
+  const handleLoadPreset = useCallback((preset: TopologyPreset) => {
+    setPresetsOpen(false);
+    if (isCanvasDirty()) setConfirmPreset(preset);
+    else loadPreset(preset);
+  }, [isCanvasDirty, loadPreset]);
+
+  /** Reactive "Unsaved changes" chip data. Round 153: the chip always
+   *  previews the workspace-instance diff through the SAME planTopologyDiff
+   *  the save path's payload builder is built on, so the preview can never
+   *  drift from the Apply. With real instances the before-side is the loaded
+   *  backend instances (round 150); on a standalone/demo canvas it is
+   *  synthesized from the committed snapshot (the preset or the last-loaded
+   *  diagram) — the workspace format is the single honest signal everywhere.
+   *  The plan is total: a workspace mid-wiring (no store ownership yet)
+   *  still counts as a creation instead of crashing the chip (round 152: a
+   *  type change surfaces as a destructive recreate, not a plain create +
+   *  archive). */
+  const dirtySummary = useMemo(() => {
+    if (!isDirty) return null;
+    const snap = appliedSnapshotRef.current;
+    const beforeInstances = workspaceInstances !== undefined
+      ? workspaceInstances.map((s) => ({
+        instance_id: s.instanceId,
+        type_key: s.typeKey,
+        // exactOptionalPropertyTypes: omit the key, never set it to undefined.
+        ...(s.purposeKey !== undefined ? { purpose_key: s.purposeKey } : {}),
+        name: s.name,
+      }))
+      : (snap?.nodes ?? [])
+        .filter((n) => n.type === 'workspace')
+        .map((n) => ({
+          instance_id: n.id,
+          type_key: (n.metadata?.['typeKey'] as string) ?? 'store-pos',
+          purpose_key: (n.metadata?.['purposeKey'] as string) ?? 'general',
+          name: n.name,
+        }));
+    const plan = planTopologyDiff(nodes, beforeInstances);
+    return summarizeTopologyPlan(plan);
+  }, [isDirty, nodes, workspaceInstances]);
 
   return (
     <div className="node-topology-editor">
@@ -5354,265 +5202,64 @@ export default function NodeTopologyEditor({
         />
       )}
 
-      <div className="node-topology-header">
-        {/* Visually-hidden heading keeps the topology screen's heading
-            hierarchy (h2 → h3 Palette Tools) intact for assistive tech
-            without occupying header space. */}
-        <Localized id="topology-builder-title">
-          <h2 className="sr-only">Visual Store & Workspace Topology Builder</h2>
-        </Localized>
-        {branchToolbar}
-        {!canSave && (
-          <div className="topology-readonly-note" role="status">
-            <Localized id="topology-readonly-note">
-              <span>View-only — only managers and owners can save topology changes.</span>
-            </Localized>
-          </div>
-        )}
-        <span className={`topology-tier-badge tier-${currentTier}`}>
-          <Localized id="topology-tier-suffix" vars={{ tier: currentTier.toUpperCase() }}>
-            <span>{currentTier.toUpperCase()} TIER</span>
-          </Localized>
-        </span>
-
-        <div className="node-topology-header-actions">
-
-          <div className="topology-presets-popover">
-            <Button
-              variant="secondary"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={() => setPresetsOpen((o) => !o)}
-              icon={<ChevronDownIcon size={16} />}
-            >
-              <Localized id="topology-presets-label">Presets</Localized>
-            </Button>
-            {presetsOpen && (
-              <div className="topology-presets-menu" role="menu" tabIndex={0} onMouseDown={(e) => e.stopPropagation()}>
-                <button type="button" role="menuitem" onClick={() => { setPresetsOpen(false); if (isCanvasDirty()) setConfirmPreset('retail'); else loadPreset('retail'); }}>
-                  <Localized id="topology-preset-retail">Retail Preset</Localized>
-                  <span className="topology-presets-menu-desc"><Localized id="topology-preset-retail-desc">Store, warehouse, and POS terminals</Localized></span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => { setPresetsOpen(false); if (isCanvasDirty()) setConfirmPreset('restaurant'); else loadPreset('restaurant'); }}>
-                  <Localized id="topology-preset-restaurant">Restaurant & KDS Preset</Localized>
-                  <span className="topology-presets-menu-desc"><Localized id="topology-preset-restaurant-desc">Restaurant POS, kitchen display, and warehouse</Localized></span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          <Button
-              variant="primary"
-              disabled={!canSave || saving || !onSave}
-              title={canSave && onSave ? undefined : l10n.getString('topology-apply-permission-tooltip')}
-              onClick={async () => {
-                // Same gate as the live badge surface — shared helper keeps
-                // the Apply toast and the on-canvas badges in lockstep. A
-                // DISMISSED missing-stock-routing prompt (intentionally
-                // empty warehouse) is the one error that stops blocking
-                // once the user explicitly resolved it (round 81).
-                const validationErrors = validateEditorGraph(nodes, wires, allowLegacyApply, currentTier).filter(
-                  (e) => !(e.code === 'warehouse-missing-stock-routing' && e.nodeId && resolvedIssues.has(issueKey(e.nodeId, e.messageId))),
-                );
-                if (validationErrors.length > 0) {
-                  // Open the issues panel so the user sees EVERY blocking
-                  // issue at once instead of fixing them one at a time
-                  // through the toast, then confirm what blocked Apply.
-                  setValidationPanelOpen(true);
-                  addToast({
-                    message: l10n.getString('topology-apply-blocked', { count: String(validationErrors.length) }),
-                    type: 'error',
-                  });
-                  return;
-                }
-                // Compute the diff preview and show the confirmation popup.
-                const snap = appliedSnapshotRef.current;
-                const beforeInstances = workspaceInstances !== undefined
-                  ? workspaceInstances.map((s) => ({
-                    instance_id: s.instanceId,
-                    type_key: s.typeKey,
-                    ...(s.purposeKey !== undefined ? { purpose_key: s.purposeKey } : {}),
-                    name: s.name,
-                  }))
-                  : (snap?.nodes ?? [])
-                    .filter((n) => n.type === 'workspace')
-                    .map((n) => ({
-                      instance_id: n.id,
-                      type_key: (n.metadata?.['typeKey'] as string) ?? 'store-pos',
-                      purpose_key: (n.metadata?.['purposeKey'] as string) ?? 'general',
-                      name: n.name,
-                    }));
-                const plan = planTopologyDiff(nodes, beforeInstances);
-                const wsNodes = new Map(nodes.filter((n) => n.type === 'workspace').map((n) => [n.id, n]));
-                const instanceMap = new Map((workspaceInstances ?? []).map((s) => [s.instanceId, s]));
-                const items = (ids: string[], map: Map<string, { name: string; typeKey?: string; type_key?: string }>): ApplyDiffItem[] =>
-                  ids.map((id) => {
-                    const entry = map.get(id);
-                    return { id, name: entry?.name ?? id, typeKey: entry?.typeKey ?? entry?.type_key ?? 'store-pos' };
-                  });
-                const createdItems = items(
-                  plan.createNodeIds.filter((id) => !plan.typeChanges.has(id)),
-                  wsNodes,
-                );
-                const typeChangedItems = [...plan.typeChanges.entries()].map(([id, ch]) => ({
-                  id: ch.newId, name: wsNodes.get(id)?.name ?? id, typeKey: ch.newTypeKey,
-                }));
-                const updatedItems = items(plan.updateNodeIds, instanceMap);
-                const archivedItems = items(
-                  plan.archiveIds.filter((id) => !plan.typeChanges.has(id)),
-                  instanceMap,
-                );
-                // Resolve store IDs for the debug info panel.
-                const branchNode = nodes.find((n) => n.type === 'store');
-                const effectiveStoreId = branchNode?.storeProfileId
-                  ?? (branchNode?.metadata?.['storeProfileId'] as string | undefined)
-                  ?? sessionStoreId;
-                setApplyConfirmData({
-                  created: [...createdItems, ...typeChangedItems],
-                  updated: updatedItems,
-                  archived: archivedItems,
-                  typeChanged: typeChangedItems,
-                  sessionStoreId,
-                  effectiveStoreId,
-                });
-                setApplyPin('');
-                setApplyPinError(false);
-                setApplyConfirmOpen(true);
-                // Focus the PIN input after the popup renders.
-                setTimeout(() => applyPinRef.current?.focus(), 50);
-              }}
-              icon={<CheckIcon size={16} />}
-            >
-            <Localized id="topology-apply-changes">Apply Topology Changes</Localized>
-          </Button>
-
-          {isDirty && (() => {
-            // Round 153: the chip always previews the workspace-instance
-            // diff through the SAME planTopologyDiff the save path's payload
-            // builder is built on, so the preview can never drift from the
-            // Apply. With real instances the before-side is the loaded
-            // backend instances (round 150); on a standalone/demo canvas it
-            // is synthesized from the committed snapshot (the preset or the
-            // last-loaded diagram) — the workspace format is the single
-            // honest signal everywhere. The plan is total: a workspace
-            // mid-wiring (no store ownership yet) still counts as a
-            // creation instead of crashing the chip (round 152: a type
-            // change surfaces as a destructive recreate, not a plain
-            // create + archive).
-            const snap = appliedSnapshotRef.current;
-            const beforeInstances = workspaceInstances !== undefined
-              ? workspaceInstances.map((s) => ({
-                instance_id: s.instanceId,
-                type_key: s.typeKey,
-                // exactOptionalPropertyTypes: omit the key, never set
-                // it to undefined.
-                ...(s.purposeKey !== undefined ? { purpose_key: s.purposeKey } : {}),
-                name: s.name,
-              }))
-              : (snap?.nodes ?? [])
-                .filter((n) => n.type === 'workspace')
-                .map((n) => ({
-                  instance_id: n.id,
-                  type_key: (n.metadata?.['typeKey'] as string) ?? 'store-pos',
-                  purpose_key: (n.metadata?.['purposeKey'] as string) ?? 'general',
-                  name: n.name,
-                }));
-            const plan = planTopologyDiff(nodes, beforeInstances);
-            const summary = summarizeTopologyPlan(plan);
-            return (
-              <span className="topology-dirty-chip" role="status">
-                <span className="topology-dirty-dot" aria-hidden="true" />
-                <Localized id="topology-unsaved">Unsaved changes</Localized>
-                <span className="topology-diff-summary">
-                  {l10n.getString('topology-apply-workspace-diff', {
-                    created: summary.created,
-                    updated: summary.updated,
-                    archived: summary.archived,
-                    typeChanged: summary.typeChanged,
-                    from: topologyRevision,
-                    to: topologyRevision + 1,
-                  })}
-                </span>
-              </span>
-            );
-          })()}
-
-          <TopologyShortcutsHelp
-            open={showShortcuts}
-            onToggle={toggleShortcuts}
-            onClose={closeShortcuts}
-          />
-        </div>
-      </div>
+      <TopologyHeader
+        l10n={l10n}
+        branchToolbar={branchToolbar}
+        canSave={canSave}
+        onSaveAvailable={!!onSave}
+        currentTier={currentTier}
+        saving={saving}
+        onApply={() => void handleApplyClick()}
+        presetsOpen={presetsOpen}
+        onTogglePresets={() => setPresetsOpen((o) => !o)}
+        onLoadPreset={handleLoadPreset}
+        dirtySummary={dirtySummary}
+        topologyRevision={topologyRevision}
+        showShortcuts={showShortcuts}
+        onToggleShortcuts={toggleShortcuts}
+        onCloseShortcuts={closeShortcuts}
+      />
 
       <div className="node-topology-main">
-        <div className="node-tool-rack">
-          <button type="button" className={`rack-icon-btn${rackPanel === 'add' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('add')} aria-label={l10n.getString('topology-rack-add-title')} aria-expanded={rackPanel === 'add'}><PlusIcon size={18} /></button>
-          {(selectedNodeIds.size > 0 || selectedWireId || history.length > 0 || redo.length > 0) && (
-            <button type="button" className={`rack-icon-btn${rackPanel === 'edit' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('edit')} aria-label={l10n.getString('topology-rack-edit-title')} aria-expanded={rackPanel === 'edit'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg></button>
-          )}
-          <button type="button" className={`rack-icon-btn${rackPanel === 'view' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('view')} aria-label={l10n.getString('topology-rack-view-title')} aria-expanded={rackPanel === 'view'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg></button>
-          <button type="button" className={`rack-icon-btn${rackPanel === 'share' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('share')} aria-label={l10n.getString('topology-rack-share-title')} aria-expanded={rackPanel === 'share'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></svg></button>
-
-          {rackPanel && (
-            <div className="rack-panel" role="group" aria-label={l10n.getString(`topology-rack-${rackPanel}-title`)}>
-              <div className="rack-panel-header">
-                <h3 className="rack-panel-title"><Localized id={`topology-rack-${rackPanel}-title`}>{rackPanel}</Localized></h3>
-                <button type="button" className="rack-panel-close" onClick={() => setRackPanel(null)} aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
-              </div>
-              {rackPanel === 'add' && (
-                <div className="rack-panel-body">
-                  {allowLegacyApply && (
-                    <button type="button" className="tool-card" onClick={() => { handleAddNode('store'); }}><span className="tool-card-icon"><StoreIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-tool-store">+ Store Node</Localized></strong><span><Localized id="topology-tool-store-desc">Store Branch Profile</Localized></span></div><kbd className="tool-card-shortcut">1</kbd></button>
-                  )}
-                  <div className="rack-panel-subsection"><span className="rack-panel-subsection-title">{l10n.getString('topology-workspace-types-title')}</span></div>
-                  <button type="button" className="tool-card" onClick={() => { handleAddNode('workspace', undefined, 'restaurant-pos'); }}><span className="tool-card-icon"><UtensilsIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-tool-restaurant-pos">+ Restaurant POS</Localized></strong><span><Localized id="topology-tool-restaurant-pos-desc">Restaurant checkout workspace</Localized></span></div></button>
-                  <button type="button" className="tool-card" onClick={() => { handleAddNode('workspace', undefined, 'store-pos'); }}><span className="tool-card-icon"><CartIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-tool-retail-pos">+ Retail POS</Localized></strong><span><Localized id="topology-tool-retail-pos-desc">Retail checkout workspace</Localized></span></div></button>
-                  <button type="button" className="tool-card" onClick={() => { handleAddNode('workspace', undefined, 'kds'); }}><span className="tool-card-icon"><NodesIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-tool-kds">+ KDS</Localized></strong><span><Localized id="topology-tool-kds-desc">Kitchen display workspace</Localized></span></div></button>
-                  <button type="button" className={`tool-card${!isProAllowed && nodes.some((n) => n.type === 'warehouse') ? ' locked' : ''}`} onClick={() => { handleAddNode('warehouse'); }}><span className="tool-card-icon"><WarehouseIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-tool-warehouse-workspace">+ Warehouse</Localized></strong><span><Localized id="topology-tool-warehouse-workspace-desc">Inventory storage workspace</Localized></span></div>{!isProAllowed && nodes.some((n) => n.type === 'warehouse') && <span className="lock-badge"><LockIcon size={12} /> Pro</span>}</button>
-                  <div className="rack-panel-subsection"><span className="rack-panel-subsection-title"><Localized id="topology-other-nodes-title">Other Nodes</Localized></span></div>
-                  <button type="button" className="tool-card" onClick={() => { handleAddNode('hardware'); }}><span className="tool-card-icon"><PrinterIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-tool-hardware">+ Hardware Node</Localized></strong><span><Localized id="topology-tool-hardware-desc">Printer / KDS Peripheral</Localized></span></div></button>
-                </div>
-              )}
-              {rackPanel === 'edit' && (
-                <div className="rack-panel-body">
-                  {selectedNodeIds.size > 0 || selectedWireId ? (
-                    <button type="button" className="tool-card" onClick={handleDeleteRequest}><span className="tool-card-icon" style={{ color: 'var(--color-danger)' }}><TrashIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-delete-selected">Delete Selected Element</Localized></strong></div></button>
-                  ) : <p className="rack-panel-empty">Select a node or wire to delete</p>}
-                  {history.length > 0 && <button type="button" className="tool-card" onClick={popUndo}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-undo">Undo (Ctrl+Z)</Localized></strong></div></button>}
-                  {redo.length > 0 && <button type="button" className="tool-card" onClick={popRedo}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-redo">Redo (Ctrl+Y)</Localized></strong></div></button>}
-                </div>
-              )}
-              {rackPanel === 'view' && (
-                <div className="rack-panel-body">
-                  <button type="button" className="tool-card" onClick={autoLayout}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-auto-layout">Auto-layout</Localized></strong></div></button>
-                  <button type="button" className={`tool-card${wireRouting === 'elbow' ? ' is-active' : ''}`} aria-pressed={wireRouting === 'elbow'} title={anyBentWires ? l10n.getString('topology-bends-override-note') : undefined} onClick={() => setWireRouting((r) => (r === 'elbow' ? 'curved' : 'elbow'))}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><polyline points="4 4 4 20 20 20" /><polyline points="4 4 12 12" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-wire-routing-toggle">Elbow wires</Localized></strong>{anyBentWires && <span className="rack-panel-note">{l10n.getString('topology-bends-override-note')}</span>}</div></button>
-                  <button type="button" className={`tool-card${snapEnabled ? ' is-active' : ''}`} aria-pressed={snapEnabled} onClick={() => setSnapEnabled((s) => !s)}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-snap-toggle">Snap to grid</Localized></strong></div></button>
-                  <button type="button" className={`tool-card${panToolActive ? ' is-active' : ''}`} aria-pressed={panToolActive} onClick={() => setPanToolActive((v) => !v)}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M18 11V6a2 2 0 0 0-4 0v5" /><path d="M14 10V4a2 2 0 0 0-4 0v6" /><path d="M10 10.5V6a2 2 0 0 0-4 0v8" /><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-pan-tool-toggle">Pan tool</Localized></strong></div></button>
-                  <button type="button" className={`tool-card${wireLabelsVisible ? ' is-active' : ''}`} aria-pressed={wireLabelsVisible} onClick={() => setWireLabelsVisible((v) => !v)}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-wire-labels-toggle">Wire labels</Localized></strong></div></button>
-                </div>
-              )}
-              {rackPanel === 'share' && (
-                <div className="rack-panel-body">
-                  <button type="button" className="tool-card" onClick={handleExport}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-export">Export</Localized></strong><span>Download as JSON</span></div></button>
-                  <button type="button" className="tool-card" onClick={handleImport}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-import">Import</Localized></strong><span>Load from JSON file</span></div></button>
-                  <div className="rack-panel-divider" />
-                  <button type="button" className="tool-card" onClick={() => setTemplateSaveOpen((v) => !v)}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-save-template">Save template</Localized></strong></div></button>
-                  {templateSaveOpen && (
-                    <div className="rack-template-pop" role="group"><input type="text" className="rack-template-input" placeholder={l10n.getString('topology-template-name-placeholder')} value={templateName} onChange={(e) => setTemplateName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleSaveTemplate(templateName); else if (e.key === 'Escape') { setTemplateSaveOpen(false); setTemplateName(''); } }} /><button type="button" className="rack-template-save" onClick={() => handleSaveTemplate(templateName)}><Localized id="topology-template-save">Save</Localized></button></div>
-                  )}
-                  <button type="button" className="tool-card" onClick={openTemplates}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-templates">Templates</Localized></strong></div></button>
-                  {templatesOpen && (
-                    <div className="rack-template-list" role="group">
-                      {savedTemplates.length === 0 ? <p className="rack-panel-empty"><Localized id="topology-no-templates">No saved templates</Localized></p> : (
-                        <ul className="rack-template-items">{savedTemplates.map((name) => (<li key={name} className="rack-template-item"><span className="rack-template-name">{name}</span><div className="rack-template-actions"><button type="button" onClick={() => handleLoadTemplate(name)}>Load</button><button type="button" onClick={() => handleDeleteTemplate(name)}>Delete</button></div></li>))}</ul>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <TopologyToolRack
+          l10n={l10n}
+          rackPanel={rackPanel}
+          onTogglePanel={toggleRackPanel}
+          onClosePanel={() => setRackPanel(null)}
+          hasSelection={selectedNodeIds.size > 0 || !!selectedWireId || history.length > 0 || redo.length > 0}
+          canDelete={selectedNodeIds.size > 0 || !!selectedWireId}
+          canUndo={history.length > 0}
+          canRedo={redo.length > 0}
+          onDeleteSelected={handleDeleteRequest}
+          onUndo={popUndo}
+          onRedo={popRedo}
+          allowLegacyApply={allowLegacyApply}
+          onAddNode={handleAddNode}
+          isProAllowed={isProAllowed}
+          hasWarehouse={nodes.some((n) => n.type === 'warehouse')}
+          onAutoLayout={autoLayout}
+          wireRouting={wireRouting}
+          onToggleWireRouting={() => setWireRouting((r) => (r === 'elbow' ? 'curved' : 'elbow'))}
+          anyBentWires={anyBentWires}
+          snapEnabled={snapEnabled}
+          onToggleSnap={() => setSnapEnabled((s) => !s)}
+          panToolActive={panToolActive}
+          onTogglePanTool={() => setPanToolActive((v) => !v)}
+          wireLabelsVisible={wireLabelsVisible}
+          onToggleWireLabels={() => setWireLabelsVisible((v) => !v)}
+          onExport={handleExport}
+          onImport={handleImport}
+          templateSaveOpen={templateSaveOpen}
+          onToggleTemplateSave={() => setTemplateSaveOpen((v) => !v)}
+          templateName={templateName}
+          onTemplateNameChange={setTemplateName}
+          onSaveTemplate={handleSaveTemplate}
+          onOpenTemplates={openTemplates}
+          templatesOpen={templatesOpen}
+          savedTemplates={savedTemplates}
+          onLoadTemplate={handleLoadTemplate}
+          onDeleteTemplate={handleDeleteTemplate}
+        />
 
         <div
           ref={canvasRef}
@@ -5731,195 +5378,32 @@ export default function NodeTopologyEditor({
             </div>
           )}
           {contextMenu && (
-            <div
-              className="topology-context-menu"
-              role="menu"
-              aria-label={l10n.getString('topology-context-add-title')}
-              tabIndex={-1}
-              onMouseDown={(e) => e.stopPropagation()}
-              onKeyDown={(e) => {
-                if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-                e.preventDefault();
-                const items = Array.from(
-                  e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
-                );
-                if (items.length === 0) return;
-                const idx = items.indexOf(document.activeElement as HTMLButtonElement);
-                const next = e.key === 'ArrowDown'
-                  ? (idx + 1) % items.length
-                  : (idx - 1 + items.length) % items.length;
-                items[next]!.focus();
-              }}
-              style={{ left: contextMenu.x, top: contextMenu.y }}
-            >
-              {(() => {
-                const menuNode = contextMenu.nodeId ? nodeMap.get(contextMenu.nodeId) : undefined;
-                const menuWire = contextMenu.wireId ? wires.find((w) => w.id === contextMenu.wireId) : undefined;
-                if (menuWire) {
-                  // Wire menu: object-scoped actions (direction + rename + delete).
-                  return (
-                    <>
-                      <div className="topology-context-section-title">{wireDisplayLabel(menuWire)}</div>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="topology-context-item"
-                        onClick={() => { setContextMenu(null); handleCycleWireDirection(menuWire.id); }}
-                      >
-                        {l10n.getString('topology-wire-toggle-aria')}
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="topology-context-item"
-                        onClick={() => { setContextMenu(null); startWireRename(menuWire.id); }}
-                      >
-                        {l10n.getString('topology-context-rename-wire')}
-                      </button>
-                      <div className="topology-context-divider" />
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="topology-context-item"
-                        onClick={() => { setContextMenu(null); setConfirmDelete(''); }}
-                      >
-                        {l10n.getString('topology-context-delete-wire')}
-                      </button>
-                    </>
-                  );
-                }
-                if (menuNode) {
-                  // Node menu: object-scoped actions (rename/duplicate/delete).
-                  const menuRenameable = (menuNode.type === 'store' && !!onRenameBranch)
-                    || (menuNode.type === 'workspace' && !!onRenameWorkspace);
-                  return (
-                    <>
-                      <div className="topology-context-section-title">{menuNode.name}</div>
-                      {menuRenameable && (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="topology-context-item"
-                          onClick={() => { setContextMenu(null); startNodeRename(menuNode.id, menuNode.name); }}
-                        >
-                          {l10n.getString('topology-context-rename')}
-                        </button>
-                      )}
-                      {menuNode.type !== 'store' && (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="topology-context-item"
-                          onClick={() => { setContextMenu(null); duplicateSelection(); }}
-                        >
-                          {l10n.getString('topology-context-duplicate')}
-                        </button>
-                      )}
-                      {menuNode.type !== 'store' && (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="topology-context-item"
-                          onClick={() => { setContextMenu(null); handleDeleteRequest(); }}
-                        >
-                          {l10n.getString('topology-confirm-delete-node-title')}
-                        </button>
-                      )}
-                      <div className="topology-context-divider" />
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="topology-context-item"
-                        onClick={() => { setContextMenu(null); zoomToSelection(); }}
-                      >
-                        {l10n.getString('topology-context-zoom-selection')}
-                      </button>
-                    </>
-                  );
-                }
-                // Canvas menu: an active (marquee) selection gets a summary
-                // + clear action up top; add node types + view actions follow.
-                return (
-                  <>
-                    {selectedNodeIds.size > 0 && (
-                      <>
-                        <div className="topology-context-section-title">
-                          {l10n.getString('topology-context-selection-title', { count: selectedNodeIds.size })}
-                        </div>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="topology-context-item"
-                          onClick={() => { setContextMenu(null); clearSelection(); }}
-                        >
-                          {l10n.getString('topology-context-clear-selection')}
-                        </button>
-                        <div className="topology-context-divider" />
-                      </>
-                    )}
-                    <div className="topology-context-section-title">
-                      {l10n.getString('topology-context-add-title')}
-                    </div>
-                    {CONTEXT_ADD_TYPES.filter((t) => allowLegacyApply || t !== 'store').map((type) => {
-                      const Icon = NODE_TYPE_ICON[type];
-                      return (
-                        <button
-                          key={type}
-                          type="button"
-                          role="menuitem"
-                          className="topology-context-item"
-                          onClick={() => {
-                            setContextMenu(null);
-                            handleAddNode(type, {
-                              x: (contextMenu.x - pan.x) / zoom,
-                              y: (contextMenu.y - pan.y) / zoom,
-                            });
-                          }}
-                        >
-                          <span className="topology-context-item-icon"><Icon size={14} /></span>
-                          {l10n.getString(`topology-new-${type}`)}
-                        </button>
-                      );
-                    })}
-                    <div className="topology-context-divider" />
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="topology-context-item"
-                      onClick={() => { setContextMenu(null); selectAllNodes(); }}
-                    >
-                      {l10n.getString('topology-context-select-all')}
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="topology-context-item"
-                      onClick={() => { setContextMenu(null); zoomToFit(); }}
-                    >
-                      {l10n.getString('topology-fit-all')}
-                    </button>
-                    {selectedNodeIds.size > 0 && (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="topology-context-item"
-                        onClick={() => { setContextMenu(null); zoomToSelection(); }}
-                      >
-                        {l10n.getString('topology-context-zoom-selection')}
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="topology-context-item"
-                      onClick={() => { setContextMenu(null); resetView(); }}
-                    >
-                      {l10n.getString('topology-reset-view')}
-                    </button>
-                  </>
-                );
-              })()}
-            </div>
+            <TopologyContextMenu
+              l10n={l10n}
+              menu={contextMenu}
+              onClose={() => setContextMenu(null)}
+              nodeMap={nodeMap}
+              wires={wires}
+              wireDisplayLabel={wireDisplayLabel}
+              onCycleWireDirection={handleCycleWireDirection}
+              onStartWireRename={startWireRename}
+              onStartNodeRename={startNodeRename}
+              onDuplicateSelection={duplicateSelection}
+              onDeleteRequest={handleDeleteRequest}
+              onZoomToSelection={zoomToSelection}
+              selectedCount={selectedNodeIds.size}
+              onClearSelection={clearSelection}
+              allowLegacyApply={allowLegacyApply}
+              onAddNode={handleAddNode}
+              pan={pan}
+              zoom={zoom}
+              onSelectAll={selectAllNodes}
+              onZoomToFit={zoomToFit}
+              onResetView={resetView}
+              canRenameBranch={!!onRenameBranch}
+              canRenameWorkspace={!!onRenameWorkspace}
+              onConfirmDeleteWire={() => setConfirmDelete('')}
+            />
           )}
           {relationshipPicker && pickerAnchor && (
             <TopologyRelationshipPicker
@@ -6158,8 +5642,8 @@ export default function NodeTopologyEditor({
                 isConnectingSource={connectingFromNodeId === node.id}
                 connectingFromNodeId={connectingFromNodeId}
                 connectingFromPort={connectingFromPort}
-                isLeftPortHovered={_htn?.port === 'left'}
-                isRightPortHovered={_htn?.port === 'right'}
+                connectingFromVariantIndex={connectingFromVariantIndex}
+                hoveredTarget={_htn ? { port: _htn.port, variantIndex: _htn.variantIndex } : null}
                 nodeErrors={nodeErrorsByNode.get(node.id) ?? EMPTY_ERRORS}
                 countBadge={excessBadgeByNode.get(node.id) ?? null}
                 hasOverlap={overlappingNodeIds.has(node.id)}
@@ -6175,7 +5659,6 @@ export default function NodeTopologyEditor({
                 isRenameable={(node.type === 'store' && !!onRenameBranch) || (node.type === 'workspace' && !!onRenameWorkspace)}
                 renaming={renamingNodeId === node.id}
                 renameDraft={renameDraft}
-                connectedPortId={connectedPortIdByNode.get(node.id)}
                 l10n={l10n}
                 renameInputRef={renameInputRef}
                 renameBaselineRef={renameBaselineRef}
@@ -6293,79 +5776,19 @@ export default function NodeTopologyEditor({
             onClose={closeFinder}
           />
 
-          {/* ── Canvas zoom controls — the floating bottom-right
-                 cluster (standard canvas-tool pattern) ────────── */}
-          <div
-            className="canvas-zoom-controls"
-            role="toolbar"
-            aria-label={l10n.getString('topology-canvas-aria-label')}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              className="canvas-zoom-btn"
-              aria-label={l10n.getString('topology-zoom-out')}
-              onClick={() => zoomBy(1 / 1.25)}
-            >
-              <MinusIcon size={14} />
-            </button>
-            <div className="canvas-zoom-picker">
-              <button
-                type="button"
-                className="canvas-zoom-level"
-                aria-label={l10n.getString('topology-zoom-level-aria', { count: Math.round(zoom * 100) })}
-                aria-expanded={zoomPickerOpen}
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={() => setZoomPickerOpen((v) => !v)}
-              >
-                {Math.round(zoom * 100)}%
-              </button>
-              {zoomPickerOpen && (
-                <div
-                  className="canvas-zoom-slider-pop"
-                  role="group"
-                  aria-label={l10n.getString('topology-zoom-slider-aria')}
-                >
-                  <input
-                    type="range"
-                    min={40}
-                    max={200}
-                    step={5}
-                    value={Math.round(zoom * 100)}
-                    onChange={(e) => setZoom(Number(e.target.value) / 100)}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    aria-label={l10n.getString('topology-zoom-slider-aria')}
-                  />
-                  <span className="canvas-zoom-slider-value" aria-hidden="true">{Math.round(zoom * 100)}%</span>
-                </div>
-              )}
-            </div>
-            <button
-              type="button"
-              className="canvas-zoom-btn"
-              aria-label={l10n.getString('topology-zoom-in')}
-              onClick={() => zoomBy(1.25)}
-            >
-              <PlusIcon size={14} />
-            </button>
-            <span className="canvas-zoom-divider" aria-hidden="true" />
-            <button type="button" className="canvas-zoom-btn canvas-zoom-action" onClick={zoomToFit}>
-              <Localized id="topology-fit-all">Fit All</Localized>
-            </button>
-            <button type="button" className="canvas-zoom-btn canvas-zoom-action" onClick={resetView}>
-              <Localized id="topology-reset-view">Reset View</Localized>
-            </button>
-            <button
-              type="button"
-              className="canvas-zoom-btn canvas-zoom-action"
-              aria-pressed={minimapVisible}
-              onClick={() => setMinimapVisible((v) => !v)}
-            >
-              <Localized id={minimapVisible ? 'topology-minimap-hide' : 'topology-minimap-show'}>
-                {minimapVisible ? 'Hide Minimap' : 'Show Minimap'}
-              </Localized>
-            </button>
-          </div>
+          <TopologyCanvasZoomControls
+            l10n={l10n}
+            zoom={zoom}
+            zoomPickerOpen={zoomPickerOpen}
+            onToggleZoomPicker={() => setZoomPickerOpen((v) => !v)}
+            onZoomOut={() => zoomBy(1 / 1.25)}
+            onZoomIn={() => zoomBy(1.25)}
+            onSliderChange={(z) => setZoom(z)}
+            onZoomToFit={zoomToFit}
+            onResetView={resetView}
+            minimapVisible={minimapVisible}
+            onToggleMinimap={() => setMinimapVisible((v) => !v)}
+          />
 
           {/* ── Canvas minimap — bottom-left overview; click/drag to
                  recenter, arrows nudge the view, Enter centers on the
@@ -6458,6 +5881,7 @@ export default function NodeTopologyEditor({
               {selectedNode.type === 'store' && (
                 <BranchLocationFields
                   nodeId={selectedNode.storeProfileId ?? selectedNode.id}
+                  sessionToken={sessionToken!}
                   l10n={l10n}
                   beginInspectorEdit={beginInspectorEdit}
                 />
@@ -6703,9 +6127,29 @@ export default function NodeTopologyEditor({
                 </div>
               )}
 
+              {applyConfirmData.typeChanged.length > 0 && (
+                <div className="topology-apply-confirm-section">
+                  <h4 className="topology-apply-confirm-section-title topology-apply-confirm-section--type-changed">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M12 2v4M12 18v4M2 12h4M18 12h4" /><circle cx="12" cy="12" r="3" /></svg>
+                    <Localized id="topology-apply-confirm-type-changed">Type Changed</Localized>
+                    <span className="topology-apply-confirm-count">{applyConfirmData.typeChanged.length}</span>
+                  </h4>
+                  <ul className="topology-apply-confirm-list">
+                    {applyConfirmData.typeChanged.map((item) => (
+                      <li key={item.id} className="topology-apply-confirm-item">
+                        <span className="topology-apply-confirm-dot topology-apply-confirm-dot--type-changed" />
+                        <span className="topology-apply-confirm-name">{item.name}</span>
+                        <span className="topology-apply-confirm-type">{item.typeKey}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {applyConfirmData.created.length === 0
                 && applyConfirmData.updated.length === 0
-                && applyConfirmData.archived.length === 0 && (
+                && applyConfirmData.archived.length === 0
+                && applyConfirmData.typeChanged.length === 0 && (
                 <p className="topology-apply-confirm-empty">
                   <Localized id="topology-apply-confirm-no-changes">No workspace changes detected.</Localized>
                 </p>

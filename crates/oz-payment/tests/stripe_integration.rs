@@ -449,3 +449,87 @@ async fn authorize_card_present_sends_correct_method_type() {
         "body: {body}"
     );
 }
+
+// ── PAY-2: Idempotency-Key header ─────────────────────────────────────
+
+fn request_with_key(key: Option<&str>) -> PaymentRequest {
+    PaymentRequest {
+        idempotency_key: key.map(str::to_string),
+        ..request(15)
+    }
+}
+
+/// Mount the success response, run one authorize, and hand back what the
+/// driver actually put on the wire.
+async fn authorize_and_capture(
+    mock_server: &MockServer,
+    req: &PaymentRequest,
+) -> Vec<wiremock::Request> {
+    Mock::given(method("POST"))
+        .and(path("/payment_intents"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": "pi_idem_001",
+            "amount": 1500,
+            "amount_received": 1500,
+            "currency": "usd",
+            "status": "requires_capture"
+        })))
+        .mount(mock_server)
+        .await;
+
+    let proc = stripe_processor(&mock_server.uri(), false);
+    proc.authorize(req).await.unwrap();
+
+    let received = mock_server.received_requests().await.unwrap_or_default();
+    assert_eq!(received.len(), 1, "expected exactly one call to the mock");
+    received
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn authorize_forwards_the_caller_idempotency_key_as_a_header() {
+    // Stripe dedups on the Idempotency-Key HEADER, so unlike Square there is
+    // no body field to put it in and the driver was simply not sending one.
+    // parse_error already maps Stripe's "idempotency_error" to
+    // PaymentError::Duplicate, which is the tell: the classification for a
+    // duplicate-key rejection existed while the key that could produce it
+    // was never sent.
+    let server = MockServer::start().await;
+    let received = authorize_and_capture(&server, &request_with_key(Some("order-42-v1"))).await;
+    let key = received[0]
+        .headers
+        .get("Idempotency-Key")
+        .expect("a caller-supplied key must be sent as the Idempotency-Key header");
+    assert_eq!(key, "order-42-v1", "the key must reach Stripe verbatim");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn authorize_sends_no_header_when_the_caller_supplied_no_key() {
+    // Guard. Minting a fresh UUID here would look like a fix and do nothing:
+    // Stripe only dedups when the SAME key comes back, so a per-call key is
+    // behaviourally identical to no key. Square has to mint one because its
+    // key is a required body field; Stripe does not, and a header that never
+    // matches anything is just noise on the wire.
+    let server = MockServer::start().await;
+    let received = authorize_and_capture(&server, &request_with_key(None)).await;
+    assert!(
+        received[0].headers.get("Idempotency-Key").is_none(),
+        "no key must mean no header"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn authorize_does_not_send_a_blank_idempotency_key() {
+    // The dangerous case, same as Square: Some("") sent verbatim puts every
+    // caller who leaves the field empty into ONE shared key on the Stripe
+    // side, and after the first charge Stripe rejects each subsequent one as
+    // an idempotency conflict. A field meant to stop double charges would
+    // become a way to refuse legitimate ones.
+    for blank in ["", "   "] {
+        let server = MockServer::start().await;
+        let received = authorize_and_capture(&server, &request_with_key(Some(blank))).await;
+        assert!(
+            received[0].headers.get("Idempotency-Key").is_none(),
+            "blank key {blank:?} must be treated as absent"
+        );
+    }
+}
