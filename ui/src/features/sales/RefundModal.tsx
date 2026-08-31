@@ -1,8 +1,9 @@
 import { useState, useCallback, useRef } from 'react';
 import { useLocalization } from '@fluent/react';
 import { Localized } from '@/frontend/shared/Localized';
-import { processRefund, type SaleDetail } from '@/api/sales';
+import { processRefundScoped, type ProcessRefundScopedArgs, type SaleDetail } from '@/api/sales';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { formatMoney, type Money } from '@/types/domain';
 import { Button } from '@/components/Button';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
@@ -23,6 +24,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
   // Date follows the active Fluent locale (not the browser default).
   const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const { session } = useAuth();
+  const { sessionToken } = useWorkspace();
   const [selectedLines, setSelectedLines] = useState<Record<string, number>>({});
   const [reason, setReason] = useState('');
   const [note, setNote] = useState('');
@@ -62,7 +64,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
   const hasSelection = Object.values(selectedLines).some((q) => q > 0);
 
   const handleRefund = useCallback(async () => {
-    if (!session || !hasSelection || !reason.trim()) return;
+    if (!session || !sessionToken || !hasSelection || !reason.trim()) return;
     setProcessing(true);
     setError(null);
     try {
@@ -80,20 +82,20 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
             lineTotalMinor: unitPriceMinor * qty,
           };
         });
-      const res = await processRefund({
+      const scopedArgs: ProcessRefundScopedArgs = {
         saleId: sale.id,
         reason: reason.trim(),
         note: note.trim() || null,
-        userId: session.user_id,
         lines,
-      });
+      };
+      const res = await processRefundScoped(sessionToken, scopedArgs);
       setResult(res);
     } catch (err) {
       setError(l10nErrorMessage(err, l10n, 'refund-error'));
     } finally {
       setProcessing(false);
     }
-  }, [session, hasSelection, reason, note, selectedLines, sale, l10n]);
+  }, [session, sessionToken, hasSelection, reason, note, selectedLines, sale, l10n]);
 
  
 

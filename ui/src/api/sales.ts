@@ -93,10 +93,6 @@ export interface SetCartDiscountArgs {
   userId: string;
 }
 
-/** Start a new sale and return the new cart identifier. */
-export const startSale = (args: StartSaleArgs): Promise<StartSaleResult> =>
-  loggedInvoke<StartSaleResult>('start_sale', { args });
-
 /** ADR #7: Start a new sale in the store resolved from a session token. */
 export const startSaleScoped = (sessionToken: string, args: StartSaleArgs): Promise<StartSaleResult> =>
   loggedInvoke<StartSaleResult>('start_sale_scoped', { sessionToken, args });
@@ -113,17 +109,9 @@ export interface DeductionLocationInfo {
 export const getCartDeductionLocation = (cartId: string): Promise<DeductionLocationInfo | null> =>
   loggedInvoke<DeductionLocationInfo | null>('get_cart_deduction_location', { cartId });
 
-/** Add a line item to a cart. */
-export const addLine = (args: AddLineArgs): Promise<AddLineResult> =>
-  loggedInvoke<AddLineResult>('add_line', { args });
-
 /** ADR #7: Add a line to a cart in the store resolved from a session token. */
 export const addLineScoped = (sessionToken: string, args: AddLineArgs): Promise<AddLineResult> =>
   loggedInvoke<AddLineResult>('add_line_scoped', { sessionToken, args });
-
-/** Complete a sale with the given payment details and return the sale record. */
-export const completeSale = (args: CompleteSaleArgs): Promise<CompleteSaleResult> =>
-  loggedInvoke<CompleteSaleResult>('complete_sale', { args });
 
 /** Arguments for completing a sale scoped to the session store. `userId` is read from session, not args. ADR #7. */
 export interface CompleteSaleScopedArgs {
@@ -284,10 +272,6 @@ export const getProductTrackSerialBatch = (skus: string[]): Promise<SerialTrackR
 export const getProductTrackSerialBatchScoped = (sessionToken: string, skus: string[]): Promise<SerialTrackRow[]> =>
   loggedInvoke<SerialTrackRow[]>('get_product_track_serial_batch_scoped', { sessionToken, skus });
 
-/** Apply a percentage-based discount to a cart. */
-export const setCartDiscount = (args: SetCartDiscountArgs): Promise<void> =>
-  loggedInvoke<void>('set_cart_discount', { args });
-
 /** ADR #7: Scoped cart discount — `userId` is read from session. */
 export interface SetCartDiscountScopedArgs {
   cartId: string;
@@ -305,10 +289,6 @@ export interface OverrideLinePriceArgs {
   newPriceMinor: number;
   userId: string;
 }
-
-/** Override the unit price of a line item in a cart. */
-export const overrideLinePrice = (args: OverrideLinePriceArgs): Promise<void> =>
-  loggedInvoke<void>('override_line_price', { args });
 
 /** ADR #7: Scoped line price override — `userId` is read from session. */
 export const overrideLinePriceScoped = (sessionToken: string, cartId: string, lineId: string, newPriceMinor: number): Promise<void> =>
@@ -405,10 +385,6 @@ export interface VoidSaleResult {
   created_at: string;
 }
 
-/** Void a completed sale with a reason. */
-export const voidSale = (args: VoidSaleArgs): Promise<VoidSaleResult> =>
-  loggedInvoke<VoidSaleResult>('void_sale', { args });
-
 /** ADR #7: Void a sale in the store resolved from a session token. */
 export const voidSaleScoped = (sessionToken: string, saleId: string, reason: string): Promise<VoidSaleResult> =>
   loggedInvoke<VoidSaleResult>('void_sale_scoped', { sessionToken, args: { saleId, reason } });
@@ -455,41 +431,21 @@ export interface HeldCartFull {
   deduction_location_id: string | null;
 }
 
-/** Park the current cart for later retrieval. */
-export const holdCart = (args: HoldCartArgs): Promise<{ id: string }> =>
-  loggedInvoke<{ id: string }>('hold_cart', { args });
-
 /** ADR #7: Hold a cart in the store resolved from a session token. */
 export const holdCartScoped = (sessionToken: string, args: HoldCartArgs): Promise<{ id: string }> =>
   loggedInvoke<{ id: string }>('hold_cart_scoped', { sessionToken, args });
-
-/** List all held (parked) carts. */
-export const listHeldCarts = (): Promise<HeldCartRow[]> =>
-  loggedInvoke<HeldCartRow[]>('list_held_carts');
 
 /** ADR #7: Scoped held carts listing. */
 export const listHeldCartsScoped = (sessionToken: string): Promise<HeldCartRow[]> =>
   loggedInvoke<HeldCartRow[]>('list_held_carts_scoped', { sessionToken });
 
-/** List all open bills (table-based held carts). */
-export const listOpenBills = (): Promise<HeldCartRow[]> =>
-  loggedInvoke<HeldCartRow[]>('list_open_bills');
-
 /** ADR #7: Scoped open bills listing. */
 export const listOpenBillsScoped = (sessionToken: string): Promise<HeldCartRow[]> =>
   loggedInvoke<HeldCartRow[]>('list_open_bills_scoped', { sessionToken });
 
-/** Fetch the full detail of a held cart by its identifier. */
-export const getHeldCart = (id: string): Promise<HeldCartFull | null> =>
-  loggedInvoke<HeldCartFull | null>('get_held_cart', { id });
-
 /** ADR #7: Scoped held cart retrieval. */
 export const getHeldCartScoped = (sessionToken: string, id: string): Promise<HeldCartFull | null> =>
   loggedInvoke<HeldCartFull | null>('get_held_cart_scoped', { sessionToken, id });
-
-/** Delete a held cart by its identifier. */
-export const deleteHeldCart = (id: string): Promise<void> =>
-  loggedInvoke('delete_held_cart', { id });
 
 /** ADR #7: Scoped held cart deletion. */
 export const deleteHeldCartScoped = (sessionToken: string, id: string): Promise<void> =>
@@ -545,17 +501,9 @@ export interface RefundLineDto {
   lineTotal: Money;
 }
 
-/** Look up a completed sale by its receipt barcode. */
-export const lookupSaleByReceiptBarcode = (barcode: string): Promise<SaleDetail | null> =>
-  loggedInvoke<SaleDetail | null>('lookup_sale_by_receipt_barcode', { barcode });
-
 /** ADR #7: Scoped receipt barcode lookup using session token. */
 export const lookupSaleByReceiptBarcodeScoped = (sessionToken: string, barcode: string): Promise<SaleDetail | null> =>
   loggedInvoke<SaleDetail | null>('lookup_sale_by_receipt_barcode_scoped', { sessionToken, barcode });
-
-/** Process a refund against a completed sale. */
-export const processRefund = (args: ProcessRefundArgs): Promise<ProcessRefundResult> =>
-  loggedInvoke<ProcessRefundResult>('process_refund', { args });
 
 /** Arguments for processing a refund scoped to the session store. `userId` is read from session, not args. ADR #7. */
 export interface ProcessRefundScopedArgs {
@@ -567,10 +515,6 @@ export interface ProcessRefundScopedArgs {
 
 export const processRefundScoped = (sessionToken: string, args: ProcessRefundScopedArgs): Promise<ProcessRefundResult> =>
   loggedInvoke<ProcessRefundResult>('process_refund_scoped', { sessionToken, args });
-
-/** List all refunds for a given sale. */
-export const listRefunds = (saleId: string): Promise<RefundDto[]> =>
-  loggedInvoke<RefundDto[]>('list_refunds', { saleId });
 
 /** ADR #7: Scoped refund listing using session token. */
 export const listRefundsScoped = (sessionToken: string, saleId: string): Promise<RefundDto[]> =>

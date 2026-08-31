@@ -6,7 +6,7 @@ import { openUpgradePricing } from '@/utils/upgrade';
 import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { Skeleton } from '@/components/Skeleton';
-import { startSale, startSaleScoped, addLine, addLineScoped, completeSale, completeSaleScoped, printSalesReceipt, getSale, setCartDiscount, setCartDiscountScoped, holdCart, finalizeSale, voidPendingSale, type SetCartDiscountArgs, type SetCartDiscountScopedArgs, type CompleteSaleScopedArgs, type PaymentSplitArg, type SerialNumberArg, type PartialStockResult } from '@/api/sales';
+import { startSaleScoped, addLineScoped, completeSaleScoped, printSalesReceipt, getSale, setCartDiscountScoped, holdCartScoped, finalizeSale, voidPendingSale, type SetCartDiscountScopedArgs, type CompleteSaleScopedArgs, type PaymentSplitArg, type SerialNumberArg, type PartialStockResult } from '@/api/sales';
 import { createKdsOrderFromSale, createKdsOrderFromSaleScoped } from '@/api/kds';
 import { Button } from '@/components/Button';
 import { formatMoney, minorUnitExponent, type Money, type CartLine } from '@/types/domain';
@@ -549,20 +549,12 @@ export default function PaymentModal({
     setProcessing(true);
 
     try {
-      const { cartId } = sessionToken
-        ? await startSaleScoped(sessionToken, { currency: cartCurrency })
-        : await startSale({ currency: cartCurrency });
+      const { cartId } = await startSaleScoped(sessionToken!, { currency: cartCurrency });
 
       if (discountPercent > 0) {
-        if (sessionToken) {
-          const scopedArgs: SetCartDiscountScopedArgs = { cartId, percent: discountPercent };
-          if (discountLabel) scopedArgs.label = discountLabel;
-          await setCartDiscountScoped(sessionToken, scopedArgs);
-        } else {
-          const discountArgs: SetCartDiscountArgs = { cartId, percent: discountPercent, userId };
-          if (discountLabel) discountArgs.label = discountLabel;
-          await setCartDiscount(discountArgs);
-        }
+        const scopedArgs: SetCartDiscountScopedArgs = { cartId, percent: discountPercent };
+        if (discountLabel) scopedArgs.label = discountLabel;
+        await setCartDiscountScoped(sessionToken!, scopedArgs);
       }
 
       for (const line of lineItemsInCartCurrency) {
@@ -576,11 +568,7 @@ export default function PaymentModal({
           // it to the cart currency.
           unitPriceCurrency: line.unit_price.currency,
         };
-        if (sessionToken) {
-          await addLineScoped(sessionToken, lineArgs);
-        } else {
-          await addLine(lineArgs);
-        }
+        await addLineScoped(sessionToken!, lineArgs);
       }
 
       const serialNumberArgs: SerialNumberArg[] | undefined = serialNumbers
@@ -594,8 +582,7 @@ export default function PaymentModal({
       // CUR-02: snapshot the base currency / total / rate for the QRIS
       // settlement payload too. Tip/service always sent.
       // FRONTEND-04: shared tenderSnapshot memo (see component scope).
-      const saleResult = sessionToken
-        ? await completeSaleScoped(sessionToken, {
+      const saleResult = await completeSaleScoped(sessionToken!, {
             cartId,
             paymentMethod: 'QRIS',
             tenderedMinor: null,
@@ -611,25 +598,7 @@ export default function PaymentModal({
               },
             ],
             ...tenderSnapshot,
-          } as CompleteSaleScopedArgs)
-        : await completeSale({
-            cartId,
-            paymentMethod: 'QRIS',
-            tenderedMinor: null,
-            userId,
-            ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
-            ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
-            paymentSplits: [
-              {
-                method: 'QRIS',
-                amountMinor: effectiveTotalInCartCurrency,
-                gatewayReference: qrReference,
-                gatewayStatus: 'completed',
-                gatewayResponse: 'QRIS payment confirmed',
-              },
-            ],
-            ...tenderSnapshot,
-          });
+          } as CompleteSaleScopedArgs);
 
       try {
         const completedSale = await getSale(saleResult.saleId);
@@ -792,7 +761,7 @@ export default function PaymentModal({
           discountLabel,
           tableNumber,
         });
-        await holdCart({
+        await holdCartScoped(sessionToken!, {
           label: customerName.trim() || `Open Bill #${Date.now()}`,
           cart_data: cartData,
           item_count: lineItems.length,
@@ -806,20 +775,12 @@ export default function PaymentModal({
       }
 
 
-      const { cartId } = sessionToken
-        ? await startSaleScoped(sessionToken, { currency: cartCurrency })
-        : await startSale({ currency: cartCurrency });
+      const { cartId } = await startSaleScoped(sessionToken!, { currency: cartCurrency });
 
       if (discountPercent > 0) {
-        if (sessionToken) {
-          const scopedArgs: SetCartDiscountScopedArgs = { cartId, percent: discountPercent };
-          if (discountLabel) scopedArgs.label = discountLabel;
-          await setCartDiscountScoped(sessionToken, scopedArgs);
-        } else {
-          const discountArgs: SetCartDiscountArgs = { cartId, percent: discountPercent, userId };
-          if (discountLabel) discountArgs.label = discountLabel;
-          await setCartDiscount(discountArgs);
-        }
+        const scopedArgs: SetCartDiscountScopedArgs = { cartId, percent: discountPercent };
+        if (discountLabel) scopedArgs.label = discountLabel;
+        await setCartDiscountScoped(sessionToken!, scopedArgs);
       }
 
       for (const line of lineItemsInCartCurrency) {
@@ -833,11 +794,7 @@ export default function PaymentModal({
           // it to the cart currency.
           unitPriceCurrency: line.unit_price.currency,
         };
-        if (sessionToken) {
-          await addLineScoped(sessionToken, lineArgs);
-        } else {
-          await addLine(lineArgs);
-        }
+        await addLineScoped(sessionToken!, lineArgs);
       }
 
       let paymentSplits: PaymentSplitArg[] | undefined;
@@ -872,8 +829,7 @@ export default function PaymentModal({
       // the backend records what the customer actually paid.
       // FRONTEND-04: shared tenderSnapshot memo (see component scope).
 
-      const saleResult = sessionToken
-        ? await completeSaleScoped(sessionToken, {
+      const saleResult = await completeSaleScoped(sessionToken!, {
             cartId,
             paymentMethod: methodLabel,
             tenderedMinor: method === 'cash' && !splitMode ? tenderedMinorInCartCurrency : null,
@@ -882,18 +838,7 @@ export default function PaymentModal({
             ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
             ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
             ...tenderSnapshot,
-          } as CompleteSaleScopedArgs)
-        : await completeSale({
-            cartId,
-            paymentMethod: methodLabel,
-            tenderedMinor: method === 'cash' && !splitMode ? tenderedMinorInCartCurrency : null,
-            userId,
-            ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
-            ...(paymentSplits ? { paymentSplits } : {}),
-            ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
-            ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
-            ...tenderSnapshot,
-          });
+          } as CompleteSaleScopedArgs);
 
       // ADR-20: Finalize the pending sale (transitions 'pending' → 'completed')
       // For cash/credit/other/split methods, capture is instantaneous — finalize immediately.
