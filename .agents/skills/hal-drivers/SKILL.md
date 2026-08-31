@@ -3,7 +3,7 @@ name: hal-drivers
 description: Hardware Abstraction Layer (HAL) conventions for OZ-POS — async_trait device traits, drivers for barcode scanners, receipt printers, cash drawers, customer displays, weight scales, and EDC payment terminals, plus mandatory mock implementations. Use when adding a new device driver or wiring hardware into a feature.
 ---
 
-<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (F1-F4 repaired + EdcTerminal documented) · F1 FIXED: removed the false 'embedded-hal' claim (no such dep; plain async_trait) · F2 FIXED: traits list corrected to the 6 real traits (barcode/printer/cash_drawer/customer_display/weight_scale/edc) — fictional nfc.rs/payment_terminal.rs removed · F3 FIXED: drivers are transport-named (usb/bt/serial_scanner, usb/bt/tcp_printer, escpos, receipt, kds_chit, drawer, serial_display, scale, edc/{wired,wireless,protocol}) — fictional honeywell_barcode/star_printer/acr122u_nfc/idtech_payment removed; example struct now UsbHidBarcodeScanner (real) · F4 FIXED: mocks are always compiled (no `mock` feature gate) · NEW: EdcTerminal trait (traits/edc.rs) + edc/ drivers now documented · verified accurate: BarcodeScanner signature (connect/poll/cancel/device_info), DriverRegistry + discover, mock.rs location, async Result<T,HalError> convention · NEW (31-08, dc07f32a): documented bootstrap.rs (`HardwareConfig` + `apply_config()` → `BootstrapReport`) as the production registration path; corrected `discover()` framing (auto-probe, not startup registration) · CORRECTED 31-08 by DSH-Agent: the bootstrap note had carried "registration never blocks", which 6624df1c superseded (Connection::Usb enumerates the bus); added the registry-id contract that 6624df1c proved — discover() mints hardware-derived ids while commands look up fixed strings, so wiring a driver into discover() leaves it unreachable, and the checklist said to do exactly that -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (F1-F4 repaired + EdcTerminal documented) · F1 FIXED: removed the false 'embedded-hal' claim (no such dep; plain async_trait) · F2 FIXED: traits list corrected to the 6 real traits (barcode/printer/cash_drawer/customer_display/weight_scale/edc) — fictional nfc.rs/payment_terminal.rs removed · F3 FIXED: drivers are transport-named (usb/bt/serial_scanner, usb/bt/tcp_printer, escpos, receipt, kds_chit, drawer, serial_display, scale, edc/{wired,wireless,protocol}) — fictional honeywell_barcode/star_printer/acr122u_nfc/idtech_payment removed; example struct now UsbHidBarcodeScanner (real) · F4 FIXED: mocks are always compiled (no `mock` feature gate) · NEW: EdcTerminal trait (traits/edc.rs) + edc/ drivers now documented · verified accurate: BarcodeScanner signature (connect/poll/cancel/device_info), DriverRegistry + discover, mock.rs location, async Result<T,HalError> convention · NEW (31-08, dc07f32a): documented bootstrap.rs (`HardwareConfig` + `apply_config()` → `BootstrapReport`) as the production registration path; corrected `discover()` framing (auto-probe, not startup registration) · CORRECTED 31-08 by DSH-Agent: the bootstrap note had carried "registration never blocks", which 6624df1c superseded (Connection::Usb enumerates the bus); added the registry-id contract that 6624df1c proved — discover() mints hardware-derived ids while commands look up fixed strings, so wiring a driver into discover() leaves it unreachable, and the checklist said to do exactly that · F5 (31-08, DSH-Agent, 1c8957ac): the driver tree omitted serial_printer.rs and presented bt_printer.rs as a separate driver. There is one serial printer implementation; Bluetooth SPP is a serial port to the application. Note this one ran the other way: this skill already listed "serial" as an addressed transport, and it was the CODE that was wrong — bootstrap.rs rejected every serial printer as having no driver. Marked scale.rs and edc/ as stubs so nobody wires a stub into a path and calls it a feature. -->
 
 # Hardware Abstraction Layer (HAL)
 
@@ -59,17 +59,24 @@ crates/oz-hal/
     └── drivers/                # transport-named, NOT vendor-named
         ├── mod.rs
         ├── usb_scanner.rs / bt_scanner.rs / serial_scanner.rs
-        ├── usb_printer.rs / bt_printer.rs / tcp_printer.rs
+        ├── serial_printer.rs   # RS-232, USB-serial and Bluetooth SPP alike
+        ├── bt_printer.rs       # alias of SerialReceiptPrinter, not a 2nd driver
+        ├── usb_printer.rs / tcp_printer.rs
         ├── escpos.rs           # ESC/POS command codec
         ├── receipt.rs / kds_chit.rs   # receipt + kitchen-chit rendering
         ├── drawer.rs           # cash drawer
         ├── serial_display.rs   # customer display
-        ├── scale.rs            # weight scale
-        ├── edc/                # payment terminals
+        ├── scale.rs            # weight scale — STUB, read_weight always fails
+        ├── edc/                # payment terminals — STUBS, every op Unsupported
         │   ├── wired.rs / wireless.rs
         │   └── protocol/       # Ingenico / PAX / Verifone codecs
         └── mock.rs             # <-- mandatory mocks (always compiled)
 ```
+
+Bluetooth SPP surfaces as an ordinary COM/rfcomm port, so there is one serial
+printer driver, not two. `register_serial_printer` and
+`register_bluetooth_printer` both build a `SerialReceiptPrinter`; they stay
+separate so logs and the setup wizard report the transport the operator chose.
 
 ---
 
