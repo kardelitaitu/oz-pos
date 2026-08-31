@@ -87,17 +87,6 @@ pub struct MonthlyRevenueRow {
     pub net_revenue_minor: i64,
 }
 
-/// Refund ledger totals for a date range, grouped by currency (REP-04).
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct RefundsSummaryRow {
-    /// ISO-4217 currency code.
-    pub currency: String,
-    /// Number of refunds processed in the range.
-    pub refund_count: i64,
-    /// Sum of refund totals in minor units (same currency).
-    pub refund_total_minor: i64,
-}
-
 /// Top product ranking.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct TopProductRow {
@@ -898,35 +887,6 @@ impl Store<'_> {
             Ok(VoidedItemRow {
                 name: row.get("name")?,
                 qty: row.get("qty")?,
-            })
-        })?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
-    }
-
-    /// Refund ledger totals for a date range, grouped by currency (REP-04).
-    ///
-    /// Refunds never mutate the sale row, so without this (and the
-    /// `refund_minor` netting on the revenue trends) the refund side of
-    /// the money was invisible in every report.
-    pub fn refunds_summary(
-        &self,
-        start_date: &str,
-        end_date: &str,
-    ) -> Result<Vec<RefundsSummaryRow>, CoreError> {
-        let mut stmt = self.conn.prepare(
-            "SELECT currency,
-                    COUNT(*) AS refund_count,
-                    COALESCE(SUM(total_minor), 0) AS refund_total_minor
-             FROM refunds
-             WHERE DATE(created_at) BETWEEN ?1 AND ?2
-             GROUP BY currency
-             ORDER BY currency ASC",
-        )?;
-        let rows = stmt.query_map(params![start_date, end_date], |row| {
-            Ok(RefundsSummaryRow {
-                currency: row.get("currency")?,
-                refund_count: row.get("refund_count")?,
-                refund_total_minor: row.get("refund_total_minor")?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)

@@ -1765,41 +1765,6 @@ fn monthly_revenue_nets_refunds() {
     assert_eq!(rows[0].net_revenue_minor, 3800);
 }
 
-#[test]
-fn refunds_summary_groups_by_currency() {
-    let conn = fresh();
-    seed_completed_sale_at(&conn, "rs-1", 1000, "USD", "2026-07-10");
-    seed_completed_sale_at(&conn, "rs-2", 165000, "IDR", "2026-07-10");
-    seed_refund_at(&conn, "rf-s1", "rs-1", 300, "USD", "2026-07-11");
-    seed_refund_at(&conn, "rf-s2", "rs-1", 200, "USD", "2026-07-12");
-    seed_refund_at(&conn, "rf-s3", "rs-2", 50000, "IDR", "2026-07-12");
-    let rows = store(&conn)
-        .refunds_summary("2026-07-01", "2026-07-31")
-        .unwrap();
-    assert_eq!(rows.len(), 2);
-    let usd_row = rows.iter().find(|r| r.currency == "USD").unwrap();
-    assert_eq!(usd_row.refund_count, 2);
-    assert_eq!(usd_row.refund_total_minor, 500);
-    let idr_row = rows.iter().find(|r| r.currency == "IDR").unwrap();
-    assert_eq!(idr_row.refund_count, 1);
-    assert_eq!(idr_row.refund_total_minor, 50000);
-}
-
-#[test]
-fn refunds_summary_respects_date_range() {
-    let conn = fresh();
-    seed_completed_sale_at(&conn, "rd-1", 1000, "USD", "2026-07-10");
-    seed_refund_at(&conn, "rf-d1", "rd-1", 300, "USD", "2026-06-30");
-    seed_refund_at(&conn, "rf-d2", "rd-1", 100, "USD", "2026-08-01");
-    let rows = store(&conn)
-        .refunds_summary("2026-07-01", "2026-07-31")
-        .unwrap();
-    assert!(
-        rows.is_empty(),
-        "refunds outside the window must not appear"
-    );
-}
-
 // ── REP-06: per-currency report aggregation ────────────────────
 //
 // top_products, hourly_heatmap, category_breakdown,
@@ -1807,6 +1772,10 @@ fn refunds_summary_respects_date_range() {
 // units across currencies into one number (the REP-02 class bug
 // below the revenue trends). Each must aggregate per currency.
 
+// REP-06 helper: 8 params is the natural shape for seeding a sale + its
+// single line; restructuring into a params struct would obscure the 11
+// call sites more than the extra argument does.
+#[allow(clippy::too_many_arguments)]
 fn seed_sale_with_line(
     conn: &Connection,
     sale_id: &str,
