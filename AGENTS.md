@@ -10,7 +10,7 @@
 | **Commits** | **ALWAYS commit with format `<type>(<area>): <description>`.** | Must follow conventional commits. Make local commits after each logical task. |
 | **Pushing** | **NEVER run `git push` without an explicit direct order.** | Even after completing all checks, wait for the user to explicitly say "push". |
 | **Version Lock** | **Version is locked at `0.0.33`. NEVER modify version numbers.** | Do not bump version in `Cargo.toml`, `package.json`, `tauri.conf.json`, etc. |
-| **File Paths** | **ALWAYS use forward slashes (`/`) in path arguments on Windows.** | Avoid path escaping bugs (e.g., use `C:/My Script/oz-pos/`). |
+| **File Paths** | **ALWAYS use forward slashes (`/`) in path arguments on Windows.** | Avoid path escaping bugs. **Never anchor to a hardcoded checkout** (e.g. `C:/My Script/oz-pos/`) — resolve the repo root with `git rev-parse --show-toplevel`, or script-relative with `$PSScriptRoot`/`__file__`/`import.meta.url`, so tools work in any worktree of the multi-root layout (`<base>/main` bare + `<base>/<release>` + `<base>/worktrees/*`). |
 | **File Reading** | **ALWAYS read files in small chunks (≤ 500 lines).** | Preserves context window and prevents output truncation. |
 | **Discovery** | **ALWAYS use `codebase-memory-mcp` first for code exploration.** | Graph discovery saves context tokens and surfaces call chains faster. |
 | **Currency** | **ALWAYS use `Money` struct (`i64` minor units). NEVER use float.** | Monetary values must never use `f32`/`f64`. |
