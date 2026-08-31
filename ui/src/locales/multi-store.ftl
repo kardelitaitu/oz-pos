@@ -255,6 +255,7 @@ topology-hardware-display-customer = Customer Display
 
 # ── Aria labels & tooltips ──
 topology-node-drag-hint = Drag to move
+topology-node-status-ok = Configured correctly
 topology-wire-toggle-aria = Toggle wire direction
 
 topology-wire-toggle-hint =

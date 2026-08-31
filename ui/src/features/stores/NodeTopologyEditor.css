@@ -1218,11 +1218,35 @@
 .node-title-wrapper {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: var(--space-2);
   flex: 1 1 auto;
   min-width: 0;
   margin-right: var(--space-2);
+}
+
+/* Header status region — the third flex column: validation notification
+   (red [!]) when the node has blocking errors, or a green "configured"
+   dot when it is properly set up. Pinned to the right edge; never grows. */
+.node-header-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.node-status-ok {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+  color: var(--color-success, #4caf50);
+  background: color-mix(in srgb, var(--color-success, #4caf50) 14%, transparent);
+  flex-shrink: 0;
+  cursor: help;
 }
 
 .node-title {

@@ -253,6 +253,7 @@ topology-hardware-display-customer = Display Pelanggan
 
 # ── Aria labels & tooltips ──
 topology-node-drag-hint = Seret untuk memindahkan
+topology-node-status-ok = Terkonfigurasi dengan benar
 topology-wire-toggle-aria = Balik arah koneksi
 
 topology-wire-toggle-hint =

@@ -95,8 +95,8 @@ function defaultProps(overrides: Partial<{
     isConnectingSource: false,
     connectingFromNodeId: null,
     connectingFromPort: null,
-    isLeftPortHovered: false,
-    isRightPortHovered: false,
+    connectingFromVariantIndex: 0,
+    hoveredTarget: null,
     nodeErrors: [],
     countBadge: null as string | null,
     hasOverlap: false,
@@ -107,7 +107,6 @@ function defaultProps(overrides: Partial<{
     isRenameable: true,
     renaming: false,
     renameDraft: node.name,
-    connectedPortId: undefined,
     l10n: { getString: (id: string) => id } as Pick<ReactLocalization, 'getString'>,
     renameInputRef: { current: null } as React.RefObject<HTMLInputElement>,
     renameBaselineRef: { current: null },
@@ -496,57 +495,71 @@ describe('TopologyNodeCard', () => {
   });
 
   describe('Rendering — port sockets', () => {
-    it('renders left and right ports for workspace', async () => {
+    it('renders stacked port rows for a workspace (1 left input + 3 right outputs)', async () => {
       await renderWithFluent(
         <TopologyNodeCard {...defaultProps({ node: makeNode({ type: 'workspace' }) })} />
       );
 
-      const ports = screen.getAllByRole('button', { name: /port/i });
-      expect(ports).toHaveLength(2);
+      const rows = document.querySelectorAll('.node-port-row');
+      // store-pos: left location-in (1) + right stock/transfer/operation-out (3).
+      expect(rows).toHaveLength(4);
+      expect(document.querySelectorAll('.node-port-row--left')).toHaveLength(1);
+      expect(document.querySelectorAll('.node-port-row--right')).toHaveLength(3);
     });
 
-    it('renders only right port for store', async () => {
+    it('renders only the right location-out row for store', async () => {
       await renderWithFluent(
         <TopologyNodeCard {...defaultProps({ node: makeNode({ type: 'store' }) })} />
       );
 
-      const ports = screen.getAllByRole('button', { name: /port/i });
-      expect(ports).toHaveLength(1);
-      expect(ports[0]).toHaveClass('port-right');
+      const rows = document.querySelectorAll('.node-port-row');
+      expect(rows).toHaveLength(1);
+      expect(document.querySelectorAll('.node-port-row--right')).toHaveLength(1);
+      expect(document.querySelectorAll('.node-port-row--left')).toHaveLength(0);
+      // The store's single output is Location Out (rendered as the key
+      // since the test l10n mock returns the key itself).
+      expect(document.querySelector('.node-port-row')?.textContent).toContain('topology-port-location-out');
     });
 
-    it('renders left and right ports for warehouse', async () => {
+    it('renders stacked port rows for warehouse (4 left inputs + 1 right output)', async () => {
       await renderWithFluent(
         <TopologyNodeCard {...defaultProps({ node: makeNode({ type: 'warehouse' }) })} />
       );
 
-      const ports = screen.getAllByRole('button', { name: /port/i });
-      expect(ports).toHaveLength(2);
+      const rows = document.querySelectorAll('.node-port-row');
+      // warehouse: left location/operation/stock/transfer-in (4) + right stock-out (1).
+      expect(rows).toHaveLength(5);
+      expect(document.querySelectorAll('.node-port-row--left')).toHaveLength(4);
+      expect(document.querySelectorAll('.node-port-row--right')).toHaveLength(1);
     });
 
-    it('renders left and right ports for hardware', async () => {
+    it('renders stacked port rows for hardware (2 left inputs + 1 right output)', async () => {
       await renderWithFluent(
         <TopologyNodeCard {...defaultProps({ node: makeNode({ type: 'hardware' }) })} />
       );
 
-      const ports = screen.getAllByRole('button', { name: /port/i });
-      expect(ports).toHaveLength(2);
+      const rows = document.querySelectorAll('.node-port-row');
+      // hardware: left generic-in + ticket-in (2) + right device-out (1).
+      expect(rows).toHaveLength(3);
+      expect(document.querySelectorAll('.node-port-row--left')).toHaveLength(2);
+      expect(document.querySelectorAll('.node-port-row--right')).toHaveLength(1);
     });
 
-    it('applies port-active class when connecting from this port', async () => {
+    it('applies port-active class to the source row when connecting from it', async () => {
       await renderWithFluent(
         <TopologyNodeCard
           {...defaultProps({
             connectingFromNodeId: 'node-1',
             connectingFromPort: 'left',
+            connectingFromVariantIndex: 0,
           })}
         />
       );
 
-      // Get the left port by its aria-label
-      const leftPort = screen.getByRole('button', { name: /port.*location.*in.*aria/i });
-      expect(leftPort).toBeInTheDocument();
-      expect(leftPort).toHaveClass('port-active');
+      // The left location-in row is the active source.
+      const activeRow = document.querySelector('.node-port-row--left');
+      expect(activeRow).toBeInTheDocument();
+      expect(activeRow).toHaveClass('port-active');
     });
 
     it('applies port-highlight when hovered and compatible', async () => {
@@ -554,57 +567,52 @@ describe('TopologyNodeCard', () => {
         <TopologyNodeCard
           {...defaultProps({
             connectingFromNodeId: 'node-2',
-            isLeftPortHovered: true,
-            isRightPortHovered: false,
+            hoveredTarget: { port: 'left', variantIndex: 0 },
             isPortCompatible: () => true,
           })}
         />
       );
 
-      // Get the left port by its aria-label
-      const leftPort = screen.getByRole('button', { name: /port.*location.*in.*aria/i });
-      expect(leftPort).toBeInTheDocument();
-      expect(leftPort).toHaveClass('port-highlight');
+      // The left location-in row is the hovered, compatible target.
+      const leftRow = document.querySelector('.node-port-row--left');
+      expect(leftRow).toBeInTheDocument();
+      expect(leftRow).toHaveClass('port-highlight');
     });
 
-    it('applies port-highlight to the right port when isRightPortHovered is true', async () => {
+    it('applies port-highlight to the right row when the right target is hovered', async () => {
       await renderWithFluent(
         <TopologyNodeCard
           {...defaultProps({
             connectingFromNodeId: 'node-2',
-            isLeftPortHovered: false,
-            isRightPortHovered: true,
+            hoveredTarget: { port: 'right', variantIndex: 0 },
             isPortCompatible: () => true,
           })}
         />
       );
 
-      // Find ports by their CSS class — the right port has .port-right.
-      const rightPort = document.querySelector('.port-right');
-      expect(rightPort).toBeInTheDocument();
-      expect(rightPort).toHaveClass('port-highlight');
+      const rightRows = document.querySelectorAll('.node-port-row--right');
+      expect(rightRows[0]).toBeInTheDocument();
+      expect(rightRows[0]).toHaveClass('port-highlight');
 
-      // Left port must NOT be highlighted.
-      const leftPort = document.querySelector('.port-left');
-      expect(leftPort).toBeInTheDocument();
-      expect(leftPort).not.toHaveClass('port-highlight');
+      // Left rows must NOT be highlighted.
+      document.querySelectorAll('.node-port-row--left').forEach((left) => {
+        expect(left).not.toHaveClass('port-highlight');
+      });
     });
 
-    it('does not apply port-highlight when no port is hovered', async () => {
+    it('does not apply port-highlight when no target is hovered', async () => {
       await renderWithFluent(
         <TopologyNodeCard
           {...defaultProps({
             connectingFromNodeId: 'node-2',
-            isLeftPortHovered: false,
-            isRightPortHovered: false,
+            hoveredTarget: null,
             isPortCompatible: () => true,
           })}
         />
       );
 
-      const ports = document.querySelectorAll('.node-port-socket');
-      ports.forEach((port) => {
-        expect(port).not.toHaveClass('port-highlight');
+      document.querySelectorAll('.node-port-row').forEach((row) => {
+        expect(row).not.toHaveClass('port-highlight');
       });
     });
 
@@ -613,9 +621,8 @@ describe('TopologyNodeCard', () => {
         <TopologyNodeCard {...defaultProps({ isPortCompatible: () => true })} />
       );
 
-      const ports = screen.getAllByRole('button', { name: /port/i });
-      ports.forEach((port) => {
-        expect(port).toHaveClass('port-compatible');
+      document.querySelectorAll('.node-port-row').forEach((row) => {
+        expect(row).toHaveClass('port-compatible');
       });
     });
 
@@ -629,9 +636,8 @@ describe('TopologyNodeCard', () => {
         />
       );
 
-      const ports = screen.getAllByRole('button', { name: /port/i });
-      ports.forEach((port) => {
-        expect(port).toHaveClass('port-incompatible');
+      document.querySelectorAll('.node-port-row').forEach((row) => {
+        expect(row).toHaveClass('port-incompatible');
       });
     });
   });
@@ -871,14 +877,16 @@ describe('TopologyNodeCard', () => {
   });
 
   describe('Interaction — port click', () => {
-    it('calls onPortClick when port clicked', async () => {
+    it('calls onPortClick when a port row is clicked', async () => {
       const onPortClick = vi.fn();
       await renderWithFluent(<TopologyNodeCard {...defaultProps({ onPortClick })} />);
 
-      // Click the left port specifically
-      const leftPort = screen.getByRole('button', { name: /port.*location.*in.*aria/i });
-      fireEvent.click(leftPort);
+      // Click the first left port row (location-in) by its CSS class.
+      const leftRow = document.querySelector('.node-port-row--left');
+      expect(leftRow).toBeInTheDocument();
+      fireEvent.click(leftRow!);
       expect(onPortClick).toHaveBeenCalledTimes(1);
+      expect(onPortClick).toHaveBeenCalledWith(expect.any(Object), 'node-1', 'left', 0);
     });
   });
 
