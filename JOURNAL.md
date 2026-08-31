@@ -8463,3 +8463,19 @@ Rust test file, fmt gate had already run clean, remaining gates N/A →
 when a gate fails on foreign uncommitted state, prove HEAD-green +
 payload-innocence, then bypass narrowly — never "fix" someone else's
 half-finished feature by guessing their translations.
+
+## 2026-08-31 — Cloud email_pg parity: REP-05 erasure fixed, stale notes corrected
+
+The follow-up note claimed the cloud mirrored "old single-currency
+shapes" — stale: REP-06 grouping was already there. Real gaps found:
+(1) top_products_pg/category_breakdown_pg had the same INNER JOIN
+erasure I'd fixed locally (cd4bdaa8) — ported (LEFT JOIN, sku-driven
+grouping); first draft used MAX() inside SUM() — **PG rejects nested
+aggregates where SQLite tolerates them**; EXPLAIN against the live dev
+container caught it before commit (grouped the product columns
+instead). (2) REP-04 netting is stubbed `refund_minor: 0` — the cloud
+schema has NO refunds table at all; wiring needs refund sync (design
+item, recorded). (3) Forecast queries still INNER JOIN products —
+advisory consumers, deliberately out of scope. Verification: cargo
+check + EXPLAIN + actual execution against oz-pg-test-15432.
+Commit 4b8a630e.
