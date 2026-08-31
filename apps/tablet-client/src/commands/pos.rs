@@ -826,6 +826,224 @@ pub struct CompleteSaleScopedArgs {
     pub promotion_ids: Option<Vec<String>>,
 }
 
+/// Arguments for previewing the promotion-reduced payable of a cart.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewPromotedTotalArgs {
+    /// ID of the associated cart.
+    pub cart_id: CartId,
+    /// Promotions to preview, in application order (they stack).
+    pub promotion_ids: Vec<String>,
+}
+
+/// One promotion's discount in the preview result.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewPromotionDiscount {
+    /// Promotion that was applied.
+    pub promotion_id: String,
+    /// Discount in minor units.
+    pub discount_minor: i64,
+    /// Human-readable description (name + amount).
+    pub description: String,
+}
+
+/// Result of previewing the promotion-reduced payable.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewPromotedTotalResult {
+    /// Cart total after cart discount + tax, before promotions.
+    pub base_total_minor: i64,
+    /// Final payable after promotions — what payment splits must cover.
+    pub total_minor: i64,
+    /// Per-promotion discounts in application order.
+    pub discounts: Vec<PreviewPromotionDiscount>,
+}
+
+/// Preview the promotion-reduced payable for a cart without mutating it.
+///
+/// PROMO-3 checkout integration: the client needs the promoted total
+/// BEFORE constructing payment splits (the checkout call validates splits
+/// against the reduced total). Runs the same cart → sale → tax → engine
+/// sequence as [`complete_sale_scoped`] but consumes no cart and writes
+/// no rows; the authoritative computation still happens inside the
+/// checkout call, which re-validates the splits against the freshly
+/// computed total.
+#[command]
+pub async fn preview_promoted_total_scoped(
+    session_token: String,
+    args: PreviewPromotedTotalArgs,
+    state: State<'_, AppState>,
+) -> Result<PreviewPromotedTotalResult, AppError> {
+    let session = state.resolve_session(&session_token)?;
+
+    // ── Lock 1: peek the cart (do NOT delete it) ──────────────────
+    let (cart, rounding_mode) = {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        require_permission_for_user(
+            &store,
+            &session.user_id,
+            oz_core::permissions::SALES_PROCESS,
+        )?;
+        let cart = store
+            .load_active_cart(&args.cart_id)?
+            .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
+        let rounding_mode = oz_core::Settings::get_tax_rounding_mode(&db)?;
+        (cart, rounding_mode)
+    };
+
+    let mut sale = oz_core::Sale::from_cart(&cart)
+        .ok_or_else(|| AppError::Invalid("cart total overflowed i64".into()))?;
+
+    // ── Lock 2: tax + engine discounts (no writes) ────────────────
+    let (base_total_minor, discounts) = {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        store.compute_sale_tax(&mut sale, &[], rounding_mode)?;
+        let base_total_minor = sale.total.minor_units;
+        let apps = store.compute_checkout_promotions(
+            &mut sale,
+            &args.promotion_ids,
+            chrono::Utc::now(),
+        )?;
+        let discounts = apps
+            .into_iter()
+            .map(|app| PreviewPromotionDiscount {
+                promotion_id: app.promotion_id,
+                discount_minor: app.discount_minor,
+                description: app.description,
+            })
+            .collect();
+        (base_total_minor, discounts)
+    };
+
+    Ok(PreviewPromotedTotalResult {
+        base_total_minor,
+        total_minor: sale.total.minor_units,
+        discounts,
+    })
+}
+
+/// One cart line for the lines-based promotion preview.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewLineArgs {
+    /// Product SKU.
+    pub sku: String,
+    /// Quantity.
+    pub qty: i64,
+    /// Unit price in minor units.
+    pub unit_price_minor: i64,
+    /// ISO-4217 code of the unit price currency.
+    pub unit_price_currency: String,
+}
+
+/// Arguments for previewing the promotion-reduced payable from raw lines.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewPromotedTotalFromLinesArgs {
+    /// Cart lines, in cart order (already in cart currency).
+    pub lines: Vec<PreviewLineArgs>,
+    /// Cart discount percent already applied client-side (0-100).
+    pub discount_percent: i64,
+    /// Promotions to preview, in application order (they stack).
+    pub promotion_ids: Vec<String>,
+}
+
+/// Build an in-memory cart mirroring the client's displayed cart for the
+/// lines-based promotion preview (no persistence, no cart id needed).
+fn build_preview_cart(
+    lines: &[PreviewLineArgs],
+    discount_percent: i64,
+) -> Result<oz_core::Cart, AppError> {
+    let first = lines
+        .first()
+        .ok_or_else(|| AppError::Invalid("cannot preview an empty cart".into()))?;
+    let parse_currency = |code: &str| -> Result<oz_core::Currency, AppError> {
+        code.parse()
+            .map_err(|_| AppError::Invalid(format!("invalid currency code: {code}")))
+    };
+    let mut cart = oz_core::Cart::new(parse_currency(&first.unit_price_currency)?);
+    for l in lines {
+        cart.add_line(oz_core::CartLine::new(
+            oz_core::Sku::new(l.sku.clone()),
+            l.qty,
+            oz_core::Money {
+                minor_units: l.unit_price_minor,
+                currency: parse_currency(&l.unit_price_currency)?,
+            },
+        ))
+        .map_err(|e| AppError::Invalid(format!("cart line rejected: {e}")))?;
+    }
+    if discount_percent > 0
+        && let Some(pct) = foundation::Percentage::new(discount_percent.min(100) as u8)
+    {
+        cart.set_discount(pct, None);
+    }
+    Ok(cart)
+}
+
+/// Preview the promotion-reduced payable from raw cart lines.
+///
+/// PROMO-3 checkout integration: the client materializes its backend cart
+/// only at the confirm step, but needs the engine-exact payable BEFORE
+/// then — to show the promoted total and let split payments be entered
+/// against it. Runs cart → sale → tax → engine on an in-memory cart built
+/// from the caller's lines (no plugin tax overrides — the tablet checkout
+/// path applies none either); the authoritative computation still happens
+/// inside the checkout call, which re-validates the splits against the
+/// freshly computed total.
+#[command]
+pub async fn preview_promoted_total_from_lines_scoped(
+    session_token: String,
+    args: PreviewPromotedTotalFromLinesArgs,
+    state: State<'_, AppState>,
+) -> Result<PreviewPromotedTotalResult, AppError> {
+    let session = state.resolve_session(&session_token)?;
+
+    let cart = build_preview_cart(&args.lines, args.discount_percent)?;
+    let mut sale = oz_core::Sale::from_cart(&cart)
+        .ok_or_else(|| AppError::Invalid("cart total overflowed i64".into()))?;
+
+    // ── Lock: permission + tax + engine discounts (no writes) ─────
+    let (base_total_minor, discounts) = {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        require_permission_for_user(
+            &store,
+            &session.user_id,
+            oz_core::permissions::SALES_PROCESS,
+        )?;
+        store.compute_sale_tax(
+            &mut sale,
+            &[],
+            oz_core::Settings::get_tax_rounding_mode(&db)?,
+        )?;
+        let base_total_minor = sale.total.minor_units;
+        let apps = store.compute_checkout_promotions(
+            &mut sale,
+            &args.promotion_ids,
+            chrono::Utc::now(),
+        )?;
+        let discounts = apps
+            .into_iter()
+            .map(|app| PreviewPromotionDiscount {
+                promotion_id: app.promotion_id,
+                discount_minor: app.discount_minor,
+                description: app.description,
+            })
+            .collect();
+        (base_total_minor, discounts)
+    };
+
+    Ok(PreviewPromotedTotalResult {
+        base_total_minor,
+        total_minor: sale.total.minor_units,
+        discounts,
+    })
+}
+
 /// Complete a sale within the session scope. ADR #7 / ADR-19 §6.
 ///
 /// Uses the `complete_sale_deduction` path which checks stock at the
@@ -936,7 +1154,7 @@ pub async fn complete_sale_scoped(
     };
 
     // Promotion-reduced payable (cart.total() would ignore promotions).
-    let total = Some(sale.total.clone());
+    let total = Some(sale.total);
     tracing::info!(%sale_id, ?total, line_count, store_id = %session.store_id, "sale completed (scoped)");
 
     // ── Event publishing (no DB lock held) ────────────────────────
@@ -1128,7 +1346,6 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
     }
 
     let line_count = cart.line_count();
-    let total = cart.total();
 
     let mut sale = oz_core::Sale::from_cart_with_user(&cart, Some(session.user_id.clone()))
         .ok_or_else(|| AppError::Invalid("cart total overflowed i64".into()))?;
@@ -1190,7 +1407,7 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
     };
 
     // Promotion-reduced payable (cart.total() would ignore promotions).
-    let total = Some(sale.total.clone());
+    let total = Some(sale.total);
 
     tracing::info!(%sale_id, store_id = %session.store_id, "sale completed with resolved shortfalls");
 
