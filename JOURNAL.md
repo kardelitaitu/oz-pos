@@ -8961,3 +8961,48 @@ diagnostic emitted by --message-format short because those lines begin with the
 file path. Fixed to match ": error" plus a crate rollup from the "could not
 compile" summaries. warnings=0 above is not a clean tree - compilation stopped
 at oz-api, so later crates were never reached.
+
+## 2026-08-31 — round S: promotions at checkout, engine-first with an exactness detour
+
+Landed the checkout promotion integration end to end. Commits: `192c5bc6`
+(core: engine-apply promotions at checkout against the reduced payable),
+`3d3823bd` (ui: preview api + promotionIds on checkout args), `a09aa73c`
+(ui: flip fixed/BXGY live with engine-previewed totals).
+
+The design fight this round: the client materializes its backend cart only
+at the confirm step (`start_sale` inside the payment handlers), so an
+engine-exact payable cannot be fetched when the modal opens — yet split
+payments need that number before the cashier types amounts. First plan was
+a preview inside the confirm handler with split+promotions rejected as a
+combo (fail-closed, documented). While wiring it I realized the preview
+command could take raw lines instead of a cart id —
+`preview_promoted_total_from_lines_scoped` builds the same cart → sale →
+tax → engine sequence in memory (plugin tax overrides included on desktop
+so the number matches what the checkout call charges; none on tablet,
+which applies none). That removed the split-payment limitation entirely
+and made the display exact pre-confirm. Both previews committed; the
+checkout call re-validates against the freshly computed total either way,
+so a stale preview fails closed and no client-side promotion math exists.
+
+Two trapdoors I stepped near: (1) the shortfall retry — the backend
+shortfall command re-applies promotions itself, so the retry must carry
+the UNPROMOTED total plus the same promotion list, or the discount
+applies twice; PaymentModal now splits `unpromotedTotalInCartCurrency`
+from the promoted charge total. (2) my earlier scope decision to keep
+percentage promotions on the cart-discount pipeline died this round:
+percentages now flow through promotionIds like everything else, so they
+stack and compose with the manual discount instead of overwriting it.
+
+Concurrent-agent friction, handled without clobbering: their attempt_id
+idempotency work is interleaved in pos.rs uncommitted (my test initializer
+needed their `attempt_id` field to compile — the tree compiles coherently
+with both features). I committed everything except the five Rust files and
+waited twice for their cadence. Also saw their oz-hal build break mid-round
+and their profile tests go red ("cannot start a transaction within a
+transaction", 7 fails) — not mine, left alone, same discipline as round R.
+
+My gates on the combined tree: oz-core promotion subset 132/132, parity OK
+(desktop 438 UI strings / 383 registered — their new commands inflating the
+tracker), my 6 UI suites 36/36, cargo check both shells clean. Remaining:
+commit the Rust preview side once pos.rs ownership frees up, then the
+dev-mock E2E pass of preview → complete with a BXGY selection.
