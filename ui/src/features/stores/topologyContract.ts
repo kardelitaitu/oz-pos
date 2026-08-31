@@ -32,6 +32,20 @@ export const isWarehouseOperationalInputPort = (portId?: string): portId is Ware
  *  empty" bypass reads the same store both sides write. */
 export const topologyIssueKey = (nodeId: string, messageId: string) => `node:${nodeId}:${messageId}`;
 
+/** Whether a workspace instance participates in the store topology canvas.
+ *  The 'admin' instance is a system workspace surfaced automatically for
+ *  owner/manager roles — it is app management, not a routing endpoint, so it
+ *  must never seed the canvas (nor reach the save sweep's archive, or it
+ *  would be archived on every Apply). Inventory Management workspaces are
+ *  likewise excluded: the topology's storage concept is the Warehouse node,
+ *  and two storage-flavored cards on one canvas confused users.
+ *
+ *  Single source of truth for BOTH the screen's load path and the Apply
+ *  refresh — the two previously drifted (one exclusion-based, one allowlist
+ *  that leaked 'admin' back onto the canvas after a save). */
+export const isTopologyInstance = (w: { type_key: string }): boolean =>
+  w.type_key !== 'admin' && w.type_key !== 'inventory';
+
 /** Closed node kinds used by the first ownership slice. */
 export type SemanticNodeKind = 'branch-location' | 'workspace' | 'warehouse' | 'hardware';
 

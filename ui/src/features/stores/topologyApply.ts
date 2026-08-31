@@ -12,6 +12,7 @@ import { listWorkspacesScoped, type WorkspaceDto } from '@/api/workspaces';
 
 import { type StoreProfile } from '@/api/stores';
 import {
+  isTopologyInstance,
   normalizeTopologyGraph,
   topologyIssueKey,
   validateTopologyGraph,
@@ -120,15 +121,6 @@ export async function applyTopologyWithDiagram(
   );
 
   // ── Step 4: Atomic apply ──────────────────────────────────────────
-  console.groupCollapsed('%c[Topology Apply] IPC Payload', 'color: #3b82f6; font-weight: bold');
-  console.log('sessionToken:', ctx.sessionToken?.slice(0, 8) + '…');
-  console.log('branchId:', ctx.branchId);
-  console.log('baseRevision:', ctx.baseRevision);
-  console.log('creations:', creations.map((c) => ({ id: c.id, store_id: c.store_id, type_key: c.type_key, name: c.name })));
-  console.log('updates:', updates.map((u) => ({ id: u.id, name: u.name })));
-  console.log('archives:', archives);
-  console.log('resolvedIssueKeys:', ctx.resolvedIssueKeys);
-  console.groupEnd();
   const result = await applyTopologyDiff(
     ctx.sessionToken,
     creations,
@@ -147,19 +139,21 @@ export async function applyTopologyWithDiagram(
   }
 
   // ── Step 5: Success toast ─────────────────────────────────────
-  const created = creations.length;
+  // Net counts mirror summarizeTopologyPlan (the diff chip) so the toast can
+  // never disagree with the header preview: a type change is a destructive
+  // recreate — archive + create of a NEW instance — so it is surfaced as
+  // type-changed and EXCLUDED from the plain created/archived counts (a
+  // single node must never be counted three times).
+  const typeChanged = typeChanges.size;
+  const created = creations.length - typeChanged;
   const updated = updates.length;
-  const archived = archives.length;
-  const typeChangeCount = typeChanges.size;
-  const parts = [
-    `${created} created`,
-    `${updated} updated`,
-    `${archived} archived`,
-  ];
-  if (typeChangeCount > 0) {
-    parts.push(`${typeChangeCount} type-changed`);
-  }
-  toast(l10n.getString('topology-toast-saved', { detail: parts.join(', ') }), 'success');
+  const archived = archives.length - typeChanged;
+  toast(l10n.getString('topology-toast-saved', {
+    created,
+    updated,
+    archived,
+    typeChanged,
+  }), 'success');
 
   // ── Step 6: Refresh instances ──────────────────────────────────
   try {
@@ -241,9 +235,4 @@ function buildDiagramPayloads(
   });
 
   return { diagramNodes, diagramWires };
-}
-
-function isTopologyInstance(ws: WorkspaceDto): boolean {
-  const topologyTypes = new Set(['restaurant-pos', 'store-pos', 'kds', 'warehouse', 'admin']);
-  return topologyTypes.has(ws.type_key);
 }
