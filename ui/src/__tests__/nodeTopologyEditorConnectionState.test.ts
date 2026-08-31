@@ -11,8 +11,10 @@ import {
 const picker = (): TopologyPickerState => ({
   fromNodeId: 'ws-1',
   fromPort: 'right',
+  fromVariantIndex: 0,
   toNodeId: 'wh-1',
   toPort: 'left',
+  toVariantIndex: 0,
   options: [],
 });
 
@@ -21,6 +23,7 @@ describe('topologyConnectionReducer', () => {
     expect(initialTopologyConnectionState).toEqual({
       fromNodeId: null,
       fromPort: null,
+      fromVariantIndex: 0,
       picker: null,
     });
   });
@@ -30,9 +33,11 @@ describe('topologyConnectionReducer', () => {
       type: 'begin',
       fromNodeId: 'ws-1',
       fromPort: 'right',
+      fromVariantIndex: 0,
     });
     expect(next.fromNodeId).toBe('ws-1');
     expect(next.fromPort).toBe('right');
+    expect(next.fromVariantIndex).toBe(0);
     expect(next.picker).toBeNull();
   });
 
@@ -40,12 +45,14 @@ describe('topologyConnectionReducer', () => {
     const withPicker: TopologyConnectionState = {
       fromNodeId: 'ws-1',
       fromPort: 'right',
+      fromVariantIndex: 0,
       picker: picker(),
     };
     const next = topologyConnectionReducer(withPicker, {
       type: 'begin',
       fromNodeId: 'ws-9',
       fromPort: 'bottom',
+      fromVariantIndex: 0,
     });
     expect(next.fromNodeId).toBe('ws-9');
     expect(next.picker).toBeNull();
@@ -55,6 +62,7 @@ describe('topologyConnectionReducer', () => {
     const armed: TopologyConnectionState = {
       fromNodeId: 'ws-1',
       fromPort: 'right',
+      fromVariantIndex: 0,
       picker: null,
     };
     const next = topologyConnectionReducer(armed, { type: 'open-picker', picker: picker() });
@@ -69,10 +77,11 @@ describe('topologyConnectionReducer', () => {
     const withPicker: TopologyConnectionState = {
       fromNodeId: 'ws-1',
       fromPort: 'right',
+      fromVariantIndex: 0,
       picker: picker(),
     };
     const next = topologyConnectionReducer(withPicker, { type: 'cancel' });
-    expect(next).toEqual({ fromNodeId: null, fromPort: null, picker: null });
+    expect(next).toEqual({ fromNodeId: null, fromPort: null, fromVariantIndex: 0, picker: null });
   });
 
   it('cancel is a no-op when nothing is in flight', () => {
@@ -86,10 +95,11 @@ describe('topologyConnectionReducer', () => {
     const withPicker: TopologyConnectionState = {
       fromNodeId: 'ws-1',
       fromPort: 'right',
+      fromVariantIndex: 0,
       picker: picker(),
     };
     const next = topologyConnectionReducer(withPicker, { type: 'dismiss-picker' });
-    expect(next).toEqual({ fromNodeId: null, fromPort: null, picker: null });
+    expect(next).toEqual({ fromNodeId: null, fromPort: null, fromVariantIndex: 0, picker: null });
   });
 
   it('dismiss-picker leaves a plain armed connection alone (carry behavior)', () => {
@@ -99,6 +109,7 @@ describe('topologyConnectionReducer', () => {
     const armed: TopologyConnectionState = {
       fromNodeId: 'ws-1',
       fromPort: 'right',
+      fromVariantIndex: 0,
       picker: null,
     };
     const next = topologyConnectionReducer(armed, { type: 'dismiss-picker' });

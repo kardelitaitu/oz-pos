@@ -387,6 +387,34 @@ export function wireRelationshipOptions(
   return options;
 }
 
+/** Resolve the SINGLE relationship between one source semantic ROW and one
+ *  target semantic ROW (round 174 stacked ports). Each stacked row is one
+ *  semantic, so the pair is fixed — zero options means incompatible, one
+ *  means the drop commits directly. Kept separate from the socket-wide
+ *  `wireRelationshipOptions` (which enumerates every source semantic for
+ *  the legacy one-socket-per-side picker flow and for compatibility
+ *  checks); the editor uses this when both endpoints are specific rows. */
+export function rowRelationshipOptions(
+  source: TopologyNodeData,
+  sourcePort: PortName,
+  sourceVariantIndex: number,
+  target: TopologyNodeData,
+  targetPort: PortName,
+  targetVariantIndex: number,
+): WireRelationshipOption[] {
+  const src = socketSemanticIds(source, sourcePort)[sourceVariantIndex];
+  const tgt = socketSemanticIds(target, targetPort, targetVariantIndex)[targetVariantIndex];
+  if (!src || !tgt) return [];
+  const row = SEMANTIC_PORT_PAIRINGS.find((r) => r.source === src && r.target === tgt);
+  if (!row || !operationRowAllowed(row, source, target)) return [];
+  return [{
+    fromPortId: src,
+    toPortId: tgt,
+    relationshipType: row.relationshipType,
+    labelId: row.labelId,
+  }];
+}
+
 /** Node-level legacy-wire migration: every legal relationship a legacy
  *  wire between these two nodes may mean, in pairing-table order. A
  *  fully-unknown legacy wire (folded to the legacy-out/legacy-in
