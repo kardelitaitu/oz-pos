@@ -933,11 +933,11 @@ export default function NodeTopologyEditor({
   const toggleShortcuts = useCallback(() => setShowShortcuts((p) => !p), []);
   const closeShortcuts = useCallback(() => setShowShortcuts(false), []);
 
-  /** Right-side tool rack panel state. The add panel starts open so the
-   *  palette is immediately visible (matches the pre-redesign sidebar and
-   *  the test suite's invariant). The edit/view/share panels stay collapsed
-   *  and open on click. */
-  const [rackPanel, setRackPanel] = useState<string | null>('add');
+  /** Right-side tool rack panel state. Collapsed on mount so the editor
+   *  opens on a clean canvas — arriving from the home screen's "Add
+   *  Workspace" (or anywhere else) should not auto-expand the add-node
+   *  palette. Each panel opens on its rack-icon click. */
+  const [rackPanel, setRackPanel] = useState<string | null>(null);
   const toggleRackPanel = useCallback((key: string) => setRackPanel((p) => (p === key ? null : key)), []);
 
   // ── Apply confirmation popup ──────────────────────────────────────

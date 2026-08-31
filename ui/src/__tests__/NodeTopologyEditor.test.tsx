@@ -307,8 +307,14 @@ const renderEditor = (props?: {
   } | null;
   compareFocus?: boolean;
   canSave?: boolean;
-}) =>
-  renderWithProvidersSync(<NodeTopologyEditor currentTier="plus" {...props} />, multiStoreFtl, sharedFtl);
+}) => {
+  const result = renderWithProvidersSync(<NodeTopologyEditor currentTier="plus" {...props} />, multiStoreFtl, sharedFtl);
+  // Open the Add panel for tests that expect the node palette to be visible.
+  // The production default is collapsed (round 174); the test helper opens it
+  // so existing tests that click +Retail POS etc. don't need updating.
+  openRackPanel('add');
+  return result;
+};
 
 /**
  * Harness that re-renders the editor with a NEW workspaceInstances array
@@ -3058,7 +3064,7 @@ function BranchDeleteHarness() {
     });
 
     // Make an edit so the undo stack has an entry.
-    fireEvent.click(screen.getByText('+ Store Node'));
+    openRackPanel('add'); fireEvent.click(screen.getByText('+ Store Node'));
     openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
     // Auto-select opens the inspector header with the same name — both match.
     expect(screen.getAllByText('New Store').length).toBeGreaterThanOrEqual(1);
