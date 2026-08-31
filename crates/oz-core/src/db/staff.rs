@@ -396,6 +396,18 @@ impl Store<'_> {
                 ),
             });
         }
+        // G-2: a role_id that references no row would either violate the FK
+        // (mislabelled as a username Conflict by the catch-all arm below)
+        // or — on a connection with foreign_keys off — create a user whose
+        // gate always denies ("role not found"), a silent zombie account.
+        // Validate up front so every caller (desktop, cloud, CLI) gets a
+        // typed error instead.
+        if self.get_role(role_id)?.is_none() {
+            return Err(CoreError::Validation {
+                field: "role_id",
+                message: format!("role '{role_id}' does not exist"),
+            });
+        }
 
         let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
@@ -454,6 +466,14 @@ impl Store<'_> {
             return Err(CoreError::Validation {
                 field: "display_name",
                 message: "display name must not be empty".into(),
+            });
+        }
+        // G-2: same zombie-account guard as create_user — a role change to
+        // a nonexistent role must fail with a typed error before any write.
+        if self.get_role(role_id)?.is_none() {
+            return Err(CoreError::Validation {
+                field: "role_id",
+                message: format!("role '{role_id}' does not exist"),
             });
         }
 

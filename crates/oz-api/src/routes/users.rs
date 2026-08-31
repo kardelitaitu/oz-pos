@@ -9,10 +9,10 @@ next: prioritize G-1 (quota evasion) alongside the admin-key-tier move; validate
 //! `POST /api/v1/users` — create a new user.
 
 use axum::{
-    Extension, Json,
     extract::State,
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
+    Extension, Json,
 };
 use serde::Deserialize;
 
@@ -20,8 +20,9 @@ use oz_core::db::Store;
 
 use oz_core::CoreError;
 
-use crate::AppState;
 use crate::auth::ApiTokenClaims;
+use crate::routes::tokens::admin_key_authorised;
+use crate::AppState;
 
 /// Request body for creating a user.
 #[derive(Deserialize)]
@@ -93,18 +94,31 @@ fn may_manage_users(claims: &ApiTokenClaims) -> bool {
 /// user. The `tenant_id` from the JWT claims is stamped on the user row
 /// so the cloud server's snapshot endpoint can scope users per tenant.
 ///
-/// Returns 403 for a terminal-scoped token: user management is an
-/// admin-tier operation (API-4).
+/// Returns 401 without the operator admin key (G-1: user creation is an
+/// operator-tier action — the JWT-authenticated self-service path let a
+/// Plus-tier tenant bypass the C1.1 staff cap that the desktop enforces;
+/// the staff quota is a licensing-side concern and the admin key is the
+/// same operator authority the CLI uses, where no quota applies by
+/// design). Returns 403 for a terminal-scoped token as defense in depth.
 pub async fn create_user(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Extension(claims): Extension<ApiTokenClaims>,
     Json(body): Json<CreateUserRequest>,
 ) -> Response {
-    // API-4: settings and tenant plans already require the admin key; this
-    // route was the one admin-tier write still reachable with a plain JWT.
-    // A terminal token is a device credential, and creating a role-owner
-    // user with it turns a tampered till into an owner session over the
-    // whole tenant. Checked before anything touches the store.
+    // G-1 / API-4: settings and tenant plans already require the admin key;
+    // this route was the one admin-tier write still reachable with a plain
+    // tenant JWT. A terminal token is a device credential, and creating a
+    // role-owner user with it turns a tampered till into an owner session
+    // over the whole tenant. Both gates run before anything touches the
+    // store.
+    if !admin_key_authorised(&headers, state.admin_key.as_deref()) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "invalid_admin_key"})),
+        )
+            .into_response();
+    }
     if !may_manage_users(&claims) {
         return (
             StatusCode::FORBIDDEN,

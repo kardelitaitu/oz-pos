@@ -1,7 +1,7 @@
 use super::*;
 use crate::DEFAULT_CORS_ORIGINS;
 use axum::body::to_bytes;
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -56,9 +56,14 @@ async fn create_user_returns_201_with_default_tenant() {
         let db = app_state.db.lock().await;
         seed_role(&db, "role-staff");
     }
-    let response = create_user(State(app_state), Extension(claims(None)), Json(body()))
-        .await
-        .into_response();
+    let response = create_user(
+        State(app_state),
+        HeaderMap::new(),
+        Extension(claims(None)),
+        Json(body()),
+    )
+    .await
+    .into_response();
     assert_eq!(response.status(), StatusCode::CREATED);
 
     let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
@@ -76,6 +81,7 @@ async fn create_user_stamps_tenant_from_claims() {
     }
     let response = create_user(
         State(app_state.clone()),
+        HeaderMap::new(),
         Extension(claims(Some("tenant-9"))),
         Json(body()),
     )
@@ -112,6 +118,7 @@ async fn create_user_normalizes_username_to_lowercase() {
     };
     let response = create_user(
         State(app_state.clone()),
+        HeaderMap::new(),
         Extension(claims(None)),
         Json(body),
     )
@@ -143,9 +150,14 @@ async fn create_user_returns_400_on_empty_username() {
         display_name: "Alice".into(),
         role_id: "role-staff".into(),
     };
-    let response = create_user(State(state()), Extension(claims(None)), Json(bad))
-        .await
-        .into_response();
+    let response = create_user(
+        State(state()),
+        HeaderMap::new(),
+        Extension(claims(None)),
+        Json(bad),
+    )
+    .await
+    .into_response();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
@@ -164,6 +176,7 @@ async fn create_user_returns_409_on_duplicate_username() {
     }
     let response = create_user(
         State(app_state.clone()),
+        HeaderMap::new(),
         Extension(claims(None)),
         Json(body()),
     )
@@ -228,6 +241,7 @@ async fn a_terminal_scoped_token_cannot_create_a_user() {
 
     let response = create_user(
         State(app_state.clone()),
+        HeaderMap::new(),
         Extension(terminal_claims("tenant-1", "term-7")),
         Json(CreateUserRequest {
             username: "intruder".into(),
@@ -272,6 +286,7 @@ async fn the_scope_check_runs_before_the_store_is_touched() {
     let app_state = state();
     let response = create_user(
         State(app_state),
+        HeaderMap::new(),
         Extension(terminal_claims("tenant-1", "term-7")),
         Json(body()),
     )
@@ -290,12 +305,83 @@ async fn an_admin_minted_token_still_creates_users() {
         let db = app_state.db.lock().await;
         seed_role(&db, "role-staff");
     }
-    let response = create_user(State(app_state), Extension(claims(None)), Json(body()))
-        .await
-        .into_response();
+    let response = create_user(
+        State(app_state),
+        HeaderMap::new(),
+        Extension(claims(None)),
+        Json(body()),
+    )
+    .await
+    .into_response();
     assert_eq!(
         response.status(),
         StatusCode::CREATED,
         "admin-minted tokens must keep working"
+    );
+}
+
+#[tokio::test]
+async fn create_user_requires_admin_key_when_configured() {
+    // G-1: user creation is an operator-tier action. With an admin key
+    // configured, a plain tenant JWT must be rejected before anything
+    // touches the store - otherwise a Plus-tier tenant could bypass the
+    // C1.1 staff cap its desktop enforces by creating staff via the API.
+    let app_state = AppState {
+        admin_key: Some("operator-key".into()),
+        ..state()
+    };
+    {
+        let db = app_state.db.lock().await;
+        seed_role(&db, "role-staff");
+    }
+
+    // No admin key header -> 401, nothing written.
+    let response = create_user(
+        State(app_state.clone()),
+        HeaderMap::new(),
+        Extension(claims(Some("tenant-1"))),
+        Json(body()),
+    )
+    .await
+    .into_response();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["error"], "invalid_admin_key");
+
+    // Wrong admin key -> 401 as well.
+    let mut wrong = HeaderMap::new();
+    wrong.insert(
+        axum::http::header::HeaderName::from_static("x-admin-key"),
+        "nope".parse().unwrap(),
+    );
+    let response = create_user(
+        State(app_state.clone()),
+        wrong,
+        Extension(claims(Some("tenant-1"))),
+        Json(body()),
+    )
+    .await
+    .into_response();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // Correct admin key -> 201 (dev claim set, no terminal binding).
+    let mut ok = HeaderMap::new();
+    ok.insert(
+        axum::http::header::HeaderName::from_static("x-admin-key"),
+        "operator-key".parse().unwrap(),
+    );
+    let response = create_user(
+        State(app_state.clone()),
+        ok,
+        Extension(claims(Some("tenant-1"))),
+        Json(body()),
+    )
+    .await
+    .into_response();
+    assert_eq!(
+        response.status(),
+        StatusCode::CREATED,
+        "the operator admin key must authorise user creation"
     );
 }
