@@ -1,7 +1,7 @@
 /*
-last audited 25-07-26 by RSA-Agent (modules-staff slice A: lib re-verify)
+last audited 31-08-26 by RSA-Agent (user-role campaign, Section E)
 crate: modules-staff | status: SAFE | lint: CLEAN
-findings: clean Module registration layer; unwraps test-only; prior 31-07-26 remediation stamp (STAFF-01..13 remediated) replaced per campaign convention
+findings: clean transitional Module registration layer — kernel-wired (platform/startup/src/lib.rs:87), types re-exported through oz-core/src/user.rs; business logic intentionally remains in oz-core db/staff.rs + session-scoped IPC (documented boundary); inline unit tests in this file predate the sibling *_tests.rs convention (low-priority convention note)
 next: none | perf: N/A
 */
 

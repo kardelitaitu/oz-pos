@@ -1,9 +1,10 @@
 /*
-last audited 25-07-26 by RSA-Agent (modules-staff slice A: models deep read)
+last audited 31-08-26 by RSA-Agent (user-role campaign, Section E)
 crate: modules-staff | status: SAFE | lint: CLEAN
-findings: MSL-6 INFO — stale doc on builtin_roles::STAFF claims Manager-minus-settings while the authoritative preset (platform-core rbac) is checkout-only (40+ negative assertions); docs-only drift, no code path. Otherwise exemplary: has_permission/permission_keys delegate to platform-core rbac with fail-closed malformed-JSON semantics (empty list authorizes nothing, test-pinned), UserId UUID v7
-next: fix STAFF doc comment in fix-order phase | perf: N/A
+findings: MSL-6 carried unfixed — builtin_roles::STAFF doc (line 143) still claims "Manager-level access minus settings" while the authoritative preset (platform-core rbac_presets, 40+ negative assertions) is checkout-only; one-line doc fix pending; NEW INFO — builtin_roles here lists 4 of the 6 platform ids (no ADMIN/AUDITOR) and test fns at file top-level (line 235+) sit outside mod tests, both convention drift; otherwise exemplary: has_permission/permission_keys delegate to platform-core rbac fail-closed (malformed JSON => empty => authorize nothing, test-pinned), UserId UUID v7
+next: batch the STAFF doc fix + top-level test relocation in the fix-order phase | perf: N/A
 */
+
 //! Staff & Role domain models.
 
 use platform_core::rbac::{AuthorizationError, has_permission};
