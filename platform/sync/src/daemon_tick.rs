@@ -322,7 +322,8 @@ pub(super) async fn run_tick(
                     Err(SyncError::AnchorExpired { oldest_available }) => {
                         pulled = 0;
                         if sync_error.is_none() {
-                            sync_error = recover_expired_anchor(db, &transport, oldest_available).await;
+                            sync_error =
+                                recover_expired_anchor(db, &transport, oldest_available).await;
                         }
                     }
                     Err(e) => {
