@@ -687,7 +687,13 @@ async fn scoped_update_staff_protects_last_owner_from_other_admin() {
             ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
     )
     .unwrap();
-    let state = scoped_state_with_token(conn, "hrboss-token", "user-hrboss", "role-hrboss", "store-a");
+    let state = scoped_state_with_token(
+        conn,
+        "hrboss-token",
+        "user-hrboss",
+        "role-hrboss",
+        "store-a",
+    );
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
