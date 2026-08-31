@@ -36,7 +36,7 @@ import {
   testSyncConnection,
   requestSyncToken,
   pendingSyncCount,
-  getOfflineQueueStatusSummary,
+  getOfflineQueueStatusSummaryScoped,
   enqueueOffline,
   listPendingOffline,
   listAllOffline,
@@ -44,11 +44,11 @@ import {
   deleteOfflineItem,
   listRemoteFailures,
   requeueRemoteFailure,
-  getPgSyncSettings,
-  updatePgSyncSettings,
-  pgSyncStatus,
-  pgSyncStart,
-  pgSyncStop,
+  getPgSyncSettingsScoped,
+  updatePgSyncSettingsScoped,
+  pgSyncStatusScoped,
+  pgSyncStartScoped,
+  pgSyncStopScoped,
   type SyncResult,
 } from '@/api/offline';
 
@@ -138,10 +138,10 @@ describe('offline.ts IPC contract', () => {
 
   // ── offline queue CRUD ───────────────────────────────────────
 
-  it('getOfflineQueueStatusSummary invokes "offline_queue_status_summary"', async () => {
+  it('getOfflineQueueStatusSummaryScoped invokes "offline_queue_status_summary_scoped"', async () => {
     mockInvoke.mockResolvedValue({ pendingCount: 0, syncedCount: 0, failedCount: 0, conflictCount: 0 });
-    await getOfflineQueueStatusSummary();
-    expect(mockInvoke).toHaveBeenCalledWith('offline_queue_status_summary', undefined);
+    await getOfflineQueueStatusSummaryScoped('tok');
+    expect(mockInvoke).toHaveBeenCalledWith('offline_queue_status_summary_scoped', { sessionToken: 'tok' });
   });
 
   it('enqueueOffline invokes "enqueue_offline" with action + payload args', async () => {
@@ -277,13 +277,13 @@ describe('offline.ts PG sync IPC contract', () => {
       user: null,
       hasPassword: false,
     });
-    await getPgSyncSettings();
-    expect(mockInvoke).toHaveBeenCalledWith('get_pg_sync_settings', undefined);
+    await getPgSyncSettingsScoped('tok');
+    expect(mockInvoke).toHaveBeenCalledWith('get_pg_sync_settings_scoped', { sessionToken: 'tok' });
   });
 
-  it('updatePgSyncSettings invokes "update_pg_sync_settings" with camelCase args', async () => {
+  it('updatePgSyncSettingsScoped invokes "update_pg_sync_settings_scoped" with camelCase args', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await updatePgSyncSettings({
+    await updatePgSyncSettingsScoped('tok', {
       enabled: true,
       host: 'db.example.com',
       port: '5432',
@@ -291,7 +291,8 @@ describe('offline.ts PG sync IPC contract', () => {
       user: 'sync_user',
       password: 'secret',
     });
-    expect(mockInvoke).toHaveBeenCalledWith('update_pg_sync_settings', {
+    expect(mockInvoke).toHaveBeenCalledWith('update_pg_sync_settings_scoped', {
+      sessionToken: 'tok',
       args: {
         enabled: true,
         host: 'db.example.com',
@@ -303,7 +304,7 @@ describe('offline.ts PG sync IPC contract', () => {
     });
   });
 
-  it('pgSyncStatus invokes "pg_sync_status" and returns the camelCase status DTO', async () => {
+  it('pgSyncStatusScoped invokes "pg_sync_status_scoped" and returns the camelCase status DTO', async () => {
     mockInvoke.mockResolvedValue({
       running: true,
       lastSyncAt: '2026-08-09T00:00:00Z',
@@ -312,19 +313,19 @@ describe('offline.ts PG sync IPC contract', () => {
       lastError: null,
       pendingCount: 10,
     });
-    await pgSyncStatus();
-    expect(mockInvoke).toHaveBeenCalledWith('pg_sync_status', undefined);
+    await pgSyncStatusScoped('tok');
+    expect(mockInvoke).toHaveBeenCalledWith('pg_sync_status_scoped', { sessionToken: 'tok' });
   });
 
-  it('pgSyncStart invokes "pg_sync_start" with no args', async () => {
+  it('pgSyncStartScoped invokes "pg_sync_start_scoped"', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await pgSyncStart();
-    expect(mockInvoke).toHaveBeenCalledWith('pg_sync_start', undefined);
+    await pgSyncStartScoped('tok');
+    expect(mockInvoke).toHaveBeenCalledWith('pg_sync_start_scoped', { sessionToken: 'tok' });
   });
 
-  it('pgSyncStop invokes "pg_sync_stop" with no args', async () => {
+  it('pgSyncStopScoped invokes "pg_sync_stop_scoped"', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await pgSyncStop();
-    expect(mockInvoke).toHaveBeenCalledWith('pg_sync_stop', undefined);
+    await pgSyncStopScoped('tok');
+    expect(mockInvoke).toHaveBeenCalledWith('pg_sync_stop_scoped', { sessionToken: 'tok' });
   });
 });

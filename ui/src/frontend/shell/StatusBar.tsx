@@ -11,7 +11,8 @@ import { useGatewayStatus } from "@/hooks/useGatewayStatus";
 import { useSyncConnection } from "@/hooks/useSyncConnection";
 import { useWorkspaceNav } from "@/hooks/useWorkspaceNav";
 import { useAuth } from "@/contexts/AuthContext";
-import { getOfflineQueueStatusSummary } from "@/api/offline";
+import { getOfflineQueueStatusSummaryScoped } from "@/api/offline";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 import ThemeToggle from "./ThemeToggle";
 import Tooltip from "./Tooltip";
 import FastPINOverlay from "@/components/FastPINOverlay";
@@ -34,6 +35,7 @@ export default function StatusBar() {
   const syncStatus = useSyncConnection();
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { session } = useAuth();
+  const { sessionToken } = useWorkspace();
   const [showFastPIN, setShowFastPIN] = useState(false);
 
   const [conflictCount, setConflictCount] = useState(0);
@@ -42,14 +44,14 @@ export default function StatusBar() {
   useEffect(() => {
     const poll = async () => {
       try {
-        const s = await getOfflineQueueStatusSummary();
+        const s = await getOfflineQueueStatusSummaryScoped(sessionToken!);
         setConflictCount(s.conflictCount);
       } catch { /* offline */ }
     };
     poll();
     const id = setInterval(poll, 30_000);
     return () => clearInterval(id);
-  }, []);
+  }, [sessionToken]);
 
   const handleOpenFastPIN = useCallback(() => setShowFastPIN(true), []);
   const handleCloseFastPIN = useCallback(() => setShowFastPIN(false), []);

@@ -214,10 +214,6 @@ export const getUserPreferences = (userId: string): Promise<Record<string, strin
 export const getUserPreferencesScoped = (sessionToken: string): Promise<Record<string, string>> =>
   loggedInvoke<Record<string, string>>('get_user_preferences_scoped', { sessionToken });
 
-/** Set preferences for a given user. */
-export const setUserPreferences = (userId: string, prefs: UserPrefEntry[]): Promise<void> =>
-  loggedInvoke<void>('set_user_preferences', { userId, prefs });
-
 /** Set user preferences (scoped — ADR #7). Uses session.user_id for write. */
 export const setUserPreferencesScoped = (sessionToken: string, prefs: UserPrefEntry[]): Promise<void> =>
   loggedInvoke<void>('set_user_preferences_scoped', { sessionToken, prefs });
