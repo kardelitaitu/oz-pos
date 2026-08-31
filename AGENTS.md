@@ -96,6 +96,7 @@ npm ci --no-audit --no-fund
 ### 3. Tauri & UI Standards
 - Tauri IPC commands live in `apps/desktop-client/src/commands/` or `apps/tablet-client/src/commands/` and are registered in their respective `lib.rs`.
 - Front-end API calls must route through `ui/src/api/` (per-domain files). **Never call `invoke(...)` directly inside React components.**
+- **"Settings" disambiguation:** "The Tauri Settings page" means `ui/src/features/settings/SettingsPage.tsx` — the master–detail UI (route `settings`) with the top-right Save button. Do not confuse it with the other `settings` surfaces: `ui/src/api/settings.ts` (IPC client) · `ui/src/contexts/SettingsContext.tsx` (shared state) · `apps/desktop-client/src/commands/settings.rs` and `apps/tablet-client/src/commands/settings.rs` (IPC commands) · `crates/oz-core/src/settings.rs` and `crates/oz-core/src/db/settings.rs` (backend service/DB) · `modules/settings/` (the kernel module — a lifecycle stub, not the UI).
 - **Accessibility:** All React components must have ARIA labels and pass `eslint-plugin-jsx-a11y` checks.
 - **Localization:** All user-visible strings must use `@fluent/react`. No hardcoded English strings in JSX.
 
