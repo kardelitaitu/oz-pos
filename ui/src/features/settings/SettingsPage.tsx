@@ -59,10 +59,7 @@ const AboutSection = lazy(() => import('./sections/AboutSection'));
 import { useContextMenu, ContextMenu } from '@/frontend/shared';
 import SettingsNavTree, {
   NAV_ITEMS as NAV_ITEMS_REF,
-  CATEGORIES as CATEGORIES_REF,
-  CATEGORY_I18N_KEYS as CATEGORY_I18N_KEYS_REF,
   NAV_L10N_KEYS as NAV_L10N_KEYS_REF,
-  type SettingsNavTreeHandle,
 } from './SettingsNavTree';
 
 // ── Lazy-loaded workspace settings cards (ADR #22 Phase 3) ──
@@ -275,7 +272,6 @@ function SettingsPageContent() {
   const [activeSection, setActiveSection] = useState('general');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const sidebarNavRef = useRef<SettingsNavTreeHandle>(null);
 
   // ── Field validation state ────────────────────────────────
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -834,7 +830,6 @@ function SettingsPageContent() {
   // ── Resolve current nav item + category for breadcrumb ─────
 
   const currentNavItem = NAV_ITEMS_REF.find((n) => n.key === activeSection);
-  const currentCategory = CATEGORIES_REF.find((c) => c.keys.includes(activeSection));
 
   // ── Main render ──────────────────────────────────────────────
 
@@ -868,14 +863,18 @@ function SettingsPageContent() {
         {/* COL 2: branding */}
         <div className="settings-topbar__col settings-topbar__col--brand">
           <div className="settings-topbar-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
+            {currentNavItem?.icon ?? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            )}
           </div>
-          <span className="settings-topbar-name">
-            <Localized id="settings-title">Settings</Localized>
-          </span>
+          <h1 className="settings-topbar-name">
+            <Localized id={NAV_L10N_KEYS_REF[currentNavItem?.key ?? ''] ?? 'settings-title'}>
+              {currentNavItem?.label ?? 'Settings'}
+            </Localized>
+          </h1>
         </div>
         {/* COL 3: search */}
         <div className="settings-topbar__col settings-topbar__col--search">
@@ -963,7 +962,6 @@ function SettingsPageContent() {
       <div className="settings-body">
         {/* ── Settings sidebar navigation tree ────────────── */}
         <SettingsNavTree
-          ref={sidebarNavRef}
           activeSection={activeSection}
           onNavigate={navigateToSection}
           searchQuery={searchQuery}
@@ -975,33 +973,6 @@ function SettingsPageContent() {
         {/* ── Main content ──────────────────────────────── */}
         <form id="settings-form" className="settings-content" onSubmit={(e) => { e.preventDefault(); handleSave(); }} ref={settingsKeyboardRef as unknown as React.Ref<HTMLFormElement>}>
           <button type="submit" hidden aria-hidden="true" tabIndex={-1}>Save</button>
-          <div className="settings-content-header">
-            {/* ── Section breadcrumb header ───────── */}
-            {currentNavItem && (
-              <header className="settings-section-header">
-                <div className="settings-section-header-icon" aria-hidden="true">
-                  {currentNavItem.icon}
-                </div>
-                <div className="settings-section-header-text">
-                  {currentCategory && (
-                    <button
-                      type="button"
-                      className="settings-section-header-category"
-                      onClick={() => { sidebarNavRef.current?.toggleCategory(currentCategory.label); }}
-                      aria-label={l10n.getString(CATEGORY_I18N_KEYS_REF[currentCategory.label] ?? '')}
-                    >
-                      <Localized id={CATEGORY_I18N_KEYS_REF[currentCategory.label] ?? ''}>
-                        {currentCategory.label}
-                      </Localized>
-                    </button>
-                  )}
-                  <h1 className="settings-section-header-title">
-                    <Localized id={NAV_L10N_KEYS_REF[currentNavItem.key] ?? ''}>{currentNavItem.label}</Localized>
-                  </h1>
-                </div>
-              </header>
-            )}
-          </div>
           <div className={`settings-section-content${activeSection === 'topology' ? ' settings-section-content--full' : ''}`} key={activeSection}><div key={activeSection}>
               <Suspense fallback={<Localized id="settings-section-loading"><div className="section-loading">Loading...</div></Localized>}>
                 {renderSection(activeSection)}
