@@ -45,10 +45,10 @@ echo ""
 echo "[3/7] Copying detailed docs into the book source..."
 rm -rf "$BOOK_SRC/guides" "$BOOK_SRC/decisions"
 mkdir -p "$BOOK_SRC/guides" "$BOOK_SRC/decisions"
-# The hand-written guides were archived to docs/archived/ (commit d0fe7481,
-# 2026-08-29) as stale content; copy them from there so the book's Docs
-# category is not empty. See documentation.md §2026-08-30 drift note.
-cp "$WORKSPACE_ROOT"/docs/archived/*.md "$BOOK_SRC/guides/" 2>/dev/null || true
+# The live guides are the ones under docs/guides/. docs/archived/ holds
+# superseded material kept for provenance (commit d0fe7481 moved it there as
+# stale), and publishing it as book chapters was never its purpose.
+cp "$WORKSPACE_ROOT"/docs/guides/*.md "$BOOK_SRC/guides/" 2>/dev/null || true
 cp "$WORKSPACE_ROOT"/docs/decisions/*.md "$BOOK_SRC/decisions/" 2>/dev/null || true
 echo "✔ guides + ADRs copied into docs/src/"
 
