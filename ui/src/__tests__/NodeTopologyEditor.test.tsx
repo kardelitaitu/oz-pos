@@ -1435,14 +1435,13 @@ describe('NodeTopologyEditor Component', () => {
     // Arm a connection from the store's location-out row (right, index 0).
     fireEvent.click(portRowOf(nodeAt(0), 'right', 0));
     // Hover the workspace's left socket (location-in, row 0): compatible → highlight.
-    // The snap target sits at (node.x, node.y + portRowCenterY). For the
-    // retail preset, ws-1 is at (380, 80) and portRowCenterY(ws, 0) = 154.
-    fireEvent.mouseMove(canvas, { clientX: 380, clientY: 234 });
+    // ws-1 at (380, 80); portRowCenterY(ws, 0) = 48 + 157 + 10 = 215 → y=295.
+    fireEvent.mouseMove(canvas, { clientX: 380, clientY: 295 });
     const wsLeft = portRowOf(nodeAt(1), 'left', 0);
     expect(wsLeft.className).toContain('port-highlight');
     // The warehouse's left socket (location-in, row 0) is also compatible.
-    // wh-1 is at (680, 140); portRowCenterY(wh, 0) = 114.
-    fireEvent.mouseMove(canvas, { clientX: 680, clientY: 254 });
+    // wh-1 at (680, 140); portRowCenterY(wh, 0) = 48 + 85 + 10 = 143 → y=283.
+    fireEvent.mouseMove(canvas, { clientX: 680, clientY: 283 });
     const whLeft = portRowOf(nodeAt(2), 'left', 0);
     expect(whLeft.className).toContain('port-highlight');
   });
@@ -6452,7 +6451,7 @@ describe('NodeTopologyEditor — wire bend editing', () => {
   /** Create a bend on w-1 by dragging its midpoint ghost to (400, 300). */
   const createBend = () => {
     const ghost = document.querySelector('.wire-bend-ghost') as Element;
-    fireEvent.mouseDown(ghost, { button: 0, clientX: 350, clientY: 244 });
+    fireEvent.mouseDown(ghost, { button: 0, clientX: 350, clientY: 289 });
     fireEvent.mouseMove(document, { clientX: 400, clientY: 300 });
     fireEvent.mouseUp(document, { button: 0 });
   };
@@ -6466,7 +6465,7 @@ describe('NodeTopologyEditor — wire bend editing', () => {
     const ghost = document.querySelector('.wire-bend-ghost') as Element;
     expect(ghost).not.toBeNull();
     expect(ghost.getAttribute('cx')).toBe('350');
-    expect(ghost.getAttribute('cy')).toBe('244');
+    expect(ghost.getAttribute('cy')).toBe('289');
 
     createBend();
 
@@ -6477,7 +6476,7 @@ describe('NodeTopologyEditor — wire bend editing', () => {
 
     // The wire now routes through the bend as an orthogonal polyline.
     const path = hitbox.parentElement!.querySelector('path.wire-path') as Element;
-    expect(path.getAttribute('d')).toBe('M 320 254 L 400 300 L 380 234');
+    expect(path.getAttribute('d')).toBe('M 320 283 L 400 300 L 380 295');
 
     // The whole drag is ONE undo entry.
     openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
@@ -6512,7 +6511,7 @@ describe('NodeTopologyEditor — wire bend editing', () => {
     expect(handle.getAttribute('cx')).toBe('420');
     expect(handle.getAttribute('cy')).toBe('280');
     const path = hitbox.parentElement!.querySelector('path.wire-path') as Element;
-    expect(path.getAttribute('d')).toBe('M 320 254 L 420 280 L 380 234');
+    expect(path.getAttribute('d')).toBe('M 320 283 L 420 280 L 380 295');
   });
 
   it('removes a bend on double-click, restoring the default curve', () => {
@@ -6604,7 +6603,7 @@ describe('NodeTopologyEditor — wire bend editing', () => {
     // is a geometric no-op) that dirties the canvas, survives Apply, and
     // has NO undo entry — the entry only pushes on first movement.
     // Mousedown + mouseup on the midpoint ghost with NO movement.
-    fireEvent.mouseDown(ghost, { button: 0, clientX: 350, clientY: 244 });
+    fireEvent.mouseDown(ghost, { button: 0, clientX: 350, clientY: 289 });
     fireEvent.mouseUp(document, { button: 0 });
 
     // Boolean forms: chai's failure formatter walks DOM elements and can
@@ -6628,7 +6627,7 @@ describe('NodeTopologyEditor — wire bend editing', () => {
     expect(handle.getAttribute('cx')).toBe('400');
     expect(handle.getAttribute('cy')).toBe('300');
     const path = hitbox.parentElement!.querySelector('path.wire-path') as Element;
-    expect(path.getAttribute('d')).toBe('M 320 254 L 400 300 L 380 234');
+    expect(path.getAttribute('d')).toBe('M 320 283 L 400 300 L 380 295');
 
     // The cancelled MOVE left no entry: ONE undo reverts the creation.
     openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
@@ -6642,7 +6641,7 @@ describe('NodeTopologyEditor — wire bend editing', () => {
     // direction (one undo entry — existing wire-click semantics)
 
     const ghost = document.querySelector('.wire-bend-ghost') as Element;
-    fireEvent.mouseDown(ghost, { button: 0, clientX: 350, clientY: 244 });
+    fireEvent.mouseDown(ghost, { button: 0, clientX: 350, clientY: 289 });
     fireEvent.mouseMove(document, { clientX: 400, clientY: 300 });
     fireEvent.keyDown(window, { key: 'Escape' });
 
@@ -6722,7 +6721,7 @@ describe('NodeTopologyEditor — wire bend editing', () => {
     const ghost = document.querySelector('.wire-bend-ghost') as Element;
     expect(ghost).not.toBeNull();
     expect(ghost.getAttribute('cx')).toBe('350');
-    expect(ghost.getAttribute('cy')).toBe('244');
+    expect(ghost.getAttribute('cy')).toBe('289');
     // Hover alone must NOT select the wire: no bend handles, no undo entry
     // (a click-to-select would push a direction-cycle entry).
     expect(document.querySelector('.wire-bend-handle')).toBeNull();
@@ -6735,13 +6734,13 @@ describe('NodeTopologyEditor — wire bend editing', () => {
     fireEvent.mouseEnter(hitbox.parentElement as Element);
 
     const ghost = document.querySelector('.wire-bend-ghost') as Element;
-    fireEvent.mouseDown(ghost, { button: 0, clientX: 350, clientY: 244 });
+    fireEvent.mouseDown(ghost, { button: 0, clientX: 350, clientY: 289 });
     fireEvent.mouseMove(document, { clientX: 400, clientY: 300 });
     fireEvent.mouseUp(document, { button: 0 });
 
     expect(document.querySelector('.wire-bend-handle')).not.toBeNull();
     const path = hitbox.parentElement!.querySelector('path.wire-path') as Element;
-    expect(path.getAttribute('d')).toBe('M 320 254 L 400 300 L 380 234');
+    expect(path.getAttribute('d')).toBe('M 320 283 L 400 300 L 380 295');
     // The drag is exactly ONE undo entry (hover pushed nothing, and the
     // direction cycle never fired) — undo removes the bend.
     openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
@@ -6774,7 +6773,7 @@ describe('NodeTopologyEditor — wire bend editing', () => {
 
     // Plain Escape clears the selection — the moved bend stays put.
     const path = hitbox.parentElement!.querySelector('path.wire-path') as Element;
-    expect(path.getAttribute('d')).toBe('M 320 254 L 420 280 L 380 234');
+    expect(path.getAttribute('d')).toBe('M 320 283 L 420 280 L 380 295');
     expect(document.querySelector('.wire-bend-handle')).toBeNull();
   });
 });
@@ -6791,10 +6790,11 @@ describe('NodeTopologyEditor — hover-target preview snap', () => {
 
     // Move to ws-1's left input port: the UX exposes only left/right
     // connectors, so the preview should snap to the labeled Location In.
+    // The port row center = 48 (header) + 157 (main) + 10 = 215.
     const wsX = parseFloat(nodeAt(1).style.left);
     const wsY = parseFloat(nodeAt(1).style.top);
     const targetX = wsX;
-    const targetY = wsY + NODE_HEIGHT - 16;
+    const targetY = wsY + 48 + 157 + 10;
     fireEvent.mouseMove(canvas, { clientX: targetX, clientY: targetY });
 
     const preview = document.querySelector(
@@ -8701,7 +8701,7 @@ describe('NodeTopologyEditor — auto-layout', () => {
     // Retail preset: store→ws→wh. Bend w-1 at (400, 300).
     fireEvent.click(document.querySelector('.wire-hitbox') as Element);
     const ghost = document.querySelector('.wire-bend-ghost') as Element;
-    fireEvent.mouseDown(ghost, { button: 0, clientX: 350, clientY: 244 });
+    fireEvent.mouseDown(ghost, { button: 0, clientX: 350, clientY: 289 });
     fireEvent.mouseMove(document, { clientX: 400, clientY: 300 });
     fireEvent.mouseUp(document, { button: 0 });
     expect(document.querySelector('.wire-bend-handle')).not.toBeNull();

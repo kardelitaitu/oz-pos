@@ -9,9 +9,12 @@ import { describe, expect, it } from 'vitest';
 import type { TopologyNodeData } from '@/features/stores/NodeTopologyEditor';
 import {
   NODE_HEADER_H,
+  NODE_BODY_PAD,
+  NODE_BODY_GAP,
+  META_ROW_H,
+  STATUS_ROW_H,
+  CONFIG_ROW_H,
   PORT_ROW_H,
-  MAIN_ROW_H,
-  MAIN_MIN_H,
   mainRowCount,
   mainHeight,
   leftPortRowCount,
@@ -52,11 +55,15 @@ describe('topologyMetrics', () => {
   });
 
   it('applies the main-height floor to content-light cards', () => {
-    // 2 rows x 24 = 48 < MAIN_MIN_H floor.
-    expect(mainHeight(STORE)).toBe(MAIN_MIN_H);
-    expect(mainHeight(WAREHOUSE)).toBe(MAIN_MIN_H);
-    // Workspace: 4 x 24 = 96, above the floor.
-    expect(mainHeight(STORE_POS)).toBe(4 * MAIN_ROW_H);
+    // Content-light cards (store/warehouse/hardware): 24 pad + 8 gap +
+    // 29 meta + 24 status = 85, above the MAIN_MIN_H floor.
+    const light = NODE_BODY_PAD + NODE_BODY_GAP + META_ROW_H + STATUS_ROW_H;
+    expect(mainHeight(STORE)).toBe(light);
+    expect(mainHeight(WAREHOUSE)).toBe(light);
+    // Workspace adds two config rows: + 2×CONFIG_ROW_H + 2 more gaps.
+    expect(mainHeight(STORE_POS)).toBe(
+      NODE_BODY_PAD + NODE_BODY_GAP * 3 + META_ROW_H + STATUS_ROW_H + 2 * CONFIG_ROW_H,
+    );
   });
 
   it('counts stacked port rows per column from the semantic registry', () => {
@@ -87,9 +94,14 @@ describe('topologyMetrics', () => {
 
   it('computes a pure adaptive total height', () => {
     // header + main + footer
-    expect(nodeHeight(STORE)).toBe(NODE_HEADER_H + MAIN_MIN_H + PORT_ROW_H);
-    expect(nodeHeight(STORE_POS)).toBe(NODE_HEADER_H + 4 * MAIN_ROW_H + 3 * PORT_ROW_H);
-    expect(nodeHeight(WAREHOUSE)).toBe(NODE_HEADER_H + MAIN_MIN_H + 4 * PORT_ROW_H);
+    const light = NODE_BODY_PAD + NODE_BODY_GAP + META_ROW_H + STATUS_ROW_H;
+    expect(nodeHeight(STORE)).toBe(NODE_HEADER_H + light + PORT_ROW_H);
+    expect(nodeHeight(STORE_POS)).toBe(
+      NODE_HEADER_H
+      + (NODE_BODY_PAD + NODE_BODY_GAP * 3 + META_ROW_H + STATUS_ROW_H + 2 * CONFIG_ROW_H)
+      + 3 * PORT_ROW_H,
+    );
+    expect(nodeHeight(WAREHOUSE)).toBe(NODE_HEADER_H + light + 4 * PORT_ROW_H);
   });
 
   it('places port-row centers below header + main, top-aligned', () => {

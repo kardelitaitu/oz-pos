@@ -27,15 +27,35 @@ export const MAIN_ROW_H = 24;
 /** Minimum main-body height so a content-light card never collapses. */
 export const MAIN_MIN_H = 56;
 
-/** Main-content rows per node kind. Workspaces carry two extra config
- *  rows (name input + enabled toggle) on top of the shared meta/status. */
+// ── Body content row heights (CSS values, kept in lockstep) ──────
+/** Body padding top+bottom (2 × var(--space-3) = 2 × 12px). */
+export const NODE_BODY_PAD = 24;
+/** Gap between body rows (var(--space-2) = 8px). */
+export const NODE_BODY_GAP = 8;
+/** Subtitle row (min-height 2.4em at text-xs 12px = 28.8px ≈ 29). */
+export const META_ROW_H = 29;
+/** Status badge row (min-height 24px). */
+export const STATUS_ROW_H = 24;
+/** Config row (name input / enabled toggle, min-height 28px). */
+export const CONFIG_ROW_H = 28;
+
+/** Main-content rows per node kind. Used by the test suite to verify the
+ *  row-count model; mainHeight() now uses the explicit budget below. */
 export function mainRowCount(node: TopologyNodeData): number {
   return node.type === 'workspace' ? 4 : 2;
 }
 
-/** Height of the card's main region (between header and footer). */
+/** Height of the card's main region (between header and footer). The
+ *  row-count × MAIN_ROW_H model underestimated real content by ~60px
+ *  because it omitted body padding, inter-row gaps, and the fact that
+ *  config rows are taller than MAIN_ROW_H. The explicit budget below
+ *  mirrors the actual CSS layout so the card never clips its content. */
 export function mainHeight(node: TopologyNodeData): number {
-  return Math.max(MAIN_MIN_H, mainRowCount(node) * MAIN_ROW_H);
+  const configRows = node.type === 'workspace' ? 2 : 0;
+  const rowCount = 2 + configRows; // meta + status + configs
+  const rowHeights = META_ROW_H + STATUS_ROW_H + configRows * CONFIG_ROW_H;
+  const gaps = NODE_BODY_GAP * Math.max(0, rowCount - 1);
+  return Math.max(MAIN_MIN_H, NODE_BODY_PAD + gaps + rowHeights);
 }
 
 /** Number of stacked port rows in a node's left column. */
