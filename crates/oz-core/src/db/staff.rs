@@ -1,9 +1,9 @@
 //! Staff management — User CRUD + Role CRUD.
 /*
-last audited 25-07-26 by RSA-Agent (oz-core slice B5 closeout)
+last audited 31-08-26 by RSA-Agent (user-role campaign, Section F)
 crate: oz-core | status: SAFE | lint: CLEAN
-findings: exemplary — STAFF-07 three-tier rate limiter (per-account/per-device/global + backoff) with settings-driven tuning object; role presets upsert-sync converge model; permission resolution fails closed (unresolvable role = PermissionDenied, never a crash); username normalized + conflict mapped to typed error; default global assignment on create; pin_hash column (user PINs hashed — contrast COR-17 gift-card PINs)
-next: none | perf: N/A
+findings: exemplary core — parameterized SQL throughout (no injection surface); centralized gate authorize_with is registry-aware deny-by-default (unregistered required key, missing/inactive user, unresolvable role, scope mismatch all deny); STAFF-07 rate limiter (account/device/global + exponential backoff, persisted, push-over re-check); preset upsert-sync converges builtin roles; assignments FK ON DELETE CASCADE armed via PRAGMA foreign_keys=ON at migrate time (migrations.rs:139); evidence 63 unit + 25 integration tests green
+next: report-only F-1 — create_user and update_user write users + assignments as separate statements with NO rusqlite transaction (repo hard rule: all writes in transactions); failure window strands a user without its default assignment (gate falls back to users.role_id so no security impact, integrity drift only); INFO — staff-quota count-then-insert TOCTOU is serialized by the process-wide session Mutex, verify the cloud path in Section G | perf: indexed lookups, fine
 */
 
 use rusqlite::params;
