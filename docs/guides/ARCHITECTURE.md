@@ -261,7 +261,7 @@ cargo tauri dev          # launches Tauri dev window
 
 ---
 ## License & Commercial Governance
-- **Proprietary & Confidential (`All Rights Reserved`)**: See [`LICENSE`](../LICENSE) for terms.
+- **Proprietary & Confidential (`All Rights Reserved`)**: See [`LICENSE`](../../LICENSE) for terms.
 - No commercial deployment, redistribution, or modification is permitted without an executed commercial license agreement from OZ-POS Contributors.
 - Internal developer contributions are governed under proprietary contributor agreements; all code strictly adheres to pre-commit quality gates (`cargo fmt + clippy + i18n lint + bundle parity`).
 
