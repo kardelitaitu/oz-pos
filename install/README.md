@@ -1,5 +1,7 @@
 # OZ-POS install scripts
 
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (0 findings) · verified against HEAD: all 4 referenced scripts exist (win/install.ps1, win/uninstall.ps1, install.sh, uninstall.sh); repo URL kardelitaitu/oz-pos matches git remote and install.ps1's default $Repo -->
+
 One-line install/uninstall for all three desktop platforms, backed by the
 project's release pipeline. Every script is attached to each GitHub Release
 as an immutable, versioned asset, and all four are covered by the release's
@@ -50,3 +52,5 @@ message instead of downloading the wrong artifact.
 > updater's own `latest.json` endpoint) resolve only after **at least one
 > release has been published**. The pipeline publishes on `v*` tags; until
 > then these URLs 404.
+
+> last audited 31-08-26 by docs-auditor

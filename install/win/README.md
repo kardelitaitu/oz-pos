@@ -1,5 +1,7 @@
 # OZ-POS Windows install scripts
 
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (0 findings) · verified against HEAD: install.ps1 supports all documented flags (-Channel/-Version/-System/-DryRun/-NoLaunch/-Repo, default kardelitaitu/oz-pos); uninstall.ps1 -Purge exists; NSIS installMode=currentUser (tauri.conf.json:47); ../install.sh + ../uninstall.sh exist -->
+
 One-line install and uninstall for Windows, backed by the project's existing
 release pipeline. Both scripts are attached to every GitHub Release as
 immutable, versioned assets — so `releases/latest/download/install.ps1`
@@ -88,3 +90,5 @@ Linux and macOS counterparts are shipped in [`../install.sh`](../install.sh)
 and [`../uninstall.sh`](../uninstall.sh) — same pattern: resolve the
 platform manifest key, verify against `SHA256SUMS.txt`, and delegate to the
 native installer (AppImage/deb on Linux, DMG on macOS).
+
+> last audited 31-08-26 by docs-auditor
