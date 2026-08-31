@@ -166,6 +166,35 @@ export function portLabelId(node: TopologyNodeData, port: PortName): string {
   return 'topology-port-generic-out';
 }
 
+/** Fluent id for the label of ONE stacked semantic port row (round 174).
+ *  Every semantic a socket exposes gets its own labeled row in the card
+ *  footer; this resolves that row's label from the semantic id — the single
+ *  mapping used by the row renderer, the relationship picker options, and
+ *  the wire-endpoint row resolution. Falls back to the legacy per-side
+ *  label for unknown semantics so nothing renders a raw id. */
+export function semanticPortLabelId(
+  node: TopologyNodeData,
+  port: PortName,
+  semanticId: SemanticPortId,
+): string {
+  const map: Record<SemanticPortId, string> = {
+    'location-out': 'topology-port-location-out',
+    'location-in': 'topology-port-location-in',
+    'operation-out': 'topology-port-operation-out',
+    'operation-in': 'topology-port-operation-in',
+    'stock-out': 'topology-port-stock-out',
+    'stock-in': 'topology-port-stock-in',
+    'transfer-out': 'topology-port-transfer-out',
+    'transfer-in': 'topology-port-transfer-in',
+    'ticket-out': 'topology-port-ticket-out',
+    'ticket-in': 'topology-port-ticket-in',
+    'device-out': 'topology-port-device-out',
+    'generic-in': 'topology-port-generic-in',
+    'generic-out': 'topology-port-generic-out',
+  };
+  return map[semanticId] ?? portLabelId(node, port);
+}
+
 export function portAriaLabelId(node: TopologyNodeData, port: PortName, variantIndex = 0): string {
   if (port === 'left') {
     const variant = leftPortVariants(node)[variantIndex];
@@ -418,6 +447,8 @@ export const TOPOLOGY_UI_FALLBACKS: Readonly<Record<string, string>> = {
   'topology-port-stock-in': 'Stock In',
   'topology-port-stock-out': 'Stock Out',
   'topology-port-transfer-in': 'Transfer In',
+  'topology-port-transfer-out': 'Transfer Out',
+  'topology-port-operation-out': 'Operation',
   'topology-port-ticket-in': 'Ticket In',
   'topology-port-ticket-out': 'Ticket Out',
   'topology-port-ticket-out-aria': 'Ticket port',
