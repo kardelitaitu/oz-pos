@@ -619,10 +619,10 @@ export default function PaymentModal({
 
   // Parse split amounts using cart currency exponent
   const parseSplitMinor = useCallback((val: string): bigint => {
-    const num = parseFloat(val);
-    if (Number.isNaN(num) || num < 0) return 0n;
-    const exp = minorUnitExponent(cartCurrency);
-    return BigInt(Math.round(num * 10 ** exp));
+    // MONEY-02: exact decimal parse (parseFloat mis-rounded "1.005").
+    const parsed = parseMinorUnits(val, minorUnitExponent(cartCurrency));
+    if (parsed === null || parsed < 0) return 0n;
+    return BigInt(parsed);
   }, [cartCurrency]);
 
   const splitTotals = useMemo(() => {

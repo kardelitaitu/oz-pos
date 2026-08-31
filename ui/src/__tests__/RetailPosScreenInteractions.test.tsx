@@ -283,7 +283,10 @@ describe('RetailPosScreen — interactions', () => {
     const input = screen.getByLabelText(/Opening balance/);
     await userEvent.type(input, '100000');
     await userEvent.click(screen.getByText('Open'));
-    await waitFor(() => expect(openShiftScoped).toHaveBeenCalledWith(expect.any(String), 10000000));
+    // MONEY-05: the store currency is IDR (exponent 0) — the drawer
+    // amount is already in minor units. The old hardcoded ×100 sent
+    // 10000000 and broke cash reconciliation 100x.
+    await waitFor(() => expect(openShiftScoped).toHaveBeenCalledWith(expect.any(String), 100000));
   });
 
   it('shows warning when Pay is pressed without an active shift', async () => {
@@ -334,6 +337,29 @@ describe('RetailPosScreen — interactions', () => {
     await userEvent.type(discountInput, '10');
     await userEvent.click(screen.getByRole('button', { name: /apply/i }));
     expect(setDiscount).toHaveBeenCalledWith(10, '');
+  });
+
+  // MONEY-04: the Rp tab must scale the entered amount by the CART
+  // currency's minor-unit exponent. The old handler hardcoded ×100 —
+  // for IDR (exponent 0) that inflated the ratio 100x, so any Rp
+  // discount ≥ 1% of the subtotal clamped to 100% off (free goods).
+  it('converts an Rp discount at the IDR exponent (2000 off 100000 = 2%)', async () => {
+    const posState = await import('@/features/sales/usePosState');
+    const setDiscount = vi.fn();
+    vi.mocked(posState.usePosState).mockReturnValue(createUsePosStateMock({
+      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: '', qty: 1, unit_price: { minor_units: 100000, currency: 'IDR' } }],
+      total: { minor_units: 100000, currency: 'IDR' },
+      subtotal: { minor_units: 100000, currency: 'IDR' },
+      setDiscount,
+    }));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    const diskonBtn = await screen.findByRole('button', { name: /^diskon$/i });
+    await userEvent.click(diskonBtn);
+    await userEvent.click(screen.getByRole('button', { name: /^Rp$/i }));
+    const rpInput = screen.getByRole('spinbutton', { name: /discount \(rp\)/i });
+    await userEvent.type(rpInput, '2000');
+    await userEvent.click(screen.getByRole('button', { name: /apply/i }));
+    expect(setDiscount).toHaveBeenCalledWith(2, '');
   });
 
   // ── Clear cart ───────────────────────────────────────────────
