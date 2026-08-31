@@ -9,7 +9,10 @@
 The Loyalty module owns the customer loyalty program: tier definitions with
 per-tier earning multipliers, point earn and redeem, and member account
 management. Points are earned automatically from completed sales via the
-`sale.completed` event.
+`sale.completed` event, and reversed proportionally when a sale is refunded
+(LOY-03) — the reversal runs inside the refund transaction via
+`reverse_loyalty_on_refund` (`crates/oz-core/src/db/loyalty.rs`), using integer
+round-half-up so no float ever touches the points.
 
 ## Module Info
 
@@ -87,3 +90,5 @@ kernel.start_all()?;
   ]
 }
 ```
+
+> last audited 31-08-26 by docs-auditor
