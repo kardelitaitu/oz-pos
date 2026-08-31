@@ -115,7 +115,7 @@ func handleAddLicenseAddon(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
-		log.Printf("addon-admin: added addon %s to key %s", req.AddonID, req.LicenseKey[:8]+"****")
+		log.Printf("addon-admin: added addon %s to key %s", req.AddonID, req.LicenseKey[:8]+"****") // key-log:masked prefix mask predates maskLicenseKey; switching would expose 8 random chars instead of 1
 
 		return e.JSON(http.StatusOK, map[string]any{
 			"status":      "addon_added",
@@ -188,7 +188,7 @@ func handleRemoveLicenseAddon(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
-		log.Printf("addon-admin: removed addon %s from key %s", req.AddonID, req.LicenseKey[:8]+"****")
+		log.Printf("addon-admin: removed addon %s from key %s", req.AddonID, req.LicenseKey[:8]+"****") // key-log:masked prefix mask predates maskLicenseKey; switching would expose 8 random chars instead of 1
 
 		return e.JSON(http.StatusOK, map[string]any{
 			"status":      "addon_removed",

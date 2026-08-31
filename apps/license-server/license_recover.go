@@ -185,7 +185,7 @@ func handleLicenseRecover(app core.App) func(e *core.RequestEvent) error {
 				"error": "failed to send recovery email",
 			})
 		}
-		log.Printf("license recover: recovery code sent for tenant %q (key=%q)", tenant.Id, body.Key)
+		log.Printf("license recover: recovery code sent for tenant %q (key=%q)", tenant.Id, maskLicenseKey(body.Key))
 		return e.JSON(http.StatusOK, map[string]any{
 			"status": "sent",
 		})

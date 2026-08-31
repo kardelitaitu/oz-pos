@@ -414,7 +414,7 @@ func midtransProvision(app core.App, n midtransNotification) error {
 		if saveErr := app.Save(keyRecord); saveErr != nil {
 			return fmt.Errorf("failed to save license key for transaction %s: %w", n.OrderID, saveErr)
 		}
-		log.Printf("midtrans webhook: minted key %q (tier=%s, bundle=%s) for order %s", key, tier, bundle, n.OrderID)
+		log.Printf("midtrans webhook: minted key %q (tier=%s, bundle=%s) for order %s", maskLicenseKey(key), tier, bundle, n.OrderID)
 		// Non-fatal: a failed receipt must not fail provisioning.
 		if mailErr := sendReceiptEmail(email, key, tier, expiresAt); mailErr != nil {
 			log.Printf("midtrans webhook: receipt email to %q failed (non-fatal): %v", email, mailErr)

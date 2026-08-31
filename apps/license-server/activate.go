@@ -413,7 +413,7 @@ func handleReactivation(
 	subRecord := subs[0]
 
 	log.Printf("Re-activation: key=%q already activated by tenant=%q (email=%q), returning existing subscription",
-		req.Key, tenant.Id, req.Email)
+		maskLicenseKey(req.Key), tenant.Id, req.Email)
 
 	// ── Machine count enforcement on re-activation ─────────
 	// Without this check, a Free-tier key holder could install
@@ -881,7 +881,7 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				keyRecord.Set("activated_at", time.Now().UTC().Format(time.RFC3339))
 				keyRecord.Set("activated_by", tenantID)
 				if err := app.Save(keyRecord); err != nil {
-					log.Printf("WARNING: failed to mark key %s as activated: %v", req.Key, err)
+					log.Printf("WARNING: failed to mark key %s as activated: %v", maskLicenseKey(req.Key), err)
 				}
 				keyFailTracker.clearKey(req.Key)
 				resp := map[string]any{
@@ -975,7 +975,7 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		keyRecord.Set("activated_at", time.Now().UTC().Format(time.RFC3339))
 		keyRecord.Set("activated_by", tenantID)
 		if err := app.Save(keyRecord); err != nil {
-			log.Printf("WARNING: failed to mark key %s as activated: %v", req.Key, err)
+			log.Printf("WARNING: failed to mark key %s as activated: %v", maskLicenseKey(req.Key), err)
 		}
 
 		// ── Clear failure tracking for this key ─────────────────

@@ -194,7 +194,7 @@ func handleEnterpriseTrial(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		log.Printf("enterprise-trial: code %s accepted, minted key %s for %s (30-day Enterprise trial)",
-			req.ApprovalCode[:4]+"****", licenseKey, req.Email)
+			req.ApprovalCode[:4]+"****", maskLicenseKey(licenseKey), req.Email)
 
 		return e.JSON(http.StatusOK, EnterpriseTrialResponse{
 			Status:     "trial_key_minted",

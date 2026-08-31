@@ -916,7 +916,7 @@ func paddleProvision(app core.App, ev paddleEvent, sendReceipt bool) error {
 		if saveErr := app.Save(keyRecord); saveErr != nil {
 			return fmt.Errorf("failed to save license key for subscription %s: %w", sub.ID, saveErr)
 		}
-		log.Printf("paddle webhook: minted key %q (tier=%s, bundle=%s) for subscription %s", key, tier, bundle, sub.ID)
+		log.Printf("paddle webhook: minted key %q (tier=%s, bundle=%s) for subscription %s", maskLicenseKey(key), tier, bundle, sub.ID)
 		if sendReceipt {
 			// Non-fatal: a failed receipt must not fail provisioning.
 			if mailErr := sendReceiptEmail(email, key, tier, expiresAt); mailErr != nil {

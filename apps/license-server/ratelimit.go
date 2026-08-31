@@ -476,7 +476,7 @@ func (kf *keyFailureTracker) recordFailure(key string) {
 	if dbAttached {
 		if err := kf.persistFailure(snapKey, snapCount, snapLastAttempt, snapCooldownAt); err != nil {
 			log.Printf("keyFailTracker: persist error for key=%q (in-memory still authoritative): %v",
-				key, err)
+				maskLicenseKey(key), err)
 		}
 	}
 }
@@ -493,7 +493,7 @@ func (kf *keyFailureTracker) clearKey(key string) {
 		if _, err := kf.db.DB().NewQuery(
 			`DELETE FROM rate_limit_key_failures WHERE key = {:key}`,
 		).Bind(map[string]any{"key": key}).Execute(); err != nil {
-			log.Printf("keyFailTracker: failed to delete persisted failure for key=%q: %v", key, err)
+			log.Printf("keyFailTracker: failed to delete persisted failure for key=%q: %v", maskLicenseKey(key), err)
 		}
 	}
 }
@@ -615,7 +615,7 @@ func (kf *keyFailureTracker) persistFailure(key string, count int, lastAttempt, 
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("keyFailTracker: recovered persist panic for key=%q (in-memory still authoritative): %v\n%s", key, r, string(debug.Stack()))
+			log.Printf("keyFailTracker: recovered persist panic for key=%q (in-memory still authoritative): %v\n%s", maskLicenseKey(key), r, string(debug.Stack()))
 			err = nil
 		}
 	}()

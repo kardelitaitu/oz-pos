@@ -239,7 +239,7 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 		keyRecord.Set("activated_at", time.Now().UTC().Format(time.RFC3339))
 		keyRecord.Set("activated_by", req.TenantID)
 		if err := app.Save(keyRecord); err != nil {
-			log.Printf("WARNING: failed to mark key %s as activated: %v", req.Key, err)
+			log.Printf("WARNING: failed to mark key %s as activated: %v", maskLicenseKey(req.Key), err)
 		}
 
 		// ── Clear failure tracking for this key ─────────────────
