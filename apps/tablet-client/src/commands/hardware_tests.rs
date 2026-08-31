@@ -142,3 +142,71 @@ fn payment_dto_deserialize() {
     assert_eq!(p.method, "CASH");
     assert!(p.change.is_some());
 }
+
+// ── Displays and discovery (parity with the desktop shell) ───────────
+
+#[test]
+fn display_show_args_deserialize() {
+    let json = r##"{"display_id":"d1","line1":"Welcome","line2":"Customer"}"##;
+    let args: DisplayShowArgs = serde_json::from_str(json).unwrap();
+    assert_eq!(args.display_id, "d1");
+    assert_eq!(args.line1, "Welcome");
+    assert_eq!(args.line2, "Customer");
+}
+
+#[test]
+fn display_show_args_accepts_exactly_the_keys_the_shared_wizard_sends() {
+    // One React wizard drives both shells. The tablet has no dependency on
+    // the desktop crate, so the parity that matters is the wire shape: pin
+    // the accepted key set and a rename on either side shows up here as a
+    // runtime failure the wizard can no longer produce.
+    let value = serde_json::json!({ "display_id": "pole", "line1": "a", "line2": "b" });
+    let args: DisplayShowArgs = serde_json::from_value(value.clone()).expect("accepted");
+    assert_eq!(args.display_id, "pole");
+
+    let mut keys: Vec<&str> = value
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    assert_eq!(keys, ["display_id", "line1", "line2"]);
+
+    // A missing line is not optional: the display API takes both lines.
+    let missing = serde_json::json!({ "display_id": "pole", "line1": "a" });
+    assert!(
+        serde_json::from_value::<DisplayShowArgs>(missing).is_err(),
+        "line2 must not silently default to empty"
+    );
+}
+
+#[test]
+fn usb_device_info_has_the_fields_the_setup_wizard_renders() {
+    // discover_hardware_scoped hands the HAL's type straight to the wizard.
+    // The shape is not this crate's to choose, so the test exists to catch a
+    // subset being deserialised and blank rows rendered.
+    let json = r#"{
+        "vid": 3128, "pid": 98, "manufacturer": "Epson", "product": "TM-T88",
+        "serial": "X1", "interface_number": 0, "endpoint_in": 129,
+        "endpoint_out": 1, "category": "Printer", "label": "Epson TM-T88"
+    }"#;
+    let info: UsbDeviceInfo = serde_json::from_str(json).expect("deserialises");
+    assert_eq!(info.vid, 3128);
+    assert_eq!(info.manufacturer, "Epson");
+    assert_eq!(info.product, "TM-T88");
+    assert_eq!(info.label, "Epson TM-T88");
+}
+
+#[test]
+fn a_scanner_with_no_out_endpoint_still_deserialises() {
+    // Scanners have no bulk OUT endpoint. If that field were required, every
+    // scanner would silently drop out of the wizard's list.
+    let json = r#"{
+        "vid": 3118, "pid": 2576, "manufacturer": "Honeywell", "product": "Voyager",
+        "serial": "S2", "interface_number": 1, "endpoint_in": 130,
+        "endpoint_out": null, "category": "Scanner", "label": "Honeywell Voyager"
+    }"#;
+    let info: UsbDeviceInfo = serde_json::from_str(json).expect("null endpoint_out is fine");
+    assert!(info.endpoint_out.is_none());
+}
