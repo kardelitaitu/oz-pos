@@ -2955,7 +2955,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
       },
       tier: {
         id: 'tier-1', name: 'Gold', min_points: 100, points_per_unit: 1000,
-        earn_multiplier: 1.5, colour: '#f59e0b', sort_order: 1, created_at: new Date().toISOString(),
+        earn_multiplier_millionths: 1_500_000, colour: '#f59e0b', sort_order: 1, created_at: new Date().toISOString(),
       },
       recent_transactions: [],
       next_tier: null,
@@ -2967,11 +2967,11 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'list_loyalty_tiers_scoped': () => [
     {
       id: 'tier-1', name: 'Gold', min_points: 100, points_per_unit: 1000,
-      earn_multiplier: 1.5, colour: '#f59e0b', sort_order: 1, created_at: new Date().toISOString(),
+      earn_multiplier_millionths: 1_500_000, colour: '#f59e0b', sort_order: 1, created_at: new Date().toISOString(),
     },
     {
       id: 'tier-2', name: 'Platinum', min_points: 500, points_per_unit: 1000,
-      earn_multiplier: 2, colour: '#8b5cf6', sort_order: 2, created_at: new Date().toISOString(),
+      earn_multiplier_millionths: 2_000_000, colour: '#8b5cf6', sort_order: 2, created_at: new Date().toISOString(),
     },
   ],
   'update_loyalty_tier_scoped': () => null,

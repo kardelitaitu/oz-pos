@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseMinorUnits } from '@/types/domain';
+import { millionthsToDecimalString, parseMinorUnits } from '@/types/domain';
 
 /**
  * Exact decimal parsing of user-entered money strings (MONEY-02,
@@ -84,5 +84,36 @@ describe('parseMinorUnits', () => {
   it('rejects results beyond the safe integer range', () => {
     expect(parseMinorUnits('9007199254740993', 2)).toBeNull();
     expect(parseMinorUnits('99999999999999999999', 0)).toBeNull();
+  });
+});
+
+/**
+ * millionthsToDecimalString (LOYALTY-01, 2026-08-31): fixed-point
+ * millionths → plain decimal display, integer-only arithmetic.
+ */
+describe('millionthsToDecimalString (LOYALTY-01)', () => {
+  it('renders seeded and custom multipliers without trailing zeros', () => {
+    expect(millionthsToDecimalString(1_000_000)).toBe('1');
+    expect(millionthsToDecimalString(1_250_000)).toBe('1.25');
+    expect(millionthsToDecimalString(1_400_000)).toBe('1.4');
+    expect(millionthsToDecimalString(2_000_000)).toBe('2');
+    expect(millionthsToDecimalString(1_070_000)).toBe('1.07');
+  });
+
+  it('keeps interior zeros and full six-digit fractions', () => {
+    expect(millionthsToDecimalString(1_000_001)).toBe('1.000001');
+    expect(millionthsToDecimalString(1_100_000)).toBe('1.1');
+    expect(millionthsToDecimalString(1_010_000)).toBe('1.01');
+  });
+
+  it('round-trips through parseMinorUnits at scale 6', () => {
+    for (const m of [1_000_000, 1_250_000, 1_400_000, 1_000_001, 2_000_000]) {
+      expect(parseMinorUnits(millionthsToDecimalString(m), 6)).toBe(m);
+    }
+  });
+
+  it('handles zero and sub-one values', () => {
+    expect(millionthsToDecimalString(0)).toBe('0');
+    expect(millionthsToDecimalString(500_000)).toBe('0.5');
   });
 });

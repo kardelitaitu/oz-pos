@@ -18,6 +18,7 @@ import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { l10nErrorMessage } from '@/utils/app-error';
 import { contrastFg } from '@/utils/color';
+import { millionthsToDecimalString, parseMinorUnits } from '@/types/domain';
 import './LoyaltyManagementScreen.css';
 
 /** Short readable date in the active locale (guards invalid ISO strings). */
@@ -97,7 +98,9 @@ export default function LoyaltyManagementScreen() {
       name: tier.name,
       min_points: String(tier.min_points),
       points_per_unit: String(tier.points_per_unit),
-      earn_multiplier: String(tier.earn_multiplier),
+      // LOYALTY-01: render the stored millionths as a plain decimal —
+      // never String(f64), which could surface representation artifacts.
+      earn_multiplier: millionthsToDecimalString(tier.earn_multiplier_millionths),
       colour: tier.colour,
     });
     setEditingTier(tier.id);
@@ -112,7 +115,9 @@ export default function LoyaltyManagementScreen() {
     const rawPpu = tierForm.points_per_unit.trim();
     const minPts = Number(rawMin);
     const ppu = Number(rawPpu);
-    const mult = Number(tierForm.earn_multiplier.trim());
+    // LOYALTY-01: the multiplier goes on the wire as fixed-point
+    // millionths (scale 6), parsed exactly — a float 1.4 here is the bug.
+    const multMillionths = parseMinorUnits(tierForm.earn_multiplier.trim(), 6);
     const validColour = /^#[0-9a-fA-F]{6}$/.test(tierForm.colour);
     if (
       rawMin === ''
@@ -121,8 +126,8 @@ export default function LoyaltyManagementScreen() {
       || rawPpu === ''
       || !Number.isInteger(ppu)
       || ppu <= 0
-      || !Number.isFinite(mult)
-      || mult <= 0
+      || multMillionths === null
+      || multMillionths <= 0
       || !validColour
       || !tierForm.name.trim()
     ) {
@@ -137,7 +142,7 @@ export default function LoyaltyManagementScreen() {
         name: tierForm.name.trim(),
         min_points: minPts,
         points_per_unit: ppu,
-        earn_multiplier: mult,
+        earn_multiplier_millionths: multMillionths,
         colour: tierForm.colour,
         sort_order: tiers.find((t) => t.id === editingTier)?.sort_order ?? 0,
         created_at: tiers.find((t) => t.id === editingTier)?.created_at ?? '',
@@ -259,7 +264,7 @@ export default function LoyaltyManagementScreen() {
                     <div className="loyalty-tier-field">
                       <Localized id="loyalty-tier-multiplier"><span className="loyalty-tier-label">Multiplier</span></Localized>
                       <Localized id="loyalty-tier-multiplier-aria" attrs={{ 'aria-label': true }}>
-                      <input className="loyalty-tier-input" type="number" step="0.01" value={tierForm.earn_multiplier} onChange={(e) => setTierForm((prev) => ({ ...prev, earn_multiplier: e.target.value }))} />
+                      <input className="loyalty-tier-input" type="number" step="0.000001" value={tierForm.earn_multiplier} onChange={(e) => setTierForm((prev) => ({ ...prev, earn_multiplier: e.target.value }))} />
                       </Localized>
                     </div>
                     <div className="loyalty-tier-field">
@@ -295,7 +300,7 @@ export default function LoyaltyManagementScreen() {
                       </div>
                       <div className="loyalty-tier-detail">
                         <Localized id="loyalty-tier-multiplier"><span>Multiplier</span></Localized>
-                        <span>{tier.earn_multiplier}x</span>
+                        <span>{millionthsToDecimalString(tier.earn_multiplier_millionths)}x</span>
                       </div>
                     </div>
                     <Localized id="edit">

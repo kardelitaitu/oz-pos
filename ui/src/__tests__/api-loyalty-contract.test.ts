@@ -29,7 +29,7 @@ const tier = {
   name: 'Silver',
   min_points: 100,
   points_per_unit: 10,
-  earn_multiplier: 1.25,
+  earn_multiplier_millionths: 1_250_000,
   colour: '#c0c0c0',
   sort_order: 1,
   created_at: '2026-01-01T00:00:00.000Z',

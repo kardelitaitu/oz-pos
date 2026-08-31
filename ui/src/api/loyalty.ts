@@ -6,7 +6,8 @@ export interface LoyaltyTier {
   name: string;
   min_points: number;
   points_per_unit: number;
-  earn_multiplier: number;
+  /** Fixed-point millionths (LOYALTY-01): 1.4× is 1_400_000, never a float. */
+  earn_multiplier_millionths: number;
   colour: string;
   sort_order: number;
   created_at: string;

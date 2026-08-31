@@ -201,6 +201,22 @@ export function parseMinorUnits(input: string, scaleExponent: number): number | 
   return Number(q);
 }
 
+/** Render a fixed-point millionths value (LOYALTY-01 tier multipliers)
+ *  as a plain decimal string without trailing zeros: 1_400_000 → "1.4",
+ *  1_000_000 → "1", 1_070_000 → "1.07". Pure integer arithmetic — the
+ *  value never passes through a binary float, so "1.4" round-trips
+ *  exactly (the whole point of the millionths storage). */
+export function millionthsToDecimalString(millionths: number): string {
+  const neg = millionths < 0;
+  const abs = Math.abs(millionths);
+  const whole = Math.floor(abs / 1_000_000);
+  const frac = abs - whole * 1_000_000;
+  const body = frac === 0
+    ? String(whole)
+    : `${whole}.${String(frac).padStart(6, '0').replace(/0+$/, '')}`;
+  return neg ? `-${body}` : body;
+}
+
 /** Format `Money` for display. Defaults to Indonesian locale (id-ID).
  *  `decimalSep` overrides the per‑store receipt setting (read from
  *  localStorage when omitted). */
