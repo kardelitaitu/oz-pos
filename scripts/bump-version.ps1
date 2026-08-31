@@ -127,9 +127,13 @@ Write-Host "`nUpdating version strings..." -ForegroundColor Cyan
 # PowerShell string - a single backtick escapes the `$` and renders a
 # literal "$currentVersion", so the pattern would never match and the file
 # would be silently skipped (it happened for 0.0.26).
-Update-File "AGENTS.md" "- **Version is locked at the current release (``$currentVersion``).** Never change the version number" "- **Version is locked at the current release (``$TargetVersion``).** Never change the version number"
-Update-File "AGENTS.md" "all read $currentVersion" "all read $TargetVersion"
-Update-File ".agents/AGENTS.md" "- **Version is locked at ``$currentVersion``.** Never change the version number" "- **Version is locked at ``$TargetVersion``.** Never change the version number"
+# AGENTS.md version-lock line is a table row in the current repo format (it used
+# to be a bullet). The audit stamp at the top of the file also carries the locked version.
+Update-File "AGENTS.md" "| **Version Lock** | **Version is locked at ``$currentVersion``. NEVER modify version numbers.** | Do not bump version in ``Cargo.toml``, ``package.json``, ``tauri.conf.json``, etc. |" "| **Version Lock** | **Version is locked at ``$TargetVersion``. NEVER modify version numbers.** | Do not bump version in ``Cargo.toml``, ``package.json``, ``tauri.conf.json``, etc. |"
+Update-File "AGENTS.md" "version lock: $currentVersion" "version lock: $TargetVersion"
+# .agents/AGENTS.md mirrors the table-row format and audit stamp of the root AGENTS.md.
+Update-File ".agents/AGENTS.md" "| **Version Lock** | **Version is locked at ``$currentVersion``. NEVER modify version numbers.** | Do not bump version in ``Cargo.toml``, ``package.json``, ``tauri.conf.json``, etc. |" "| **Version Lock** | **Version is locked at ``$TargetVersion``. NEVER modify version numbers.** | Do not bump version in ``Cargo.toml``, ``package.json``, ``tauri.conf.json``, etc. |"
+Update-File ".agents/AGENTS.md" "version lock: $currentVersion" "version lock: $TargetVersion"
 Update-File "Cargo.toml" "version = `"$currentVersion`"" "version = `"$TargetVersion`""
 Update-File "Dockerfile.server" "version = `"$currentVersion`"" "version = `"$TargetVersion`""
 Update-File "apps/desktop-client/tauri.conf.json" "`"version`": `"$currentVersion`"," "`"version`": `"$TargetVersion`","
@@ -153,8 +157,16 @@ Update-File "ui/src/locales/shared.id.ftl" "statusbar-version = v$currentVersion
 
 # Website (marketing site): package version + i18n version strings. Single-quoted
 # format strings keep the em-dash out of the source; it is injected via [char]0x2014.
-Update-File "website/package.json" "`"version`": `"$currentVersion`"," "`"version`": `"$TargetVersion`","
-Update-File "website/package-lock.json" "`"version`": `"$currentVersion`"," "`"version`": `"$TargetVersion`","
+# Website app version is tracked independently (it can lag the Cargo version,
+# e.g. 0.0.32 while Cargo is 0.0.33), so read its real current value instead of
+# assuming $currentVersion. The bump still targets $TargetVersion.
+$websitePkgPath = "website/package.json"
+if (Test-Path $websitePkgPath) {
+    $websiteVersion = [regex]::Match([System.IO.File]::ReadAllText($websitePkgPath, (New-Object System.Text.UTF8Encoding($false))), '(?m)"version"\s*:\s*"([^"]+)"').Groups[1].Value
+} else { $websiteVersion = $currentVersion }
+
+Update-File "website/package.json" "`"version`": `"$websiteVersion`"," "`"version`": `"$TargetVersion`","
+Update-File "website/package-lock.json" "`"version`": `"$websiteVersion`"," "`"version`": `"$TargetVersion`","
 Update-File "website/src/i18n/en.json" ('"versionValue": "{0}"' -f $currentVersion) ('"versionValue": "{0}"' -f $TargetVersion)
 Update-File "website/src/i18n/en.json" ('"subtitle": "Version {0} {1} free forever, no signup required."' -f $currentVersion, [char]0x2014) ('"subtitle": "Version {0} {1} free forever, no signup required."' -f $TargetVersion, [char]0x2014)
 Update-File "website/src/i18n/id.json" ('"versionValue": "{0}"' -f $currentVersion) ('"versionValue": "{0}"' -f $TargetVersion)
@@ -255,7 +267,13 @@ if (-not $DryRun) {
     $utf8 = New-Object System.Text.UTF8Encoding($false)
     $stale = 0
     foreach ($target in $script:BumpTargets) {
-        if ([System.IO.File]::ReadAllText($target, $utf8).Contains($currentVersion)) {
+        # Audit-stamp HTML comments record historical version moves (e.g. the
+        # README "footer version 0.0.25 -> 0.0.33" line) and are NOT live
+        # version references, so strip comments before the stale check or the
+        # gate would wrongly fail on a record of the previous bump.
+        $raw = [System.IO.File]::ReadAllText($target, $utf8)
+        $stripped = [regex]::Replace($raw, '<!--.*?-->', '', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        if ($stripped.Contains($currentVersion)) {
             Write-Host "STALE: $target still contains $currentVersion" -ForegroundColor Red
             $stale++
         }
