@@ -3752,3 +3752,58 @@ fn checkout_promotions_stack() {
         .unwrap();
     assert_eq!(apps, 2);
 }
+
+/// COR-7 safety: the command layer keys splits as `{attempt}:{n}`. If it ever
+/// reused one key for every row, a two-tender sale would collide with itself on
+/// its own second payment and reject a legitimate sale — strictly worse than
+/// the double-charge the guard exists to prevent, because it stops the till
+/// trading. This pins that a split tender under one attempt persists both rows.
+#[test]
+fn complete_sale_deduction_persists_every_split_keyed_to_one_attempt() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product_with_stock(&conn, "COFFEE", 10);
+
+    let sale = make_single_line_sale("COFFEE", 2, 350); // total 700
+    let splits = vec![
+        crate::PaymentSplitArg {
+            method: "cash".into(),
+            amount_minor: 400,
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+            idempotency_key: Some("attempt-a:0".into()),
+        },
+        crate::PaymentSplitArg {
+            method: "card".into(),
+            amount_minor: 300,
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+            idempotency_key: Some("attempt-a:1".into()),
+        },
+    ];
+
+    s.complete_sale_deduction(&sale, None, &splits, "cashier-1", None)
+        .expect("a split tender must not collide with itself");
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT idempotency_key, method FROM payments WHERE sale_id = ?1
+             ORDER BY idempotency_key",
+        )
+        .unwrap();
+    let rows: Vec<(Option<String>, String)> = stmt
+        .query_map(rusqlite::params![sale.id], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+
+    assert_eq!(
+        rows.iter().filter(|(k, _)| k.is_some()).count(),
+        2,
+        "both splits must persist with their own key, got {rows:?}"
+    );
+    let keys: Vec<&str> = rows.iter().map(|(k, _)| k.as_deref().unwrap()).collect();
+    assert_eq!(keys, vec!["attempt-a:0", "attempt-a:1"]);
+}
