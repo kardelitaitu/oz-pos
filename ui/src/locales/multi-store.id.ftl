@@ -36,6 +36,7 @@ topology-apply-confirm-title = Konfirmasi Perubahan Topologi
 topology-apply-confirm-created = Dibuat
 topology-apply-confirm-updated = Diperbarui
 topology-apply-confirm-archived = Diarsipkan
+topology-apply-confirm-type-changed = Jenis Diubah
 topology-apply-confirm-no-changes = Tidak ada perubahan workspace terdeteksi.
 topology-apply-confirm-pin-label = Masukkan PIN Anda untuk mengonfirmasi
 topology-apply-confirm-pin-placeholder = PIN
@@ -260,6 +261,7 @@ topology-wire-flip-hint-connecting =
     Balik arah? Klik tetap menjaga koneksi Anda tetap berjalan.
 topology-inspector-close-aria = Tutup panel properti
 topology-inspector-hardware-title = Perangkat Keras
+topology-inspector-save-error = Gagal menyimpan lokasi cabang
 topology-warehouse-settings-title = Pengaturan Gudang
 topology-warehouse-capacity = Kapasitas
 # Ditampilkan pada tier non-Pro saat input kapasitas dinonaktifkan (putaran 78).
@@ -344,7 +346,7 @@ topology-peer-group-badge = Grup peer: { $group }
 topology-toast-save-error = Gagal menyimpan topologi
 topology-toast-revision-conflict = Topologi berubah di tempat lain — versi terbaru telah dimuat. Terapkan kembali perubahan Anda.
 topology-toast-no-session = Tidak ada sesi aktif — tidak dapat menyimpan workspace.
-topology-toast-saved = Topologi tersimpan: { $detail }.
+topology-toast-saved = Topologi tersimpan: { $created } dibuat · { $updated } diperbarui · { $archived } diarsipkan · { $typeChanged } diubah jenisnya.
 topology-apply-status-saving = Menyimpan perubahan topologi…
 topology-apply-status-refreshing = Menyegarkan data workspace…
 

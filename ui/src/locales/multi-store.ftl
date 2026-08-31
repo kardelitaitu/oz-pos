@@ -38,6 +38,7 @@ topology-apply-confirm-title = Confirm Topology Changes
 topology-apply-confirm-created = Created
 topology-apply-confirm-updated = Updated
 topology-apply-confirm-archived = Archived
+topology-apply-confirm-type-changed = Type Changed
 topology-apply-confirm-no-changes = No workspace changes detected.
 topology-apply-confirm-pin-label = Enter your PIN to confirm
 topology-apply-confirm-pin-placeholder = PIN
@@ -262,6 +263,7 @@ topology-wire-flip-hint-connecting =
     Flip direction? Clicking keeps your connection in progress.
 topology-inspector-close-aria = Close properties panel
 topology-inspector-hardware-title = Hardware Device
+topology-inspector-save-error = Could not save branch location
 topology-warehouse-settings-title = Warehouse Settings
 topology-warehouse-capacity = Capacity
 # Shown on non-Pro tiers where the capacity inputs are disabled (round 78).
@@ -346,7 +348,7 @@ topology-peer-group-badge = Peer group: { $group }
 topology-toast-save-error = Failed to save topology
 topology-toast-revision-conflict = The topology changed elsewhere — loaded the latest version. Re-apply your changes.
 topology-toast-no-session = No active session — cannot save workspaces.
-topology-toast-saved = Topology saved: { $detail }.
+topology-toast-saved = Topology saved: { $created } created · { $updated } updated · { $archived } archived · { $typeChanged } type-changed.
 topology-apply-status-saving = Saving topology changes…
 topology-apply-status-refreshing = Refreshing workspace data…
 
