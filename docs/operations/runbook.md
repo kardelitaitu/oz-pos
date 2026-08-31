@@ -1,5 +1,7 @@
 # Operations Runbook — OZ-POS (unified Northflank deployment)
 
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (0 findings) · verified against HEAD: apps/unified/healthcheck.sh + docs/archived/2026-08-15-unify-auth-and-sync.md exist; sync port 3099 (config.rs:61); rate limits push100/pull300/status300/snapshot50 + token 30/min/IP + license 5/IP/hr (activate.go:585) all match code; all 6 §2 metric names present in cloud-server/unified -->
+
 One Northflank service, one Docker image. Two functions behind one caddy
 reverse proxy (single public port):
 
@@ -676,3 +678,5 @@ the ~5 min portal build — probe #3 stays the ground truth for what actually sh
   says. Add it to the §5 alert rules as a page-level check.
 - **Treat a red `deploy` job as an incident:** add "Website Deploy `deploy` job failed"
   to §3 — the check job being green is not a signal that anything shipped.
+
+> last audited 31-08-26 by docs-auditor
