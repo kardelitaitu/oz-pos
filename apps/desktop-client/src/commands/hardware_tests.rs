@@ -208,5 +208,5 @@ fn a_preference_naming_an_absent_scanner_changes_nothing() {
 
 #[test]
 fn preference_survives_an_empty_registry() {
-    assert!(prefer_first(vec![], "a".into()).is_empty());
+    assert!(prefer_first(vec![], "a").is_empty());
 }
