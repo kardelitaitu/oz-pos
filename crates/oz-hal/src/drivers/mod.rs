@@ -1,7 +1,7 @@
 /*
 last audited 25-07-26 by RSA-Agent (oz-hal slice A: verified)
 crate: oz-hal | status: SAFE | lint: CLEAN
-findings: clean
+findings: clean — 14 driver modules, all declared, none orphaned. (The dead drivers/scanner.rs that sat here uncompiled was deleted 31-08-26.) drivers/edc/ arrived the same day from oz-payment as part of the HAL unification; its drivers are stubs, so nothing here opens a device that the trait does not model.
 next: none | perf: N/A
 */
 //! Hardware drivers.
@@ -16,6 +16,8 @@ pub mod bt_printer;
 pub mod bt_scanner;
 /// Cash drawer driver (serial / USB).
 pub mod drawer;
+/// EDC card-payment terminal drivers and vendor protocol codecs.
+pub mod edc;
 /// ESC/POS command builder for receipt printers.
 pub mod escpos;
 /// KDS kitchen chit formatter.
