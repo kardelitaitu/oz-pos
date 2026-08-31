@@ -57,7 +57,8 @@ ROOT = Path(__file__).resolve().parent.parent
 #     ROW LEVEL SECURITY; the cloud sync data layer
 #     (apps/cloud-server/src/sync_store.rs) already runs `SET LOCAL
 #     oz.tenant_id = <jwt tenant>` as the first statement of every request
-#     transaction (auto-reset on pool return). See unify-auth-and-sync.md
+#     transaction (auto-reset on pool return). See
+#     docs/archived/2026-08-15-unify-auth-and-sync.md
 #     §11.5 item 6.
 RLS_SQL = """-- ── Row-Level Security: tenant isolation (PG-only) ─────────────────────
 -- See the appendix source in scripts/generate-pg-migration.py.

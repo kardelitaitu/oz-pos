@@ -17,7 +17,7 @@
 | [`releases/`](./releases/) | Changelogs, release process, checklists | [`CHANGELOG-0.0.33.md`](./releases/CHANGELOG-0.0.33.md) |
 | [`observability/`](./observability/) | Logging, error handling, metrics | [`logging-2026-07-20.md`](./observability/logging-2026-07-20.md) |
 | [`benchmarks/`](./benchmarks/) | Performance benchmarks and regression tracking | [`baseline-2026-07-21.md`](./benchmarks/baseline-2026-07-21.md) |
-| [`archived/`](./archived/) | Truly retired documents — completed/superseded audits, old plans, obsolete guides | *(reduced from 39 to ~5 after the 2026-08-31 reorganization)* |
+| [`archived/`](./archived/) | Truly retired documents — completed/superseded audits, old plans, obsolete guides | *(27 files; the 2026-08-31 retirement pass moved the last three repo-root docs here — see [`records/`](./records/) index)* |
 | [`plans/`](./plans/) | Active improvement plans | [`northflank-p1-p7-plan.md`](./plans/northflank-p1-p7-plan.md) |
 
 ## Quick links

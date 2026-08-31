@@ -1,4 +1,16 @@
+---
+area: sync
+title: Unify Auth & Sync to Northflank
+status: Archived (2026-08-31) — implemented; live procedure is docs/operations/runbook.md
+---
+
 # Unify Auth & Sync to Northflank
+
+> **Status:** Archived (2026-08-31) — implemented and closed by the §11.5 Post-Implementation Review (2026-08-15).
+>
+> For the live deployment procedure use [`docs/operations/runbook.md`](../operations/runbook.md).
+> This file is kept as a historical design record for its rationale and its phase numbering
+> ("Phase 1.2", "Phase 3.5", "§11"), which Rust source and the runbook still cite.
 
 > Co-locate the license (auth) server and cloud (sync) server into one
 > Northflank deployment: one Docker image running both functions, two

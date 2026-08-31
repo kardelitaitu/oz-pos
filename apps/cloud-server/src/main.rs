@@ -435,7 +435,8 @@ pub fn build_router(
     config: &config::CloudServerConfig,
     pg: Option<deadpool_postgres::Pool>,
 ) -> Router {
-    // CORS allowlist shared with the oz-api router (unify-auth-and-sync.md
+    // CORS allowlist shared with the oz-api router
+    // (docs/archived/2026-08-15-unify-auth-and-sync.md
     // §11): documented defaults, overridable via OZ_CORS_ORIGINS.
     let cors_origins = oz_api::cors_origins_from_env();
     let cors = oz_api::build_cors(&cors_origins);

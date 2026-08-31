@@ -184,9 +184,15 @@ if (existsSync(observabilityDir)) {
 // ── scattered docs list (kept explicit — they have no folder pattern) ──────
 // 2026-08-31 audit: the standalone audit reports moved from docs/ root to
 // docs/archived/ (retirement pass). Update the list here when one moves.
+// 2026-08-31 retirement pass #2: the three remaining repo-root docs
+// (unify-auth-and-sync, the GLM-5.3 crates audit, and the GLM-5.3 Tauri app
+// review journal) joined them; every citation was rewritten to the new path.
 const scattered = [
   'docs/archived/2026-07-28-retail-pos-theming-audit.md',
   'docs/archived/2026-07-29-retail-pos-ux-audit.md',
+  'docs/archived/2026-08-15-unify-auth-and-sync.md',
+  'docs/archived/2026-08-30-glm-5.3-tauri-app-review.md',
+  'docs/archived/2026-08-31-glm-5.3f-crates-audit.md',
   'docs/archived/code-quality-2026-07-20.md',
   'docs/archived/database-optimization-2026-07-20.md',
   'docs/archived/dev-experience-2026-07-20.md',

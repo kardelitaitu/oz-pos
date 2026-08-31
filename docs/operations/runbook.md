@@ -8,7 +8,7 @@ reverse proxy (single public port):
 | Auth (license) | PocketBase + Go hooks | 8080 | PocketBase SQLite (`pb_data/data.db`) |
 | Sync (cloud) | Rust axum | 3099 | Postgres (managed addon) |
 
-This runbook covers the §11 reliability contract of `unify-auth-and-sync.md`:
+This runbook covers the §11 reliability contract of `docs/archived/2026-08-15-unify-auth-and-sync.md`:
 Postgres PITR, PocketBase backup, restore drills, and alerting on retention
 flatline, queue depth, webhook 5xx, and token-mint rate. It also documents the
 metrics that make each incident observable.
@@ -155,7 +155,7 @@ the throwaway. A drill that has never been executed is not a backup strategy.
 ### 4.2 PocketBase SQLite (auth)
 
 Low-traffic, but irreplaceable: `tenants`, `license_keys`, `subscriptions`,
-`tenant_machines`. Two acceptable strategies per `unify-auth-and-sync.md`:
+`tenant_machines`. Two acceptable strategies per `docs/archived/2026-08-15-unify-auth-and-sync.md`:
 
 **Option A — litestream (continuous, recommended):** replicate
 `/data/pb_data/data.db` to object storage continuously. Minimal config:
@@ -306,7 +306,7 @@ data is exposed:
 
 The sync limiter and snapshot cache are **per-process** (in-memory); scaling
 past one sync instance requires moving both to a shared store (Redis) — see
-the growth path in `unify-auth-and-sync.md`.
+the growth path in `docs/archived/2026-08-15-unify-auth-and-sync.md`.
 
 ---
 
@@ -411,7 +411,7 @@ docker volume prune
 Both live under `/data` so one persistent volume covers the whole service.
 The old `pb_data:/pb/pb_data` mount from the standalone license service no
 longer exists — migrating that data requires a PocketBase backup → restore
-(see `unify-auth-and-sync.md` §Phase 3.5).
+(see `docs/archived/2026-08-15-unify-auth-and-sync.md` §Phase 3.5).
 
 ### Environment variables
 
@@ -424,7 +424,7 @@ longer exists — migrating that data requires a PocketBase backup → restore
 | `OZ_ENFORCE_PLANS` | `1` | reject free-plan sync (403 plan_required) |
 | `OZ_CORS_ORIGINS` | optional | extra origins beyond the default allowlist |
 | `OZ_DB_POOL_SIZE` | `20` | Postgres pool size (ignored for SQLite) |
-| `DATABASE_URL` | `postgres://user:pass@host:5432/db?sslmode=require` | optional — switch from SQLite to the managed PostgreSQL addon (free on Northflank). Requires `sslmode=require` (fail-fast at boot). See `docs/operations/unify-auth-and-sync.md` §Phase 3.5 for the full cutover. The image defaults to `/data/oz-pos.db` (SQLite); this variable overrides the connection string. |
+| `DATABASE_URL` | `postgres://user:pass@host:5432/db?sslmode=require` | optional — switch from SQLite to the managed PostgreSQL addon (free on Northflank). Requires `sslmode=require` (fail-fast at boot). See `docs/archived/2026-08-15-unify-auth-and-sync.md` §Phase 3.5 for the full cutover. The image defaults to `/data/oz-pos.db` (SQLite); this variable overrides the connection string. |
 | `OZ_LOG_FORMAT` | `json` or unset | log output format (plain unless `json`) |
 | `OZ_APPLY_SCHEMA` | `0` post-cutover | default applies full DDL at startup; set `0` once the schema exists and the app runs as the restricted `oz_app` role (§6.3) |
 | `OZ_REDIRECT_ONLY` / `OZ_SYNC_REDIRECT_URL` | optional | sync-redirect mode — `OZ_REDIRECT_ONLY=true` requires `OZ_SYNC_REDIRECT_URL`; dev/testing only |
@@ -452,7 +452,7 @@ longer exists — migrating that data requires a PocketBase backup → restore
 > latency growing) — enable the **free Northflank PostgreSQL addon** and set
 > `DATABASE_URL` (see the env table above). The managed PG addon eliminates
 > the single-writer lock and is the documented production target (see
-> `docs/operations/unify-auth-and-sync.md` §Phase 3.5 for the full cutover,
+> `docs/archived/2026-08-15-unify-auth-and-sync.md` §Phase 3.5 for the full cutover,
 > including the RLS migration). Keep the `/data` volume either way — PocketBase
 > stays on SQLite under `/data/pb_data`.
 

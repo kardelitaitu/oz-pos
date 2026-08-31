@@ -88,11 +88,12 @@ pub struct AppState {
     /// CORS allowlist (origins that may call this API). An empty list
     /// denies every cross-origin request (fail closed); `"*"` allows any
     /// origin (explicit dev opt-in). Defaults to the documented allowlist
-    /// in `unify-auth-and-sync.md` §11; overridable via `OZ_CORS_ORIGINS`.
+    /// in `docs/archived/2026-08-15-unify-auth-and-sync.md` §11; overridable via `OZ_CORS_ORIGINS`.
     pub cors_origins: Vec<String>,
 }
 
-/// Default CORS allowlist — the documented origins in `unify-auth-and-sync.md`
+/// Default CORS allowlist — the documented origins in
+/// `docs/archived/2026-08-15-unify-auth-and-sync.md`
 /// §11: the website (global + Indonesia), the website dev server, and the
 /// Tauri POS app. The Tauri webview origin differs per platform: `tauri://`
 /// on macOS/Linux, `http://tauri.localhost` on Windows (WebView2) — both are
@@ -154,7 +155,8 @@ pub fn security_header_value(production: bool) -> Option<&'static str> {
     production.then_some("max-age=31536000")
 }
 
-/// Security headers applied to every response (unify-auth-and-sync.md §11):
+/// Security headers applied to every response
+/// (`docs/archived/2026-08-15-unify-auth-and-sync.md` §11):
 /// `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
 /// `Content-Security-Policy: default-src 'self'`, and — when
 /// `OZ_PRODUCTION=1` — `Strict-Transport-Security: max-age=31536000`.

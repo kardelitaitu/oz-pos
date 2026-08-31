@@ -1,5 +1,5 @@
 //! Postgres data layer for the oz-api REST handlers (Phase 1.2 of
-//! `unify-auth-and-sync.md`).
+//! `docs/archived/2026-08-15-unify-auth-and-sync.md`).
 /*
 last audited 25-07-26 by RSA-Agent (oz-api slice B: pg deep read)
 crate: oz-api | status: SAFE | lint: CLEAN

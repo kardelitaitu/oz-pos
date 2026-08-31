@@ -8,7 +8,7 @@ Both the sync server (Rust, `/data/oz-pos.db`) and the auth server (PocketBase, 
 **Strategy:**
 Three-part fix covering the configuration gap, not the migration itself:
 1. Add `DATABASE_URL` to the runbook §8 env table (see P3).
-2. Add a one-paragraph note in §8 explaining when to switch: "When the free tier's 200–400 terminal ceiling is reached, or when you observe SQLite lock contention in production, enable the Northflank PostgreSQL addon and set `DATABASE_URL` to the connection string. See `docs/operations/unify-auth-and-sync.md` §Phase 3.5 for the full cutover procedure including the RLS migration."
+2. Add a one-paragraph note in §8 explaining when to switch: "When the free tier's 200–400 terminal ceiling is reached, or when you observe SQLite lock contention in production, enable the Northflank PostgreSQL addon and set `DATABASE_URL` to the connection string. See `docs/archived/2026-08-15-unify-auth-and-sync.md` §Phase 3.5 for the full cutover procedure including the RLS migration."
 3. Consider adding a `Dockerfile.unified` build-time check that fails early if `DATABASE_URL` is unset and `OZ_ENFORCE_PLANS=1` (current SQLite works for dev; production should be on PG).
 
 **Effect after:**
@@ -38,13 +38,13 @@ A new crate added to the workspace triggers a CI failure if either Dockerfile is
 ## P3 — Missing `DATABASE_URL` in the §8 env table
 
 **Condition:**
-The runbook §8 env table (the authoritative config document for the Northflank deployment) lists every `OZ_*`, `PADDLE_*`, and `OZ_SMTP_*` variable but does **not** list `DATABASE_URL`. The only reference to PostgreSQL is in `Dockerfile.unified` line 19 ("set DATABASE_URL to switch to the managed Postgres addon") and in the separate `docs/operations/unify-auth-and-sync.md`. A deployer reading only §8 has no way to know they can switch from SQLite to the free PostgreSQL addon.
+The runbook §8 env table (the authoritative config document for the Northflank deployment) lists every `OZ_*`, `PADDLE_*`, and `OZ_SMTP_*` variable but does **not** list `DATABASE_URL`. The only reference to PostgreSQL is in `Dockerfile.unified` line 19 ("set DATABASE_URL to switch to the managed Postgres addon") and in the separate `docs/archived/2026-08-15-unify-auth-and-sync.md`. A deployer reading only §8 has no way to know they can switch from SQLite to the free PostgreSQL addon.
 
 **Strategy:**
 Add a single row to the §8 env table:
 
 ```
-| `DATABASE_URL` | `postgres://user:pass@host:5432/db?sslmode=require` | optional — switch from SQLite to the managed PostgreSQL addon (free on Northflank). Requires `sslmode=require` (fail-fast at boot). See `docs/operations/unify-auth-and-sync.md` §Phase 3.5 for the full cutover. |
+| `DATABASE_URL` | `postgres://user:pass@host:5432/db?sslmode=require` | optional — switch from SQLite to the managed PostgreSQL addon (free on Northflank). Requires `sslmode=require` (fail-fast at boot). See `docs/archived/2026-08-15-unify-auth-and-sync.md` §Phase 3.5 for the full cutover. |
 ```
 
 **Effect after:**
