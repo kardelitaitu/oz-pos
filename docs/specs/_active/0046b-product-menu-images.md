@@ -31,6 +31,7 @@ author; tablets render).
 | `RetailProductGrid` paginates (`pagedProducts`); `RestaurantMenu` renders `filtered.map` unvirtualized | `RetailProductGrid.tsx:611`, `RestaurantMenu.tsx:921` |
 | Cloud product routes exist for sync (`list_products`, `create_product`, …) | `crates/oz-api/src/routes/products.rs` |
 | Cloud byte store = Northflank volume (`VOLUME ["/data"]`, `OZ_DB_PATH=/data/oz-pos.db`) | `Dockerfile.server`, `docs/plans/northflank-p1-p7-plan.md` |
+| Prod service `oz-cloud` = one combined container: **supervisord {caddy, license/PocketBase, sync/oz-api}** on the single `/data` volume; Caddy terminates auto-TLS with HTTP/2+3 | `Dockerfile.unified:179-215`, `apps/unified/supervisord.conf`, `.github/workflows/deploy.yml` |
 
 ## 3. Architecture (the three rules, made concrete)
 
@@ -123,7 +124,7 @@ author; tablets render).
   recovery path of 0045 stays untouched).
 - **Byte store: the Northflank persistent volume** (decided — not R2, not PG
   `bytea`). Image files live beside the DB at `OZ_IMAGE_DIR` (default
-  `/data/images` in prod, `./data/images` in dev). Capacity math: 6 GB
+  `/data/images` in prod, `./data/images` in dev; oz-api `create_dir_all`s it on startup — no entrypoint change). Capacity math: 6 GB
   volume, ~20 KB per image (512 px q40) ⇒ **≈ 300k images** (a 5k-product
   catalog with full 5-image sets ≈ 500 MB — one volume holds ~12 such
   tenants' worth of headroom at that size); P4 adds a bytes-used metric with
@@ -140,6 +141,7 @@ author; tablets render).
     validation kills directory traversal; immutable,
     `Cache-Control: max-age=31536000, immutable`; unknown hash ⇒ 404).
   - Natural dedupe: re-uploading an existing hash is a no-op success.
+  - Caddy hygiene: the global encode directive must exclude `/api/v1/images*` — WebP is already compressed; re-compressing burns CPU for zero bytes saved.
 - Tablet pull: a tiny **download manager** in the tablet's Rust shell — on
   catalog apply, for each referenced hash with no local file, queue a
   background GET (bounded concurrency 3, LRU eviction of the images dir at a
@@ -226,13 +228,61 @@ are env-tunable per repo convention: `OZ_IMG_PUSH_JITTER_SECS`,
 `OZ_IMG_PULL_JITTER_SECS` (both `60..300`), `OZ_IMG_PUSH_BATCH` (16),
 `OZ_IMG_PULL_CYCLE_CAP` (40).
 
+
+### 3.7 SOTA server-efficiency stack (proposed for ratification)
+
+"State of the art" here means: the strongest mechanism at each layer,
+sized to this fleet (single-region, <= hundreds of devices, <= ~50k images
+per tenant) — not maximal machinery. Verified topology first: devices hit
+Caddy (HTTP/2/3, auto-TLS) -> the supervisord `sync` program = oz-api ->
+the `/data` volume. Every mechanism below is chosen against that reality.
+
+1. **Immutable content-addressing everywhere.** The sha-256 of the
+   transcoded bytes is simultaneously the filename, the ETag, the DB value,
+   and the cache key. Zero invalidation logic exists anywhere in the
+   system, ever — every other mechanism below cheapens against this.
+2. **Exact server-side content spine — `image_refs`.** The cloud keeps
+   (tenant_id, hash, refcount, bytes), maintained transactionally when
+   catalog deltas apply. Four features fall out of one table:
+   `missing_hashes` in the delta response becomes an exact SQL
+   set-difference (no bloom filters — at <= 50k hashes/tenant, exact is
+   cheaper); PUT dedupe is refcount>0 AND file-exists => duplicate; GC is
+   refcount=0 after grace; per-tenant byte accounting for the 4 GB soft
+   alert is SUM(bytes).
+3. **Conditional GETs.** `ETag: "{hash8}"` (free — computed at ingest) +
+   `If-None-Match` on the puller => 304 with a string compare, no disk
+   read. Protects every cache layer between the tablet LRU and the volume.
+4. **HTTP/2 multiplexing + pooled keep-alive.** Free at Caddy; the Rust
+   client (reqwest pool max 4/host, TLS session resumption) multiplexes
+   the 2-in-flight pull GETs over one connection.
+5. **Pack endpoint for cold start** — `GET /api/v1/images:pack?hashes=...`
+   (<= 64 files / <= 2 MB, length-prefixed frames, immutable): a fresh
+   tablet provisioning a 5k-image catalog does ~80 pack requests instead
+   of 5k GETs. Steady state stays per-hash GET for cache granularity.
+   Git packfile thinking, sized down.
+6. **Backpressure contract.** The client ladder honors 429/503 +
+   `Retry-After` — load shedding at Caddy or the OS passes through to the
+   jitter/backoff loop with one line of client code.
+7. **Compression hygiene.** No `Content-Encoding` on image routes (WebP
+   is the compression); Caddy's encode directive excludes the image path
+   (see §3.4).
+8. **Deliberate non-features** (SOTA is also refusing the wrong machinery):
+   no CDN/edge cache (single-region fleet; immutable + 304 already zeroes
+   repeat egress, and a CDN would add an auth-bypass surface for
+   tenant-scoped assets); no LAN tablet-to-desktop shortcut (audit finding
+   c4 — LAN is plaintext today; adding mDNS+TLS is a campaign, not a
+   phase); no application-level singleflight on GETs (the kernel page
+   cache already coalesces concurrent identical reads — the only true miss
+   is the first read after a restart); no bloom-filter reconciliation
+   (exact SQL wins at this cardinality).
+
 ## 4. Work breakdown (each phase = conventional commits, tests first)
 
 | Phase | Deliverable | Touches |
 |---|---|---|
 | **P1 — storage spine** | `products.image_hash` + `product_images` table (sqlite+pg migrations, models, repository), `products_set_image` / `products_clear_image` commands with sniff/limits/transcode/hash/atomic-write/txn + promotion + menu-invariant logic, unit tests (malformed magic, oversized, slot bounds, promotion, menu-clear refusal, dedupe) | `oz-core` (migrations, db/products), `desktop-client/src/commands`, tauri.conf `assetProtocol` |
 | **P2 — UI** | `FixedSizeGrid` on POS rendering slot 1 via `convertFileSrc`, miss→initial-tile fallback; editor flows: assign-at-apply for menu (1 required) and product (primary + ≤4 alternatives with reorder); alternatives strip lazy-mounted; a11y (alt from product name, aria-busy) | `ui/src/features/retail`, `restaurant`, shared `ProductThumb` |
-| **P3 — cloud sync** | `PUT/GET /api/v1/images` on the Northflank volume (`OZ_IMAGE_DIR`, admin-key gate, hash re-verification), image array in the product delta payload, push/pull scheduler lanes with batching + jitter (§3.6), tablet download manager (primary-first, LRU), sync tests | `oz-api`, `Dockerfile.unified` volume note, tablet-client Rust |
+| **P3 — cloud sync** | `PUT/GET /api/v1/images` on the Northflank volume (`OZ_IMAGE_DIR`, admin-key gate, hash re-verification), image array in the product delta payload, image_refs content spine + missing_hashes nudge, push/pull scheduler lanes with batching + jitter (§3.6), pack endpoint for cold start, tablet download manager (primary-first, LRU), sync tests | `oz-api`, `Dockerfile.unified` volume note, tablet-client Rust |
 | **P4 — hygiene** | startup GC sweep (reverse-index + grace), metrics (bytes dir, hit/miss latency, 4 GB soft alert), e2e, docs (`docs/guides`), i18n strings for the editor UI (en+id FTL) | `desktop-client`, `ui`, docs |
 
 **Est. budget:** P1–P2 make a fully local (single-device) feature — shippable
@@ -271,6 +321,7 @@ slice. P3 unlocks tablets. P4 is polish.
   backup cadence (Northflank volume snapshots) alongside the DB backup;
   bytes are re-uploadable from the desktop authoring device as a last resort
   (hashes in the DB prove exactly which files are missing).
+- **The 6 GB volume is shared** (oz-pos.db + pb_data + images/) — image growth can starve the DB's WAL headroom; the 4 GB soft alert exists for exactly this, and the volume backup cadence covers all three at once.
 - **Slot-1 mirror drift** (products.image_hash vs product_images slot 1) —
   both writes live in the same transaction, and P1 ships a consistency
   assertion test; the mirror is a read cache, `product_images` is truth.
