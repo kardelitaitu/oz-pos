@@ -1029,21 +1029,32 @@ pub async fn create_sale(pool: &Pool, tenant_id: &str, sale: &Sale) -> Result<()
 
     for line in &sale.lines {
         let line_cur = currency_str(&line.unit_price.currency)?;
-        // Freeze the product cost at write time (ADR #36 reporting).
-        let cost_minor: Option<i64> = tx
+        // Freeze the product cost at write time (ADR #36 reporting) and
+        // the product identity (REP-05): renaming a product, moving it
+        // between categories, or reusing a deleted sku must never
+        // relabel historical revenue in the email reports.
+        let (cost_minor, product_id, product_name, category_id): (Option<i64>, Option<String>, Option<String>, Option<String>) = tx
             .query_opt(
-                "SELECT cost_minor FROM products WHERE tenant_id = $1 AND sku = $2",
+                "SELECT cost_minor, id, name, category_id FROM products WHERE tenant_id = $1 AND sku = $2",
                 &[&tenant_id, &line.sku],
             )
             .await
             .map_err(|e| PgError::Db(e.to_string()))?
-            .map(|r| r.get::<_, i64>(0))
-            .filter(|&v| v > 0);
+            .map(|r| {
+                (
+                    Some(r.get::<_, i64>(0)).filter(|&v| v > 0),
+                    r.get::<_, Option<String>>(1),
+                    r.get::<_, Option<String>>(2),
+                    r.get::<_, Option<String>>(3),
+                )
+            })
+            .unwrap_or_default();
         tx.execute(
             "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position,
                                      tax_minor, tax_rate_id, tax_breakdown_json,
-                                     serial_number, course, modifiers_json, cost_minor)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
+                                     serial_number, course, modifiers_json, cost_minor,
+                                     product_id, product_name, category_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)",
             &[
                 &line.id,
                 &line.sale_id,
@@ -1060,6 +1071,9 @@ pub async fn create_sale(pool: &Pool, tenant_id: &str, sale: &Sale) -> Result<()
                 &line.course,
                 &line.modifiers_json,
                 &cost_minor,
+                &product_id,
+                &product_name,
+                &category_id,
             ],
         )
         .await

@@ -852,15 +852,13 @@ async fn top_products_pg(
     let sql = format!(
         // REP-06: include currency so rows are grouped per-product AND
         // per-currency; minor units must never be summed across currencies.
-        // REP-05: LEFT JOIN products — a product deleted after a sale must
-        // not erase that sale's revenue from the email report. Grouping is
-        // driven by sl.sku (deleted rows have NULL p.id and would otherwise
-        // collapse into one NULL group); the product columns are grouped
-        // too — PG forbids nesting aggregates, so the per-row cost
-        // fallback cannot wrap MAX().
-        "SELECT COALESCE(p.id, 'deleted:' || sl.sku) AS product_id,
+        // REP-05: identity comes from the sale-line snapshot first; the
+        // products join is only a fallback for legacy NULL rows. Grouping
+        // by the resolved expressions keeps each sale era of a reused sku
+        // on its own correctly-labelled row instead of relabelling history.
+        "SELECT COALESCE(sl.product_id, p.id, 'deleted:' || sl.sku) AS product_id,
                 sl.sku,
-                COALESCE(p.name, sl.sku) AS name,
+                COALESCE(sl.product_name, p.name, sl.sku) AS name,
                 SUM(sl.qty)::bigint AS total_qty,
                 SUM(sl.line_minor)::bigint AS total_minor,
                 SUM(sl.qty * COALESCE(sl.cost_minor, p.cost_minor, 0))::bigint AS cogs_minor,
@@ -872,7 +870,9 @@ async fn top_products_pg(
          WHERE s.status = 'completed'
            AND s.tenant_id = $4
            AND s.created_at::date BETWEEN $1 AND $2
-         GROUP BY sl.sku, s.currency, p.id, p.name, p.cost_minor
+         GROUP BY sl.sku, s.currency, p.cost_minor,
+                  COALESCE(sl.product_id, p.id, 'deleted:' || sl.sku),
+                  COALESCE(sl.product_name, p.name, sl.sku)
          ORDER BY {order_clause}, sl.sku
          LIMIT $3"
     );
@@ -968,18 +968,23 @@ async fn category_breakdown_pg(
     let rows = tx
         .query(
             // REP-06: group by currency so per-currency percentage is correct.
-            "SELECT p.category_id, COALESCE(c.name, 'Uncategorised') AS category_name,
+            // REP-05: category resolved from the sale-line snapshot first —
+            // moving a product between categories after the sale no longer
+            // relabels historical revenue; legacy NULL rows fall back to the
+            // products join.
+            "SELECT COALESCE(sl.category_id, p.category_id) AS category_id,
+                    COALESCE(c.name, 'Uncategorised') AS category_name,
                     SUM(sl.line_minor)::bigint AS total_minor,
                     COUNT(DISTINCT s.id) AS sale_count,
                     s.currency
              FROM sale_lines sl
              JOIN sales s ON sl.sale_id = s.id
              LEFT JOIN products p ON p.sku = sl.sku AND p.tenant_id = s.tenant_id
-             LEFT JOIN categories c ON p.category_id = c.id
+             LEFT JOIN categories c ON c.id = COALESCE(sl.category_id, p.category_id)
              WHERE s.status = 'completed'
                AND s.tenant_id = $3
                AND s.created_at::date BETWEEN $1 AND $2
-             GROUP BY p.category_id, c.name, s.currency
+             GROUP BY COALESCE(sl.category_id, p.category_id), c.name, s.currency
              ORDER BY total_minor DESC",
             &[&start, &end, &tenant],
         )

@@ -544,9 +544,13 @@ impl Store<'_> {
             "total_minor DESC"
         };
         let mut stmt = self.conn.prepare(&format!(
-            "SELECT COALESCE(p.id, sl.sku) AS product_id,
+            // REP-05: identity comes from the sale-line snapshot first; the
+            // products join is only a fallback for legacy NULL rows. Grouping
+            // by the resolved id/name keeps each sale era of a reused sku on
+            // its own correctly-labelled row instead of relabelling history.
+            "SELECT COALESCE(sl.product_id, p.id, sl.sku) AS product_id,
                     sl.sku AS sku,
-                    COALESCE(p.name, sl.sku) AS name,
+                    COALESCE(sl.product_name, p.name, sl.sku) AS name,
                     sl.currency AS currency,
                     SUM(sl.qty) AS total_qty,
                     SUM(sl.line_minor) AS total_minor,
@@ -556,7 +560,9 @@ impl Store<'_> {
              JOIN sales s ON sl.sale_id = s.id
              LEFT JOIN products p ON sl.sku = p.sku
              WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
-             GROUP BY sl.sku, sl.currency
+             GROUP BY sl.sku, sl.currency,
+                      COALESCE(sl.product_id, p.id, sl.sku),
+                      COALESCE(sl.product_name, p.name, sl.sku)
              ORDER BY {order_clause}, sl.sku
              LIMIT ?3"
         ))?;
@@ -772,16 +778,21 @@ impl Store<'_> {
         end_date: &str,
     ) -> Result<Vec<CategoryBreakdownRow>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT p.category_id, COALESCE(c.name, 'Uncategorised') AS category_name,
+            // REP-05: the category is resolved from the sale-line snapshot
+            // first, so moving a product between categories after the sale
+            // no longer relabels (or moves) historical revenue. Legacy NULL
+            // rows fall back to the products join.
+            "SELECT COALESCE(sl.category_id, p.category_id) AS category_id,
+                    COALESCE(c.name, 'Uncategorised') AS category_name,
                     sl.currency AS currency,
                     SUM(sl.line_minor) AS total_minor,
                     COUNT(DISTINCT s.id) AS sale_count
              FROM sale_lines sl
              JOIN sales s ON sl.sale_id = s.id
              LEFT JOIN products p ON sl.sku = p.sku
-             LEFT JOIN categories c ON p.category_id = c.id
+             LEFT JOIN categories c ON c.id = COALESCE(sl.category_id, p.category_id)
              WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
-             GROUP BY p.category_id, sl.currency
+             GROUP BY COALESCE(sl.category_id, p.category_id), sl.currency
              ORDER BY sl.currency, total_minor DESC",
         )?;
         let mut rows: Vec<CategoryBreakdownRow> = stmt

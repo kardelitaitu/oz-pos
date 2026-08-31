@@ -1011,6 +1011,10 @@ CREATE TABLE IF NOT EXISTS "sale_lines" (
     course        TEXT,
     modifiers_json TEXT,
     tax_breakdown_json TEXT, cost_minor BIGINT,
+    -- REP-05: product identity frozen at sale time (see 20260826 SQLite
+    -- migration). Deliberately NO foreign keys: these must survive
+    -- product/category deletion — they are history, not references.
+    product_id TEXT, product_name TEXT, category_id TEXT,
     UNIQUE (sale_id, line_position)
 );
 

@@ -157,12 +157,16 @@ pub struct HeldCartFull {
 /// negative split is never legitimate and is rejected even when the sum
 /// happens to cover the total. Summing uses checked arithmetic so a huge
 /// split list cannot overflow past the total.
-/// Insert one sale line with the HPP cost snapshot (ADR #36 reporting).
+/// Insert one sale line with the HPP cost snapshot (ADR #36 reporting)
+/// and the product-identity snapshot (REP-05).
 ///
 /// The product's cost is frozen at write time so historical margins never
-/// change when `products.cost_minor` is edited later. NULL when the product
-/// is missing or has no cost set — the reporting layer falls back to the
-/// product's current cost (and 0) via COALESCE.
+/// change when `products.cost_minor` is edited later. The product id, name
+/// and category are frozen too, so renaming a product, moving it between
+/// categories, or reusing a deleted product's sku cannot relabel historical
+/// revenue in reports. NULL snapshots (missing product, or rows written
+/// before the snapshot migration) fall back to the products join via
+/// COALESCE in the reporting layer.
 fn insert_sale_line(tx: &rusqlite::Transaction<'_>, line: &SaleLine) -> Result<(), CoreError> {
     let unit_cur =
         std::str::from_utf8(&line.unit_price.currency.0).map_err(|e| CoreError::Validation {
@@ -172,20 +176,28 @@ fn insert_sale_line(tx: &rusqlite::Transaction<'_>, line: &SaleLine) -> Result<(
     // `products.cost_minor` is `NOT NULL DEFAULT 0` — 0 means "cost not
     // set". Normalize it to NULL so an unset snapshot can never shadow a
     // later-set product cost in the reporting COALESCE fallback.
-    let cost_minor = match tx.query_row(
-        "SELECT cost_minor FROM products WHERE sku = ?1",
+    let (cost_minor, product_id, product_name, category_id) = match tx.query_row(
+        "SELECT cost_minor, id, name, category_id FROM products WHERE sku = ?1",
         params![line.sku],
-        |row| row.get::<_, i64>(0),
+        |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
+            ))
+        },
     ) {
-        Ok(v) if v > 0 => Some(v),
-        Ok(_) | Err(rusqlite::Error::QueryReturnedNoRows) => None,
+        Ok((c, pid, pname, cid)) => (if c > 0 { Some(c) } else { None }, pid, pname, cid),
+        Err(rusqlite::Error::QueryReturnedNoRows) => (None, None, None, None),
         Err(e) => return Err(CoreError::Db(e)),
     };
     tx.execute(
         "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position,
                                  tax_minor, tax_rate_id, tax_breakdown_json,
-                                 serial_number, course, modifiers_json, cost_minor)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                                 serial_number, course, modifiers_json, cost_minor,
+                                 product_id, product_name, category_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
         params![
             line.id,
             line.sale_id,
@@ -202,6 +214,9 @@ fn insert_sale_line(tx: &rusqlite::Transaction<'_>, line: &SaleLine) -> Result<(
             line.course,
             line.modifiers_json,
             cost_minor,
+            product_id,
+            product_name,
+            category_id,
         ],
     )?;
     Ok(())

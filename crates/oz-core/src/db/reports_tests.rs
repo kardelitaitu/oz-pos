@@ -866,11 +866,13 @@ fn top_products_keeps_deleted_product_sales_under_their_sku() {
 }
 
 #[test]
-fn category_breakdown_buckets_deleted_product_sales_as_uncategorised() {
+fn category_breakdown_keeps_deleted_product_in_its_snapshot_category() {
     // REP-05: sales of deleted products vanished from the category
     // breakdown entirely (INNER JOIN products), inflating every
     // remaining category's percentage — the pie claimed 100% of
-    // revenue while a quarter of it was missing.
+    // revenue while a quarter of it was missing. With the identity
+    // snapshot, a deleted product's revenue not only stays visible,
+    // it keeps the CATEGORY the product actually had at sale time.
     let conn = fresh();
     let s = store(&conn);
     s.create_category("cat-keep", "Drinks", "#00f", "").unwrap();
@@ -917,18 +919,60 @@ fn category_breakdown_buckets_deleted_product_sales_as_uncategorised() {
     let rows = s.category_breakdown("2000-01-01", "2099-12-31").unwrap();
     let total: i64 = rows.iter().map(|r| r.total_minor).sum();
     assert_eq!(total, 4000, "no revenue may vanish from the breakdown");
+    assert_eq!(
+        rows.len(),
+        1,
+        "the snapshot keeps the deleted product in Drinks, not Uncategorised"
+    );
     let drinks = rows.iter().find(|r| r.category_name == "Drinks").unwrap();
-    let uncat = rows
-        .iter()
-        .find(|r| r.category_name == "Uncategorised")
-        .expect("deleted product's revenue must land in the uncategorised bucket");
-    assert_eq!(drinks.total_minor, 3000);
-    assert_eq!(uncat.total_minor, 1000);
+    assert_eq!(drinks.total_minor, 4000);
     assert!(
-        (drinks.percentage - 75.0).abs() < 0.01,
-        "percentage must normalize against the FULL revenue, got {}",
+        (drinks.percentage - 100.0).abs() < 0.01,
+        "all revenue is Drinks, got {}",
         drinks.percentage
     );
+}
+
+#[test]
+fn category_breakdown_legacy_deleted_product_falls_back_to_uncategorised() {
+    // Legacy rows (NULL snapshot) of deleted products still land in the
+    // Uncategorised bucket — the join fallback has nothing to resolve.
+    let conn = fresh();
+    let s = store(&conn);
+    s.create_category("cat-keep", "Drinks", "#00f", "").unwrap();
+    s.create_product(
+        "GONE",
+        "Gone",
+        price(1000),
+        Some("cat-keep"),
+        None,
+        100,
+        None,
+    )
+    .unwrap();
+    let mut cart = Cart::new(usd());
+    cart.add_line(CartLine::new(Sku::new("GONE"), 1, price(1000)))
+        .unwrap();
+    let mut sale = Sale::from_cart(&cart).unwrap();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    sale.created_at = now.clone();
+    sale.updated_at = now;
+    s.create_sale(&sale).unwrap();
+    s.update_sale_status(&sale.id, SaleStatus::Active).unwrap();
+    s.update_sale_status(&sale.id, SaleStatus::Completed)
+        .unwrap();
+    conn.execute(
+        "UPDATE sale_lines SET category_id = NULL, product_id = NULL, product_name = NULL",
+        [],
+    )
+    .unwrap();
+    conn.execute("DELETE FROM products WHERE sku = 'GONE'", [])
+        .unwrap();
+
+    let rows = s.category_breakdown("2000-01-01", "2099-12-31").unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].category_name, "Uncategorised");
+    assert_eq!(rows[0].total_minor, 1000);
 }
 
 #[test]
