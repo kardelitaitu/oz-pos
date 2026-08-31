@@ -985,6 +985,9 @@ CREATE TABLE IF NOT EXISTS receipt_barcodes (
 
 CREATE TABLE IF NOT EXISTS refunds (
     id              TEXT PRIMARY KEY,
+    -- REP-04 cloud parity: tenant scoping mirrors 20260827 on SQLite and
+    -- lets RLS isolate the refund ledger like every other money table.
+    tenant_id       TEXT NOT NULL DEFAULT 'default',
     sale_id         TEXT NOT NULL REFERENCES sales(id) ON DELETE RESTRICT,
     total_minor     BIGINT NOT NULL CHECK (total_minor >= 0),
     currency        TEXT NOT NULL,
@@ -1017,6 +1020,11 @@ CREATE TABLE IF NOT EXISTS "sale_lines" (
     product_id TEXT, product_name TEXT, category_id TEXT,
     UNIQUE (sale_id, line_position)
 );
+
+-- REP-04 cloud parity: the refund ledger feeds the email-report netting
+-- (idx below); the table itself is defined with the other money tables.
+CREATE INDEX IF NOT EXISTS idx_refunds_tenant_created
+    ON refunds(tenant_id, created_at);
 
 
 CREATE TABLE IF NOT EXISTS tables (
@@ -1946,7 +1954,7 @@ BEGIN
                             'media_thumbnails','offline_queue','payment_gateways',
                             'payment_settlements','product_activity',
                             'product_bundles','product_taxes','product_variants',
-                            'products','sales','sent_reports','stripe_customers',
+                            'products','refunds','sales','sent_reports','stripe_customers',
                             'sync_terminals','tax_rates','tenant_plans',
                             'tenant_subscription','users']
     LOOP

@@ -8,7 +8,7 @@
 //!
 //! - sync function: `offline_queue`, `tenant_plans`
 //! - REST / snapshots: `products`, `categories`, `tax_rates`, `users`,
-//!   `roles`, `assignments`, `sales`, `sale_lines`, `payments`,
+//!   `roles`, `assignments`, `sales`, `sale_lines`, `refunds`, `payments`,
 //!   `sync_terminals`, `settings`
 //! - webhooks: `processed_webhooks`, `stripe_customers`
 //!
@@ -77,6 +77,7 @@ const DEFAULT_TABLES: &[&str] = &[
     "assignments",
     "sales",
     "sale_lines",
+    "refunds",
     "payments",
     "sync_terminals",
     "processed_webhooks",

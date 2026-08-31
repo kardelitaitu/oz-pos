@@ -957,16 +957,21 @@ async fn pg_integration_email_analytics_visible_as_restricted_role() {
              END $$;
              CREATE ROLE {role} LOGIN PASSWORD 'oz_email_rls_probe_pw';
              GRANT USAGE ON SCHEMA public TO {role};
-             GRANT SELECT, INSERT, UPDATE, DELETE ON sales, sale_lines, sent_reports, products TO {role};
+             GRANT SELECT, INSERT, UPDATE, DELETE ON sales, sale_lines, sent_reports, products, refunds TO {role};
              ALTER TABLE sales ENABLE ROW LEVEL SECURITY;
              ALTER TABLE sent_reports ENABLE ROW LEVEL SECURITY;
+             ALTER TABLE refunds ENABLE ROW LEVEL SECURITY;
              ALTER TABLE sales FORCE ROW LEVEL SECURITY;
              ALTER TABLE sent_reports FORCE ROW LEVEL SECURITY;
+             ALTER TABLE refunds FORCE ROW LEVEL SECURITY;
              DROP POLICY IF EXISTS tenant_isolation ON sales;
              CREATE POLICY tenant_isolation ON sales
                  USING (tenant_id = current_setting('oz.tenant_id', true));
              DROP POLICY IF EXISTS tenant_isolation ON sent_reports;
              CREATE POLICY tenant_isolation ON sent_reports
+                 USING (tenant_id = current_setting('oz.tenant_id', true));
+             DROP POLICY IF EXISTS tenant_isolation ON refunds;
+             CREATE POLICY tenant_isolation ON refunds
                  USING (tenant_id = current_setting('oz.tenant_id', true));"
         ))
         .await
@@ -1193,4 +1198,114 @@ async fn pg_integration_active_tenants_survives_rls_cutover() {
     // production depends on it, and dropping it here would race concurrent
     // tests that use it. It is idempotently re-created (`IF NOT EXISTS`) by
     // the next run.
+}
+
+/// REP-04 cloud parity: daily revenue nets the refund ledger per
+/// (date, currency) with FULL OUTER semantics — a refund-only day must
+/// produce a row (total 0, negative net) instead of vanishing. Uses a
+/// unique tenant id so concurrent PG tests on tenant 'default' can
+/// never leak into the window. Skips when Postgres is unreachable.
+/// `#[serial]`: like the other PG integration tests here, it shares the
+/// base database's catalog state (roles, grants, FORCE RLS) with the
+/// restricted-role tests, which mutate it mid-flight.
+#[tokio::test]
+#[serial(pg_rls_cutover)]
+async fn pg_daily_revenue_nets_refunds_per_date_and_currency() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG refund-netting test skipped: {e}");
+            return;
+        }
+    };
+
+    let ns = format!("pg-refund-net-{}", uuid::Uuid::now_v7());
+    let sale_id = format!("{ns}-sale");
+    {
+        let client = pool.get().await.unwrap();
+        for sql in [
+            "DELETE FROM refunds WHERE id LIKE 'pg-refund-net-%'",
+            "DELETE FROM sales WHERE id LIKE 'pg-refund-net-%'",
+        ] {
+            client.execute(sql, &[]).await.unwrap();
+        }
+    }
+
+    let mut client = pool.get().await.unwrap();
+    let tx = client.transaction().await.unwrap();
+    tx.execute(
+        "INSERT INTO sales (id, tenant_id, total_minor, currency, line_count, status, payment_method,
+                            tendered_minor, discount_percent, discount_label, user_id, created_at,
+                            updated_at, subtotal_minor, tax_total_minor, customer_id, version)
+         VALUES ($1, $2, 10000, 'USD', 0, 'completed', 'cash', 10000, 0, NULL, NULL,
+                 '2026-01-10T09:00:00.000Z', '2026-01-10T09:00:00.000Z', 10000, 0, NULL, 1)",
+        &[&sale_id, &ns],
+    )
+    .await
+    .unwrap();
+    // (date, currency, total) — two USD refunds on different days and one
+    // IDR refund sharing a day with a USD refund (currency separation).
+    for (rid, day, cur, amount) in [
+        (format!("{ns}-r1"), "2026-01-11", "USD", 4000i64),
+        (format!("{ns}-r2"), "2026-01-15", "USD", 2000),
+        (format!("{ns}-r3"), "2026-01-11", "IDR", 5000),
+    ] {
+        tx.execute(
+            "INSERT INTO refunds (id, tenant_id, sale_id, total_minor, currency, reason, note,
+                                  processed_by, created_at)
+             VALUES ($1, $2, $3, $4, $5, 'defective', '', 'user-1', $6)",
+            &[
+                &rid,
+                &ns,
+                &sale_id,
+                &amount,
+                &cur,
+                &format!("{day}T12:00:00.000Z"),
+            ],
+        )
+        .await
+        .unwrap();
+    }
+    tx.commit().await.unwrap();
+
+    let rows = daily_revenue_pg(&pool, "2026-01-01", "2026-01-31", &ns)
+        .await
+        .expect("daily_revenue_pg");
+
+    let find = |date: &str, currency: &str| {
+        rows.iter()
+            .find(|r| r.date.starts_with(date) && r.currency == currency)
+    };
+    let sale_day = find("2026-01-10", "USD").expect("sale day row");
+    assert_eq!(sale_day.total_minor, 10000);
+    assert_eq!(sale_day.refund_minor, 0);
+    assert_eq!(sale_day.net_revenue_minor, 10000);
+
+    let r1 = find("2026-01-11", "USD").expect("refund-only USD day must produce a row");
+    assert_eq!(r1.total_minor, 0);
+    assert_eq!(r1.sale_count, 0);
+    assert_eq!(r1.refund_minor, 4000);
+    assert_eq!(r1.net_revenue_minor, -4000);
+
+    let r_idr = find("2026-01-11", "IDR").expect("IDR refund must not merge into the USD row");
+    assert_eq!(r_idr.refund_minor, 5000);
+    assert_eq!(r_idr.net_revenue_minor, -5000);
+
+    let r2 = find("2026-01-15", "USD").expect("second refund day row");
+    assert_eq!(r2.refund_minor, 2000);
+    assert_eq!(r2.net_revenue_minor, -2000);
+
+    // Sweep this run's rows.
+    let client = pool.get().await.unwrap();
+    client
+        .execute("DELETE FROM refunds WHERE id LIKE 'pg-refund-net-%'", &[])
+        .await
+        .unwrap();
+    client
+        .execute("DELETE FROM sales WHERE id LIKE 'pg-refund-net-%'", &[])
+        .await
+        .unwrap();
 }

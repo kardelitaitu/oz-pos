@@ -502,6 +502,7 @@ fn existing_db_with_legacy_rows_upgrades_idempotently() {
             "20260824_media_edc.sql".to_string(),
             "20260825_payment_infra.sql".to_string(),
             "20260826_sale_line_snapshots.sql".to_string(),
+            "20260827_refunds_tenant.sql".to_string(),
         ]
     );
 
