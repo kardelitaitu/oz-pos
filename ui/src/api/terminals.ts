@@ -142,30 +142,12 @@ export interface TerminalProfileDto {
   updatedAt: string;
 }
 
-/** Get the profile for a terminal. */
-export const getTerminalProfile = (
-  terminalId: string,
-): Promise<TerminalProfileDto | null> =>
-  loggedInvoke<TerminalProfileDto | null>('get_terminal_profile', { terminalId });
-
 /** Get terminal profile (scoped — ADR #7). */
 export const getTerminalProfileScoped = (
   sessionToken: string,
   terminalId: string,
 ): Promise<TerminalProfileDto | null> =>
   loggedInvoke<TerminalProfileDto | null>('get_terminal_profile_scoped', { sessionToken, terminalId });
-
-/** Set or update a terminal's profile. */
-export const setTerminalProfile = (
-  userId: string,
-  terminalId: string,
-  profileType: string,
-  lockedScreen: string | null,
-): Promise<void> =>
-  loggedInvoke<void>('set_terminal_profile', {
-    userId,
-    args: { terminalId, profileType, lockedScreen },
-  });
 
 /** Set terminal profile (scoped — ADR #7). */
 export const setTerminalProfileScoped = (
@@ -179,20 +161,9 @@ export const setTerminalProfileScoped = (
     args: { terminalId, profileType, lockedScreen },
   });
 
-/** List all terminal profiles. */
-export const listTerminalProfiles = (): Promise<TerminalProfileDto[]> =>
-  loggedInvoke<TerminalProfileDto[]>('list_terminal_profiles');
-
 /** List terminal profiles (scoped — ADR #7). */
 export const listTerminalProfilesScoped = (sessionToken: string): Promise<TerminalProfileDto[]> =>
   loggedInvoke<TerminalProfileDto[]>('list_terminal_profiles_scoped', { sessionToken });
-
-/** Delete a terminal's profile. */
-export const deleteTerminalProfile = (
-  userId: string,
-  terminalId: string,
-): Promise<void> =>
-  loggedInvoke<void>('delete_terminal_profile', { userId, terminalId });
 
 /** Delete terminal profile (scoped — ADR #7). */
 export const deleteTerminalProfileScoped = (
@@ -211,25 +182,9 @@ export interface DeviceBindingDto {
   signatureValid: boolean;
 }
 
-/** Get a terminal's device binding and validate its HMAC signature. */
-export const getDeviceBinding = (terminalId: string): Promise<DeviceBindingDto> =>
-  loggedInvoke<DeviceBindingDto>('get_device_binding', { terminalId });
-
 /** Get device binding (scoped — ADR #7). */
 export const getDeviceBindingScoped = (sessionToken: string, terminalId: string): Promise<DeviceBindingDto> =>
   loggedInvoke<DeviceBindingDto>('get_device_binding_scoped', { sessionToken, terminalId });
-
-/** Set (or update) a terminal's device binding with HMAC signature. */
-export const setDeviceBinding = (
-  userId: string,
-  terminalId: string,
-  boundStoreId: string,
-  boundInstanceId: string,
-): Promise<void> =>
-  loggedInvoke<void>('set_device_binding', {
-    userId,
-    args: { terminalId, boundStoreId, boundInstanceId },
-  });
 
 /** Set device binding (scoped — ADR #7). */
 export const setDeviceBindingScoped = (
@@ -242,13 +197,6 @@ export const setDeviceBindingScoped = (
     sessionToken,
     args: { terminalId, boundStoreId, boundInstanceId },
   });
-
-/** Clear a terminal's device binding. */
-export const clearDeviceBinding = (
-  userId: string,
-  terminalId: string,
-): Promise<void> =>
-  loggedInvoke<void>('clear_device_binding', { userId, terminalId });
 
 /** Clear device binding (scoped — ADR #7). */
 export const clearDeviceBindingScoped = (

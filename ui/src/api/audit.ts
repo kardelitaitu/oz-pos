@@ -30,12 +30,6 @@ export interface ListAuditLogScopedArgs {
   beforeId?: string;
 }
 
-/** List audit log entries with pagination (global DB, legacy). */
-export const listAuditLog = (limit: number = 100, offset: number = 0): Promise<AuditEntryDto[]> =>
-  loggedInvoke<AuditEntryDto[]>('list_audit_log', {
-    args: { limit, offset },
-  });
-
 /**
  * Server-filtered, keyset-paginated audit log for the session's store
  * (AUD-01/02/03). The session resolves the store and user server-side and

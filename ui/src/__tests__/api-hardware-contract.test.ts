@@ -24,11 +24,11 @@ import {
   listScanners,
   startScanner,
   stopScanner,
-  listDisplays,
-  displayShow,
-  displayClear,
+  listDisplaysScoped,
+  displayShowScoped,
+  displayClearScoped,
   readScaleWeight,
-  discoverHardware,
+  discoverHardwareScoped,
 } from '@/api/hardware';
 
 describe('hardware.ts IPC contract', () => {
@@ -82,24 +82,24 @@ describe('hardware.ts IPC contract', () => {
     expect(mockInvoke).toHaveBeenCalledWith('stop_scanner', undefined);
   });
 
-  // ── Customer Display ──────────────────────────────────────
+  // ── Customer Display (scoped — ADR #7) ──────────────────────
 
-  it('listDisplays → list_displays (no args)', async () => {
+  it('listDisplaysScoped → list_displays_scoped with sessionToken', async () => {
     mockInvoke.mockResolvedValue([]);
-    await listDisplays();
-    expect(mockInvoke).toHaveBeenCalledWith('list_displays', undefined);
+    await listDisplaysScoped('tok');
+    expect(mockInvoke).toHaveBeenCalledWith('list_displays_scoped', { sessionToken: 'tok' });
   });
 
-  it('displayShow → display_show with args', async () => {
+  it('displayShowScoped → display_show_scoped with sessionToken + args', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await displayShow({ displayId: 'd1', line1: 'Total', line2: '$10.00' });
-    expect(mockInvoke).toHaveBeenCalledWith('display_show', { args: { displayId: 'd1', line1: 'Total', line2: '$10.00' } });
+    await displayShowScoped('tok', { displayId: 'd1', line1: 'Total', line2: '$10.00' });
+    expect(mockInvoke).toHaveBeenCalledWith('display_show_scoped', { sessionToken: 'tok', args: { displayId: 'd1', line1: 'Total', line2: '$10.00' } });
   });
 
-  it('displayClear → display_clear with displayId', async () => {
+  it('displayClearScoped → display_clear_scoped with sessionToken + displayId', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await displayClear('d1');
-    expect(mockInvoke).toHaveBeenCalledWith('display_clear', { displayId: 'd1' });
+    await displayClearScoped('tok', 'd1');
+    expect(mockInvoke).toHaveBeenCalledWith('display_clear_scoped', { sessionToken: 'tok', displayId: 'd1' });
   });
 
   // ── Weight Scale ──────────────────────────────────────────
@@ -110,12 +110,12 @@ describe('hardware.ts IPC contract', () => {
     expect(mockInvoke).toHaveBeenCalledWith('read_scale_weight', undefined);
   });
 
-  // ── Device Discovery ──────────────────────────────────────
+  // ── Device Discovery (scoped — ADR #7) ─────────────────────
 
-  it('discoverHardware → discover_hardware (no args)', async () => {
+  it('discoverHardwareScoped → discover_hardware_scoped with sessionToken', async () => {
     mockInvoke.mockResolvedValue([]);
-    await discoverHardware();
-    expect(mockInvoke).toHaveBeenCalledWith('discover_hardware', undefined);
+    await discoverHardwareScoped('tok');
+    expect(mockInvoke).toHaveBeenCalledWith('discover_hardware_scoped', { sessionToken: 'tok' });
   });
 
   // ── Error propagation ─────────────────────────────────────

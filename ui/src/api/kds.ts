@@ -113,10 +113,6 @@ export interface UpdateKdsOrderItemsInput {
   line_items?: CreateKdsLineItemInput[] | null;
 }
 
-/** Update the items (summary + count) on an existing KDS order. */
-export const updateKdsOrderItems = (userId: string, args: UpdateKdsOrderItemsInput): Promise<KdsOrder> =>
-  loggedInvoke<KdsOrder>('update_kds_order_items', { userId, args });
-
 /** Update KDS order items (scoped — ADR #7). */
 export const updateKdsOrderItemsScoped = (sessionToken: string, args: UpdateKdsOrderItemsInput): Promise<KdsOrder> =>
   loggedInvoke<KdsOrder>('update_kds_order_items_scoped', { sessionToken, args });
