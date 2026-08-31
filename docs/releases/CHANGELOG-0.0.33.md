@@ -37,6 +37,13 @@ This release is the **audit + hardening + security** cycle. It closes 40+ audit 
 - **REP-04:** Net refunds properly netted into revenue reports
 - Shortfall reconstruction carries line currency correctly
 
+## Checkout Features (landed post-audit)
+
+- **PROMO-3:** Fixed/BXGY promotions now apply at checkout — engine-previewed totals (`compute_checkout_promotions`), `promotionIds` on checkout args, and application rows persisted inside the checkout transaction (desktop + tablet)
+- **LOY-03:** Loyalty points are reversed on refund inside the refund transaction, using integer round-half-up proportional points (no float on money)
+- **COR-7:** Checkout replay guard — a client `attemptId` becomes per-split `idempotency_key`s backed by `UNIQUE idx_payments_idempotency_key`, so a retried checkout returns the original receipt instead of double-charging (desktop; tablet guard pending)
+- **CUR-11:** `PaymentModal` loads one newest exchange rate per currency pair via `list_latest_exchange_rates_scoped` (bounded latest-per-pair) instead of the full rate history
+
 ## Website & Account Portal
 
 - **httpOnly cookie migration (R1):** Account portal session migrated to httpOnly cookie; cookie-only sessions now load the dashboard
