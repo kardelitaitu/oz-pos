@@ -1,0 +1,354 @@
+/*
+last audited 31-08-26 by DSH-Agent (bootstrap module, new)
+crate: oz-hal | status: SAFE | lint: CLEAN
+findings: exists because the registry had a complete read side and no write side — DriverRegistry::discover() had exactly one caller (registry_tests.rs:213) and no app ever called register_*, so every hardware command resolved None at runtime while the setup wizard could still list devices via probe_all(). Deliberately does NOT open any device: constructing a driver only records addressing, so a bad saved profile cannot block startup, and the first real I/O error surfaces on the operation that needs the device. Scales are absent because TerminalProfile stores a device path but HidWeightScale needs vendor/product ids the profile never captured — that is a config-schema gap, not a wiring gap.
+next: scale config needs vid/pid in TerminalProfile | perf: sequential registration; a handful of devices, no benefit from concurrency
+*/
+//! Registry bootstrap — turning saved hardware configuration into drivers.
+//!
+//! [`HardwareConfig`] is the HAL's own description of what an operator
+//! configured. An app reads its persistence layer (for OZ-POS that is
+//! `platform_core::terminal_profile::TerminalProfile`) and maps it here;
+//! the HAL never reaches into a settings table.
+//!
+//! [`DriverRegistry::apply_config`] then registers each entry and returns a
+//! [`BootstrapReport`] naming what was registered, skipped, or rejected.
+//! Registration never blocks: constructing a driver records addressing only.
+
+use std::fmt;
+
+use serde::{Deserialize, Serialize};
+
+use crate::drivers::edc::WirelessTarget;
+use crate::registry::DriverRegistry;
+use crate::types::DeviceInfo;
+
+/// Baud rate assumed when a saved profile predates the baud field or
+/// recorded zero. 9600 is the default on every thermal printer and pole
+/// display this crate ships a driver for.
+pub const DEFAULT_BAUD: u32 = 9600;
+
+/// How a configured device is reached.
+///
+/// The string forms the profile uses are `"usb"`, `"serial"`, `"bluetooth"`,
+/// `"network"` and `"auto"`; [`Connection::parse`] accepts them
+/// case-insensitively so a profile saved by an older build still loads.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Connection {
+    /// Match by USB vendor/product, no address needed.
+    Usb,
+    /// Serial port at a given baud rate.
+    Serial {
+        /// Platform port name (`COM3`, `/dev/ttyUSB0`).
+        port: String,
+        /// Baud rate; 9600 when the profile did not record one.
+        baud: u32,
+    },
+    /// Bluetooth SPP exposed as a serial port by the OS.
+    Bluetooth {
+        /// The COM/port name the stack bound the device to.
+        port: String,
+    },
+    /// Host[:port] socket.
+    Network {
+        /// Address, e.g. `192.168.1.50:9100`.
+        addr: String,
+    },
+}
+
+impl Connection {
+    /// Parse the profile's connection vocabulary. Returns `None` for
+    /// `"none"`, `"disabled"`, `"auto"` and anything unrecognised, which the
+    /// caller reports as skipped rather than failed.
+    #[must_use]
+    pub fn parse(kind: &str, address: &str, baud: u32) -> Option<Self> {
+        match kind.trim().to_ascii_lowercase().as_str() {
+            "usb" => Some(Self::Usb),
+            "serial" if !address.trim().is_empty() => Some(Self::Serial {
+                port: address.trim().to_owned(),
+                baud: if baud == 0 { DEFAULT_BAUD } else { baud },
+            }),
+            "bluetooth" | "bt" if !address.trim().is_empty() => Some(Self::Bluetooth {
+                port: address.trim().to_owned(),
+            }),
+            "network" | "tcp" | "ethernet" if !address.trim().is_empty() => Some(Self::Network {
+                addr: address.trim().to_owned(),
+            }),
+            _ => None,
+        }
+    }
+
+    /// The address this connection names, if any.
+    #[must_use]
+    pub fn address(&self) -> Option<&str> {
+        match self {
+            Self::Usb => None,
+            Self::Serial { port, .. } | Self::Bluetooth { port } => Some(port),
+            Self::Network { addr } => Some(addr),
+        }
+    }
+}
+
+/// A receipt printer the operator configured.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrinterConfig {
+    /// Registry id the app will look the printer up under (`"default"`,
+    /// `"kitchen"`).
+    pub id: String,
+    /// How to reach it.
+    pub connection: Connection,
+    /// Identity for logs and the setup wizard.
+    pub info: DeviceInfo,
+}
+
+/// A customer pole display.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DisplayConfig {
+    /// Registry id.
+    pub id: String,
+    /// Serial port name.
+    pub port: String,
+    /// Baud rate, 9600 when unset.
+    pub baud: u32,
+    /// Identity for logs.
+    pub info: DeviceInfo,
+}
+
+/// A standalone cash drawer on its own serial line.
+///
+/// Drawers kicked through a printer's RJ11 port do not appear here: the
+/// registry registers a companion `PrinterKickCashDrawer` automatically
+/// whenever a printer is registered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DrawerConfig {
+    /// Registry id.
+    pub id: String,
+    /// Serial port name.
+    pub port: String,
+    /// Baud rate, 9600 when unset.
+    pub baud: u32,
+    /// Identity for logs.
+    pub info: DeviceInfo,
+}
+
+/// A card-payment terminal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TerminalConfig {
+    /// Registry id.
+    pub id: String,
+    /// Wired serial/USB, or wireless Bluetooth/network.
+    pub connection: TerminalConnection,
+    /// Identity for logs.
+    pub info: DeviceInfo,
+}
+
+/// How a card terminal is attached.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TerminalConnection {
+    /// Serial or USB line at a baud rate.
+    Wired {
+        /// Platform port name.
+        port: String,
+        /// Baud rate.
+        baud: u32,
+    },
+    /// Bluetooth or network address.
+    Wireless {
+        /// The HAL wireless target.
+        target: WirelessTarget,
+    },
+}
+
+/// Everything the operator configured on this terminal, in the HAL's own
+/// vocabulary.
+///
+/// Weight scales are intentionally absent: `TerminalProfile` records a scale
+/// device path, but [`crate::drivers::scale::HidWeightScale`] is constructed
+/// from a USB vendor/product pair the profile never captured. Registering a
+/// scale needs a config-schema change first, not a wiring change.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HardwareConfig {
+    /// Receipt printers.
+    pub printers: Vec<PrinterConfig>,
+    /// Customer pole displays.
+    pub displays: Vec<DisplayConfig>,
+    /// Standalone cash drawers.
+    pub drawers: Vec<DrawerConfig>,
+    /// Card-payment terminals.
+    pub terminals: Vec<TerminalConfig>,
+}
+
+impl HardwareConfig {
+    /// A config that registers nothing.
+    #[must_use]
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
+    /// `true` when there is nothing to register.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.printers.is_empty()
+            && self.displays.is_empty()
+            && self.drawers.is_empty()
+            && self.terminals.is_empty()
+    }
+
+    /// Total number of configured devices.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.printers.len() + self.displays.len() + self.drawers.len() + self.terminals.len()
+    }
+}
+
+/// What happened during [`DriverRegistry::apply_config`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BootstrapReport {
+    /// `"<category>:<id>"` for each driver registered.
+    pub registered: Vec<String>,
+    /// `"<category>:<id>"` for entries skipped as unconfigured or disabled.
+    pub skipped: Vec<String>,
+    /// `"<category>:<id>"` and why it could not be registered.
+    pub rejected: Vec<(String, String)>,
+}
+
+impl BootstrapReport {
+    /// How many drivers were registered.
+    #[must_use]
+    pub fn registered_count(&self) -> usize {
+        self.registered.len()
+    }
+
+    /// `true` when nothing was rejected. A report can be `ok` while
+    /// registering nothing — an unconfigured machine is a valid state.
+    #[must_use]
+    pub fn ok(&self) -> bool {
+        self.rejected.is_empty()
+    }
+}
+
+impl fmt::Display for BootstrapReport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "hardware bootstrap: {} registered, {} skipped, {} rejected",
+            self.registered.len(),
+            self.skipped.len(),
+            self.rejected.len()
+        )?;
+        for (id, reason) in &self.rejected {
+            write!(f, "; rejected {id}: {reason}")?;
+        }
+        Ok(())
+    }
+}
+
+/// Register every device in `config` on `registry`.
+///
+/// Fail-open per device: one bad entry is recorded in
+/// [`BootstrapReport::rejected`] and the rest still register, matching how
+/// [`DriverRegistry::discover`] treats a driver that fails to probe. Nothing
+/// here opens a device, so a stale saved profile cannot block startup.
+pub async fn apply_config(registry: &DriverRegistry, config: &HardwareConfig) -> BootstrapReport {
+    let mut report = BootstrapReport::default();
+
+    for printer in &config.printers {
+        let key = format!("printer:{}", printer.id);
+        match &printer.connection {
+            Connection::Usb => {
+                // USB printers are enumerated by discover(); a profile that
+                // says "usb" without an address has nothing to bind.
+                report.skipped.push(key);
+            }
+            Connection::Serial { port, baud } => {
+                // There is no serial receipt-printer driver in this crate:
+                // drivers/ has usb_printer, bt_printer and tcp_printer only.
+                // BtReceiptPrinter happens to be serialport-backed, but
+                // routing a wired printer through it would name the wrong
+                // device in every log and status screen, so the entry is
+                // reported rather than quietly redirected.
+                let _ = baud;
+                report.rejected.push((
+                    key,
+                    format!("no serial printer driver exists (port {port})"),
+                ));
+            }
+            Connection::Bluetooth { port } => {
+                registry
+                    .register_bluetooth_printer(
+                        &printer.id,
+                        port,
+                        DEFAULT_BAUD,
+                        printer.info.clone(),
+                    )
+                    .await;
+                report.registered.push(key);
+            }
+            Connection::Network { addr } => {
+                registry
+                    .register_tcp_printer(&printer.id, addr, printer.info.clone())
+                    .await;
+                report.registered.push(key);
+            }
+        }
+    }
+
+    for display in &config.displays {
+        let key = format!("display:{}", display.id);
+        if display.port.trim().is_empty() {
+            report.skipped.push(key);
+            continue;
+        }
+        registry
+            .register_serial_display(&display.id, &display.port, display.info.clone())
+            .await;
+        report.registered.push(key);
+    }
+
+    for drawer in &config.drawers {
+        let key = format!("drawer:{}", drawer.id);
+        if drawer.port.trim().is_empty() {
+            report.skipped.push(key);
+            continue;
+        }
+        registry
+            .register_serial_drawer(&drawer.id, &drawer.port, drawer.info.clone())
+            .await;
+        report.registered.push(key);
+    }
+
+    for terminal in &config.terminals {
+        let key = format!("terminal:{}", terminal.id);
+        match &terminal.connection {
+            TerminalConnection::Wired { port, baud } if !port.trim().is_empty() => {
+                registry
+                    .register_wired_terminal(
+                        &terminal.id,
+                        port.trim(),
+                        if *baud == 0 {
+                            crate::drivers::edc::wired::DEFAULT_BAUD
+                        } else {
+                            *baud
+                        },
+                        terminal.info.clone(),
+                    )
+                    .await;
+                report.registered.push(key);
+            }
+            TerminalConnection::Wireless { target } if !target.address().trim().is_empty() => {
+                registry
+                    .register_wireless_terminal(&terminal.id, target.clone(), terminal.info.clone())
+                    .await;
+                report.registered.push(key);
+            }
+            _ => report.skipped.push(key),
+        }
+    }
+
+    report
+}
+
+#[cfg(test)]
+#[path = "bootstrap_tests.rs"]
+mod tests;

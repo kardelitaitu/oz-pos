@@ -29,6 +29,8 @@ next: SAFETY comments when real FFI drivers are implemented | perf: drivers do d
 //! the mocks; production code uses real drivers registered through
 //! [`registry::DriverRegistry`] at startup.
 
+/// Turning saved hardware configuration into registered drivers.
+pub mod bootstrap;
 pub mod drivers;
 pub mod error;
 pub mod registry;
@@ -37,6 +39,10 @@ pub mod traits;
 pub mod transport;
 pub mod types;
 
+pub use bootstrap::{
+    BootstrapReport, Connection, DisplayConfig, DrawerConfig, HardwareConfig, PrinterConfig,
+    TerminalConfig, TerminalConnection, apply_config,
+};
 pub use error::{HalError, HalErrorKind};
 pub use registry::DriverRegistry;
 pub use traits::barcode::BarcodeScanner;

@@ -269,6 +269,32 @@ impl DriverRegistry {
         self.register_cash_drawer(&drawer_id, drawer).await;
     }
 
+    /// Register a Bluetooth (SPP) printer under the given id, plus its
+    /// companion cash drawer.
+    ///
+    /// `port_name` is the COM port the OS Bluetooth stack bound the device
+    /// to — Bluetooth SPP is exposed as serial on Windows, which is why
+    /// [`crate::drivers::bt_printer`] is serialport-backed rather than a
+    /// separate radio transport. The setup wizard calls this when an
+    /// operator names a printer they paired beforehand;
+    /// [`Self::discover`] binds one automatically for every Bluetooth port
+    /// it finds.
+    pub async fn register_bluetooth_printer(
+        &self,
+        id: &str,
+        port_name: &str,
+        baud_rate: u32,
+        info: DeviceInfo,
+    ) {
+        let printer_arc = Arc::new(crate::drivers::bt_printer::BtReceiptPrinter::new(
+            port_name, baud_rate, info,
+        ));
+        self.register_printer(id, printer_arc.clone()).await;
+        let drawer_id = format!("drawer:kick:{id}");
+        let drawer = Arc::new(PrinterKickCashDrawer::new_pin2(printer_arc));
+        self.register_cash_drawer(&drawer_id, drawer).await;
+    }
+
     /// Register a serial customer display under the given id. The setup
     /// wizard calls this when the user configures a pole display by port name.
     pub async fn register_serial_display(&self, id: &str, port_name: &str, info: DeviceInfo) {
