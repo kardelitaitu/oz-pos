@@ -145,7 +145,7 @@ This skips the NSIS installer step and produces just `oz-pos-app.exe`.
 | 2.1 | Enter staff PIN on numpad | Each digit highlights on press | ☐ |
 | 2.2 | Submit PIN (press enter or OK) | Loading spinner appears briefly | ☐ |
 | 2.3 | Successful login | Workspace picker screen appears with store cards | ☐ |
-| 2.4 | Try wrong PIN | Error message: "Invalid PIN. 3 attempts remaining." After 5 attempts, account locks. | ☐ |
+| 2.4 | Try wrong PIN | Error message: "Invalid PIN. 3 attempts remaining." After 3 attempts, account locks. | ☐ |
 | 2.5 | Try empty PIN | Validation message: "Please enter a PIN." | ☐ |
 
 **Pass criteria:** Login accepts valid PIN, rejects invalid PIN with user-friendly message, and navigates to workspace picker.
@@ -339,7 +339,7 @@ into a spreadsheet.
 ☐ PHASE 2 — Login
    ☐ PIN entry works (numpad, keyboard)
    ☐ Wrong PIN rejected with message
-   ☐ Account locks after 5 attempts
+   ☐ Account locks after 3 attempts
    ☐ Valid PIN navigates to workspace picker
 
 ☐ PHASE 3 — Workspace Picker
@@ -418,6 +418,6 @@ Notes:
 - [Build Script](../../scripts/build-exe-release.ps1) — Automated Windows build
 - [Release Checklist](../releases/checklist.md) — Pre-release verification
 - [Tauri Config](../../apps/desktop-client/tauri.conf.json) — Window size, CSP, bundle settings
-- [VPS Migration Guide](./vps-migration.md) — Cloud server deployment
-- [Docker Deployment Guide](./docker-deployment.md) — Full stack deployment
-- [Runbook](./runbook.md) — Incident response procedures
+- [VPS Migration Guide](../operations/vps-migration.md) — Cloud server deployment
+- [Docker Deployment Guide](../operations/docker-deployment.md) — Full stack deployment
+- [Runbook](../operations/runbook.md) — Incident response procedures
