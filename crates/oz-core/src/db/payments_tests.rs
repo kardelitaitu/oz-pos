@@ -699,3 +699,128 @@ fn create_payments_idempotency_key_none_allows_duplicates() {
     let listed = store.list_payments_for_sale(&sale_id).unwrap();
     assert_eq!(listed.len(), 2);
 }
+
+// ── find_sale_by_idempotency_key — read side of the COR-7 replay guard ──
+
+fn keyed_split(method: &str, amount_minor: i64, key: &str) -> PaymentSplitArg {
+    PaymentSplitArg {
+        method: method.into(),
+        amount_minor,
+        gateway_reference: None,
+        gateway_status: None,
+        gateway_response: None,
+        idempotency_key: Some(key.into()),
+    }
+}
+
+#[test]
+fn find_sale_by_idempotency_key_returns_the_sale_the_key_paid_for() {
+    let conn = fresh();
+    let store = store(&conn);
+    let sale_id = uuid::Uuid::now_v7().to_string();
+    let now = "2025-06-01T12:00:00Z";
+    insert_sale(&conn, &sale_id, 700, now);
+    let currency: Currency = "USD".parse().unwrap();
+
+    store
+        .create_payments(
+            &sale_id,
+            &[keyed_split("cash", 700, "attempt-1:0")],
+            &currency,
+            now,
+        )
+        .unwrap();
+
+    assert_eq!(
+        store
+            .find_sale_by_idempotency_key("attempt-1:0")
+            .unwrap()
+            .as_deref(),
+        Some(sale_id.as_str()),
+    );
+}
+
+#[test]
+fn find_sale_by_idempotency_key_resolves_every_split_of_one_attempt_to_one_sale() {
+    // The command layer indexes keys as `{attempt}:{n}` so a split tender does
+    // not collide with itself. That only works if every split of the attempt
+    // still leads back to the one sale, since the replay check can only hold
+    // whichever key it happens to have.
+    let conn = fresh();
+    let store = store(&conn);
+    let sale_id = uuid::Uuid::now_v7().to_string();
+    let now = "2025-06-01T12:00:00Z";
+    insert_sale(&conn, &sale_id, 700, now);
+    let currency: Currency = "USD".parse().unwrap();
+
+    let payments = store
+        .create_payments(
+            &sale_id,
+            &[
+                keyed_split("cash", 400, "attempt-2:0"),
+                keyed_split("card", 300, "attempt-2:1"),
+            ],
+            &currency,
+            now,
+        )
+        .unwrap();
+    assert_eq!(payments.len(), 2, "both splits must persist");
+
+    for key in ["attempt-2:0", "attempt-2:1"] {
+        let found = store.find_sale_by_idempotency_key(key).unwrap();
+        assert_eq!(
+            found.as_deref(),
+            Some(sale_id.as_str()),
+            "key {key} should resolve to the attempt sale",
+        );
+    }
+}
+
+#[test]
+fn find_sale_by_idempotency_key_returns_none_for_an_unknown_key() {
+    let conn = fresh();
+    let store = store(&conn);
+    assert_eq!(
+        store.find_sale_by_idempotency_key("never-used").unwrap(),
+        None
+    );
+}
+
+#[test]
+fn find_sale_by_idempotency_key_never_matches_unkeyed_legacy_payments() {
+    // The property that kept COR-7 invisible for so long: rows written with a
+    // NULL key are mutually distinct under the UNIQUE index, and a NULL never
+    // equals a supplied key either. A lookup must miss them rather than
+    // resolve to some arbitrary sale, or replaying a new attempt could hand
+    // back an unrelated receipt.
+    let conn = fresh();
+    let store = store(&conn);
+    let sale_id = uuid::Uuid::now_v7().to_string();
+    let now = "2025-06-01T12:00:00Z";
+    insert_sale(&conn, &sale_id, 700, now);
+    let currency: Currency = "USD".parse().unwrap();
+
+    store
+        .create_payments(
+            &sale_id,
+            &[PaymentSplitArg {
+                method: "cash".into(),
+                amount_minor: 700,
+                gateway_reference: None,
+                gateway_status: None,
+                gateway_response: None,
+                idempotency_key: None,
+            }],
+            &currency,
+            now,
+        )
+        .unwrap();
+
+    for key in ["anything", "", "attempt-9:0"] {
+        let found = store.find_sale_by_idempotency_key(key).unwrap();
+        assert_eq!(
+            found, None,
+            "a NULL-keyed payment must not match the query for {key:?}",
+        );
+    }
+}
