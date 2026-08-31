@@ -1,6 +1,6 @@
 # Quickstart
 
-<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (1 finding) · resolved F1: prerequisites table and troubleshooting updated to Node.js >=22 and npm >=11 · F2 (minor): payment drivers listed "Stripe, Square" (line 122) — actual drivers are stripe, square, qris, mock (omits qris + mock; subset still valid) · verified accurate: scripts/setup-dev.ps1 + scripts/check.sh exist, edition="2024", rust-version="1.88", ui/src/api/pos.ts exists, Stripe+Square drivers present · re-audited 2026-08-08 by docs-auditor: structure diagram rlua->mlua, crate list completed to 11 (oz-api/oz-notification/oz-plugin), payment drivers row corrected -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (mock-gate + crate-list + drivers repaired) · FIXED 31-08: removed the false 'mock feature gate' claim (mocks always compiled — no mock feature in Cargo.toml, matches hal-drivers); crate list 11 -> 13 (added oz-crypto, oz-media); oz-payment drivers +Paddle; 'pos.ts wrapper' -> per-domain ui/src/api/<feature>.ts · verified accurate: Node >=22 / npm >=11, rust-version 1.88, edition 2024, scripts/setup-dev.ps1 + check.sh + lint-i18n.sh exist, migrations at crates/oz-core/migrations/, mlua runtime -->
 
 This guide gets OZ-POS building and running on your machine in under 15 minutes. It's aimed at first-time contributors — for the deeper project conventions, see `CONTRIBUTING.md`, `AGENTS.md`, and the skills under `.agents/skills/`.
 
@@ -80,7 +80,7 @@ cargo test --workspace --all-features
 cd ui && npm run test
 ```
 
-The Rust test suite is fully offline — no browser, no network, no hardware. Mocks live in `crates/oz-hal/src/drivers/mock.rs` and are gated by the `mock` feature.
+The Rust test suite is fully offline — no browser, no network, no hardware. Mocks live in `crates/oz-hal/src/drivers/mock.rs` and are always compiled (there is no `mock` feature gate).
 
 ---
 
@@ -121,10 +121,12 @@ oz-pos/
 ├── Cargo.toml                  # workspace root
 ├── crates/                     # Rust workspace members (one per oz-* responsibility)
 │   ├── oz-core/                # money, currency, cart, sale, inventory
+│   ├── oz-crypto/              # cryptographic primitives (secret encryption at rest)
 │   ├── oz-hal/                 # hardware abstraction + drivers
 │   ├── oz-lua/                 # mlua runtime + script bindings
+│   ├── oz-media/               # media pipeline (compress, crop, thumbnail)
 │   ├── oz-security/            # encryption, secrets, PCI helpers
-│   ├── oz-payment/             # Stripe, Square, QRIS, mock
+│   ├── oz-payment/             # Stripe, Square, QRIS, Paddle, mock
 │   ├── oz-reporting/           # analytics + CSV export
 │   ├── oz-logging/             # structured logging
 │   ├── oz-api/                 # HTTP API server (axum)
@@ -152,7 +154,7 @@ The first time you work on a layer, read the matching skill under `.agents/skill
 | If you're touching… | Read this skill |
 |---|---|
 | Rust in any `oz-*` crate, `Money`, SQL, error types | `rust-backend` |
-| A Tauri command, the `pos.ts` wrapper, events | `tauri-ipc` |
+| A Tauri command, a per-domain `ui/src/api/<feature>.ts` wrapper, events | `tauri-ipc` |
 | A React component, Fluent strings, accessibility | `ui-components` |
 | A device driver, the mock, the registry | `hal-drivers` |
 | The workspace, CI, branches, commit messages | `project-scaffold` |
@@ -236,4 +238,4 @@ Welcome to OZ-POS. Keep the curtain closed, the merchant happy, and the money in
 
 ---
 
-> last audited 25-07-26 by Hermes-Agent
+> last audited 31-08-26 by docs-auditor
