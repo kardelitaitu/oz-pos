@@ -1,19 +1,24 @@
 # Spec 0046-bis — Product & Menu-Item Images (Optimized for Low-End Android)
 
-**Status:** draft for review · **Created:** 2026-08-31 · **Scope:** desktop-client, tablet-client, ui/, oz-core, oz-api, cloud worker
+**Status:** draft for review · **Created:** 2026-08-31 · **Scope:** desktop-client, tablet-client, ui/, oz-core, oz-api
 **Related:** 0048 (workspace model), sync-conflict-dead-letter-recovery (0045), subscription tiers (staff/licensing untouched)
 
 ---
 
 ## 1. Goal
 
-Let a merchant attach one thumbnail image per product (retail POS) / menu item
-(resto POS), render it flawlessly on cheap Indonesian tablets, and sync it
-through the existing cloud topology — without bloating the SQLite/PG rows, the
-IPC bridge, or the WebView heap.
+Let a merchant attach images to retail products and resto menu items —
+**a menu item always has exactly 1 image; a product has 1 primary plus at
+most 4 alternatives** — rendered flawlessly on cheap Indonesian tablets and
+synced through the existing cloud topology, without bloating the SQLite/PG
+rows, the IPC bridge, or the WebView heap.
 
-**Non-goals (v1):** multiple images per product, zoom/full-screen viewer,
-category images, printer artwork on receipts/KDS chits.
+Upload happens **at assignment time**: the merchant picks/edits an image in
+the product or menu editor, and that action uploads + ingests the bytes.
+
+**Non-goals (v1):** zoom/full-screen viewer, category images, printer
+artwork on receipts/KDS chits, tablet camera capture (desktop editors
+author; tablets render).
 
 ## 2. Ground truth in the codebase today
 
@@ -25,6 +30,7 @@ category images, printer artwork on receipts/KDS chits.
 | `react-window` v2.2.7 is already a dependency | `ui/package.json:50` |
 | `RetailProductGrid` paginates (`pagedProducts`); `RestaurantMenu` renders `filtered.map` unvirtualized | `RetailProductGrid.tsx:611`, `RestaurantMenu.tsx:921` |
 | Cloud product routes exist for sync (`list_products`, `create_product`, …) | `crates/oz-api/src/routes/products.rs` |
+| Cloud byte store = Northflank volume (`VOLUME ["/data"]`, `OZ_DB_PATH=/data/oz-pos.db`) | `Dockerfile.server`, `docs/plans/northflank-p1-p7-plan.md` |
 
 ## 3. Architecture (the three rules, made concrete)
 
@@ -44,26 +50,51 @@ category images, printer artwork on receipts/KDS chits.
 - UI never receives bytes. A card renders
   `convertFileSrc(cachePath)` → `<img src="http://asset.localhost/…">`, and the
   Android WebView streams from disk asynchronously.
-- **Image URLs are immutable cache keys** — a new upload produces a new file
-  name, so `<img>` cache invalidation is free (no stale-image bugs).
+- **Image URLs are immutable cache keys** — filenames are content-addressed,
+  so a new upload produces a new URL and `<img>` cache invalidation is free.
 
-### 3.2 Rust-owned flat disk cache; DB stores only the hash
+### 3.2 Rust-owned flat disk store; DB stores only hashes — content-addressed, deduped
 
 - Directory: `$APPCACHE/images/` (per-profile app cache — OS-managed
-  location, safe to wipe).
-- File name: `{product_id}.{content_hash8}.webp` — flat, one file per image
-  version; product id keeps it greppable, hash keeps it content-addressed.
-- DB row stores **`image_hash TEXT NULL` only** — never an absolute path
-  (paths differ per device), never bytes (keeps rows light and indexable).
-  Sync then replicates one small string per product; each device resolves
-  hash → local file (or downloads it — §3.4).
-- Column added to `products` in **both** migrations (`.sql` + `.pg.sql`) as a
-  trailing nullable `ALTER`-style append (existing table style) +
-  `version` bump on image change so the delta sync picks it up.
+  location, safe to wipe; cloud twin: `$OZ_IMAGE_DIR`).
+- **File name = `{hash8}.webp`** (first 8 hex chars of the sha-256 of the
+  transcoded bytes). Content-addressed means:
+  - the same image applied to several products/slots is stored **once**
+    locally and once in the cloud (alternatives re-use is common in menus);
+  - paths are device-independent, so "where is the file" never enters the DB;
+  - GC is a reverse-index check, not per-file bookkeeping.
+- **Data model (both migrations, sqlite + pg):**
+  ```sql
+  -- primary image, denormalized for grid reads + free row-sync ride
+  ALTER TABLE products ADD COLUMN image_hash TEXT;          -- slot 1 mirror
+  -- alternatives + authoritative slot list (1 = primary, 2..5 = alternatives)
+  CREATE TABLE product_images (
+      product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      slot       INTEGER NOT NULL CHECK (slot BETWEEN 1 AND 5),
+      hash       TEXT NOT NULL,
+      position   INTEGER NOT NULL DEFAULT 0,   -- display order of alternatives
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (product_id, slot)
+  );
+  ```
+  - `products.image_hash` is a **mirror of slot 1** kept in the same
+    transaction (grid queries read the product row only; no JOIN on the POS
+    hot path). `product_images` is authoritative.
+  - **Menu invariant** (`product_type = 'menu'`): exactly 1 image — enforced
+    in the set/clear commands (clear refused if it would leave a menu item
+    without a primary; UI hides the alternatives strip for menu items).
+  - **Product invariant**: slots 1..5, alternatives ordered by `position`;
+    clearing slot 1 while alternatives exist promotes the first alternative
+    to primary (same transaction).
+  - Assignments ride the product's existing `version` — any image-set change
+    bumps `products.version`, so the delta sync ships the row + its image
+    rows atomically per product.
+- The DB never stores paths or bytes — hashes only — keeping rows light and
+  indexable (guideline rule 3).
 
-### 3.3 Ingest pipeline in Rust (desktop is the authoring surface)
+### 3.3 Ingest pipeline in Rust — one command per assignment
 
-One IPC command, `products_register_image(product_id, bytes)`:
+`products_set_image(product_id, slot, bytes)` (upload = apply, per decision):
 
 1. **Sniff, don't trust:** validate magic bytes (WebP `RIFF….WEBP`, JPEG
    `FFD8FF`, PNG `89504E47`) — extension is ignored.
@@ -74,38 +105,48 @@ One IPC command, `products_register_image(product_id, bytes)`:
    tiles) → encode **WebP q40**. Target output ≈ **10–25 KB** per image
    (aggressive but clean at tile render size), decoded ARGB ≈ **1 MB** per
    image in RAM — which is exactly why §3.5 virtualization is mandatory.
-4. **Write & commit:** write `{product_id}.{hash8}.webp` to the cache dir
-   (temp + atomic rename), then `UPDATE products SET image_hash = ?,
-   version = version + 1` inside a **rusqlite transaction** (repo rule).
-5. **GC:** on startup and after deletes, sweep the dir — any file whose
-   `{product_id}` no longer exists or whose `{hash8}` ≠ current row hash is
-   removed after a grace period (simple: remove immediately except files
-   touched in the last 24 h, so an in-flight sync never mid-air-collides).
+4. **Hash & write:** sha-256 → `{hash8}.webp` in the store (temp + atomic
+   rename; pre-existing identical hash ⇒ skip the write, dedupe hit).
+5. **Assign in one transaction (repo rule):** upsert
+   `product_images(product_id, slot → hash)`, maintain the slot-1 mirror on
+   `products.image_hash`, handle the promotion rule above, bump
+   `products.version`. `products_clear_image(product_id, slot)` mirrors it.
+6. **GC:** startup sweep — any file whose hash is referenced by **no**
+   `products.image_hash` / `product_images.hash` row is deleted after a
+   24 h grace period (an in-flight sync never mid-air-collides).
 
-### 3.4 Sync: hash first, bytes on demand
+### 3.4 Sync: hashes first, bytes on demand (Northflank volume — decided)
 
-- Row-level product sync already carries `version`; adding `image_hash` is a
-  free rider — **the hash syncs like any column**.
+- **Hashes sync like any column:** the product delta payload gains an
+  `images: [{slot, hash, position}]` array; the byte store never participates
+  in delta/conflict logic (immutable content-addressed files — the dead-letter
+  recovery path of 0045 stays untouched).
 - **Byte store: the Northflank persistent volume** (decided — not R2, not PG
-  `bytea`). The unified cloud image already declares `VOLUME ["/data"]` with
-  `OZ_DB_PATH=/data/oz-pos.db`; image files live beside the DB at
-  `OZ_IMAGE_DIR` (default `/data/images` in prod, `./data/images` in dev).
-  Capacity math: 6 GB volume, ~20 KB per image (512 px q40) ⇒ **≈ 300k
-  product images** before the DB ever matters; P4 adds a bytes-used metric
-  with a soft alert at 4 GB.
+  `bytea`). Image files live beside the DB at `OZ_IMAGE_DIR` (default
+  `/data/images` in prod, `./data/images` in dev). Capacity math: 6 GB
+  volume, ~20 KB per image (512 px q40) ⇒ **≈ 300k images** (a 5k-product
+  catalog with full 5-image sets ≈ 500 MB — one volume holds ~12 such
+  tenants' worth of headroom at that size); P4 adds a bytes-used metric with
+  a soft alert at 4 GB.
 - oz-api serves the bytes itself — **no new component**:
-  - `PUT /api/v1/products/{id}/image` (admin-key gate, same tier as catalog
-    writes per API-4/G-1; ≤ 32 KB body; writes `{product_id}.{hash8}.webp`
-    via temp + rename **on the same volume** so the rename is atomic)
-  - `GET /api/v1/products/{id}/image?hash=…` (tablet download; immutable,
-    `Cache-Control: max-age=31536000, immutable` — hashes are keys; unknown
-    hash ⇒ 404, no directory traversal — id and hash are validated against
-    the same grammar the desktop ingest uses)
+  - `PUT /api/v1/images` (admin-key gate, same tier as catalog writes per
+    API-4/G-1; ≤ 32 KB body; body must be the **transcoded** WebP; server
+    re-verifies magic bytes + size and stores by the client-computed hash
+    after recomputing sha-256 — hash mismatch ⇒ 409, a corrupt upload never
+    enters the store). Atomic temp+rename **on the same volume**. Response:
+    `{hash8}`.
+  - `GET /api/v1/images/{hash8}` (tenant JWT is enough — hashes are
+    unguessable and content is non-sensitive product art; strict hash-grammar
+    validation kills directory traversal; immutable,
+    `Cache-Control: max-age=31536000, immutable`; unknown hash ⇒ 404).
+  - Natural dedupe: re-uploading an existing hash is a no-op success.
 - Tablet pull: a tiny **download manager** in the tablet's Rust shell — on
-  catalog apply, for each product with `image_hash` and no local file, queue
-  a background GET (bounded concurrency 3, LRU eviction of the images dir at
-  a configurable budget, default **64 MB** ≈ ~3k products at 20 KB). Offline-first
-  holds: missing image degrades to the existing colored-initial tile.
+  catalog apply, for each referenced hash with no local file, queue a
+  background GET (bounded concurrency 3, LRU eviction of the images dir at a
+  configurable budget, default **64 MB** ≈ ~3k images ≈ ~600 products with
+  full 5-image sets). Offline-first holds: missing image degrades to the
+  existing colored-initial tile. POS tiles only ever need slot 1; the
+  manager downloads primary images first, alternatives opportunistically.
 
 ### 3.5 UI: virtualize or the pixel RAM wins anyway
 
@@ -117,42 +158,59 @@ One IPC command, `products_register_image(product_id, bytes)`:
 - **POS grids** (`RetailProductGrid`, resto ordering screen) switch the
   product tiles to `react-window` v2 (`FixedSizeGrid`) — already in the
   dependency tree — so off-screen tiles **unmount entirely** and Android
-  reclaims their decoded bitmaps.
+  reclaims their decoded bitmaps. Tiles render **slot 1 only**.
+- **Alternatives appear on interaction, not on the grid:** the product-detail
+  strip / menu editor shows the 4 alternatives as small lazy thumbnails
+  (`loading="lazy"` + `decoding="async"`), mounted only while open — never
+  in the hot grid.
 - Admin screens (`RestaurantMenu` catalog editor, `ProductLookupScreen`) get
-  thumbnails lazily (`loading="lazy"` + `decoding="async"`) — full grid
-  virtualization there is P3, not blocking.
+  primary thumbnails lazily — full grid virtualization there is P3, not
+  blocking.
 - Placeholder: keep the existing colored-initial tile as the skeleton/miss
-  state; no layout shift (fixed tile aspect-ratio).
+  state; no layout shift (fixed tile aspect-ratio). Menu editor enforces the
+  always-1-image rule in its save flow.
 
 ## 4. Work breakdown (each phase = conventional commits, tests first)
 
 | Phase | Deliverable | Touches |
 |---|---|---|
-| **P1 — storage spine** | `image_hash` column (sqlite+pg migrations, models, repository, `products_register_image` command with sniff/limits/transcode/atomic-write/txn, unit tests incl. malformed-magic + oversized rejection) | `oz-core` (migrations, db/products), `desktop-client/src/commands`, tauri.conf `assetProtocol` |
-| **P2 — UI tiles** | `FixedSizeGrid` on POS + `<img convertFileSrc>` with hash-keyed URLs, miss→initial tile fallback, a11y (alt text from product name, aria-busy on load) | `ui/src/features/retail`, `restaurant`, shared `ProductThumb` component |
-| **P3 — cloud sync** | oz-api image routes on the Northflank volume (upload/download, admin-key gate per API-4/G-1 pattern, `OZ_IMAGE_DIR`), tablet download manager + LRU, sync tests (hash rider, immutable Cache-Control) | `oz-api`, `Dockerfile.unified` volume note, tablet-client Rust |
-| **P4 — hygiene** | startup GC sweep, metrics (bytes dir, hit/miss latency), e2e on the E2E suite, docs (`docs/guides`), i18n strings for the editor UI (en+id FTL) | `desktop-client`, `ui`, docs |
+| **P1 — storage spine** | `products.image_hash` + `product_images` table (sqlite+pg migrations, models, repository), `products_set_image` / `products_clear_image` commands with sniff/limits/transcode/hash/atomic-write/txn + promotion + menu-invariant logic, unit tests (malformed magic, oversized, slot bounds, promotion, menu-clear refusal, dedupe) | `oz-core` (migrations, db/products), `desktop-client/src/commands`, tauri.conf `assetProtocol` |
+| **P2 — UI** | `FixedSizeGrid` on POS rendering slot 1 via `convertFileSrc`, miss→initial-tile fallback; editor flows: assign-at-apply for menu (1 required) and product (primary + ≤4 alternatives with reorder); alternatives strip lazy-mounted; a11y (alt from product name, aria-busy) | `ui/src/features/retail`, `restaurant`, shared `ProductThumb` |
+| **P3 — cloud sync** | `PUT/GET /api/v1/images` on the Northflank volume (`OZ_IMAGE_DIR`, admin-key gate, hash re-verification), image array in the product delta payload, tablet download manager (primary-first, LRU), sync tests | `oz-api`, `Dockerfile.unified` volume note, tablet-client Rust |
+| **P4 — hygiene** | startup GC sweep (reverse-index + grace), metrics (bytes dir, hit/miss latency, 4 GB soft alert), e2e, docs (`docs/guides`), i18n strings for the editor UI (en+id FTL) | `desktop-client`, `ui`, docs |
 
 **Est. budget:** P1–P2 make a fully local (single-device) feature — shippable
 slice. P3 unlocks tablets. P4 is polish.
 
-## 5. Decision points to confirm before P1
+## 5. Decision log
 
 1. ~~256 px q80 vs 512 px detail~~ **RESOLVED: single 512 px WebP q40
    variant** — decided 2026-08-31; 2x-DPR headroom on tablet tiles, q40
    keeps bytes at 10–25 KB so storage/sync surface stays tiny.
-2. **R2 as the byte store** vs PG `bytea` (simpler, but blobs in PG fight the
-   "DB stays light" rule and bloat snapshots).
-3. **Upload authoring surface** — desktop settings screen only (v1), or also
-   allow tablet camera capture (adds upload path from Android)?
+2. ~~R2 vs PG bytea~~ **RESOLVED: Northflank persistent volume** — decided
+   2026-08-31; bytes at `/data/images` via `OZ_IMAGE_DIR`, oz-api serves
+   them itself, no new component.
+3. ~~Bulk import vs upload-at-assignment~~ **RESOLVED: upload happens when
+   the image is applied** — decided 2026-08-31; the editor's apply action
+   ingests + assigns in one step (no bulk importer, no staging area).
+   Model: **menu item = exactly 1 image (always); product = 1 primary +
+   max 4 alternatives** (slots 1..5, slot 1 mirrored to the product row).
+   Authoring device: desktop editors (tablet capture stays a non-goal for v1).
 
 ## 6. Risks
 
 - **`image` crate weight** on the Android binary (~1–2 MB) — acceptable;
   feature-gate to the desktop + tablet apps only (CLI/cloud never link it).
 - **Cache wipe by OS** (app cache is clearable) — self-healing by design:
-  hash still in DB, download manager refetches. Never store the only copy in
-  `$APPCACHE`.
+  hashes still in DB, download manager refetches. Never store the only copy
+  in `$APPCACHE`.
 - **ConvertFileSrc on Android** returns `asset://localhost/...`; ensure the
   scope uses forward-slash glob relative to `$APPCACHE` so both platforms
   resolve.
+- **Volume is the single copy in the cloud** — P3 must document a volume
+  backup cadence (Northflank volume snapshots) alongside the DB backup;
+  bytes are re-uploadable from the desktop authoring device as a last resort
+  (hashes in the DB prove exactly which files are missing).
+- **Slot-1 mirror drift** (products.image_hash vs product_images slot 1) —
+  both writes live in the same transaction, and P1 ships a consistency
+  assertion test; the mirror is a read cache, `product_images` is truth.
