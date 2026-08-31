@@ -24,11 +24,35 @@ fn parse_currency(code: &str) -> Currency {
 /// Fixed conversion: 100 points = 100 minor units ($1.00).
 const POINTS_TO_MINOR_RATIO: i64 = 1;
 
+/// Exact points computation (LOYALTY-01): `round_half_up(base ×
+/// multiplier_millionths / (100 × 1_000_000))` in i128 — no floats
+/// anywhere. The old `(base as f64)/100.0 × multiplier` mis-rounded every
+/// product landing on an exact .5 boundary (a $22.50 sale at
+/// points_per_unit=1 with a 1.4× tier earned 31 where decimal gives 32).
+/// Half-up is defined toward +∞, the house convention shared with
+/// `refunds.rs` (CRM-06). Inputs are non-negative in practice (sale
+/// totals × positive points_per_unit); the floor-division normalization
+/// keeps the rule uniform for any sign.
+pub(crate) fn compute_points(base: i64, multiplier_millionths: i64) -> i64 {
+    const DEN: i128 = 100 * 1_000_000;
+    let num = i128::from(base) * i128::from(multiplier_millionths);
+    let mut q = num / DEN;
+    let mut r = num % DEN;
+    if r < 0 {
+        q -= 1;
+        r += DEN;
+    }
+    if r * 2 >= DEN {
+        q += 1;
+    }
+    i64::try_from(q).unwrap_or(i64::MAX)
+}
+
 fn validate_tier_config(
     name: &str,
     min_points: i64,
     points_per_unit: i64,
-    earn_multiplier: f64,
+    earn_multiplier_millionths: i64,
     colour: &str,
 ) -> Result<(), CoreError> {
     if name.trim().is_empty() {
@@ -49,10 +73,10 @@ fn validate_tier_config(
             message: "points per unit must be positive".into(),
         });
     }
-    if !earn_multiplier.is_finite() || earn_multiplier <= 0.0 {
+    if earn_multiplier_millionths <= 0 {
         return Err(CoreError::Validation {
-            field: "earn_multiplier",
-            message: "earn multiplier must be finite and positive".into(),
+            field: "earn_multiplier_millionths",
+            message: "earn multiplier must be a positive number of millionths".into(),
         });
     }
     let valid_colour = colour.len() == 7
@@ -301,7 +325,9 @@ impl Store<'_> {
     }
 
     /// Earn points for a purchase.
-    /// points_earned = (total_minor * tier.points_per_unit / 100) * tier.earn_multiplier
+    /// points_earned = round_half_up(total_minor * tier.points_per_unit
+    ///                               × tier.earn_multiplier_millionths
+    ///                               / (100 × 1_000_000))   — exact i128
     ///
     /// Thin transactional wrapper over [`earn_points_with_conn`]; kept for
     /// the standalone IPC path. `Ok(None)` (total too small) maps to the
@@ -515,7 +541,7 @@ impl Store<'_> {
     /// List all loyalty tiers.
     pub fn list_tiers(&self) -> Result<Vec<LoyaltyTier>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, min_points, points_per_unit, earn_multiplier, colour, sort_order, created_at
+            "SELECT id, name, min_points, points_per_unit, earn_multiplier_millionths, colour, sort_order, created_at
              FROM loyalty_tiers ORDER BY sort_order",
         )?;
         let rows = stmt.query_map([], |row| {
@@ -524,7 +550,7 @@ impl Store<'_> {
                 name: row.get("name")?,
                 min_points: row.get("min_points")?,
                 points_per_unit: row.get("points_per_unit")?,
-                earn_multiplier: row.get("earn_multiplier")?,
+                earn_multiplier_millionths: row.get("earn_multiplier_millionths")?,
                 colour: row.get("colour")?,
                 sort_order: row.get("sort_order")?,
                 created_at: row.get("created_at")?,
@@ -535,7 +561,7 @@ impl Store<'_> {
 
     fn get_loyalty_tier(&self, id: &str) -> Result<Option<LoyaltyTier>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, min_points, points_per_unit, earn_multiplier, colour, sort_order, created_at
+            "SELECT id, name, min_points, points_per_unit, earn_multiplier_millionths, colour, sort_order, created_at
              FROM loyalty_tiers WHERE id = ?1",
         )?;
         let result = stmt.query_row(params![id], |row| {
@@ -544,7 +570,7 @@ impl Store<'_> {
                 name: row.get("name")?,
                 min_points: row.get("min_points")?,
                 points_per_unit: row.get("points_per_unit")?,
-                earn_multiplier: row.get("earn_multiplier")?,
+                earn_multiplier_millionths: row.get("earn_multiplier_millionths")?,
                 colour: row.get("colour")?,
                 sort_order: row.get("sort_order")?,
                 created_at: row.get("created_at")?,
@@ -564,7 +590,7 @@ impl Store<'_> {
         name: &str,
         min_points: i64,
         points_per_unit: i64,
-        earn_multiplier: f64,
+        earn_multiplier_millionths: i64,
         colour: &str,
     ) -> Result<LoyaltyTier, CoreError> {
         let tier_exists: bool = self
@@ -582,7 +608,13 @@ impl Store<'_> {
             });
         }
 
-        validate_tier_config(name, min_points, points_per_unit, earn_multiplier, colour)?;
+        validate_tier_config(
+            name,
+            min_points,
+            points_per_unit,
+            earn_multiplier_millionths,
+            colour,
+        )?;
 
         let duplicate_threshold: bool = self.conn.query_row(
             "SELECT EXISTS(
@@ -618,12 +650,12 @@ impl Store<'_> {
 
         let rows = self.conn.execute(
             "UPDATE loyalty_tiers SET name = ?1, min_points = ?2, points_per_unit = ?3,
-             earn_multiplier = ?4, colour = ?5 WHERE id = ?6",
+             earn_multiplier_millionths = ?4, colour = ?5 WHERE id = ?6",
             params![
                 name,
                 min_points,
                 points_per_unit,
-                earn_multiplier,
+                earn_multiplier_millionths,
                 colour,
                 id
             ],
@@ -759,23 +791,24 @@ pub(crate) fn earn_points_with_conn(
         return Ok(Some(existing));
     }
 
-    // Tier formula. Multiply first (still in i64) then convert to f64 for
-    // the /100 division to preserve fractional cents; integer division
-    // would truncate sub-dollar amounts to zero points.
+    // Tier formula (LOYALTY-01): exact integer arithmetic via
+    // [`compute_points`] — the multiplier is fixed-point millionths, so
+    // no float ever touches points. (The old f64 path mis-rounded every
+    // exact .5 boundary.)
     let tier = account
         .tier_id
         .as_deref()
         .and_then(|tid| {
             conn.query_row(
-                "SELECT points_per_unit, earn_multiplier FROM loyalty_tiers WHERE id = ?1",
+                "SELECT points_per_unit, earn_multiplier_millionths FROM loyalty_tiers WHERE id = ?1",
                 params![tid],
-                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, f64>(1)?)),
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
             )
             .ok()
         })
-        .unwrap_or((10, 1.0));
+        .unwrap_or((10, 1_000_000));
     let base = total_minor.saturating_mul(tier.0);
-    let points = ((base as f64) / 100.0 * tier.1).round() as i64;
+    let points = compute_points(base, tier.1);
     if points <= 0 {
         return Ok(None);
     }

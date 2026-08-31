@@ -503,6 +503,7 @@ fn existing_db_with_legacy_rows_upgrades_idempotently() {
             "20260825_payment_infra.sql".to_string(),
             "20260826_sale_line_snapshots.sql".to_string(),
             "20260827_refunds_tenant.sql".to_string(),
+            "20260831_loyalty_multiplier_fixedpoint.sql".to_string(),
         ]
     );
 
@@ -1254,5 +1255,102 @@ fn migration_registry_matches_filesystem() {
         "DB-01: registry/file parity broken — {} files vs {} registered entries",
         files.len(),
         registered.len()
+    );
+}
+
+/// LOYALTY-01: the fixed-point migration must recover the owner's intended
+/// decimal from the corrupted REAL column (1.4 was stored as
+/// 1.3999999999999999111; ROUND(×1e6) gives back 1_400_000), drop the old
+/// column, and re-arm the validation triggers on the new one.
+#[test]
+fn loyalty_multiplier_backfill_from_legacy_real_column() {
+    let conn = fresh();
+    // Pre-migration schema, verbatim from init.sql:310.
+    conn.execute_batch(
+        "CREATE TABLE loyalty_tiers (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            min_points  INTEGER NOT NULL DEFAULT 0,
+            points_per_unit INTEGER NOT NULL DEFAULT 10,
+            earn_multiplier REAL NOT NULL DEFAULT 1.0,
+            colour      TEXT NOT NULL DEFAULT '#6b7280',
+            sort_order  INTEGER NOT NULL DEFAULT 0,
+            created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
+        INSERT INTO loyalty_tiers (id, name, earn_multiplier) VALUES
+            ('t-one',   'One',   1.0),
+            ('t-gold',  'Gold',  1.25),
+            ('t-flip',  'Flip',  1.4),
+            ('t-drift', 'Drift', 1.07);",
+    )
+    .unwrap();
+
+    conn.execute_batch(include_str!(
+        "../migrations/20260831_loyalty_multiplier_fixedpoint.sql"
+    ))
+    .unwrap();
+
+    let get: Vec<(String, i64)> = conn
+        .prepare("SELECT id, earn_multiplier_millionths FROM loyalty_tiers ORDER BY id")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+    assert_eq!(
+        get,
+        vec![
+            ("t-drift".to_string(), 1_070_000),
+            ("t-flip".to_string(), 1_400_000),
+            ("t-gold".to_string(), 1_250_000),
+            ("t-one".to_string(), 1_000_000),
+        ],
+        "backfill must recover the intended decimal for every ≤6-digit multiplier"
+    );
+
+    // The old column is gone…
+    let cols: Vec<String> = conn
+        .prepare("SELECT name FROM pragma_table_info('loyalty_tiers')")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+    assert!(!cols.contains(&"earn_multiplier".to_string()));
+
+    // …and the recreated triggers guard the new column.
+    let err = conn.execute(
+        "INSERT INTO loyalty_tiers (id, name, earn_multiplier_millionths, colour)
+         VALUES ('t-bad', 'Bad', 0, '#6b7280')",
+        [],
+    );
+    assert!(
+        err.is_err(),
+        "zero multiplier must be rejected by the trigger"
+    );
+}
+
+/// Fresh installs run init.sql (seeds REAL multipliers) and then the
+/// fixed-point migration — the seeded tiers must land on exact millionths.
+#[test]
+fn loyalty_seeded_tiers_carry_exact_millionths() {
+    let mut conn = fresh();
+    run(&mut conn).unwrap();
+    let mut stmt = conn
+        .prepare("SELECT id, earn_multiplier_millionths FROM loyalty_tiers ORDER BY id")
+        .unwrap();
+    let rows: Vec<(String, i64)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            ("tier-bronze".to_string(), 1_000_000),
+            ("tier-gold".to_string(), 1_500_000),
+            ("tier-platinum".to_string(), 2_000_000),
+            ("tier-silver".to_string(), 1_250_000),
+        ]
     );
 }

@@ -138,7 +138,7 @@ pub async fn update_loyalty_tier_scoped(
         &tier.name,
         tier.min_points,
         tier.points_per_unit,
-        tier.earn_multiplier,
+        tier.earn_multiplier_millionths,
         &tier.colour,
     )?)
 }

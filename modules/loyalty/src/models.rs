@@ -1,7 +1,7 @@
 /*
 last audited 25-07-26 by RSA-Agent (modules-loyalty slice A: models deep read)
 crate: modules-loyalty | status: SAFE | lint: CLEAN
-findings: MSL-10 FIXED — pin is skip_serializing+default (JSON responses omit it) and Debug is a manual impl redacting it: any JSON serialization of a GiftCard (Tauri command response, log dump) emits the PIN, and Debug prints it; consistent with COR-17 plaintext-at-rest but adds wire/log exposure. Proposed: serde(skip_serializing) on pin plus a redacted Debug or manual impl. LoyaltyTier.earn_multiplier is f64 (points math, not currency — consistent with oz-core ledger note); earn/redeem service logic lives in oz-core db/loyalty.rs (audited exemplary: idempotent per account+sale+txn, redeem validates server-side)
+findings: MSL-10 FIXED — pin is skip_serializing+default (JSON responses omit it) and Debug is a manual impl redacting it: any JSON serialization of a GiftCard (Tauri command response, log dump) emits the PIN, and Debug prints it; consistent with COR-17 plaintext-at-rest but adds wire/log exposure. Proposed: serde(skip_serializing) on pin plus a redacted Debug or manual impl. LoyaltyTier.earn_multiplier_millionths is fixed-point i64 (LOYALTY-01: was f64, migrated to millionths — points math never touches a float); earn/redeem service logic lives in oz-core db/loyalty.rs (audited exemplary: idempotent per account+sale+txn, redeem validates server-side)
 next: redact GiftCard pin in fix-order phase | perf: N/A
 */
 //! Loyalty & Gift Card domain models.
@@ -19,8 +19,11 @@ pub struct LoyaltyTier {
     pub min_points: i64,
     /// Base points earned per minor unit of spend.
     pub points_per_unit: i64,
-    /// Multiplier applied on top of base earnings (e.g. 1.5 = 1.5x).
-    pub earn_multiplier: f64,
+    /// Multiplier applied on top of base earnings, in fixed-point
+    /// millionths (LOYALTY-01): 1.4× is `1_400_000`, never an f64. The
+    /// old float column corrupted intent at write time and mis-rounded
+    /// every exact .5 boundary in the points formula.
+    pub earn_multiplier_millionths: i64,
     /// Hex colour for UI badge.
     pub colour: String,
     /// Display ordering (lower = higher priority).
@@ -224,7 +227,7 @@ mod tests {
             name: "Gold".into(),
             min_points: 1000,
             points_per_unit: 2,
-            earn_multiplier: 1.5,
+            earn_multiplier_millionths: 1_500_000,
             colour: "#FFD700".into(),
             sort_order: 1,
             created_at: "2025-01-01T00:00:00Z".into(),
@@ -233,7 +236,7 @@ mod tests {
         let back: LoyaltyTier = serde_json::from_str(&json).unwrap();
         assert_eq!(back.name, "Gold");
         assert_eq!(back.min_points, 1000);
-        assert_eq!(back.earn_multiplier, 1.5);
+        assert_eq!(back.earn_multiplier_millionths, 1_500_000);
         assert_eq!(back.points_per_unit, 2);
     }
 
@@ -398,7 +401,7 @@ mod tests {
                 name: "Gold".into(),
                 min_points: 1000,
                 points_per_unit: 2,
-                earn_multiplier: 1.5,
+                earn_multiplier_millionths: 1_500_000,
                 colour: "#FFD700".into(),
                 sort_order: 1,
                 created_at: "".into(),

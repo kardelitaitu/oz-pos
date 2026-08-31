@@ -379,12 +379,12 @@ fn list_tiers_includes_all_four_defaults() {
 fn update_tier_persists_changes() {
     let conn = setup();
     let updated = store(&conn)
-        .update_tier("tier-bronze", "Bronze+", 0, 12, 1.5, "#ff6600")
+        .update_tier("tier-bronze", "Bronze+", 0, 12, 1_500_000, "#ff6600")
         .unwrap();
 
     assert_eq!(updated.name, "Bronze+");
     assert_eq!(updated.points_per_unit, 12);
-    assert_eq!(updated.earn_multiplier, 1.5);
+    assert_eq!(updated.earn_multiplier_millionths, 1_500_000);
     assert_eq!(updated.colour, "#ff6600");
 }
 
@@ -392,7 +392,7 @@ fn update_tier_persists_changes() {
 fn update_tier_not_found() {
     let conn = setup();
     let err = store(&conn)
-        .update_tier("no-such-tier", "X", 0, 10, 1.0, "#000")
+        .update_tier("no-such-tier", "X", 0, 10, 1_000_000, "#000")
         .unwrap_err();
     assert!(matches!(
         err,

@@ -110,11 +110,14 @@ fn update_tier_rejects_invalid_values() {
     let s = store(&conn);
 
     for (field, args) in [
-        ("name", ("", 0, 10, 1.0, "#ffffff")),
-        ("min_points", ("Bronze", -1, 10, 1.0, "#ffffff")),
-        ("points_per_unit", ("Bronze", 0, 0, 1.0, "#ffffff")),
-        ("earn_multiplier", ("Bronze", 0, 10, 0.0, "#ffffff")),
-        ("colour", ("Bronze", 0, 10, 1.0, "not-a-colour")),
+        ("name", ("", 0, 10, 1_000_000, "#ffffff")),
+        ("min_points", ("Bronze", -1, 10, 1_000_000, "#ffffff")),
+        ("points_per_unit", ("Bronze", 0, 0, 1_000_000, "#ffffff")),
+        (
+            "earn_multiplier_millionths",
+            ("Bronze", 0, 10, 0, "#ffffff"),
+        ),
+        ("colour", ("Bronze", 0, 10, 1_000_000, "not-a-colour")),
     ] {
         let err = s
             .update_tier("tier-bronze", args.0, args.1, args.2, args.3, args.4)
@@ -289,11 +292,11 @@ fn list_tiers_returns_seeded() {
 fn update_tier_modifies_fields() {
     let conn = fresh();
     let updated = store(&conn)
-        .update_tier("tier-bronze", "Bronze Updated", 0, 15, 1.5, "#ff0000")
+        .update_tier("tier-bronze", "Bronze Updated", 0, 15, 1_500_000, "#ff0000")
         .unwrap();
     assert_eq!(updated.name, "Bronze Updated");
     assert_eq!(updated.points_per_unit, 15);
-    assert_eq!(updated.earn_multiplier, 1.5);
+    assert_eq!(updated.earn_multiplier_millionths, 1_500_000);
 }
 
 #[test]
@@ -413,7 +416,7 @@ fn earn_points_no_integer_truncation_for_sub_dollar_amounts() {
         .get_or_create_loyalty_account("cust-1")
         .unwrap();
 
-    // total_minor = 155 ($1.55), points_per_unit = 10, earn_multiplier = 1.0
+    // total_minor = 155 ($1.55), points_per_unit = 10, multiplier 1.0 (1_000_000)
     // Correct math: 155 * 10 / 100 = 15.5 → round → 16
     // Integer-division bug: 155 * 10 / 100 = 15 (truncated) → 15
     let txn = store(&conn).earn_points("cust-1", "sale-1", 155).unwrap();
@@ -503,7 +506,7 @@ fn redeem_points_no_account_returns_not_found() {
 fn update_tier_not_found() {
     let conn = fresh();
     let err = store(&conn)
-        .update_tier("nonexistent", "No Tier", 0, 10, 1.0, "#000")
+        .update_tier("nonexistent", "No Tier", 0, 10, 1_000_000, "#000")
         .unwrap_err();
     assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "loyalty_tier"));
 }
@@ -936,5 +939,62 @@ fn refund_reversal_demotes_tier_when_lifetime_drops() {
         acct_state(&conn, "cust-1").2,
         "tier-bronze",
         "lifetime back to 0 → tier recomputed down"
+    );
+}
+
+// ── LOYALTY-01: fixed-point multiplier, exact points ──────────────────
+
+#[test]
+fn compute_points_exact_half_up_boundaries() {
+    // The $22.50 case: 22.5 × 1.4 = 31.5 exact → 32. The old float path
+    // computed 31.499999999999996 → 31 (scan-verified: 585 such bases ≤ 2M
+    // for multiplier 1.4, all rounding DOWNWARD).
+    assert_eq!(compute_points(2250, 1_400_000), 32);
+    // Further scan-verified flip bases: exact 59.5 → 60, exact 115.5 → 116.
+    assert_eq!(compute_points(4250, 1_400_000), 60);
+    assert_eq!(compute_points(8250, 1_400_000), 116);
+    // base=250: exact 3.5 → 4. (The old float happened to be right here —
+    // the product snapped back to exactly 3.5 — pin it so it stays right.)
+    assert_eq!(compute_points(250, 1_400_000), 4);
+    // The pre-existing $1.55 boundary (155 × 10 = 1550; 15.5 → 16).
+    assert_eq!(compute_points(1550, 1_000_000), 16);
+    // Non-boundary rounding: 123.45 → 123, 123.5 → 124, 123.6 → 124.
+    assert_eq!(compute_points(12345, 1_000_000), 123);
+    assert_eq!(compute_points(12350, 1_000_000), 124);
+    assert_eq!(compute_points(12360, 1_000_000), 124);
+    // 1.25× (seeded Silver): 4.4 × 1.25 = 5.5 → 6.
+    assert_eq!(compute_points(440, 1_250_000), 6);
+    // Zero and identity.
+    assert_eq!(compute_points(0, 1_400_000), 0);
+    assert_eq!(compute_points(99, 1_000_000), 1); // 0.99 → 1
+    assert_eq!(compute_points(49, 1_000_000), 0); // 0.49 → 0
+}
+
+#[test]
+fn compute_points_extremes_do_not_overflow() {
+    // i128 intermediate: i64::MAX × 1.0 stays in i64 range.
+    assert_eq!(compute_points(i64::MAX, 1_000_000), i64::MAX / 100);
+    // Absurd multiplier: result saturates instead of wrapping.
+    assert_eq!(compute_points(i64::MAX, i64::MAX), i64::MAX);
+    // Negative base (defensive — sale totals are non-negative): half-up
+    // toward +∞, the house convention. -3.5 → -3.
+    assert_eq!(compute_points(-250, 1_400_000), -3);
+}
+
+#[test]
+fn earn_points_22_50_at_1_4x_tier_earns_32() {
+    // The real-world repro, end to end through the DB path: Gold-style
+    // tier "1 point per dollar, 1.4× bonus", $22.50 sale.
+    let conn = fresh();
+    seed_customer(&conn, "cust-1", "Alice");
+    seed_sale(&conn, "sale-1");
+    let s = store(&conn);
+    s.get_or_create_loyalty_account("cust-1").unwrap();
+    s.update_tier("tier-bronze", "Bronze", 0, 1, 1_400_000, "#cd7f32")
+        .unwrap();
+    let txn = s.earn_points("cust-1", "sale-1", 2250).unwrap();
+    assert_eq!(
+        txn.points, 32,
+        "22.5 × 1.4 = 31.5 → half-up 32; the old f64 path earned 31"
     );
 }
