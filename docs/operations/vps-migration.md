@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: ACCURATE (0 findings, operational-doc verified) · references ADR#11 (zero-downtime-vps-migration); claims verified against apps/cloud-server/src/db.rs: deadpool_postgres::Pool with .max_size(8) (line 90), tokio_postgres::NoTls (line 87), OZ_DB_PATH defaults to oz-pos.db (line 52), DATABASE_URL postgres://|postgresql:// detection; /health + /metrics endpoints exist; doc is ops guidance, not a code-claim audit of sync internals -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: MAJOR-DRIFT REPAIRED (supersedes Hermes-Agent 07-24 "0 findings") · the PostgreSQL section had gone stale against apps/cloud-server/src/db.rs: (1) "TLS is not currently supported / tokio_postgres::NoTls / all connections unencrypted / planned future enhancement" was FALSE — TLS now ships via rustls (db.rs:205-226), honouring `sslmode` in DATABASE_URL, with OZ_DB_REQUIRE_TLS=1 (implied by OZ_PRODUCTION=1) enforcing sslmode=require fail-closed (config.rs resolve_require_tls); Neon/Supabase/RDS are therefore supported, so the provider table's "not supported yet" rows were corrected; (2) "pool size: 8 connections" is now configurable via OZ_DB_POOL_SIZE (default 8). Still accurate: OZ_DB_PATH defaults oz-pos.db, DATABASE_URL postgres://|postgresql:// detection, /health + /metrics, and the DuckDNS terminal↔server TLS note (a separate concern). The old stamp's line-number citations (90/87/52) had all shifted and were dropped. -->
 
 # VPS Migration Guide — Zero-Downtime Server Migration
 
@@ -194,7 +194,7 @@ migration. Single point of failure (the VPS disk).
 
 When `DATABASE_URL` is set and starts with `postgres://` or
 `postgresql://`, the server connects to a managed PostgreSQL instance
-using `deadpool-postgres` (pool size: 8 connections).
+using `deadpool-postgres` (pool size configurable via `OZ_DB_POOL_SIZE`, default 8).
 
 ```bash
 docker run -d \
@@ -212,22 +212,23 @@ postgres://<user>:<password>@<host>:<port>/<database>
 postgresql://<user>:<password>@<host>:<port>/<database>
 ```
 
-> ⚠️ **TLS is not currently supported.** The cloud server uses
-> `tokio_postgres::NoTls` — all connections are unencrypted. For
-> production use, run the database on the same VPS or within a private
-> network (VPC). If the database provider requires TLS (Neon, Supabase,
-> some RDS configurations), the server won't be able to connect.
->
-> TLS support (`tokio_postgres::native_tls` or `rustls`) is a planned
-> future enhancement.
+> 🔒 **TLS is supported via rustls.** The connection honours the `sslmode`
+> parameter in `DATABASE_URL` (`disable` | `prefer` | `require`; default
+> `prefer`), so a local plaintext Postgres keeps working while production
+> sets `sslmode=require` for an encrypted connection. Root certificates come
+> from the platform trust store (`ca-certificates` in the container image).
+> Set `OZ_DB_REQUIRE_TLS=1` (implied by `OZ_PRODUCTION=1`) to make startup
+> fail closed unless `DATABASE_URL` specifies `sslmode=require`, preventing a
+> silent plaintext fallback. TLS-required providers (Neon, Supabase, RDS) are
+> therefore supported.
 
-**Managed PostgreSQL providers compatible with OZ-POS (non-TLS):**
+**Managed PostgreSQL providers compatible with OZ-POS:**
 
 | Provider | Free tier | Connection string (example) |
 |----------|-----------|----------------------------|
-| [Neon](https://neon.tech) | Yes — 0.5 GB | Requires TLS — not supported yet |
-| [Supabase](https://supabase.com) | Yes — 500 MB | Requires TLS — not supported yet |
-| [AWS RDS](https://aws.amazon.com/rds/) | No (pay-as-you-go) | `postgres://user:pass@ozpos.xyz.us-east-1.rds.amazonaws.com:5432/ozpos` (with TLS disabled) |
+| [Neon](https://neon.tech) | Yes — 0.5 GB | TLS required — append `?sslmode=require` to the connection string |
+| [Supabase](https://supabase.com) | Yes — 500 MB | TLS required — append `?sslmode=require` to the connection string |
+| [AWS RDS](https://aws.amazon.com/rds/) | No (pay-as-you-go) | `postgres://user:pass@ozpos.xyz.us-east-1.rds.amazonaws.com:5432/ozpos?sslmode=require` |
 | [Railway](https://railway.app) | Yes — $5 credit | `postgres://postgres:pass@containers-us-west-xyz.railway.app:5432/ozpos` |
 | Self-hosted (same VPS) | N/A | `postgres://user:pass@localhost:5432/ozpos` |
 | Self-hosted (private network) | N/A | `postgres://user:pass@10.0.0.5:5432/ozpos` |
@@ -1178,3 +1179,5 @@ Use this checklist during every migration to confirm each step completed:
 - `platform/sync/src/transport.rs` — Client-side `parse_server_migrated()`
 - `platform/sync/src/daemon.rs` — Auto URL-update handler
 - `Dockerfile.server` — Cloud server Docker build
+
+> last audited 31-08-26 by docs-auditor
