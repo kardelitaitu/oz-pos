@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (drift repaired) · FIXED 31-08: crate tree +oz-crypto/oz-media/oz-notification/oz-plugin; rlua->mlua; oz-payment +Paddle (tree + prose); HAL device list 'NFC' -> real (barcode/printer/drawer/display/scale/EDC); migrations 98 -> 19 SQL files (131 squashed into init.sql); IPC endpoints 618 -> 505 unique (385 desktop + 369 tablet, 49 modules) · NOTE: this condensed guides/ARCHITECTURE.md coexists with a fuller root ARCHITECTURE.md (reorg 28147fe4 copied an archived version here); README links to THIS file · verified against HEAD Cargo.toml + generate_handler! + crates/oz-core/migrations/ · 31-08 (dc07f32a/bb7ce92d): Registry + platform-startup sections updated for the new apply_config()/HardwareConfig bootstrap path (discover() is auto-probe, not startup registration) · 31-08: module count 9 -> 14 (all wired in platform-startup; added giftcards/kitchen/loyalty/promotions/purchasing); feature flags 32 -> 39 and store presets 4 -> 5 (verified against crates/oz-core/src/features.rs) -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (drift repaired) · FIXED 31-08: crate tree +oz-crypto/oz-media/oz-notification/oz-plugin; rlua->mlua; oz-payment +Paddle (tree + prose); HAL device list 'NFC' -> real (barcode/printer/drawer/display/scale/EDC); migrations 98 -> 19 SQL files (131 squashed into init.sql); IPC endpoints 618 -> 505 unique (385 desktop + 369 tablet, 49 modules) · NOTE: this condensed guides/ARCHITECTURE.md coexists with a fuller root ARCHITECTURE.md (reorg 28147fe4 copied an archived version here); README links to THIS file · verified against HEAD Cargo.toml + generate_handler! + crates/oz-core/migrations/ · 31-08 (dc07f32a/bb7ce92d): Registry + platform-startup sections updated for the new apply_config()/HardwareConfig bootstrap path (discover() is auto-probe, not startup registration) · 31-08: module count 9 -> 14 (all wired in platform-startup; added giftcards/kitchen/loyalty/promotions/purchasing); feature flags 32 -> 39 and store presets 4 -> 5 (verified against crates/oz-core/src/features.rs); ui/api 'pos.ts THE ONLY place that calls invoke()' -> per-domain <domain>.ts wrappers; locales 48 -> 50 .ftl files -->
 
 # OZ-POS – Codebase Architecture
 
@@ -118,13 +118,14 @@ oz-pos/
 │       ├─ main.tsx          # Entry point
 │       ├─ App.tsx           # Root component
 │       ├─ api/
-│       │   └─ pos.ts        # THE ONLY place that calls invoke()
+│       │   ├─ pos.ts        # sales/POS IPC wrappers
+│       │   └─ <domain>.ts   # per-domain wrappers (currency, edc, hardware, …) — the only layer that calls invoke()
 │       ├─ types/
 │       │   └─ domain.ts     # TypeScript mirrors: CartId, LineId, Sku, Money
 │       ├─ features/         # Feature-scoped screens (sales/)
 │       ├─ components/       # Reusable React components
 │       ├─ hooks/            # Custom React hooks
-│       ├─ locales/          # Per-feature Fluent bundles (48 `.ftl` files, en + id variants)
+│       ├─ locales/          # Per-feature Fluent bundles (50 `.ftl` files, en + id variants)
 │       ├─ frontend/themes/  # CSS design tokens and shared component styles
 │       └─ __tests__/        # Vitest + Testing Library tests
 ├─ scripts/                  # Build helpers, pre-push checks
