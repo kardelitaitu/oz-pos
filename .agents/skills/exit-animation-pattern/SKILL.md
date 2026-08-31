@@ -3,13 +3,13 @@ name: exit-animation-pattern
 description: OZ-POS convention for symmetric CSS entry/exit animations + the React state machine that gates a dismiss through the CSS animation duration. Applies to pills, badges, banners, modals, and any in-flight overlay whose dismissal currently snaps to unmount. Use when adding a smooth fade-out sibling to an existing entry animation, or when reviewing a polish commit for the four required components.
 ---
 
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings — convention skill) · reference files verified: ui/src/features/sales/PosScreen.tsx, ui/src/features/sales/CartPanel.css, ui/src/utils/animation.ts (animDuration at line 25); the CSS mirror + --exiting + animDuration + id-set-compare pattern matches the shipped undo-bar + CartLineItem implementations · (file also carries its own 'last audited 19-07-26 by skill-drift-guard' line in a different convention) -->
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings — convention skill) · reference files verified: ui/src/features/sales/PosScreen.tsx, ui/src/features/sales/CartPanel.css, ui/src/utils/animation.ts (animDuration at line 25); the CSS mirror + --exiting + animDuration + id-set-compare pattern matches the shipped undo-bar + CartLineItem implementations · 31-08 by docs-auditor: FIXED 5 broken relative links — the three ui-file links were `../../ui/…` (one level short of repo root from `.agents/skills/<id>/`; now `../../../ui/…`) and the two sibling-skill links used `./` (now `../`) · (file also carries its own 'last audited 19-07-26 by skill-drift-guard' line in a different convention) -->
 
 # Exit-Animation Pattern
 
 The OZ-POS UI convention for dismissing UI elements gracefully. When an element enters with a CSS keyframe animation today, **its dismissal must run a mirror keyframe** rather than snapping to unmount. This skill packages the four moving parts (CSS mirror + `--exiting` class, React exiting flag, unmount-safe timer, race-safe cleanup) so you don't re-invent the wheel on each new surface.
 
-Reference implementation: commit [`fcf1d07`](https://github.com/) on branch `0.0.3` — the undo-pill in [`ui/src/features/sales/PosScreen.tsx`](../../ui/src/features/sales/PosScreen.tsx) and [`ui/src/features/sales/CartPanel.css`](../../ui/src/features/sales/CartPanel.css).
+Reference implementation: commit [`fcf1d07`](https://github.com/) on branch `0.0.3` — the undo-pill in [`ui/src/features/sales/PosScreen.tsx`](../../../ui/src/features/sales/PosScreen.tsx) and [`ui/src/features/sales/CartPanel.css`](../../../ui/src/features/sales/CartPanel.css).
 
 ## When to use
 
@@ -35,7 +35,7 @@ Reference implementation: commit [`fcf1d07`](https://github.com/) on branch `0.0
 | 6 | **Capture a snapshot of dismiss-time state; compare against live state by id-set in the timer body.** | Concurrent pushes during the 200 ms fade aren't silently wiped. |
 | 7 | **`useRef<ReturnType<typeof setTimeout> \| null>` for the pending timer; clear it in an empty-deps `useEffect` cleanup.** | Never `setState` against an unmounted component. |
 | 8 | **CSS rules live inside `@media (prefers-reduced-motion: no-preference)`.** | Element renders unmoving + functional in reduced-motion; JS still snaps cleanly via `animDuration() === 0`. |
-| 9 | **Zero new design tokens.** Reuse `var(--duration-200)`, `var(--ease-out)`, `animDuration(N)` from [`@/utils/animation`](../../ui/src/utils/animation.ts). | Token introduced = design-system drift; the project's tokens are the canonical source of truth. |
+| 9 | **Zero new design tokens.** Reuse `var(--duration-200)`, `var(--ease-out)`, `animDuration(N)` from [`@/utils/animation`](../../../ui/src/utils/animation.ts). | Token introduced = design-system drift; the project's tokens are the canonical source of truth. |
 | 10 | **Mirror the closest sibling's shape, not a fresh invention.** If `<CartLineItem>` already uses exit-class + setTimeout, copy its shape; do not introduce a second convention. | Two patterns = downstream agents pick inconsistently. |
 
 ## The pattern: 4 components
@@ -250,7 +250,7 @@ The `PosScreen` undo-bar uses `useRef` instead of `useEffect`-driven timer so it
 | Need | Reference | Why |
 |------|-----------|-----|
 | Duration | `var(--duration-200)` (CSS), `animDuration(200)` (JS) | They collapse to `0` under reduced-motion in `frontend/themes/tokens.css`. |
-| Easing | `var(--ease-out)` | Project-wide standard; see [`ui-components`](./ui-components/SKILL.md) styling section. |
+| Easing | `var(--ease-out)` | Project-wide standard; see [`ui-components`](../ui-components/SKILL.md) styling section. |
 | `pointer-events` | inline `none` (CSS) | No token needed. |
 | `clearTimeout` | browser built-in | No token. |
 
@@ -318,8 +318,8 @@ Before opening the PR:
 
 ## Cross-references
 
-- **[`ui-components`](./ui-components/SKILL.md)** — front-end conventions (i18n, accessibility, strict TS, styling). Read first before reaching for new files or tokens.
-- **[`skill-drift-guard`](./skill-drift-guard/SKILL.md)** — run after committing if the change renames a CSS class referenced here, or after this skill itself is touched (re-audit the footer format).
+- **[`ui-components`](../ui-components/SKILL.md)** — front-end conventions (i18n, accessibility, strict TS, styling). Read first before reaching for new files or tokens.
+- **[`skill-drift-guard`](../skill-drift-guard/SKILL.md)** — run after committing if the change renames a CSS class referenced here, or after this skill itself is touched (re-audit the footer format).
 - **Polish commits on branch `0.0.3`** that exemplify the baseline this skill codifies:
   - `3dd919d` — `feat(ui): cousin-pos visual polish` — modal entry cohesion (overlay fade + panel slide-up on `PosScreen`).
   - `1fcb1d` — `feat(ui): cousin-surfaces polish sweep` — modal cohesion on `SalesHistoryScreen` + focus/hover/empty-state work across 5 sibling files.
@@ -336,4 +336,4 @@ When the next polish pass lands, the contributor should be able to point at this
 5. **In-flight async dismiss handlers.** If the dismiss triggers an IPC call (`holdCart`, `pay` etc.), the in-flight promise may still resolve after the element unmounts. The IPC wrappers under `@/api/*` already handle this — don't add an additional guard inside the pattern.
 6. **React strict-mode double-mount.** React 18 strict mode mounts components twice in dev. Without unmount cleanup, the first timer survives the second mount and you see duplicate unmounts in dev only. Always clear on unmount.
 
-> last audited 19-08-26 by skill-drift-guard
+> last audited 31-08-26 by docs-auditor
