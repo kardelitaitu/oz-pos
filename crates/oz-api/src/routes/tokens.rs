@@ -85,6 +85,8 @@ pub fn admin_key_authorised(headers: &HeaderMap, configured: Option<&str>) -> bo
     type HmacSha256 = Hmac<Sha256>;
     let digest = |value: &str| {
         let mut mac = HmacSha256::new_from_slice(b"oz-api-admin-key-compare")
+            // INVARIANT: HMAC accepts keys of any length (RFC 2104), so a fixed
+            // literal domain-separation key cannot fail.
             .expect("HMAC accepts any key length");
         mac.update(value.as_bytes());
         mac.finalize().into_bytes()
@@ -92,6 +94,8 @@ pub fn admin_key_authorised(headers: &HeaderMap, configured: Option<&str>) -> bo
 
     let provided = digest(supplied);
     let mut mac = HmacSha256::new_from_slice(b"oz-api-admin-key-compare")
+        // INVARIANT: HMAC accepts keys of any length (RFC 2104), so a fixed
+        // literal domain-separation key cannot fail.
         .expect("HMAC accepts any key length");
     mac.update(key.as_bytes());
     // `verify_slice` is the constant-time comparison; a digest `==` is not

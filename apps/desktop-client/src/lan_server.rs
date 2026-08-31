@@ -118,11 +118,15 @@ const PSK_HANDSHAKE_TIMEOUT_SECS: u64 = 5;
 fn psk_matches(provided: &str, expected: &str) -> bool {
     use hmac::{Hmac, Mac};
     type HmacSha256 = Hmac<sha2::Sha256>;
-    let mut mac_provided =
-        HmacSha256::new_from_slice(b"oz-lan-psk-compare").expect("fixed key length is valid");
+    let mut mac_provided = HmacSha256::new_from_slice(b"oz-lan-psk-compare")
+        // INVARIANT: HMAC accepts keys of any length (RFC 2104), so a fixed
+        // literal domain-separation key cannot fail.
+        .expect("fixed key length is valid");
     mac_provided.update(provided.as_bytes());
-    let mut mac_expected =
-        HmacSha256::new_from_slice(b"oz-lan-psk-compare").expect("fixed key length is valid");
+    let mut mac_expected = HmacSha256::new_from_slice(b"oz-lan-psk-compare")
+        // INVARIANT: HMAC accepts keys of any length (RFC 2104), so a fixed
+        // literal domain-separation key cannot fail.
+        .expect("fixed key length is valid");
     mac_expected.update(expected.as_bytes());
     mac_provided
         .verify_slice(&mac_expected.finalize().into_bytes())

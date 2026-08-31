@@ -87,8 +87,10 @@ fn master_key_from_env() -> Option<[u8; 32]> {
 
 /// HMAC-SHA256(master, domain) — the master-key portable derivation.
 fn hmac_key(master: &[u8; 32], domain: &[u8]) -> [u8; 32] {
-    let mut mac =
-        <Hmac<Sha256> as Mac>::new_from_slice(master).expect("HMAC accepts any key length");
+    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(master)
+        // INVARIANT: HMAC accepts keys of any length (RFC 2104), so deriving
+        // from the 32-byte master key cannot fail.
+        .expect("HMAC accepts any key length");
     mac.update(domain);
     mac.finalize().into_bytes().into()
 }
