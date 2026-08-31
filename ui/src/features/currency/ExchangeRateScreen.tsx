@@ -1,10 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
-  listExchangeRates,
-  createExchangeRate,
-  deleteExchangeRate,
-  listCurrencies,
   listExchangeRatesScoped,
   createExchangeRateScoped,
   deleteExchangeRateScoped,
@@ -12,6 +8,7 @@ import {
   formatExchangeRate,
   type ExchangeRateDto,
   type CurrencyDto,
+  type CreateExchangeRateArgs,
 } from '@/api/currency';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
@@ -75,8 +72,8 @@ export default function ExchangeRateScreen() {
     setError(null);
     try {
       const [items, currs] = await Promise.all([
-        sessionToken ? listExchangeRatesScoped(sessionToken) : listExchangeRates(),
-        sessionToken ? listCurrenciesScoped(sessionToken) : listCurrencies(),
+        listExchangeRatesScoped(sessionToken),
+        listCurrenciesScoped(sessionToken),
       ]);
       if (seq !== loadSeqRef.current) return;
       setRates(items);
@@ -113,18 +110,14 @@ export default function ExchangeRateScreen() {
       const rateMillionths = Math.round(rate * 1_000_000);
       if (!Number.isFinite(rate) || rate <= 0 || !Number.isSafeInteger(rateMillionths) || rateMillionths <= 0) return;
 
-      const args: Parameters<typeof createExchangeRate>[0] = {
+      const args: CreateExchangeRateArgs = {
         from_currency: form.fromCurrency,
         to_currency: form.toCurrency,
         rate_millionths: rateMillionths,
       };
       if (form.source) args.source = form.source;
       if (form.effectiveDate) args.effective_date = form.effectiveDate;
-      if (sessionToken) {
-        await createExchangeRateScoped(sessionToken, args);
-      } else {
-        await createExchangeRate(args);
-      }
+      await createExchangeRateScoped(sessionToken, args);
       setShowModal(false);
       await load();
     } catch {
@@ -140,11 +133,7 @@ export default function ExchangeRateScreen() {
     setDeleting(id);
     setDeleteTarget(null);
     try {
-      if (sessionToken) {
-        await deleteExchangeRateScoped(sessionToken, id);
-      } else {
-        await deleteExchangeRate(id);
-      }
+      await deleteExchangeRateScoped(sessionToken, id);
       setDeleting(null);
       await load();
     } catch {

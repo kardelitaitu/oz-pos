@@ -25,10 +25,6 @@ export interface SetDefaultCurrencyArgs {
 export const getCurrencyInfo = (code: string): Promise<CurrencyInfo> =>
   loggedInvoke<CurrencyInfo>('currency_info', { code });
 
-/** List all available currencies. */
-export const listCurrencies = (): Promise<CurrencyDto[]> =>
-  loggedInvoke<CurrencyDto[]>('list_currencies');
-
 /** List all available currencies resolved from a session token. ADR #7. */
 export const listCurrenciesScoped = (sessionToken: string): Promise<CurrencyDto[]> =>
   loggedInvoke<CurrencyDto[]>('list_currencies_scoped', { sessionToken });
@@ -91,17 +87,9 @@ export function formatExchangeRate(rate: Pick<ExchangeRateDto, 'rate_millionths'
   return decimal.toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0';
 }
 
-/** List all exchange rates. */
-export const listExchangeRates = (): Promise<ExchangeRateDto[]> =>
-  loggedInvoke<ExchangeRateDto[]>('list_exchange_rates');
-
-/** ADR #7: List all exchange rates in the store resolved from a session token. */
+/** List all exchange rates in the store resolved from a session token. ADR #7. */
 export const listExchangeRatesScoped = (sessionToken: string): Promise<ExchangeRateDto[]> =>
   loggedInvoke<ExchangeRateDto[]>('list_exchange_rates_scoped', { sessionToken });
-
-/** Create a new exchange rate. */
-export const createExchangeRate = (args: CreateExchangeRateArgs): Promise<ExchangeRateDto> =>
-  loggedInvoke<ExchangeRateDto>('create_exchange_rate', { args });
 
 /** ADR #7: Create an exchange rate in the store resolved from a session token. */
 export const createExchangeRateScoped = (
@@ -109,10 +97,6 @@ export const createExchangeRateScoped = (
   args: CreateExchangeRateArgs,
 ): Promise<ExchangeRateDto> =>
   loggedInvoke<ExchangeRateDto>('create_exchange_rate_scoped', { sessionToken, args });
-
-/** Delete an exchange rate by its identifier. */
-export const deleteExchangeRate = (id: string): Promise<void> =>
-  loggedInvoke<void>('delete_exchange_rate', { id });
 
 /** ADR #7: Delete an exchange rate in the store resolved from a session token. */
 export const deleteExchangeRateScoped = (sessionToken: string, id: string): Promise<void> =>

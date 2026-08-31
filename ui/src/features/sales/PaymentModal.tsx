@@ -12,11 +12,8 @@ import { Button } from '@/components/Button';
 import { formatMoney, minorUnitExponent, type Money, type CartLine } from '@/types/domain';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import {
-  listCurrencies,
   listCurrenciesScoped,
-  listExchangeRates,
   listExchangeRatesScoped,
-  getDefaultCurrency,
   getDefaultCurrencyScoped,
   getLatestExchangeRateScoped,
   exchangeRateToDecimal,
@@ -220,17 +217,11 @@ export default function PaymentModal({
         Promise<CurrencyDto[]>,
         Promise<ExchangeRateDto[]>,
         Promise<string | null>,
-      ] = sessionToken
-        ? [
-            listCurrenciesScoped(sessionToken),
-            listExchangeRatesScoped(sessionToken),
-            getDefaultCurrencyScoped(sessionToken),
-          ]
-        : [
-            listCurrencies(),
-            listExchangeRates(),
-            getDefaultCurrency(),
-          ];
+      ] = [
+        listCurrenciesScoped(sessionToken!),
+        listExchangeRatesScoped(sessionToken!),
+        getDefaultCurrencyScoped(sessionToken!),
+      ];
       Promise.all(loads)
         .then(([currs, rates, base]) => {
           setCurrencies(currs);
