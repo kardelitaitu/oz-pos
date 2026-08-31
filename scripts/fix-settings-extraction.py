@@ -2,8 +2,16 @@
 """Replace inline case blocks in SettingsPage.tsx with section component calls."""
 
 import re
+from pathlib import Path
 
-path = r"C:\My Script\oz-pos\ui\src\features\settings\SettingsPage.tsx"
+# Resolve the target from THIS script's location (scripts/ -> repo root), so
+# the fixer works from any checkout/worktree path, not just the original
+# workspace. (The previous hardcoded r"C:\My Script\oz-pos\..." anchored the
+# tool to one absolute directory and broke everywhere else.)
+path = (
+    Path(__file__).resolve().parents[1]
+    / "ui" / "src" / "features" / "settings" / "SettingsPage.tsx"
+)
 
 with open(path, 'r', encoding='utf-8') as f:
     content = f.read()

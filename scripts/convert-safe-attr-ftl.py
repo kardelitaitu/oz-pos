@@ -109,7 +109,11 @@ def convert_file(filepath: Path, safe_keys: set[str]) -> int:
 
 
 def main():
-    locales_dir = Path('ui/src/locales')
+    # Anchor to this script's location, not the caller's CWD, so the
+    # conversion runs from any checkout path or worktree.
+    locales_dir = (
+        Path(__file__).resolve().parent.parent / "ui" / "src" / "locales"
+    )
     if not locales_dir.exists():
         print(f'Error: {locales_dir} not found', file=sys.stderr)
         sys.exit(1)

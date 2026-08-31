@@ -9,7 +9,7 @@ targets = [
 ]
 exts = {".rs", ".toml", ".yml", ".yaml", ".md", ".env", ".env.example"}
 
-for root, dirs, files in os.walk("."):
+for root, dirs, files in os.walk(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
     parts = root.replace("\\", "/").split("/")
     if any(skip in parts for skip in ("target", ".git", "node_modules")):
         continue

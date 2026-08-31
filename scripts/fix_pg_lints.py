@@ -2,7 +2,9 @@
 """Apply targeted clippy lint fixes to crates/oz-api/src/pg.rs."""
 import pathlib
 
-path = pathlib.Path("crates/oz-api/src/pg.rs")
+# Resolve the target from THIS script's location so it works from any
+# checkout/worktree, not just a repository-root CWD.
+path = pathlib.Path(__file__).resolve().parents[1] / "crates" / "oz-api" / "src" / "pg.rs"
 raw = path.read_bytes()
 text = raw.decode("utf-8")
 
@@ -33,7 +35,7 @@ print("Fix 2b: map_or -> is_ok_and for day")
 # This query has no format interpolation args, so format! is useless.
 # tokio_postgres::ToStatement is implemented for both str and String.
 old3 = """            &format!(
-                \"SELECT er.id, er.from_currency, er.to_currency, er.rate_millionths,
+                "SELECT er.id, er.from_currency, er.to_currency, er.rate_millionths,
                         er.source, er.effective_date, er.created_at
                  FROM exchange_rates er
                  WHERE er.id = (
@@ -45,7 +47,7 @@ old3 = """            &format!(
                  )
                  ORDER BY er.from_currency, er.to_currency\"
             ),"""
-new3 = """            \"SELECT er.id, er.from_currency, er.to_currency, er.rate_millionths,
+new3 = """            "SELECT er.id, er.from_currency, er.to_currency, er.rate_millionths,
                         er.source, er.effective_date, er.created_at
                  FROM exchange_rates er
                  WHERE er.id = (
@@ -55,7 +57,7 @@ new3 = """            \"SELECT er.id, er.from_currency, er.to_currency, er.rate_
                      ORDER BY e2.effective_date DESC, e2.created_at DESC
                      LIMIT 1
                  )
-                 ORDER BY er.from_currency, er.to_currency\",\"""
+                 ORDER BY er.from_currency, er.to_currency","""
 count = text.count(old3)
 assert count == 1, f"Fix 3: expected 1 occurrence, found {count}"
 text = text.replace(old3, new3, 1)
