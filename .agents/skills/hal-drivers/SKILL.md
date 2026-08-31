@@ -1,15 +1,15 @@
 ---
 name: hal-drivers
-description: Hardware Abstraction Layer (HAL) conventions for OZ-POS — embedded-hal traits, drivers for barcode scanners, receipt printers, NFC readers, and payment terminals, plus mandatory mock implementations. Use when adding a new device driver or wiring hardware into a feature.
+description: Hardware Abstraction Layer (HAL) conventions for OZ-POS — async_trait device traits, drivers for barcode scanners, receipt printers, cash drawers, customer displays, weight scales, and EDC payment terminals, plus mandatory mock implementations. Use when adding a new device driver or wiring hardware into a feature.
 ---
 
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (4 noted findings, doc-staleness) · F1: claims HAL built on embedded-hal traits + crate path crates/oz-hal/; actual oz-hal has NO embedded-hal dep and lives at crates/oz-hal/ (not crates/oz-hal/) · F2: layout lists traits nfc.rs + payment_terminal.rs — neither exists; actual traits dir has barcode/cash_drawer/customer_display/printer only (no NfcReader/PaymentTerminal trait) · F3: driver files shown as honeywell_barcode/star_printer/acr122u_nfc/idtech_payment — actual drivers are generic usb/bt/serial/tcp_scanner + usb/bt/tcp_printer + drawer/serial_display/scale (no vendor-specific named drivers) · F4: claims mocks gated by mock feature (cargo test --features mock) — no mock feature in Cargo.toml and mock.rs has no cfg(feature) gate (mocks always compiled) · verified accurate: BarcodeScanner trait signature matches code (connect/poll/cancel/device_info, &self/&mut self/Box<dyn>), register_scanner + register_tcp_printer + DriverRegistry::discover present, mocks in drivers/mock.rs, async Result<T,HalError> convention -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (F1-F4 repaired + EdcTerminal documented) · F1 FIXED: removed the false 'embedded-hal' claim (no such dep; plain async_trait) · F2 FIXED: traits list corrected to the 6 real traits (barcode/printer/cash_drawer/customer_display/weight_scale/edc) — fictional nfc.rs/payment_terminal.rs removed · F3 FIXED: drivers are transport-named (usb/bt/serial_scanner, usb/bt/tcp_printer, escpos, receipt, kds_chit, drawer, serial_display, scale, edc/{wired,wireless,protocol}) — fictional honeywell_barcode/star_printer/acr122u_nfc/idtech_payment removed; example struct now UsbHidBarcodeScanner (real) · F4 FIXED: mocks are always compiled (no `mock` feature gate) · NEW: EdcTerminal trait (traits/edc.rs) + edc/ drivers now documented · verified accurate: BarcodeScanner signature (connect/poll/cancel/device_info), DriverRegistry + discover, mock.rs location, async Result<T,HalError> convention -->
 
 # Hardware Abstraction Layer (HAL)
 
-OZ-POS runs on real hardware: barcode scanners, receipt printers, NFC readers, cash drawers, payment terminals. The HAL (`oz-hal`) is the seam between the **business logic** (which wants "scan a barcode") and the **physical device** (which sends bytes over USB, Bluetooth, or serial).
+OZ-POS runs on real hardware: barcode scanners, receipt printers, cash drawers, customer displays, weight scales, and EDC payment terminals. The HAL (`oz-hal`) is the seam between the **business logic** (which wants "scan a barcode") and the **physical device** (which sends bytes over USB, Bluetooth, or serial).
 
-The HAL is implemented in Rust on top of `embedded-hal` traits. The rest of the system only ever sees the trait — it never imports a specific driver.
+The HAL is implemented in Rust as plain `async_trait` traits — there is **no** `embedded-hal` dependency. The rest of the system only ever sees the trait — it never imports a specific driver.
 
 ---
 
@@ -46,22 +46,29 @@ crates/oz-hal/
     │   ├── mod.rs
     │   ├── barcode.rs          # BarcodeScanner trait
     │   ├── printer.rs          # ReceiptPrinter trait
-    │   ├── nfc.rs              # NfcReader trait
-    │   ├── payment_terminal.rs # PaymentTerminal trait
-    │   └── cash_drawer.rs      # CashDrawer trait
+    │   ├── cash_drawer.rs      # CashDrawer trait
+    │   ├── customer_display.rs # CustomerDisplay trait
+    │   ├── weight_scale.rs     # WeightScale trait
+    │   └── edc.rs              # EdcTerminal trait (payment terminals)
     ├── error.rs                # HalError enum (thiserror)
     ├── registry.rs             # DriverRegistry + discovery
     ├── transport/
     │   ├── usb.rs
     │   ├── bluetooth.rs
     │   └── serial.rs           # platform-conditional
-    └── drivers/
+    └── drivers/                # transport-named, NOT vendor-named
         ├── mod.rs
-        ├── honeywell_barcode.rs
-        ├── star_printer.rs
-        ├── acr122u_nfc.rs
-        ├── idtech_payment.rs
-        └── mock.rs             # <-- mandatory mocks
+        ├── usb_scanner.rs / bt_scanner.rs / serial_scanner.rs
+        ├── usb_printer.rs / bt_printer.rs / tcp_printer.rs
+        ├── escpos.rs           # ESC/POS command codec
+        ├── receipt.rs / kds_chit.rs   # receipt + kitchen-chit rendering
+        ├── drawer.rs           # cash drawer
+        ├── serial_display.rs   # customer display
+        ├── scale.rs            # weight scale
+        ├── edc/                # payment terminals
+        │   ├── wired.rs / wireless.rs
+        │   └── protocol/       # Ingenico / PAX / Verifone codecs
+        └── mock.rs             # <-- mandatory mocks (always compiled)
 ```
 
 ---
@@ -107,7 +114,8 @@ pub trait BarcodeScanner: Send + Sync {
 ## Implementing a driver
 
 ```rust
-// crates/oz-hal/src/drivers/honeywell_barcode.rs
+// crates/oz-hal/src/drivers/usb_scanner.rs (illustrative — the real
+// `UsbHidBarcodeScanner` wraps a `rusb` device handle)
 
 use async_trait::async_trait;
 use crate::error::HalError;
@@ -115,20 +123,20 @@ use crate::traits::barcode::{BarcodeScanner, DeviceInfo};
 use crate::types::Barcode;
 use tokio::sync::Mutex;
 
-pub struct HoneywellBarcode {
-    inner: Mutex<hw_usb::DeviceHandle>,
+pub struct UsbHidBarcodeScanner {
+    inner: Mutex<rusb::DeviceHandle<rusb::Context>>,
     info: DeviceInfo,
 }
 
-impl HoneywellBarcode {
+impl UsbHidBarcodeScanner {
     pub fn new() -> Self { /* ... */ }
 }
 
 #[async_trait]
-impl BarcodeScanner for HoneywellBarcode {
+impl BarcodeScanner for UsbHidBarcodeScanner {
     async fn connect(&self) -> Result<Box<dyn BarcodeScanner>, HalError> {
         // idempotent; return self
-        Ok(Box::new(HoneywellBarcode { /* ... */ }))
+        Ok(Box::new(UsbHidBarcodeScanner { /* ... */ }))
     }
 
     async fn poll(&mut self, timeout_ms: u32) -> Result<Option<Barcode>, HalError> {
@@ -326,7 +334,7 @@ async fn sale_completes_after_scan() {
 **Rules:**
 - Tests use `MockBarcodeScanner`, `MockReceiptPrinter`, etc. — never a real driver.
 - For driver-internal tests (e.g., parsing a USB packet), use synthetic byte buffers.
-- Mocks live in `crates/oz-hal/src/drivers/mock.rs` and are gated by a `mock` feature: `cargo test --features mock`.
+- Mocks live in `crates/oz-hal/src/drivers/mock.rs` and are **always compiled** — there is no `mock` feature gate; just `cargo test`.
 
 ---
 
@@ -335,7 +343,7 @@ async fn sale_completes_after_scan() {
 - [ ] Define the trait in `crates/oz-hal/src/traits/<device>.rs` with `async` methods returning `Result<T, HalError>`.
 - [ ] Re-export from `crates/oz-hal/src/traits/mod.rs`.
 - [ ] Add the `HalError` variant(s) if needed.
-- [ ] Implement the driver in `crates/oz-hal/src/drivers/<vendor>_<device>.rs`.
+- [ ] Implement the driver in `crates/oz-hal/src/drivers/<transport>_<device>.rs` (e.g. `usb_scanner.rs`, `tcp_printer.rs`, `edc/wired.rs`) — drivers are named by transport, not by vendor.
 - [ ] Re-export the driver from `crates/oz-hal/src/drivers/mod.rs`.
 - [ ] **Add the mock to `crates/oz-hal/src/drivers/mock.rs`.** (Mandatory — CI will fail otherwise.)
 - [ ] Register the driver in `DriverRegistry::discover()`.
@@ -350,7 +358,7 @@ async fn sale_completes_after_scan() {
 1. **Holding `std::sync::Mutex` across `.await`.** Use `tokio::sync::Mutex` or restructure.
 2. **Forgetting the mock.** Tests then need a real device, which makes CI fragile.
 3. **Leaking low-level errors** like `rusb::Error` past the driver. Wrap in `HalError`.
-4. **Hardcoding a vendor name** in business code (`HoneywellBarcode::new()`). Use the registry.
+4. **Hardcoding a vendor name** in business code (`UsbHidBarcodeScanner::new()`). Use the registry.
 5. **Blocking the executor** with a `read_exact` call. Wrap in `spawn_blocking`.
 6. **Not handling the `Disconnected` case** — the cashier unplugs the scanner mid-shift. The system must reconnect or surface a clear error.
 7. **Polling with `loop { sleep(1ms) }`** instead of waiting on a real event. Burns CPU and battery.
@@ -366,4 +374,4 @@ async fn sale_completes_after_scan() {
 
 ---
 
-> last audited 29-08-26 by skill-drift-guard
+> last audited 31-08-26 by docs-auditor
