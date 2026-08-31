@@ -1,5 +1,7 @@
 # Mobile Release Checklist
 
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (build claims verified) · verified against HEAD: Android minSdkVersion 26 (tauri.conf.json:34 + gen/android/app/build.gradle.kts:35); iOS minimumSystemVersion 16.0 (tauri.conf.json:37); APK artifact name oz-pos-tablet-aarch64.apk (android.yml:156); APPLE_TEAM_ID in ios.yml; Android Build + iOS Build workflows exist (android.yml/ios.yml). NFC removed (round-14 fix confirmed absent). QA targets (cold-start ≤5s, memory ≤200MB, touch ≥44px, iPad sizes) are test criteria, not code-falsifiable -->
+
 > **Purpose:** Pre-release verification for Android APK and iOS IPA builds.
 > Run through this checklist before every mobile release.
 >
@@ -126,3 +128,5 @@ Test on at least these iPad sizes:
 | Product Owner | | | |
 
 > Once signed off, tag the release: `git tag v<version> && git push origin v<version>`
+
+> last audited 31-08-26 by docs-auditor
