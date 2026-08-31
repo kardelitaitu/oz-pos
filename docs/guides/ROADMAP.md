@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: styles/tokens.css -> ui/src/frontend/themes/ (no ui/src/styles/) · resolved F2: ui/src/locales/en-US.ftl -> per-feature English bundles (*.ftl) · resolved F3: ui/src/i18n/id.ftl -> per-feature Bahasa Indonesia bundles (*.id.ftl) · resolved F4: "25 translation files" -> 24 per-feature bundles × 2 locales = 48 .ftl files · resolved F5: "48 Fluent bundles" -> 24 per-feature bundles, each with en + id variants · verified accurate: oz-reporting implemented (Phase 5 daily/weekly/monthly engines present in src/), oz-payment Square+QRIS/Midtrans (square.rs+qris.rs exist), redis optional dep present (line 375), i18n-gap self-note (line 486: EmailReportSettings.tsx + SettingsPage.tsx still hardcoded English) matches the settings audit finding · re-audited 2026-08-08 by docs-auditor: 3 stale checkboxes flipped (scheduled email, Android APK CI, CRDT sync), counts refreshed (39 Feature variants, 265 UI test files, 5,800+ Rust tests), rlua->mlua, i18n note narrowed to EmailReportSettings.tsx -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: styles/tokens.css -> ui/src/frontend/themes/ (no ui/src/styles/) · resolved F2: ui/src/locales/en-US.ftl -> per-feature English bundles (*.ftl) · resolved F3: ui/src/i18n/id.ftl -> per-feature Bahasa Indonesia bundles (*.id.ftl) · resolved F4: "25 translation files" -> 24 per-feature bundles × 2 locales = 48 .ftl files · resolved F5: "48 Fluent bundles" -> 24 per-feature bundles, each with en + id variants · verified accurate: oz-reporting implemented (Phase 5 daily/weekly/monthly engines present in src/), oz-payment Square+QRIS/Midtrans (square.rs+qris.rs exist), redis optional dep present (line 375), i18n-gap self-note (line 486: EmailReportSettings.tsx + SettingsPage.tsx still hardcoded English) matches the settings audit finding · re-audited 2026-08-08 by docs-auditor: 3 stale checkboxes flipped (scheduled email, Android APK CI, CRDT sync), counts refreshed (39 Feature variants, 265 UI test files, 5,800+ Rust tests), rlua->mlua, i18n note narrowed to EmailReportSettings.tsx · RE-AUDITED 2026-08-31 by docs-auditor: .ftl count refreshed 24→25 bundles / 48→50 files (one per-feature bundle added since 08-08; canonical ui/src/locales/ = 25 bare + 25 .id.ftl, matching ARCHITECTURE.md + ui/README "50 .ftl files"); NOTE: 2 stray files sit at ui/locales/sales.ftl + ui/locales/sales.id.ftl (a duplicate of the canonical sales bundle, outside ui/src/locales/) — a code-cleanup concern, not counted in the bundle total -->
 
 # OZ-POS — Roadmap
 
@@ -463,11 +463,11 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] ARIA labels on all interactive elements
 - [x] `ui/src/locales/*.ftl` — English per-feature bundles
 - [x] `ui/src/locales/*.id.ftl` — Bahasa Indonesia per-feature bundles
-- [x] 24 per-feature bundles × 2 locales = 48 `.ftl` files
+- [x] 25 per-feature bundles × 2 locales = 50 `.ftl` files
 - [x] `@fluent/react` integration — no hardcoded strings in JSX
 - [x] `docs/a11y.md` — accessibility compliance checklist
 - [x] Lighthouse a11y score ≥ 90 on all pages (CI gate via `.lighthouserc.json`, 0.90 threshold)
-- [x] UI fully translated in English + Bahasa Indonesia (24 per-feature Fluent bundles, 48 `.ftl` files, lint-i18n.sh clean)
+- [x] UI fully translated in English + Bahasa Indonesia (25 per-feature Fluent bundles, 50 `.ftl` files, lint-i18n.sh clean)
 - [x] Thai locale removed — not a target market
 
 ### oz-reporting — Performance & Profiling
