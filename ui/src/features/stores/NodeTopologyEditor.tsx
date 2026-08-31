@@ -98,6 +98,13 @@ import { TopologyToolRack } from './topologyToolRack';
 import { TopologyContextMenu } from './topologyContextMenu';
 import { TopologyCanvasZoomControls } from './topologyCanvasZoomControls';
 
+/** Session-level "Remember PIN" cache. The editor is keyed by branch
+ *  (TopologyScreen remounts it on every branch switch), so a component-scoped
+ *  ref would forget the verified PIN on each switch — contradicting the
+ *  "Remember PIN for this session" label. A module-scope set keyed by session
+ *  token survives remounts for the app's lifetime, matching the label. */
+const PIN_VERIFIED_SESSIONS = new Set<string>();
+
 // Re-export the moved pure helpers so tests (nodeTopologyEditorHelpers,
 // canvasStateEqual) and runtime importers (topologyWarehouseCard) resolve
 // them from this module exactly as before the split.
@@ -392,6 +399,57 @@ function BranchLocationFields({ nodeId, sessionToken, l10n, beginInspectorEdit }
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<Partial<Pick<StoreProfile, 'address' | 'currency' | 'timezone' | 'tax_id'>> | null>(null);
   const active = draft && profile ? { ...profile, ...draft } : profile;
+  const { addToast } = useToast();
+
+  // ── Serialized blur-persist ─────────────────────────────────────
+  // The four fields each fire persist on blur. Naive per-field saves race:
+  // blurring Address then immediately Currency (before the first update
+  // resolves) builds the second payload from the STALE pre-Address profile,
+  // silently overwriting the Address change. Keep the latest profile and
+  // draft in refs, serialize the IPC calls, and loop until no queued edit
+  // remains — so every accumulated field change rides the final payload.
+  // The draft is only cleared once the whole chain settles, so a failed
+  // save keeps the user's edits visible (with an error toast) for a retry
+  // instead of reverting them silently.
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const saveInFlightRef = useRef(false);
+  const queuedRef = useRef(false);
+
+  const persist = useCallback(async () => {
+    if (!profileRef.current) return;
+    if (saveInFlightRef.current) {
+      // A save is running; mark a newer edit arrived so the loop re-reads
+      // the latest draft instead of the snapshot already in flight.
+      queuedRef.current = true;
+      return;
+    }
+    saveInFlightRef.current = true;
+    try {
+      // Drain the queue: each pass snapshots the CURRENT profile + draft.
+      // A blur arriving mid-save sets queuedRef, forcing another pass with
+      // the accumulated edits once the in-flight update commits.
+      while (true) {
+        queuedRef.current = false;
+        const currentDraft = draftRef.current;
+        if (!currentDraft) break;
+        const merged = { ...profileRef.current, ...currentDraft };
+        const updated = await updateStoreProfileScoped(sessionToken, merged);
+        profileRef.current = updated;
+        setProfile(updated);
+        if (queuedRef.current) continue;
+        setDraft(null);
+        break;
+      }
+    } catch {
+      // Keep the draft so the user's edits stay visible; surface the failure.
+      addToast({ message: l10n.getString('topology-inspector-save-error'), type: 'error' });
+    } finally {
+      saveInFlightRef.current = false;
+    }
+  }, [sessionToken, addToast, l10n]);
 
   useEffect(() => {
     let cancelled = false;
@@ -401,14 +459,6 @@ function BranchLocationFields({ nodeId, sessionToken, l10n, beginInspectorEdit }
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [nodeId, sessionToken]);
-
-  const persist = useCallback(() => {
-    if (draft && profile) {
-      const merged = { ...profile, ...draft };
-      updateStoreProfileScoped(sessionToken, merged).then(setProfile).catch(() => {});
-      setDraft(null);
-    }
-  }, [draft, profile, sessionToken]);
 
   if (loading) {
     return (
@@ -927,8 +977,11 @@ export default function NodeTopologyEditor({
   const [rememberPin, setRememberPin] = useState(false);
   /** Session-level PIN cache. When set, subsequent Apply calls skip the
    *  verifyPin prompt — the checkbox in the dialog controls whether the
-   *  flag is persisted to sessionStorage (cleared on tab close). */
-  const pinVerifiedRef = useRef(false);
+   *  flag is remembered for the session. The cache lives in a module-scope
+   *  set keyed by session token (not a component ref) so a branch switch —
+   *  which remounts this editor — keeps the remembered PIN, matching the
+   *  "for this session" label. */
+  const pinVerifiedRef = useRef(PIN_VERIFIED_SESSIONS.has(sessionToken ?? ''));
   const applyPinRef = useRef<HTMLInputElement>(null);
 
   /** Live canvas getter for the relationship picker's position clamp. */
@@ -2093,8 +2146,13 @@ export default function NodeTopologyEditor({
           setTimeout(() => applyPinRef.current?.focus(), 50);
           return;
         }
-        // Persist the verified flag for the rest of the session.
-        if (rememberPin) pinVerifiedRef.current = true;
+        // Persist the verified flag for the rest of the session. Write to
+        // the module-scope cache too so a branch-switch remount (new ref
+        // initialized from the set) keeps the remembered PIN.
+        if (rememberPin) {
+          pinVerifiedRef.current = true;
+          if (sessionToken) PIN_VERIFIED_SESSIONS.add(sessionToken);
+        }
       }
     } catch {
       setApplyPinError(true);
@@ -5047,7 +5105,7 @@ export default function NodeTopologyEditor({
       ?? (branchNode?.metadata?.['storeProfileId'] as string | undefined)
       ?? sessionStoreId;
     setApplyConfirmData({
-      created: [...createdItems, ...typeChangedItems],
+      created: createdItems,
       updated: updatedItems,
       archived: archivedItems,
       typeChanged: typeChangedItems,
@@ -6081,9 +6139,29 @@ export default function NodeTopologyEditor({
                 </div>
               )}
 
+              {applyConfirmData.typeChanged.length > 0 && (
+                <div className="topology-apply-confirm-section">
+                  <h4 className="topology-apply-confirm-section-title topology-apply-confirm-section--type-changed">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M12 2v4M12 18v4M2 12h4M18 12h4" /><circle cx="12" cy="12" r="3" /></svg>
+                    <Localized id="topology-apply-confirm-type-changed">Type Changed</Localized>
+                    <span className="topology-apply-confirm-count">{applyConfirmData.typeChanged.length}</span>
+                  </h4>
+                  <ul className="topology-apply-confirm-list">
+                    {applyConfirmData.typeChanged.map((item) => (
+                      <li key={item.id} className="topology-apply-confirm-item">
+                        <span className="topology-apply-confirm-dot topology-apply-confirm-dot--type-changed" />
+                        <span className="topology-apply-confirm-name">{item.name}</span>
+                        <span className="topology-apply-confirm-type">{item.typeKey}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {applyConfirmData.created.length === 0
                 && applyConfirmData.updated.length === 0
-                && applyConfirmData.archived.length === 0 && (
+                && applyConfirmData.archived.length === 0
+                && applyConfirmData.typeChanged.length === 0 && (
                 <p className="topology-apply-confirm-empty">
                   <Localized id="topology-apply-confirm-no-changes">No workspace changes detected.</Localized>
                 </p>
