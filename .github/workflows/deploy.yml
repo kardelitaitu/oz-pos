@@ -80,7 +80,7 @@ permissions:
 jobs:
   deploy:
     name: Build + deploy to Northflank
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 90
     steps:
       # Fail-closed credential gate (website.yml convention): a deploy that
