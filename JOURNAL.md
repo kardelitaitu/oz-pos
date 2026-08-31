@@ -8761,7 +8761,7 @@ already written down once.
     the second sale.
   - StockShortfallDialog renders inside PaymentModal, so the component stays
     mounted across a shortfall retry and the id survives.
-  - The dialog synthesises cartId: \esolved-\\` on every submit,
+  - The dialog synthesises cartId: \esolved-\\` on every submit,
     so the attempt cannot be derived from the cart id here. That settled the
     option-(a) question with evidence rather than argument.
   - No arg struct uses deny_unknown_fields, so the extra JSON field is inert.
