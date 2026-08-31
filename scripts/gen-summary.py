@@ -74,6 +74,39 @@ def decisions() -> list[str]:
     return entries
 
 
+def archived_decisions() -> list[str]:
+    """Superseded ADRs kept under docs/decisions/archived/ for provenance."""
+    archived = DOCS / "decisions" / "archived"
+    if not archived.is_dir():
+        return []
+    return [
+        chapter(p.name, prettify(p.stem), "decisions/archived")
+        for p in sorted(archived.glob("*.md"))
+    ]
+
+
+def releases() -> list[str]:
+    """Release checklists and process docs under docs/releases/."""
+    rel = DOCS / "releases"
+    if not rel.is_dir():
+        return []
+    return [
+        chapter(p.name, prettify(p.stem), "releases")
+        for p in sorted(rel.glob("*.md"))
+    ]
+
+
+def operations() -> list[str]:
+    """Operational runbooks and deployment guides under docs/operations/."""
+    ops = DOCS / "operations"
+    if not ops.is_dir():
+        return []
+    return [
+        chapter(p.name, prettify(p.stem), "operations")
+        for p in sorted(ops.glob("*.md"))
+    ]
+
+
 def rust_crates() -> list[str]:
     """Crate names from the copied rustdoc crates.js (workspace doc index)."""
     js = SRC / "api" / "rust" / "crates.js"
@@ -117,6 +150,23 @@ def build() -> str:
         "---",
         "",
         *decisions(),
+    ]
+    arch = archived_decisions()
+    if arch:
+        lines += ["", "## Archived", *arch]
+    lines += [
+        "",
+        "---",
+        "",
+        "# Releases",
+        *releases(),
+        "",
+        "---",
+        "",
+        "# Operations",
+        *operations(),
+        "",
+        "---",
         "",
         "# Rust",
         "- [API Reference](api/rust/index.html)",
@@ -132,7 +182,7 @@ def main() -> None:
     SRC.mkdir(parents=True, exist_ok=True)
     out = SRC / "SUMMARY.md"
     out.write_text(build(), encoding="utf-8")
-    print(f"Wrote {out}: {len(guides())} guides, {len(decisions())} ADRs")
+    print(f"Wrote {out}: {len(guides())} guides, {len(decisions())} ADRs, {len(archived_decisions())} archived, {len(releases())} releases, {len(operations())} ops")
 
     crates = rust_crates()
     ensure_api_landing(

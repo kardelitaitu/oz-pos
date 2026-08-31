@@ -2,7 +2,7 @@
 
 > **Status:** Implemented (2026-07-21)
 > **Target audience:** QA / developers testing on Ubuntu 22.04+ or Debian 12+
-> **Related:** [Release Checklist](../releases/checklist.md) · [Tauri Config](../../apps/desktop-client/tauri.conf.json) · [Windows Launch Test](./windows-launch-test.md)
+> **Related:** [Release Checklist](../releases/checklist.md) · [Tauri Config](https://github.com/kardelitaitu/oz-pos/blob/main/apps/desktop-client/tauri.conf.json) · [Windows Launch Test](./windows-launch-test.md)
 
 This guide covers building the OZ-POS desktop client on Linux and
 running the core POS flow end-to-end on a physical Linux machine.
@@ -473,8 +473,8 @@ Notes:
 
 - [Windows Launch Test](./windows-launch-test.md) — Windows equivalent guide
 - [Release Checklist](../releases/checklist.md) — Pre-release verification
-- [Tauri Config](../../apps/desktop-client/tauri.conf.json) — Window size, CSP, bundle settings
+- [Tauri Config](https://github.com/kardelitaitu/oz-pos/blob/main/apps/desktop-client/tauri.conf.json) — Window size, CSP, bundle settings
 - [VPS Migration Guide](../operations/vps-migration.md) — Cloud server deployment
 - [Docker Deployment Guide](../operations/docker-deployment.md) — Full stack deployment
 - [Runbook](../operations/runbook.md) — Incident response procedures
-- [QUICKSTART](../../docs/guides/QUICKSTART.md) — Project quick start
+- [QUICKSTART](./QUICKSTART.md) — Project quick start

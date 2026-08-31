@@ -2,7 +2,7 @@
 
 > **Status:** Implemented (2026-07-21)
 > **Target audience:** QA / developers testing on Android 10+ physical tablets
-> **Related:** [Mobile Build Guide](../../packaging/mobile/README.md) · [Tauri Tablet Config](../../apps/tablet-client/tauri.conf.json) · [Windows Launch Test](./windows-launch-test.md) · [Linux Launch Test](./linux-launch-test.md)
+> **Related:** [Mobile Build Guide](https://github.com/kardelitaitu/oz-pos/tree/main/packaging/mobile) · [Tauri Tablet Config](https://github.com/kardelitaitu/oz-pos/blob/main/apps/tablet-client/tauri.conf.json) · [Windows Launch Test](./windows-launch-test.md) · [Linux Launch Test](./linux-launch-test.md)
 
 This guide covers building, installing, and testing the OZ-POS tablet app
 on a physical Android device (phone or tablet).
@@ -584,8 +584,8 @@ Notes:
 
 ## Related
 
-- [Mobile Build & Deployment Guide](../../packaging/mobile/README.md) — Full Android/iOS build pipeline
-- [Tablet Client Notes](../../apps/tablet-client/AGENTS.md) — Android dev conventions
+- [Mobile Build & Deployment Guide](https://github.com/kardelitaitu/oz-pos/tree/main/packaging/mobile) — Full Android/iOS build pipeline
+- [Tablet Client Notes](https://github.com/kardelitaitu/oz-pos/blob/main/apps/tablet-client/AGENTS.md) — Android dev conventions
 - [iPad Launch Test](./ios-install-test.md) — iOS equivalent guide
 - [Windows Launch Test](./windows-launch-test.md) — Desktop equivalent guide
 - [Linux Launch Test](./linux-launch-test.md) — Linux equivalent guide

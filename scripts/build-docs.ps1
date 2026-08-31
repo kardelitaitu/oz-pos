@@ -72,10 +72,15 @@ Write-Host "`n[3/7] Copying detailed docs into the book source..." -ForegroundCo
 # stale), and publishing it as book chapters was never its purpose.
 if (Test-Path "$BookSrc\guides") { Remove-Item -Recurse -Force "$BookSrc\guides" }
 if (Test-Path "$BookSrc\decisions") { Remove-Item -Recurse -Force "$BookSrc\decisions" }
-New-Item -ItemType Directory -Force -Path "$BookSrc\guides", "$BookSrc\decisions" | Out-Null
+if (Test-Path "$BookSrc\releases") { Remove-Item -Recurse -Force "$BookSrc\releases" }
+if (Test-Path "$BookSrc\operations") { Remove-Item -Recurse -Force "$BookSrc\operations" }
+New-Item -ItemType Directory -Force -Path "$BookSrc\guides", "$BookSrc\decisions\archived", "$BookSrc\releases", "$BookSrc\operations" | Out-Null
 Copy-Item (Join-Path $WorkspaceRoot "docs\guides\*.md") "$BookSrc\guides\" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $WorkspaceRoot "docs\decisions\*.md") "$BookSrc\decisions\" -ErrorAction SilentlyContinue
-Write-Host "[SUCCESS] guides + ADRs copied into docs/src/" -ForegroundColor Green
+Copy-Item (Join-Path $WorkspaceRoot "docs\decisions\archived\*.md") "$BookSrc\decisions\archived\" -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $WorkspaceRoot "docs\releases\*.md") "$BookSrc\releases\" -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $WorkspaceRoot "docs\operations\*.md") "$BookSrc\operations\" -ErrorAction SilentlyContinue
+Write-Host "[SUCCESS] guides + ADRs + releases + operations copied into docs/src/" -ForegroundColor Green
 
 Write-Host "`n[4/7] Copying Rust API docs into the book source..." -ForegroundColor Yellow
 if (Test-Path "$BookSrc\api\rust") { Remove-Item -Recurse -Force "$BookSrc\api\rust" }

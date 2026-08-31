@@ -2,7 +2,7 @@
 
 > **Status:** Implemented (2026-07-21)
 > **Target audience:** QA / developers testing on iPadOS 16+ physical iPads
-> **Related:** [Mobile Build Guide](../../packaging/mobile/README.md) · [Tauri Tablet Config](../../apps/tablet-client/tauri.conf.json) · [Android Install Test](./android-install-test.md) · [Windows Launch Test](./windows-launch-test.md)
+> **Related:** [Mobile Build Guide](https://github.com/kardelitaitu/oz-pos/tree/main/packaging/mobile) · [Tauri Tablet Config](https://github.com/kardelitaitu/oz-pos/blob/main/apps/tablet-client/tauri.conf.json) · [Android Install Test](./android-install-test.md) · [Windows Launch Test](./windows-launch-test.md)
 
 This guide covers building, installing, and testing the OZ-POS tablet app
 on a physical iPad device via TestFlight or direct sideloading.
@@ -685,14 +685,14 @@ Notes:
 
 ## Related
 
-- [Mobile Build & Deployment Guide](../../packaging/mobile/README.md) — Full Android/iOS build pipeline
+- [Mobile Build & Deployment Guide](https://github.com/kardelitaitu/oz-pos/tree/main/packaging/mobile) — Full Android/iOS build pipeline
 - [Android Install Test](./android-install-test.md) — Android equivalent guide
 - [Windows Launch Test](./windows-launch-test.md) — Desktop equivalent guide
 - [Linux Launch Test](./linux-launch-test.md) — Linux equivalent guide
 - [Tauri iOS Guide](https://v2.tauri.app/start/mobile/ios/) — Official Tauri iOS docs
 - [Apple Developer Documentation](https://developer.apple.com/documentation/)
 - [TestFlight Guide](https://developer.apple.com/testflight/)
-- [iOS CI Workflow](../../.github/workflows/ios.yml) — Automated iOS build pipeline
+- [iOS CI Workflow](https://github.com/kardelitaitu/oz-pos/blob/main/.github/workflows/ios.yml) — Automated iOS build pipeline
 
 ---
 
