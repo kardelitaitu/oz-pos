@@ -1,17 +1,26 @@
 /*
-last audited 25-07-26 by RSA-Agent (oz-hal slice C: verified)
+last audited 31-08-26 by DSH-Agent (stub corrected)
 crate: oz-hal | status: SAFE | lint: CLEAN
-findings: clean driver — no unwrap/panic/unsafe
-next: none | perf: N/A
+findings: the driver is a stub and used to say otherwise. The struct doc claimed it "communicates with the scale over the HID POS usage page" while read_weight unconditionally returned an error and _vendor_id/_product_id were placeholders. It also reported NotFound, the same kind an unplugged device reports, so an operator was told to check a cable on a feature that was never written. Now Unsupported. Deliberately NOT wired into bootstrap::apply_config: read_scale_weight_scoped maps a missing scale to Ok(None) — the UI shows no weight — but a registered stub would make the same command return Err on every poll, turning a silent absence into a recurring error. Wiring is blocked on this driver, not on the config schema.
+next: implement HID POS reads (rusb is already a dependency; a HID interrupt-endpoint read path is what usb_scanner.rs does) and only then add scale entries to HardwareConfig | perf: N/A
 */
+//! USB HID weight scale driver — currently a stub.
+//!
+//! Declares [`HidWeightScale`] so the [`WeightScale`] trait has a named
+//! production type and the registry, mocks and setup wizard all have
+//! something concrete to hold. No device is opened: [`WeightScale::read_weight`]
+//! always fails with [`HalError::Unsupported`], which is why the startup
+//! bootstrap registers no scales and why wiring one would be a regression
+//! rather than a feature.
+
 use crate::error::HalError;
 use crate::traits::weight_scale::{WeightReading, WeightScale};
 
-/// A real USB HID weight scale driver.
+/// A USB HID weight scale.
 ///
-/// Communicates with the scale over the HID POS usage page
-/// (`0x0001:0x0011`). This is a basic implementation that reads
-/// from a configured device path.
+/// **Stub.** Holds the identity a configured scale would need but opens
+/// nothing and reads nothing; see the module doc for why it stays out of the
+/// startup bootstrap.
 pub struct HidWeightScale {
     device_path: String,
     /// Placeholder for a future HID device handle.
@@ -41,16 +50,18 @@ impl HidWeightScale {
 
 impl WeightScale for HidWeightScale {
     fn read_weight(&self) -> Result<WeightReading, HalError> {
-        // Stub implementation: In production this would:
-        // 1. Open the HID device at self.device_path
-        // 2. Send a GET_WEIGHT command (or listen for reports)
-        // 3. Parse the HID POS scale report (Usage Page 0x0011)
-        //    to extract weight value and stability flag
+        // Not implemented. A real version would open the HID device at
+        // self.device_path, listen for reports on the HID POS scale usage
+        // page (0x0001:0x0011), and parse the weight and stability fields.
         //
-        // For now, return a "not connected" error so the caller
-        // knows the physical device has not been attached.
-        Err(HalError::NotFound(format!(
-            "scale at {} not available — stub implementation",
+        // Reported as Unsupported rather than NotFound on purpose. NotFound
+        // is what an unplugged device returns, and the two need different
+        // answers from an operator: "check the cable" versus "this build
+        // cannot read a scale at all, whatever the cable is doing". The
+        // weight command propagates either way, so the sub_kind is the only
+        // place the distinction survives to the UI.
+        Err(HalError::Unsupported(format!(
+            "weight scale reading is not implemented (device {})",
             self.device_path
         )))
     }

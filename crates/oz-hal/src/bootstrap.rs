@@ -1,8 +1,8 @@
 /*
 last audited 31-08-26 by DSH-Agent (bootstrap module, new)
 crate: oz-hal | status: SAFE | lint: CLEAN
-findings: exists because the registry had a complete read side and no write side — DriverRegistry::discover() had exactly one caller (registry_tests.rs:213) and no app ever called register_*, so every hardware command resolved None at runtime while the setup wizard could still list devices via probe_all(). Second, independent defect found here: discover() mints hardware-derived ids ("printer:vendor:model") while the app looks up "default"/"kitchen", so calling discover() alone would not have fixed anything — apply_config binds the operator's id to the device. Addressed transports are constructed without I/O; Connection::Usb is the one branch that enumerates the bus, since it names no address. Scales are absent because TerminalProfile stores a device path but HidWeightScale needs vendor/product ids the profile never captured — a config-schema gap, not a wiring gap.
-next: scale config needs vid/pid in TerminalProfile | perf: USB enumeration is synchronous and blocks the runtime thread briefly at startup
+findings: exists because the registry had a complete read side and no write side — DriverRegistry::discover() had exactly one caller (registry_tests.rs:213) and no app ever called register_*, so every hardware command resolved None at runtime while the setup wizard could still list devices via probe_all(). Second, independent defect found here: discover() mints hardware-derived ids ("printer:vendor:model") while the app looks up "default"/"kitchen", so calling discover() alone would not have fixed anything — apply_config binds the operator's id to the device. Addressed transports are constructed without I/O; Connection::Usb is the one branch that enumerates the bus, since it names no address. Scales are absent because HidWeightScale is a stub: registering one would turn read_scale_weight_scoped's clean Ok(None) into an Err on every poll, so wiring waits on the driver, not on the config schema.
+next: implement HID POS reads in drivers/scale.rs, then add vid/pid to TerminalProfile and scale entries here | perf: USB enumeration is synchronous and blocks the runtime thread briefly at startup
 */
 //! Registry bootstrap — turning saved hardware configuration into drivers.
 //!
@@ -166,10 +166,15 @@ pub enum TerminalConnection {
 /// Everything the operator configured on this terminal, in the HAL's own
 /// vocabulary.
 ///
-/// Weight scales are intentionally absent: `TerminalProfile` records a scale
-/// device path, but [`crate::drivers::scale::HidWeightScale`] is constructed
-/// from a USB vendor/product pair the profile never captured. Registering a
-/// scale needs a config-schema change first, not a wiring change.
+/// Weight scales are intentionally absent, and not only for the config
+/// reason. `TerminalProfile` records a scale device path while
+/// [`crate::drivers::scale::HidWeightScale`] is constructed from a USB
+/// vendor/product pair the profile never captured — but the blocking fact is
+/// that the driver is a stub whose `read_weight` always fails.
+/// `read_scale_weight_scoped` maps a missing scale to `Ok(None)` so the UI
+/// simply shows no weight; registering a stub would make the same command
+/// return `Err` on every poll. Wiring a scale is therefore a regression
+/// until the driver reads a device, whatever the config schema says.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct HardwareConfig {
     /// Receipt printers.

@@ -1,6 +1,6 @@
 # oz-hal
 
-<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (3 findings repaired) · F1: removed dead `Scanner`/`drivers/scanner.rs` row (file deleted at HEAD; scanners covered by usb/bt/serial_scanner) · F2: added `EdcTerminal` trait row (traits/edc.rs — status/authorize/capture/sale/refund/void/print_receipt/device_info; re-exported with EdcPaymentResult/TerminalStatus) · F3: added EDC drivers WiredEdcTerminal (drivers/edc/wired.rs), WirelessEdcTerminal (drivers/edc/wireless.rs), protocol codecs Ingenico/PAX/Verifone (drivers/edc/protocol/), and MockEdcTerminal (drivers/mock.rs) · verified accurate: remaining traits (barcode/printer/cash_drawer/customer_display/weight_scale), drivers (usb/bt/serial/tcp printer, drawer, serial_display, scale, kds_chit), mocks, escpos consts + format_receipt, receipt format_sales_receipt/SalesReceipt/ReceiptConfig, DriverRegistry methods; unsafe confined to lib.rs with SAFETY comment. NOTE: EdcTerminal migration is now complete — trait (217554f5), drivers (bbd74c01), registry category (459f852c) and the oz-payment switchover (ad908e96, which deleted the duplicate trait and made the commands fail closed) · F4 (31-08, post dc07f32a): documented the new `bootstrap` module (`HardwareConfig` + `apply_config()` → `BootstrapReport`) as the production registration path and corrected the registry example — `discover()` was never wired into startup, so the registry was empty at runtime · CORRECTED 31-08 by DSH-Agent (F5-F7): F5 WiredEdcTerminal/WirelessEdcTerminal were labelled "Real" but every op returns HalError::Unsupported — they are stubs, and the mislabel was on a money path; F6 "registration never blocks" was superseded by 6624df1c (Connection::Usb enumerates the bus); F7 the registry example would not compile — apply_config is a free function not a method, register_tcp_printer takes a DeviceInfo, and the ids shown were discover()-style ones that no command looks up -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (3 findings repaired) · F1: removed dead `Scanner`/`drivers/scanner.rs` row (file deleted at HEAD; scanners covered by usb/bt/serial_scanner) · F2: added `EdcTerminal` trait row (traits/edc.rs — status/authorize/capture/sale/refund/void/print_receipt/device_info; re-exported with EdcPaymentResult/TerminalStatus) · F3: added EDC drivers WiredEdcTerminal (drivers/edc/wired.rs), WirelessEdcTerminal (drivers/edc/wireless.rs), protocol codecs Ingenico/PAX/Verifone (drivers/edc/protocol/), and MockEdcTerminal (drivers/mock.rs) · verified accurate: remaining traits (barcode/printer/cash_drawer/customer_display/weight_scale), drivers (usb/bt/serial/tcp printer, drawer, serial_display, scale, kds_chit), mocks, escpos consts + format_receipt, receipt format_sales_receipt/SalesReceipt/ReceiptConfig, DriverRegistry methods; unsafe confined to lib.rs with SAFETY comment. NOTE: EdcTerminal migration is now complete — trait (217554f5), drivers (bbd74c01), registry category (459f852c) and the oz-payment switchover (ad908e96, which deleted the duplicate trait and made the commands fail closed) · F4 (31-08, post dc07f32a): documented the new `bootstrap` module (`HardwareConfig` + `apply_config()` → `BootstrapReport`) as the production registration path and corrected the registry example — `discover()` was never wired into startup, so the registry was empty at runtime · CORRECTED 31-08 by DSH-Agent (F5-F7): F5 WiredEdcTerminal/WirelessEdcTerminal were labelled "Real" but every op returns HalError::Unsupported — they are stubs, and the mislabel was on a money path; F6 "registration never blocks" was superseded by 6624df1c (Connection::Usb enumerates the bus); F7 the registry example would not compile — apply_config is a free function not a method, register_tcp_printer takes a DeviceInfo, and the ids shown were discover()-style ones that no command looks up · F8 (31-08, DSH-Agent): six drivers were labelled "Stub" with no evidence — bt_scanner, serial_scanner, usb_printer, bt_printer, tcp_printer, serial_display. All six do real device I/O (rusb write_bulk, tokio TcpStream, serialport read/write) and none contains todo!/unimplemented!/Unsupported. Only HidWeightScale and the two EDC terminals are genuine stubs; the table now says which primitive each driver uses so the claim is checkable. F9: added SerialReceiptPrinter and relabelled BtReceiptPrinter as an alias — drivers/serial_printer.rs is the implementation, and the crate never had a second one. -->
 
 Hardware Abstraction Layer — the seam between business logic and physical devices (USB, Bluetooth, serial, TCP).
 
@@ -31,21 +31,24 @@ Business code never imports a specific driver — only traits via `DriverRegistr
 
 | Driver | File | Status |
 |--------|------|--------|
-| `UsbHidBarcodeScanner` | `drivers/usb_scanner.rs` | Real — USB HID interrupt + keycode→ASCII |
-| `BtBarcodeScanner` | `drivers/bt_scanner.rs` | Stub |
-| `SerialBarcodeScanner` | `drivers/serial_scanner.rs` | Stub |
-| `UsbReceiptPrinter` | `drivers/usb_printer.rs` | Stub |
-| `BtReceiptPrinter` | `drivers/bt_printer.rs` | Stub |
-| `TcpReceiptPrinter` | `drivers/tcp_printer.rs` | Stub |
-| `CashDrawer` | `drivers/drawer.rs` | Cash drawer driver |
-| `SerialCustomerDisplay` | `drivers/serial_display.rs` | Stub |
-| `HidWeightScale` | `drivers/scale.rs` | USB HID weight scale driver |
-| `KdsChit` | `drivers/kds_chit.rs` | KDS chit printer |
+| `UsbHidBarcodeScanner` | `drivers/usb_scanner.rs` | Real — USB HID interrupt read + keycode→ASCII |
+| `BtBarcodeScanner` | `drivers/bt_scanner.rs` | Real — reads bytes over a Bluetooth SPP serial port (`port.read`) |
+| `SerialBarcodeScanner` | `drivers/serial_scanner.rs` | Real — reads bytes over a serial port |
+| `UsbReceiptPrinter` | `drivers/usb_printer.rs` | Real — `rusb` `write_bulk` to the OUT endpoint |
+| `SerialReceiptPrinter` | `drivers/serial_printer.rs` | Real — `serialport` write; covers RS-232, USB-serial and Bluetooth SPP alike |
+| `BtReceiptPrinter` | `drivers/bt_printer.rs` | **Alias** of `SerialReceiptPrinter`, not a second driver — SPP presents as a serial port |
+| `TcpReceiptPrinter` | `drivers/tcp_printer.rs` | Real — `tokio::net::TcpStream` to port 9100 |
+| `CashDrawer` | `drivers/drawer.rs` | Real — serial pulse, plus `PrinterKickCashDrawer` which kicks through a printer |
+| `SerialCustomerDisplay` | `drivers/serial_display.rs` | Real — serial ESC/POS display commands |
+| `HidWeightScale` | `drivers/scale.rs` | **Stub** — `read_weight` always returns `NotFound`; the vid/pid fields are placeholders (`_vendor_id`) |
+| `KdsChit` | `drivers/kds_chit.rs` | Chit formatter, not a device driver |
 | `WiredEdcTerminal` | `drivers/edc/wired.rs` | Stub — every op fails closed with `HalError::Unsupported`; the Ingenico/PAX/Verifone codecs in `drivers/edc/protocol/` are stubs too |
 | `WirelessEdcTerminal` | `drivers/edc/wireless.rs` | Stub — same `Unsupported` behaviour, shares the `drivers/edc/protocol/` codecs |
 | `MockBarcodeScanner` | `drivers/mock.rs` | Programmable mock |
 | `MockReceiptPrinter` | `drivers/mock.rs` | Programmable mock |
 | `MockCashDrawer` | `drivers/mock.rs` | Programmable mock |
+| `MockWeightScale` | `drivers/mock.rs` | Programmable mock |
+| `MockCustomerDisplay` | `drivers/mock.rs` | Programmable mock |
 | `MockEdcTerminal` | `drivers/mock.rs` | Programmable mock |
 
 ## ESC/POS & receipt formatting
