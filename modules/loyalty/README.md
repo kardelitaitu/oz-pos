@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-26 · rewritten after the previous file was found corrupted (2.8 MB of repeated garbage text); content reconstructed from modules/loyalty/manifest.json, src/{lib,models,repository,service,error}.rs, and platform/startup/src/lib.rs · RE-AUDITED 31-08 (cont) by docs-auditor: lifecycle hooks are stubs (lib.rs:98-118) — corrected the Lifecycle section which claimed on_load "validates dependencies" and on_start "initialises state" (both are "future phases" comments); earn-handler-wired-in-platform and the not-registered-history claims re-confirmed. CAUTION: src/models.rs is currently DIRTY (in-flight — likely the gift-card migration the "Misplaced: gift cards" section describes as pending), so the Models list and that section were NOT re-verified this pass; re-audit them once models.rs lands -->
+<!-- Audit stamp: 2026-07-26 · rewritten after the previous file was found corrupted (2.8 MB of repeated garbage text); content reconstructed from modules/loyalty/manifest.json, src/{lib,models,repository,service,error}.rs, and platform/startup/src/lib.rs · RE-AUDITED 31-08 (cont) by docs-auditor: lifecycle hooks are stubs (lib.rs:98-118) — corrected the Lifecycle section which claimed on_load "validates dependencies" and on_start "initialises state" (both are "future phases" comments); earn-handler-wired-in-platform and the not-registered-history claims re-confirmed. CAUTION resolved: src/models.rs has since LANDED (LOYALTY-01, 803f6239 — earn_multiplier f64 -> earn_multiplier_millionths i64 fixed-point); re-verified the Models list (LoyaltyTier/Account/Transaction/AccountWithDetails all present) and the "Misplaced: gift cards" section (GiftCard/GiftCardTransaction/GiftCardWithTransactions/IssueGiftCardInput/GiftCardFilter/RedeemGiftCardResult still live here — the gift-card migration has NOT landed, so that section remains accurate); Overview updated to note the fixed-point multiplier -->
 
 # Loyalty Module
 
@@ -7,7 +7,7 @@
 ## Overview
 
 The Loyalty module owns the customer loyalty program: tier definitions with
-per-tier earning multipliers, point earn and redeem, and member account
+per-tier earning multipliers (fixed-point millionths — `LoyaltyTier::earn_multiplier_millionths: i64`, LOYALTY-01, never an `f64`), point earn and redeem, and member account
 management. Points are earned automatically from completed sales via the
 `sale.completed` event, and reversed proportionally when a sale is refunded
 (LOY-03) — the reversal runs inside the refund transaction via
