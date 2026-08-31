@@ -107,46 +107,68 @@ an optional `permissions`/`preset` field; anything else keeps full-read.
 
 ### F3 — Enforcement (cloud-server/oz-api)
 
-- Static `READ_KEY_MAP: &[(method, path, &str)]` covering the 13 GET
-  operations (plus any read verbs on mixed routes). Owned next to the
-  router build (the drift guard from Part A keeps this map honest too —
-  add a fourth assertion: every GET operation in the spec has a read-key
-  entry).
+- Static `READ_KEY_MAP: &[(method, path, key, pii)]` covering the 13 GET
+  operations (plus any read verbs on mixed routes) — each entry carries
+  its registry key **and its PII classification** (decision 3). Owned next
+  to the router build (the drift guard from Part A keeps this map honest
+  too — add a fourth assertion: every GET operation in the spec has a
+  read-key entry).
 - Read-gate middleware: `None`-claim → pass (legacy); claim present →
   `has_permission(key)` with the registry's fail-closed resolver; failure
   ⇒ 403 `insufficient_scope` (same error shape the terminal-token 403
   already uses — one error vocabulary).
 - Write routes untouched (D1 residual stays the separate admin-key
   campaign). Sync routes keep their existing gating.
+- Terminal binding: client-credential mints carry the `terminal` preset
+  unconditionally; `OZ_TERMINAL_READ_TIER=full` is the documented
+  escape hatch (startup warning + deprecation note; decision 1).
 - Tier-matrix tests: presets × 13 GETs → expected 200/403; grandfathering;
-  terminal-mint default.
+  terminal-mint default; **and the PII invariant: `dashboard` ∩
+  pii-marked routes = ∅** (decision 3 — the classification is test-visible).
 
 ### F4 — Contract + docs
 
 - OpenAPI: describe the tier model in the Auth tag + add a 403 response
-  example to read operations (the drift guard now enforces consistency
-  automatically).
+  example to read operations + a changelog note for the terminal-default
+  flip and the `OZ_TERMINAL_READ_TIER` deprecation (the drift guard now
+  enforces consistency automatically).
 - Website guides (`docs/content` en+id): "API read tiers" page for
   integrators — mint → preset → call.
 - Stamp both touched files; `docs(api)`/`docs(website)` commits.
 
-## 5. Decision points
+## 5. Decision log (all resolved 2026-08-31 — delegated to engineering, chosen by SOTA principle)
 
-1. **Terminal default flip** — do terminal client-credential tokens narrow
-   to the `terminal` preset at F3 immediately (closes the residual
-   outright, but is a behavior change for any deployed integration reading
-   beyond catalog), or ship opt-in behind `OZ_TERMINAL_READ_TIER` env with
-   the flip as a follow-up? *Recommendation:* opt-in first, flip after one
-   release cycle.
-2. **Tier model** — registry-key lists (recommended: reuses ADR #35
-   machinery, audit-stamped, fail-closed resolver) vs a coarse 3-value
-   enum (simpler JWT, but a second taxonomy to maintain). *Recommendation:*
-   registry keys + named presets.
-3. **PII classification sign-off** — the `dashboard` preset must exclude
-   user-list and any customer-PII-bearing reads; the final key list needs
-   a one-time review of the 13 GET response payloads (which fields are
-   PII) before F3 freezes the map. *Recommendation:* I produce the
-   classification table as the first F3 artifact for your sign-off.
+1. ~~Terminal default flip~~ **RESOLVED: secure-by-default with an
+   escape hatch.** At F3, terminal client-credential tokens bind to the
+   `terminal` preset unconditionally — secure-by-default is the SOTA
+   posture (an opt-in window leaves the residual open indefinitely and
+   is how "temporary" flags become permanent). Deployed integrations
+   that legitimately need legacy reads get `OZ_TERMINAL_READ_TIER=full`:
+   an explicit operator override that logs a startup warning naming the
+   deprecation, is documented in the OpenAPI changelog, and is slated
+   for removal after one release cycle (the Kubernetes legacy-API
+   removal pattern: window + flag, never a permanent opt-out).
+2. ~~Tier model~~ **RESOLVED: registry-key lists + named presets.** A
+   coarse enum would create a second authorization taxonomy to keep in
+   sync with ADR #35 — two sources of truth is exactly the drift class
+   this whole campaign exists to kill. Registry keys mean one resolver
+   (fail-closed, audit-stamped), one key vocabulary across desktop gate
+   and cloud reads, and presets as pure mint-time sugar over the same
+   keys. Token bloat stays bounded (presets <= ~10 keys; full-read is
+   claim-free).
+3. ~~PII classification sign-off~~ **RESOLVED: machine-enforced, not
+   one-time human sign-off.** A one-time table goes stale the day
+   someone adds a field; instead the classification lives IN CODE —
+   every `READ_KEY_MAP` entry carries a `pii: bool` flag, the
+   `dashboard` preset is *derived* by excluding pii-marked routes, and
+   a pinned test asserts the invariant `dashboard ∩ pii-routes = ∅`.
+   Reviewing PII becomes reviewing a test-visible diff: whoever adds a
+   PII-bearing route must flip its flag and the invariant test makes
+   that change impossible to hide. Preliminary classification at F3
+   start (verify against actual handler payloads): `users` list = PII
+   (staff identity); `sales` reads = PII-flagged (customer refs + notes
+   can ride sale payloads); everything else = non-PII until the payload
+   review says otherwise.
 
 ## 6. Risks
 
@@ -156,8 +178,14 @@ an optional `permissions`/`preset` field; anything else keeps full-read.
 - **PII-map incompleteness** — a route missed in the read-key map is
   silently `full` for restricted tokens; mitigated by the Part-A style
   bidirectional assertion (spec GET ↔ map entry) plus the tier-matrix
-  tests enumerating every GET.
+  tests enumerating every GET. Residual: a route *classified* non-PII
+  that later gains PII fields — the flag lives in code next to the map,
+  so the review that adds the fields sees the flag; the invariant test
+  cannot catch payload-level drift, only route-level.
 - **Claim bloat** — `permissions` lists in JWTs grow the token; presets
   keep them short (≤ ~10 keys); full-read stays claim-free.
 - **Back-compat** — `None`-claim = today's behavior exactly; no deployed
-  token changes meaning at any point.
+  admin-minted token changes meaning at any point. Terminal tokens are
+  the deliberate exception (decision 1: secure-by-default) — the
+  `OZ_TERMINAL_READ_TIER=full` escape hatch covers any deployed
+  integration during the one-cycle deprecation window.
