@@ -1,3 +1,8 @@
+/*
+last audited 31-08-26 by RSA-Agent (user-role campaign, Section H)
+findings: display drift — doc comment promises "admin: Shield" but the switch has NO admin case (normalizeRole yields admin, falls to default staff icon); auditor/owner/manager correct
+next: batch into the fix-order phase | perf: n/a (presentational)
+*/
 import { normalizeRole } from '@/utils/role';
 
 interface RoleIconProps {

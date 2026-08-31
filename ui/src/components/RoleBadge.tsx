@@ -1,3 +1,8 @@
+/*
+last audited 31-08-26 by RSA-Agent (user-role campaign, Section H)
+findings: CANONICAL but dead — five-variant normalizeRole badge with logout; production AppLayout renders the stale shell copy instead (see its stamp); only the test imports this file
+next: batch into the fix-order phase | perf: n/a (presentational)
+*/
 import { useLocalization } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleIcon } from '@/components/RoleIcon';

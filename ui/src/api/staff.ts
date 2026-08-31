@@ -1,3 +1,8 @@
+/*
+last audited 31-08-26 by RSA-Agent (user-role campaign, Section H)
+findings: clean IPC contract — every call through loggedInvoke (no direct invoke), scoped args carry sessionToken only (no forgeable caller_user_id), identity masked by default (ADR #35 D6), quota rejection surfaced as typed subscriptionLimitExceeded subKind, RoleDto permissions documented display-only
+next: batch into the fix-order phase | perf: n/a (presentational)
+*/
 // ── Staff: Login, Bootstrap, CRUD ──────────────────────────────────
 
 import { loggedInvoke } from '@/utils/logged-invoke';

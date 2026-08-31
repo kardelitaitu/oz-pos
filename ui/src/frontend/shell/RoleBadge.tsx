@@ -1,3 +1,8 @@
+/*
+last audited 31-08-26 by RSA-Agent (user-role campaign, Section H)
+findings: LIVE-BUT-STALE duplicate — AppLayout imports this copy, and it still matches the RETIRED kitchen role (0048-2c) while missing admin and auditor entirely (both render with staff styling); consolidate on components/RoleBadge + normalizeRole in the fix-order phase
+next: batch into the fix-order phase | perf: n/a (presentational)
+*/
 import { useLocalization } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import Tooltip from './Tooltip';
