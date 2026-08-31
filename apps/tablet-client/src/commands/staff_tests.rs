@@ -337,3 +337,336 @@ async fn bootstrap_owner_mints_verifiable_picker_ticket() {
     assert!(!result.picker_ticket.is_empty());
     assert_eq!(result.session.role_id, "role-owner");
 }
+
+// ── STAFF-13 residual: command-level security tests for the TABLET's
+// duplicated policy copy. The tablet enforces the same role-assignment
+// policy as the desktop (staff.rs:545) but had ZERO command-level tests
+// — only DTO/bootstrap coverage. These mirror the desktop's
+// branch-pinned set (d45d1119): each guard fires in isolation with an
+// exact-message assert where the branch is distinguishable.
+
+use oz_core::session::SessionContext;
+use platform_core::StoreDatabaseManager;
+use tauri::Manager as _;
+
+fn scoped_state_with_token(
+    conn: rusqlite::Connection,
+    token: &str,
+    user_id: &str,
+    role_id: &str,
+    store_id: &str,
+) -> AppState {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut state = AppState::for_test_with_conn(conn);
+    state.db_manager =
+        StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+    state.session_store.write().unwrap().insert(
+        token.into(),
+        SessionContext::new(
+            user_id.into(),
+            role_id.into(),
+            "terminal-1".into(),
+            store_id.into(),
+            "instance-1".into(),
+            "pos".into(),
+            None,
+            0,
+        ),
+    );
+    state
+}
+
+fn complete_profile_args() -> ProfileArgs {
+    ProfileArgs {
+        date_of_birth: Some("1990-05-14".into()),
+        phone: Some("+14155550123".into()),
+        national_id_type: Some("ssn".into()),
+        national_id: Some("123456789".into()),
+        email: Some("fixture@example.com".into()),
+        monthly_take_home_minor: Some(5_000_000),
+        emergency_contact_name: Some("Bob".into()),
+        emergency_contact_phone: Some("+14155550987".into()),
+        ..Default::default()
+    }
+}
+
+fn build_app(state: AppState) -> tauri::App<tauri::test::MockRuntime> {
+    tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap()
+}
+
+#[tokio::test]
+async fn scoped_create_staff_denies_cashier_session() {
+    let conn = oz_core::migrations::fresh_db();
+    let store = Store::new(&conn);
+    store.seed_default_roles().unwrap();
+    conn.execute_batch(
+        "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+            ('role-lite', 'Lite', 'Limited', '[\"sales:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+         INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+            ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-lite', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+    )
+    .unwrap();
+    let app = build_app(scoped_state_with_token(
+        conn,
+        "cashier-token",
+        "user-cashier",
+        "role-lite",
+        "store-a",
+    ));
+
+    let result = create_staff_scoped(
+        "cashier-token".into(),
+        CreateStaffScopedArgs {
+            username: "mallory".into(),
+            pin: "1234".into(),
+            display_name: "Mallory".into(),
+            role_id: "role-staff".into(),
+            profile: complete_profile_args(),
+            assignment: None,
+        },
+        app.state(),
+    )
+    .await;
+    assert!(matches!(result, Err(AppError::PermissionDenied(_))));
+}
+
+#[tokio::test]
+async fn scoped_list_staff_requires_staff_read() {
+    let conn = oz_core::migrations::fresh_db();
+    let store = Store::new(&conn);
+    store.seed_default_roles().unwrap();
+    conn.execute_batch(
+        "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+            ('role-lite', 'Lite', 'Limited', '[\"sales:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+         INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+            ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-lite', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+    )
+    .unwrap();
+    let app = build_app(scoped_state_with_token(
+        conn,
+        "cashier-token",
+        "user-cashier",
+        "role-lite",
+        "store-a",
+    ));
+    let result = list_staff_scoped("cashier-token".into(), app.state()).await;
+    assert!(matches!(result, Err(AppError::PermissionDenied(_))));
+}
+
+#[tokio::test]
+async fn scoped_update_staff_denies_manager_promoting_to_owner() {
+    let conn = oz_core::migrations::fresh_db();
+    let store = Store::new(&conn);
+    store.seed_default_roles().unwrap();
+    conn.execute_batch(
+        "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+            ('user-manager', 'manager', 'hash', 'Manager', 'role-manager', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
+            ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-staff', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+    )
+    .unwrap();
+    let app = build_app(scoped_state_with_token(
+        conn,
+        "manager-token",
+        "user-manager",
+        "role-manager",
+        "store-a",
+    ));
+
+    let result = update_staff_scoped(
+        "manager-token".into(),
+        UpdateStaffScopedArgs {
+            id: "user-cashier".into(),
+            username: "cashier".into(),
+            display_name: "Cashier".into(),
+            role_id: "role-owner".into(),
+            is_active: true,
+            pin: None,
+            profile: None,
+            assignment: None,
+        },
+        app.state(),
+    )
+    .await;
+    assert!(
+        matches!(result, Err(AppError::PermissionDenied(_))),
+        "Manager must not promote a user to Owner"
+    );
+}
+
+#[tokio::test]
+async fn scoped_update_staff_denies_self_promotion() {
+    let conn = oz_core::migrations::fresh_db();
+    let store = Store::new(&conn);
+    store.seed_default_roles().unwrap();
+    conn.execute_batch(
+        "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+            ('user-manager', 'manager', 'hash', 'Manager', 'role-manager', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+    )
+    .unwrap();
+    let app = build_app(scoped_state_with_token(
+        conn,
+        "manager-token",
+        "user-manager",
+        "role-manager",
+        "store-a",
+    ));
+
+    let result = update_staff_scoped(
+        "manager-token".into(),
+        UpdateStaffScopedArgs {
+            id: "user-manager".into(),
+            username: "manager".into(),
+            display_name: "Manager".into(),
+            role_id: "role-owner".into(),
+            is_active: true,
+            pin: None,
+            profile: None,
+            assignment: None,
+        },
+        app.state(),
+    )
+    .await;
+    assert!(matches!(result, Err(AppError::PermissionDenied(_))));
+}
+
+#[tokio::test]
+async fn scoped_update_staff_protects_last_active_owner() {
+    let conn = oz_core::migrations::fresh_db();
+    let store = Store::new(&conn);
+    store.seed_default_roles().unwrap();
+    conn.execute_batch(
+        "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+            ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+    )
+    .unwrap();
+    let app = build_app(scoped_state_with_token(
+        conn,
+        "owner-token",
+        "user-owner",
+        "role-owner",
+        "store-a",
+    ));
+
+    let result = update_staff_scoped(
+        "owner-token".into(),
+        UpdateStaffScopedArgs {
+            id: "user-owner".into(),
+            username: "owner".into(),
+            display_name: "Owner".into(),
+            role_id: "role-owner".into(),
+            is_active: false,
+            pin: None,
+            profile: None,
+            assignment: None,
+        },
+        app.state(),
+    )
+    .await;
+    assert!(
+        matches!(result, Err(AppError::PermissionDenied(_))),
+        "last active Owner must not be deactivated"
+    );
+}
+
+#[tokio::test]
+async fn scoped_update_staff_denies_self_deactivation_by_manager() {
+    // Branch pin: caller is NOT an Owner — only the self-deactivation
+    // rule can reject this, so the message must name it.
+    let conn = oz_core::migrations::fresh_db();
+    let store = Store::new(&conn);
+    store.seed_default_roles().unwrap();
+    conn.execute_batch(
+        "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+            ('role-hr', 'HR', 'Staff updater', '[\"staff:update\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+         INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+            ('user-hr', 'hr', 'hash', 'HR Admin', 'role-hr', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+    )
+    .unwrap();
+    let app = build_app(scoped_state_with_token(
+        conn, "hr-token", "user-hr", "role-hr", "store-a",
+    ));
+
+    let result = update_staff_scoped(
+        "hr-token".into(),
+        UpdateStaffScopedArgs {
+            id: "user-hr".into(),
+            username: "hr".into(),
+            display_name: "HR Admin".into(),
+            role_id: "role-hr".into(),
+            is_active: false,
+            pin: None,
+            profile: None,
+            assignment: None,
+        },
+        app.state(),
+    )
+    .await;
+    match result {
+        Err(AppError::PermissionDenied(msg)) => {
+            assert!(
+                msg.contains("your own account"),
+                "expected the self-deactivation message, got: {msg}"
+            );
+        }
+        other => panic!(
+            "expected self-deactivation denial, got ok={}",
+            other.is_ok()
+        ),
+    }
+}
+
+#[tokio::test]
+async fn scoped_update_staff_protects_last_owner_from_other_admin() {
+    // Branch pin: caller holds staff:manage_roles (Owner-role gate
+    // passes) and edits a DIFFERENT user — only the last-active-Owner
+    // protection can reject this.
+    let conn = oz_core::migrations::fresh_db();
+    let store = Store::new(&conn);
+    store.seed_default_roles().unwrap();
+    conn.execute_batch(
+        "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+            ('role-hrboss', 'HR Boss', 'Can manage staff incl. roles', '[\"staff:update\",\"staff:manage_roles\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+         INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+            ('user-hrboss', 'hrboss', 'hash', 'HR Boss', 'role-hrboss', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
+            ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+    )
+    .unwrap();
+    let app = build_app(scoped_state_with_token(
+        conn,
+        "hrboss-token",
+        "user-hrboss",
+        "role-hrboss",
+        "store-a",
+    ));
+
+    let result = update_staff_scoped(
+        "hrboss-token".into(),
+        UpdateStaffScopedArgs {
+            id: "user-owner".into(),
+            username: "owner".into(),
+            display_name: "Owner".into(),
+            role_id: "role-owner".into(),
+            is_active: false,
+            pin: None,
+            profile: None,
+            assignment: None,
+        },
+        app.state(),
+    )
+    .await;
+    match result {
+        Err(AppError::PermissionDenied(msg)) => {
+            assert!(
+                msg.contains("last active Owner"),
+                "expected the last-owner message, got: {msg}"
+            );
+        }
+        other => panic!(
+            "expected last-owner protection denial, got ok={}",
+            other.is_ok()
+        ),
+    }
+}
