@@ -1203,17 +1203,7 @@
   color: currentColor;
 }
 
-.node-anchor-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--color-info) 15%, transparent);
-  color: var(--color-info);
-  flex-shrink: 0;
-}
+
 
 .node-title-wrapper {
   display: flex;

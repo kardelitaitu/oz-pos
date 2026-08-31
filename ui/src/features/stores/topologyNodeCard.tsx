@@ -205,11 +205,6 @@ function TopologyNodeCardImpl({
 
         {/* Region 2: node title (flexible — grows to fill) */}
         <div className="node-title-wrapper">
-          {node.type === 'store' && (
-            <span className="node-anchor-chip" title="Branch Location — permanent anchor, cannot be deleted">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="10" height="10"><circle cx="12" cy="5" r="2" /><path d="M12 7v10" /><path d="M8 21h8" /></svg>
-            </span>
-          )}
           {isRenameable && renaming ? (
             <input
               ref={renameInputRef}
