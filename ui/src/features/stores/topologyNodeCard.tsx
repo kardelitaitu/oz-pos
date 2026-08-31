@@ -19,6 +19,7 @@ import {
   semanticPortLabelId,
   topologyUiString,
 } from './topologyCard';
+import { nodeHeight } from './topologyMetrics';
 import Tooltip from '../../frontend/shell/Tooltip';
 
 interface TelemetryBadge {
@@ -176,7 +177,7 @@ function TopologyNodeCardImpl({
       }}
       data-node-id={node.id}
       className={`topology-node node-type-${node.type} ${isSelected ? 'node-selected' : ''} ${isConnectingSource ? 'node-connecting-source' : ''}${isFresh ? ' node-fresh' : ''}${isDimmed ? ' node-dimmed' : ''}${overlayMarker ? ` topology-node--overlay-${overlayMarker}` : ''}`}
-      style={{ left: `${node.x}px`, top: `${node.y}px` }}
+      style={{ left: `${node.x}px`, top: `${node.y}px`, height: `${nodeHeight(node)}px` }}
       // role=group — NOT aria-selected: group supports no selection state
       // and axe flagged every card (critical aria-allowed-attr). The card
       // also contains real controls (rename, enabled, port sockets), which

@@ -1375,11 +1375,11 @@
 
 .node-body {
   /* flex-driven: the body fills the space between the fixed header and
-     the 48px rail clearance instead of a hardcoded 152px */
+     the adaptive footer (no more absolute rail clearance hack). */
   flex: 1 1 auto;
   min-height: 0;
   box-sizing: border-box;
-  padding: var(--space-3) var(--space-3) 48px;
+  padding: var(--space-3) var(--space-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -1832,46 +1832,77 @@
   line-height: 1.5;
 }
 
-/* ── Labeled left/right connector layout ───────────────────────── */
-
-/* The connector rail geometry is the single source of truth for wire
-   endpoints: NODE_PORT_ROW_H (32px) and NODE_PORT_MARKER (12px) in
-   nodeTopologyClamp.ts drive NODE_PORT_Y. Keep these numbers in lockstep
-   — the ::before circle is centered at top = (32 − 12) / 2 = 10. */
-.node-port-sockets-group {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 32px;
+/* ── Stacked per-semantic footer (round 174) ─────────────────────
+   The card footer is a two-column flex band: left inputs on the left
+   edge, right outputs on the right edge, each semantic its own labeled
+   row. The wire-endpoint contract is per-row: PORT_ROW_H (20px) bands
+   whose CENTER (header + main + 10 + row*20) is where wires attach —
+   driven by topologyMetrics.portRowCenterY, kept in lockstep with
+   NODE_PORT_MARKER (12px) so the ::before circle centers on it. */
+.node-footer {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
   box-sizing: border-box;
-  pointer-events: none;
-  z-index: 1;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-subtle);
+  position: relative;
 }
 
-.node-port-socket {
-  position: absolute;
-  width: 116px;
-  height: 32px;
+.node-port-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0;
+}
+
+/* One semantic port row: a full-band button (transparent chrome — the
+   circle marker is the affordance, the label names the port). */
+.node-port-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 20px;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: inherit;
   cursor: pointer;
-  pointer-events: all;
   padding: 0;
-  opacity: 1;
-  transition: opacity 0.15s ease;
-  z-index: 1;
+  font: inherit;
 }
 
-/* The button is a generous labeled hit area; the small circle is the actual
-   connector marker. Keeping these separate prevents the label from being
-   positioned relative to a 12px socket and colliding with the node body. */
-.node-port-socket::before {
-  content: '';
+/* Left rows: marker pinned to the card's left edge, label beside it. */
+.node-port-row--left {
+  justify-content: flex-start;
+}
+.node-port-row--left .node-port-marker {
+  left: 0;
+}
+.node-port-row--left .node-port-label {
+  padding-left: 18px;
+  text-align: left;
+}
+
+/* Right rows: marker pinned to the card's right edge, label before it. */
+.node-port-row--right {
+  justify-content: flex-end;
+}
+.node-port-row--right .node-port-marker {
+  right: 0;
+}
+.node-port-row--right .node-port-label {
+  padding-right: 18px;
+  text-align: right;
+}
+
+/* The connector circle — sits exactly on the card edge at the row's
+   vertical center (the wire endpoint). */
+.node-port-marker {
   position: absolute;
-  top: 10px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 12px;
   height: 12px;
   border-radius: var(--radius-full);
@@ -1879,38 +1910,70 @@
   border: 2px solid var(--color-accent);
   box-sizing: border-box;
   transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  pointer-events: none;
+  z-index: 1;
 }
 
-.node-connecting-source .node-port-sockets-group,
-.node-port-sockets-group:focus-within {
-  z-index: 2;
-}
-
-.node-port-socket:hover::before,
-.node-port-socket:focus-visible::before {
-  transform: scale(1.4);
+.node-port-row:hover .node-port-marker,
+.node-port-row:focus-visible .node-port-marker {
+  transform: translateY(-50%) scale(1.4);
   background-color: var(--color-accent);
   box-shadow: 0 0 8px var(--color-accent);
 }
 
-.node-port-socket.port-active::before {
-  transform: scale(1.6);
+.node-port-row.port-active .node-port-marker {
+  transform: translateY(-50%) scale(1.6);
   background-color: var(--color-accent);
   box-shadow: 0 0 12px var(--color-accent);
 }
 
-.node-port-socket.port-highlight::before {
+.node-port-row.port-highlight .node-port-marker {
   animation: port-glow 1.5s infinite;
 }
 
-.node-port-socket.port-compatible::before {
+.node-port-row.port-compatible .node-port-marker {
   border-color: var(--color-success, #22c55e);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success, #22c55e) 22%, transparent);
 }
 
-.node-port-socket.port-incompatible {
+.node-port-row.port-incompatible {
   opacity: 0.28;
   filter: grayscale(1);
+}
+
+/* Port row label — plain text, no pill chrome: the circle is the
+   affordance; the label just names the semantic. */
+.node-port-label {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  color: var(--color-fg-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.2;
+  z-index: 2;
+  transition: color 0.15s ease;
+}
+
+.node-port-row:hover .node-port-label,
+.node-port-row:focus-visible .node-port-label {
+  color: var(--color-fg);
+}
+
+.node-port-row.port-incompatible .node-port-label {
+  color: var(--color-fg-muted);
+}
+
+.node-connecting-source .node-footer {
+  z-index: 2;
+}
+
+@keyframes port-glow {
+  0%, 100% { box-shadow: 0 0 0 0 var(--color-accent-subtle); }
+  50% { box-shadow: 0 0 0 6px var(--color-accent-subtle); }
 }
 
 .topology-workspace-identity {
@@ -1933,78 +1996,6 @@
   color: var(--color-text-muted);
   font-size: var(--text-xs);
 }
-
-@keyframes port-glow {
-  0%, 100% { box-shadow: 0 0 0 0 var(--color-accent-subtle); }
-  50% { box-shadow: 0 0 0 6px var(--color-accent-subtle); }
-}
-
-/* Position only left/right ports. Legacy top/bottom values are retained in
-   the TypeScript geometry map so old saved wires can still be displayed. */
-.node-port-socket.port-right {
-  /* Overhang is a hit-area convenience only; the circle itself sits at the
-     card edge (right: 0) where the SVG endpoint lands. */
-  right: -6px;
-  top: 0;
-}
-
-.node-port-socket.port-right::before {
-  right: 0;
-}
-
-.node-port-socket.port-left {
-  /* Overhang is a hit-area convenience only; the circle itself sits at the
-     card edge (left: 0) where the SVG endpoint lands. */
-  left: -6px;
-  top: 0;
-}
-
-.node-port-socket.port-left::before {
-  left: 0;
-}
-
-/* Connector label — plain text beside the marker circle. No pill/box chrome:
-   a boxed label reads as competing chrome against body content and wire
-   labels, which is what made the footer look cluttered. The circle marker
-   is the interactive affordance; the label just names the port. */
-.node-port-label {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: max-content;
-  max-width: 104px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  pointer-events: none;
-  color: var(--color-fg-muted);
-  font-size: var(--text-xs);
-  font-weight: var(--font-weight-bold);
-  line-height: 1.2;
-  z-index: 2;
-  transition: color 0.15s ease;
-}
-
-.node-port-socket:hover .node-port-label,
-.node-port-socket:focus-visible .node-port-label {
-  color: var(--color-fg);
-}
-
-.node-port-label-left {
-  left: var(--space-4);
-  text-align: left;
-}
-
-.node-port-label-right {
-  right: var(--space-4);
-  text-align: right;
-}
-
-.node-port-socket.port-incompatible .node-port-label {
-  color: var(--color-fg-muted);
-}
-
-
 
 /* Right Inspector Drawer — floats over the canvas, so it needs an opaque
    panel (THM-08): surface is a 5% alpha tint in the glass theme. */
