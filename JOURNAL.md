@@ -8814,3 +8814,52 @@ still present as uncommitted changes in all three of their files.
 **Totals:** COR-7 client half landed and tested. Backend half blocked on a
 non-compiling tree. One repeated process error caught by prediction, corrected,
 and its rule sharpened.
+
+## 2026-08-31 — round R: the leftovers batch, and the e2e that taught two things
+
+Closed the goal's remaining items after the four-slice batch (round Q).
+
+**CUR-11 (`8f026449` + `41598afa`).** Bounded latest-per-pair rate query
+in the currency repository, scoped command on both clients, PaymentModal
+switched off the full-history list. Two small traps: my first tie-break
+test was invalid — `UNIQUE(pair, effective_date)` makes within-pair ties
+impossible, so the created_at tail is pure defence in depth (swapped the
+test for pair-independence); and the final ordering tiebreaker must be
+`rowid`, not `id` — rate ids are UUIDs, so `id DESC` would be arbitrary.
+The Playwright half paid unexpected interest: the first spec assumed real
+CRUD against the docker backend and failed — the exchange-rate commands
+have NO cloud REST counterpart at all (e2e/web mode is served by the
+dev-mock; the snapshot's "16 / manual / 2026-08-01" was mock data).
+Rewrote the spec as an honest screen-contract test (route, columns, Save
+gating, CUR-10 confirm flow) and recorded the REST gap as ARCH-01-family
+instead of silently building four endpoints. Also: the repo-root `.env`
+had six Paddle note lines with spaces in keys — docker compose refuses to
+parse the file, so every local e2e run was dead; commented them (local
+file, untracked).
+
+**Shortfall receipt (`8f79bd43`).** The retry path committed a real sale
+but skipped the print preview entirely: the dialog discarded the
+`CompleteSaleResult` and the modal just flipped to done. Dialog now
+forwards the result; the modal builds the preview from the COMMITTED
+sale lines — resolutions change quantities/SKUs, the local cart no
+longer describes what sold. PaymentModal suites carry 9 pre-existing
+failures at HEAD (proved by stash-run: identical without my changes —
+foreign checkout-flow churn), left untouched per incident-#6 discipline.
+
+**CurrencyContext reload (`319f03dd`).** The provider fetched the global
+bootstrap default once at mount; per-store scoped defaults (CUR-03)
+never reached `useCurrency`. The provider deliberately sits ABOVE
+Workspace/Auth (login needs a currency pre-session), so the fix is a
+bridge: `refresh(token?)` + a zero-UI `CurrencyWorkspaceSync` under
+`WorkspaceProvider` in both entries. Failed refresh keeps the last good
+value — a transient error must not reset the display currency mid-sale.
+
+**Shared-tree notes.** The `\'` PowerShell escape silently killed a
+whole compound command (nothing ran — verify state after silent exit 1);
+a foreign `npm ci` died mid-flight twice (29 dirs, then empty `.bin`,
+then 31 missing packages — `npm install` reconciles in place, `npm ci`
+wipes first and is the riskier pick while others race); the shared index
+picked up foreign staged junk before my commit — pathspec commits
+(`git commit -- <paths>`) sidestep it cleanly; and `bash` from pwsh here
+resolves to WSL (rollup native mismatch) — let the Git-Bash hooks run
+the i18n gate instead of invoking it manually.
