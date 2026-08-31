@@ -1,6 +1,6 @@
 # OZ-POS Architecture
 
-<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (5 structural majors repaired) · FIXED 31-08: Core Traits rewritten verbatim from foundation/src/contracts.rs (Module id/dependencies/on_load/on_start/on_stop->ModuleResult; Service id/start/stop; EventHandler<E> generic; DomainEvent added; invented `trait Integration` removed); Platform Core Services tree trimmed to the 6 real services (auth/rbac/rbac_presets/permission_registry/database/settings/terminal_profile) with a note that logging/audit/cache live elsewhere; permission delimiter domain.action -> domain:action with real keys (sales:process/view/refund); Event Flow invented names (stock.updated/customer.history.updated/points.awarded/report.data.changed) replaced with real handlers (SaleSyncEnqueuer/InventorySyncEnqueuer/AuditLogHandler/LoyaltyEarnHandler) incl. the Rule-2 diagram; ADR #31 -> #43 (react-only); foundation/ -> foundation/src/; HAL/payment/reporting device lists synced · REMAINING (minor backlog, not falsehoods): no dedicated HAL/driver-trait section (EdcTerminal detail lives in crates/oz-hal/README.md); apps/unified omitted from apps list; manifest example omits description/permissions; scoped-IPC (ADR #7) convention undocumented; PROMO-3/CUR-11/LOY-03/COR-7 not shown in any flow · counts (35 members / 13 crates / 14 modules / 61 ADRs) verified accurate -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (5 structural majors repaired) · FIXED 31-08: Core Traits rewritten verbatim from foundation/src/contracts.rs (Module id/dependencies/on_load/on_start/on_stop->ModuleResult; Service id/start/stop; EventHandler<E> generic; DomainEvent added; invented `trait Integration` removed); Platform Core Services tree trimmed to the 6 real services (auth/rbac/rbac_presets/permission_registry/database/settings/terminal_profile) with a note that logging/audit/cache live elsewhere; permission delimiter domain.action -> domain:action with real keys (sales:process/view/refund); Event Flow invented names (stock.updated/customer.history.updated/points.awarded/report.data.changed) replaced with real handlers (SaleSyncEnqueuer/InventorySyncEnqueuer/AuditLogHandler/LoyaltyEarnHandler) incl. the Rule-2 diagram; ADR #31 -> #43 (react-only); foundation/ -> foundation/src/; HAL/payment/reporting device lists synced; module tree corrected to the 14 active modules (loyalty/purchasing were wrongly marked 'planned', 8 real modules omitted); apps/unified added; foundation contracts list +DomainEvent · REMAINING (minor backlog, not falsehoods): no dedicated HAL/driver-trait section (EdcTerminal detail lives in crates/oz-hal/README.md); manifest example omits description/permissions; scoped-IPC (ADR #7) convention undocumented; PROMO-3/CUR-11/LOY-03/COR-7 not shown in any flow · counts (35 members / 13 crates / 14 modules / 61 ADRs) verified accurate -->
 
 **Version:** 2.0 (Post-Restructuring)
 **Status:** Active — restructuring complete
@@ -113,7 +113,8 @@ oz-pos/
 │   ├─ cloud-server/    Cloud HTTP API (axum, for hosted tenants)
 │   ├─ desktop-client/  Windows + Linux (keyboard/mouse, Tauri v2)
 │   ├─ license-server/  License activation & validation (Go)
-│   └─ tablet-client/   Android + iPad (touch, Tauri v2)
+│   ├─ tablet-client/   Android + iPad (touch, Tauri v2)
+│   └─ unified/         Containerized all-in-one deployment (Caddy + supervisord)
 │
 ├─ platform/          System infrastructure
 │   ├─ kernel/         Module system (load, unload, lifecycle)
@@ -122,27 +123,32 @@ oz-pos/
 │   ├─ api/            Backend HTTP API (today: crates/oz-api/)
 │   └─ ui/             Frontend infrastructure (today: ui/src/frontend/)
 │
-├─ modules/           Business features (14 exist today; top 14 shown)
+├─ modules/           Business features (14 active, all registered in the kernel)
 │   ├─ sales/
 │   ├─ inventory/
 │   ├─ crm/
-│   ├─ loyalty/        ← planned
+│   ├─ loyalty/
+│   ├─ promotions/
+│   ├─ currency/
+│   ├─ tax/
 │   ├─ reporting/
-│   ├─ accounting/     ← planned
-│   ├─ purchasing/     ← planned
-│   ├─ warehouse/      ← planned
-│   ├─ restaurant/     ← planned
-│   └─ ecommerce/      ← planned
+│   ├─ purchasing/
+│   ├─ giftcards/
+│   ├─ kitchen/
+│   ├─ settings/
+│   ├─ staff/
+│   └─ terminal/
+│   (planned, not yet a crate: accounting, warehouse, restaurant, ecommerce)
 │
 ├─ integrations/      External adapters (planned; today in crates/oz-hal, crates/oz-payment)
 │   ├─ payments/       (cash, stripe, midtrans, xendit)
-│   ├─ hardware/       (printers, scanners, cash-drawers, scales)
+│   ├─ hardware/       (printers, scanners, cash-drawers, customer displays, scales, EDC terminals)
 │   ├─ messaging/      (whatsapp, email, telegram)
 │   ├─ shipping/
 │   └─ tax/
 │
 ├─ foundation/        Reusable zero-business-logic code
-│   ├─ contracts/      Core traits (Module, Service, EventHandler)
+│   ├─ contracts/      Core traits (Module, Service, EventHandler, DomainEvent)
 │   ├─ dto/            Shared DTOs                 (planned)
 │   ├─ value-objects/  Money, Currency, Email, etc. (today: money.rs)
 │   ├─ errors/         Shared error types
