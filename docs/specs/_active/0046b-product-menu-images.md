@@ -58,8 +58,12 @@ author; tablets render).
 
 - Directory: `$APPCACHE/images/` (per-profile app cache — OS-managed
   location, safe to wipe; cloud twin: `$OZ_IMAGE_DIR`).
-- **File name = `{hash8}.webp`** (first 8 hex chars of the sha-256 of the
-  transcoded bytes). Content-addressed means:
+- **File name = `{hash16}.webp`** (first 16 hex chars = first 64 bits of the
+  sha-256 of the transcoded bytes; final-review fix — 32-bit hash8 has a
+  birthday-bound collision at ~65k images and the cloud store is shared
+  across tenants, so two products could silently resolve to the wrong
+  image; 64 bits puts a 300k-image store at ~1e-9 collision probability).
+  Content-addressed means:
   - the same image applied to several products/slots is stored **once**
     locally and once in the cloud (alternatives re-use is common in menus);
   - paths are device-independent, so "where is the file" never enters the DB;
@@ -106,7 +110,7 @@ author; tablets render).
    tiles) → encode **WebP q40**. Target output ≈ **10–25 KB** per image
    (aggressive but clean at tile render size), decoded ARGB ≈ **1 MB** per
    image in RAM — which is exactly why §3.5 virtualization is mandatory.
-4. **Hash & write:** sha-256 → `{hash8}.webp` in the store (temp + atomic
+4. **Hash & write:** sha-256 → `{hash16}.webp` in the store (temp + atomic
    rename; pre-existing identical hash ⇒ skip the write, dedupe hit).
 5. **Assign in one transaction (repo rule):** upsert
    `product_images(product_id, slot → hash)`, maintain the slot-1 mirror on
@@ -124,19 +128,23 @@ author; tablets render).
   recovery path of 0045 stays untouched).
 - **Byte store: the Northflank persistent volume** (decided — not R2, not PG
   `bytea`). Image files live beside the DB at `OZ_IMAGE_DIR` (default
-  `/data/images` in prod, `./data/images` in dev; oz-api `create_dir_all`s it on startup — no entrypoint change). Capacity math: 6 GB
-  volume, ~20 KB per image (512 px q40) ⇒ **≈ 300k images** (a 5k-product
-  catalog with full 5-image sets ≈ 500 MB — one volume holds ~12 such
-  tenants' worth of headroom at that size); P4 adds a bytes-used metric with
-  a soft alert at 4 GB.
+  `/data/images` in prod, `./data/images` in dev; oz-api `create_dir_all`s it on startup — no entrypoint change). Capacity math: ~20 KB per image (512 px q40) ⇒ the 6 GB volume is the
+  ~300k-image *ceiling*, but the DB + pb_data share it — the practical cap
+  is the 4 GB soft alert ⇒ **≈ 200k images** (a 5k-product catalog with
+  full 5-image sets ≈ 500 MB, so ~40 such tenants fit under the alert).
+  P4 ships the bytes-used metric (per §3.7 image_refs SUM).
 - oz-api serves the bytes itself — **no new component**:
-  - `PUT /api/v1/images` (admin-key gate, same tier as catalog writes per
-    API-4/G-1; ≤ 32 KB body; body must be the **transcoded** WebP; server
+  - `PUT /api/v1/images` — the upload primitive (the batch lane in §3.6
+    composes the same server-side logic; final-review fix: the gate is the
+    *actual* catalog tier — bare JWT, matching `create_product` — NOT
+    admin-key, which would break merchant self-service; images inherit the
+    admin-key tier automatically when the D1 residual campaign extends to
+    master data); ≤ 32 KB body; body must be the **transcoded** WebP; server
     re-verifies magic bytes + size and stores by the client-computed hash
     after recomputing sha-256 — hash mismatch ⇒ 409, a corrupt upload never
     enters the store). Atomic temp+rename **on the same volume**. Response:
-    `{hash8}`.
-  - `GET /api/v1/images/{hash8}` (tenant JWT is enough — hashes are
+    `{hash16}`.
+  - `GET /api/v1/images/{hash16}` (tenant JWT is enough — hashes are
     unguessable and content is non-sensitive product art; strict hash-grammar
     validation kills directory traversal; immutable,
     `Cache-Control: max-age=31536000, immutable`; unknown hash ⇒ 404).
@@ -144,7 +152,7 @@ author; tablets render).
   - Caddy hygiene: the global encode directive must exclude `/api/v1/images*` — WebP is already compressed; re-compressing burns CPU for zero bytes saved.
 - Tablet pull: a tiny **download manager** in the tablet's Rust shell — on
   catalog apply, for each referenced hash with no local file, queue a
-  background GET (bounded concurrency 3, LRU eviction of the images dir at a
+  background GET (2 in flight, pooled keep-alive per §3.7; LRU eviction of the images dir at a
   configurable budget, default **64 MB** ≈ ~3k images ≈ ~600 products with
   full 5-image sets). Offline-first holds: missing image degrades to the
   existing colored-initial tile. POS tiles only ever need slot 1; the
@@ -183,13 +191,13 @@ background sync daemon pattern (`sync_bootstrap` / tablet daemon).
 **Push (desktop → cloud):**
 
 - `products_set_image` enqueues into a persisted `image_push_queue`
-  `(hash PK, size_bytes, attempts, next_attempt_at, enqueued_at)` — the
+  `(hash16 PK, size_bytes, attempts, next_attempt_at, enqueued_at)` — the
   apply action commits locally and returns immediately; the network leg is
   never on the UI path.
 - A drain loop wakes on **`next_run = now + jitter(60 s .. 300 s)`** (full
   jitter — uniformly random per cycle, per device) and drains up to
   **16 images / 512 KB per batch** via `POST /api/v1/images:batch`
-  (admin-key gated, length-prefixed binary frames). The server re-verifies
+  (same gate as PUT — bare JWT today, per §3.4; length-prefixed binary frames). The server re-verifies
   magic bytes + sha-256 per file and answers per-hash
   `{hash, stored|duplicate|rejected}` — partial success is allowed, the
   queue keeps only the failures. One auth check, one connection, one
@@ -249,7 +257,7 @@ the `/data` volume. Every mechanism below is chosen against that reality.
    cheaper); PUT dedupe is refcount>0 AND file-exists => duplicate; GC is
    refcount=0 after grace; per-tenant byte accounting for the 4 GB soft
    alert is SUM(bytes).
-3. **Conditional GETs.** `ETag: "{hash8}"` (free — computed at ingest) +
+3. **Conditional GETs.** `ETag: "{hash16}"` (free — computed at ingest) +
    `If-None-Match` on the puller => 304 with a string compare, no disk
    read. Protects every cache layer between the tablet LRU and the volume.
 4. **HTTP/2 multiplexing + pooled keep-alive.** Free at Caddy; the Rust
@@ -282,7 +290,7 @@ the `/data` volume. Every mechanism below is chosen against that reality.
 |---|---|---|
 | **P1 — storage spine** | `products.image_hash` + `product_images` table (sqlite+pg migrations, models, repository), `products_set_image` / `products_clear_image` commands with sniff/limits/transcode/hash/atomic-write/txn + promotion + menu-invariant logic, unit tests (malformed magic, oversized, slot bounds, promotion, menu-clear refusal, dedupe) | `oz-core` (migrations, db/products), `desktop-client/src/commands`, tauri.conf `assetProtocol` |
 | **P2 — UI** | `FixedSizeGrid` on POS rendering slot 1 via `convertFileSrc`, miss→initial-tile fallback; editor flows: assign-at-apply for menu (1 required) and product (primary + ≤4 alternatives with reorder); alternatives strip lazy-mounted; a11y (alt from product name, aria-busy) | `ui/src/features/retail`, `restaurant`, shared `ProductThumb` |
-| **P3 — cloud sync** | `PUT/GET /api/v1/images` on the Northflank volume (`OZ_IMAGE_DIR`, admin-key gate, hash re-verification), image array in the product delta payload, image_refs content spine + missing_hashes nudge, push/pull scheduler lanes with batching + jitter (§3.6), pack endpoint for cold start, tablet download manager (primary-first, LRU), sync tests | `oz-api`, `Dockerfile.unified` volume note, tablet-client Rust |
+| **P3 — cloud sync** | `PUT/GET /api/v1/images` on the Northflank volume (`OZ_IMAGE_DIR`, admin-key gate, hash re-verification), image array in the product delta payload, image_refs content spine + missing_hashes nudge, push/pull scheduler lanes with batching + jitter (§3.6), pack endpoint for cold start, cloud GC via image_refs refcount=0 + grace sweep, tablet download manager (primary-first, LRU), sync tests | `oz-api`, `Dockerfile.unified` volume note, tablet-client Rust |
 | **P4 — hygiene** | startup GC sweep (reverse-index + grace), metrics (bytes dir, hit/miss latency, 4 GB soft alert), e2e, docs (`docs/guides`), i18n strings for the editor UI (en+id FTL) | `desktop-client`, `ui`, docs |
 
 **Est. budget:** P1–P2 make a fully local (single-device) feature — shippable
@@ -302,7 +310,6 @@ slice. P3 unlocks tablets. P4 is polish.
    Model: **menu item = exactly 1 image (always); product = 1 primary +
    max 4 alternatives** (slots 1..5, slot 1 mirrored to the product row).
    Authoring device: desktop editors (tablet capture stays a non-goal for v1).
-
 4. **RESOLVED: batched, jittered byte transfer** — decided 2026-08-31; push
    batches ≤ 16 images / 512 KB per request, pull cycles cap ≤ 40 images,
    both lanes wake on full random jitter in the 1–5 min window (§3.6).
