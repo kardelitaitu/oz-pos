@@ -8492,3 +8492,75 @@ Removed my own REP-04 orphan: refunds_summary (fn + DTO + 2 tests,
 76 lines) had zero consumers and the per-period refund_minor already
 shows the same money — the CRM-06 lesson applied to my own code.
 Recoverable from 35d8bec4. Reports 70/70. Commit ecc2c534.
+
+## 2026-08-31 — round N: swept the license-key logging residual, and it paid twice
+
+Picked from the deferred list rather than hunting new bugs, on the theory that
+a known class on a live path beats a new maybe-bug. It was the right call, and
+the reasoning that made it available is worth keeping: the admin dashboard
+review had left this unfixed *because* one file alone would be worse than
+inconsistent. That is the COR-31 shape - a defect whose blocker is scope, not
+difficulty.
+
+**11 sites across 7 files** now mask through maskLicenseKey (039197e9). Go
+toolchain turned out to be fully available (1.26.3, module builds clean), so
+this is verified rather than best-effort - unlike the Rust desktop half of B53
+that still cannot be test-built here.
+
+**Classified by argument, not keyword**, which is where the value was. The
+keyword list was 24 candidates; the real set was 11:
+  - 3 excluded: login_lockout.go logs loginLockoutKey(email), literally
+    "email:" plus a lowercased address. Not a credential.
+  - 1 excluded: trial_emails.go logs milestone.LogKey, a milestone name.
+  - 2 excluded: MIDTRANS_SERVER_KEY lines name an env var, never its value.
+  - 6 sneaked in: keyFailTracker uses the license key itself as its rate-limit
+    bucket name, so ratelimit.go logged keys in three places while looking
+    like infrastructure code about counters.
+
+**Two decisions that were not to fix things.** addon_admin.go already masks
+with a prefix form, LicenseKey[:8] plus stars. Converting it to the tail form
+would expose 8 random characters where it currently exposes 1 - a real
+secrecy regression made purely for tidiness - so it stays, now carrying a
+key-log:masked marker with that reason. And 4 files in the package are not
+gofmt-clean; none are mine, so I left them. Reformatting another agent's files
+inside a security commit is how a review becomes unreadable.
+
+**Tail, not prefix, on evidence.** generateLicenseKey builds
+"OZ-" + uppercased tier + 16 chars from a 32-symbol alphabet. The prefix is
+therefore constant per tier and already present in the same log line as tier=,
+so it has zero correlation value; the tail is pure entropy. 8 tail chars
+straddle a group separator, so it is really 7 symbols: 35 bits shown, 45
+hidden, collision near 0.15 percent at 10k keys. I wrote 40 bits in the doc
+first and corrected it to 45 after working out the dash.
+
+**Rune-safe because the input is hostile.** Most of these values come straight
+off request bodies. Byte slicing a multi-byte string can split a rune and push
+invalid UTF-8 into the log stream - the same failure mode as SEC-8 on the Rust
+side, arriving independently in a different language.
+
+**A guard, because a sweep regrows** (e90b2e2c). AST-based, not grep: my own
+first grep pass missed two of the eleven because their arguments sit on the
+line after the format string, and an AST sees a call as one node however it is
+wrapped. The watched name list is deliberately narrow - matching bare "key"
+flags map keys, lockout buckets, env-var names and PB column bindings, and a
+guard that cries wolf gets deleted within a week. Identifier-boundary matching
+so req.Keyring cannot match req.Key.
+
+Proven rather than assumed: dropped a throwaway file that logs req.Key, the
+guard failed naming file, line and expression; removed it, green again.
+
+**New open finding, recorded not folded in**: login_lockout.go writes customer
+email addresses into the server log. PII, not a credential, so out of scope
+for a key sweep. Left open and written into the review doc (116a377d) rather
+than quietly expanding the commit.
+
+**Process slip, caught by the habit it was supposed to prevent.** I staged 9
+files, verified the index, then committed with -- apps/license-server. A
+*directory* pathspec commits everything under it including unstaged changes, so
+addon_admin.go rode along and the message did not mention it. Same class as the
+round-J pathspec error. Inspecting git show --name-only caught it, and HEAD was
+still mine so an amend fixed the message rather than the tree. Rule for next
+time: pathspec a commit to exact files, never a directory.
+
+**Totals this area:** B46-B55 plus the license-key class closed. license-server
+full suite green in 135s, 8 new tests.
