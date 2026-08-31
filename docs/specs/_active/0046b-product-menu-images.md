@@ -48,8 +48,13 @@ author; tablets render).
     "scope": ["$APPCACHE/images/**"]
   }
   ```
-  CSP is already correct (`asset:` on Android, `https://asset.localhost` on
-  Windows desktop).
+  CSP: Android is covered by `asset:`; Windows needs one config key —
+  `useHttpsScheme: true` in `app.windows[]` so the protocol is served as
+  `https://asset.localhost` and the CSP entry (which only whitelists the
+  https form) actually matches. Audit finding: without that key Tauri v2
+  serves `http://asset.localhost` on Windows and the current CSP silently
+  blocks every image — a P2-only failure that never appears in dev tools
+  until first real run.
 - UI never receives bytes. A card renders
   `convertFileSrc(cachePath)` → `<img src="http://asset.localhost/…">`, and the
   Android WebView streams from disk asynchronously.
@@ -101,7 +106,12 @@ author; tablets render).
 
 ### 3.3 Ingest pipeline in Rust — one command per assignment
 
-`products_set_image(product_id, slot, bytes)` (upload = apply, per decision):
+`products_set_image(product_id, slot, source_path)` (upload = apply, per
+decision; audit fix: the command takes the **file path** chosen via the
+dialog plugin — already in both manifests — and Rust does `fs::read`, so
+zero bytes cross the IPC bridge on the upload path either; passing 5 MB
+arrays through JSON `invoke` would violate rule 1 on the very path that
+mandates against it):
 
 1. **Sniff, don't trust:** validate magic bytes (WebP `RIFF….WEBP`, JPEG
    `FFD8FF`, PNG `89504E47`) — extension is ignored.
@@ -192,7 +202,10 @@ author; tablets render).
   2 GB tablet even with 15 KB files on disk — the disk size is irrelevant;
   the decoded bitmap is what eats RAM.
 - **POS grids** (`RetailProductGrid`, resto ordering screen) switch the
-  product tiles to `react-window` v2 (`FixedSizeGrid`) — already in the
+  product tiles to the **react-window v2 `Grid`** component (`cellComponent`
+  API — audit fix: v2 removed the v1 `FixedSizeGrid` name; verified against
+  the installed 2.2.7 type surface, which also warns Grid cell sizes must
+  be known ahead of time — true for our fixed tiles) — already in the
   dependency tree — so off-screen tiles **unmount entirely** and Android
   reclaims their decoded bitmaps. Tiles render **slot 1 only**.
 - **Alternatives appear on interaction, not on the grid:** the product-detail
@@ -322,7 +335,7 @@ the `/data` volume. Every mechanism below is chosen against that reality.
 | Phase | Deliverable | Touches |
 |---|---|---|
 | **P1 — storage spine** | `products.image_hash` + `product_images` table (sqlite+pg migrations, models, repository), `products_set_image` / `products_clear_image` commands with sniff/limits/transcode/hash/atomic-write/txn + promotion + menu-invariant logic, unit tests (malformed magic, oversized, slot bounds, promotion, menu-clear refusal, dedupe) | `oz-core` (migrations, db/products), `desktop-client/src/commands`, tauri.conf `assetProtocol` |
-| **P2 — UI** | `FixedSizeGrid` on POS rendering slot 1 via `convertFileSrc`, miss→initial-tile fallback; editor flows: assign-at-apply for menu (1 required) and product (primary + ≤4 alternatives with reorder); alternatives strip lazy-mounted; a11y (alt from product name, aria-busy) | `ui/src/features/retail`, `restaurant`, shared `ProductThumb` |
+| **P2 — UI** | react-window v2 `Grid` on POS rendering slot 1 via `convertFileSrc` (+ `useHttpsScheme: true` desktop config), miss→initial-tile fallback; editor flows: assign-at-apply for menu (1 required) and product (primary + ≤4 alternatives with reorder); alternatives strip lazy-mounted; a11y (alt from product name, aria-busy) | `ui/src/features/retail`, `restaurant`, shared `ProductThumb` |
 | **P3 — cloud sync** | `PUT/GET /api/v1/images` on the Northflank volume (`OZ_IMAGE_DIR`, admin-key gate, hash re-verification), `images` array in the catalog snapshot payload (list_products), image_refs content spine + missing_hashes nudge, migration files for both engines (sqlite incremental + PG regenerate via scripts/generate-pg-migration.py), push/pull scheduler lanes with batching + jitter (§3.6), pack endpoint for cold start, cloud GC via image_refs refcount=0 + grace sweep, tablet download manager (primary-first, LRU), sync tests | `oz-api`, `Dockerfile.unified` volume note, tablet-client Rust |
 | **P4 — hygiene** | startup GC sweep (reverse-index + grace), metrics (bytes dir, hit/miss latency, 4 GB soft alert), e2e, docs (`docs/guides`), i18n strings for the editor UI (en+id FTL) | `desktop-client`, `ui`, docs |
 
