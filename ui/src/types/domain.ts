@@ -157,6 +157,50 @@ export const MINOR_UNIT_EXPONENT: Record<string, number> = {
 export const minorUnitExponent = (currency: string): number =>
   MINOR_UNIT_EXPONENT[currency] ?? 2;
 
+/** Strict decimal literal: optional sign, digits and/or a fractional part. */
+const DECIMAL_RE = /^([+-]?)(\d*)(?:\.(\d*))?$/;
+
+/**
+ * Parse a user-entered decimal string into scaled integer units EXACTLY
+ * (MONEY-02, 2026-08-31) — `scaleExponent` is the currency's minor-unit
+ * exponent, or 6 for fixed-point rate millionths.
+ *
+ * Replaces the `Math.round(parseFloat(s) * 10**exp)` pattern, which
+ * mis-rounds boundary decimals ("1.005" → 100.49999… → 100 instead of
+ * 101) and silently accepts non-decimal garbage ("1e3" → 1000,
+ * "1,500" → 1). The whole computation is BigInt; ties round half-up
+ * toward +Infinity, the same rule `Math.round` applies to positives.
+ *
+ * Returns `null` for anything that is not a plain decimal literal or
+ * whose scaled result exceeds the safe integer range — callers must
+ * handle `null` as invalid input, never as zero.
+ */
+export function parseMinorUnits(input: string, scaleExponent: number): number | null {
+  const m = DECIMAL_RE.exec(input.trim());
+  if (!m) return null;
+  const sign = m[1] === '-' ? -1n : 1n;
+  const intPart = m[2] ?? '';
+  const fracPart = m[3] ?? '';
+  if (intPart === '' && fracPart === '') return null; // '', '+', '.', '5.'
+  const digits = (intPart + fracPart).replace(/^0+(?=\d)/, '');
+  // value = sign × digits / 10^fracLen; result = value × 10^scaleExponent
+  const num = sign * BigInt(digits) * 10n ** BigInt(scaleExponent);
+  const den = 10n ** BigInt(fracPart.length);
+  let q = num / den;
+  let r = num % den;
+  if (r < 0n) {
+    // BigInt division truncates toward zero; move to floor so the
+    // half-up tie rule is uniform across signs.
+    q -= 1n;
+    r += den;
+  }
+  if (2n * r >= den) q += 1n;
+  if (q > BigInt(Number.MAX_SAFE_INTEGER) || q < BigInt(Number.MIN_SAFE_INTEGER)) {
+    return null;
+  }
+  return Number(q);
+}
+
 /** Format `Money` for display. Defaults to Indonesian locale (id-ID).
  *  `decimalSep` overrides the per‑store receipt setting (read from
  *  localStorage when omitted). */

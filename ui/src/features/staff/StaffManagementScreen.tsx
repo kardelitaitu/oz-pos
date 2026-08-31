@@ -15,6 +15,7 @@ import {
 import { listAllWorkspacesScoped, type WorkspaceTypeDto } from '@/api/workspaces';
 import { listStoresScoped, type StoreProfile } from '@/api/stores';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { parseMinorUnits } from '@/types/domain';
 import { LocaleContext } from '@/i18n/LocaleContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { openUpgradePricing as openUpgradePricingPage } from '@/utils/upgrade';
@@ -152,8 +153,10 @@ const EMPTY_FORM: FormData = {
 
 /** Build the IPC `ProfileArgs` from the form, skipping empty optionals. */
 function profileArgsFromForm(form: FormData): ProfileArgs {
+  // MONEY-02: exact decimal parse; garbage input is treated as absent
+  // (the old parseFloat path stored NaN).
   const payMinor = form.monthlyTakeHome.trim()
-    ? Math.round(parseFloat(form.monthlyTakeHome) * 100)
+    ? parseMinorUnits(form.monthlyTakeHome, 2) ?? undefined
     : undefined;
   const profile: ProfileArgs = {};
   const set = (key: keyof ProfileArgs, value: string | number | undefined) => {

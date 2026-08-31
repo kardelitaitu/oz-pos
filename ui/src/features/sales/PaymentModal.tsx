@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { startSaleScoped, addLineScoped, completeSaleScoped, printSalesReceipt, getSale, setCartDiscountScoped, holdCartScoped, finalizeSale, voidPendingSale, previewPromotedTotalFromLinesScoped, type SetCartDiscountScopedArgs, type CompleteSaleScopedArgs, type PaymentSplitArg, type SerialNumberArg, type PartialStockResult, type PreviewPromotedTotalResult } from '@/api/sales';
 import { createKdsOrderFromSale, createKdsOrderFromSaleScoped } from '@/api/kds';
 import { Button } from '@/components/Button';
-import { formatMoney, minorUnitExponent, type Money, type CartLine } from '@/types/domain';
+import { formatMoney, minorUnitExponent, parseMinorUnits, type Money, type CartLine } from '@/types/domain';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import {
   listCurrenciesScoped,
@@ -468,10 +468,10 @@ export default function PaymentModal({
   }), [effectiveTotal, total.currency]);
 
   const tenderedMinor = useMemo(() => {
-    const num = parseFloat(tendered);
-    if (Number.isNaN(num) || num < 0) return 0n;
-    const exp = minorUnitExponent(total.currency);
-    return BigInt(Math.round(num * 10 ** exp));
+    // MONEY-02: exact decimal parse (parseFloat mis-rounded "1.005").
+    const parsed = parseMinorUnits(tendered, minorUnitExponent(total.currency));
+    if (parsed === null || parsed < 0) return 0n;
+    return BigInt(parsed);
   }, [tendered, total.currency]);
 
   // Convert base currency amount to selected charge currency using exchange rate
@@ -576,10 +576,10 @@ export default function PaymentModal({
   // Convert tendered amount to cart currency
   const tenderedMinorInCartCurrency = useMemo(() => {
     if (cartCurrency === total.currency) return Number(tenderedMinor);
-    const num = parseFloat(tendered);
-    if (Number.isNaN(num) || num < 0) return 0;
-    const chargeExponent = minorUnitExponent(cartCurrency);
-    return Math.round(num * 10 ** chargeExponent);
+    // MONEY-02: exact decimal parse at the charge currency's exponent.
+    const parsed = parseMinorUnits(tendered, minorUnitExponent(cartCurrency));
+    if (parsed === null || parsed < 0) return 0;
+    return parsed;
   }, [tendered, cartCurrency, tenderedMinor, total.currency]);
 
   // CUR-02: snapshot of what the customer actually paid — tip/service are
@@ -910,7 +910,7 @@ export default function PaymentModal({
         const exp = minorUnitExponent(cartCurrency);
         paymentSplits = splits.map((s) => ({
           method: s.method === 'other' ? s.otherLabel.trim() || 'OTHER' : s.method.toUpperCase(),
-          amountMinor: Math.round(parseFloat(s.amountMinor || '0') * 10 ** exp),
+          amountMinor: parseMinorUnits(s.amountMinor || '0', exp) ?? 0,
         }));
       }
 
@@ -1114,7 +1114,7 @@ export default function PaymentModal({
     const exp = minorUnitExponent(total.currency);
     return splits.map((s) => ({
       method: s.method === 'other' ? s.otherLabel.trim() || 'OTHER' : s.method.toUpperCase(),
-      amountMinor: Math.round(parseFloat(s.amountMinor || '0') * 10 ** exp),
+      amountMinor: parseMinorUnits(s.amountMinor || '0', exp) ?? 0,
     }));
   }, [splitMode, splits, total.currency]);
 

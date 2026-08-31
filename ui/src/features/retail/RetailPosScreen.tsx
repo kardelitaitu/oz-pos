@@ -29,7 +29,7 @@ import { holdCartScoped, listHeldCartsScoped, getHeldCartScoped, deleteHeldCartS
 import { getStoreSettingsScoped, listCreditSalesScoped, settleCreditScoped, type StoreSettingsDto, type CreditSaleDto } from '@/api/settings';
 import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
 import { recordMark } from '@/utils/perf-metrics';
-import { DEFAULT_LOW_STOCK_THRESHOLD, type CartId, type CartLine, type CourseId, type LineId, type ModifierSelection, type Money, type Product, type Sku } from '@/types/domain';
+import { DEFAULT_LOW_STOCK_THRESHOLD, parseMinorUnits, type CartId, type CartLine, type CourseId, type LineId, type ModifierSelection, type Money, type Product, type Sku } from '@/types/domain';
 import { useSound } from '@/frontend/shared/useSound';
 import { useOptionalTheme } from '@/frontend/shell/ThemeProvider';
 import RetailFnBar from './RetailFnBar';
@@ -889,8 +889,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   }, [sessionToken]);
 
   const handleOpenShift = useCallback(async () => {
-    const val = Math.round(parseFloat(openingBalance) * 100);
-    if (Number.isNaN(val) || val < 0) return;
+    // MONEY-02: exact decimal parse (parseFloat mis-rounded boundary input).
+    const val = parseMinorUnits(openingBalance, 2);
+    if (val === null || val < 0) return;
     setOpeningShift(true);
     try {
       const s = await openShiftScoped(sessionToken, val);
@@ -906,8 +907,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   const handleCloseShift = useCallback(async () => {
     if (!activeShift) return;
-    const val = Math.round(parseFloat(closingBalance) * 100);
-    if (Number.isNaN(val) || val < 0) return;
+    // MONEY-02: exact decimal parse.
+    const val = parseMinorUnits(closingBalance, 2);
+    if (val === null || val < 0) return;
     setClosingShift(true);
     setCloseShiftError(null);
     try {
