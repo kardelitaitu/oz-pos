@@ -3,7 +3,7 @@ name: hal-drivers
 description: Hardware Abstraction Layer (HAL) conventions for OZ-POS — async_trait device traits, drivers for barcode scanners, receipt printers, cash drawers, customer displays, weight scales, and EDC payment terminals, plus mandatory mock implementations. Use when adding a new device driver or wiring hardware into a feature.
 ---
 
-<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (F1-F4 repaired + EdcTerminal documented) · F1 FIXED: removed the false 'embedded-hal' claim (no such dep; plain async_trait) · F2 FIXED: traits list corrected to the 6 real traits (barcode/printer/cash_drawer/customer_display/weight_scale/edc) — fictional nfc.rs/payment_terminal.rs removed · F3 FIXED: drivers are transport-named (usb/bt/serial_scanner, usb/bt/tcp_printer, escpos, receipt, kds_chit, drawer, serial_display, scale, edc/{wired,wireless,protocol}) — fictional honeywell_barcode/star_printer/acr122u_nfc/idtech_payment removed; example struct now UsbHidBarcodeScanner (real) · F4 FIXED: mocks are always compiled (no `mock` feature gate) · NEW: EdcTerminal trait (traits/edc.rs) + edc/ drivers now documented · verified accurate: BarcodeScanner signature (connect/poll/cancel/device_info), DriverRegistry + discover, mock.rs location, async Result<T,HalError> convention -->
+<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (F1-F4 repaired + EdcTerminal documented) · F1 FIXED: removed the false 'embedded-hal' claim (no such dep; plain async_trait) · F2 FIXED: traits list corrected to the 6 real traits (barcode/printer/cash_drawer/customer_display/weight_scale/edc) — fictional nfc.rs/payment_terminal.rs removed · F3 FIXED: drivers are transport-named (usb/bt/serial_scanner, usb/bt/tcp_printer, escpos, receipt, kds_chit, drawer, serial_display, scale, edc/{wired,wireless,protocol}) — fictional honeywell_barcode/star_printer/acr122u_nfc/idtech_payment removed; example struct now UsbHidBarcodeScanner (real) · F4 FIXED: mocks are always compiled (no `mock` feature gate) · NEW: EdcTerminal trait (traits/edc.rs) + edc/ drivers now documented · verified accurate: BarcodeScanner signature (connect/poll/cancel/device_info), DriverRegistry + discover, mock.rs location, async Result<T,HalError> convention · NEW (31-08, dc07f32a): documented bootstrap.rs (`HardwareConfig` + `apply_config()` → `BootstrapReport`) as the production registration path; corrected `discover()` framing (auto-probe, not startup registration) -->
 
 # Hardware Abstraction Layer (HAL)
 
@@ -267,7 +267,8 @@ impl DriverRegistry {
 
 **Rules:**
 - Registry is held in `AppState` and reached via `State<'_, AppState>` in Tauri commands.
-- Discovery is a separate phase: `DriverRegistry::discover()` probes USB/Bluetooth/serial and populates the registry. Failure of one driver does not abort discovery.
+- Production registration is config-driven: `DriverRegistry::apply_config(&HardwareConfig)` (in `bootstrap.rs`) turns the operator's saved config into registered drivers and returns a `BootstrapReport` (registered / skipped / rejected). Apps map their persistence (`TerminalProfile`) → `HardwareConfig`; the HAL never reads a settings table. Registration never blocks — constructing a driver only records addressing, so a bad saved profile cannot stall startup.
+- `discover()` is the auto-probe phase (USB/Bluetooth/serial); failure of one driver does not abort discovery. It is not the startup registration path.
 - Setup wizard uses the registry to show "what's plugged in."
 
 ---
@@ -346,7 +347,7 @@ async fn sale_completes_after_scan() {
 - [ ] Implement the driver in `crates/oz-hal/src/drivers/<transport>_<device>.rs` (e.g. `usb_scanner.rs`, `tcp_printer.rs`, `edc/wired.rs`) — drivers are named by transport, not by vendor.
 - [ ] Re-export the driver from `crates/oz-hal/src/drivers/mod.rs`.
 - [ ] **Add the mock to `crates/oz-hal/src/drivers/mock.rs`.** (Mandatory — CI will fail otherwise.)
-- [ ] Register the driver in `DriverRegistry::discover()`.
+- [ ] Wire the driver into registration: `DriverRegistry::discover()` (auto-probe) and, if operator-configurable, `bootstrap.rs` `apply_config()` / `HardwareConfig` (the production startup path).
 - [ ] Add a Tauri command in `apps/desktop-client/src/commands/hardware.rs` that takes the registry from `State` and returns a `Result`.
 - [ ] Add a TS wrapper in `ui/src/api/<feature>.ts` and a hook in `ui/src/features/<feature>/`.
 - [ ] Tests: a unit test in the driver, a feature test using the mock, and a UI test with the hook.
