@@ -53,7 +53,7 @@
   flex: 0 0 auto;
   min-height: 3rem;
   display: grid;
-  grid-template-columns: auto auto 1fr auto auto;
+  grid-template-columns: auto auto 1fr auto;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-8);
@@ -79,9 +79,7 @@
   min-width: 0;
 }
 
-/* COL 4: clock */
-
-/* COL 5: actions (revert + save) */
+/* COL 4: actions (revert + save) */
 .settings-topbar__col--actions {
   gap: var(--space-3);
 }
@@ -142,15 +140,9 @@
   height: 1.25rem;
 }
 
-.settings-topbar-clock {
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-fg-secondary);
+.settings-footer-date {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-md);
-  line-height: 1;
 }
 
 /* ── Body (sidebar + content) ─────────────────────────────── */
@@ -391,10 +383,6 @@
 
   .settings-footer {
     padding: 0 var(--space-3);
-  }
-
-  .settings-topbar-clock {
-    display: none;
   }
 }
 

@@ -910,13 +910,7 @@ function SettingsPageContent() {
             )}
           </div>
         </div>
-        {/* COL 4: clock */}
-        <div className="settings-topbar__col">
-          <span className="settings-topbar-clock" aria-label={`${today}, ${clock}`}>
-            {today} {clock}
-          </span>
-        </div>
-        {/* COL 5: actions */}
+        {/* COL 4: actions */}
         <div className="settings-topbar__col settings-topbar__col--actions">
           <div className="settings-save-bar">
             {/* Revert button is always rendered but invisible when not dirty.
@@ -1081,9 +1075,9 @@ function SettingsPageContent() {
             <kbd>Ctrl</kbd>+<kbd>S</kbd>
             <Localized id="settings-btn-save"><span>Save</span></Localized>
           </span>
-          <Localized id="settings-license-type-value">
-            <span>Proprietary Commercial License</span>
-          </Localized>
+          <span className="settings-footer-date">
+            {today} {clock}
+          </span>
         </span>
       </footer>
     </div>
