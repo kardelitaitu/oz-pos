@@ -17,7 +17,7 @@ import {
   type TerminalFeatureOverride,
   type DeviceBindingDto,
 } from '@/api/terminals';
-import { listStores, type StoreProfile } from '@/api/stores';
+import { listStoresScoped, type StoreProfile } from '@/api/stores';
 import {
   listWorkspacesForStoreScoped,
   type WorkspaceDto,
@@ -273,7 +273,7 @@ export default function TerminalManagementScreen() {
       try {
         const [b, stores] = await Promise.all([
           getDeviceBindingScoped(sessionToken, editingId),
-          listStores(),
+          listStoresScoped(sessionToken),
         ]);
         if (!cancelled) {
           setBinding(b);

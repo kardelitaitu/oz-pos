@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useLocalization } from '@fluent/react';
-import { listStores, createStore, updateStore, deleteStore, type StoreProfile } from '@/api/stores';
+import { listStoresScoped, createStoreProfileScoped, updateStoreProfileScoped, deleteStoreProfileScoped, type StoreProfile } from '@/api/stores';
 import {
   listWorkspacesScoped,
   updateWorkspaceInstanceScoped,
@@ -155,7 +155,7 @@ export default function TopologyScreen() {
       .catch(() => { setLicenseTier('free'); });
 
     try {
-      const storeData = await listStores();
+      const storeData = await listStoresScoped(sessionToken!);
       setStores(storeData);
       setStoresUnavailable(false);
       storesResolvedRef.current = true;
@@ -354,7 +354,7 @@ export default function TopologyScreen() {
     if (!name) return;
     if (atStoreLimit) return; // the inline banner explains why
     try {
-      const created = await createStore({ id: `store-${crypto.randomUUID()}`, name });
+      const created = await createStoreProfileScoped(sessionToken!, { id: `store-${crypto.randomUUID()}`, name });
       setStores((prev) => [...prev, created]);
       setSelectedBranchId(created.id);
       setAddingBranch(false);
@@ -378,7 +378,7 @@ export default function TopologyScreen() {
     const remaining = stores.filter((s) => s.id !== id);
     setDeleteBranchSaving(true);
     try {
-      await deleteStore(id);
+      await deleteStoreProfileScoped(sessionToken!, id);
       setStores(remaining);
       setSelectedBranchId(remaining[0]?.id ?? null);
       // No branches left: nothing owns the graph — clear the instances so
@@ -409,7 +409,7 @@ export default function TopologyScreen() {
     const trimmed = name.trim();
     if (!trimmed || trimmed === store.name) return false;
     try {
-      const updated = await updateStore({
+      const updated = await updateStoreProfileScoped(sessionToken!, {
         id: store.id,
         name: trimmed,
         address: store.address,

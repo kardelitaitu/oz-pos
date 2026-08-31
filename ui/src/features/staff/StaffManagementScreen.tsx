@@ -13,7 +13,7 @@ import {
   isStaffQuotaLimitError,
 } from '@/api/staff';
 import { listAllWorkspacesScoped, type WorkspaceTypeDto } from '@/api/workspaces';
-import { listStores, type StoreProfile } from '@/api/stores';
+import { listStoresScoped, type StoreProfile } from '@/api/stores';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { LocaleContext } from '@/i18n/LocaleContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
@@ -300,7 +300,7 @@ export default function StaffManagementScreen() {
       try {
         const [workspaces, storeProfiles] = await Promise.all([
           listAllWorkspacesScoped(sessionToken),
-          listStores(),
+          listStoresScoped(sessionToken),
         ]);
         const nameMap = new Map<string, string>();
         for (const w of workspaces) {
@@ -390,7 +390,7 @@ export default function StaffManagementScreen() {
       const [profile, workspaces, storeProfiles] = await Promise.all([
         getStaffProfileScoped(sessionToken, member.id),
         listAllWorkspacesScoped(sessionToken),
-        listStores(),
+        listStoresScoped(sessionToken),
       ]);
       setForm((prev) => ({
         ...prev,

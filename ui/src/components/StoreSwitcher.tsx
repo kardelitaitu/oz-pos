@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocalization } from '@fluent/react';
-import { listStores, setPrimaryStore, type StoreProfile } from '@/api/stores';
+import { listStoresScoped, setPrimaryStoreScoped, type StoreProfile } from '@/api/stores';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import './StoreSwitcher.css';
 
@@ -11,7 +11,7 @@ import './StoreSwitcher.css';
  */
 export default function StoreSwitcher() {
   const { l10n } = useLocalization();
-  const { switchStore } = useWorkspace();
+  const { switchStore, sessionToken } = useWorkspace();
   const [stores, setStores] = useState<StoreProfile[]>([]);
   const [primary, setPrimary] = useState<StoreProfile | null>(null);
   const [open, setOpen] = useState(false);
@@ -22,7 +22,7 @@ export default function StoreSwitcher() {
 
   const load = useCallback(async () => {
     try {
-      const data = await listStores();
+      const data = await listStoresScoped(sessionToken!);
       setStores(data);
       const p = data.find((s) => s.is_primary) ?? data[0] ?? null;
       setPrimary(p);
@@ -41,7 +41,7 @@ export default function StoreSwitcher() {
       return;
     }
     try {
-      await setPrimaryStore(store.id);
+      await setPrimaryStoreScoped(sessionToken!, store.id);
       setPrimary(store);
       setStores((prev) =>
         prev.map((s) => ({ ...s, is_primary: s.id === store.id })),

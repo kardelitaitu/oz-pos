@@ -10,7 +10,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import {
   type WorkspaceCardProps,
 } from '@/features/settings/workspace-cards';
-import { updateStore, getStore, type StoreProfile } from '@/api/stores';
+import { updateStoreProfileScoped, getStoreProfileScoped, type StoreProfile } from '@/api/stores';
 import {
   CheckIcon,
   TrashIcon,
@@ -382,8 +382,9 @@ const graphIssueKey = (messageId: string) => `graph:${messageId}`;
 const SELECTION_ANNOUNCE_SETTLE_MS = 120;
 
 /** Branch Location profile fields — fetched lazily from the backend. */
-function BranchLocationFields({ nodeId, l10n, beginInspectorEdit }: {
+function BranchLocationFields({ nodeId, sessionToken, l10n, beginInspectorEdit }: {
   nodeId: string;
+  sessionToken: string;
   l10n: ReturnType<typeof useLocalization>['l10n'];
   beginInspectorEdit: (id: string) => void;
 }) {
@@ -395,19 +396,19 @@ function BranchLocationFields({ nodeId, l10n, beginInspectorEdit }: {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getStore(nodeId)
+    getStoreProfileScoped(sessionToken, nodeId)
       .then((p) => { if (!cancelled) { setProfile(p); setLoading(false); } })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [nodeId]);
+  }, [nodeId, sessionToken]);
 
   const persist = useCallback(() => {
     if (draft && profile) {
       const merged = { ...profile, ...draft };
-      updateStore(merged).then(setProfile).catch(() => {});
+      updateStoreProfileScoped(sessionToken, merged).then(setProfile).catch(() => {});
       setDraft(null);
     }
-  }, [draft, profile]);
+  }, [draft, profile, sessionToken]);
 
   if (loading) {
     return (
@@ -5834,6 +5835,7 @@ export default function NodeTopologyEditor({
               {selectedNode.type === 'store' && (
                 <BranchLocationFields
                   nodeId={selectedNode.storeProfileId ?? selectedNode.id}
+                  sessionToken={sessionToken!}
                   l10n={l10n}
                   beginInspectorEdit={beginInspectorEdit}
                 />

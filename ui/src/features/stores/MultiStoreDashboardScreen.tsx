@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
-import { listStores, setPrimaryStore, deleteStore, type StoreProfile } from '@/api/stores';
+import { listStoresScoped, setPrimaryStoreScoped, deleteStoreProfileScoped, type StoreProfile } from '@/api/stores';
 import { listTerminalsScoped, type TerminalDto } from '@/api/terminals';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
@@ -41,7 +41,7 @@ export default function MultiStoreDashboardScreen() {
     setError(null);
     try {
       const [storeData, termData] = await Promise.all([
-        listStores(),
+        listStoresScoped(sessionToken),
         listTerminalsScoped(sessionToken),
       ]);
       setStores(storeData);
@@ -57,26 +57,26 @@ export default function MultiStoreDashboardScreen() {
 
   const handleSetPrimary = useCallback(async (id: string) => {
     try {
-      await setPrimaryStore(id);
+      await setPrimaryStoreScoped(sessionToken, id);
       setStores((prev) =>
         prev.map((s) => ({ ...s, is_primary: s.id === id })),
       );
     } catch {
       // silently fail
     }
-  }, []);
+  }, [sessionToken]);
 
   const handleDelete = useCallback(async (id: string) => {
     setDeletingId(id);
     try {
-      await deleteStore(id);
+      await deleteStoreProfileScoped(sessionToken, id);
       setStores((prev) => prev.filter((s) => s.id !== id));
     } catch {
       // silently fail
     } finally {
       setDeletingId(null);
     }
-  }, []);
+  }, [sessionToken]);
 
   const activeTerminals = terminals.filter((t) => t.isActive).length;
   const onlineTerminals = terminals.filter((t) => isOnline(t.lastSeenAt)).length;
