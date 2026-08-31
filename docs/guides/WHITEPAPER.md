@@ -77,7 +77,7 @@ The `oz-` prefix is short, memorable, and signals: *this is part of the wizard's
 |----------|----------------|-----------|
 | **Windows PC** | Windows 10/11, modern hardware (x86‑64) | Full desktop UI, peripheral support (USB, Bluetooth, NFC). |
 | **Linux PC** | Ubuntu, Debian, Fedora (x86‑64) | Open‑source OS, robust networking, wide driver support. |
-| **Android Tablet** | Android 8.0+ tablets (ARM, minSdk 26) (ARM) | Portable POS, touchscreen UI, integrated Wi‑Fi/Cellular. |
+| **Android Tablet** | Android 8.0+ tablets (ARM, minSdk 26) | Portable POS, touchscreen UI, integrated Wi‑Fi/Cellular. |
 | **iPad** | iPadOS (ARM) | Premium touch UI, Apple Pay integration, high‑resolution display. |
 
 **Hardware Abstraction Layer (HAL):**
