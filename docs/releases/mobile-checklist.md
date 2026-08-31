@@ -29,7 +29,7 @@
 - [ ] **Permissions granted correctly**
   - Camera (barcode scanning)
   - Storage (backup export)
-  - Bluetooth (receipt printer, NFC reader)
+  - Bluetooth (receipt printer, barcode scanner)
 
 ### Functional Testing
 
