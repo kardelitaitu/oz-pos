@@ -23,8 +23,8 @@ import {
   openShiftScoped,
   closeShiftScoped,
   getActiveShiftScoped,
-  getShiftReport,
-  createCashPayout,
+  getShiftReportScoped,
+  createCashPayoutScoped,
   type ShiftDto,
   type ShiftReportDto,
 
@@ -94,11 +94,11 @@ export default function ShiftManagementScreen() {
       return;
     }
     setReportLoading(true);
-    getShiftReport(showDetailModal.id)
+    getShiftReportScoped(sessionToken, showDetailModal.id)
       .then(setShiftReport)
       .catch(() => setShiftReport(null))
       .finally(() => setReportLoading(false));
-  }, [showDetailModal]);
+  }, [showDetailModal, sessionToken]);
 
   // ── Open shift ────────────────────────────────────────────────────
 
@@ -179,7 +179,7 @@ export default function ShiftManagementScreen() {
     setSaving(true);
     setError(null);
     try {
-      await createCashPayout(activeShift.id, amount, reason);
+      await createCashPayoutScoped(sessionToken, activeShift.id, amount, reason);
       setShowPayoutModal(false);
       setPayoutAmount('');
       setPayoutReason('');

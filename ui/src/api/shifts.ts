@@ -30,30 +30,12 @@ export interface ShiftDto {
 
 // ── Commands ────────────────────────────────────────────────────────
 
-/** Open a new shift for a user. */
-export const openShift = (userId: string, openingBalanceMinor: number): Promise<ShiftDto> =>
-  loggedInvoke<ShiftDto>('open_shift', {
-    args: { userId, terminalId: null as string | null, openingBalanceMinor },
-  });
-
 /** Open a shift (scoped — ADR #7). */
 export const openShiftScoped = (sessionToken: string, openingBalanceMinor: number, terminalId?: string | null): Promise<ShiftDto> =>
   loggedInvoke<ShiftDto>('open_shift_scoped', {
     sessionToken,
     args: { terminalId: terminalId ?? null, openingBalanceMinor },
   });
-
-/** Arguments for manually closing a shift with a counted closing balance. */
-export interface CloseShiftArgs {
-  userId: string;
-  id: string;
-  closingBalanceMinor: number;
-  notes?: string | null;
-}
-
-/** Close an active shift with a counted closing balance. */
-export const closeShift = (args: CloseShiftArgs): Promise<ShiftDto> =>
-  loggedInvoke<ShiftDto>('close_shift', { args });
 
 /** Close a shift (scoped — ADR #7). */
 export const closeShiftScoped = (sessionToken: string, id: string, closingBalanceMinor: number, notes?: string | null): Promise<ShiftDto> =>
@@ -62,25 +44,17 @@ export const closeShiftScoped = (sessionToken: string, id: string, closingBalanc
     args: { id, closingBalanceMinor, notes: notes ?? null },
   });
 
-/** Get the currently open shift for a user, if any. */
-export const getActiveShift = (userId: string): Promise<ShiftDto | null> =>
-  loggedInvoke<ShiftDto | null>('get_active_shift', { userId });
-
 /** Get the active shift for the session user (scoped — ADR #7). */
 export const getActiveShiftScoped = (sessionToken: string): Promise<ShiftDto | null> =>
   loggedInvoke<ShiftDto | null>('get_active_shift_scoped', { sessionToken });
-
-/** List all shifts, most recent first. */
-export const listShifts = (): Promise<ShiftDto[]> =>
-  loggedInvoke<ShiftDto[]>('list_shifts');
 
 /** List all shifts for the store resolved from a session token. ADR #7. */
 export const listShiftsScoped = (sessionToken: string): Promise<ShiftDto[]> =>
   loggedInvoke<ShiftDto[]>('list_shifts_scoped', { sessionToken });
 
-/** Get a single shift by its identifier. */
-export const getShift = (id: string): Promise<ShiftDto | null> =>
-  loggedInvoke<ShiftDto | null>('get_shift', { id });
+/** Get a single shift in the store resolved from a session token. ADR #7. */
+export const getShiftScoped = (sessionToken: string, id: string): Promise<ShiftDto | null> =>
+  loggedInvoke<ShiftDto | null>('get_shift_scoped', { sessionToken, id });
 
 // ── Cash Payouts ──────────────────────────────────────────────────────
 
@@ -93,13 +67,15 @@ export interface CashPayoutDto {
   createdAt: string;
 }
 
-/** Record a cash payout (safe drop) against an open shift. */
-export const createCashPayout = (
+/** Record a cash payout (safe drop) against the session's open shift. ADR #7. */
+export const createCashPayoutScoped = (
+  sessionToken: string,
   shiftId: string,
   amountMinor: number,
   reason: string,
 ): Promise<CashPayoutDto> =>
-  loggedInvoke<CashPayoutDto>('create_cash_payout', {
+  loggedInvoke<CashPayoutDto>('create_cash_payout_scoped', {
+    sessionToken,
     args: { shiftId, amountMinor, reason },
   });
 
@@ -136,6 +112,6 @@ export interface ShiftSalesByHourDto {
   saleCount: number;
 }
 
-/** Get a comprehensive report for a single shift. */
-export const getShiftReport = (shiftId: string): Promise<ShiftReportDto> =>
-  loggedInvoke<ShiftReportDto>('get_shift_report', { shiftId });
+/** Get a comprehensive report for the session's shift. ADR #7. */
+export const getShiftReportScoped = (sessionToken: string, shiftId: string): Promise<ShiftReportDto> =>
+  loggedInvoke<ShiftReportDto>('get_shift_report_scoped', { sessionToken, shiftId });

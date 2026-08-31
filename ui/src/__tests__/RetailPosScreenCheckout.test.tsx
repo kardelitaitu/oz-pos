@@ -130,7 +130,7 @@ describe('RetailPosScreen — checkout & navigation', () => {
       subtotal: { minor_units: 3500, currency: 'IDR' },
     }));
     const shiftsApi = await import('@/api/shifts');
-    vi.mocked(shiftsApi.getActiveShift).mockResolvedValueOnce({
+    vi.mocked(shiftsApi.getActiveShiftScoped).mockResolvedValueOnce({
       id: 'shift-1', userId: 'user-1', terminalId: null,
       openedAt: '2026-07-05T08:00:00Z', closedAt: null,
       openingBalanceMinor: 100000, closingBalanceMinor: null,
@@ -157,7 +157,7 @@ describe('RetailPosScreen — checkout & navigation', () => {
       addProduct, resetCart,
     }));
     const shiftsApi = await import('@/api/shifts');
-    vi.mocked(shiftsApi.getActiveShift).mockResolvedValueOnce({
+    vi.mocked(shiftsApi.getActiveShiftScoped).mockResolvedValueOnce({
       id: 'shift-1', userId: 'user-1', terminalId: null,
       openedAt: '2026-07-06T08:00:00Z', closedAt: null,
       openingBalanceMinor: 100000, closingBalanceMinor: null,
@@ -258,7 +258,7 @@ describe('RetailPosScreen — checkout & navigation', () => {
       addProduct, resetCart,
     }));
     const shiftsApi = await import('@/api/shifts');
-    vi.mocked(shiftsApi.getActiveShift).mockResolvedValueOnce({
+    vi.mocked(shiftsApi.getActiveShiftScoped).mockResolvedValueOnce({
       id: 'shift-1', userId: 'user-1', terminalId: null,
       openedAt: '2026-07-06T08:00:00Z', closedAt: null,
       openingBalanceMinor: 100000, closingBalanceMinor: null,
