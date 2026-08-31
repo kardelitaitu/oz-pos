@@ -99,5 +99,3 @@ The original 15 delegating Store methods in `oz-core` are marked `#[deprecated]`
 ```
 
 > last audited 31-08-26 by docs-auditor
-> audit: Phase 3 Module-Level Documentation Audit
-> status: ACCURATE (verified against actual codebase)
