@@ -20,7 +20,7 @@ on a physical Android device (phone or tablet).
 | Android SDK | 34+ | `sdkmanager --list \| grep 'platforms'` |
 | Android NDK | 27.x | `sdkmanager --list \| grep 'ndk'` |
 | Rust toolchain | stable (1.88+) | `rustc --version` |
-| Node.js | 20+ LTS | `node --version` |
+| Node.js | >=22 LTS | `node --version` |
 | cargo-ndk | latest | `cargo install cargo-ndk --locked` |
 | Tauri CLI | ^2 | `cargo install tauri-cli --version "^2" --locked` |
 | Rust targets (Android) | 3 targets | `rustup target list \| grep android` |

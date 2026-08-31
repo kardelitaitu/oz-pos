@@ -14,7 +14,7 @@ running the core POS flow end-to-end on a physical Windows machine.
 | Requirement | Version | Check |
 |-------------|---------|-------|
 | Windows 10 or 11 | 22H2+ (10.0.19045+) | `winver` |
-| Rust toolchain | stable (1.85+) | `rustc --version` |
+| Rust toolchain | stable (1.88+) | `rustc --version` |
 | Node.js | >=22 LTS | `node --version` |
 | npm | >=11 | `npm --version` |
 | Visual Studio Build Tools | 2022+ | `cl.exe` on PATH (from "Developer Command Prompt") |

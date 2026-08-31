@@ -19,7 +19,7 @@ on a physical iPad device via TestFlight or direct sideloading.
 | iPad device | iPadOS 16.0+ | Settings → General → About → iPadOS Version |
 | Apple Developer account | Paid ($99/yr) or free | [developer.apple.com](https://developer.apple.com) |
 | Rust toolchain | stable (1.88+) | `rustc --version` |
-| Node.js | 20+ LTS | `node --version` |
+| Node.js | >=22 LTS | `node --version` |
 | Tauri CLI | ^2 | `cargo install tauri-cli --version "^2" --locked` |
 | Rust targets (iOS) | 3 targets | `rustup target list --installed \| grep ios` |
 | TestFlight app | Installed on iPad | App Store → TestFlight |

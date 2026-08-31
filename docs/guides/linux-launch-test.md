@@ -14,7 +14,7 @@ running the core POS flow end-to-end on a physical Linux machine.
 | Requirement | Version | Check |
 |-------------|---------|-------|
 | Ubuntu 22.04+ / Debian 12+ | LTS recommended | `lsb_release -a` or `cat /etc/os-release` |
-| Rust toolchain | stable (1.85+) | `rustc --version` |
+| Rust toolchain | stable (1.88+) | `rustc --version` |
 | Node.js | >=22 LTS | `node --version` |
 | npm | >=11 | `npm --version` |
 | WebKitGTK | 4.1+ | `pkg-config --modversion webkit2gtk-4.1` |
