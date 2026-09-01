@@ -16,7 +16,7 @@ import { convertFileSrc } from '@/api/tauri';
 // ── Cache-dir resolution (lazy, once) ───────────────────────────────
 
 let _cacheDir: string | null = null;
-let _cacheDirPromise: Promise<string> | null = null;
+let _cacheDirPromise: Promise<string | null> | null = null;
 
 async function resolveCacheDir(): Promise<string | null> {
   if (_cacheDir !== null) return _cacheDir;

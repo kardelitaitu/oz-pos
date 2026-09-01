@@ -455,7 +455,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // ADR #36 D4: per-user column visibility + hide-inactive (KDS pattern).
-  const { prefs: colPrefs, toggleColumn: onToggleColumn, setHideInactive: onToggleHideInactive } = useRetailColumnPrefs();
+  const { prefs: colPrefs, toggleColumn: onToggleColumn, setHideInactive: onToggleHideInactive, setViewMode: onSetViewMode } = useRetailColumnPrefs();
 
   // ADR #38 D1: positioned row context menu state.
   const [rowMenu, setRowMenu] = useState<ContextMenuState | null>(null);
@@ -1499,6 +1499,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
             filterLowStock,
             visibleColumns: colPrefs.visibleColumns,
             hideInactive: colPrefs.hideInactive,
+            viewMode: colPrefs.viewMode,
           }}
           actions={{
             onSetActiveCategory: setActiveCategory,
@@ -1517,6 +1518,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
             onWeighAdd: handleWeighAdd,
             onToggleColumn,
             onToggleHideInactive,
+            onSetViewMode,
             onRowContextMenu: handleRowContextMenu,
           }}
           isScaleEnabled={isEnabled(FEATURES.USB_SCALE)}

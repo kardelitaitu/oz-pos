@@ -903,6 +903,12 @@ retail-col-toggle-btn = Columns
 retail-col-toggle-title = Show / hide columns
 retail-col-toggle-aria = Choose visible columns
 
+# ── Retail view-mode toggle (spec 0046b §3.5) ──
+retail-view-grid-label = Grid
+retail-view-text-label = Text
+retail-view-grid-title = Show products as an image grid
+retail-view-text-title = Show products as a text table
+
 # ── Retail product attributes (ADR #36 D5) ──
 retail-edit-field-cost = Cost (IDR)
 retail-edit-field-unit = Unit

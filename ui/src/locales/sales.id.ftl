@@ -848,6 +848,12 @@ retail-col-toggle-btn = Kolom
 retail-col-toggle-title = Tampilkan / sembunyikan kolom
 retail-col-toggle-aria = Pilih kolom yang terlihat
 
+# ── Retail view-mode toggle (spec 0046b §3.5) ──
+retail-view-grid-label = Grid
+retail-view-text-label = Teks
+retail-view-grid-title = Tampilkan produk sebagai grid gambar
+retail-view-text-title = Tampilkan produk sebagai tabel teks
+
 # ── Retail product attributes (ADR #36 D5) ──
 retail-edit-field-cost = HPP (IDR)
 retail-edit-field-unit = Satuan
