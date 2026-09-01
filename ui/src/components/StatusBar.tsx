@@ -2,11 +2,9 @@ import { useLocalization } from '@fluent/react';
 import { requiredLocalized } from '@/frontend/shared';
 import { useToast } from '@/frontend/shared/Toast';
 import Tooltip from '@/frontend/shell/Tooltip';
-import { AUTH_SERVICE_URL } from '@/utils/service-url';
-import { useHealthLatency } from '@/hooks/useHealthLatency';
+import { useAuthConnection } from '@/hooks/useAuthConnection';
 import { useSyncConnection } from '@/hooks/useSyncConnection';
 import { useVersionStatus } from '@/hooks/useVersionStatus';
-import type { HealthLatencyInfo } from '@/hooks/useHealthLatency';
 import type { VersionStatusInfo } from '@/hooks/useVersionStatus';
 import './StatusBar.css';
 
@@ -17,8 +15,11 @@ const LATENCY_WARN_MAX = 2999; // yellow
 
 type DotTone = 'good' | 'warn' | 'bad' | 'checking';
 
+/** Health-check state enum (checking / online / offline). */
+type HealthState = 'checking' | 'online' | 'offline';
+
 /** Map a health latency result to a color tone. */
-function latencyTone(latencyMs: number | null, state: HealthLatencyInfo['state']): DotTone {
+function latencyTone(latencyMs: number | null, state: HealthState): DotTone {
   if (state === 'checking') return 'checking';
   if (state === 'offline' || latencyMs === null) return 'bad';
   if (latencyMs <= LATENCY_GOOD_MAX) return 'good';
@@ -102,7 +103,7 @@ export default function StatusBar({ bare = false }: { bare?: boolean }) {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
 
-  const auth = useHealthLatency(AUTH_SERVICE_URL);
+  const auth = useAuthConnection();
   const sync = useSyncConnection();
   const version = useVersionStatus();
 
@@ -111,19 +112,25 @@ export default function StatusBar({ bare = false }: { bare?: boolean }) {
   const syncLabel = requiredLocalized(l10n, 'staff-login-connection-sync');
   const versionLabel = requiredLocalized(l10n, 'statusbar-version-label');
 
-  // ── Auth item ──────────────────────────────────────────────────
-  const authTone = latencyTone(auth.latencyMs, auth.state);
-  const authTooltip = healthTooltip(l10n, auth, authLabel);
+  // ── Auth + Sync items ──────────────────────────────────────────
+  // Both hooks return { state: checking/connected/disconnected, latencyMs }.
+  const connectionTone = (s: { state: 'checking' | 'connected' | 'disconnected'; latencyMs: number | null }): DotTone =>
+    s.state === 'checking' ? 'checking' : s.state === 'connected' ? latencyTone(s.latencyMs, 'online') : 'bad';
+  const connectionTooltip = (
+    l10n: ReturnType<typeof useLocalization>['l10n'],
+    s: { state: 'checking' | 'connected' | 'disconnected'; latencyMs: number | null },
+    name: string,
+  ) =>
+    s.state === 'checking'
+      ? requiredLocalized(l10n, 'statusbar-checking-msg', { name })
+      : s.state === 'disconnected'
+        ? requiredLocalized(l10n, 'statusbar-offline-msg', { name })
+        : requiredLocalized(l10n, 'statusbar-latency-msg', { name, ms: String(s.latencyMs ?? 0) });
 
-  // ── Sync item (useSyncConnection: checking/connected/disconnected) ─
-  const syncTone: DotTone =
-    sync.state === 'checking' ? 'checking' : sync.state === 'connected' ? latencyTone(sync.latencyMs, 'online') : 'bad';
-  const syncTooltip =
-    sync.state === 'checking'
-      ? requiredLocalized(l10n, 'statusbar-checking-msg', { name: syncLabel })
-      : sync.state === 'disconnected'
-        ? requiredLocalized(l10n, 'statusbar-offline-msg', { name: syncLabel })
-        : requiredLocalized(l10n, 'statusbar-latency-msg', { name: syncLabel, ms: String(sync.latencyMs ?? 0) });
+  const authTone = connectionTone(auth);
+  const authTooltip = connectionTooltip(l10n, auth, authLabel);
+  const syncTone = connectionTone(sync);
+  const syncTooltip = connectionTooltip(l10n, sync, syncLabel);
 
   // ── Version item (2 states: latest / update) ───────────────────
   const versionTone: DotTone =
@@ -144,19 +151,6 @@ export default function StatusBar({ bare = false }: { bare?: boolean }) {
       <StatusItem kind="download" tone={versionTone} label={versionLabel} tooltip={versionTooltip} onClick={() => notify(versionTooltip)} align="right" />
     </div>
   );
-}
-
-/** Localize a health item's tooltip from its state + latency. */
-function healthTooltip(
-  l10n: ReturnType<typeof useLocalization>['l10n'],
-  info: HealthLatencyInfo,
-  name: string,
-): string {
-  if (info.state === 'checking') return requiredLocalized(l10n, 'statusbar-checking-msg', { name });
-  if (info.state === 'offline' || info.latencyMs === null) {
-    return requiredLocalized(l10n, 'statusbar-offline-msg', { name });
-  }
-  return requiredLocalized(l10n, 'statusbar-latency-msg', { name, ms: String(info.latencyMs) });
 }
 
 // Re-export type for tests.

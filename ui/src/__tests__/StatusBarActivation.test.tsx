@@ -25,14 +25,14 @@ vi.mock('@/hooks/useSyncConnection', () => ({
   useSyncConnection: () => ({ state: mockSync.state, latencyMs: mockSync.latencyMs }),
 }));
 
-// ── Mock useHealthLatency for auth ────────────────────────────────
+// ── Mock useAuthConnection for auth ────────────────────────────────
 const mockAuth = vi.hoisted(() => ({
-  state: 'online' as 'checking' | 'online' | 'offline',
+  state: 'connected' as 'checking' | 'connected' | 'disconnected',
   latencyMs: 42 as number | null,
 }));
 
-vi.mock('@/hooks/useHealthLatency', () => ({
-  useHealthLatency: () => ({ state: mockAuth.state, latencyMs: mockAuth.latencyMs }),
+vi.mock('@/hooks/useAuthConnection', () => ({
+  useAuthConnection: () => ({ state: mockAuth.state, latencyMs: mockAuth.latencyMs }),
 }));
 
 // ── Mock the Toast hook ───────────────────────────────────────────
@@ -58,7 +58,7 @@ describe('StatusBar (activation screen unified status area)', () => {
     mockUpdaterCheck.mockResolvedValue(null); // no update available
     mockSync.state = 'connected';
     mockSync.latencyMs = 42;
-    mockAuth.state = 'online';
+    mockAuth.state = 'connected';
     mockAuth.latencyMs = 42;
   });
 
@@ -160,7 +160,7 @@ describe('StatusBar (activation screen unified status area)', () => {
   });
 
   it('applies bad tone (red) when offline', () => {
-    mockAuth.state = 'offline';
+    mockAuth.state = 'disconnected';
     mockAuth.latencyMs = null;
     mockSync.state = 'disconnected';
     mockSync.latencyMs = null;
