@@ -1259,7 +1259,7 @@ export default function PaymentModal({
             receipt={receiptArgs}
             onPrint={async () => {
               try {
-                await printSalesReceipt(receiptArgs);
+                await printSalesReceipt(sessionToken!, receiptArgs);
                 animateLeave(onComplete);
               } catch {
                 // Printer error — still dismiss

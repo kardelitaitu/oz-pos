@@ -708,6 +708,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
 
   // ── Barcode scanner integration ─────────────────────────────
   useBarcodeScanner({
+    sessionToken,
     onProductFound: useCallback(async (payload: BarcodeScannedPayload) => {
       if (!activeShiftRef.current) {
         addToast({ message: 'Open a shift first', type: 'warning' });

@@ -43,7 +43,7 @@ const { invokeMock } = vi.hoisted(() => ({
         return Promise.resolve({ saleId: 'sale-1', total: null, lineCount: 1 });
       case 'get_sale':
         return Promise.resolve(null);
-      case 'print_sales_receipt':
+      case 'print_sales_receipt_scoped':
         return Promise.resolve({ printed: true });
       case 'hold_cart':
         return Promise.resolve();
@@ -82,6 +82,7 @@ describe('PaymentModal — sale flow', () => {
         lineItems={[lineItem()]}
         total={usd(700)}
         userId="test-user-id"
+        sessionToken="mock-token"
         onComplete={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -95,7 +96,7 @@ describe('PaymentModal — sale flow', () => {
     await userEvent.click(printBtn);
 
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('print_sales_receipt', expect.any(Object));
+      expect(invokeMock).toHaveBeenCalledWith('print_sales_receipt_scoped', { sessionToken: 'mock-token', args: expect.any(Object) });
     });
   });
 
@@ -152,6 +153,7 @@ describe('PaymentModal — sale flow', () => {
         lineItems={[lineItem()]}
         total={usd(700)}
         userId="test-user-id"
+        sessionToken="mock-token"
         onComplete={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -164,7 +166,7 @@ describe('PaymentModal — sale flow', () => {
     const printBtn = await screen.findByRole('button', { name: /Print Receipt/i });
     await userEvent.click(printBtn);
 
-    expect(invokeMock).toHaveBeenCalledWith('print_sales_receipt', expect.any(Object));
+    expect(invokeMock).toHaveBeenCalledWith('print_sales_receipt_scoped', { sessionToken: 'mock-token', args: expect.any(Object) });
   });
 });
 
@@ -180,7 +182,7 @@ const defaultInvokeImpl = (cmd: string) => {
       return Promise.resolve({ saleId: 'sale-1', total: null, lineCount: 1 });
     case 'get_sale':
       return Promise.resolve(null);
-    case 'print_sales_receipt':
+    case 'print_sales_receipt_scoped':
       return Promise.resolve({ printed: true });
     case 'hold_cart':
       return Promise.resolve();

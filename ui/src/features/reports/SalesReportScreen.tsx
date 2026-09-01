@@ -286,7 +286,7 @@ export default function SalesReportScreen() {
       0,
     );
 
-    await printSalesReceipt({
+    await printSalesReceipt(sessionToken, {
       date: new Date().toISOString().slice(0, 10),
       receiptNumber: `RPT-${Date.now()}`,
       items: topProducts.map((p) => ({

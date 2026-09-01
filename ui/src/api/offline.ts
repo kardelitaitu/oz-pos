@@ -209,9 +209,17 @@ export const getSyncSettingsScoped = (sessionToken: string): Promise<SyncSetting
 export const updateSyncSettings = (args: UpdateSyncSettingsArgs): Promise<void> =>
   loggedInvoke<void>('update_sync_settings', { args });
 
+/** Update the cloud sync settings (scoped — ADR #7). */
+export const updateSyncSettingsScoped = (sessionToken: string, args: UpdateSyncSettingsArgs): Promise<void> =>
+  loggedInvoke<void>('update_sync_settings_scoped', { sessionToken, args });
+
 /** Run a sync cycle — push pending local changes to the cloud server. */
 export const syncRun = (): Promise<SyncAttemptResult> =>
   loggedInvoke<SyncAttemptResult>('sync_run');
+
+/** Run a sync cycle (scoped — ADR #7). */
+export const syncRunScoped = (sessionToken: string): Promise<SyncAttemptResult> =>
+  loggedInvoke<SyncAttemptResult>('sync_run_scoped', { sessionToken });
 
 /** Get the number of actions pending cloud sync. */
 export const pendingSyncCount = (): Promise<number> =>
@@ -292,6 +300,10 @@ export interface SyncPullArgs {
 export const syncPull = (args: SyncPullArgs): Promise<PullResult> =>
   loggedInvoke<PullResult>('sync_pull', { args });
 
+/** Pull data (scoped — ADR #7). */
+export const syncPullScoped = (sessionToken: string, args: SyncPullArgs): Promise<PullResult> =>
+  loggedInvoke<PullResult>('sync_pull_scoped', { sessionToken, args });
+
 // ── Tenant plan (ADR sync-plan-gating) ─────────────────────────
 
 /** Result of reading the caller's own sync plan from the server. */
@@ -323,6 +335,10 @@ export interface PingResult {
 export const testSyncConnection = (): Promise<PingResult> =>
   loggedInvoke<PingResult>('test_sync_connection');
 
+/** Test connectivity (scoped — ADR #7). */
+export const testSyncConnectionScoped = (sessionToken: string): Promise<PingResult> =>
+  loggedInvoke<PingResult>('test_sync_connection_scoped', { sessionToken });
+
 // ── Token Request ────────────────────────────────────────────────
 
 /** Result of requesting a new JWT API token from the cloud server. */
@@ -336,3 +352,7 @@ export interface TokenResult {
 /** Request a new JWT token from the cloud server (H-6: URL always resolved from saved settings). */
 export const requestSyncToken = (): Promise<TokenResult> =>
   loggedInvoke<TokenResult>('request_sync_token');
+
+/** Request a new JWT token (scoped — ADR #7). */
+export const requestSyncTokenScoped = (sessionToken: string): Promise<TokenResult> =>
+  loggedInvoke<TokenResult>('request_sync_token_scoped', { sessionToken });
