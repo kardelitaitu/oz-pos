@@ -414,6 +414,20 @@ CREATE TABLE IF NOT EXISTS snapshot_versions (
     updated_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
 );
 
+CREATE TABLE IF NOT EXISTS outbox (
+    id              TEXT PRIMARY KEY,
+    topic           TEXT NOT NULL,
+    payload         TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'delivering', 'delivered', 'failed', 'dead_letter')),
+    priority        BIGINT NOT NULL DEFAULT 0,
+    max_attempts    BIGINT NOT NULL DEFAULT 5,
+    attempts        BIGINT NOT NULL DEFAULT 0,
+    next_attempt_at TEXT NOT NULL,       -- RFC 3339 timestamp
+    created_at      TEXT NOT NULL,
+    last_error      TEXT
+);
+
 CREATE TABLE IF NOT EXISTS exchange_rates (
     id              TEXT PRIMARY KEY,
     from_currency   TEXT NOT NULL REFERENCES currencies(code),
@@ -1435,6 +1449,9 @@ CREATE INDEX IF NOT EXISTS idx_offline_queue_tenant_created
     ON offline_queue(tenant_id, created_at);
 
 CREATE INDEX IF NOT EXISTS idx_offline_queue_tenant_status ON offline_queue(tenant_id, status);
+
+CREATE INDEX IF NOT EXISTS idx_outbox_due
+    ON outbox(status, next_attempt_at, priority DESC);
 
 CREATE INDEX IF NOT EXISTS idx_payment_gateways_tenant
     ON payment_gateways(tenant_id, is_active);

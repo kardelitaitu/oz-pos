@@ -34,6 +34,7 @@ mod email_pg;
 mod image_gc;
 mod metrics;
 mod openapi;
+mod outbox;
 mod prune;
 mod rate_limit;
 mod redirect;

@@ -123,6 +123,10 @@ pub const ALL: &[Migration] = &[
         id: "20260902_snapshot_versions.sql",
         sql: include_str!("../migrations/20260902_snapshot_versions.sql"),
     },
+    Migration {
+        id: "20260902_outbox.sql",
+        sql: include_str!("../migrations/20260902_outbox.sql"),
+    },
 ];
 
 /// Postgres DDL for the full schema, parallel to the SQLite `init.sql`.
