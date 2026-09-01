@@ -291,6 +291,11 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             // P55-3: Start the scheduled report sender loop.
             email::start_report_sender_loop(conn.clone());
 
+            // ADR #43 D7: outbox drainer for async email/webhook delivery.
+            // The report sender now enqueues into the outbox; this task
+            // drains pending entries and sends with retry/backoff.
+            outbox::start_drainer_sqlite(conn.clone(), &crate::email::deliver_outbox_entry);
+
             // P8-1: Per-tenant rate limiter state + background cleanup.
             // ADR #43 D4: prefer the shared Redis token bucket when a
             // backend is configured; the in-process shards remain the
