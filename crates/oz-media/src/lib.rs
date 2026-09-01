@@ -1,8 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent (oz-media slice A: verified)
+last audited DD-MM-YY by DSH-Agent
 crate: oz-media | status: SAFE | lint: CLEAN
-findings: clean — no unwrap/panic/unsafe; sibling tests per convention
-next: none | perf: N/A
+findings: 0 unsafe blocks (earlier risk sweep counted comment text "no unsafe" — corrected); transforms guarded: decompression-bomb caps (max_pixels/max_side/max_input_bytes) enforced via header-only probe before decode, zero-size sources rejected, crop math saturating with solid-colour trim guard, single-decode pipeline (M-2). Storage backends documented PLANNED stubs returning NotImplemented. No defects found.
+next: none — storage persistence still planned | perf: decode-once pipeline; N/A elsewhere
 *//*
 Media & image processing crate for OZ-POS.
 
