@@ -23,9 +23,10 @@ function AlertIcon() {
 
 /**
  * Session lock screen — shown after idle timeout.
- * Displays current time, a "Session Locked" message, and
- * a PIN pad for re-entry. On successful PIN match, calls
- * `onUnlock`. On failure, shows error.
+ * The current time and date sit in a header above the card, the lock
+ * state is a badge on the card corner, and the card itself is a clone of
+ * the StaffLoginScreen PIN step so the keypad does not move between the
+ * two. On successful PIN match, calls `onUnlock`. On failure, shows error.
  */
 export default function SessionLockScreen({
   onUnlock,
@@ -320,7 +321,7 @@ export default function SessionLockScreen({
       {/* ── Footer: version + connection status pills (login-style) ── */}
       <div className="session-lock-footer">
         <div className="session-lock-footer-left">
-          <span className="session-lock-footer-version">v0.0.33</span>
+          <span className="session-lock-footer-version">v0.0.34</span>
         </div>
         <div className="session-lock-footer-right">
           <StatusBar />
