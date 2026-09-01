@@ -1,9 +1,16 @@
 import type React from 'react';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { requiredLocalized } from '@/frontend/shared';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
-import type { ProductDto } from '@/api/products';
+import { open } from '@tauri-apps/plugin-dialog';
+import { ProductThumb } from '@/components/ProductThumb';
+import type { ProductDto, ProductImageDto } from '@/api/products';
+import {
+  productsSetImageScoped,
+  productsClearImageScoped,
+  productsListImagesScoped,
+} from '@/api/products';
 import { DEFAULT_LOW_STOCK_THRESHOLD, DEFAULT_HIGH_STOCK_THRESHOLD } from '@/types/domain';
 
 export interface EditProductModalProps {
@@ -13,6 +20,18 @@ export interface EditProductModalProps {
   onSave: (updatedProduct: ProductDto) => void;
   /** ADR #36 D7: false hides the Cost field + override hint (manager+ only). */
   canEditCost?: boolean;
+  /** Scoped session token — enables the product image editor (spec 0046b). */
+  sessionToken?: string;
+}
+
+/** Max number of images per product (1 primary + 4 alternatives). */
+const MAX_IMAGES = 5;
+
+/** Derive a stable hue (0-360) from a string for the fallback tile colour. */
+function hueFromString(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h) % 360;
 }
 
 export const EditProductModal: React.FC<EditProductModalProps> = ({
@@ -21,6 +40,7 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({
   onClose,
   onSave,
   canEditCost = true,
+  sessionToken,
 }) => {
   const { l10n } = useLocalization();
   const [name, setName] = useState('');
@@ -35,6 +55,74 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({
   const [notes, setNotes] = useState('');
   const [unit, setUnit] = useState('');
   const [isActive, setIsActive] = useState(true);
+
+  // ── Product images (spec 0046b) ────────────────────────────────────
+  const [images, setImages] = useState<ProductImageDto[]>([]);
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+
+  const isMenu = product?.product_type === 'restaurant';
+  const canEditImages = Boolean(sessionToken && product?.id);
+
+  const loadImages = useCallback(async () => {
+    if (!sessionToken || !product?.id) return;
+    try {
+      const list = await productsListImagesScoped(sessionToken, product.id);
+      setImages(list);
+      setImageError(null);
+    } catch {
+      setImageError(requiredLocalized(l10n, 'retail-edit-image-error'));
+    }
+  }, [sessionToken, product?.id, l10n]);
+
+  // Load existing images when the editor opens.
+  useEffect(() => {
+    if (isOpen && canEditImages) {
+      void loadImages();
+    }
+  }, [isOpen, canEditImages, loadImages]);
+
+  const handleSetImage = useCallback(async (slot: number) => {
+    if (!sessionToken || !product?.id) return;
+    try {
+      const picked = await open({
+        multiple: false,
+        filters: [{ name: 'Images', extensions: ['webp', 'png', 'jpg', 'jpeg'] }],
+      });
+      // `open` returns string | string[] | null; single selection → string.
+      if (!picked) return;
+      const path = Array.isArray(picked) ? picked[0] : picked;
+      if (!path) return;
+      setImageBusy(true);
+      setImageError(null);
+      await productsSetImageScoped(sessionToken, product.id, slot, path);
+      await loadImages();
+    } catch {
+      setImageError(requiredLocalized(l10n, 'retail-edit-image-error'));
+    } finally {
+      setImageBusy(false);
+    }
+  }, [sessionToken, product?.id, loadImages, l10n]);
+
+  const handleClearImage = useCallback(async (slot: number) => {
+    if (!sessionToken || !product?.id) return;
+    // Menu items must always have exactly 1 image — the backend refuses
+    // clearing slot 1; surface the note here as well.
+    if (isMenu && slot === 1) {
+      setImageError(requiredLocalized(l10n, 'retail-edit-image-menu-note'));
+      return;
+    }
+    try {
+      setImageBusy(true);
+      setImageError(null);
+      await productsClearImageScoped(sessionToken, product.id, slot);
+      await loadImages();
+    } catch {
+      setImageError(requiredLocalized(l10n, 'retail-edit-image-error'));
+    } finally {
+      setImageBusy(false);
+    }
+  }, [sessionToken, product?.id, loadImages, l10n, isMenu]);
 
   useEffect(() => {
     if (isOpen && product) {
@@ -362,6 +450,120 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
+
+          {/* ── Product images (spec 0046b §3.2–3.3) ── */}
+          {canEditImages && (
+            <fieldset className="retail-edit-images" aria-busy={imageBusy}>
+              <legend className="retail-edit-label">
+                <Localized id="retail-edit-image-title">
+                  <span>Product Images</span>
+                </Localized>
+              </legend>
+
+              {imageError && (
+                <div className="retail-edit-image-error" role="alert">
+                  {imageError}
+                </div>
+              )}
+
+              {/* Primary image (slot 1) */}
+              <div className="retail-edit-image-slot">
+                <span className="retail-edit-image-slot-label">
+                  <Localized id="retail-edit-image-primary">
+                    <span>Primary image</span>
+                  </Localized>
+                </span>
+                <ProductThumb
+                  hash={images.find((i) => i.slot === 1)?.hash ?? null}
+                  name={product.name}
+                  size={64}
+                  hue={hueFromString(product.name)}
+                />
+                <div className="retail-edit-image-actions">
+                  <button
+                    type="button"
+                    className="retail-edit-image-btn"
+                    onClick={() => void handleSetImage(1)}
+                    disabled={imageBusy}
+                    aria-label={requiredLocalized(l10n, 'retail-edit-image-set-aria', { name: product.name })}
+                  >
+                    <Localized id="retail-edit-image-set">
+                      <span>Set Image</span>
+                    </Localized>
+                  </button>
+                  {!isMenu && images.some((i) => i.slot === 1) && (
+                    <button
+                      type="button"
+                      className="retail-edit-image-btn retail-edit-image-btn--danger"
+                      onClick={() => void handleClearImage(1)}
+                      disabled={imageBusy}
+                      aria-label={requiredLocalized(l10n, 'retail-edit-image-clear-aria', { name: product.name })}
+                    >
+                      <Localized id="retail-edit-image-clear">
+                        <span>Remove</span>
+                      </Localized>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Alternatives (slots 2..5) — retail products only */}
+              {!isMenu && (
+                <div className="retail-edit-image-alternatives">
+                  <span className="retail-edit-label">
+                    <Localized id="retail-edit-image-alternatives">
+                      <span>Additional images</span>
+                    </Localized>
+                  </span>
+                  <div className="retail-edit-image-strip">
+                    {[2, 3, 4, 5].map((slot) => {
+                      const img = images.find((i) => i.slot === slot);
+                      return (
+                        <div key={slot} className="retail-edit-image-alt-slot">
+                          <ProductThumb
+                            hash={img?.hash ?? null}
+                            name={product.name}
+                            size={56}
+                            hue={hueFromString(product.name)}
+                          />
+                          <div className="retail-edit-image-alt-actions">
+                            <button
+                              type="button"
+                              className="retail-edit-image-btn retail-edit-image-btn--small"
+                              onClick={() => void handleSetImage(slot)}
+                              disabled={imageBusy || (images.length >= MAX_IMAGES && !img)}
+                              aria-label={requiredLocalized(l10n, img ? 'retail-edit-image-replace-aria' : 'retail-edit-image-set-alt-aria', { name: product.name, slot: slot })}
+                            >
+                              {img ? <Localized id="retail-edit-image-replace"><span>Replace</span></Localized> : <Localized id="retail-edit-image-set"><span>Set</span></Localized>}
+                            </button>
+                            {img && (
+                              <button
+                                type="button"
+                                className="retail-edit-image-btn retail-edit-image-btn--small retail-edit-image-btn--danger"
+                                onClick={() => void handleClearImage(slot)}
+                                disabled={imageBusy}
+                                aria-label={requiredLocalized(l10n, 'retail-edit-image-clear-alt-aria', { name: product.name, slot: slot })}
+                              >
+                                <Localized id="retail-edit-image-clear">
+                                  <span>Remove</span>
+                                </Localized>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {isMenu && (
+                <div className="retail-edit-image-menu-note" role="note">
+                  {requiredLocalized(l10n, 'retail-edit-image-menu-note')}
+                </div>
+              )}
+            </fieldset>
+          )}
 
           <label
             className="retail-edit-checkbox"

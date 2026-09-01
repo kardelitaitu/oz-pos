@@ -1726,6 +1726,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         quickReturnSale={quickReturnSale}
         quickReturnRefundDone={handleQuickReturnRefundDone}
         scanFlash={scanFlash}
+        sessionToken={sessionToken}
       />
 
       {/* ── Row context menu (ADR #38) ───── */}
