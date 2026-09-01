@@ -21,6 +21,9 @@
   --chip-bg: #e8e9ec;
   --chip-bg-hover: #dcdde2;
   --tooltip-bg: #1a1d23;
+  --seg-active: #ffffff;
+  --danger-solid: #fc3d39;
+  --danger-solid-hover: #e0332f;
   color-scheme: light;
 
   /* Brand palette */
@@ -92,6 +95,7 @@
   --chip-bg: #2a2e39;
   --chip-bg-hover: #323745;
   --tooltip-bg: #3a3f4c;
+  --seg-active: #3a3f4c;
   color-scheme: dark;
 
   /* Semantic roles — brighter pushes for AA on dark surfaces */
@@ -171,26 +175,36 @@ body {
   box-shadow: 0 0 0 3px var(--tint-primary-bg);
 }
 
-.nav { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+/* ── Nav — iOS segmented slider (3 segments, raised active) ────────── */
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  background: var(--ghost-bg);
+  padding: 3px;
+  border-radius: var(--r-md);
+}
 .nav-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   background: transparent;
   color: var(--text-muted);
   border: none;
   border-radius: var(--r-sm);
-  padding: 7px 14px;
-  min-height: 34px;
+  padding: 6px 14px;
+  min-height: 32px;
   font-family: inherit;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: color var(--dur-fast), background var(--dur-fast);
+  transition: color var(--dur-fast), background var(--dur-fast), box-shadow var(--dur-fast);
 }
 .nav-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
-.nav-btn:hover { color: var(--text); background: var(--ghost-bg); }
-.nav-active { color: var(--text); background: var(--ghost-bg); }
+.nav-btn:hover { color: var(--text); }
+.nav-active { color: var(--text); background: var(--seg-active); box-shadow: var(--shadow-sm); }
 .nav-active svg { color: var(--primary); }
 
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
@@ -253,8 +267,15 @@ body {
 }
 .btn-warn:hover { background: var(--tint-warning-bg); }
 
-.db-link { color: var(--success); border-color: transparent; background: var(--tint-success-bg); }
-.db-link:hover { background: var(--ghost-bg-hover); color: var(--success); }
+/* DB shortcut — brand-blue solid with white label (the .btn treatment) */
+.db-link { color: var(--text-on-color); border-color: transparent; background: var(--primary); }
+.db-link:hover { background: var(--primary-hover); color: var(--text-on-color); }
+.db-link:active { background: var(--primary-active); }
+
+/* Logout is destructive — solid red with a white label on any theme
+   (brand red fill keeps ≥4:1 contrast with the white text in both). */
+#logout-btn { background: var(--danger-solid); color: var(--text-on-color); }
+#logout-btn:hover { background: var(--danger-solid-hover); color: var(--text-on-color); }
 
 /* ── Page shell ────────────────────────────────────────────────────── */
 .wrap { max-width: 1400px; margin: 0 auto; padding: 1.5rem; }
@@ -651,7 +672,8 @@ select.input {
   .hero-value { font-size: 26px; }
   .topbar-inner { flex-wrap: wrap; padding: .5rem 1rem; }
   .brand { margin-right: auto; }
-  .nav { order: 3; width: 100%; justify-content: center; margin-left: 0; padding-top: .4rem; border-top: 1px solid var(--border); }
+  .nav { order: 3; width: 100%; justify-content: stretch; margin-left: 0; margin-top: .4rem; }
+  .nav-btn { flex: 1; }
   .topbar-actions { margin-left: auto; }
   .wrap { padding: 1rem; }
   .chart-card { padding: 1rem; }
