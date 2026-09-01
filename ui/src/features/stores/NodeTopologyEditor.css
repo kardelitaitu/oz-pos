@@ -1636,15 +1636,13 @@
 .canvas-hud {
   position: absolute;
   bottom: var(--space-3);
-  left: 50%;
-  transform: translateX(-50%);
+  /* Sit to the right of the minimap (svg 176px + padding/border ~186px) on
+     the same bottom row, instead of centered where it overlapped. */
+  left: calc(var(--space-3) + 190px);
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1_5) var(--space-4);
-  /* THM-08: opaque panel — elevated is an 8% alpha tint in the glass theme,
-     so the HUD's text blended with canvas nodes beneath it. The whole-panel
-     opacity was also dropped: with an opaque bg it only re-introduced bleed. */
   background: var(--color-bg-popover);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
