@@ -306,6 +306,10 @@ pub fn router(state: AppState) -> Router {
             put(routes::images::put_image).post(routes::images::put_image_batch),
         )
         .route("/api/v1/images:pack", get(routes::images::get_image_pack))
+        .route(
+            "/api/v1/images:missing",
+            get(routes::images::get_image_missing),
+        )
         .route("/api/v1/images/{hash16}", get(routes::images::get_image))
         .layer(middleware::from_fn(auth::auth_middleware));
 

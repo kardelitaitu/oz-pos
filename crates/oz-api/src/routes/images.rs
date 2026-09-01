@@ -184,6 +184,13 @@ pub struct PackQuery {
     pub hashes: String,
 }
 
+/// Query params for the missing-set endpoint (`?hashes=a,b,c`).
+#[derive(Deserialize)]
+pub struct MissingQuery {
+    /// Comma-separated list of candidate content hashes.
+    pub hashes: String,
+}
+
 // ── Handlers ───────────────────────────────────────────────────────────
 
 /// `PUT /api/v1/images` — single upload.
@@ -406,6 +413,64 @@ pub async fn get_image_pack(
         "max-age=31536000, immutable".parse().unwrap(),
     );
     response
+}
+
+/// `GET /api/v1/images:missing?hashes=a,b,c` — server-side missing-set nudge.
+///
+/// Given a comma-separated list of candidate content hashes, returns the
+/// subset the tenant does NOT have an active reference for (`image_refs`
+/// set-difference, spec 0046b §3.4/§3.7). The desktop push scheduler calls
+/// this before a batch upload so it pushes exactly the hashes the cloud
+/// lacks first, then the rest opportunistically.
+pub async fn get_image_missing(
+    State(state): State<AppState>,
+    axum::Extension(claims): axum::Extension<ApiTokenClaims>,
+    Query(query): Query<MissingQuery>,
+) -> Response {
+    let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
+    let candidates: Vec<String> = query
+        .hashes
+        .split(',')
+        .filter(|h| !h.is_empty() && is_valid_hash16(h))
+        .map(str::to_owned)
+        .collect();
+    if candidates.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "no valid hashes"})),
+        )
+            .into_response();
+    }
+    // De-duplicate candidates (set-difference semantics).
+    let candidates: Vec<String> = {
+        let mut seen = std::collections::HashSet::new();
+        candidates
+            .into_iter()
+            .filter(|h| seen.insert(h.clone()))
+            .collect()
+    };
+
+    let missing = if let Some(pool) = &state.pg {
+        crate::pg::list_missing_hashes(pool, tenant_id, &candidates)
+            .await
+            .unwrap_or_default()
+    } else {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        let refs: Vec<&str> = candidates.iter().map(String::as_str).collect();
+        store
+            .missing_hashes(tenant_id, &refs)
+            .unwrap_or_default()
+            .into_iter()
+            .map(str::to_owned)
+            .collect()
+    };
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "missing_hashes": missing })),
+    )
+        .into_response()
 }
 
 #[cfg(test)]

@@ -125,12 +125,37 @@ impl ImagePushScheduler {
             }
         };
 
+        // Phase 1b: fetch the server-side `missing_hashes` nudge and
+        // reorder pending hashes so the cloud's missing set is pushed
+        // first (spec 0046b §3.6).  On failure we fall back to queue order.
+        let missing_set = self.fetch_missing_set(&config, &token, &pending).await;
+        let mut reordered: Vec<(String, i64, i32)> = Vec::with_capacity(pending.len());
+        if let Some(ref missing) = missing_set {
+            // Missing hashes first (preserving queue order within the set).
+            for item in &pending {
+                if missing.contains(&item.0) {
+                    reordered.push(item.clone());
+                }
+            }
+            // Then the rest.
+            for item in &pending {
+                if !missing.contains(&item.0) {
+                    reordered.push(item.clone());
+                }
+            }
+        }
+        let ordered = if reordered.is_empty() {
+            pending
+        } else {
+            reordered
+        };
+
         // Phase 2: read files from the app cache (no DB lock held).
         let mut frames: Vec<u8> = Vec::with_capacity(batch_max_bytes().min(8192));
-        let mut batch_hashes: Vec<String> = Vec::with_capacity(pending.len());
+        let mut batch_hashes: Vec<String> = Vec::with_capacity(ordered.len());
         let mut total_bytes = 0usize;
 
-        for (hash, _size_bytes, _attempts) in &pending {
+        for (hash, _size_bytes, _attempts) in &ordered {
             let path = self.cache_dir.join("images").join(format!("{hash}.webp"));
             match tokio::fs::read(&path).await {
                 Ok(bytes) => {
@@ -220,6 +245,50 @@ impl ImagePushScheduler {
             };
             if let Err(e) = store.mark_push_attempt(hash, success) {
                 tracing::error!(hash, error = %e, "image push: mark_push_attempt failed");
+            }
+        }
+    }
+
+    /// Fetch the server-side `missing_hashes` nudge for the candidate hashes
+    /// (`GET /api/v1/images:missing?hashes=...`).  Returns `None` on any
+    /// error — the caller falls back to queue order, never blocks a push.
+    async fn fetch_missing_set(
+        &self,
+        config: &SyncConfig,
+        token: &str,
+        pending: &[(String, i64, i32)],
+    ) -> Option<std::collections::HashSet<String>> {
+        if pending.is_empty() {
+            return Some(std::collections::HashSet::new());
+        }
+        let joined: Vec<String> = pending.iter().map(|(hash, _, _)| hash.clone()).collect();
+        let url = format!(
+            "{}/api/v1/images:missing?hashes={}",
+            config.server_url.trim_end_matches('/'),
+            joined.join(",")
+        );
+        let resp = match self.client.get(&url).bearer_auth(token).send().await {
+            Ok(r) if r.status().is_success() => r,
+            _ => {
+                tracing::warn!("image push: missing-set fetch failed, using queue order");
+                return None;
+            }
+        };
+        match resp.json::<serde_json::Value>().await {
+            Ok(json) => {
+                let set: std::collections::HashSet<String> = json["missing_hashes"]
+                    .as_array()
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(str::to_owned))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                Some(set)
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "image push: missing-set parse failed, using queue order");
+                None
             }
         }
     }

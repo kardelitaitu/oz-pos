@@ -287,7 +287,43 @@ fn build_schemas() -> Value {
                 "barcode": { "type": ["string", "null"] },
                 "stock_qty": { "type": ["integer", "null"], "format": "int64" },
                 "created_at": { "type": "string", "format": "date-time" },
-                "updated_at": { "type": "string", "format": "date-time" }
+                "updated_at": { "type": "string", "format": "date-time" },
+                "image_hash": { "type": ["string", "null"], "description": "Slot-1 primary image content hash (spec 0046b)" },
+                "images": { "type": "array", "items": { "$ref": "#/components/schemas/ProductImage" }, "description": "Content-addressed image assignments (slots 1..5)" }
+            }
+        },
+        "ProductImage": {
+            "type": "object",
+            "properties": {
+                "slot": { "type": "integer", "description": "1 = primary, 2..5 = alternatives" },
+                "hash": { "type": "string", "description": "16-hex content hash" },
+                "position": { "type": "integer", "description": "Display order of alternatives (0-based)" }
+            }
+        },
+        "PutImageResponse": {
+            "type": "object",
+            "required": ["hash16"],
+            "properties": {
+                "hash16": { "type": "string", "description": "16-hex content hash of the stored image" }
+            }
+        },
+        "BatchImageResult": {
+            "type": "object",
+            "properties": {
+                "hash": { "type": ["string", "null"], "description": "Content hash when accepted; null when rejected" },
+                "status": { "type": "string", "enum": ["stored", "duplicate", "rejected"], "description": "Per-hash outcome" }
+            }
+        },
+        "BatchPutResponse": {
+            "type": "object",
+            "properties": {
+                "results": { "type": "array", "items": { "$ref": "#/components/schemas/BatchImageResult" }, "description": "Per-hash outcomes, in the same order as the request frames" }
+            }
+        },
+        "MissingHashesResponse": {
+            "type": "object",
+            "properties": {
+                "missing_hashes": { "type": "array", "items": { "type": "string" }, "description": "Candidate hashes the tenant has no active image_refs row for" }
             }
         },
         "PatchStockRequest": {
@@ -678,9 +714,100 @@ fn build_paths() -> Value {
             }
         },
 
-        // ── Plans (tenant sync plan — ADR sync-plan-gating) ────────
-        "/api/v1/tenants/me/plan": {
+        // ── Images (product/menu-item content store — spec 0046b) ──
+        "/api/v1/images": {
+            "put": {
+                "tags": ["Images"],
+                "summary": "Upload a single product image",
+                "description": "Body is the raw WebP bytes (max 32 KB). The server re-verifies magic bytes + size and recomputes sha-256 before storing atomically on the volume. Returns the 16-hex content hash — the filename, ETag, and cache key in one.",
+                "operationId": "putImage",
+                "security": [{ "bearerAuth": [] }],
+                "parameters": [
+                    { "name": "hash", "in": "query", "required": false, "schema": { "type": "string" }, "description": "Optional client-computed hash; if present it must match the server's (409 otherwise)." }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } }
+                },
+                "responses": {
+                    "201": { "description": "Image stored (or already present as a content-addressed duplicate)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PutImageResponse" } } } },
+                    "400": { "description": "Not a valid WebP or exceeds 32 KB", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "409": { "description": "Client-supplied hash does not match the computed hash", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            },
+            "post": {
+                "tags": ["Images"],
+                "summary": "Upload a batch of product images",
+                "description": "Body is length-prefixed binary frames (big-endian u32 length + bytes) for up to 16 images / 512 KB. The server re-verifies each file and answers per-hash `stored|duplicate|rejected` in the same order.",
+                "operationId": "putImageBatch",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } }
+                },
+                "responses": {
+                    "201": { "description": "Batch processed (per-hash outcomes)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BatchPutResponse" } } } },
+                    "400": { "description": "Malformed frames or all images rejected", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "413": { "description": "Batch exceeds limits (16 images / 512 KB)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+        "/api/v1/images:pack": {
             "get": {
+                "tags": ["Images"],
+                "summary": "Cold-start pack of images",
+                "description": "Returns up to 64 files / 2 MB as length-prefixed frames for the given comma-separated hashes. Missing or unreferenced hashes are silently skipped. Used by fresh tablet provisioning instead of thousands of per-hash GETs.",
+                "operationId": "getImagePack",
+                "security": [{ "bearerAuth": [] }],
+                "parameters": [
+                    { "name": "hashes", "in": "query", "required": true, "schema": { "type": "string" }, "description": "Comma-separated list of content hashes" }
+                ],
+                "responses": {
+                    "200": { "description": "Length-prefixed image frames (may be empty)", "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } } },
+                    "400": { "description": "No valid hashes or more than 64 requested", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+        "/api/v1/images:missing": {
+            "get": {
+                "tags": ["Images"],
+                "summary": "Server-side missing-hash nudge",
+                "description": "Given comma-separated candidate hashes, returns the subset the tenant has no active `image_refs` row for. The desktop push scheduler calls this before a batch upload so it pushes exactly what the cloud lacks first (spec 0046b §3.6).",
+                "operationId": "getImageMissing",
+                "security": [{ "bearerAuth": [] }],
+                "parameters": [
+                    { "name": "hashes", "in": "query", "required": true, "schema": { "type": "string" }, "description": "Comma-separated list of candidate content hashes" }
+                ],
+                "responses": {
+                    "200": { "description": "The missing subset", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MissingHashesResponse" } } } },
+                    "400": { "description": "No valid hashes", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+        "/api/v1/images/{hash16}": {
+            "get": {
+                "tags": ["Images"],
+                "summary": "Fetch an image by content hash",
+                "description": "Returns the immutable WebP bytes for a content-addressed hash the tenant references. `Cache-Control: max-age=31536000, immutable` and `ETag: \"<hash>\"` — every cache layer between the tablet and the volume can treat it as a static asset. Unknown or un-hashed files return 404.",
+                "operationId": "getImage",
+                "security": [{ "bearerAuth": [] }],
+                "parameters": [
+                    { "name": "hash16", "in": "path", "required": true, "schema": { "type": "string", "minLength": 16, "maxLength": 16 }, "description": "16-hex content hash" }
+                ],
+                "responses": {
+                    "200": { "description": "Immutable WebP bytes", "content": { "image/webp": { "schema": { "type": "string", "format": "binary" } } } },
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "404": { "description": "Invalid hash grammar, unknown hash, or tenant has no active reference", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+
+        // ── Plans (tenant sync plan — ADR sync-plan-gating) ────────
+        "/api/v1/tenants/me/plan": {            "get": {
                 "tags": ["Plans"],
                 "summary": "Get the caller's sync plan",
                 "description": "Returns the tenant's cloud sync plan (free or pro) resolved from the JWT claims — a missing plan row reports free (fail closed). Unlike the sync router this endpoint is not plan-gated, so a free tenant can read its own plan to render the upgrade prompt.",

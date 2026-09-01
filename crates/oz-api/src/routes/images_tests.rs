@@ -327,6 +327,53 @@ async fn batch_put_accepts_multiple_images() {
     cleanup(&dir);
 }
 
+#[tokio::test]
+async fn missing_returns_only_hashes_not_in_image_refs() {
+    let (state, dir) = temp_image_dir();
+    let token = test_token(&state, "tenant-a");
+    let app = router(state.clone());
+
+    // Upload an image → refcount becomes 1.
+    let body = make_webp_body();
+    let hash = sha256_hex16(&body);
+
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/v1/images")
+                .header("Authorization", format!("Bearer {token}"))
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    // The uploaded hash has refcount=1 → NOT missing.
+    // Some other random hash → IS missing.
+    let missing_uri = format!("/api/v1/images:missing?hashes={},bbbbbbbbbbbbbbbb", hash);
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(&missing_uri)
+                .header("Authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let json = body_json(resp).await;
+    let missing = json["missing_hashes"].as_array().unwrap();
+    assert_eq!(missing.len(), 1, "only the unknown hash should be missing");
+    assert_eq!(missing[0], "bbbbbbbbbbbbbbbb");
+    cleanup(&dir);
+}
+
 async fn body_json(resp: axum::response::Response) -> serde_json::Value {
     let bytes = resp
         .into_body()
