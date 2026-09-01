@@ -681,11 +681,20 @@ export const NODE_KIND_REGISTRY: Readonly<Record<string, NodeKindEntry>> = {
   // exists only for graphs that recorded it historically — which is why it
   // keeps the fallback's sockets but still names itself in the type selector.
   'workspace:warehouse': {
-    visiblePorts: ['left', 'right'],
+    // ADR #45 §3 follow-up #1. The topology contract declares no endpoints with
+    // an `admin`-style workspace type on either side, so the stock and transfer
+    // feeds this row used to advertise could never carry an authorizable wire —
+    // the card offered two sockets the Apply gate would always refuse. Note this
+    // is the WORKSPACE shape carrying typeKey `warehouse`, which the palette
+    // never creates: the palette spawns a `warehouse` NODE, whose own row is
+    // unaffected and does keep its feeds.
+    visiblePorts: ['left'],
     leftVariants: ['location-in'],
     leftSemantics: ['location-in'],
-    rightSemantics: ['stock-out', 'transfer-out'],
+    rightSemantics: [],
     records: { left: 'location-in' },
+    // Required by NodeKindEntry even though no right port renders; see the
+    // follow-up about making these conditional on visiblePorts.
     rightLabelId: 'topology-port-workspace-out',
     rightAriaLabelId: NEUTRAL_ARIA,
     icon: PosIcon,

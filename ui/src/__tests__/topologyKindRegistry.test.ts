@@ -241,11 +241,11 @@ const UNAUTHORABLE_SOCKET_DEBT: readonly string[] = [
   // never carry a wire. ADR #45 §3 follow-up #1.
   'workspace:admin:right:stock-out',
   'workspace:admin:right:transfer-out',
-  // `warehouse` is a real seeded workspace type key that the topology contract
-  // does not declare; the palette creates a `warehouse` NODE instead. A graph
-  // that recorded the workspace shape keeps the same false promise.
-  'workspace:warehouse:right:stock-out',
-  'workspace:warehouse:right:transfer-out',
+  // The `workspace:warehouse` pair recorded here is paid off — that row now
+  // advertises no output socket, since the contract declares no endpoints for a
+  // workspace-shaped `warehouse`. ADR #45 §3 follow-up #1, step 1. What remains
+  // is the `workspace:*` fallback, which cannot be emptied the same way because
+  // a legacy type-less node renders through it; see the tests below.
 ];
 
 /** Map a card kind back to the contract vocabulary the gate speaks. */
