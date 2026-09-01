@@ -1173,6 +1173,42 @@ quieter and worse loss than a visible failure.
 
 ---
 
+## Correction to the sweep above: the Rust side was scoped too (2026-09-02)
+
+The round-37 record claimed eight rounds were cleared, citing
+`oz-pos-app --lib topology` at 329/329. The number is correct and the conclusion
+drawn from it was not: **329 is the topology-filtered subset of a 1160-test crate.**
+Running the whole crate:
+
+| Crate | Scoped (as reported) | Full crate |
+|---|---|---|
+| `oz-core --lib` | 58 topology | **2396 / 2396** |
+| `oz-pos-app --lib` | 329 topology | **1153 / 1160 — 7 failed** |
+
+The irony is the point: the lesson was applied to the UI suite and then quietly not
+applied to Rust, in the same round, in a section whose entire subject is that scoped
+green is not green.
+
+**The seven are not this slice's.** All are
+`commands::staff::tests::scoped_update_staff_*`, failing with
+`database error: cannot start a transaction within a transaction`. Evidence:
+
+- They reproduce **within the staff module alone** (38 passed / 7 failed), so they
+  are not cross-module pollution from anything added here.
+- `staff.rs` was last touched by `5c71bcd0`, another agent's staff-IPC enforcement
+  campaign. This slice's last Rust commit is `c4cfbef8`, touching only
+  `topology.rs`.
+- A SQLite transaction-nesting error in PIN-rotation tests has no path from
+  `validate_semantic_json`.
+
+Left unfixed and recorded rather than touched: this thread has twice already stayed
+out of overlapping in-flight work, and a concurrent agent is editing UI files right
+now. Worth flagging to that campaign's owner — a nested-transaction failure that
+appears only when the module runs as a group is a shared-connection leak between
+tests, and it will read as flakiness to anyone running them singly.
+
+---
+
 ## Related decisions
 
 - [ADR #22: Visual Node-Based Store & Workspace Topology Builder](./2026-07-20-node-based-store-topology-builder.md)
