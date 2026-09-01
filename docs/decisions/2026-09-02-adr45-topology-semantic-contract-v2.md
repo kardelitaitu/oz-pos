@@ -1209,6 +1209,29 @@ tests, and it will read as flakiness to anyone running them singly.
 
 ---
 
+## Third whole-suite sweep (2026-09-02, closing rounds 38–43)
+
+| Gate | Round 37 | Now | Delta |
+|---|---|---|---|
+| UI test files | 410 | **410** | 0 |
+| UI tests | 7774 | **7776** | **+2** — exactly the migration canary |
+| UI failures | 4 | **4** | same four, unchanged |
+| `oz-core --lib` (full) | 2396 | 2396 +2 ticket tests | clean |
+| `oz-pos-app --lib` (full) | 1153/1160 | unchanged | 7 staff failures, another campaign |
+
+Checked before running, because the canary added in round 40 asserts the *current*
+state of `NodeTopologyEditor.tsx` and a concurrent agent had four UI files open at
+the time: the editor has not changed since, and the working tree is clean. Had they
+landed a template-API call in the editor, my own test would have gone red on someone
+else's correct work — a coupling the canary accepts deliberately, since the whole
+point is to be woken up by exactly that change.
+
+The four failures remain `NodeTopologyEditorDevMock`, `themeTokenCompliance`,
+`popoverSurfaceCompliance`, `SettingsPage`. All predate this slice and are in the
+deferred list.
+
+---
+
 ## Related decisions
 
 - [ADR #22: Visual Node-Based Store & Workspace Topology Builder](./2026-07-20-node-based-store-topology-builder.md)
