@@ -69,6 +69,7 @@ import {
   socketSemanticIds,
   type WireRelationshipOption,
   NODE_TYPE_ICON,
+  SELECTABLE_WORKSPACE_TYPE_KEYS,
   workspaceTypeLabel,
   settingsCardForTypeKey,
   topologyUiString,
@@ -302,9 +303,9 @@ export interface NodeTopologyEditorProps {
   canSave?: boolean;
 }
 
-/** Valid workspace type keys selectable when creating a workspace node.
- *  Labels are resolved at render time via l10n.getString for i18n. */
-const WORKSPACE_TYPE_KEYS = ['store-pos', 'restaurant-pos', 'kds', 'warehouse'] as const;
+/** Valid workspace type keys come from the node kind registry
+ *  (`SELECTABLE_WORKSPACE_TYPE_KEYS`, ADR #45 §3); labels are resolved at
+ *  render time via l10n.getString for i18n. */
 
 /** Evaluate a cubic bezier at parameter t (0-1). */
 const GRID_SIZE = 24;
@@ -5838,7 +5839,7 @@ export default function NodeTopologyEditor({
                     }}
                     aria-label={l10n.getString('topology-ws-type-select-aria')}
                   >
-                    {WORKSPACE_TYPE_KEYS.filter((k) => k !== 'warehouse').map((k) => (
+                    {SELECTABLE_WORKSPACE_TYPE_KEYS.map((k) => (
                       <option key={k} value={k}>
                         {workspaceTypeLabel(k, (id, vars) => topologyUiString(l10n, id, vars ?? null))}
                       </option>

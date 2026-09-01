@@ -1,0 +1,233 @@
+import { describe, expect, it } from 'vitest';
+import type { TopologyNodeData } from '@/features/stores/NodeTopologyEditor';
+import {
+  cardKindToken,
+  gatingSemanticId,
+  iconForNode,
+  leftPortVariants,
+  NODE_KIND_REGISTRY,
+  nodeKindEntry,
+  nodeKindToken,
+  NODE_TYPE_ICON,
+  pairingAdmitsKinds,
+  SELECTABLE_WORKSPACE_TYPE_KEYS,
+  socketSemanticIds,
+  visiblePortsForNode,
+  workspaceTypeLabel,
+} from '@/features/stores/topologyCard';
+import topologySemantics from '@/features/stores/topologySemantics.json';
+
+// ADR #45 §3 — the kind registry, and the loop it closes with §1.
+//
+// The registry is the single answer to "what does this kind of node look like".
+// These tests hold it to three promises:
+//   1. it covers the vocabulary, so no node resolves by accident;
+//   2. it did not change what the card renders (the behavior freeze proves the
+//      how; these prove the invariants that make the table trustworthy);
+//   3. it does not advertise a socket the §1 contract can never authorize —
+//      the defect the registry exists to make visible.
+
+function node(type: TopologyNodeData['type'], typeKey?: string): TopologyNodeData {
+  return {
+    id: 'n',
+    type,
+    name: 'N',
+    x: 0,
+    y: 0,
+    ...(typeKey === undefined ? {} : { metadata: { typeKey } }),
+  };
+}
+
+/** Every kind the registry can resolve, plus the kinds the contract declares
+ *  but the registry has no row for. Both directions matter: a contract kind
+ *  with no row is a card falling through, and a row with no contract kind is a
+ *  shape nothing can wire to. */
+const CARD_KINDS = [
+  'branch-location',
+  'warehouse',
+  'hardware',
+  'workspace:store-pos',
+  'workspace:restaurant-pos',
+  'workspace:kds',
+  'workspace:warehouse',
+  // An unregistered typeKey. It resolves through the `workspace:*` fallback
+  // row, and the contract speaks it as-is — which is the whole point of
+  // probing it here rather than probing the token `workspace:*`.
+  'workspace:admin',
+];
+
+/** Kinds a wire could legitimately sit on the far end of. Includes kinds no
+ *  card row exists for, because the contract speaks them. */
+const FAR_END_KINDS = [
+  ...CARD_KINDS,
+  'workspace:admin',
+  'workspace:general',
+  'workspace:pharmacy-pos',
+  'not-a-kind',
+];
+
+const ALL_SEMANTICS = new Set(
+  topologySemantics.semanticPairings.flatMap((row) => [row.source, row.target]),
+);
+
+describe('node kind registry (ADR #45 §3)', () => {
+  it('has a row for every node type the canvas can hold', () => {
+    for (const type of ['store', 'workspace', 'warehouse', 'hardware'] as const) {
+      expect(nodeKindEntry(node(type))).toBe(NODE_KIND_REGISTRY[cardKindToken(node(type))]);
+    }
+  });
+
+  it('has a row for every workspace type the semantic contract declares', () => {
+    // A declared type that resolves through the fallback is the bug this
+    // registry exists to prevent: the contract says the type is authorable
+    // while the card draws it as an unknown shape.
+    for (const key of topologySemantics.workspaceTypeKeys) {
+      expect(NODE_KIND_REGISTRY[`workspace:${key}`], `workspace:${key} has no registry row`)
+        .toBeDefined();
+    }
+  });
+
+  it('resolves an unregistered workspace type to the declared fallback row', () => {
+    expect(nodeKindEntry(node('workspace', 'admin'))).toBe(NODE_KIND_REGISTRY['workspace:*']);
+    expect(nodeKindEntry(node('workspace'))).toBe(NODE_KIND_REGISTRY['workspace:*']);
+    expect(nodeKindEntry(node('workspace', 'pharmacy-pos'))).toBe(NODE_KIND_REGISTRY['workspace:*']);
+  });
+
+  it('keeps the card token and the contract token deliberately different', () => {
+    // The contract resolves a type-less workspace to `workspace:store-pos` so
+    // it stays authorable as a Store POS; the card must NOT, or every legacy
+    // node silently gains POS sockets. This one assertion is the whole reason
+    // two tokens exist.
+    const untyped = node('workspace');
+    expect(nodeKindToken('workspace', undefined)).toBe('workspace:store-pos');
+    expect(cardKindToken(untyped)).toBe('workspace:*');
+    // Registered kinds agree, which is what makes the split safe.
+    expect(nodeKindToken('workspace', 'kds')).toBe(cardKindToken(node('workspace', 'kds')));
+    expect(nodeKindToken('store', undefined)).toBe(cardKindToken(node('store')));
+  });
+
+  it('exposes the same glyph the pre-registry map produced', () => {
+    // The refactor moved icons into a kind-keyed table. If any of these drift
+    // from the legacy type-keyed map, the canvas changed under the merchant.
+    for (const type of ['store', 'workspace', 'warehouse', 'hardware'] as const) {
+      expect(iconForNode(node(type))).toBe(NODE_TYPE_ICON[type]);
+    }
+    // Known defect, pinned so a fix is a decision rather than a surprise: the
+    // registry CAN express per-kind icons, and today every workspace kind
+    // still chooses the same POS glyph.
+    expect(iconForNode(node('workspace', 'kds'))).toBe(iconForNode(node('workspace', 'store-pos')));
+  });
+
+  it('derives gating from the socket list rather than restating it', () => {
+    for (const kind of CARD_KINDS) {
+      const probe = kindToNode(kind);
+      for (const port of ['left', 'right'] as const) {
+        expect(gatingSemanticId(probe, port)).toBe(socketSemanticIds(probe, port)[0]);
+      }
+    }
+  });
+
+  it('names only semantics the contract knows', () => {
+    for (const [token, entry] of Object.entries(NODE_KIND_REGISTRY)) {
+      for (const semantic of [...entry.leftSemantics, ...entry.rightSemantics]) {
+        expect(ALL_SEMANTICS, `${token} advertises unknown semantic ${semantic}`).toContain(semantic);
+      }
+      if (entry.records.left !== undefined) expect(ALL_SEMANTICS).toContain(entry.records.left);
+      if (entry.records.right !== undefined) expect(ALL_SEMANTICS).toContain(entry.records.right);
+    }
+  });
+
+  it('shows a left socket exactly when it has a variant to render', () => {
+    for (const token of Object.keys(NODE_KIND_REGISTRY)) {
+      const probe = kindToNode(token);
+      expect(visiblePortsForNode(probe).includes('left'), token)
+        .toBe(leftPortVariants(probe).length > 0);
+    }
+  });
+
+  it('owns the inspector type list, including what is NOT selectable', () => {
+    // The editor used to keep its own list whose fourth member ('warehouse')
+    // was filtered straight back out by its only consumer. Selectability is
+    // now a property of the row, so the list cannot contain a type the
+    // selector would then have to hide.
+    expect(SELECTABLE_WORKSPACE_TYPE_KEYS).toEqual(['store-pos', 'restaurant-pos', 'kds']);
+    // `warehouse` is a real workspace shape a legacy graph can hold — it has a
+    // row and a name — but the palette creates a warehouse NODE instead, so it
+    // must not appear as a type a node can be switched to.
+    expect(NODE_KIND_REGISTRY['workspace:warehouse']).toBeDefined();
+    expect(NODE_KIND_REGISTRY['workspace:warehouse']?.typeLabelId).toBe('topology-ws-type-warehouse');
+    expect(SELECTABLE_WORKSPACE_TYPE_KEYS).not.toContain('warehouse');
+  });
+
+  it('names every selectable type, so the selector never renders a bare key', () => {
+    for (const key of SELECTABLE_WORKSPACE_TYPE_KEYS) {
+      const seen: string[] = [];
+      const label = workspaceTypeLabel(key, (id) => { seen.push(id); return `«${id}»`; });
+      expect(seen, `workspace:${key} has no typeLabelId`).toHaveLength(1);
+      expect(label).toBe(`«topology-ws-type-${key}»`);
+    }
+    // An unregistered key has no name and is shown as-is rather than as a
+    // missing-translation placeholder.
+    expect(workspaceTypeLabel('pharmacy-pos', () => 'SHOULD-NOT-CALL')).toBe('pharmacy-pos');
+  });
+
+  it('advertises no socket the contract cannot authorize — except the recorded debt', () => {
+    // The §1↔§3 loop. A socket a card draws is a promise to the merchant that
+    // a wire can be attached to it. When the contract admits no endpoint pair
+    // for that semantic and kind, the promise is false: the picker offers a
+    // relationship that Apply will refuse, which is the exact failure ADR #45
+    // was written to end.
+    //
+    // The unauthorable set is asserted EXACTLY, as a ledger. Adding a kind with
+    // an illegal socket fails the test; fixing one shrinks the ledger, which
+    // also fails until the entry is removed — so the debt can neither grow
+    // quietly nor be forgotten.
+    const found: string[] = [];
+    for (const kind of CARD_KINDS) {
+      const probe = kindToNode(kind);
+      for (const [port, semantics] of [
+        ['right', socketSemanticIds(probe, 'right')] as const,
+        ['left', socketSemanticIds(probe, 'left')] as const,
+      ]) {
+        for (const semantic of semantics) {
+          const rows = topologySemantics.semanticPairings.filter((row) => (
+            port === 'right' ? row.source === semantic : row.target === semantic
+          ));
+          const authorable = rows.some((row) => (
+            port === 'right'
+              ? FAR_END_KINDS.some((far) => pairingAdmitsKinds(row.source, row.target, kind, far))
+              : FAR_END_KINDS.some((far) => pairingAdmitsKinds(row.source, row.target, far, kind))
+          ));
+          if (!authorable) found.push(`${kind}:${port}:${semantic}`);
+        }
+      }
+    }
+    expect(found.sort()).toEqual(UNAUTHORABLE_SOCKET_DEBT.slice().sort());
+  });
+});
+
+/** The recorded debt, by name. Each entry is a socket the card draws that the
+ *  §1 contract admits no wire for. */
+const UNAUTHORABLE_SOCKET_DEBT: readonly string[] = [
+  // A workspace whose typeKey the contract does not register — `admin`,
+  // `general`, a future `pharmacy-pos`, or none at all — is drawn with the
+  // retail inventory outputs, but the contract declares endpoints only for
+  // store-pos, restaurant-pos and kds. So the card offers two sockets that can
+  // never carry a wire. ADR #45 §3 follow-up #1.
+  'workspace:admin:right:stock-out',
+  'workspace:admin:right:transfer-out',
+  // `warehouse` is a real seeded workspace type key that the topology contract
+  // does not declare; the palette creates a `warehouse` NODE instead. A graph
+  // that recorded the workspace shape keeps the same false promise.
+  'workspace:warehouse:right:stock-out',
+  'workspace:warehouse:right:transfer-out',
+];
+
+/** Map a card kind back to the contract vocabulary the gate speaks. */
+function kindToNode(kind: string): TopologyNodeData {
+  if (kind === 'branch-location') return node('store');
+  if (kind === 'warehouse') return node('warehouse');
+  if (kind === 'hardware') return node('hardware');
+  if (kind === 'workspace:*') return node('workspace');
+  return node('workspace', kind.replace('workspace:', ''));
+}

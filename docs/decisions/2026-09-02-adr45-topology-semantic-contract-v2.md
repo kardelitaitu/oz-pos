@@ -2,11 +2,11 @@
 num: 45
 area: topology
 title: ADR #45: Topology Semantic Contract v2 — Endpoint Predicates, Kind Registry, Deliberate Cold Start, and Theme Parity
-status: Accepted — §1–§2 implemented (2026-09-02); §3–§5 proposed
+status: Accepted — §1–§3 implemented (2026-09-02); §4–§5 proposed
 ---
 # ADR #45: Topology Semantic Contract v2
 
-**Status:** Accepted — §1–§2 implemented (2026-09-02); §3–§5 proposed
+**Status:** Accepted — §1–§3 implemented (2026-09-02); §4–§5 proposed
 **Date:** 2026-09-02
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** topology, semantic-contract, cross-language-parity, node-kind-registry, cold-start, theming
@@ -517,18 +517,80 @@ list (what a merchant may add). "Derive the editor list from the registry" is
 therefore wrong as originally written: the registry should **own** the palette
 list as its own declared concern, not inherit it from the contract.
 
+### §3 — kind registry (shipped 2026-09-02)
+
+`NODE_KIND_REGISTRY` in `topologyCard.ts` now holds one row per kind —
+`branch-location`, `warehouse`, `hardware`, `workspace:store-pos`,
+`workspace:restaurant-pos`, `workspace:kds`, `workspace:warehouse`, and an
+explicit `workspace:*` fallback — carrying visible ports, left variants, both
+socket semantic lists in order, the recording-side map, right labels and aria
+labels, the connected-port label override with its precedence, icon, settings
+card, type label, and whether the inspector may switch to it.
+
+Eight functions now delegate: `leftPortVariants`, `visiblePortsForNode`,
+`leftPortLabelId`, `portLabelId`, `portAriaLabelId`, `semanticPortId`,
+`socketSemanticIds`, `settingsCardForTypeKey`, plus `workspaceTypeLabel`. The
+`?? store-pos` fallback is gone — an unregistered type reaches the
+`workspace:*` row, which declares the Store POS card as data instead of
+inheriting it from a trailing `??`.
+
+**The behavior freeze held byte-identically**, which is the proof the refactor
+changed no behaviour. `topologyKindBehavior.golden.json` was not regenerated at
+any point during it.
+
+**The card token is deliberately not the contract token.** `nodeKindToken`
+resolves a workspace with no typeKey to `workspace:store-pos`, because that
+default is what keeps such a node authorable as a Store POS under §1. The card
+must keep treating it as unregistered, or every legacy type-less node would
+silently gain full POS sockets. So `cardKindToken` exists, resolves it to
+`workspace:*`, and `topologyKindRegistry.test.ts` pins the divergence as a
+named promise rather than an accident of two code paths.
+
+**§1 and §3 now close a loop.** The registry test computes, for every kind,
+which advertised sockets the §1 contract admits no wire for, and asserts the
+result *exactly* as a debt ledger:
+
+```
+workspace:admin:right:stock-out      workspace:warehouse:right:stock-out
+workspace:admin:right:transfer-out   workspace:warehouse:right:transfer-out
+```
+
+Four entries, all the fallthrough shapes, nothing else. Adding a kind with an
+illegal socket fails the test; fixing one shrinks the ledger, which also fails
+until the entry is deleted — so the debt can neither grow quietly nor be
+forgotten. Follow-up #1 is now a named list rather than a paragraph.
+
+`WORKSPACE_TYPE_KEYS` is deleted from `NodeTopologyEditor.tsx`. Its single
+consumer filtered out the list's own fourth member; selectability is now
+`typeSelectable` on the row, and `SELECTABLE_WORKSPACE_TYPE_KEYS` is derived
+from it.
+
+**Not done in this slice, on purpose:** the KDS icon defect. The registry *can*
+express a per-kind icon and `iconForNode` reads it, but every workspace row
+still names `PosIcon`, and a test pins that equality so the fix has to be
+deliberate. Changing it edits the golden, which is the mechanism working as
+designed rather than a hurdle.
+
 ### Follow-ups this slice surfaced
 
-1. `socketSemanticIds` (`topologyCard.ts:230-262`) still hands an unregistered
-   workspace type the generic `['stock-out','transfer-out']` output set
-   (`:261`). The card therefore advertises sockets that can never legally
-   connect — the exact "discoverable validity" violation ADR #34 §Context names.
-   Folding this into the §3 registry is the fix.
+1. ~~`socketSemanticIds` still hands an unregistered workspace type the generic
+   `['stock-out','transfer-out']` output set~~ — **now measured and pinned** as
+   the four-entry debt ledger in `topologyKindRegistry.test.ts`. The remaining
+   work is the decision, not the discovery: either register endpoints for those
+   types in the contract, or make the `workspace:*` row advertise no output
+   socket at all. Either edit shrinks the ledger to empty and the test forces
+   its deletion.
 2. The `invalid-operation-source` / `invalid-warehouse-operation-source` checks
    are a seventh and eighth statement of the operation row's endpoints. They
    give better messages and should stay, but the contract should generate them.
-3. Three workspace-type lists with three meanings and no owner (Context above).
-   §3 assigns the ownership.
+3. ~~Three workspace-type lists with three meanings and no owner~~ — **half
+   resolved.** The editor's list is gone, derived from `typeSelectable`. The
+   contract's `workspaceTypeKeys` and the DB's `workspace_types` table remain
+   two different vocabularies, which is correct — one declares what the semantic
+   contract has endpoints for, the other what the system can store — but the
+   contract field's name still implies the second meaning. Renaming it to
+   `endpointWorkspaceTypeKeys` (or documenting it at the field) would finish the
+   job.
 
 ---
 
