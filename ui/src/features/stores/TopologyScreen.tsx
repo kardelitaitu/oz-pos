@@ -19,7 +19,7 @@ import { useContext } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import { checkLicenseStatus } from '@/api/license';
-import { plainErrorMessage } from '@/utils/app-error';
+import { plainErrorMessage, l10nErrorMessage } from '@/utils/app-error';
 import { openUpgradePricing } from '@/utils/upgrade';
 import SettingsSelect from '@/features/settings/SettingsSelect';
 import { Button } from '@/components/Button';
@@ -329,7 +329,7 @@ export default function TopologyScreen() {
 
   // C2.2: second-store gate (Plus→Pro trigger) — the tier's `max_stores()`
   // quota caps how many store profiles can exist.
-  const { caps } = useSubscription();
+  const { caps, refresh: refreshCaps } = useSubscription();
   const locale = useContext(LocaleContext)?.locale ?? 'en';
   const atStoreLimit =
     caps !== null && caps.maxStores !== null && caps.storeCount >= caps.maxStores;
@@ -344,9 +344,11 @@ export default function TopologyScreen() {
       setSelectedBranchId(created.id);
       setAddingBranch(false);
       setNewBranchName('');
+      // Keep the C2.2 gate honest: storeCount in caps just changed.
+      refreshCaps();
     } catch (err) {
       addToast({
-        message: `${l10n.getString('topology-branch-add-error')}: ${plainErrorMessage(err)}`,
+        message: `${l10n.getString('topology-branch-add-error')}: ${l10nErrorMessage(err, l10n)}`,
         type: 'error',
       });
     }
@@ -371,6 +373,8 @@ export default function TopologyScreen() {
       if (remaining.length === 0) setWorkspaceInstances([]);
       setDeleteTargetId(null);
       setDeletingBranch(false);
+      // Keep the C2.2 gate honest: storeCount in caps just changed.
+      refreshCaps();
     } catch (err) {
       addToast({
         message: `${l10n.getString('topology-branch-delete-error')}: ${plainErrorMessage(err)}`,

@@ -4,7 +4,7 @@
 //! database connection.
 
 use oz_core::StoreProfile;
-use oz_core::subscription::TenantSubscription;
+use oz_core::subscription::{SubscriptionTier, TenantSubscription};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -169,11 +169,6 @@ pub async fn create_store_profile_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<StoreProfileDto, AppError> {
-    // Create the store's database file before inserting the profile.
-    // If DB creation fails, we still insert the profile — the DB can
-    // be created lazily by open_store() later.
-    let _ = state.db_manager.create_store_db(&args.id);
-
     let (session, _conn) = state.resolve_scope(&session_token)?;
 
     // F-017: enforce per-domain permission on this scoped command.
@@ -186,10 +181,32 @@ pub async fn create_store_profile_scoped(
 
     // C1.2: enforce the subscription tier's store-count limit before creating
     // a new store — Free/Plus allow 1, Pro allows 2, Premium allows 10.
+    //
+    // The gate tier mirrors `get_subscription_capabilities`'s dev shim: in
+    // debug builds the bootstrap Free tier is upgraded to Premium so all
+    // features (including multi-branch creation) stay available during
+    // development — otherwise the capabilities read reported unlimited
+    // stores while this gate still rejected at 1, leaving the UI with no
+    // banner and the user a dead-end error. Release enforces the real tier
+    // signed by the license server.
     let sub = TenantSubscription::load(&conn, "default")?
         .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?;
     sub.verify_signature()?;
-    store.enforce_store_quota(&sub.effective_tier())?;
+    let tier = sub.effective_tier();
+    #[cfg(debug_assertions)]
+    let tier = if tier == SubscriptionTier::Free {
+        SubscriptionTier::Premium
+    } else {
+        tier
+    };
+    store.enforce_store_quota(&tier)?;
+
+    // Create the store's database file only after every gate has passed —
+    // it used to run first, so every rejected create leaked an orphan
+    // `store-<id>.sqlite` in the data dir (found in the wild). If DB
+    // creation still fails, we insert the profile anyway — the DB can be
+    // created lazily by open_store() later.
+    let _ = state.db_manager.create_store_db(&args.id);
 
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
