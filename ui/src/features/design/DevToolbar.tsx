@@ -174,6 +174,17 @@ export function DevToolbar() {
             ))}
           </div>
         </div>
+
+        <div className="dev-toolbar-actions">
+          <button
+            type="button"
+            className="dev-toolbar-lock-btn"
+            onClick={() => window.dispatchEvent(new CustomEvent('app:lock'))}
+            title="Lock screen (trigger SessionLockScreen)"
+          >
+            Lock
+          </button>
+        </div>
       </div>
     </div>
   );
