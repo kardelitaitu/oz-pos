@@ -786,8 +786,16 @@ fn apply_gate_rejects_duplicate_node_ids_before_mutation() {
     let result = validate_apply_gate(&conn, &nodes, &wires);
     assert!(result.is_err(), "gate must reject duplicate node ids");
     let err = result.unwrap_err().to_string();
+    // Layer-agnostic on purpose. This used to match only the Apply gate's own
+    // wording. ADR #45 §4.3 follow-up moved the check upstream into
+    // `validate_semantic_json`, which now refuses a duplicate id while building
+    // the graph index - so that message arrives first and the gate's own check
+    // is now defence in depth. What this test actually asserts is "the gate
+    // rejects duplicates before mutating anything", which is true whichever
+    // layer catches it; pinning one layer's phrasing would only make this break
+    // when the wording changes.
     assert!(
-        err.contains("duplicate node id"),
+        err.contains("duplicate node id") || err.contains("share the id"),
         "gate should reject duplicate node ids, got: {err}"
     );
 }

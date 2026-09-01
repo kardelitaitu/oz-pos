@@ -837,26 +837,16 @@ fn topology_matrix_covers_every_contract_row_and_declared_kind() {
 }
 
 #[test]
-fn the_backend_reports_a_structural_error_ahead_of_a_duplicate_node_id() {
-    // ADR #45 section 4.3 follow-up. Characterization test, NOT an endorsement.
+fn a_duplicate_node_id_now_outranks_the_structural_checks() {
+    // ADR #45 §4.3 follow-up. This began life as a characterization test pinning
+    // a DIVERGENCE: the backend reported `missing-branch-location` for a graph
+    // that also had two nodes sharing an id, while the TypeScript tier table
+    // names `duplicate-node` first. Its own comment said to rewrite it if the
+    // backend ever ordered properly - and it now does, because the duplicate is
+    // refused at index-build time before any structural gate runs.
     //
-    // The TypeScript validator now sorts errors by tier, where an unreadable
-    // graph (duplicate-node, tier 1) outranks a structurally impossible one
-    // (missing-branch-location, tier 2). The backend cannot express that: it
-    // returns `Result<(), CoreError>`, so it reports the first check that fires
-    // in traversal order and discards the rest.
-    //
-    // For this graph the two disagree. The merchant's live checklist says "two
-    // nodes share an id"; Apply says "add a branch location". Following Apply's
-    // advice leaves the id collision in place, and every check downstream of it
-    // is then evaluated against a graph that has already lost a node.
-    //
-    // Pinned so the divergence is a known, dated fact rather than a surprise
-    // during the checklist work. Fixing it means collecting errors in
-    // `validate_semantic_json` and returning the highest-tier one, which is a
-    // change to the validator's shape across fourteen return sites - deliberately
-    // not folded into a UI change. See the ADR section "the ordering rule is half
-    // a prerequisite".
+    // Kept rather than deleted: it is the regression test for the case that
+    // motivated the fix, and it records that the two surfaces agree here.
     let warehouse_a = typed_node("wh", "warehouse", None);
     let warehouse_b = typed_node("wh", "warehouse", None);
     let admin = typed_node("adm", "workspace", Some("admin"));
@@ -864,13 +854,7 @@ fn the_backend_reports_a_structural_error_ahead_of_a_duplicate_node_id() {
 
     let err = validate_semantic_json(&[warehouse_a, warehouse_b, admin], &[wire])
         .expect_err("a graph with no branch location must not validate");
-
-    assert_eq!(
-        validation_code(&err),
-        "missing-branch-location",
-        "the backend short-circuits on the structural check; if it ever collects \
-         and sorts, this test should be rewritten to assert the tier order instead"
-    );
+    assert_eq!(validation_code(&err), "duplicate-node");
 }
 
 #[test]
@@ -890,4 +874,37 @@ fn the_backend_and_the_tier_order_agree_on_an_illegal_wire_before_a_missing_inpu
     let err = validate_semantic_json(&[warehouse, admin], &[wire])
         .expect_err("an unregistered workspace type must not validate");
     assert_eq!(validation_code(&err), "missing-branch-location");
+}
+
+#[test]
+fn two_nodes_sharing_an_id_are_refused_before_anything_reads_the_index() {
+    // ADR #45 §4.3 follow-up. The backend had no duplicate-node check at all:
+    // the graph index used `entry(id).or_insert(node)`, which silently dropped
+    // the second node and then validated the collapsed graph. `Ok(())` was the
+    // real answer before this commit - confirmed by probe, not inferred.
+    //
+    // This is the one defect the tier ordering cannot express as a preference:
+    // with two nodes claiming one id, every later lookup by id resolves to an
+    // arbitrary one of them, so a graph the UI calls unreadable passed the
+    // core validator. (The Apply gate had its own check, so this was not
+    let mut root = typed_node("root", "branch-location", None);
+    root["store_profile_id"] = json!("branch-1");
+    let warehouse = typed_node("wh", "warehouse", None);
+    let impostor = typed_node("wh", "workspace", Some("kds"));
+    let wire = wire_between(&root, &warehouse, "location-out", "location-in", "location");
+
+    let err = validate_semantic_json(&[root, warehouse, impostor], &[wire])
+        .expect_err("two nodes must not share one id");
+    assert_eq!(validation_code(&err), "duplicate-node");
+}
+
+#[test]
+fn distinct_ids_still_validate_after_the_duplicate_guard_lands() {
+    // Guards the fix itself: `insert` replaces rather than `or_insert`-skips, so
+    // a mis-placed early return here would reject ordinary graphs.
+    let mut root = typed_node("root", "branch-location", None);
+    root["store_profile_id"] = json!("branch-1");
+    let warehouse = typed_node("wh", "warehouse", None);
+    let wire = wire_between(&root, &warehouse, "location-out", "location-in", "location");
+    assert!(validate_semantic_json(&[root, warehouse], &[wire]).is_ok());
 }

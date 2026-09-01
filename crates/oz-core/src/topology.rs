@@ -397,14 +397,29 @@ fn topology_validation(
 /// used to infer ownership here.
 pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), CoreError> {
     // Index the graph once so the per-wire and per-node gates below are
-    // O(N + W) instead of O(N × W). `node_by_id` keeps the FIRST node for
-    // each id (matching the previous linear `find` scans); the id sets and
-    // the incoming-wire index preserve wire order and first-match
-    // semantics, so no gate changes its result or its report order.
+    // O(N + W) instead of O(N × W). The id sets and the incoming-wire index
+    // preserve wire order and first-match semantics, so no gate changes its
+    // result or its report order.
+    //
+    // ADR #45 §4.3 follow-up: this used to be `entry(id).or_insert(node)`, which
+    // SILENTLY DROPPED any node whose id was already present and then validated
+    // the collapsed graph. Two nodes sharing an id is the one defect no later
+    // gate can recover from, because every lookup by id now resolves to an
+    // arbitrary one of them, so it is refused here before anything reads the
+    // index. The TypeScript validator already reported this as `duplicate-node`;
+    // the backend core validator did not have it. The Apply gate in desktop-client DID catch duplicates with its own check, so this was not reachable through Apply - the gap was in every other caller of the core validator.
     let mut node_by_id: std::collections::HashMap<&str, &Value> = std::collections::HashMap::new();
     for node in nodes {
         if let Some(id) = value_string(node, "id") {
-            node_by_id.entry(id).or_insert(node);
+            if node_by_id.insert(id, node).is_some() {
+                return Err(topology_validation(
+                    "duplicate-node",
+                    Some(id),
+                    None,
+                    None,
+                    format!("two nodes share the id `{id}`"),
+                ));
+            }
         }
     }
     let warehouse_ids: std::collections::HashSet<&str> = nodes
