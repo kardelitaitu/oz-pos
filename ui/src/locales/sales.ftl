@@ -992,3 +992,17 @@ pos-promotions-selected-count = { $count } selected
 pos-promotions-apply-selected = Apply promotions
 pos-promotions-apply-aria = Apply promotion { $name }
 pos-promotions-unavailable-aria = Promotion { $name } is not applicable
+
+# ── Product image editor (spec 0046b §3.2–3.3) ──
+retail-edit-image-title = Product Images
+retail-edit-image-primary = Primary image
+retail-edit-image-alternatives = Additional images
+retail-edit-image-set = Set Image
+retail-edit-image-set-aria = Choose a new image for { $name }
+retail-edit-image-replace-aria = Replace the image for { $name }
+retail-edit-image-clear = Remove
+retail-edit-image-clear-aria = Remove the image for { $name }
+retail-edit-image-uploading = Uploading image…
+retail-edit-image-error = Could not update the image. Try again.
+retail-edit-image-menu-note = Menu items always have exactly one image.
+retail-edit-image-alt = { $name } image { $slot }

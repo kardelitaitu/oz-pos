@@ -1003,3 +1003,17 @@ pos-promotions-selected-count = { $count } dipilih
 pos-promotions-apply-selected = Terapkan promosi
 pos-promotions-apply-aria = Terapkan promosi { $name }
 pos-promotions-unavailable-aria = Promosi { $name } tidak dapat diterapkan
+
+# ── Product image editor (spec 0046b §3.2–3.3) ──
+retail-edit-image-title = Gambar Produk
+retail-edit-image-primary = Gambar utama
+retail-edit-image-alternatives = Gambar tambahan
+retail-edit-image-set = Atur Gambar
+retail-edit-image-set-aria = Pilih gambar baru untuk { $name }
+retail-edit-image-replace-aria = Ganti gambar untuk { $name }
+retail-edit-image-clear = Hapus
+retail-edit-image-clear-aria = Hapus gambar untuk { $name }
+retail-edit-image-uploading = Mengunggah gambar…
+retail-edit-image-error = Gagal memperbarui gambar. Coba lagi.
+retail-edit-image-menu-note = Item menu selalu memiliki tepat satu gambar.
+retail-edit-image-alt = Gambar { $name } { $slot }
