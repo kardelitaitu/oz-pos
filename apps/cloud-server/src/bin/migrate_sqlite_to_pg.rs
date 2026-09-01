@@ -241,10 +241,18 @@ fn read_sqlite_rows(conn: &Connection, table: &str) -> Result<Vec<Row>, String> 
 /// typed int8 null fails client-side with "error serializing parameter N"
 /// when Postgres infers a TEXT parameter, e.g. a NULL `category_id` on
 /// products).
+///
+/// **Column alignment**: the source rows (`read_sqlite_rows`) contain ALL
+/// SQLite columns, but `columns` is the *shared* subset present in both
+/// SQLite and Postgres.  When a migration adds a column to SQLite without
+/// the PG schema being regenerated (or vice versa), the sets diverge.
+/// This function projects each row's cells to only the columns in
+/// `columns` by looking up their position in the full SQLite column list.
 async fn insert_pg_batch(
     tx: &tokio_postgres::Transaction<'_>,
     table: &str,
     columns: &[String],
+    sqlite_columns: &[String],
     rows: &[Row],
 ) -> Result<(), String> {
     if rows.is_empty() {
@@ -256,6 +264,18 @@ async fn insert_pg_batch(
         .map(|c| format!("\"{c}\""))
         .collect::<Vec<_>>()
         .join(", ");
+    // Build a column-position lookup: for each column in `columns`,
+    // find its index in the full sqlite_columns list.
+    let col_indices: Vec<usize> = columns
+        .iter()
+        .map(|c| {
+            sqlite_columns
+                .iter()
+                .position(|sc| sc == c)
+                .expect("every pg_cols column must exist in sqlite_columns")
+        })
+        .collect();
+
     // One placeholder group per row: ($1..$N), ($N+1..$2N), …
     let value_groups = (0..rows.len())
         .map(|r| {
@@ -276,7 +296,7 @@ async fn insert_pg_batch(
 
     let params: Vec<Box<dyn ToSql + Sync>> = rows
         .iter()
-        .flat_map(|row| row.cells.iter())
+        .flat_map(|row| col_indices.iter().map(|&idx| &row.cells[idx]))
         .map(|cell| -> Box<dyn ToSql + Sync> {
             match cell {
                 Cell::Null => Box::new(WildcardNull),
@@ -604,12 +624,33 @@ async fn verify_table(
     pool: &Pool,
     table: &str,
     columns: &[String],
+    sqlite_columns: &[String],
     src_rows: &[Row],
 ) -> Result<bool, String> {
     let pg_rows = read_pg_rows(pool, table, columns).await?;
+    // Project source rows to shared columns so checksums compare the same
+    // set of columns as PG (the source may have extra columns from newer
+    // migrations that the PG schema hasn't caught up with yet).
+    let col_indices: Vec<usize> = columns
+        .iter()
+        .map(|c| {
+            sqlite_columns
+                .iter()
+                .position(|sc| sc == c)
+                .expect("every pg_cols column must exist in sqlite_columns")
+        })
+        .collect();
     let src_checksum: u64 = src_rows
         .iter()
-        .map(|r| fnv1a(&r.checksum_fragment()))
+        .map(|r| {
+            let projected = Row {
+                cells: col_indices
+                    .iter()
+                    .map(|&idx| r.cells[idx].clone())
+                    .collect(),
+            };
+            fnv1a(&projected.checksum_fragment())
+        })
         .fold(0u64, |acc, h| acc ^ h);
     let pg_checksum: u64 = pg_rows
         .iter()
@@ -709,7 +750,7 @@ async fn copy_and_verify(
                 .await
                 .map_err(|e| format!("begin tx for {table}: {e}"))?;
             for chunk in src_rows.chunks(batch) {
-                insert_pg_batch(&tx, table, &pg_cols, chunk).await?;
+                insert_pg_batch(&tx, table, &pg_cols, &sqlite_cols, chunk).await?;
             }
             tx.commit()
                 .await
@@ -718,7 +759,7 @@ async fn copy_and_verify(
         total_copied += src_rows.len();
 
         // 6. Verify: row count + checksum on both sides.
-        if !verify_table(pool, table, &pg_cols, &src_rows).await? {
+        if !verify_table(pool, table, &pg_cols, &sqlite_cols, &src_rows).await? {
             failures += 1;
         }
     }
