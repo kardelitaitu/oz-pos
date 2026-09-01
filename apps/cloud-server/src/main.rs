@@ -30,6 +30,7 @@ mod config;
 mod db;
 mod email;
 mod email_pg;
+mod image_gc;
 mod metrics;
 mod openapi;
 mod prune;
@@ -186,6 +187,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             };
             // Start the background prune loop (ADR #6 Q4 / P-1 Ledger Retention).
             prune::start_prune_loop(conn.clone());
+
+            // Start the background image GC loop (spec 0046b §3.4/§3.7) —
+            // sweeps orphaned `image_refs` (refcount = 0, 24h grace) and
+            // deletes the corresponding files from the image volume.
+            image_gc::start_image_gc_loop(conn.clone(), oz_api::image_dir_from_env());
 
             // P55-3: Start the scheduled report sender loop.
             email::start_report_sender_loop(conn.clone());
