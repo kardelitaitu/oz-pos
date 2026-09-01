@@ -323,21 +323,29 @@
     return rows.filter(function (r) { return r; });
   }
 
-  // revokeConfirmModal builds the confirm-by-email dialog for the
-  // destructive revoke action (previously one click — no guard at all).
-  // The confirm button stays disabled until the typed email matches the
-  // tenant's address (trimmed, case-insensitive); a live mismatch hint
-  // appears when text is present. Returns { box, cancelBtn } — the
-  // caller mounts it and wires cancel to its closeModal.
-  function revokeConfirmModal(email, onConfirm) {
+  // revokeConfirmModal builds the confirm-by-email dialog for destructive
+  // tenant actions (previously one click — no guard at all). The confirm
+  // button stays disabled until the typed email matches the tenant's
+  // address (trimmed, case-insensitive); a live mismatch hint appears when
+  // text is present. Returns { box, cancelBtn } — the caller mounts it and
+  // wires cancel to its closeModal.
+  // opts (Phase 4) reuses the same gate for "delete tenant": title, hint,
+  // confirmLabel and an extraWarn paragraph (cascade consequences).
+  function revokeConfirmModal(email, onConfirm, opts) {
+    opts = opts || {};
     var box = el('div', 'modal');
     box.setAttribute('role', 'dialog');
     box.setAttribute('aria-modal', 'true');
-    box.appendChild(el('h3', null, t('tenant.revokeTitle')));
+    box.appendChild(el('h3', null, opts.title || t('tenant.revokeTitle')));
     var p = el('p', 'small');
     p.style.marginBottom = '.6rem';
-    p.textContent = t('tenant.revokeHint') + (email || '—');
+    p.textContent = (opts.hint || t('tenant.revokeHint')) + (email || '—');
     box.appendChild(p);
+    if (opts.extraWarn) {
+      var warn = el('p', 'small', opts.extraWarn);
+      warn.style.cssText = 'color:var(--danger);margin:0 0 .6rem';
+      box.appendChild(warn);
+    }
     var input = el('input', 'input');
     input.placeholder = t('tenant.revokePlaceholder');
     input.autocomplete = 'off';
@@ -349,7 +357,7 @@
     var act = el('div', 'modal-actions');
     var cancelBtn = el('button', 'btn btn-ghost', t('tenant.cancel'));
     act.appendChild(cancelBtn);
-    var confirmBtn = el('button', 'btn btn-bad', t('tenant.revoke'));
+    var confirmBtn = el('button', 'btn btn-bad', opts.confirmLabel || t('tenant.revoke'));
     confirmBtn.disabled = true;
     var matches = function () { return input.value.trim().toLowerCase() === String(email || '').trim().toLowerCase(); };
     input.addEventListener('input', function () {
@@ -358,7 +366,7 @@
     });
     act.appendChild(confirmBtn);
     box.appendChild(act);
-    // busyWrap (B19): one confirm click fires exactly one revoke POST.
+    // busyWrap (B19): one confirm click fires exactly one action POST.
     confirmBtn.addEventListener('click', busyWrap(confirmBtn, function () {
       if (matches()) onConfirm();
     }));
@@ -1142,6 +1150,31 @@
     'tenant.changeTier': 'Change tier',
     'tenant.reasonOverride': 'Reason for override (audit)',
     'tenant.renew365': 'Renew +365d',
+    // ── Phase 4: tenant lifecycle UI ──────────────────────────────
+    'tenant.editContact': 'Edit contact',
+    'tenant.editTitle': 'Edit tenant contact',
+    'tenant.emailTaken': 'That email is already in use.',
+    'tenant.contactUpdated': 'Contact updated',
+    'tenant.devices': 'Devices',
+    'tenant.lastSeen': 'Last seen',
+    'tenant.deviceRevoked': 'Device revoked',
+    'tenant.renewTitle': 'Renew subscription',
+    'tenant.setExactDate': 'Set exact date',
+    'tenant.or': 'or',
+    'tenant.grantTitle': 'Grant subscription',
+    'tenant.grantHint': 'For transfer/e-wallet payments made outside Paddle/Midtrans.',
+    'tenant.months': 'Months',
+    'tenant.exactDate': 'Exact date (inclusive)',
+    'tenant.reasonGrant': 'Reason (audit trail)',
+    'tenant.reasonRequired': 'Reason is required.',
+    'tenant.granted': 'Granted',
+    'tenant.delete': 'Delete tenant',
+    'tenant.deleteTitle': 'Delete tenant permanently',
+    'tenant.deleteHint': 'This cannot be undone. Type the tenant email to confirm: ',
+    'tenant.deleteWarn': 'All devices and subscriptions are deleted. License keys are unlinked but kept for the audit trail.',
+    'tenant.deleteConfirm': 'Delete permanently',
+    'tenant.deleted': 'Tenant deleted',
+    // ──────────────────────────────────────────────────────────────
     'tenant.revoke': 'Revoke',
     'tenant.revoked': 'Revoked',
     'tenant.activate': 'Activate',

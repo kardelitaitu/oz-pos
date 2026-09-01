@@ -17,14 +17,17 @@
     // defined in admin-utils.js (loaded first) so they're unit-testable.
     // admin-utils.js sets these as globals for backward compatibility.
 
-    async function api(path, body) {
+    async function api(path, body, method) {
       // B12 fix: both fetches go through admin-utils.fetchWithTimeout —
       // the old un-timed awaits left the whole render pending forever on
       // a hung connection (skeleton, no retry UI, no console error).
+      // Phase 4: third arg sets PATCH/DELETE explicitly; the historic
+      // contract (body ⇒ POST, no body ⇒ GET) is unchanged for the
+      // existing call sites.
       const sess = await fetchWithTimeout(undefined, '/__oz/session');
       const token = (await sess.json()).token;
       const opts = { headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } };
-      if (body) { opts.method = 'POST'; opts.body = body; }
+      if (body) { opts.method = method || 'POST'; opts.body = body; }
       const res = await fetchWithTimeout(undefined, API + path, opts);
       if (isAuthDenied(res.status)) {
         // P3: build the card via DOM API (el() uses textContent), NOT
@@ -230,6 +233,22 @@
 
 // kpiC, tableCard are defined in admin-utils.js (loaded first).
 
+    // ── Phase 4 capability probe ────────────────────────────────────
+    // The lifecycle endpoints (edit/grant/delete/device-revoke/exact-date
+    // renew) only exist on license-server 0.0.34+. Until the server is
+    // redeployed, the UI must not offer controls that can only fail —
+    // worse, an exact-date renew against the old server would silently
+    // fall back to +365 days. One cheap /admin/health call at boot gives
+    // an honest gate; the controls appear as soon as the server reports
+    // the new version.
+    let lifecycleReady = false;
+    (async () => {
+      try {
+        const h = await api('/api/v1/admin/health');
+        lifecycleReady = String((h && h.version) || '') >= '0.0.34';
+      } catch { lifecycleReady = false; }
+    })();
+
     // ── Tab switching: cached DOM + per-card background refresh ─────
     // Clicking back to an earlier tab used to re-fetch everything and
     // rebuild the DOM from zero (a full reload per switch). Each tab's
@@ -391,6 +410,41 @@
         }
         tenantDetailRows(data).forEach(pair => addRow(pair[0], pair[1]));
         box.appendChild(kv);
+        // Phase 4: device inventory — the detail payload always carried
+        // devices nobody could act on. Per-device revoke (busyWrap guard),
+        // revoked devices shown as a badge; timestamps via relTime.
+        if (data.devices && data.devices.length) {
+          const devHead = el('p', 'muted', t('tenant.devices') + ' (' + data.devices.length + ')');
+          devHead.style.cssText = 'margin:.9rem 0 .2rem;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em';
+          box.appendChild(devHead);
+          data.devices.forEach(d => {
+            const row = el('div'); row.style.cssText = 'display:flex;align-items:center;gap:.5rem;font-size:.8rem;padding:.3rem 0;border-top:1px solid var(--border)';
+            const mid = el('span', null, d.machine_id || d.id);
+            mid.style.cssText = 'font-family:var(--font-mono);font-size:.72rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+            row.appendChild(mid);
+            if (d.revoked_at) {
+              row.appendChild(el('span', 'muted', t('tenant.revoked')));
+            } else {
+              if (d.last_seen_at) {
+                const seen = el('span', 'muted', t('tenant.lastSeen') + ' ' + relTime(d.last_seen_at));
+                seen.style.cssText = 'font-size:.72rem';
+                row.appendChild(seen);
+              }
+              const rv = el('button', 'btn btn-ghost btn-sm', t('tenant.revoke'));
+              if (lifecycleReady) {
+                rv.addEventListener('click', busyWrap(rv, async () => {
+                  try {
+                    await api('/api/v1/admin/tenants/' + id + '/devices/' + d.id + '/revoke', '{}');
+                    flash(t('tenant.deviceRevoked') + ' ' + t('common.successfully'));
+                    showTenantDetail(id); // reload the same dialog with fresh state
+                  } catch { flash(t('tenant.deviceRevoked') + ' ' + t('common.failed')); }
+                }));
+                row.appendChild(rv);
+              }
+            }
+            box.appendChild(row);
+          });
+        }
         // Drop the pre-fetch loading backdrop before mounting — mountModal
         // appends, so the stale "Loading…" card would otherwise stay
         // mounted underneath the real dialog (two modal-backs stacked).
@@ -398,6 +452,12 @@
         const actions = el('div', null); actions.style.cssText = 'display:flex;gap:.4rem;margin-top:.8rem;flex-wrap:wrap';
         // B19: busyWrap (single-flight guard) on every action button —
         // Renew POSTs +365 days per call, so a double-click granted 730.
+        // Phase 4: Edit contact opens the PATCH dialog (0.0.34+ only).
+        if (lifecycleReady) {
+          const editBtn = el('button', 'btn btn-sm btn-ghost', t('tenant.editContact'));
+          editBtn.addEventListener('click', () => { closeModal(); editContactPrompt(id, data); });
+          actions.appendChild(editBtn);
+        }
         if (tenant.status === 'active') {
           // Confirm-by-email: revoke used to fire on a single click.
           const revoke = el('button', 'btn btn-sm btn-bad', t('tenant.revoke'));
@@ -418,11 +478,23 @@
         // Guarded renew: the endpoint 404s ("no subscription found") when
         // the tenant has no subscription record — disable + reword instead
         // of letting the admin press a button that can only fail.
+        // Phase 4: renew opens a dialog — quick +365d OR an exact expiry
+        // date (both re-sign server-side now). On a pre-0.0.34 server the
+        // exact-date branch is hidden (it would silently become +365d).
         const hasSub = !!data.subscription;
         const renew = el('button', 'btn btn-sm', hasSub ? t('tenant.renew365') : t('tenant.renewNoSub'));
-        if (hasSub) { renew.addEventListener('click', busyWrap(renew, () => doAction(id,'renew',t('tenant.renewed'),'{"days":365}',closeModal))); }
-        else { renew.disabled = true; renew.title = t('tenant.renewNoSubTip'); renew.setAttribute('aria-disabled', 'true'); }
+        if (hasSub) {
+          renew.addEventListener('click', () => { closeModal(); if (lifecycleReady) { renewPrompt(id); } else { doAction(id, 'renew', t('tenant.renewed'), '{"days":365}', null); } });
+        } else { renew.disabled = true; renew.title = t('tenant.renewNoSubTip'); renew.setAttribute('aria-disabled', 'true'); }
         actions.appendChild(renew);
+        // Manual grant (Phase 4): transfer/e-wallet customers with no
+        // subscription record — the dead-end that used to disable renew
+        // AND silently no-op tier-override.
+        if (!hasSub && lifecycleReady) {
+          const grant = el('button', 'btn btn-sm btn-ok', t('tenant.grantTitle'));
+          grant.addEventListener('click', () => { closeModal(); grantPrompt(id); });
+          actions.appendChild(grant);
+        }
         const upgrade = el('button', 'btn btn-sm btn-warn', t('tenant.upgrade')); upgrade.addEventListener('click', () => { closeModal(); upgradePrompt(id,data); }); actions.appendChild(upgrade);
         box.appendChild(actions);
         // B11: mountModal owns the backdrop/ESC/close wiring and always
@@ -431,6 +503,31 @@
         // to later ESC presses.
         const closeModal = mountModal(modal, box);
         const closeBtn = el('button', 'btn btn-ghost', t('tenant.close')); closeBtn.style.cssText = 'margin-top:.8rem;width:100%'; closeBtn.addEventListener('click', closeModal); box.appendChild(closeBtn);
+        // Phase 4: guarded cascade delete — full-width destructive row at
+        // the very bottom, confirm-by-email with a cascade warning.
+        // (0.0.34+ only; hidden against the old server.)
+        if (lifecycleReady) {
+          const del = el('button', 'btn btn-sm btn-bad', t('tenant.delete'));
+          del.style.cssText = 'margin-top:.4rem;width:100%';
+          del.addEventListener('click', () => {
+            closeModal();
+            const rc = revokeConfirmModal(tenant.email, async () => {
+              const modalRoot = document.getElementById('modal-root');
+              try {
+                await api('/api/v1/admin/tenants/' + id, JSON.stringify({ confirm_email: tenant.email }), 'DELETE');
+                modalRoot.innerHTML = '';
+                flash(t('tenant.deleted') + ' ' + t('common.successfully'));
+                renderTenants();
+              } catch (err) {
+                if (err && err.authDenied) { modalRoot.innerHTML = ''; return; }
+                flash(t('tenant.delete') + ' ' + t('common.failed'));
+              }
+            }, { title: t('tenant.deleteTitle'), hint: t('tenant.deleteHint'), confirmLabel: t('tenant.deleteConfirm'), extraWarn: t('tenant.deleteWarn') });
+            const closeDelete = mountModal(modal, rc.box);
+            rc.cancelBtn.addEventListener('click', closeDelete);
+          });
+          box.appendChild(del);
+        }
       } catch (err) {
         if (err && err.authDenied) { modal.innerHTML = ''; return; }
         modal.innerHTML = '<div class="modal-back"><div class="modal"><p class="empty">' + t('common.failedToLoadTenantDetail') + '</p></div></div>';
@@ -440,6 +537,108 @@
     async function doAction(id, action, label, body, close) {
       const modal = document.getElementById('modal-root');
       try { await api('/api/v1/admin/tenants/' + id + '/' + action, body); if (close) { close(); } else { modal.innerHTML = ''; } flash(label + t('common.successfully')); renderTenants(); } catch { flash(label + t('common.failed')); }
+    }
+
+    // ── Phase 4: lifecycle dialogs (each REPLACES the detail dialog —
+    // mountModal appends, so a stale dialog underneath would fight over
+    // ESC/backdrop — the established close-then-mount pattern) ────────
+
+    function editContactPrompt(id, data) {
+      const modal = document.getElementById('modal-root');
+      const box = el('div', 'modal'); box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true');
+      box.appendChild(el('h3', null, t('tenant.editTitle')));
+      const tenant = data.tenant || {};
+      const lbl1 = el('p', 'muted', t('th.email')); lbl1.style.cssText = 'margin:.5rem 0 .15rem;font-size:.72rem';
+      const email = el('input', 'input'); email.type = 'email'; email.value = tenant.email || ''; email.autocomplete = 'off'; email.spellcheck = false;
+      const lbl2 = el('p', 'muted', t('tenant.phone')); lbl2.style.cssText = 'margin:.6rem 0 .15rem;font-size:.72rem';
+      const phone = el('input', 'input'); phone.type = 'tel'; phone.value = tenant.phone || ''; phone.placeholder = '+62 …';
+      const errLine = el('p', 'small', ''); errLine.style.cssText = 'color:var(--danger);margin:.4rem 0 0;display:none';
+      box.appendChild(lbl1); box.appendChild(email); box.appendChild(lbl2); box.appendChild(phone); box.appendChild(errLine);
+      const act = el('div', 'modal-actions');
+      const closeModal = mountModal(modal, box);
+      const cancel = el('button', 'btn btn-ghost', t('tenant.cancel')); cancel.addEventListener('click', closeModal); act.appendChild(cancel);
+      const save = el('button', 'btn', t('tenant.save'));
+      save.addEventListener('click', busyWrap(save, async () => {
+        errLine.style.display = 'none';
+        const payload = {};
+        const newEmail = email.value.trim().toLowerCase();
+        if (newEmail && newEmail !== String(tenant.email || '').toLowerCase()) { payload.email = newEmail; }
+        const newPhone = phone.value.trim();
+        if (newPhone && newPhone !== String(tenant.phone || '')) { payload.phone = newPhone; }
+        if (!payload.email && !payload.phone) { closeModal(); return; } // nothing changed
+        try {
+          await api('/api/v1/admin/tenants/' + id, JSON.stringify(payload), 'PATCH');
+          closeModal();
+          flash(t('tenant.contactUpdated') + ' ' + t('common.successfully'));
+          renderTenants();
+        } catch (err) {
+          if (err && err.authDenied) { closeModal(); return; }
+          // api() throws Error('<path> (<status>)') — surface the collision
+          // case inline instead of a generic toast.
+          errLine.textContent = /409/.test(String(err && err.message)) ? t('tenant.emailTaken') : t('common.failed');
+          errLine.style.display = 'block';
+        }
+      }));
+      act.appendChild(save);
+      box.appendChild(act);
+    }
+
+    function grantPrompt(id) {
+      const modal = document.getElementById('modal-root');
+      const box = el('div', 'modal'); box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true');
+      box.appendChild(el('h3', null, t('tenant.grantTitle')));
+      const hint = el('p', 'small', t('tenant.grantHint')); hint.style.marginBottom = '.6rem';
+      box.appendChild(hint);
+      const lblT = el('p', 'muted', t('th.tier')); lblT.style.cssText = 'margin:.2rem 0 .15rem;font-size:.72rem';
+      const select = el('select', 'input'); ['plus','pro','premium','enterprise'].forEach(tier => select.appendChild(el('option', null, tier)));
+      const lblM = el('p', 'muted', t('tenant.months') + ' (' + t('tenant.or') + ' ' + t('tenant.exactDate') + ')'); lblM.style.cssText = 'margin:.6rem 0 .15rem;font-size:.72rem';
+      const months = el('input', 'input'); months.type = 'number'; months.min = '1'; months.value = '12';
+      const dateIn = el('input', 'input'); dateIn.type = 'date'; dateIn.style.marginTop = '.35rem';
+      const lblR = el('p', 'muted', t('tenant.reasonGrant')); lblR.style.cssText = 'margin:.6rem 0 .15rem;font-size:.72rem';
+      const reason = el('input', 'input'); reason.placeholder = t('tenant.reasonGrant'); reason.autocomplete = 'off';
+      const errLine = el('p', 'small', t('tenant.reasonRequired')); errLine.style.cssText = 'color:var(--danger);margin:.4rem 0 0;display:none';
+      box.appendChild(lblT); box.appendChild(select); box.appendChild(lblM); box.appendChild(months); box.appendChild(dateIn); box.appendChild(lblR); box.appendChild(reason); box.appendChild(errLine);
+      const act = el('div', 'modal-actions');
+      const closeModal = mountModal(modal, box);
+      const cancel = el('button', 'btn btn-ghost', t('tenant.cancel')); cancel.addEventListener('click', closeModal); act.appendChild(cancel);
+      const save = el('button', 'btn', t('tenant.grantTitle'));
+      save.addEventListener('click', busyWrap(save, () => {
+        errLine.style.display = 'none';
+        if (!reason.value.trim()) { errLine.style.display = 'block'; return; }
+        if (dateIn.value && Number(months.value) > 0) { errLine.textContent = t('common.failed'); errLine.style.display = 'block'; return; }
+        const payload = { tier_key: select.value, reason: reason.value.trim() };
+        if (dateIn.value) { payload.expires_at = dateIn.value; }
+        else if (Number(months.value) > 0) { payload.months = Number(months.value); }
+        else { errLine.textContent = t('common.failed'); errLine.style.display = 'block'; return; }
+        doAction(id, 'grant-subscription', t('tenant.granted'), JSON.stringify(payload), closeModal);
+      }));
+      act.appendChild(save);
+      box.appendChild(act);
+    }
+
+    function renewPrompt(id) {
+      const modal = document.getElementById('modal-root');
+      const box = el('div', 'modal'); box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true');
+      box.appendChild(el('h3', null, t('tenant.renewTitle')));
+      const quick = el('button', 'btn btn-ok', t('tenant.renew365')); quick.style.cssText = 'width:100%';
+      quick.addEventListener('click', busyWrap(quick, () => doAction(id, 'renew', t('tenant.renewed'), '{"days":365}', closeModal)));
+      box.appendChild(quick);
+      const or = el('p', 'muted', '— ' + t('tenant.or') + ' —'); or.style.cssText = 'text-align:center;margin:.5rem 0;font-size:.72rem';
+      box.appendChild(or);
+      const dateIn = el('input', 'input'); dateIn.type = 'date'; dateIn.style.width = '100%';
+      box.appendChild(dateIn);
+      const setBtn = el('button', 'btn', t('tenant.setExactDate')); setBtn.style.cssText = 'margin-top:.5rem;width:100%'; setBtn.disabled = true;
+      dateIn.addEventListener('input', () => { setBtn.disabled = !dateIn.value; });
+      setBtn.addEventListener('click', busyWrap(setBtn, () => {
+        if (!dateIn.value) { return; }
+        doAction(id, 'renew', t('tenant.renewed'), JSON.stringify({ expires_at: dateIn.value }), closeModal);
+      }));
+      box.appendChild(setBtn);
+      const act = el('div', 'modal-actions');
+      const closeModal = mountModal(modal, box);
+      const cancel = el('button', 'btn btn-ghost', t('tenant.cancel')); cancel.addEventListener('click', closeModal);
+      act.appendChild(cancel);
+      box.appendChild(act);
     }
 
     function upgradePrompt(id, data) {

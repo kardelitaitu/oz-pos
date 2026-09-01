@@ -380,6 +380,28 @@ describe('admin-utils revokeConfirmModal (confirm-by-email guard)', () => {
     expect(box.contains(cancelBtn)).toBe(true);
     expect(cancelBtn.textContent).toBe('Cancel');
   });
+
+  it('opts reuse the gate for the delete flow (title, hint, label, cascade warn)', () => {
+    const confirmSpy = vi.fn();
+    const { box } = utils.revokeConfirmModal('del@x.id', confirmSpy, {
+      title: 'Delete tenant permanently',
+      hint: 'Cannot be undone. Type the tenant email to confirm: ',
+      confirmLabel: 'Delete permanently',
+      extraWarn: 'All devices and subscriptions are deleted.',
+    });
+    document.body.appendChild(box);
+    expect(box.querySelector('h3')!.textContent).toBe('Delete tenant permanently');
+    expect(box.textContent).toContain('Cannot be undone.');
+    expect(box.textContent).toContain('All devices and subscriptions are deleted.');
+    const confirm = [...box.querySelectorAll('button')].find(b => b.textContent === 'Delete permanently') as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    const input = box.querySelector('input') as HTMLInputElement;
+    input.value = 'del@x.id';
+    input.dispatchEvent(new Event('input'));
+    expect(confirm.disabled).toBe(false);
+    confirm.click();
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('admin-utils svgBarChart (B3: churn chart read the wrong field)', () => {
