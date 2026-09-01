@@ -222,7 +222,16 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
     ("branding", 0, &[]),
     // ADR #36/#37/#38 opener browser plugin: no permission-gated commands.
     ("browser", 0, &[]),
-    ("bundles", 0, &[]),
+    (
+        "bundles",
+        6,
+        &[
+            "PRODUCTS_CREATE",
+            "PRODUCTS_DELETE",
+            "PRODUCTS_READ",
+            "PRODUCTS_UPDATE",
+        ],
+    ),
     (
         "categories",
         1,
@@ -241,7 +250,11 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
     ),
     ("exchange_rates", 5, &["SETTINGS_EDIT", "SETTINGS_READ"]),
     ("features", 2, &["SETTINGS_EDIT"]),
-    ("gift_cards", 0, &[]),
+    (
+        "gift_cards",
+        8,
+        &["GIFTCARDS_ISSUE", "GIFTCARDS_MANAGE", "GIFTCARDS_REDEEM"],
+    ),
     ("hardware", 0, &[]),
     ("health", 0, &[]),
     ("history", 0, &[]),
