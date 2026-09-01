@@ -1006,6 +1006,36 @@ worse than today's single-source state. The premise check is the actual gain —
 blocker named for twenty rounds was not real, and the next session should expect
 this to be a short piece of work.
 
+**Attempted the next round (2026-09-02), and reverted it.** The swap itself went
+cleanly: all four handlers converted, `tsc` clean, and **508 of 510** editor tests
+passed untouched — confirming the change is well-scoped and the editor's other
+behaviour is unaffected. What stopped it is exactly two tests, both written
+against the localStorage contract this change replaces:
+
+- `saves the current diagram as a named template` — asserts
+  `localStorage.getItem('oz-topology-template:My Layout')` is non-null. Must
+  assert the backend call instead.
+- `loads and deletes a saved template` — seeds that same key and expects
+  `Import Me` in the popover. Must seed `listTopologyTemplates` /
+  `loadTopologyTemplate` instead, and assert `deleteTopologyTemplate`.
+
+Two findings from the attempt that save the next session discovery time:
+
+1. **No new Fluent copy is needed.** The handlers reuse `topology-toast-no-session`,
+   `topology-toast-save-error`, `topology-toast-load-error` and
+   `topology-toast-import-invalid`, all of which already exist in every bundle.
+   The first draft invented `topology-toast-template-save-failed`; catching that
+   against the bundle list is what round 18's missing-key mistake taught.
+2. **The test file's `vi.mock('@/api/topology')` block must be self-seeded** with
+   the four new functions, for the documented reason already in its comment: an
+   unseeded `vi.fn()` returns `undefined` and the async handlers await on it.
+
+One design decision the attempt settled in code, worth keeping: if **any** template
+fails to migrate, `openTemplates` keeps showing the local list rather than
+switching to the backend. A partial switch would hide the templates left behind —
+still on disk, but unreachable from the only UI that can reach them — which is a
+quieter and worse loss than a visible failure.
+
 ---
 
 ## Related decisions
