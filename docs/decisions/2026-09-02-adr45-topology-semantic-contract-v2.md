@@ -2,11 +2,11 @@
 num: 45
 area: topology
 title: ADR #45: Topology Semantic Contract v2 — Endpoint Predicates, Kind Registry, Deliberate Cold Start, and Theme Parity
-status: Accepted — §1–§3, §5 implemented (2026-09-02); §4 proposed
+status: Accepted — §1–§3, §4.1, §5 implemented (2026-09-02); §4.2–§4.3 proposed
 ---
 # ADR #45: Topology Semantic Contract v2
 
-**Status:** Accepted — §1–§3, §5 implemented (2026-09-02); §4 proposed
+**Status:** Accepted — §1–§3, §4.1, §5 implemented (2026-09-02); §4.2–§4.3 proposed
 **Date:** 2026-09-02
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** topology, semantic-contract, cross-language-parity, node-kind-registry, cold-start, theming
@@ -660,7 +660,7 @@ mode.
   mechanical token swap either — no spacing token equals 18px, so "fixing" it
   would move the port labels a concurrent agent just laid out.
 
-### §4 — cold start (open; obligation 1 found already implemented)
+### §4 — cold start (§4.1 closed 2026-09-02; §4.2–§4.3 open)
 
 Reading the load path before changing it overturned this section's premise too.
 The first obligation — "a mandatory root is not a decision, so do not make the
@@ -672,14 +672,24 @@ a default slot position. That is the `@branch-root` the contract requires,
 authored without a merchant decision, and it is why `multiple-branch-locations`
 can treat a second root as an error at all.
 
-What is **not** resolved is the two paths that commit a genuinely empty canvas
-(`:1693`, `:1709`). One is the `unassigned` pseudo-branch, which is correct —
-there is no branch to root on. The other is "no saved diagram, parent supplied
-empty seeds", and whether a brand-new store with a real branch location reaches
-it or is caught by the seed loop depends on control flow that branches on
-`workspaceInstances !== undefined` around `:1559`. That question needs an
-empirical answer from a mount test, not a reading of 6,100 lines, and the answer
-determines whether §4.1 is a two-line fix or already done.
+What was **not** resolved then is resolved now, by test rather than by reading.
+A fresh store — real `branchLocations`, no workspace instances, `loadTopology`
+resolving `null` — opens on exactly one node, the Branch Location card keyed by
+`location.id`, with the onboarding hint stepped aside and the canvas **not**
+dirty. `NodeTopologyEditor.test.tsx` › *"authors the Branch Location root for a
+fresh store that has a location"* and *"does not mark the canvas dirty for a root
+the merchant never placed"*. The second is the one that matters: the root lands
+in the same `commitSnapshot` as the loaded graph, so it is part of the applied
+baseline rather than an edit — otherwise every fresh store would open showing
+"Unsaved changes", asking the merchant to Apply a decision they were never asked
+to make. Both were negative-controlled by replacing the seed loop's
+`branchLocations ?? []` with an empty array; the root test fails, so it detects
+the behaviour rather than the render.
+
+**§4.1 is therefore closed as already-implemented, now with the tests that keep
+it that way.** The two genuinely rootless cases — `branchLocations: []` with no
+instances, and the `unassigned` pseudo-branch — keep the onboarding hint, which
+is correct: there is no branch to root on.
 
 Obligations 2 and 3 are each a full slice on their own and neither is mechanical:
 

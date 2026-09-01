@@ -7043,6 +7043,41 @@ describe('NodeTopologyEditor — empty-state onboarding', () => {
     await waitFor(() => expect(getNodeCount()).toBe(1));
     expect(screen.queryByText('Build your store topology')).not.toBeInTheDocument();
   });
+
+  // ADR #45 §4.1 — "a mandatory root is not a decision, so do not make the
+  // merchant place it." @branch-root exists exactly once per graph by contract,
+  // so a fresh store that HAS a branch location must open on that root rather
+  // than on an empty canvas asking for it. The two tests above cover the
+  // genuinely rootless cases (no locations at all); this is the one where a
+  // location exists and the diagram is empty.
+  it('authors the Branch Location root for a fresh store that has a location', async () => {
+    mockLoadTopology.mockResolvedValueOnce(null); // no saved diagram yet
+    renderEditor({
+      branchLocations: [{ id: 'store-1', name: 'Main Street' }],
+      workspaceInstances: [],
+    });
+
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    const root = document.querySelector('.topology-node[data-node-id="store-1"]') as HTMLElement;
+    expect(root).toBeInTheDocument();
+    // The onboarding hint must not compete with the root the contract required.
+    expect(screen.queryByText('Build your store topology')).not.toBeInTheDocument();
+  });
+
+  it('does not mark the canvas dirty for a root the merchant never placed', async () => {
+    // The auto-authored root lands in the same commitSnapshot as the loaded
+    // graph, so it is part of the applied baseline. If it were added as an
+    // edit instead, every fresh store would open showing "Unsaved changes" —
+    // asking the merchant to Apply a decision they were never asked to make.
+    mockLoadTopology.mockResolvedValueOnce(null);
+    renderEditor({
+      branchLocations: [{ id: 'store-1', name: 'Main Street' }],
+      workspaceInstances: [],
+    });
+
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+  });
 });
 
 // ── Unsaved-changes indicator ────────────────────────────────────
