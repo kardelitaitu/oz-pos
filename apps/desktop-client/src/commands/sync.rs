@@ -468,6 +468,34 @@ pub async fn get_sync_plan_scoped(
     }
 }
 
+/// Test the cloud sync connection by pinging the configured server
+/// (pre-session, no authentication required). Falls back to the cloud
+/// probe URL when no URL is saved, so the login screen's sync indicator
+/// works out of the box.
+#[tauri::command]
+pub async fn test_sync_connection(
+    state: State<'_, AppState>,
+) -> Result<sync_client::PingResult, AppError> {
+    let (saved, allow_local_fallback) = {
+        let db = state.db.lock().await;
+        let saved = Settings::get_sync_server_url(&db)?;
+        let allow_local_fallback = saved
+            .as_deref()
+            .map(|value| value.trim().is_empty())
+            .unwrap_or(true);
+        (saved, allow_local_fallback)
+    }; // db lock dropped here
+    let resolved = resolve_sync_probe_url(None, saved, allow_local_fallback);
+    match resolved {
+        Some(u) => Ok(sync_client::ping_server(&u).await),
+        None => Ok(sync_client::PingResult {
+            ok: false,
+            status: "No server URL configured".into(),
+            latency_ms: None,
+        }),
+    }
+}
+
 /// Test sync connection (scoped).
 #[tauri::command]
 pub async fn test_sync_connection_scoped(

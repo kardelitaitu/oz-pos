@@ -449,11 +449,9 @@ describe('CloudSyncSettings', () => {
   });
 
   it('sends enabled flag to backend on save', async () => {
-    const user = userEvent.setup();
     await waitForSyncSection();
 
     const checkbox = getEnabledCheckbox();
-    const wrapper = checkbox.closest('.settings-toggle') as HTMLLabelElement;
     // Starts enabled (cloud default) — no toggle needed, the backend
     // receives the current enabled state regardless.
     expect(checkbox.checked).toBe(true);

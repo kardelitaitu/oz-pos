@@ -833,6 +833,7 @@ pub fn run() {
             commands::sync::pending_sync_count_scoped,
             commands::sync::request_sync_token_scoped,
             commands::sync::get_sync_plan_scoped,
+            commands::sync::test_sync_connection,
             commands::sync::test_sync_connection_scoped,
             commands::sync::sync_run_scoped,
             commands::sync::sync_pull_scoped,
