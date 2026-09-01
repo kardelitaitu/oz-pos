@@ -853,6 +853,16 @@ Obligations 2 and 3 are each a full slice on their own and neither is mechanical
    Making them conditional on `visiblePorts` is a type change with consumers to
    audit, and it was left as its own piece of work rather than folded in.
 
+   **Closed without changing the type (2026-09-02).** The audit came back as two
+   consumers, both total functions today. Making the fields optional would push an
+   `undefined` case into each of them and need a fallback message key that means
+   nothing for half the kinds — for the benefit of deleting four unused string
+   literals. `records` in the same interface IS optional, and that is the useful
+   contrast: its consumers already handle absence, so optionality there costs
+   nothing. The invariant is now stated at the field, so the dead fields read as
+   an accepted trade rather than unfinished work. Recorded because "we decided not
+   to do this" needs to be as findable as "we did".
+
 ### Whole-suite verification (2026-09-02, after 19 rounds of scoped runs)
    Every gate in this slice had been run against topology-scoped suites only,
    which is a real blind spot: a change to a shared registry can break a test

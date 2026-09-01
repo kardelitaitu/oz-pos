@@ -541,7 +541,19 @@ interface NodeKindEntry {
    *  gating lists: ADR #34 keeps persisted wire semantics and duplicate
    *  detection stable, so most sockets record nothing at all. */
   records: { readonly left?: SemanticPortId; readonly right?: SemanticPortId };
-  /** Right-socket Fluent label. Left labels derive from the variant. */
+  /** Right-socket Fluent label. Left labels derive from the variant.
+   *
+   *  REQUIRED even on a row that renders no right port, and that is deliberate
+   *  rather than an oversight: `portLabelId` and `portAriaLabelId` are total
+   *  functions today, and making these optional would push an undefined case
+   *  into every caller plus need a fallback message key that means nothing for
+   *  half the kinds. `records` above IS optional for the same reason in reverse —
+   *  its consumers already handle absence.
+   *
+   *  So `workspace:admin` and `workspace:warehouse` carry two fields each that
+   *  can never render. That is the accepted cost of keeping the accessors
+   *  branch-free; ADR #45 §3 follow-up #1 raised it and closed it here rather
+   *  than leaving it looking unfinished. */
   rightLabelId: string;
   /** Right-socket Fluent aria label. */
   rightAriaLabelId: string;
