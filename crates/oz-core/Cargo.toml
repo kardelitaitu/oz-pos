@@ -55,8 +55,8 @@ reqwest = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
-proptest = "1"
-serial_test = "3"
+proptest = { workspace = true }
+serial_test = { workspace = true }
 tokio = { workspace = true }
 
 [[bench]]

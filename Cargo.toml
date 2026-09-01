@@ -150,6 +150,12 @@ webp = "0.3"
 criterion = { version = "0.5", features = ["html_reports"] }
 console-subscriber = "0.4"
 
+# Shared dev-dependencies (hoisted for single source of truth)
+tempfile = "3"
+serial_test = "3"
+proptest = "1"
+wiremock = "0.6.5"
+
 # ── Workspace lint policy ─────────────────────────────────────────────
 #
 # Every member opts in with `[lints] workspace = true`, so a new crate

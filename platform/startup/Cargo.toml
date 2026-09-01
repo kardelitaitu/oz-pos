@@ -53,7 +53,7 @@ console = ["dep:console-subscriber"]
 whatsapp-notifications = ["dep:oz-notification"]
 
 [dev-dependencies]
-serial_test = "3"
-tempfile = "3"
+serial_test = { workspace = true }
+tempfile = { workspace = true }
 # startup_tests.rs reads modules/*/manifest.json to assert registration parity.
 serde_json = { workspace = true }

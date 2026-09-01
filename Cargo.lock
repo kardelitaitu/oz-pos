@@ -4615,7 +4615,6 @@ dependencies = [
  "thiserror 1.0.69",
  "toml 0.8.2",
  "tracing",
- "walkdir",
  "zip 2.4.2",
 ]
 

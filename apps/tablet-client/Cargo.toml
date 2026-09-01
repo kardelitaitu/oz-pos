@@ -23,7 +23,7 @@ tauri-build = { workspace = true }
 
 [dev-dependencies]
 tauri = { workspace = true, features = ["test"] }
-tempfile = "3"
+tempfile = { workspace = true }
 
 [dependencies]
 foundation = { workspace = true }

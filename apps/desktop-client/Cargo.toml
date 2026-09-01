@@ -27,7 +27,7 @@ tauri = { workspace = true, features = ["test"] }
 rand = "0.8"
 serde = { workspace = true }
 serde_json = { workspace = true }
-tempfile = "3"
+tempfile = { workspace = true }
 
 [dependencies]
 foundation = { workspace = true }
