@@ -78,7 +78,7 @@ produced it was left in place. This ADR addresses the shape.
 ### Two adjacent findings from the same review
 
 **Two kind vocabularies, no single owner.** `topologySemantics.json:9` declares
-`workspaceTypeKeys: ["store-pos", "restaurant-pos", "kds"]`. The editor ignores
+`endpointWorkspaceTypeKeys: ["store-pos", "restaurant-pos", "kds"]`. The editor ignores
 that field and hardcodes its own list at `NodeTopologyEditor.tsx:307` —
 `['store-pos', 'restaurant-pos', 'kds', 'warehouse']`. Neither list is the
 system's real enum: the seeded `workspace_types` table
@@ -509,7 +509,7 @@ Reading the freeze surfaced four things the source review had missed:
    `operation, stock, transfer`. The registry must preserve order, not become a
    set. The freeze pins it.
 4. **Two contract fields have no production readers at all.** Neither
-   `nodeKinds` nor `workspaceTypeKeys` is read by any TypeScript or Rust
+   `nodeKinds` nor `endpointWorkspaceTypeKeys` is read by any TypeScript or Rust
    production code; the only readers are the §2 corpus tests, which now make
    them load-bearing as a coverage forcing function — a declared kind that the
    corpus does not probe fails. That is a legitimate role, but it is not the
@@ -717,12 +717,23 @@ Obligations 2 and 3 are each a full slice on their own and neither is mechanical
    give better messages and should stay, but the contract should generate them.
 3. ~~Three workspace-type lists with three meanings and no owner~~ — **half
    resolved.** The editor's list is gone, derived from `typeSelectable`. The
-   contract's `workspaceTypeKeys` and the DB's `workspace_types` table remain
+   contract's `endpointWorkspaceTypeKeys` and the DB's `workspace_types` table remain
    two different vocabularies, which is correct — one declares what the semantic
    contract has endpoints for, the other what the system can store — but the
    contract field's name still implies the second meaning. Renaming it to
    `endpointWorkspaceTypeKeys` (or documenting it at the field) would finish the
    job.
+
+   **Done (2026-09-02).** Renamed across both vendored JSON copies, the Rust
+   corpus test, both TypeScript contract tests and `verify-topology-parity.py`.
+   The name was not merely imprecise: every consumer builds an endpoint token
+   from it (`format!("workspace:{}", key)`), and nothing reads it as a palette
+   list — yet the palette's own list, `SELECTABLE_WORKSPACE_TYPE_KEYS`, is
+   derived separately from the card registry. Two similarly-named fields with
+   different meanings and different sources is exactly the shape this ADR keeps
+   collapsing. Parity re-verified byte-identical at 2,515 bytes; 49/49 Rust and
+   688/688 UI topology tests pass unchanged, and the generated golden matrix
+   never referenced the field, so it needed no regeneration.
 
 ---
 

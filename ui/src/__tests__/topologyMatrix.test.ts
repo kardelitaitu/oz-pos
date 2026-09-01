@@ -69,7 +69,7 @@ describe('topology corpus matrix (ADR #45 §2) — the TypeScript gate vs the Ru
   });
 
   it('probes every kind the contract declares', () => {
-    for (const key of topologySemantics.workspaceTypeKeys) {
+    for (const key of topologySemantics.endpointWorkspaceTypeKeys) {
       expect(matrix.kinds).toContain(`workspace:${key}`);
     }
     for (const kind of topologySemantics.nodeKinds) {

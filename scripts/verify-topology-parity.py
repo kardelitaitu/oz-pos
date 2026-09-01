@@ -175,7 +175,7 @@ def check_corpus(contract: dict) -> int:
 
     kinds = matrix.get("kinds") or []
     expected_kinds = [k for k in contract.get("nodeKinds") or [] if k != "workspace"]
-    expected_kinds += [f"workspace:{key}" for key in contract.get("workspaceTypeKeys") or []]
+    expected_kinds += [f"workspace:{key}" for key in contract.get("endpointWorkspaceTypeKeys") or []]
     unprobed = [kind for kind in expected_kinds if kind not in kinds]
     if unprobed:
         problems.append(f"corpus does not probe declared kinds: {unprobed}")

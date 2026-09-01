@@ -593,7 +593,7 @@ fn contract_gate_still_admits_both_declared_operation_feeds() {
 // drifting away from it.
 
 /// Kinds the corpus probes. The first six come from the contract's own
-/// `nodeKinds` plus `workspaceTypeKeys`; the rest are deliberately undeclared,
+/// `nodeKinds` plus `endpointWorkspaceTypeKeys`; the rest are deliberately undeclared,
 /// so fail-closed behaviour is pinned in the golden rather than assumed.
 fn corpus_kinds() -> Vec<&'static str> {
     vec![
@@ -702,9 +702,9 @@ fn topology_matrix_covers_every_contract_row_and_declared_kind() {
     );
     let kinds = golden["kinds"].as_array().expect("matrix kinds");
     let declared = shared_topology_semantics()
-        .get("workspaceTypeKeys")
+        .get("endpointWorkspaceTypeKeys")
         .and_then(Value::as_array)
-        .expect("contract must declare workspaceTypeKeys");
+        .expect("contract must declare endpointWorkspaceTypeKeys");
     for key in declared {
         let token = format!("workspace:{}", key.as_str().expect("type keys are strings"));
         assert!(

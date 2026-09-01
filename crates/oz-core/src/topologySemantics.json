@@ -6,7 +6,7 @@
     "primaryRelationships": ["location", "generic"],
     "operationalRelationships": ["stock-routing", "inventory-transfer"]
   },
-  "workspaceTypeKeys": ["store-pos", "restaurant-pos", "kds"],
+  "endpointWorkspaceTypeKeys": ["store-pos", "restaurant-pos", "kds"],
   "nodeKinds": ["branch-location", "workspace", "warehouse", "hardware"],
   "semanticPairings": [
     {

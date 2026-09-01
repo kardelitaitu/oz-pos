@@ -88,7 +88,7 @@ describe('node kind registry (ADR #45 §3)', () => {
     // A declared type that resolves through the fallback is the bug this
     // registry exists to prevent: the contract says the type is authorable
     // while the card draws it as an unknown shape.
-    for (const key of topologySemantics.workspaceTypeKeys) {
+    for (const key of topologySemantics.endpointWorkspaceTypeKeys) {
       expect(NODE_KIND_REGISTRY[`workspace:${key}`], `workspace:${key} has no registry row`)
         .toBeDefined();
     }
