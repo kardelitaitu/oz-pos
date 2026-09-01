@@ -811,7 +811,21 @@ export function validateTopologyGraph(
       } else {
         const operationInput = operationInputs[0]!;
         const source = graph.nodes.find((node) => node.id === operationInput.fromNodeId);
-        if (operationInput.fromPortId !== 'operation-out' || source?.typeKey !== 'restaurant-pos') {
+        // ADR #45 follow-up #2: ask the contract which kinds may feed
+        // `operation-in` rather than re-stating "restaurant-pos" here. The port
+        // check stays, because this branch reports a wire-level problem with a
+        // specific message; only the kind test moves to the shared rule. The
+        // old predicate also looked at `source?.typeKey` alone, so a non-
+        // workspace node carrying a `restaurant-pos` typeKey would have passed.
+        const feedAdmitted = source !== undefined
+          && workspace !== undefined
+          && pairingAdmitsKinds(
+            'operation-out',
+            'operation-in',
+            nodeKindToken(source.kind, source.typeKey),
+            nodeKindToken(workspace.kind, workspace.typeKey),
+          );
+        if (operationInput.fromPortId !== 'operation-out' || !feedAdmitted) {
           errors.push({
             code: 'invalid-operation-source',
             messageId: 'topology-validation-invalid-operation-source',
