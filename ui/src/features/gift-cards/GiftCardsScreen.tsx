@@ -10,6 +10,7 @@ import {
 } from '@/api/giftCards';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized, EmptyState } from '@/frontend/shared';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { NoGiftCardsIcon } from '@/components/EmptyStateIllustrations';
 import { l10nErrorMessage } from '@/utils/app-error';
 import { formatMoney } from '@/types/domain';
@@ -36,6 +37,8 @@ function formatDate(iso: string, locale: string): string {
 /** Gift card management screen — list, search, filter, freeze/unfreeze, top up, and issue gift cards. */
 export default function GiftCardsScreen() {
   const { l10n } = useLocalization();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
   // Dates follow the active Fluent locale (not the browser default).
   const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const [cards, setCards] = useState<GiftCardWithTransactions[]>([]);
@@ -55,29 +58,29 @@ export default function GiftCardsScreen() {
       const filter: GiftCardFilter = {};
       if (search.trim()) filter.search = search.trim();
       if (statusFilter) filter.status = statusFilter;
-      const result = await listGiftCards(filter);
+      const result = await listGiftCards(sessionToken, filter);
       setCards(result);
     } catch {
       addToast({ message: requiredLocalized(l10n, 'gift-cards-error-load'), type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter, addToast, l10n]);
+  }, [search, statusFilter, addToast, l10n, sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
   const handleFreezeToggle = useCallback(async (cardNumber: string, currentStatus: string) => {
     try {
       if (currentStatus === 'frozen') {
-        await unfreezeGiftCard(cardNumber);
+        await unfreezeGiftCard(sessionToken, cardNumber);
       } else {
-        await freezeGiftCard(cardNumber);
+        await freezeGiftCard(sessionToken, cardNumber);
       }
       await load();
     } catch (err) {
       addToast({ message: l10nErrorMessage(err, l10n, 'gift-cards-error-freeze'), type: 'error' });
     }
-  }, [load, addToast, l10n]);
+  }, [load, addToast, l10n, sessionToken]);
 
   const handleTopUp = useCallback(async (cardNumber: string) => {
     // Reject non-integers (e.g. "500.5") rather than silently truncating.
@@ -89,14 +92,14 @@ export default function GiftCardsScreen() {
     }
     setTopUpError('');
     try {
-      await topUpGiftCard(cardNumber, amount);
+      await topUpGiftCard(sessionToken, cardNumber, amount);
       setTopUpCardId(null);
       setTopUpAmount('');
       await load();
     } catch (err) {
       setTopUpError(l10nErrorMessage(err, l10n, 'gift-cards-error-topup'));
     }
-  }, [topUpAmount, load, l10n]);
+  }, [topUpAmount, load, l10n, sessionToken]);
 
   return (
     <div className="gift-cards-page">
@@ -307,6 +310,7 @@ export default function GiftCardsScreen() {
 
       {showIssueModal && (
         <IssueGiftCardModal
+          sessionToken={sessionToken}
           onClose={() => setShowIssueModal(false)}
           onIssued={() => {
             setShowIssueModal(false);

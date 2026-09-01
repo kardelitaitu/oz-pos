@@ -2990,6 +2990,14 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'top_up_gift_card': () => null,
   'freeze_gift_card': () => null,
   'unfreeze_gift_card': () => null,
+  'issue_gift_card_scoped': () => null,
+  'get_gift_card_scoped': () => null,
+  'list_gift_cards_scoped': () => [],
+  'get_gift_card_balance_scoped': () => null,
+  'redeem_gift_card_scoped': () => null,
+  'top_up_gift_card_scoped': () => null,
+  'freeze_gift_card_scoped': () => null,
+  'unfreeze_gift_card_scoped': () => null,
 
   // ═══════════════════════════════════════════════════════════════
   // BUNDLES

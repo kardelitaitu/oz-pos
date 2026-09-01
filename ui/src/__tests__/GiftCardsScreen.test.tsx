@@ -12,6 +12,12 @@ vi.mock('@/api/giftCards', () => ({
   topUpGiftCard: vi.fn(),
 }));
 
+// Mock WorkspaceContext so GiftCardsScreen can use useWorkspace.
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({ sessionToken: 'tok-test', activeWorkspace: null, logout: vi.fn() }),
+  WorkspaceProvider: ({ children }: { children: import('react').ReactNode }) => <>{children}</>,
+}));
+
 // Mock the IssueGiftCardModal child component.
 vi.mock('@/features/gift-cards/IssueGiftCardModal', () => ({
   default: ({ onClose, onIssued }: { onClose: () => void; onIssued: () => void }) => (
@@ -228,7 +234,7 @@ describe('GiftCardsScreen', () => {
     await waitAndClickButton(/freeze/i);
 
     await waitFor(() => {
-      expect(mockFreezeGiftCard).toHaveBeenCalledWith('GC-001');
+      expect(mockFreezeGiftCard).toHaveBeenCalledWith('tok-test', 'GC-001');
     }, FAST_WAIT);
   });
 
@@ -252,7 +258,7 @@ describe('GiftCardsScreen', () => {
     await waitAndClickButton(/unfreeze/i);
 
     await waitFor(() => {
-      expect(mockUnfreezeGiftCard).toHaveBeenCalledWith('GC-003');
+      expect(mockUnfreezeGiftCard).toHaveBeenCalledWith('tok-test', 'GC-003');
     }, FAST_WAIT);
   });
 
@@ -315,7 +321,7 @@ describe('GiftCardsScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: /confirm top-up/i }));
 
     await waitFor(() => {
-      expect(mockTopUpGiftCard).toHaveBeenCalledWith('GC-001', 50000);
+      expect(mockTopUpGiftCard).toHaveBeenCalledWith('tok-test', 'GC-001', 50000);
     }, FAST_WAIT);
   });
 

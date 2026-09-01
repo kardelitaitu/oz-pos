@@ -23,7 +23,7 @@ import { issueGiftCard } from '@/api/giftCards';
 
 describe('IssueGiftCardModal', () => {
   it('renders the form with default generated card number', () => {
-    renderWithFluentSync(<IssueGiftCardModal onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
+    renderWithFluentSync(<IssueGiftCardModal sessionToken="tok-1" onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
     expect(screen.getByText('Issue Gift Card')).toBeInTheDocument();
     expect(screen.getByLabelText('Card number')).toHaveValue('GC-TEST12345678');
     expect(screen.getByLabelText('Initial amount')).toBeInTheDocument();
@@ -34,13 +34,13 @@ describe('IssueGiftCardModal', () => {
   });
 
   it('shows validation error when amount is empty', async () => {
-    renderWithFluentSync(<IssueGiftCardModal onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
+    renderWithFluentSync(<IssueGiftCardModal sessionToken="tok-1" onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
     await userEvent.click(screen.getByRole('button', { name: /issue card/i }));
     expect(screen.getByRole('alert')).toHaveTextContent('Amount must be positive');
   });
 
   it('shows validation error when amount is zero or negative', async () => {
-    renderWithFluentSync(<IssueGiftCardModal onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
+    renderWithFluentSync(<IssueGiftCardModal sessionToken="tok-1" onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
     const amountInput = screen.getByLabelText('Initial amount');
     await userEvent.type(amountInput, '0');
     await userEvent.click(screen.getByRole('button', { name: /issue card/i }));
@@ -48,7 +48,7 @@ describe('IssueGiftCardModal', () => {
   });
 
   it('shows validation error when card number is empty', async () => {
-    renderWithFluentSync(<IssueGiftCardModal onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
+    renderWithFluentSync(<IssueGiftCardModal sessionToken="tok-1" onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
     const cardInput = screen.getByLabelText('Card number');
     await userEvent.clear(cardInput);
     const amountInput = screen.getByLabelText('Initial amount');
@@ -59,7 +59,7 @@ describe('IssueGiftCardModal', () => {
 
   it('calls onClose when cancel is clicked', async () => {
     const onClose = vi.fn();
-    renderWithFluentSync(<IssueGiftCardModal onClose={onClose} onIssued={vi.fn()} />, giftCardsFtl);
+    renderWithFluentSync(<IssueGiftCardModal sessionToken="tok-1" onClose={onClose} onIssued={vi.fn()} />, giftCardsFtl);
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
     await vi.waitFor(() => {
       expect(onClose).toHaveBeenCalledTimes(1);
@@ -71,13 +71,14 @@ describe('IssueGiftCardModal', () => {
     mockIssue.mockResolvedValueOnce(undefined);
     const onIssued = vi.fn();
 
-    renderWithFluentSync(<IssueGiftCardModal onClose={vi.fn()} onIssued={onIssued} />, giftCardsFtl);
+    renderWithFluentSync(<IssueGiftCardModal sessionToken="tok-1" onClose={vi.fn()} onIssued={onIssued} />, giftCardsFtl);
     const amountInput = screen.getByLabelText('Initial amount');
     await userEvent.type(amountInput, '50000');
     await userEvent.click(screen.getByRole('button', { name: /issue card/i }));
 
     expect(mockIssue).toHaveBeenCalledTimes(1);
     expect(mockIssue).toHaveBeenCalledWith(
+      'tok-1',
       expect.objectContaining({
         card_number: 'GC-TEST12345678',
         initial_amount_minor: 50000,
@@ -95,7 +96,7 @@ describe('IssueGiftCardModal', () => {
     const mockIssue = issueGiftCard as ReturnType<typeof vi.fn>;
     mockIssue.mockRejectedValueOnce(new Error('Network error'));
 
-    renderWithFluentSync(<IssueGiftCardModal onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
+    renderWithFluentSync(<IssueGiftCardModal sessionToken="tok-1" onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
     const amountInput = screen.getByLabelText('Initial amount');
     await userEvent.type(amountInput, '50000');
     await userEvent.click(screen.getByRole('button', { name: /issue card/i }));
@@ -106,14 +107,14 @@ describe('IssueGiftCardModal', () => {
   });
 
   it('allows entering an optional customer name', async () => {
-    renderWithFluentSync(<IssueGiftCardModal onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
+    renderWithFluentSync(<IssueGiftCardModal sessionToken="tok-1" onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
     const nameInput = screen.getByLabelText('Issued to');
     await userEvent.type(nameInput, 'Alice');
     expect(nameInput).toHaveValue('Alice');
   });
 
   it('allows editing the card number manually', async () => {
-    renderWithFluentSync(<IssueGiftCardModal onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
+    renderWithFluentSync(<IssueGiftCardModal sessionToken="tok-1" onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
     const cardInput = screen.getByLabelText('Card number');
     await userEvent.clear(cardInput);
     await userEvent.type(cardInput, 'GC-MYCARD');
@@ -121,12 +122,12 @@ describe('IssueGiftCardModal', () => {
   });
 
   it('uses password type for PIN input', () => {
-    renderWithFluentSync(<IssueGiftCardModal onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
+    renderWithFluentSync(<IssueGiftCardModal sessionToken="tok-1" onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
     expect(screen.getByLabelText('PIN')).toHaveAttribute('type', 'password');
   });
 
   it('rejects decimal amounts with validation error', async () => {
-    renderWithFluentSync(<IssueGiftCardModal onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
+    renderWithFluentSync(<IssueGiftCardModal sessionToken="tok-1" onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
     const amountInput = screen.getByLabelText('Initial amount');
     await userEvent.clear(amountInput);
     await userEvent.type(amountInput, '50000.75');
@@ -135,7 +136,7 @@ describe('IssueGiftCardModal', () => {
   });
 
   it('clears error when editing issuedTo after validation failure', async () => {
-    renderWithFluentSync(<IssueGiftCardModal onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
+    renderWithFluentSync(<IssueGiftCardModal sessionToken="tok-1" onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
     await userEvent.click(screen.getByRole('button', { name: /issue card/i }));
     expect(screen.getByRole('alert')).toBeInTheDocument();
     const nameInput = screen.getByLabelText('Issued to');
@@ -144,7 +145,7 @@ describe('IssueGiftCardModal', () => {
   });
 
   it('clears error when editing PIN after validation failure', async () => {
-    renderWithFluentSync(<IssueGiftCardModal onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
+    renderWithFluentSync(<IssueGiftCardModal sessionToken="tok-1" onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
     await userEvent.click(screen.getByRole('button', { name: /issue card/i }));
     expect(screen.getByRole('alert')).toBeInTheDocument();
     const pinInput = screen.getByLabelText('PIN');
@@ -154,7 +155,7 @@ describe('IssueGiftCardModal', () => {
 
   it('closes when backdrop overlay is clicked', async () => {
     const onClose = vi.fn();
-    renderWithFluentSync(<IssueGiftCardModal onClose={onClose} onIssued={vi.fn()} />, giftCardsFtl);
+    renderWithFluentSync(<IssueGiftCardModal sessionToken="tok-1" onClose={onClose} onIssued={vi.fn()} />, giftCardsFtl);
     const overlay = screen.getByRole('presentation');
     await userEvent.click(overlay);
     await vi.waitFor(() => {
@@ -164,7 +165,7 @@ describe('IssueGiftCardModal', () => {
 
   it('does not close when modal panel is clicked', async () => {
     const onClose = vi.fn();
-    renderWithFluentSync(<IssueGiftCardModal onClose={onClose} onIssued={vi.fn()} />, giftCardsFtl);
+    renderWithFluentSync(<IssueGiftCardModal sessionToken="tok-1" onClose={onClose} onIssued={vi.fn()} />, giftCardsFtl);
     const panel = document.querySelector('.gift-cards-modal')!;
     await userEvent.click(panel);
     expect(onClose).not.toHaveBeenCalled();

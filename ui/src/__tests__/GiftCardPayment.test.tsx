@@ -16,6 +16,7 @@ import { getGiftCardBalance, redeemGiftCard } from '@/api/giftCards';
 
 
 const defaultProps = {
+  sessionToken: 'tok-1',
   totalMinor: 100000,
   currency: 'IDR',
   saleId: 'sale-1',
@@ -62,7 +63,7 @@ describe('GiftCardPayment', () => {
     await userEvent.click(screen.getByRole('button', { name: /check/i }));
 
     await vi.waitFor(() => {
-      expect(mockBalance).toHaveBeenCalledWith('GC-TEST');
+      expect(mockBalance).toHaveBeenCalledWith('tok-1', 'GC-TEST');
       expect(screen.getByText('Available Balance')).toBeInTheDocument();
       expect(screen.getByText('To Apply')).toBeInTheDocument();
     });
@@ -154,7 +155,7 @@ describe('GiftCardPayment', () => {
     await userEvent.click(screen.getByRole('button', { name: /apply gift card/i }));
 
     await vi.waitFor(() => {
-      expect(mockRedeem).toHaveBeenCalledWith('GC-TEST', 30000, 'sale-1');
+      expect(mockRedeem).toHaveBeenCalledWith('tok-1', 'GC-TEST', 30000, 'sale-1');
       expect(onApplied).toHaveBeenCalledWith(30000, 'GC-TEST');
       expect(onComplete).toHaveBeenCalledTimes(1);
     });
