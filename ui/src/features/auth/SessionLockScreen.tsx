@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { requiredLocalized } from '@/frontend/shared';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSyncConnection } from '@/hooks/useSyncConnection';
-import { testAuthConnection } from '@/api/license';
+import StatusBar from '@/components/StatusBar';
 import { staffLogin } from '@/api/staff';
 import { useLocalization } from '@fluent/react';
 import './SessionLockScreen.css';
@@ -44,37 +43,6 @@ export default function SessionLockScreen({
   const pinWrapRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const lastErrorRef = useRef<string | null>(null);
-
-  const syncStatus = useSyncConnection();
-  const [authOnline, setAuthOnline] = useState<boolean | null>(null);
-  const [authLatency, setAuthLatency] = useState<number | null>(null);
-
-  // Check auth-server reachability once on mount (decorative status pill —
-  // no continuous polling needed). Reachability probe needs no stored
-  // license key, so the pill goes green when the server is up even before
-  // any license is activated.
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const start = performance.now();
-        const result = await testAuthConnection();
-        if (!mounted) return;
-        if (result.ok) {
-          setAuthLatency(Math.round(performance.now() - start));
-          setAuthOnline(true);
-        } else {
-          setAuthLatency(null);
-          setAuthOnline(false);
-        }
-      } catch {
-        if (!mounted) return;
-        setAuthLatency(null);
-        setAuthOnline(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
 
   // U1: Auto-unlock after lockout period with visible countdown.
   useEffect(() => {
@@ -337,18 +305,7 @@ export default function SessionLockScreen({
           <span className="session-lock-footer-version">v0.0.33</span>
         </div>
         <div className="session-lock-footer-right">
-          <div className="session-lock-connection-group">
-          {/* Auth status — via checkLicenseStatus IPC */}            <div className="connection-status" title={authOnline === null ? requiredLocalized(l10n, 'staff-login-connection-checking') : authOnline ? requiredLocalized(l10n, 'staff-login-connection-connected') : requiredLocalized(l10n, 'staff-login-connection-disconnected')}>
-            <span className={`status-indicator ${authOnline === null ? 'checking' : authOnline ? 'online' : 'offline'}`} />
-            <span className="connection-label">{requiredLocalized(l10n, 'staff-login-connection-auth')}</span>
-            {authOnline && authLatency !== null && <span className="connection-latency">{authLatency}ms</span>}
-          </div>
-          {/* Sync status — via useSyncConnection IPC */}            <div className="connection-status" title={syncStatus.state === 'checking' ? requiredLocalized(l10n, 'staff-login-connection-checking') : syncStatus.state === 'connected' ? requiredLocalized(l10n, 'staff-login-connection-connected') : requiredLocalized(l10n, 'staff-login-connection-disconnected')}>
-            <span className={`status-indicator ${syncStatus.state === 'checking' ? 'checking' : syncStatus.state === 'connected' ? 'online' : 'offline'}`} />
-            <span className="connection-label">{requiredLocalized(l10n, 'staff-login-connection-sync')}</span>
-            {syncStatus.state === 'connected' && syncStatus.latencyMs !== null && <span className="connection-latency">{syncStatus.latencyMs}ms</span>}
-          </div>
-        </div>
+          <StatusBar />
         </div>
       </div>
     </div>

@@ -3,10 +3,8 @@ import { useKeyboardAvoidance } from '@/hooks/useKeyboardAvoidance';
 import { checkUsername } from '@/api/staff';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBrand } from '@/contexts/BrandContext';
-import { useSyncConnection } from '@/hooks/useSyncConnection';
-import { testAuthConnection } from '@/api/license';
+import StatusBar from '@/components/StatusBar';
 import { useToast } from '@/frontend/shared/Toast';
-import { requiredLocalized } from '@/frontend/shared';
 import { Localized } from '@/frontend/shared/Localized';
 import { useLocalization } from '@fluent/react';
 import { convertFileSrc } from '@/api/tauri';
@@ -133,37 +131,6 @@ export default function StaffLoginScreen() {
   const toastShownForError = useRef<string | null>(null);
   // P7-4: Keyboard avoidance — scroll inputs into view on mobile
   const { containerRef: keyboardAvoidRef } = useKeyboardAvoidance();
-
-  const syncStatus = useSyncConnection();
-  const [authOnline, setAuthOnline] = useState<boolean | null>(null);
-  const [authLatency, setAuthLatency] = useState<number | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    const check = async () => {
-      try {
-        const start = performance.now();
-        // Reachability probe — no stored license key required, so the pill
-        // shows green as soon as the auth server is reachable.
-        const result = await testAuthConnection();
-        if (!mounted) return;
-        if (result.ok) {
-          setAuthLatency(Math.round(performance.now() - start));
-          setAuthOnline(true);
-        } else {
-          setAuthLatency(null);
-          setAuthOnline(false);
-        }
-      } catch {
-        if (!mounted) return;
-        setAuthLatency(null);
-        setAuthOnline(false);
-      }
-    };
-    check();
-    const id = setInterval(check, 60000);
-    return () => { mounted = false; clearInterval(id); };
-  }, []);
 
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -634,20 +601,7 @@ export default function StaffLoginScreen() {
           )}
         </div>
         <div className="staff-login-footer-right">
-          <div className="staff-login-connection-group">
-            {/* Auth status — via checkLicenseStatus IPC */}
-            <div className="connection-status" title={authOnline === null ? requiredLocalized(l10n, 'staff-login-connection-checking') : authOnline ? requiredLocalized(l10n, 'staff-login-connection-connected') : requiredLocalized(l10n, 'staff-login-connection-disconnected')}>
-              <span className={`status-indicator ${authOnline === null ? 'checking' : authOnline ? 'online' : 'offline'}`} />
-              <span className="connection-label">{requiredLocalized(l10n, 'staff-login-connection-auth')}</span>
-              {authOnline && authLatency !== null && <span className="connection-latency">{authLatency}ms</span>}
-            </div>
-            {/* Sync status — via useSyncConnection IPC */}
-            <div className="connection-status" title={syncStatus.state === 'checking' ? requiredLocalized(l10n, 'staff-login-connection-checking') : syncStatus.state === 'connected' ? requiredLocalized(l10n, 'staff-login-connection-connected') : requiredLocalized(l10n, 'staff-login-connection-disconnected')}>
-              <span className={`status-indicator ${syncStatus.state === 'checking' ? 'checking' : syncStatus.state === 'connected' ? 'online' : 'offline'}`} />
-              <span className="connection-label">{requiredLocalized(l10n, 'staff-login-connection-sync')}</span>
-              {syncStatus.state === 'connected' && syncStatus.latencyMs !== null && <span className="connection-latency">{syncStatus.latencyMs}ms</span>}
-            </div>
-          </div>
+          <StatusBar />
         </div>
       </div>
     </div>
