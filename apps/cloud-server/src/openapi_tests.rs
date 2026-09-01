@@ -310,6 +310,7 @@ fn test_full_router() -> axum::Router {
         db: std::sync::Arc::new(tokio::sync::Mutex::new(oz_core::migrations::fresh_db())),
         pg: None,
         started_at: std::time::Instant::now(),
+        health_depth_cache: crate::HealthDepthCache::default(),
         stripe_webhook_secret: None,
         square_webhook_signature_key: None,
         square_webhook_url: None,
