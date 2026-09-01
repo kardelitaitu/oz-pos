@@ -242,12 +242,14 @@
     // an honest gate; the controls appear as soon as the server reports
     // the new version.
     let lifecycleReady = false;
-    (async () => {
+    async function probeLifecycle() {
       try {
         const h = await api('/api/v1/admin/health');
         lifecycleReady = String((h && h.version) || '') >= '0.0.34';
       } catch { lifecycleReady = false; }
-    })();
+      return lifecycleReady;
+    }
+    probeLifecycle();
 
     // ── Tab switching: cached DOM + per-card background refresh ─────
     // Clicking back to an earlier tab used to re-fetch everything and
@@ -388,6 +390,11 @@
     async function showTenantDetail(id) {
       const modal = document.getElementById('modal-root');
       modal.innerHTML = '<div class="modal-back"><div class="modal"><h3>' + t('common.loading') + '</h3></div></div>';
+      // Phase 4: re-probe on every detail open — the boot-time probe goes
+      // stale across a server redeploy, and a panel that stayed open
+      // through it would keep hiding the lifecycle controls. Awaiting it
+      // keeps the button set in sync with the server that will serve them.
+      await probeLifecycle();
       try {
         const data = await api('/api/v1/admin/tenants/' + id);
         // B2 fix: the old `const t = data.tenant` shadowed the global i18n

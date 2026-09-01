@@ -1139,7 +1139,7 @@
     'tenant.revokePlaceholder': 'tenant email',
     'tenant.revokeMismatch': 'Email does not match yet.',
     'tenant.renewNoSub': 'Renew (no subscription)',
-    'tenant.renewNoSubTip': 'No subscription record — renew would fail. Grant one via the license API first.',
+    'tenant.renewNoSubTip': 'No subscription record — renew would fail. Use "Grant subscription" to add one.',
     'tenant.noSubWarn': 'This tenant has NO subscription record — saving would silently do nothing server-side.',
     'th.devices': 'Devices',
     'th.subscriptionStatus': 'Subscription status',
