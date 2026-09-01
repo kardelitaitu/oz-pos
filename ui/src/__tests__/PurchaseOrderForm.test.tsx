@@ -8,6 +8,11 @@ import poFtl from '@/locales/purchasing.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
 // Mock the purchasing API — use vi.fn() inline to avoid hoisting issues.
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({ sessionToken: 'tok-test', activeWorkspace: null, logout: vi.fn() }),
+  WorkspaceProvider: ({ children }: { children: import('react').ReactNode }) => <>{children}</>,
+}));
+
 vi.mock('@/api/purchasing', () => ({
   createPurchaseOrder: vi.fn(),
   listSuppliers: vi.fn(),
@@ -243,6 +248,7 @@ describe('PurchaseOrderForm', () => {
 
     expect(mockCreatePO).toHaveBeenCalledTimes(1);
     expect(mockCreatePO).toHaveBeenCalledWith(
+      'tok-test',
       expect.objectContaining({
         po_number: 'PO-001',
         supplier_id: 'sup-1',

@@ -2613,6 +2613,9 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'get_supplier': () => null,
   'create_supplier': () => null,
   'update_supplier': () => null,
+  'get_supplier_scoped': () => null,
+  'create_supplier_scoped': () => null,
+  'update_supplier_scoped': () => null,
   'list_purchase_orders': () => [
     { id: 'po-1', po_number: 'PO-001', supplier_id: 'supplier-1', supplier_name: 'PT Teknologi Maju', status: 'pending', order_date: new Date().toISOString(), expected_date: new Date(Date.now() + 86400000).toISOString(), received_date: null, subtotal_minor: 5000000, tax_minor: 0, total_minor: 5000000, notes: '', created_by: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), lines: [{ id: 'po-line-1', po_id: 'po-1', sku: 'CPU-R7-7800X3D', product_name: 'AMD Ryzen 7 7800X3D 8-Core', qty: 2, unit_cost_minor: 2500000, line_total_minor: 5000000 }] },
   ],
@@ -2623,6 +2626,11 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'create_purchase_order': () => null,
   'update_po_status': () => null,
   'receive_purchase_order': () => null,
+  'get_purchase_order_scoped': () => null,
+  'create_purchase_order_scoped': () => null,
+  'update_po_status_scoped': () => null,
+  'receive_purchase_order_scoped': () => null,
+  'receive_purchase_order_with_lines_scoped': () => null,
 
   // ═══════════════════════════════════════════════════════════════
   // REPORTS
