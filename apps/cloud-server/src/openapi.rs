@@ -13,8 +13,13 @@ use serde_json::{Value, json};
 
 /// Returns the OpenAPI 3.1 specification as a JSON value.
 ///
-/// This documents all 20 endpoints across 7 tag groups: Health, Auth,
-/// Products, Categories, Tax Rates, Users, Sales, Sync, and Webhooks.
+/// This documents the full cloud-server API surface across 19 tag groups
+/// (Health, Auth, Products, Images, Categories, Tax Rates, Exchange Rates,
+/// Users, Sales, Sync, Plans, Terminals, Webhooks, plus reserved groups).
+/// The path set and per-operation `security` declarations are guarded by
+/// the drift-guard tests in `openapi_tests.rs` (spec 0047 §3): every path
+/// declared here must resolve to a live route in `build_router`, and every
+/// operation must carry `bearerAuth` unless on the public allowlist.
 pub fn openapi_spec() -> Value {
     json!({
         "openapi": "3.1.0",
@@ -36,6 +41,7 @@ pub fn openapi_spec() -> Value {
             { "name": "Health", "description": "Server health and monitoring endpoints" },
             { "name": "Auth", "description": "Token generation and authentication" },
             { "name": "Products", "description": "Product CRUD and stock management" },
+            { "name": "Images", "description": "Content-addressed product/menu-item image store (spec 0046b)" },
             { "name": "Categories", "description": "Product category listing" },
             { "name": "Tax Rates", "description": "Tax rate configuration" },
             { "name": "Exchange Rates", "description": "Currency exchange rate management (global reference data)" },

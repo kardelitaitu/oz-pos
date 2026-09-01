@@ -79,6 +79,7 @@ async fn openapi_json_documents_all_tag_groups() {
     assert!(tags.contains(&"Customers"));
     assert!(tags.contains(&"Notifications"));
     assert!(tags.contains(&"Analytics"));
+    assert!(tags.contains(&"Images"));
 }
 
 #[tokio::test]
@@ -167,6 +168,19 @@ async fn openapi_json_documents_all_paths() {
         paths.contains_key("/api/webhooks/square"),
         "missing square webhook"
     );
+    assert!(paths.contains_key("/api/v1/images"), "missing images");
+    assert!(
+        paths.contains_key("/api/v1/images:pack"),
+        "missing images pack"
+    );
+    assert!(
+        paths.contains_key("/api/v1/images:missing"),
+        "missing images missing-set"
+    );
+    assert!(
+        paths.contains_key("/api/v1/images/{hash16}"),
+        "missing images by hash"
+    );
 }
 
 #[tokio::test]
@@ -244,6 +258,12 @@ fn all_protected_routes_have_security() {
         ("/api/sync/status", "get"),
         ("/api/sync/push", "post"),
         ("/api/sync/pull", "post"),
+        // Images (spec 0046b) — all operations require bearerAuth.
+        ("/api/v1/images", "put"),
+        ("/api/v1/images", "post"),
+        ("/api/v1/images:pack", "get"),
+        ("/api/v1/images:missing", "get"),
+        ("/api/v1/images/{hash16}", "get"),
     ];
 
     for (path, method) in &protected_routes {
@@ -278,4 +298,101 @@ fn health_endpoints_have_no_security() {
             "{path} should not require security"
         );
     }
+}
+
+// ── Drift guard (spec 0047 §3) — liveness probe ──────────────────────
+
+/// Build a full router backed by an in-memory SQLite database, used by
+/// the drift-guard liveness probe to confirm every documented path+method
+/// resolves to a real route (≠ 404 ≠ 405).
+fn test_full_router() -> axum::Router {
+    let state = crate::CloudServerState {
+        db: std::sync::Arc::new(tokio::sync::Mutex::new(oz_core::migrations::fresh_db())),
+        pg: None,
+        started_at: std::time::Instant::now(),
+        stripe_webhook_secret: None,
+        square_webhook_signature_key: None,
+        square_webhook_url: None,
+    };
+    let config = crate::config::CloudServerConfig {
+        db_path: ":memory:".into(),
+        database_url: None,
+        require_tls: false,
+        db_pool_size: 20,
+        apply_schema: true,
+        port: 3099,
+        admin_key: None,
+        enforce_plans: false,
+        production: false,
+        log_format: crate::config::LogFormat::Plain,
+        redirect_only: false,
+        sync_redirect_url: None,
+        stripe_webhook_secret: None,
+        square_webhook_signature_key: None,
+        square_webhook_url: None,
+        api_secret: Some("test-secret".into()),
+    };
+    crate::build_router(
+        state,
+        crate::rate_limit::RateLimiterState::new(),
+        &config,
+        None,
+    )
+}
+
+/// Every (path, method) declared in the OpenAPI spec must resolve to a
+/// real route in the merged router.  We fire a `tower::ServiceExt::oneshot`
+/// request for each and assert the status is **not 404 and not 405**
+/// (401 is a pass — it proves the route + method exist; auth is not this
+/// test's job).  Catches renamed/removed/retyped endpoints.
+#[tokio::test]
+async fn every_spec_path_method_is_alive() {
+    let spec = openapi_spec();
+    let paths = spec["paths"].as_object().unwrap().clone();
+    let router = test_full_router();
+    let mut results = Vec::new();
+
+    for (path_template, methods) in &paths {
+        let methods_obj = methods.as_object().unwrap();
+        for (method, _operation) in methods_obj {
+            // Build a concrete URL from the path template.
+            let url = concrete_url(path_template);
+            // OpenAPI method keys are lowercase ("get"); HTTP methods are
+            // case-sensitive and must be uppercase to match the router.
+            let uppercase = method.to_uppercase();
+            let http_method = axum::http::Method::from_bytes(uppercase.as_bytes())
+                .expect("OpenAPI methods are standard HTTP verbs");
+            let req = Request::builder()
+                .method(http_method)
+                .uri(&url)
+                .body(Body::empty())
+                .unwrap();
+            let resp = router.clone().oneshot(req).await.unwrap();
+            let status = resp.status();
+            if status == StatusCode::NOT_FOUND || status == StatusCode::METHOD_NOT_ALLOWED {
+                results.push(format!(
+                    "[{method} {path_template}] ({url}) → {status} — route missing or method mismatch"
+                ));
+            }
+        }
+    }
+
+    if !results.is_empty() {
+        panic!(
+            "Drift detected — {} spec-declared route(s) are not alive:\n{}",
+            results.len(),
+            results.join("\n")
+        );
+    }
+}
+
+/// Replace OpenAPI path parameters (`{param}`) with test values.
+fn concrete_url(template: &str) -> String {
+    template
+        .replace("{sku}", "TEST-SKU")
+        .replace("{id}", "00000000-0000-0000-0000-000000000000")
+        .replace("{from}", "USD")
+        .replace("{to}", "IDR")
+        .replace("{tenant_id}", "tenant-a")
+        .replace("{hash16}", "aaaaaaaaaaaaaaaa")
 }
