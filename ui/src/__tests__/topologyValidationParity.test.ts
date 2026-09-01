@@ -63,7 +63,7 @@ describe('topology validation code parity (TS ↔ Rust)', () => {
   const coreSource = read('crates/oz-core/src/topology.rs');
 
   const tsCodes = [...new Set(
-    [...tsSource.matchAll(/code:\s*'([a-z][a-z0-9-]*)'/g)].map((m) => m[1]).filter(Boolean),
+    [...tsSource.matchAll(/code:\s*'([a-z][a-z0-9-]*)'/g)].map((m) => m[1] ?? '').filter(Boolean),
   )];
 
   // Deliberately loose: it captures a code emitted as a literal AND one emitted
@@ -72,7 +72,7 @@ describe('topology validation code parity (TS ↔ Rust)', () => {
   // original hand audit. Over-matching is safe here because the set is
   // intersected with the TS codes below.
   const coreStrings = new Set(
-    [...coreSource.matchAll(/"([a-z][a-z0-9-]*)"/g)].map((m) => m[1]).filter(Boolean),
+    [...coreSource.matchAll(/"([a-z][a-z0-9-]*)"/g)].map((m) => m[1] ?? '').filter(Boolean),
   );
 
   it('extracts a meaningful set from both sides, so nothing below passes vacuously', () => {
