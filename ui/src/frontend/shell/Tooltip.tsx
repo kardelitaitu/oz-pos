@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useId, type ReactNode, type ReactElement, cloneElement } from 'react';
+import { useState, useRef, useCallback, useId, useLayoutEffect, type ReactNode, type ReactElement, cloneElement } from 'react';
 import { createPortal } from 'react-dom';
 import './Tooltip.css';
 
@@ -93,12 +93,57 @@ export default function Tooltip({
         } as React.CSSProperties)
       : undefined;
 
+  // ── Clamp to viewport (portal mode only) ──────────────────────────
+  const [clamped, setClamped] = useState<{ left: number; top: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!visible || !portal || !triggerRect || !tooltipRef.current) {
+      setClamped(null);
+      return;
+    }
+    const tip = tooltipRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const margin = 8;
+
+    const clampX = (x: number) => Math.max(margin, Math.min(x, vw - tip.width - margin));
+    const clampY = (y: number) => Math.max(margin, Math.min(y, vh - tip.height - margin));
+
+    let left: number;
+    let top: number;
+    if (position === 'right') {
+      // Bubble to the right of the trigger, vertically centered
+      left = clampX(triggerRect.right + 10);
+      top = clampY(triggerRect.top + triggerRect.height / 2 - tip.height / 2);
+    } else if (position === 'left') {
+      // Bubble to the left of the trigger, vertically centered
+      left = clampX(triggerRect.left - tip.width - 10);
+      top = clampY(triggerRect.top + triggerRect.height / 2 - tip.height / 2);
+    } else if (position === 'bottom') {
+      // Bubble below the trigger, horizontally centered
+      left = clampX(triggerRect.left + triggerRect.width / 2 - tip.width / 2);
+      top = clampY(triggerRect.bottom + 10);
+    } else {
+      // top: bubble above the trigger, horizontally centered
+      left = clampX(triggerRect.left + triggerRect.width / 2 - tip.width / 2);
+      top = clampY(triggerRect.top - tip.height - 10);
+    }
+
+    setClamped({ left, top });
+  }, [visible, portal, position, triggerRect]);
+
   const tooltipNode = (
     <div
       ref={tooltipRef}
       id={tooltipId}
       className={`tooltip-content tooltip-content--${position}${visible ? ' tooltip-content--visible' : ''}${portal ? ' tooltip-content--portal' : ''}${nowrap ? ' tooltip-content--nowrap' : ''}`}
-      style={portal ? portalStyle : (maxWidth ? { maxWidth } : undefined)}
+      style={
+        portal
+          ? clamped
+            ? { left: clamped.left, top: clamped.top, transform: 'none', maxWidth }
+            : portalStyle
+          : maxWidth ? { maxWidth } : undefined
+      }
       role="tooltip"
       onMouseEnter={() => {
         clearTimeout(hideTimer.current);
