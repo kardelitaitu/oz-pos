@@ -196,15 +196,17 @@ export default function SessionLockScreen({
       <div className="session-lock-backdrop" aria-hidden="true" />
 
       <div className="session-lock-card" ref={cardRef}>
-        {/* ── Top bar: lock icon + clock (mirrors the login PIN step) ── */}
+        {/* ── Top bar: clock + lock icon on one line (mirrors the login PIN step) ── */}
         <div className="session-lock-top-bar">
-          <div className="session-lock-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
+          <div className="session-lock-clock-row">
+            <div className="session-lock-time">{timeStr}</div>
+            <div className="session-lock-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </div>
           </div>
-          <div className="session-lock-time">{timeStr}</div>
           <div className="session-lock-date">{dateStr}</div>
         </div>
 

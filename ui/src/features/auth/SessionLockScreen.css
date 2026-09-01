@@ -106,17 +106,25 @@
   }
 }
 
-/* ── Top bar content: lock icon + clock ──────────────────────────── */
+/* ── Top bar content: clock + lock icon (same line) ─────────────── */
+
+.session-lock-clock-row {
+  display: flex;
+  align-items: center;
+  gap: clamp(var(--space-2), 1.5vw, var(--space-3));
+}
 
 .session-lock-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--color-accent);
   opacity: 0.85;
-  margin-bottom: var(--space-1);
 }
 
 .session-lock-icon svg {
-  width: clamp(36px, 8vw, 48px);
-  height: clamp(36px, 8vw, 48px);
+  width: clamp(22px, 3vw, 28px);
+  height: clamp(22px, 3vw, 28px);
 }
 
 .session-lock-time {
