@@ -343,14 +343,17 @@ impl SyncStore {
                 tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
                     .await
                     .ok()?;
-                tx.query_opt(
-                    "SELECT MIN(created_at) FROM offline_queue WHERE tenant_id = $1",
-                    &[&tenant_id],
-                )
-                .await
-                .ok()
-                .flatten()
-                .and_then(|r| r.try_get::<_, Option<String>>(0).ok().flatten())
+                let stmt = tx
+                    .prepare_cached(
+                        "SELECT MIN(created_at) FROM offline_queue WHERE tenant_id = $1",
+                    )
+                    .await
+                    .ok()?;
+                tx.query_opt(&stmt, &[&tenant_id])
+                    .await
+                    .ok()
+                    .flatten()
+                    .and_then(|r| r.try_get::<_, Option<String>>(0).ok().flatten())
             }
         }
     }
@@ -409,13 +412,23 @@ impl SyncStore {
                 {
                     return 0;
                 }
-                tx.query_one(
-                    "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending' AND tenant_id = $1",
-                    &[&tenant_id],
-                )
-                .await
-                .map(|r| r.get::<_, i64>(0))
-                .unwrap_or(0)
+                // D1 (ADR #43): prepared statement caching — this COUNT runs
+                // on every status heartbeat; re-parsing identical SQL each
+                // time wastes PG CPU. prepare_cached is keyed by SQL text on
+                // the pooled connection, so repeated calls reuse the plan.
+                match tx
+                    .prepare_cached(
+                        "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending' AND tenant_id = $1",
+                    )
+                    .await
+                {
+                    Ok(stmt) => tx
+                        .query_one(&stmt, &[&tenant_id])
+                        .await
+                        .map(|r| r.get::<_, i64>(0))
+                        .unwrap_or(0),
+                    Err(_) => 0,
+                }
             }
         }
     }
@@ -443,8 +456,14 @@ impl SyncStore {
                 let Ok(client) = pool.get().await else {
                     return 0;
                 };
+                let Ok(stmt) = client
+                    .prepare_cached("SELECT COUNT(DISTINCT tenant_id) FROM offline_queue")
+                    .await
+                else {
+                    return 0;
+                };
                 client
-                    .query_one("SELECT COUNT(DISTINCT tenant_id) FROM offline_queue", &[])
+                    .query_one(&stmt, &[])
                     .await
                     .map(|r| r.get::<_, i64>(0))
                     .unwrap_or(0)
@@ -519,20 +538,23 @@ impl SyncStore {
                 tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
                     .await
                     .map_err(|e| e.to_string())?;
-                tx.query_opt(
-                    "SELECT \
-                     (SELECT COUNT(*)::text || ':' || COALESCE(MAX(updated_at)::text, '') \
-                      FROM products WHERE tenant_id = $1) || '|' || \
-                     (SELECT COUNT(*)::text || ':' || COALESCE(MAX(updated_at)::text, '') \
-                      FROM tax_rates WHERE tenant_id = $1) || '|' || \
-                     (SELECT COUNT(*)::text || ':' || COALESCE(MAX(updated_at)::text, '') \
-                      FROM users WHERE tenant_id = $1)",
-                    &[&tenant_id],
-                )
-                .await
-                .map_err(|e| e.to_string())?
-                .map(|r| r.try_get::<_, String>(0).map_err(|e| e.to_string()))
-                .unwrap_or_else(|| Ok(String::new()))
+                let stmt = tx
+                    .prepare_cached(
+                        "SELECT \
+                         (SELECT COUNT(*)::text || ':' || COALESCE(MAX(updated_at)::text, '') \
+                          FROM products WHERE tenant_id = $1) || '|' || \
+                         (SELECT COUNT(*)::text || ':' || COALESCE(MAX(updated_at)::text, '') \
+                          FROM tax_rates WHERE tenant_id = $1) || '|' || \
+                         (SELECT COUNT(*)::text || ':' || COALESCE(MAX(updated_at)::text, '') \
+                          FROM users WHERE tenant_id = $1)",
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                tx.query_opt(&stmt, &[&tenant_id])
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .map(|r| r.try_get::<_, String>(0).map_err(|e| e.to_string()))
+                    .unwrap_or_else(|| Ok(String::new()))
             }
         }
     }
@@ -942,35 +964,45 @@ async fn pg_pull_items(
     const SELECT: &str = "SELECT id, action, payload, status, retry_count, last_error, \
                           created_at, synced_at, tenant_id, priority FROM offline_queue";
 
+    // D1 (ADR #43): prepare each query shape once; the connection-level
+    // plan cache makes repeated identical pulls skip re-parsing.
     let rows = if let Some((ts, cid)) = cursor {
+        let stmt = client
+            .prepare_cached(&format!(
+                "{SELECT} WHERE tenant_id = $1 AND created_at >= $2 \
+                 AND (created_at > $3 OR (created_at = $3 AND id > $4)) \
+                 ORDER BY created_at ASC, id ASC LIMIT $5"
+            ))
+            .await
+            .map_err(|e| e.to_string())?;
         client
             .query(
-                &format!(
-                    "{SELECT} WHERE tenant_id = $1 AND created_at >= $2 \
-                     AND (created_at > $3 OR (created_at = $3 AND id > $4)) \
-                     ORDER BY created_at ASC, id ASC LIMIT $5"
-                ),
+                &stmt,
                 &[&tenant_id, &since.unwrap_or(""), &ts, &cid, &limit],
             )
             .await
             .map_err(|e| e.to_string())?
     } else if let Some(since) = since {
+        let stmt = client
+            .prepare_cached(&format!(
+                "{SELECT} WHERE created_at >= $1 AND tenant_id = $2 \
+                 ORDER BY created_at ASC, id ASC LIMIT $3"
+            ))
+            .await
+            .map_err(|e| e.to_string())?;
         client
-            .query(
-                &format!(
-                    "{SELECT} WHERE created_at >= $1 AND tenant_id = $2 \
-                     ORDER BY created_at ASC, id ASC LIMIT $3"
-                ),
-                &[&since, &tenant_id, &limit],
-            )
+            .query(&stmt, &[&since, &tenant_id, &limit])
             .await
             .map_err(|e| e.to_string())?
     } else {
+        let stmt = client
+            .prepare_cached(&format!(
+                "{SELECT} WHERE tenant_id = $1 ORDER BY created_at ASC, id ASC LIMIT $2"
+            ))
+            .await
+            .map_err(|e| e.to_string())?;
         client
-            .query(
-                &format!("{SELECT} WHERE tenant_id = $1 ORDER BY created_at ASC, id ASC LIMIT $2"),
-                &[&tenant_id, &limit],
-            )
+            .query(&stmt, &[&tenant_id, &limit])
             .await
             .map_err(|e| e.to_string())?
     };
@@ -1021,13 +1053,18 @@ async fn pg_snapshot_products(
     client: &mut impl deadpool_postgres::GenericClient,
     tenant_id: &str,
 ) -> Result<Vec<serde_json::Value>, String> {
-    let rows = client
-        .query(
+    // D1 (ADR #43): prepared statement caching — snapshot_all runs on
+    // every cold snapshot miss.
+    let stmt = client
+        .prepare_cached(
             "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, \
              updated_at, price_updated_at, track_serial, store_id, brand, rack_location, notes, \
              unit, is_active FROM products WHERE tenant_id = $1",
-            &[&tenant_id],
         )
+        .await
+        .map_err(|e| e.to_string())?;
+    let rows = client
+        .query(&stmt, &[&tenant_id])
         .await
         .map_err(|e| e.to_string())?;
 
@@ -1106,12 +1143,15 @@ async fn pg_snapshot_tax_rates(
     client: &mut impl deadpool_postgres::GenericClient,
     tenant_id: &str,
 ) -> Result<Vec<serde_json::Value>, String> {
-    let rows = client
-        .query(
+    let stmt = client
+        .prepare_cached(
             "SELECT id, name, rate_bps, is_default, is_inclusive, created_at, updated_at \
              FROM tax_rates WHERE tenant_id = $1",
-            &[&tenant_id],
         )
+        .await
+        .map_err(|e| e.to_string())?;
+    let rows = client
+        .query(&stmt, &[&tenant_id])
         .await
         .map_err(|e| e.to_string())?;
 
@@ -1136,12 +1176,15 @@ async fn pg_snapshot_users(
     client: &mut impl deadpool_postgres::GenericClient,
     tenant_id: &str,
 ) -> Result<Vec<serde_json::Value>, String> {
-    let rows = client
-        .query(
+    let stmt = client
+        .prepare_cached(
             "SELECT id, username, display_name, role_id, is_active, created_at, updated_at \
              FROM users WHERE tenant_id = $1",
-            &[&tenant_id],
         )
+        .await
+        .map_err(|e| e.to_string())?;
+    let rows = client
+        .query(&stmt, &[&tenant_id])
         .await
         .map_err(|e| e.to_string())?;
 
