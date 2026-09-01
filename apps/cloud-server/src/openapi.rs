@@ -26,7 +26,7 @@ pub fn openapi_spec() -> Value {
         "info": {
             "title": "OZ-POS Cloud Server API",
             "version": env!("CARGO_PKG_VERSION"),
-            "description": "REST API for the OZ-POS point-of-sale cloud sync server.\n\n## Authentication\nMost endpoints require a JWT bearer token from `POST /api/v1/tokens`. Pass it as `Authorization: Bearer <token>`.\n\n## Versioning\nThe API is versioned by URL path prefix (`/api/v1/`). Breaking changes will ship under a new version prefix (`/api/v2/`) — the old version remains available for at least 6 months after the new one lands.\n\n## Pagination\nList endpoints accept `?limit` (default 50, max 200) and `?offset` (default 0) query parameters and return a `PaginatedResponse` envelope with `data`, `total`, `limit`, and `offset` fields.\n\n## Errors\nAll error responses share a common envelope: `{ \"error\": { \"code\": \"MACHINE_READABLE\", \"message\": \"Human description\", \"details\": [...] } }`. The `code` field is stable across versions — use it for programmatic error handling, not the message string.\n\n## Rate Limiting\nSync endpoints return `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Retry-After` headers when nearing the per-tenant limit.",
+            "description": "REST API for the OZ-POS point-of-sale cloud sync server.\n\n## Authentication\nMost endpoints require a JWT bearer token from `POST /api/v1/tokens`. Pass it as `Authorization: Bearer <token>`.\n\n## Versioning\nThe API is versioned by URL path prefix (`/api/v1/`). Breaking changes will ship under a new version prefix (`/api/v2/`) — the old version remains available for at least 6 months after the new one lands.\n\n## Pagination\nList endpoints accept `?limit` (default 50, max 200) and `?offset` (default 0) query parameters and return a `PaginatedResponse` envelope with `data`, `total`, `limit`, and `offset` fields.\n\n## Errors\nAll error responses share a common envelope: `{ \"error\": { \"code\": \"MACHINE_READABLE\", \"message\": \"Human description\", \"details\": [...] } }`. The `code` field is stable across versions — use it for programmatic error handling, not the message string.\n\n## Rate Limiting\nSync endpoints return `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Retry-After` headers when nearing the per-tenant limit.\n\n## Changelog\n- **Read tiers (0.0.34, spec 0047):** terminal client-credential tokens now bind the `terminal` preset — reads are gated by `permissions` claim keys (403 `insufficient_scope` when missing). Legacy tokens without the claim keep full read. The `OZ_TERMINAL_READ_TIER=full` escape hatch restores legacy terminal reads and is **deprecated** (removal after one release cycle).",
             "contact": { "name": "OZ-POS" }
         },
         "servers": [
@@ -39,7 +39,7 @@ pub fn openapi_spec() -> Value {
         },
         "tags": [
             { "name": "Health", "description": "Server health and monitoring endpoints" },
-            { "name": "Auth", "description": "Token generation and authentication" },
+            { "name": "Auth", "description": "Token generation and authentication. **Read tiers (spec 0047):** a token may carry an optional `permissions` claim (list of permission-registry keys). Reads are then gated per route: a missing key returns `403 insufficient_scope`. A token without the claim is grandfathered as full-read. Presets (`terminal`, `dashboard`, `audit`) are mint-time sugar — terminal client-credential tokens automatically bind the `terminal` preset; admin-key mints accept `read_preset`/`read_permissions`. The `OZ_TERMINAL_READ_TIER=full` escape hatch preserves legacy terminal reads (deprecated, one release window)." },
             { "name": "Products", "description": "Product CRUD and stock management" },
             { "name": "Images", "description": "Content-addressed product/menu-item image store (spec 0046b)" },
             { "name": "Categories", "description": "Product category listing" },
@@ -659,7 +659,8 @@ fn build_paths() -> Value {
                 ],
                 "responses": {
                     "200": { "description": "List of products (may be empty)", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/ProductDetail" } } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `products:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
             },
             "post": {
@@ -693,7 +694,8 @@ fn build_paths() -> Value {
                 ],
                 "responses": {
                     "200": { "description": "Product detail, or null if not found", "content": { "application/json": { "schema": { "oneOf": [{ "$ref": "#/components/schemas/ProductDetail" }, { "type": "null" }] } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `products:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
             }
         },
@@ -773,7 +775,8 @@ fn build_paths() -> Value {
                 "responses": {
                     "200": { "description": "Length-prefixed image frames (may be empty)", "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } } },
                     "400": { "description": "No valid hashes or more than 64 requested", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `products:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
             }
         },
@@ -790,7 +793,8 @@ fn build_paths() -> Value {
                 "responses": {
                     "200": { "description": "The missing subset", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MissingHashesResponse" } } } },
                     "400": { "description": "No valid hashes", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `products:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
             }
         },
@@ -807,6 +811,7 @@ fn build_paths() -> Value {
                 "responses": {
                     "200": { "description": "Immutable WebP bytes", "content": { "image/webp": { "schema": { "type": "string", "format": "binary" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `products:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } },
                     "404": { "description": "Invalid hash grammar, unknown hash, or tenant has no active reference", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
@@ -821,7 +826,8 @@ fn build_paths() -> Value {
                 "security": [{ "bearerAuth": [] }],
                 "responses": {
                     "200": { "description": "Effective plan for the authenticated tenant", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PlanResponse" } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `plan:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
             }
         },
@@ -859,7 +865,8 @@ fn build_paths() -> Value {
                 ],
                 "responses": {
                     "200": { "description": "List of categories (may be empty)", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/CategoryDto" } } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `categories:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
             }
         },
@@ -893,7 +900,8 @@ fn build_paths() -> Value {
                 "security": [{ "bearerAuth": [] }],
                 "responses": {
                     "200": { "description": "Rate history (may be empty)", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/ExchangeRateResponse" } } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `reference:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
             },
             "post": {
@@ -923,7 +931,8 @@ fn build_paths() -> Value {
                 "security": [{ "bearerAuth": [] }],
                 "responses": {
                     "200": { "description": "Current rates (may be empty)", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/ExchangeRateResponse" } } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `reference:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
             }
         },
@@ -942,6 +951,7 @@ fn build_paths() -> Value {
                     "200": { "description": "Newest rate for the pair", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ExchangeRateResponse" } } } },
                     "400": { "description": "Invalid ISO-4217 code", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `reference:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } },
                     "404": { "description": "No rate for this pair", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
@@ -1015,7 +1025,8 @@ fn build_paths() -> Value {
                 ],
                 "responses": {
                     "200": { "description": "Sale detail, or null if not found", "content": { "application/json": { "schema": { "oneOf": [{ "$ref": "#/components/schemas/SaleDetail" }, { "type": "null" }] } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `sales:view` read-tier permission (PII-flagged route)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
             }
         },
