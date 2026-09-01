@@ -36,6 +36,8 @@ export interface ProductDto {
   default_supplier_id?: string | null;
   /** Materialized popularity score (ADR #37) — retail grid sort key. */
   popularity_score?: number;
+  /** Slot-1 primary image content hash (spec 0046b); absent = no image. */
+  image_hash?: string;
 }
 
 /** Arguments for creating a new product. */

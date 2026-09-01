@@ -404,6 +404,7 @@ pub(crate) fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<crate::Pro
         unit: row.get("unit").unwrap_or(None),
         is_active: row.get("is_active").unwrap_or(1i64) != 0,
         default_supplier_id: row.get("default_supplier_id").unwrap_or(None),
+        image_hash: row.get("image_hash").unwrap_or(None),
     })
 }
 

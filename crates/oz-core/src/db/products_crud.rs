@@ -22,6 +22,7 @@ impl Store<'_> {
                      p.track_serial, p.product_type, p.version,
                      p.cost_minor, p.brand, p.rack_location, p.notes, p.unit,
                      p.is_active, p.default_supplier_id, p.popularity_score,
+                     p.image_hash,
                      c.name AS category_name,
                      COALESCE((SELECT SUM(ss.qty) FROM stock_summary ss WHERE ss.item_id = p.id), i.qty) AS stock_qty
              FROM products p
@@ -53,6 +54,7 @@ impl Store<'_> {
                      p.track_serial, p.product_type, p.version,
                      p.cost_minor, p.brand, p.rack_location, p.notes, p.unit,
                      p.is_active, p.default_supplier_id, p.popularity_score,
+                     p.image_hash,
                      c.name AS category_name,
                      COALESCE((SELECT SUM(ss.qty) FROM stock_summary ss WHERE ss.item_id = p.id), i.qty) AS stock_qty
              FROM products p
@@ -75,6 +77,7 @@ impl Store<'_> {
                      p.track_serial, p.product_type, p.version,
                      p.cost_minor, p.brand, p.rack_location, p.notes, p.unit,
                      p.is_active, p.default_supplier_id, p.popularity_score,
+                     p.image_hash,
                      c.name AS category_name,
                      COALESCE((SELECT SUM(ss.qty) FROM stock_summary ss WHERE ss.item_id = p.id), i.qty) AS stock_qty
              FROM products p
@@ -102,6 +105,7 @@ impl Store<'_> {
                      p.track_serial, p.product_type, p.version,
                      p.cost_minor, p.brand, p.rack_location, p.notes, p.unit,
                      p.is_active, p.default_supplier_id, p.popularity_score,
+                     p.image_hash,
                      c.name AS category_name,
                      COALESCE((SELECT ss.qty FROM stock_summary ss WHERE ss.item_id = p.id AND ss.location_id = ?1), 0) AS stock_qty
              FROM products p
@@ -130,6 +134,7 @@ impl Store<'_> {
                      p.track_serial, p.product_type, p.version,
                      p.cost_minor, p.brand, p.rack_location, p.notes, p.unit,
                      p.is_active, p.default_supplier_id, p.popularity_score,
+                     p.image_hash,
                      c.name AS category_name,
                      COALESCE((SELECT SUM(ss.qty) FROM stock_summary ss WHERE ss.item_id = p.id), i.qty) AS stock_qty
              FROM products p
@@ -165,6 +170,7 @@ impl Store<'_> {
                      p.track_serial, p.product_type, p.version,
                      p.cost_minor, p.brand, p.rack_location, p.notes, p.unit,
                      p.is_active, p.default_supplier_id, p.popularity_score,
+                     p.image_hash,
                      c.name AS category_name,
                      COALESCE((SELECT SUM(ss.qty) FROM stock_summary ss WHERE ss.item_id = p.id), i.qty) AS stock_qty
              FROM products p
@@ -359,6 +365,7 @@ impl Store<'_> {
             unit: attrs.unit.clone(),
             is_active: attrs.is_active,
             default_supplier_id: attrs.default_supplier_id.clone(),
+            image_hash: None,
         })
     }
 
@@ -548,7 +555,7 @@ impl Store<'_> {
         }
 
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version, cost_minor, brand, rack_location, notes, unit, is_active, default_supplier_id, popularity_score
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version, cost_minor, brand, rack_location, notes, unit, is_active, default_supplier_id, popularity_score, image_hash
              FROM products WHERE sku = ?1",
         )?;
         let product = stmt.query_row(params![sku], row_to_product)?;
@@ -561,7 +568,7 @@ impl Store<'_> {
             return Ok(None);
         }
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version, cost_minor, brand, rack_location, notes, unit, is_active, default_supplier_id, popularity_score
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version, cost_minor, brand, rack_location, notes, unit, is_active, default_supplier_id, popularity_score, image_hash
              FROM products WHERE barcode = ?1",
         )?;
         let result = stmt.query_row(params![barcode.trim()], row_to_product);

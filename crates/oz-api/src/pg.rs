@@ -561,7 +561,7 @@ const PRODUCT_SELECT: &str = "SELECT p.id, p.sku, p.name, p.price_minor, p.curre
      p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at, \
      p.track_serial, p.product_type, p.version, \
      p.cost_minor, p.brand, p.rack_location, p.notes, p.unit, \
-     p.is_active, p.default_supplier_id, p.popularity_score, \
+     p.is_active, p.default_supplier_id, p.popularity_score, p.image_hash, \
      c.name AS category_name, \
      COALESCE((SELECT SUM(ss.qty)::bigint FROM stock_summary ss WHERE ss.item_id = p.id), i.qty) AS stock_qty \
      FROM products p \
@@ -636,6 +636,7 @@ fn pg_row_to_product_with_details(
         default_supplier_id: row
             .try_get("default_supplier_id")
             .map_err(|e| PgError::Db(e.to_string()))?,
+        image_hash: row.try_get("image_hash").ok(),
     };
 
     Ok(ProductWithDetails {
@@ -826,6 +827,7 @@ pub async fn create_product(
             unit: None,
             is_active: true,
             default_supplier_id: None,
+            image_hash: None,
         },
         category_name: None,
         stock_qty: if initial_stock > 0 {

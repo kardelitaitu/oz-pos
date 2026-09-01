@@ -149,6 +149,8 @@ pub struct ProductDto {
     pub default_supplier_id: Option<String>,
     /// Materialized popularity score (ADR #37) — retail grid sort key.
     pub popularity_score: f64,
+    /// Slot-1 primary image content hash (spec 0046b); `None` = no image.
+    pub image_hash: Option<String>,
 }
 
 /// Money DTO matching the front-end `Money` type (snake_case keys).
@@ -258,6 +260,7 @@ fn map_products_to_dtos(
                 is_active: pwd.product.is_active,
                 default_supplier_id: pwd.product.default_supplier_id.clone(),
                 popularity_score: pwd.popularity_score,
+                image_hash: pwd.product.image_hash.clone(),
             }
         })
         .collect();
@@ -356,6 +359,7 @@ fn map_pwd_to_dto(
             is_active: pwd.product.is_active,
             default_supplier_id: pwd.product.default_supplier_id.clone(),
             popularity_score: pwd.popularity_score,
+            image_hash: pwd.product.image_hash.clone(),
         }
     }))
 }

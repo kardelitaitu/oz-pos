@@ -157,6 +157,10 @@ pub struct Product {
     /// Default supplier FK. Local-only — never synced (ADR #36 D2).
     #[serde(default)]
     pub default_supplier_id: Option<String>,
+    /// Slot-1 primary image content hash (spec 0046b). Mirrors
+    /// `product_images` slot 1 in the same transaction; `None` = no image.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_hash: Option<String>,
 }
 
 fn default_version() -> i64 {
@@ -193,6 +197,7 @@ impl Product {
             unit: None,
             is_active: true,
             default_supplier_id: None,
+            image_hash: None,
         }
     }
 
