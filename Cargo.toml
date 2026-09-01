@@ -122,6 +122,9 @@ hmac = "0.12"
 sha2 = "0.10"
 snow = "0.10"
 hex = "0.4"
+# Cloud HTTP middleware and test utilities
+tower = { version = "0.5", features = ["limit"] }
+http-body-util = "0.1"
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls"] }
 # Cloud sync Postgres transport — one canonical spec for oz-api,
 # platform-sync, and apps/cloud-server (feature-unified at build time).
@@ -133,6 +136,8 @@ rustls-native-certs = "0.8"
 prometheus = { version = "0.14", features = ["process"] }
 mlua = { version = "0.9", features = ["lua54", "vendored", "send"] }
 notify = { version = "7", features = [] }
+# Platform-specific FFI — version-only; per-crate features added at the consumer
+windows-sys = { version = "0.59" }
 
 regex = "1"
 mdns-sd = "0.10"
@@ -149,6 +154,9 @@ webp = "0.3"
 # Benchmarking
 criterion = { version = "0.5", features = ["html_reports"] }
 console-subscriber = "0.4"
+
+# Shared build-dependencies
+embed-resource = "2"
 
 # Shared dev-dependencies (hoisted for single source of truth)
 tempfile = "3"

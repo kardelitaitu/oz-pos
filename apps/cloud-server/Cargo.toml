@@ -29,7 +29,7 @@ rusqlite = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 tower-http = { workspace = true }
-tower = { version = "0.5", features = ["limit"] }
+tower = { workspace = true }
 thiserror = { workspace = true }
 tokio-postgres = { workspace = true }
 bytes = "1"
@@ -53,9 +53,9 @@ console = ["dep:console-subscriber"]
 [build-dependencies]
 # Embeds the asInvoker application manifest into the Windows exe (see
 # build.rs + app.manifest + app.rc). No-op on non-Windows targets.
-embed-resource = "2"
+embed-resource = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-http-body-util = "0.1"
+http-body-util = { workspace = true }
 serial_test = { workspace = true }
