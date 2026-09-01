@@ -12,6 +12,9 @@ import {
   socketSemanticIds,
   canSemanticPortsConnect,
   isSemanticWireCompatible,
+  nodeKindOf,
+  nodeKindToken,
+  pairingAdmitsKinds,
   wireRelationshipOptions,
   legacyWireResolutionOptions,
   settingsCardForTypeKey,
@@ -134,6 +137,48 @@ describe('typed connection pairing (ADR #34 first slice)', () => {
     expect(isSemanticWireCompatible('device-out', 'generic-in', 'hardware-connection')).toBe(true);
     expect(isSemanticWireCompatible('stock-out', 'location-in', 'stock-routing')).toBe(false);
     expect(isSemanticWireCompatible('ticket-out', 'ticket-in', 'generic')).toBe(false);
+  });
+
+  // ADR #45 §1: the endpoint predicates live in the contract, not in code.
+  // These assertions are mirrored one-for-one by the Rust tests in
+  // crates/oz-core/src/topology_tests.rs, so the two evaluators are pinned to
+  // the same verdicts. ADR #45 §2 replaces the mirroring with a corpus
+  // generated from the contract itself.
+  it('canonicalizes a node into its contract kind token', () => {
+    expect(nodeKindOf(node({ type: 'store' }))).toBe('branch-location');
+    expect(nodeKindOf(node({ type: 'warehouse' }))).toBe('warehouse');
+    expect(nodeKindOf(node({ type: 'hardware' }))).toBe('hardware');
+    expect(nodeKindOf(node({ metadata: { typeKey: 'kds' } }))).toBe('workspace:kds');
+    // A workspace with no recorded typeKey is the Store POS baseline, matching
+    // the Apply-boundary default in topologyContract.
+    expect(nodeKindOf(node({ type: 'workspace' }))).toBe('workspace:store-pos');
+    expect(nodeKindToken('workspace', undefined)).toBe('workspace:store-pos');
+  });
+
+  it('admits declared endpoint pairs and the family form of a token', () => {
+    expect(pairingAdmitsKinds(
+      'operation-out', 'operation-in', 'workspace:restaurant-pos', 'workspace:kds',
+    )).toBe(true);
+    // A token with no `:` suffix covers the family: the Location row means
+    // "any workspace", not an enumeration of every type key.
+    expect(pairingAdmitsKinds('location-out', 'location-in', '@branch-root', 'workspace:store-pos')).toBe(true);
+    expect(pairingAdmitsKinds('location-out', 'location-in', '@branch-root', 'warehouse')).toBe(true);
+    // The future-facing generic row carries the wildcard.
+    expect(pairingAdmitsKinds('generic-out', 'generic-in', 'hardware', 'warehouse')).toBe(true);
+  });
+
+  it('refuses undeclared pairs, unregistered kinds, and unknown semantics', () => {
+    // The operation row's two admitted pairs are deliberately NOT the cross
+    // product of its endpoints — which is why the contract lists pairs.
+    expect(pairingAdmitsKinds(
+      'operation-out', 'operation-in', 'workspace:store-pos', 'workspace:kds',
+    )).toBe(false);
+    expect(pairingAdmitsKinds('ticket-out', 'ticket-in', 'workspace:store-pos', 'hardware')).toBe(false);
+    expect(pairingAdmitsKinds('location-out', 'location-in', 'workspace:store-pos', 'warehouse')).toBe(false);
+    // An unregistered workspace type is not authorable until the contract
+    // declares it: adding a POS type is a contract edit both gates read.
+    expect(pairingAdmitsKinds('stock-out', 'stock-in', 'workspace:pharmacy-pos', 'warehouse')).toBe(false);
+    expect(pairingAdmitsKinds('made-up-out', 'stock-in', 'warehouse', 'warehouse')).toBe(false);
   });
 
   it('resolves the full typed socket map for gating (outputs + non-workspace inputs)', () => {
@@ -329,8 +374,23 @@ describe('relationship options (ADR #34 multi-semantic slice)', () => {
       expect(legacyWireResolutionOptions(storePos, kds)).toEqual([]);
     });
 
-    it('offers Stock routing and Transfer for a plain workspace → warehouse wire', () => {
+    it('yields ZERO options for an unregistered workspace type → warehouse (ADR #45)', () => {
+      // 'general' is a purpose_key, not a workspace type_key: this is a
+      // workspace whose type the contract has no row for. Before ADR #45 the
+      // canvas offered Stock routing and Transfer here while the Rust Apply
+      // gate refused the same wire (its arm required store-pos or
+      // restaurant-pos), so the merchant was invited to draw a wire that could
+      // never persist. The endpoints list is now the single rule: an
+      // unregistered type is not authorable until the contract says so, which
+      // is also how a new POS type gets added — by declaring its rows.
       const ws = node({ type: 'workspace', metadata: { typeKey: 'general' } });
+      const wh = node({ type: 'warehouse' });
+      expect(legacyWireResolutionOptions(ws, wh)).toEqual([]);
+      expect(wireRelationshipOptions(ws, 'right', wh, 'left')).toEqual([]);
+    });
+
+    it('offers Stock routing, Transfer, and Operation for a Store POS → warehouse', () => {
+      const ws = node({ type: 'workspace', metadata: { typeKey: 'store-pos' } });
       const wh = node({ type: 'warehouse' });
       expect(legacyWireResolutionOptions(ws, wh)).toEqual([
         {
@@ -344,6 +404,12 @@ describe('relationship options (ADR #34 multi-semantic slice)', () => {
           toPortId: 'transfer-in',
           relationshipType: 'inventory-transfer',
           labelId: 'topology-relationship-inventory-transfer',
+        },
+        {
+          fromPortId: 'operation-out',
+          toPortId: 'operation-in',
+          relationshipType: 'generic',
+          labelId: 'topology-relationship-operation',
         },
       ]);
     });

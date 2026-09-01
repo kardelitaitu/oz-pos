@@ -284,12 +284,30 @@ export function gatingSemanticId(
  *  and the Fluent id for its human-readable label. Kept as an ordered row
  *  list so (a) the gate and the relationship picker share ONE source of
  *  truth and (b) picker options render in the order the rows appear — the
- *  PRIMARY relationship of a pair always comes first. */
+ *  PRIMARY relationship of a pair always comes first.
+ *
+ *  Since ADR #45 the row also carries `endpoints`: the closed list of
+ *  node-kind pairs that may sit on the ends of the row. Before that, the row
+ *  table was the only shared part of the rule and the endpoint predicates
+ *  were re-written by hand on each side. */
 interface SemanticPairingRow {
   source: SemanticPortId;
   target: SemanticPortId;
   relationshipType: SemanticRelationshipType;
   labelId: string;
+  endpoints: readonly TopologyEndpointPair[];
+}
+
+/** One admitted (source kind → target kind) pair for a row. Deliberately a
+ *  flat tuple list rather than a boolean expression: the contract has to be
+ *  evaluable identically by the TypeScript gate and the Rust gate, and an
+ *  expression language would need two parsers — which is how the two drifted
+ *  apart in the first place. Rows whose admitted pairs are NOT the cross
+ *  product of their endpoints (the generic operation row) are written out
+ *  pair by pair. See ADR #45 §1. */
+export interface TopologyEndpointPair {
+  from: string;
+  to: string;
 }
 
 /** The pairing table: which source semantic may feed which target
@@ -303,6 +321,106 @@ interface SemanticPairingRow {
  *  authorable. Other unused semantic members remain contract-level and
  *  future-facing rather than authorable today. */
 const SEMANTIC_PORT_PAIRINGS = topologySemantics.semanticPairings as readonly SemanticPairingRow[];
+
+/** Matches any node kind. Used only by the future-facing `generic-out` row,
+ *  which has no registered producer yet. */
+export const ANY_NODE_KIND = '*';
+
+/** Matches the graph's Branch Location node. Whether the graph has exactly one
+ *  such node is a separate rule both gates enforce before the wire loop
+ *  (`multiple-branch-locations`), so at endpoint level this reduces to the
+ *  node's kind. */
+export const BRANCH_ROOT_KIND = '@branch-root';
+
+/** Build the canonical kind token from a node's two identity halves. Both
+ *  languages already carry `type`/`kind` plus a workspace `typeKey`;
+ *  collapsing them into one string is what makes every endpoint predicate a set
+ *  lookup instead of a hand-written condition. A workspace with no recorded
+ *  typeKey is the Store POS baseline, matching the Apply-boundary default. */
+export function nodeKindToken(kind: string, typeKey?: string | null): string {
+  if (kind === 'workspace') return `workspace:${typeKey ?? 'store-pos'}`;
+  // `store` is the serialized compatibility alias for `branch-location`
+  // (ADR #34 §1); the contract speaks the canonical name.
+  if (kind === 'store') return 'branch-location';
+  return kind;
+}
+
+/** The kind token for a canvas node. */
+export function nodeKindOf(node: TopologyNodeData): string {
+  return nodeKindToken(node.type, node.metadata?.['typeKey'] as string | undefined);
+}
+
+/** True when a contract endpoint token admits a node's kind token.
+ *
+ *  Matching is exact, with one addition: a token written without a `:` suffix
+ *  also covers that family. So `workspace` admits `workspace:store-pos` and
+ *  `workspace:kds`, while `workspace:store-pos` admits only itself. The
+ *  contract needs both — the Location row means "any workspace", the Operation
+ *  row means "this one" — and a single prefix rule keeps the comparison to one
+ *  line in each language rather than an expression language in JSON. */
+function kindTokenAdmits(endpointToken: string, nodeKind: string): boolean {
+  return endpointToken === nodeKind || nodeKind.startsWith(`${endpointToken}:`);
+}
+
+/** True when one endpoint pair admits this (source kind, target kind) tuple.
+ *  Unknown kinds and unknown `@`-tokens fail closed — only `*` and
+ *  `@branch-root` are special, everything else goes through
+ *  {@link kindTokenAdmits}. This is THE endpoint predicate; the Rust gate
+ *  implements the same function over the same JSON and ADR #45 §2 keeps them
+ *  provably identical. */
+function endpointPairAllows(pair: TopologyEndpointPair, fromKind: string, toKind: string): boolean {
+  const sourceKind = fromKind === 'branch-location' ? BRANCH_ROOT_KIND : fromKind;
+  const fromOk = pair.from === ANY_NODE_KIND || kindTokenAdmits(pair.from, sourceKind);
+  const toOk = pair.to === ANY_NODE_KIND || kindTokenAdmits(pair.to, toKind);
+  return fromOk && toOk;
+}
+
+/** True when a row's declared endpoints admit this node pair. An empty list
+ *  admits nothing, so a payload that lost its endpoints degrades to "no wire
+ *  may be authored" rather than to the looser row-only check. */
+export function pairingAllowsEndpoints(
+  row: SemanticPairingRow,
+  fromKind: string,
+  toKind: string,
+): boolean {
+  return row.endpoints.some((pair) => endpointPairAllows(pair, fromKind, toKind));
+}
+
+/** Kind-level form of the endpoint gate, for callers that hold a normalized
+ *  graph node (`kind` + `typeKey`) rather than a canvas node. The Apply-boundary
+ *  contract validator uses this so it evaluates the exact same endpoint list
+ *  the canvas offered — previously it carried its own hand-written copy of the
+ *  per-row predicates, which is how the two drifted. */
+export function pairingAdmitsKinds(
+  sourceSemantic: string,
+  targetSemantic: string,
+  fromKind: string,
+  toKind: string,
+): boolean {
+  const row = SEMANTIC_PORT_PAIRINGS.find(
+    (r) => r.source === sourceSemantic && r.target === targetSemantic,
+  );
+  return row ? pairingAllowsEndpoints(row, fromKind, toKind) : false;
+}
+
+/** The full authoring gate for one semantic pair between two specific nodes:
+ *  the table must declare a row for the semantics AND that row must admit the
+ *  node kinds. Returns the row so callers can build the relationship option
+ *  without a second lookup. Every authoring surface — socket drop, stacked
+ *  row, legacy migration — goes through this, so the canvas can never offer a
+ *  wire the Apply gate would reject. */
+export function pairingAllowsNodes(
+  source: TopologyNodeData,
+  target: TopologyNodeData,
+  sourceSemantic: SemanticPortId,
+  targetSemantic: SemanticPortId,
+): SemanticPairingRow | undefined {
+  const row = SEMANTIC_PORT_PAIRINGS.find(
+    (r) => r.source === sourceSemantic && r.target === targetSemantic,
+  );
+  if (!row) return undefined;
+  return pairingAllowsEndpoints(row, nodeKindOf(source), nodeKindOf(target)) ? row : undefined;
+}
 
 /** True when the source semantic may feed the target semantic under the
  *  typed pairing table. Unknown or input-side sources always return false
@@ -337,27 +455,6 @@ export interface WireRelationshipOption {
   labelId: string;
 }
 
-/** True when a generic pairing row (operation-out → operation-in) is
- *  authorable between these two node instances. The generic row is
- *  deliberately narrow: only the concrete operational feeds the runtime
- *  supports — Restaurant POS → KDS, and Store POS → Warehouse. Shared by
- *  the socket-level drop options and the legacy-wire migration options so
- *  the two surfaces can never disagree on the generic row. */
-function operationRowAllowed(
-  row: SemanticPairingRow,
-  source: TopologyNodeData,
-  target: TopologyNodeData,
-): boolean {
-  if (row.relationshipType !== 'generic') return true;
-  if (target.type === 'warehouse') {
-    return source.type === 'workspace' && source.metadata?.['typeKey'] === 'store-pos';
-  }
-  return target.type === 'workspace'
-    && target.metadata?.['typeKey'] === 'kds'
-    && source.type === 'workspace'
-    && source.metadata?.['typeKey'] === 'restaurant-pos';
-}
-
 /** All relationships a drop between a source socket and a target socket
  *  may create, in pairing-table order (primary first). Zero options means
  *  the pair is incompatible; one option means the drop creates that wire
@@ -373,8 +470,8 @@ export function wireRelationshipOptions(
   const options: WireRelationshipOption[] = [];
   for (const src of socketSemanticIds(source, sourcePort)) {
     for (const tgt of socketSemanticIds(target, targetPort, targetVariantIndex)) {
-      const row = SEMANTIC_PORT_PAIRINGS.find((r) => r.source === src && r.target === tgt);
-      if (row && operationRowAllowed(row, source, target)) {
+      const row = pairingAllowsNodes(source, target, src, tgt);
+      if (row) {
         options.push({
           fromPortId: src,
           toPortId: tgt,
@@ -405,8 +502,8 @@ export function rowRelationshipOptions(
   const src = socketSemanticIds(source, sourcePort)[sourceVariantIndex];
   const tgt = socketSemanticIds(target, targetPort, targetVariantIndex)[targetVariantIndex];
   if (!src || !tgt) return [];
-  const row = SEMANTIC_PORT_PAIRINGS.find((r) => r.source === src && r.target === tgt);
-  if (!row || !operationRowAllowed(row, source, target)) return [];
+  const row = pairingAllowsNodes(source, target, src, tgt);
+  if (!row) return [];
   return [{
     fromPortId: src,
     toPortId: tgt,
@@ -436,8 +533,8 @@ export function legacyWireResolutionOptions(
   const options: WireRelationshipOption[] = [];
   for (const src of socketSemanticIds(source, 'right')) {
     for (const tgt of socketSemanticIds(target, 'left')) {
-      const row = SEMANTIC_PORT_PAIRINGS.find((r) => r.source === src && r.target === tgt);
-      if (row && operationRowAllowed(row, source, target)) {
+      const row = pairingAllowsNodes(source, target, src, tgt);
+      if (row) {
         options.push({
           fromPortId: src,
           toPortId: tgt,

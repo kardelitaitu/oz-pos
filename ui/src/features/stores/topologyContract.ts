@@ -1,6 +1,6 @@
 import type { TopologyNodeData, TopologyWireData } from './NodeTopologyEditor';
 import topologySemantics from './topologySemantics.json';
-import { isSemanticWireCompatible } from './topologyCard';
+import { isSemanticWireCompatible, nodeKindToken, pairingAdmitsKinds } from './topologyCard';
 import type { SemanticPortId } from './topologyCard';
 
 type TopologyNodeInput = TopologyNodeData & { storeProfileId?: string };
@@ -467,46 +467,22 @@ function locationWires(graph: SemanticTopologyGraph): SemanticTopologyWire[] {
   return graph.wires.filter((wire) => wire.relationshipType === 'location');
 }
 
-/** Match the node capabilities behind the semantic port matrix. Port ids
- *  alone are not enough at the Apply boundary: a forged ticket-out on a
- *  Store POS must not become a valid KDS ticket feed. */
+/** Match the node kinds behind the semantic port matrix. Port ids alone are
+ *  not enough at the Apply boundary: a forged ticket-out on a Store POS must
+ *  not become a valid KDS ticket feed. Since ADR #45 this delegates to the
+ *  contract's own `endpoints` lists instead of re-stating them here, so the
+ *  gate that offered a wire and the gate that accepts it read one rule. */
 function semanticNodesMatchWire(
   wire: SemanticTopologyWire,
   fromNode: SemanticTopologyNode,
   toNode: SemanticTopologyNode,
 ): boolean {
-  const fromTypeKey = fromNode.typeKey ?? 'store-pos';
-  const toTypeKey = toNode.typeKey ?? 'store-pos';
-  switch (`${wire.fromPortId}|${wire.toPortId}|${wire.relationshipType}`) {
-    case 'stock-out|stock-in|stock-routing':
-      return toNode.kind === 'warehouse'
-        && ((fromNode.kind === 'workspace'
-          && ['store-pos', 'restaurant-pos'].includes(fromTypeKey))
-          || fromNode.kind === 'warehouse');
-    case 'transfer-out|transfer-in|inventory-transfer':
-      // Round 82: a warehouse may feed another warehouse (hub-and-spoke).
-      // Workspace sources stay valid for the direct-transfer case.
-      return toNode.kind === 'warehouse'
-        && ((fromNode.kind === 'warehouse')
-          || (fromNode.kind === 'workspace'
-            && ['store-pos', 'restaurant-pos'].includes(fromTypeKey)));
-    case 'ticket-out|ticket-in|ticket-routing':
-      return fromNode.kind === 'workspace'
-        && fromTypeKey === 'kds'
-        && toNode.kind === 'hardware';
-    case 'operation-out|operation-in|generic':
-      return fromNode.kind === 'workspace'
-        && ((fromTypeKey === 'restaurant-pos'
-          && toNode.kind === 'workspace'
-          && toTypeKey === 'kds')
-          || (fromTypeKey === 'store-pos' && toNode.kind === 'warehouse'));
-    case 'device-out|generic-in|hardware-connection':
-      return fromNode.kind === 'hardware' && toNode.kind === 'hardware';
-    case 'generic-out|generic-in|generic':
-      return true;
-    default:
-      return false;
-  }
+  return pairingAdmitsKinds(
+    wire.fromPortId,
+    wire.toPortId,
+    nodeKindToken(fromNode.kind, fromNode.typeKey),
+    nodeKindToken(toNode.kind, toNode.typeKey),
+  );
 }
 
 /** Return one node in a directed cycle, if the graph contains one. */
@@ -652,13 +628,16 @@ export function validateTopologyGraph(
     const fromNode = graph.nodes.find((node) => node.id === wire.fromNodeId);
     const toNode = graph.nodes.find((node) => node.id === wire.toNodeId);
     // Let the dedicated KDS check report invalid-operation-source rather than
-    // replacing it with the broader semantic-connection error.
-    const isKdsOperation = wire.fromPortId === 'operation-out'
+    // replacing it with the broader semantic-connection error — but only for a
+    // feed whose SOURCE is a workspace. Skipping on the target alone meant any
+    // node type could drop an operation-in wire past this gate (ADR #45).
+    const isWorkspaceOperationFeed = wire.fromPortId === 'operation-out'
       && wire.toPortId === 'operation-in'
       && wire.relationshipType === 'generic'
+      && fromNode?.kind === 'workspace'
       && toNode?.kind === 'workspace'
       && toNode.typeKey === 'kds';
-    if (isKdsOperation || !fromNode || !toNode) continue;
+    if (isWorkspaceOperationFeed || !fromNode || !toNode) continue;
     if (!isSemanticWireCompatible(wire.fromPortId, wire.toPortId, wire.relationshipType)
       || !semanticNodesMatchWire(wire, fromNode, toNode)) {
       errors.push({
