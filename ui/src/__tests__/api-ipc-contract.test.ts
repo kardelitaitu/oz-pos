@@ -267,10 +267,6 @@ describe('topology.ts IPC contract', () => {
 // ── settings.ts ───────────────────────────────────────────────────
 
 import {
-  getReceiptSettings,
-  setReceiptSettings,
-  getStoreSettings,
-  setStoreSettings,
   getHardwareSettings,
   setHardwareSettings,
   getEnabledFeatures,
@@ -281,71 +277,6 @@ import {
 
 describe('settings.ts IPC contract', () => {
   beforeEach(() => mockInvoke.mockReset());
-
-  it('getReceiptSettings invokes "get_receipt_settings" with no args', async () => {
-    mockInvoke.mockResolvedValue({
-      showCurrency: false,
-      decimalSeparator: 'dot',
-      showTax: true,
-      footer: '',
-      paperWidth: 'standard',
-      showTableNumber: false,
-      marginTop: 0,
-      marginBottom: 0,
-      marginLeft: 0,
-      marginRight: 0,
-    });
-    await getReceiptSettings();
-    expect(mockInvoke).toHaveBeenCalledWith('get_receipt_settings', undefined);
-  });
-
-  it('setReceiptSettings invokes "set_receipt_settings" with args + userId', async () => {
-    mockInvoke.mockResolvedValue(undefined);
-    const args = {
-      showCurrency: true,
-      decimalSeparator: 'comma',
-      showTax: true,
-      footer: 'Thanks!',
-      paperWidth: 'narrow',
-      showTableNumber: false,
-      marginTop: 1,
-      marginBottom: 1,
-      marginLeft: 1,
-      marginRight: 1,
-    };
-    await setReceiptSettings(args, 'u1');
-    expect(mockInvoke).toHaveBeenCalledWith('set_receipt_settings', {
-      args,
-      userId: 'u1',
-    });
-  });
-
-  it('getStoreSettings invokes "get_store_settings" with no args', async () => {
-    mockInvoke.mockResolvedValue({
-      name: 'Test',
-      address: '',
-      taxId: '',
-      currency: 'USD',
-      branch: '',
-      logo: '',
-    });
-    await getStoreSettings();
-    expect(mockInvoke).toHaveBeenCalledWith('get_store_settings', undefined);
-  });
-
-  it('setStoreSettings invokes "set_store_settings" with args + userId', async () => {
-    mockInvoke.mockResolvedValue(undefined);
-    const args = {
-      name: 'New Name',
-      address: '123 St',
-      taxId: 'TAX-1',
-      currency: 'IDR',
-      branch: 'main',
-      logo: '',
-    };
-    await setStoreSettings(args, 'u1');
-    expect(mockInvoke).toHaveBeenCalledWith('set_store_settings', { args, userId: 'u1' });
-  });
 
   it('getHardwareSettings invokes "get_hardware_settings" with no args', async () => {
     mockInvoke.mockResolvedValue({
@@ -419,7 +350,7 @@ describe('settings.ts IPC contract', () => {
 
   it('propagates backend errors', async () => {
     mockInvoke.mockRejectedValueOnce(new Error('permission denied'));
-    await expect(getReceiptSettings()).rejects.toThrow('permission denied');
+    await expect(getHardwareSettings()).rejects.toThrow('permission denied');
   });
 });
 

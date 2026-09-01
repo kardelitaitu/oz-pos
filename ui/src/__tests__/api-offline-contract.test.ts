@@ -1,14 +1,13 @@
 // ── IPC contract tests for the offline/sync API layer ───────────────
 //
 // These tests verify the contract between `ui/src/api/offline.ts` and the
-// Rust Tauri commands (`commands::offline`, `commands::sync`):
+// Rust Tauri commands (`commands::offline`, `commands::sync`). All entry
+// points are session-scoped (ADR #7) except `testSyncConnection`, which is
+// deliberately pre-auth for the login-screen connectivity check.
 //
-//   • SYNC-03 — `syncPull` must send `{ confirmDestructive: true }` as the
-//     IPC payload; the backend command rejects any pull without explicit
-//     destructive consent.
-//   • SYNC-04 — `retryOfflineSync` invokes the real cloud-sync command
-//     (no placeholder path) and returns the camelCase `SyncResult` DTO
-//     (`syncedCount` / `failedCount` / `totalCount`).
+//   • SYNC-03 — `syncPullScoped` must send `{ confirmDestructive: true }`
+//     as the IPC payload; the backend command rejects any pull without
+//     explicit destructive consent.
 //   • SYNC-11 — DTO shapes match the Rust `#[serde(rename_all = "camelCase")]`
 //     serializers exactly.
 //
@@ -25,25 +24,20 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: (cmd: string, args?: Record<string, unknown>) => mockInvoke(cmd, args),
 }));
 
-// ── offline.ts ─────────────────────────────────────────────────────
-
 import {
-  syncPull,
-  retryOfflineSync,
-  syncRun,
-  getSyncSettings,
-  updateSyncSettings,
+  syncPullScoped,
+  retryOfflineSyncScoped,
+  syncRunScoped,
+  getSyncSettingsScoped,
+  updateSyncSettingsScoped,
   testSyncConnection,
-  requestSyncToken,
-  pendingSyncCount,
+  requestSyncTokenScoped,
   getOfflineQueueStatusSummaryScoped,
-  enqueueOffline,
-  listPendingOffline,
-  listAllOffline,
-  pendingOfflineCount,
-  deleteOfflineItem,
-  listRemoteFailures,
-  requeueRemoteFailure,
+  listAllOfflineScoped,
+  pendingOfflineCountScoped,
+  deleteOfflineItemScoped,
+  listRemoteFailuresScoped,
+  requeueRemoteFailureScoped,
   getPgSyncSettingsScoped,
   updatePgSyncSettingsScoped,
   pgSyncStatusScoped,
@@ -57,86 +51,77 @@ describe('offline.ts IPC contract', () => {
 
   // ── SYNC-03: destructive pull consent contract ──────────────
 
-  it('syncPull invokes "sync_pull" with confirmDestructive: true', async () => {
+  it('syncPullScoped invokes "sync_pull_scoped" with confirmDestructive: true', async () => {
     mockInvoke.mockResolvedValue({ productsPulled: 3, taxRatesPulled: 1, usersPulled: 0, error: null });
-    await syncPull({ confirmDestructive: true });
-    expect(mockInvoke).toHaveBeenCalledWith('sync_pull', {
+    await syncPullScoped('tok', { confirmDestructive: true });
+    expect(mockInvoke).toHaveBeenCalledWith('sync_pull_scoped', {
+      sessionToken: 'tok',
       args: { confirmDestructive: true },
     });
   });
 
-  it('syncPull forwards a declined consent value verbatim (backend rejects it)', async () => {
+  it('syncPullScoped forwards a declined consent value verbatim (backend rejects it)', async () => {
     // The TS signature requires the flag, but the wire contract must still
     // forward the value as-is so the backend's consent gate is the source of
     // truth (false/missing is rejected server-side).
     mockInvoke.mockResolvedValue({ productsPulled: 0, taxRatesPulled: 0, usersPulled: 0, error: 'no consent' });
-    await syncPull({ confirmDestructive: false });
-    expect(mockInvoke).toHaveBeenCalledWith('sync_pull', {
+    await syncPullScoped('tok', { confirmDestructive: false });
+    expect(mockInvoke).toHaveBeenCalledWith('sync_pull_scoped', {
+      sessionToken: 'tok',
       args: { confirmDestructive: false },
     });
   });
 
   // ── SYNC-04: retry delegates to the real sync pipeline ──────
 
-  it('retryOfflineSync invokes "retry_offline_sync" with no args', async () => {
+  it('retryOfflineSyncScoped invokes "retry_offline_sync_scoped"', async () => {
     mockInvoke.mockResolvedValue({ syncedCount: 2, failedCount: 1, totalCount: 3 });
-    await retryOfflineSync();
-    expect(mockInvoke).toHaveBeenCalledWith('retry_offline_sync', undefined);
+    await retryOfflineSyncScoped('tok');
+    expect(mockInvoke).toHaveBeenCalledWith('retry_offline_sync_scoped', { sessionToken: 'tok' });
   });
 
-  it('retryOfflineSync returns the camelCase SyncResult DTO shape', async () => {
+  it('retryOfflineSyncScoped returns the camelCase SyncResult DTO shape', async () => {
     mockInvoke.mockResolvedValue({ syncedCount: 2, failedCount: 1, totalCount: 3 });
-    const result: SyncResult = await retryOfflineSync();
+    const result: SyncResult = await retryOfflineSyncScoped('tok');
     expect(result).toEqual({ syncedCount: 2, failedCount: 1, totalCount: 3 });
   });
 
   // ── sync_run / settings / connection helpers ─────────────────
 
-  it('syncRun invokes "sync_run" with no args', async () => {
+  it('syncRunScoped invokes "sync_run_scoped"', async () => {
     mockInvoke.mockResolvedValue({ synced: 1, failed: 0, error: null });
-    await syncRun();
-    expect(mockInvoke).toHaveBeenCalledWith('sync_run', undefined);
+    await syncRunScoped('tok');
+    expect(mockInvoke).toHaveBeenCalledWith('sync_run_scoped', { sessionToken: 'tok' });
   });
 
-  it('getSyncSettings invokes "get_sync_settings" with no args', async () => {
+  it('getSyncSettingsScoped invokes "get_sync_settings_scoped"', async () => {
     mockInvoke.mockResolvedValue({ serverUrl: null, hasApiKey: false, enabled: false });
-    await getSyncSettings();
-    expect(mockInvoke).toHaveBeenCalledWith('get_sync_settings', undefined);
+    await getSyncSettingsScoped('tok');
+    expect(mockInvoke).toHaveBeenCalledWith('get_sync_settings_scoped', { sessionToken: 'tok' });
   });
 
-  it('updateSyncSettings invokes "update_sync_settings" with camelCase args', async () => {
+  it('updateSyncSettingsScoped invokes "update_sync_settings_scoped" with camelCase args', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await updateSyncSettings({ serverUrl: 'https://sync.example.com', apiKey: 'sk-1', enabled: true });
-    expect(mockInvoke).toHaveBeenCalledWith('update_sync_settings', {
+    await updateSyncSettingsScoped('tok', { serverUrl: 'https://sync.example.com', apiKey: 'sk-1', enabled: true });
+    expect(mockInvoke).toHaveBeenCalledWith('update_sync_settings_scoped', {
+      sessionToken: 'tok',
       args: { serverUrl: 'https://sync.example.com', apiKey: 'sk-1', enabled: true },
     });
   });
 
-  it('testSyncConnection invokes "test_sync_connection" with the candidate url', async () => {
+  it('testSyncConnection invokes "test_sync_connection" with no args (pre-auth login check)', async () => {
     mockInvoke.mockResolvedValue({ ok: true, status: 'Connected', latencyMs: 12 });
     await testSyncConnection();
     expect(mockInvoke).toHaveBeenCalledWith('test_sync_connection', undefined);
   });
 
-  it('testSyncConnection with no url passes null so the backend falls back to saved settings', async () => {
-    mockInvoke.mockResolvedValue({ ok: false, status: 'nope', latencyMs: null });
-    await testSyncConnection();
-    expect(mockInvoke).toHaveBeenCalledWith('test_sync_connection', undefined);
-  });
-
-  it('requestSyncToken invokes "request_sync_token" with the candidate url', async () => {
+  it('requestSyncTokenScoped invokes "request_sync_token_scoped"', async () => {
     mockInvoke.mockResolvedValue({ ok: true, token: 'jwt', status: 'issued', expiresAt: null });
-    await requestSyncToken();
-    expect(mockInvoke).toHaveBeenCalledWith('request_sync_token', undefined);
+    await requestSyncTokenScoped('tok');
+    expect(mockInvoke).toHaveBeenCalledWith('request_sync_token_scoped', { sessionToken: 'tok' });
   });
 
-  it('pendingSyncCount invokes "pending_sync_count" with no args', async () => {
-    mockInvoke.mockResolvedValue(3);
-    await pendingSyncCount();
-    expect(mockInvoke).toHaveBeenCalledWith('pending_sync_count', undefined);
-  });
-
-  // ── offline queue CRUD ───────────────────────────────────────
+  // ── offline queue (scoped) ───────────────────────────────────
 
   it('getOfflineQueueStatusSummaryScoped invokes "offline_queue_status_summary_scoped"', async () => {
     mockInvoke.mockResolvedValue({ pendingCount: 0, syncedCount: 0, failedCount: 0, conflictCount: 0 });
@@ -144,18 +129,10 @@ describe('offline.ts IPC contract', () => {
     expect(mockInvoke).toHaveBeenCalledWith('offline_queue_status_summary_scoped', { sessionToken: 'tok' });
   });
 
-  it('enqueueOffline invokes "enqueue_offline" with action + payload args', async () => {
-    mockInvoke.mockResolvedValue({ id: 'q1' });
-    await enqueueOffline({ action: 'complete_sale', payload: '{}' });
-    expect(mockInvoke).toHaveBeenCalledWith('enqueue_offline', {
-      args: { action: 'complete_sale', payload: '{}' },
-    });
-  });
-
-  it('listPendingOffline invokes "list_pending_offline" with no args', async () => {
+  it('listAllOfflineScoped invokes "list_all_offline_scoped"', async () => {
     mockInvoke.mockResolvedValue([]);
-    await listPendingOffline();
-    expect(mockInvoke).toHaveBeenCalledWith('list_pending_offline', undefined);
+    await listAllOfflineScoped('tok');
+    expect(mockInvoke).toHaveBeenCalledWith('list_all_offline_scoped', { sessionToken: 'tok' });
   });
 
   it('OfflineQueueItemDto carries payload (SYNC-11 — matches the Rust serializer)', async () => {
@@ -173,7 +150,7 @@ describe('offline.ts IPC contract', () => {
         priority: 'critical',
       },
     ]);
-    const items = await listPendingOffline();
+    const items = await listAllOfflineScoped('tok');
     expect(items).toHaveLength(1);
     // The payload field must survive the IPC round-trip — the Rust
     // OfflineQueueItemDto serializes it and the TS DTO must not drop it.
@@ -186,51 +163,30 @@ describe('offline.ts IPC contract', () => {
     expect(first.priority).toBe('critical');
   });
 
-  it('enqueueOffline forwards optional tenantId + priority (OFF-09)', async () => {
-    mockInvoke.mockResolvedValue({ id: 'q1' });
-    await enqueueOffline({
-      action: 'complete_sale',
-      payload: '{}',
-      tenantId: 'store-b',
-      priority: 'critical',
-    });
-    expect(mockInvoke).toHaveBeenCalledWith('enqueue_offline', {
-      args: {
-        action: 'complete_sale',
-        payload: '{}',
-        tenantId: 'store-b',
-        priority: 'critical',
-      },
-    });
-  });
-
-  it('listAllOffline invokes "list_all_offline" with no args', async () => {
-    mockInvoke.mockResolvedValue([]);
-    await listAllOffline();
-    expect(mockInvoke).toHaveBeenCalledWith('list_all_offline', undefined);
-  });
-
-  it('pendingOfflineCount invokes "pending_offline_count" with no args', async () => {
+  it('pendingOfflineCountScoped invokes "pending_offline_count_scoped"', async () => {
     mockInvoke.mockResolvedValue(0);
-    await pendingOfflineCount();
-    expect(mockInvoke).toHaveBeenCalledWith('pending_offline_count', undefined);
+    await pendingOfflineCountScoped('tok');
+    expect(mockInvoke).toHaveBeenCalledWith('pending_offline_count_scoped', { sessionToken: 'tok' });
   });
 
-  it('deleteOfflineItem invokes "delete_offline_item" with id arg', async () => {
+  it('deleteOfflineItemScoped invokes "delete_offline_item_scoped" with id arg', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await deleteOfflineItem('oq-1');
-    expect(mockInvoke).toHaveBeenCalledWith('delete_offline_item', { args: { id: 'oq-1' } });
+    await deleteOfflineItemScoped('tok', 'oq-1');
+    expect(mockInvoke).toHaveBeenCalledWith('delete_offline_item_scoped', {
+      sessionToken: 'tok',
+      args: { id: 'oq-1' },
+    });
   });
 
   // ── SYNC-11: remote dead-letter (quarantined pulls) ────────
 
-  it('listRemoteFailures invokes "list_remote_failures" with no args', async () => {
+  it('listRemoteFailuresScoped invokes "list_remote_failures_scoped"', async () => {
     mockInvoke.mockResolvedValue([]);
-    await listRemoteFailures();
-    expect(mockInvoke).toHaveBeenCalledWith('list_remote_failures', undefined);
+    await listRemoteFailuresScoped('tok');
+    expect(mockInvoke).toHaveBeenCalledWith('list_remote_failures_scoped', { sessionToken: 'tok' });
   });
 
-  it('listRemoteFailures returns the camelCase RemoteSyncFailureDto shape', async () => {
+  it('listRemoteFailuresScoped returns the camelCase RemoteSyncFailureDto shape', async () => {
     mockInvoke.mockResolvedValue([
       {
         itemId: 'remote-sale-1',
@@ -241,7 +197,7 @@ describe('offline.ts IPC contract', () => {
         deadLettered: true,
       },
     ]);
-    const failures = await listRemoteFailures();
+    const failures = await listRemoteFailuresScoped('tok');
     expect(failures).toHaveLength(1);
     const first = failures[0]!;
     expect(first.itemId).toBe('remote-sale-1');
@@ -249,17 +205,18 @@ describe('offline.ts IPC contract', () => {
     expect(first.attempts).toBe(3);
   });
 
-  it('requeueRemoteFailure invokes "requeue_remote_failure" with camelCase itemId arg', async () => {
+  it('requeueRemoteFailureScoped invokes "requeue_remote_failure_scoped" with camelCase itemId arg', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await requeueRemoteFailure('remote-sale-1');
-    expect(mockInvoke).toHaveBeenCalledWith('requeue_remote_failure', {
+    await requeueRemoteFailureScoped('tok', 'remote-sale-1');
+    expect(mockInvoke).toHaveBeenCalledWith('requeue_remote_failure_scoped', {
+      sessionToken: 'tok',
       args: { itemId: 'remote-sale-1' },
     });
   });
 
   it('propagates backend errors (does not swallow)', async () => {
     mockInvoke.mockRejectedValueOnce(new Error('confirmDestructive must be true'));
-    await expect(syncPull({ confirmDestructive: false })).rejects.toThrow(
+    await expect(syncPullScoped('tok', { confirmDestructive: false })).rejects.toThrow(
       'confirmDestructive must be true',
     );
   });
@@ -268,7 +225,7 @@ describe('offline.ts IPC contract', () => {
 describe('offline.ts PG sync IPC contract', () => {
   beforeEach(() => mockInvoke.mockReset());
 
-  it('getPgSyncSettings invokes "get_pg_sync_settings" with no args', async () => {
+  it('getPgSyncSettingsScoped invokes "get_pg_sync_settings_scoped"', async () => {
     mockInvoke.mockResolvedValue({
       enabled: false,
       host: null,

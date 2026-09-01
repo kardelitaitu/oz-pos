@@ -67,44 +67,19 @@ export interface OfflineQueueSummaryDto {
 export const getOfflineQueueStatusSummaryScoped = (sessionToken: string): Promise<OfflineQueueSummaryDto> =>
   loggedInvoke<OfflineQueueSummaryDto>('offline_queue_status_summary_scoped', { sessionToken });
 
-/** Enqueue an action to be performed when back online. */
-export const enqueueOffline = (args: EnqueueOfflineArgs): Promise<OfflineQueueItemDto> =>
-  loggedInvoke<OfflineQueueItemDto>('enqueue_offline', { args });
-
-/** List pending (not yet synced) offline actions. */
-export const listPendingOffline = (): Promise<OfflineQueueItemDto[]> =>
-  loggedInvoke<OfflineQueueItemDto[]>('list_pending_offline');
-
-/** List all offline actions (pending and synced). */
-export const listAllOffline = (): Promise<OfflineQueueItemDto[]> =>
-  loggedInvoke<OfflineQueueItemDto[]>('list_all_offline');
+// ── Offline queue operations (scoped — ADR #7) ──────────────────────
 
 /** List all offline actions (scoped — ADR #7). */
 export const listAllOfflineScoped = (sessionToken: string): Promise<OfflineQueueItemDto[]> =>
   loggedInvoke<OfflineQueueItemDto[]>('list_all_offline_scoped', { sessionToken });
 
-/** Get the count of pending offline actions. */
-export const pendingOfflineCount = (): Promise<number> =>
-  loggedInvoke<number>('pending_offline_count');
-
 /** Get the count of pending offline actions (scoped — ADR #7). */
 export const pendingOfflineCountScoped = (sessionToken: string): Promise<number> =>
   loggedInvoke<number>('pending_offline_count_scoped', { sessionToken });
 
-/**
- * Retry syncing all pending offline actions through the real cloud sync
- * pipeline (SYNC-04 — no longer a placeholder).
- */
-export const retryOfflineSync = (): Promise<SyncResult> =>
-  loggedInvoke<SyncResult>('retry_offline_sync');
-
 /** Retry syncing all pending offline actions (scoped — ADR #7). */
 export const retryOfflineSyncScoped = (sessionToken: string): Promise<SyncResult> =>
   loggedInvoke<SyncResult>('retry_offline_sync_scoped', { sessionToken });
-
-/** Delete an offline queue item by its identifier. */
-export const deleteOfflineItem = (id: string): Promise<void> =>
-  loggedInvoke('delete_offline_item', { args: { id } });
 
 /** Delete an offline queue item (scoped). */
 export const deleteOfflineItemScoped = (sessionToken: string, id: string): Promise<void> =>
@@ -134,30 +109,9 @@ export interface RemoteSyncFailureDto {
   deadLettered: boolean;
 }
 
-/**
- * List remote items quarantined after repeated pull-application failures.
- *
- * The listing is not session-scoped: the sync daemon runs server-side in
- * both clients, so an operator with backend access can inspect the dead
- * letter without an active POS session (SYNC-11).
- */
-export const listRemoteFailures = (): Promise<RemoteSyncFailureDto[]> =>
-  loggedInvoke<RemoteSyncFailureDto[]>('list_remote_failures');
-
 /** List remote failures (scoped — ADR #7). */
 export const listRemoteFailuresScoped = (sessionToken: string): Promise<RemoteSyncFailureDto[]> =>
   loggedInvoke<RemoteSyncFailureDto[]>('list_remote_failures_scoped', { sessionToken });
-
-/**
- * Requeue a dead-lettered remote item so the next sync cycle retries it.
- *
- * Operators call this after remediating the item's source (e.g. creating
- * the missing product a remote sale referenced). Returns `NotFound` for
- * ids that are not currently dead-lettered, so a mistyped id is never a
- * silent no-op.
- */
-export const requeueRemoteFailure = (itemId: string): Promise<void> =>
-  loggedInvoke('requeue_remote_failure', { args: { itemId } });
 
 /** Requeue a dead-lettered remote item (scoped). */
 export const requeueRemoteFailureScoped = (sessionToken: string, itemId: string): Promise<void> =>
@@ -197,33 +151,17 @@ export interface PullResult {
   error: string | null;
 }
 
-/** Get the current cloud sync settings. */
-export const getSyncSettings = (): Promise<SyncSettingsDto> =>
-  loggedInvoke<SyncSettingsDto>('get_sync_settings');
-
 /** Get cloud sync settings resolved from a session token. ADR #7. */
 export const getSyncSettingsScoped = (sessionToken: string): Promise<SyncSettingsDto> =>
   loggedInvoke<SyncSettingsDto>('get_sync_settings_scoped', { sessionToken });
-
-/** Update the cloud sync settings. */
-export const updateSyncSettings = (args: UpdateSyncSettingsArgs): Promise<void> =>
-  loggedInvoke<void>('update_sync_settings', { args });
 
 /** Update the cloud sync settings (scoped — ADR #7). */
 export const updateSyncSettingsScoped = (sessionToken: string, args: UpdateSyncSettingsArgs): Promise<void> =>
   loggedInvoke<void>('update_sync_settings_scoped', { sessionToken, args });
 
-/** Run a sync cycle — push pending local changes to the cloud server. */
-export const syncRun = (): Promise<SyncAttemptResult> =>
-  loggedInvoke<SyncAttemptResult>('sync_run');
-
 /** Run a sync cycle (scoped — ADR #7). */
 export const syncRunScoped = (sessionToken: string): Promise<SyncAttemptResult> =>
   loggedInvoke<SyncAttemptResult>('sync_run_scoped', { sessionToken });
-
-/** Get the number of actions pending cloud sync. */
-export const pendingSyncCount = (): Promise<number> =>
-  loggedInvoke<number>('pending_sync_count');
 
 // ── PostgreSQL sync settings & daemon ──────────────────────────────
 
@@ -295,12 +233,8 @@ export interface SyncPullArgs {
  *
  * SYNC-03: the destructive consent is part of the IPC contract — the
  * caller must pass `{ confirmDestructive: true }` after showing a
- * confirmation dialog.
+ * confirmation dialog. (scoped — ADR #7)
  */
-export const syncPull = (args: SyncPullArgs): Promise<PullResult> =>
-  loggedInvoke<PullResult>('sync_pull', { args });
-
-/** Pull data (scoped — ADR #7). */
 export const syncPullScoped = (sessionToken: string, args: SyncPullArgs): Promise<PullResult> =>
   loggedInvoke<PullResult>('sync_pull_scoped', { sessionToken, args });
 
@@ -313,10 +247,6 @@ export interface SyncPlanResult {
   plan: 'free' | 'pro' | null;
   status: string;
 }
-
-/** Read the caller's own sync plan via `GET /api/v1/tenants/me/plan`. */
-export const getSyncPlan = (): Promise<SyncPlanResult> =>
-  loggedInvoke<SyncPlanResult>('get_sync_plan');
 
 /** Get sync plan (scoped — ADR #7). */
 export const getSyncPlanScoped = (sessionToken: string): Promise<SyncPlanResult> =>
@@ -348,10 +278,6 @@ export interface TokenResult {
   status: string;
   expiresAt: string | null;
 }
-
-/** Request a new JWT token from the cloud server (H-6: URL always resolved from saved settings). */
-export const requestSyncToken = (): Promise<TokenResult> =>
-  loggedInvoke<TokenResult>('request_sync_token');
 
 /** Request a new JWT token (scoped — ADR #7). */
 export const requestSyncTokenScoped = (sessionToken: string): Promise<TokenResult> =>
