@@ -2,11 +2,11 @@
 num: 43
 area: cloud
 title: ADR #43: Cloud Sync Performance & Scale-Out Roadmap
-status: Proposed (2026-09-02)
+status: Implemented (D1–D4, D7, D9-ready) — remaining items deferred or infra-only (2026-09-02)
 ---
 # ADR #43: Cloud Sync Performance & Scale-Out Roadmap
 
-**Status:** Proposed (2026-09-02)  
+**Status:** Implemented (D1–D4, D7, D9-ready) — remaining items deferred or infra-only (2026-09-02)  
 **Date:** 2026-09-02  
 **Author:** Architecture Team & OZ-POS Contributors  
 **Tags:** cloud, sync, performance, scalability, caching, rate-limiting, observability, rls, cost-optimization, redis, postgres
