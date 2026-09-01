@@ -39,6 +39,10 @@ interface Env {
   CONTACT_WEBHOOK_URL?: string;
   /** Northflank read-only API key for the Health-tab log proxy (secret — never exposed to the browser). */
   NF_API_KEY?: string;
+  /** Cloudflare API token for the Health-tab deployments proxy (secret — never exposed to the browser). */
+  CF_API_KEY?: string;
+  /** Cloudflare account ID (non-secret) for the deployments proxy — set in wrangler.toml [vars]. */
+  CLOUDFLARE_ACCOUNT_ID?: string;
 }
 
 const RUNTIME_CONFIG_PATH = '/__oz/runtime-config.js';
@@ -49,6 +53,10 @@ const NF_LOGS_PATH = '/__oz/nf-logs';
 /** The license server's Northflank coordinates (fixed deployment). */
 const NF_PROJECT = 'oz-pos';
 const NF_SERVICE = 'cloud';
+/** Health-tab Cloudflare deployment history — proxied with the CF_API_KEY secret. */
+const CF_DEPLOYS_PATH = '/__oz/cf-deploys';
+/** This Worker's own script name on Cloudflare. */
+const CF_SCRIPT_NAME = 'oz-pos';
 const COOKIE_NAME = 'oz_session';
 
 /** Subdomains that require authentication (admin-only). */
@@ -318,6 +326,71 @@ export default {
           });
         } catch {
           return new Response(JSON.stringify({ ok: false, error: 'could not reach Northflank' }), {
+            status: 502,
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+          });
+        }
+      }
+
+      // Step 1b-3: CF_DEPLOYS_PATH — Cloudflare deployment history for the
+      // Health tab (same trust shape as NF_LOGS_PATH: the API token is a
+      // Worker secret, the browser only talks to this session-gated route).
+      // Returns the latest deployments (message, author, trigger, version)
+      // newest-first; capped at 10 entries.
+      if (url.pathname === CF_DEPLOYS_PATH) {
+        if (!sessionCookie) {
+          return new Response(JSON.stringify({ error: 'not signed in' }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+          });
+        }
+        if (!env.CF_API_KEY) {
+          return new Response(JSON.stringify({ error: 'deployments proxy not configured (missing CF_API_KEY)' }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+          });
+        }
+        const cfUrl = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${CF_SCRIPT_NAME}/deployments`;
+        try {
+          const cfRes = await fetch(cfUrl, {
+            headers: { Authorization: `Bearer ${env.CF_API_KEY}` },
+            signal: AbortSignal.timeout(8000),
+          });
+          if (!cfRes.ok) {
+            return new Response(JSON.stringify({ ok: false, error: `Cloudflare responded ${cfRes.status}` }), {
+              status: 502,
+              headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+            });
+          }
+          const cfBody = await cfRes.json() as {
+            success?: boolean;
+            errors?: Array<{ message?: string }>;
+            result?: { deployments?: Array<{
+              id?: string; created_on?: string; author_email?: string; source?: string;
+              annotations?: Record<string, string>;
+              versions?: Array<{ version_id?: string; percentage?: number }>;
+            }> };
+          };
+          if (!cfBody.success) {
+            const msg = cfBody.errors && cfBody.errors[0] && cfBody.errors[0].message ? `: ${cfBody.errors[0].message}` : '';
+            return new Response(JSON.stringify({ ok: false, error: `Cloudflare API error${msg}` }), {
+              status: 502,
+              headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+            });
+          }
+          const deploys = (cfBody.result?.deployments ?? []).slice(0, 10).map(d => ({
+            id: String(d.id ?? ''),
+            time: String(d.created_on ?? ''),
+            author: String(d.author_email ?? ''),
+            trigger: String(d.annotations?.['workers/triggered_by'] ?? 'deployment'),
+            message: String(d.annotations?.['workers/message'] ?? ''),
+            versionId: String(d.versions?.[0]?.version_id ?? ''),
+          }));
+          return new Response(JSON.stringify({ ok: true, deploys }), {
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+          });
+        } catch {
+          return new Response(JSON.stringify({ ok: false, error: 'could not reach Cloudflare' }), {
             status: 502,
             headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
           });

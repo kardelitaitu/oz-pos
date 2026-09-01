@@ -445,6 +445,40 @@
     return wrap;
   }
 
+  // cfDeployRows renders Cloudflare Worker deployment history (newest
+  // first) as compact rows: deploy message with the git sha highlighted,
+  // author, trigger chip and a WIB timestamp. Built with el() →
+  // textContent; API data never touches innerHTML.
+  function cfDeployRows(deploys) {
+    var wrap = el('div', 'deploy-list');
+    if (!Array.isArray(deploys) || deploys.length === 0) {
+      wrap.appendChild(el('p', 'empty', t('health.deploysEmpty')));
+      return wrap;
+    }
+    deploys.forEach(function (d) {
+      var row = el('div', 'deploy-row');
+      var main = el('span', 'deploy-msg');
+      var msg = String((d && d.message) || '');
+      // Highlight the embedded git sha ("Coding Agent — 47e3ea90 …").
+      var m = msg.match(/\b[0-9a-f]{8}\b/);
+      if (m && m.index !== undefined) {
+        if (m.index > 0) main.appendChild(document.createTextNode(msg.slice(0, m.index)));
+        main.appendChild(el('span', 'deploy-sha', m[0]));
+        if (m.index + m[0].length < msg.length) main.appendChild(document.createTextNode(msg.slice(m.index + m[0].length)));
+      } else {
+        main.textContent = msg || '—';
+      }
+      row.appendChild(main);
+      if (d && d.author) row.appendChild(el('span', 'deploy-author', String(d.author)));
+      var trig = String((d && d.trigger) || 'deployment');
+      row.appendChild(el('span', 'deploy-chip deploy-chip--' + (trig === 'secret' ? 'secret' : 'deploy'), trig));
+      var ts = d && d.time ? logTsWib(d.time) : '';
+      if (ts) row.appendChild(el('span', 'deploy-time', ts + ' WIB'));
+      wrap.appendChild(row);
+    });
+    return wrap;
+  }
+
   // exchangeUrlFrom validates the /exchange-issue response and builds the
   // redirect URL. B13 fix: login.js concatenated body.code unguarded — a
   // 200 response without a code sent the browser to /?code=undefined, the
@@ -925,6 +959,11 @@
     'health.logsCaption': 'times in UTC+7 · source: Northflank',
     'health.logsEmpty': 'No log lines in the last 24 hours.',
     'health.logsFailed': 'Could not load logs.',
+    'health.deploysTitle': 'Cloudflare Deployments — worker oz-pos',
+    'health.deploysRefresh': '↻ Refresh',
+    'health.deploysCaption': 'times in UTC+7 · source: Cloudflare',
+    'health.deploysEmpty': 'No deployments found.',
+    'health.deploysFailed': 'Could not load deployments.',
     'common.loading': 'Loading…',
     'common.loadingTenants': 'Loading tenants…',
     'common.failedToLoadTenants': 'Failed to load tenants.',
@@ -1052,6 +1091,7 @@
     stripAnsi: stripAnsi,
     logTsWib: logTsWib,
     logView: logView,
+    cfDeployRows: cfDeployRows,
     mountModal: mountModal,
     flashMessage: flashMessage,
     fetchWithTimeout: fetchWithTimeout,

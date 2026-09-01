@@ -683,6 +683,29 @@ select.input {
 .log-ts { color: var(--text-muted); flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .log-msg { color: var(--text); white-space: pre-wrap; word-break: break-word; min-width: 0; }
 
+/* ── Health — Cloudflare deployments list ──────────────────────────── */
+.deploy-list { display: flex; flex-direction: column; }
+.deploy-row {
+  display: flex; align-items: center; gap: .75rem;
+  padding: .45rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.deploy-row:last-child { border-bottom: none; }
+.deploy-msg { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deploy-sha { font-family: var(--font-mono); color: var(--primary); font-weight: 600; }
+.deploy-author { color: var(--text-muted); flex-shrink: 0; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deploy-chip {
+  flex-shrink: 0; font-size: 10px; font-weight: 600;
+  padding: 2px 7px; border-radius: 999px;
+  background: var(--ghost-bg); color: var(--text-muted);
+}
+.deploy-chip--secret { background: var(--tint-warning-bg); color: var(--warning); }
+.deploy-time { color: var(--text-muted); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) {
+  .deploy-author { display: none; }
+}
+
 /* ── Responsive: tablet + mobile portrait ──────────────────────────── */
 @media (max-width: 800px) {
   .chart-grid { grid-template-columns: 1fr; gap: 1rem; }

@@ -818,6 +818,36 @@ describe('admin-utils logView / stripAnsi / logTsWib (health platform logs)', ()
   });
 });
 
+describe('admin-utils cfDeployRows (health Cloudflare deployments)', () => {
+  const deploys = [
+    { id: 'd1', time: '2026-09-01T14:12:07.544Z', author: 'adikaradwiatmaja@gmail.com', trigger: 'deployment', message: 'Coding Agent — 47e3ea90 health logs (feat/agent-4-website)', versionId: 'v1' },
+    { id: 'd2', time: '2026-09-01T14:08:43.612Z', author: 'adikaradwiatmaja@gmail.com', trigger: 'secret', message: '', versionId: 'v2' },
+  ];
+
+  it('renders rows newest-first with sha highlighted via textContent', () => {
+    const v = utils.cfDeployRows(deploys);
+    const rows = v.querySelectorAll('.deploy-row');
+    expect(rows.length).toBe(2);
+    const sha = rows[0].querySelector('.deploy-sha');
+    expect(sha.textContent).toBe('47e3ea90');
+    expect(rows[0].querySelector('.deploy-msg').querySelector('img')).toBeNull();
+    expect(rows[0].innerHTML).not.toContain('<img');
+    expect(rows[0].querySelector('.deploy-time').textContent).toBe('21:12:07 WIB');
+  });
+
+  it('tags secret-triggered rows with the warning chip and falls back to —', () => {
+    const v = utils.cfDeployRows(deploys);
+    const rows = v.querySelectorAll('.deploy-row');
+    expect(rows[1].querySelector('.deploy-chip--secret')).not.toBeNull();
+    expect(rows[1].querySelector('.deploy-msg').textContent).toBe('—');
+  });
+
+  it('shows the empty state for no deploys', () => {
+    expect(utils.cfDeployRows([]).querySelector('.empty')).not.toBeNull();
+    expect(utils.cfDeployRows(null).querySelector('.empty')).not.toBeNull();
+  });
+});
+
 describe('admin-utils busyWrap (B19: double-click submitted the action twice)', () => {
   // The tenant detail modal's Revoke/Activate/Renew/Upgrade-save buttons
   // fired doAction on every click with no in-flight guard. Renew is

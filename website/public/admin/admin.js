@@ -437,6 +437,48 @@
         }
         refreshBtn.addEventListener('click', loadLogs);
         loadLogs();
+
+        // ── Cloudflare deployments (worker oz-pos, via the worker proxy) ─
+        // Same trust shape as the log panel: the CF token lives in a Worker
+        // secret; the browser talks only to same-origin /__oz/cf-deploys.
+        const cfCard = el('div', 'card table-card');
+        const cfHead = el('div', 'logs-head');
+        cfHead.appendChild(el('h2', null, t('health.deploysTitle')));
+        const cfMeta = el('span', 'muted log-meta');
+        cfHead.appendChild(cfMeta);
+        const cfRefresh = el('button', 'btn btn-ghost btn-sm', t('health.deploysRefresh'));
+        cfRefresh.type = 'button';
+        cfHead.appendChild(cfRefresh);
+        cfCard.appendChild(cfHead);
+        const cfWrap = el('div');
+        cfWrap.appendChild(el('p', 'empty', t('common.loading')));
+        cfCard.appendChild(cfWrap);
+        c.appendChild(cfCard);
+
+        const cfGuard = createSeqGuard();
+        async function loadDeploys() {
+          const seq = cfGuard.next();
+          cfRefresh.disabled = true;
+          cfWrap.innerHTML = '';
+          cfWrap.appendChild(el('p', 'empty', t('common.loading')));
+          let body = null;
+          try {
+            const res = await fetchWithTimeout(undefined, '/__oz/cf-deploys');
+            body = await res.json();
+          } catch (e) { body = null; }
+          if (!cfGuard.isCurrent(seq)) { return; }
+          cfRefresh.disabled = false;
+          cfWrap.innerHTML = '';
+          if (!body || !body.ok) {
+            const detail = body && body.error ? ' ' + body.error : '';
+            cfWrap.appendChild(el('p', 'empty', t('health.deploysFailed') + detail));
+            return;
+          }
+          cfMeta.textContent = t('health.deploysCaption');
+          cfWrap.appendChild(cfDeployRows(body.deploys));
+        }
+        cfRefresh.addEventListener('click', loadDeploys);
+        loadDeploys();
       } catch (err) { if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">' + t('common.failedToLoadHealth') + '</p></div>'; }
     }
 

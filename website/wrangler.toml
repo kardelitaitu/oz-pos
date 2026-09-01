@@ -30,6 +30,9 @@ compatibility_date = "2026-08-16"
 # when the Northflank host changes; no site rebuild required.
 LICENSE_API_URL = "https://license.ozpos.my.id"
 CONTACT_WEBHOOK_URL = "https://discord.com/api/webhooks/154258447961xxxxxx"
+# Cloudflare account for the Health-tab deployments proxy (/__oz/cf-deploys).
+# The API token itself is a Worker secret: npx wrangler secret put CF_API_KEY
+CLOUDFLARE_ACCOUNT_ID = "872d4b05f29418e3e8c8a35d687e3dda"
 
 # PUBLIC_* env vars are baked into the JS at BUILD time (import.meta.env),
 # so they are NOT bindings — set them when running `npm run build`:
