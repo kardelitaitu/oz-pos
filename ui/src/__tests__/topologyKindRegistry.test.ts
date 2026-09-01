@@ -95,9 +95,13 @@ describe('node kind registry (ADR #45 §3)', () => {
   });
 
   it('resolves an unregistered workspace type to the declared fallback row', () => {
-    expect(nodeKindEntry(node('workspace', 'admin'))).toBe(NODE_KIND_REGISTRY['workspace:*']);
+    // ADR #45 §3 follow-up #1 moved `admin` out of here: it is a real seeded type
+    // with no contract endpoints, so it now has its own row with no output
+    // socket. What still falls back is a type the registry has never heard of,
+    // and a legacy node carrying no type key at all.
     expect(nodeKindEntry(node('workspace'))).toBe(NODE_KIND_REGISTRY['workspace:*']);
     expect(nodeKindEntry(node('workspace', 'pharmacy-pos'))).toBe(NODE_KIND_REGISTRY['workspace:*']);
+    expect(NODE_KIND_REGISTRY['workspace:admin']).toBeDefined();
   });
 
   it('keeps the card token and the contract token deliberately different', () => {
@@ -232,21 +236,21 @@ describe('node kind registry (ADR #45 §3)', () => {
 });
 
 /** The recorded debt, by name. Each entry is a socket the card draws that the
- *  §1 contract admits no wire for. */
-const UNAUTHORABLE_SOCKET_DEBT: readonly string[] = [
-  // A workspace whose typeKey the contract does not register — `admin`,
-  // `general`, a future `pharmacy-pos`, or none at all — is drawn with the
-  // retail inventory outputs, but the contract declares endpoints only for
-  // store-pos, restaurant-pos and kds. So the card offers two sockets that can
-  // never carry a wire. ADR #45 §3 follow-up #1.
-  'workspace:admin:right:stock-out',
-  'workspace:admin:right:transfer-out',
-  // The `workspace:warehouse` pair recorded here is paid off — that row now
-  // advertises no output socket, since the contract declares no endpoints for a
-  // workspace-shaped `warehouse`. ADR #45 §3 follow-up #1, step 1. What remains
-  // is the `workspace:*` fallback, which cannot be emptied the same way because
-  // a legacy type-less node renders through it; see the tests below.
-];
+ *  §1 contract admits no wire for. Emptied by ADR #45 §3 follow-up #1.
+ *
+ *  Read the remaining hazard honestly: this list is empty because no KIND the
+ *  corpus enumerates is left holding an unauthorizable socket, not because the
+ *  fallback row is now safe to empty. `workspace:*` still advertises stock-out
+ *  and transfer-out, and any type the registry has never heard of — a future
+ *  `pharmacy-pos`, a typo, a type added to the DB before anyone adds a row —
+ *  still resolves to it. That is deliberate: a legacy node with no type key
+ *  renders through the same row, and the contract treats it as
+ *  `workspace:store-pos`, whose stock feeds are legitimate. The two-population
+ *  tests below pin that coupling.
+ *
+ *  The list is kept rather than deleted so a new entry appearing here means
+ *  someone gave a card a socket the contract has no endpoints for. */
+const UNAUTHORABLE_SOCKET_DEBT: readonly string[] = [];
 
 /** Map a card kind back to the contract vocabulary the gate speaks. */
 function kindToNode(kind: string): TopologyNodeData {
@@ -275,26 +279,25 @@ describe('the workspace:* fallback row serves two populations', () => {
     ).toBe(true);
   });
 
-  it('renders an unregistered workspace type from the fallback row, where nothing is authorizable', () => {
+  it('gives an unregistered-but-known workspace type its own row, not the fallback', () => {
     const admin = node('workspace', 'admin');
-    // cardKindToken does distinguish the two populations: an explicit but
-    // unregistered type key stays itself rather than collapsing to the
-    // wildcard. The conflation happens one step later, in nodeKindEntry, whose
-    // `?? NODE_KIND_REGISTRY['workspace:*']` gives this token the same row the
-    // type-less legacy node gets. That is the mechanism, and round 13 had it
-    // wrong while having the conclusion right.
+    // cardKindToken distinguishes the two populations: an explicit type key stays
+    // itself rather than collapsing to the wildcard. Step 2 of ADR #45 §3
+    // follow-up #1 gave `admin` a row of its own, so nodeKindEntry no longer has
+    // to reach the `??` fallback for it.
     expect(cardKindToken(admin)).toBe('workspace:admin');
-    expect(NODE_KIND_REGISTRY['workspace:admin']).toBeUndefined();
+    expect(NODE_KIND_REGISTRY['workspace:admin']).toBeDefined();
     expect(
       pairingAdmitsKinds('stock-out', 'stock-in', 'workspace:admin', 'warehouse'),
     ).toBe(false);
+    // And the row now matches what the contract says: nothing to offer.
+    expect(nodeKindEntry(admin).rightSemantics).toEqual([]);
   });
 
-  it('resolves both populations to one identical row, which is what makes deletion unsafe', () => {
-    // The shared row is the hazard: one edit satisfies the ledger and strips
-    // ports the legacy population may legitimately use. If this ever fails, the
-    // two have been given separate rows and the ledger can be emptied by editing
-    // only the unregistered one.
-    expect(nodeKindEntry(node('workspace'))).toBe(nodeKindEntry(node('workspace', 'admin')));
+  it('no longer resolves the two populations to one row, which is what emptied the ledger', () => {
+    // This assertion is the inverse of the one that stood here through step 1.
+    // It failed the moment `admin` got its own row, which is exactly the signal
+    // the ledger test was written to demand before anyone deletes a socket.
+    expect(nodeKindEntry(node('workspace'))).not.toBe(nodeKindEntry(node('workspace', 'admin')));
   });
 });

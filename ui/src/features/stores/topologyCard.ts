@@ -680,6 +680,31 @@ export const NODE_KIND_REGISTRY: Readonly<Record<string, NodeKindEntry>> = {
   // `warehouse` NODE instead (see the `warehouse` row above), so this shape
   // exists only for graphs that recorded it historically — which is why it
   // keeps the fallback's sockets but still names itself in the type selector.
+  // ADR #45 §3 follow-up #1, step 2. `admin` is a real seeded workspace type key
+  // with no endpoints anywhere in the topology contract, so it used to fall
+  // through to `workspace:*` and be drawn with the retail inventory feeds — two
+  // sockets the Apply gate could never authorize. Giving it its own row pre-empts
+  // that fallback without touching the fallback itself, which a legacy type-less
+  // node still needs: the contract treats that node as `workspace:store-pos`,
+  // whose stock feeds are legitimate. Emptying the shared row instead would have
+  // paid the ledger by breaking legacy stores.
+  'workspace:admin': {
+    visiblePorts: ['left'],
+    leftVariants: ['location-in'],
+    leftSemantics: ['location-in'],
+    rightSemantics: [],
+    records: { left: 'location-in' },
+    // Required by NodeKindEntry though no right port renders; see the note on
+    // `workspace:warehouse` about making these conditional on visiblePorts.
+    rightLabelId: 'topology-port-workspace-out',
+    rightAriaLabelId: NEUTRAL_ARIA,
+    icon: PosIcon,
+    settingsCard: WorkspaceStorePosSettings,
+    // No `typeLabelId`: there is no `topology-ws-type-admin` message in any
+    // bundle, and inventing one here would need copy in every locale to pass the
+    // bundle-parity gate. `workspaceTypeLabel` falls back to the raw type key,
+    // which is the same treatment any other unregistered key already gets.
+  },
   'workspace:warehouse': {
     // ADR #45 §3 follow-up #1. The topology contract declares no endpoints with
     // an `admin`-style workspace type on either side, so the stock and transfer

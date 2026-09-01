@@ -862,8 +862,7 @@
         "isKds": false,
         "isRestaurantPos": false,
         "visiblePorts": [
-          "left",
-          "right"
+          "left"
         ],
         "leftPortVariants": [
           "location-in"
@@ -888,15 +887,11 @@
           },
           {
             "side": "right",
-            "visible": true,
+            "visible": false,
             "rows": [
               {
                 "index": 0,
-                "semantics": [
-                  "stock-out",
-                  "transfer-out"
-                ],
-                "gating": "stock-out",
+                "semantics": [],
                 "labelId": "topology-port-workspace-out",
                 "ariaLabelId": "topology-port-aria"
               }
