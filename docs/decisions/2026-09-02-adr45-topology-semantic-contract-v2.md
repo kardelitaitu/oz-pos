@@ -2,11 +2,11 @@
 num: 45
 area: topology
 title: ADR #45: Topology Semantic Contract v2 — Endpoint Predicates, Kind Registry, Deliberate Cold Start, and Theme Parity
-status: Accepted — §1 implemented (2026-09-02); §2–§5 proposed
+status: Accepted — §1–§2 implemented (2026-09-02); §3–§5 proposed
 ---
 # ADR #45: Topology Semantic Contract v2
 
-**Status:** Accepted — §1 implemented (2026-09-02); §2–§5 proposed
+**Status:** Accepted — §1–§2 implemented (2026-09-02); §3–§5 proposed
 **Date:** 2026-09-02
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** topology, semantic-contract, cross-language-parity, node-kind-registry, cold-start, theming
@@ -416,13 +416,55 @@ reproduce with this change stashed, and every one names a preset fixture
 its component no longer has, or a hardcoded `18px` port padding: the concurrent
 preset-removal work, not this contract.
 
-### §2 — corpus test (not shipped)
+### §2 — corpus test (shipped 2026-09-02)
 
-Interim measure: the TypeScript and Rust evaluator tests assert the **same**
-verdicts case by case, so a divergence in either language fails one of the two
-suites. This is mirroring, not generation — it catches drift in the evaluator
-but not drift in coverage when a row or kind is added. The generated corpus
-remains the real fix and still gates closing this ADR.
+`crates/oz-core/src/topologySemantics.matrix.json` is the generated corpus:
+every (pairing row × source kind × target kind) combination — 7 rows × 9 kinds
+× 9 kinds = 567 verdicts — produced by the Rust evaluator, never by restating a
+rule. Both gates assert against it:
+`topology_matrix_golden_matches_the_rust_evaluator` in Rust, and
+`ui/src/__tests__/topologyMatrix.test.ts` in TypeScript (572 tests, 567 of them
+generated). A change to either evaluator now fails a test until the golden is
+regenerated deliberately and the matrix diff is reviewed — which is where a new
+rule gets argued instead of quietly landing on one side.
+
+The golden is Rust-generated because the backend is the persistence authority:
+it defines what a wire that survives means. The TypeScript test is the one that
+catches the canvas drifting from it.
+
+The corpus probes three undeclared kinds on purpose — `workspace:pharmacy-pos`
+(an unregistered POS type), `workspace:general` (a `purpose_key` mistaken for a
+`type_key`), and `not-a-kind` — so fail-closed behaviour is pinned rather than
+assumed.
+
+`verify-topology-parity.py` gained a second phase. It cannot run either
+evaluator, so it enforces the corpus's *shape*: existence, schema version, one
+row per pairing in contract order, every declared kind probed, the full
+cross-product per row, and **at least one admitted pair per row**. That last
+check exists because removing the family-match rule made the Location row
+all-false while every other test still passed; a row that authorizes nothing is
+either a dead contract member or a broken evaluator, and the script now forces
+the question.
+
+Two bugs were caught by negative-controlling this slice's own tests — the
+practice, not the assertion, found them:
+
+1. The corpus guard script printed row labels containing `→`, which raised
+   `UnicodeEncodeError` on a cp1252 Windows console. The script died *instead
+   of reporting the drift it had found*: a guard that fails closed by failing
+   silently is worse than no guard. Output is now forced to UTF-8 with
+   `errors="replace"`, and labels use `->`.
+2. The corpus test was verified by tampering one golden verdict and confirming
+   2 assertions failed, and the shape guard by zeroing a row's verdicts and
+   confirming the specific message. A test that has never been observed failing
+   is not evidence.
+
+### §2 — what is still not covered
+
+The corpus pins the **endpoint evaluator**. It does not yet pin the two
+specialized operation-source checks (follow-up #2) or `socketSemanticIds`'
+capability fallthrough (follow-up #1), both of which can still make the canvas
+and the gate disagree for reasons other than endpoint kinds.
 
 ### Follow-ups this slice surfaced
 

@@ -572,3 +572,150 @@ fn contract_gate_still_admits_both_declared_operation_feeds() {
         &warehouse
     ));
 }
+
+// ── ADR #45 §2: the generated cross-language corpus ───────────────
+//
+// The corpus is every (pairing row × source kind × target kind) combination,
+// and `topologySemantics.matrix.json` records the verdicts the Rust evaluator
+// produced when it was last regenerated. BOTH gates assert against that file,
+// so changing either evaluator without regenerating the matrix fails a test.
+// That is the mechanism: a contract change has to become a deliberate,
+// reviewable act whose blast radius shows up as a matrix diff, rather than a
+// silent disagreement between two languages that a merchant discovers by
+// pressing Apply.
+//
+// Regenerate with:
+//   TOPOLOGY_MATRIX_UPDATE=1 cargo test -p oz-core --lib topology_matrix
+//
+// The golden is Rust-generated on purpose: the backend is the persistence
+// authority, so it defines what a wire that survives means. The TypeScript side
+// (ui/src/__tests__/topologyMatrix.test.ts) is the one that catches the canvas
+// drifting away from it.
+
+/// Kinds the corpus probes. The first six come from the contract's own
+/// `nodeKinds` plus `workspaceTypeKeys`; the rest are deliberately undeclared,
+/// so fail-closed behaviour is pinned in the golden rather than assumed.
+fn corpus_kinds() -> Vec<&'static str> {
+    vec![
+        "branch-location",
+        "warehouse",
+        "hardware",
+        "workspace:store-pos",
+        "workspace:restaurant-pos",
+        "workspace:kds",
+        // An unregistered POS type, a purpose_key that is not a type_key, and
+        // plain nonsense. None of the three may author a wire.
+        "workspace:pharmacy-pos",
+        "workspace:general",
+        "not-a-kind",
+    ]
+}
+
+fn matrix_path() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/topologySemantics.matrix.json")
+}
+
+/// Build the full verdict matrix by asking the live evaluator, never by
+/// restating a rule — so the golden can only ever record what the code decides.
+fn build_matrix() -> Value {
+    let contract = shared_topology_semantics();
+    let pairings = contract
+        .get("semanticPairings")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let kinds: Vec<Value> = corpus_kinds()
+        .iter()
+        .map(|kind| Value::String((*kind).to_string()))
+        .collect();
+    let rows: Vec<Value> = pairings
+        .iter()
+        .map(|row| {
+            let source = value_string(row, "source").unwrap_or_default();
+            let target = value_string(row, "target").unwrap_or_default();
+            let mut verdicts = serde_json::Map::new();
+            for from in corpus_kinds() {
+                for to in corpus_kinds() {
+                    verdicts.insert(
+                        format!("{from}|{to}"),
+                        Value::Bool(pairing_admits_kinds(source, target, from, to)),
+                    );
+                }
+            }
+            json!({
+                "source": source,
+                "target": target,
+                "relationshipType": value_string(row, "relationshipType").unwrap_or_default(),
+                "verdicts": Value::Object(verdicts),
+            })
+        })
+        .collect();
+    json!({
+        "generatedBy": "oz-core pairing_admits_kinds (ADR #45 §2)",
+        "contractSchemaVersion": contract.get("schemaVersion").cloned().unwrap_or(Value::Null),
+        "kinds": kinds,
+        "rows": rows,
+    })
+}
+
+#[test]
+fn topology_matrix_golden_matches_the_rust_evaluator() {
+    let path = matrix_path();
+    let expected = build_matrix();
+    if std::env::var("TOPOLOGY_MATRIX_UPDATE").is_ok() {
+        let rendered = serde_json::to_string_pretty(&expected).expect("matrix must serialize");
+        std::fs::write(&path, format!("{rendered}\n")).expect("matrix must be writable");
+        return;
+    }
+    assert!(
+        path.exists(),
+        "topology matrix golden missing at {} — regenerate with \
+         TOPOLOGY_MATRIX_UPDATE=1 cargo test -p oz-core --lib topology_matrix",
+        path.display()
+    );
+    let bytes = std::fs::read(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let golden: Value = serde_json::from_slice(&bytes).expect("matrix golden must be valid JSON");
+    assert_eq!(
+        golden, expected,
+        "the Rust topology evaluator no longer matches \
+         crates/oz-core/src/topologySemantics.matrix.json — either restore the \
+         evaluator, or regenerate the golden deliberately and review the matrix \
+         diff (ADR #45 §2)"
+    );
+}
+
+#[test]
+fn topology_matrix_covers_every_contract_row_and_declared_kind() {
+    // Guards the golden against going stale in the quiet direction: a new
+    // pairing row or a newly declared workspace type must land in the corpus,
+    // so the matrix cannot silently stop covering part of the contract.
+    let golden = build_matrix();
+    let pairings = shared_topology_semantics()
+        .get("semanticPairings")
+        .and_then(Value::as_array)
+        .expect("contract must declare semanticPairings");
+    let rows = golden["rows"].as_array().expect("matrix rows");
+    assert_eq!(
+        rows.len(),
+        pairings.len(),
+        "the matrix must hold exactly one row per contract pairing"
+    );
+    let kinds = golden["kinds"].as_array().expect("matrix kinds");
+    let declared = shared_topology_semantics()
+        .get("workspaceTypeKeys")
+        .and_then(Value::as_array)
+        .expect("contract must declare workspaceTypeKeys");
+    for key in declared {
+        let token = format!("workspace:{}", key.as_str().expect("type keys are strings"));
+        assert!(
+            kinds.iter().any(|k| k.as_str() == Some(token.as_str())),
+            "declared workspace type {token} is missing from the corpus kinds"
+        );
+    }
+    for kind in ["branch-location", "warehouse", "hardware"] {
+        assert!(
+            kinds.iter().any(|k| k.as_str() == Some(kind)),
+            "node kind {kind} is missing from the corpus kinds"
+        );
+    }
+}
