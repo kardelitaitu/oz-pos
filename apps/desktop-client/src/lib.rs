@@ -765,6 +765,12 @@ pub fn run() {
             commands::topology::load_topology,
             commands::topology::can_save_topology,
             commands::topology::apply_topology_diff,
+            // ADR #45 §4.2 — diagram templates, persisted per branch in the
+            // same settings namespace as the graph they seed.
+            commands::topology::save_topology_template,
+            commands::topology::load_topology_template,
+            commands::topology::list_topology_templates,
+            commands::topology::delete_topology_template,
             // ── Newly registered scoped variants (H-1/H-2 remediation) ──
             commands::branding::set_brand_primary_colour_scoped,
             commands::branding::set_brand_store_name_scoped,
