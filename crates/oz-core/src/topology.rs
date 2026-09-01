@@ -412,13 +412,11 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
         .filter(|node| semantic_node_type(node) == Some("warehouse"))
         .filter_map(|node| value_string(node, "id"))
         .collect();
-    let retail_pos_ids: std::collections::HashSet<&str> = nodes
-        .iter()
-        .filter(|node| {
-            semantic_node_type(node) == Some("workspace") && semantic_type_key(node) == "store-pos"
-        })
-        .filter_map(|node| value_string(node, "id"))
-        .collect();
+    // `retail_pos_ids` used to live here: a hand-built set of the nodes allowed
+    // to feed a warehouse's operation-in. ADR #45 §3 follow-up #2 removed it,
+    // because the contract's `endpoints` list for that pairing is the same
+    // information and the check now reads that instead. Two correct copies are
+    // still two copies.
     let mut incoming_by_target: std::collections::HashMap<&str, Vec<&Value>> =
         std::collections::HashMap::new();
     for wire in wires {
@@ -781,10 +779,26 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
             ));
         }
         for operation_wire in operation_inputs {
-            let source_is_retail_pos = retail_pos_ids
-                .contains(value_string(operation_wire, "from_node_id").unwrap_or_default())
-                && value_string(operation_wire, "from_port_id") == Some("operation-out");
-            if !source_is_retail_pos {
+            // ADR #45 §3 follow-up #2, second half: ask the contract which kinds
+            // may feed `operation-in` on a warehouse instead of consulting
+            // `retail_pos_ids`, a set built by hand from the same endpoints the
+            // contract already lists. Unlike the KDS variant this predicate was
+            // correct — it checked node type as well as type key — but a correct
+            // duplicate is still free to drift from the rule it copies, which is
+            // the whole argument sections 1-3 make.
+            let feed_admitted = value_string(operation_wire, "from_port_id")
+                == Some("operation-out")
+                && node_by_id
+                    .get(value_string(operation_wire, "from_node_id").unwrap_or_default())
+                    .is_some_and(|node| {
+                        pairing_admits_kinds(
+                            "operation-out",
+                            "operation-in",
+                            &node_kind_token(node),
+                            "warehouse",
+                        )
+                    });
+            if !feed_admitted {
                 return Err(topology_validation(
                     "invalid-warehouse-operation-source",
                     Some(warehouse_id),

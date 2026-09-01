@@ -893,7 +893,22 @@ export function validateTopologyGraph(
     }
     for (const input of operationInputs) {
       const source = graph.nodes.find((node) => node.id === input.fromNodeId);
-      if (source?.kind !== 'workspace' || source.typeKey !== 'store-pos') {
+      // ADR #45 §3 follow-up #2, second half: ask the contract which kinds may
+      // feed `operation-in` on a warehouse instead of re-stating "store-pos"
+      // here. Unlike the KDS variant, this predicate already tested kind
+      // alongside the type key, so it was never wrong — only duplicated, which
+      // is what would eventually let it drift. The port test stays explicit
+      // because `operationInputs` filters on the target port and relationship,
+      // not the source port.
+      const feedAdmitted = source !== undefined
+        && input.fromPortId === 'operation-out'
+        && pairingAdmitsKinds(
+          'operation-out',
+          'operation-in',
+          nodeKindToken(source.kind, source.typeKey),
+          nodeKindToken(warehouse.kind, warehouse.typeKey),
+        );
+      if (!feedAdmitted) {
         errors.push({
           code: 'invalid-warehouse-operation-source',
           messageId: 'topology-validation-invalid-warehouse-operation-source',
