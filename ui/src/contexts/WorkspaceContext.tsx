@@ -21,81 +21,7 @@ import { createSession, destroySession, refreshPickerTicket } from "@/api/staff"
 import { getDeviceId } from "@/api/system";
 import { useAuth } from "@/contexts/AuthContext";
 
-// ── Fallback workspaces for development (ADR #4 shape) ──────────────
 
- 
-const FALLBACK_WORKSPACES: WorkspaceDto[] = [
-  {
-    instance_id: "default-restaurant-pos",
-    type_key: "restaurant-pos",
-    store_id: "default",
-    store_name: "Main Store",
-    purpose_key: "general",
-    name: "Restaurant POS",
-    description:
-      "Cashier terminal for restaurant ordering with menu categories and table management",
-    icon: "restaurant",
-    layout_mode: "fullscreen",
-    colour: null,
-    is_default: false,
-  },
-  {
-    instance_id: "default-store-pos",
-    type_key: "store-pos",
-    store_id: "default",
-    store_name: "Main Store",
-    purpose_key: "general",
-    name: "Store POS",
-    description:
-      "Cashier terminal for retail with product lookup, customer management, and loyalty",
-    icon: "store",
-    layout_mode: "fullscreen",
-    colour: null,
-    is_default: false,
-  },
-  {
-    instance_id: "default-kds",
-    type_key: "kds",
-    store_id: "default",
-    store_name: "Main Store",
-    purpose_key: "general",
-    name: "Kitchen Display",
-    description:
-      "Order queue display for the kitchen — tap tickets to advance their status",
-    icon: "kds",
-    layout_mode: "fullscreen",
-    colour: null,
-    is_default: false,
-  },
-  {
-    instance_id: "default-warehouse",
-    type_key: "warehouse",
-    store_id: "default",
-    store_name: "Main Store",
-    purpose_key: "stock-control",
-    name: "Warehouse",
-    description:
-      "Manage products, stock levels, bundles, categories, and inventory reports",
-    icon: "inventory",
-    layout_mode: "sidebar",
-    colour: null,
-    is_default: false,
-  },
-  {
-    instance_id: "default-admin",
-    type_key: "admin",
-    store_id: "default",
-    store_name: "Main Store",
-    purpose_key: "general",
-    name: "Admin",
-    description:
-      "System settings, staff management, reports, audit logs, and configuration",
-    icon: "admin",
-    layout_mode: "sidebar",
-    colour: null,
-    is_default: false,
-  },
-];
 
 // ── Workspace scope context (ADR #4) ────────────────────────────────
 
@@ -263,25 +189,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       // sends a role/user claim that could be forged.
       if (!pickerTicket) return;
       try {
+        // Only registered workspace instances are shown on the home screen —
+        // an empty list from the server means there is nothing to show, so
+        // the picker renders its empty state instead of demo data.
         const workspaces = await listWorkspaces(pickerTicket, storeId);
         if (!cancelled()) {
-          if (workspaces.length > 0) {
-            setAvailableWorkspaces(workspaces);
-            setError(null);
-          } else {
-            setAvailableWorkspaces(FALLBACK_WORKSPACES);
-            setError(null);
-          }
+          setAvailableWorkspaces(workspaces);
+          setError(null);
         }
       } catch (err) {
         if (!cancelled()) {
           console.warn(
-            "WorkspaceContext: failed to list workspaces, using fallback",
+            "WorkspaceContext: failed to list workspaces",
             err,
           );
-          setAvailableWorkspaces(FALLBACK_WORKSPACES);
+          setAvailableWorkspaces([]);
           setError(
-            "Failed to load workspaces from server. Using demo workspaces.",
+            "Failed to load workspaces from server.",
           );
         }
       }
