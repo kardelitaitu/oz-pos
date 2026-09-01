@@ -348,6 +348,8 @@ topology-apply-status-refreshing = Menyegarkan data workspace…
 # ── Canvas HUD (aria-hidden decorative text) ──
 topology-branch-selector-label = Cabang
 topology-branch-selector-aria = Pilih cabang topologi
+topology-branch-selector-empty = Belum ada cabang
+topology-branch-selector-unavailable = Cabang tidak tersedia
 topology-branch-add = Tambah Cabang
 topology-branch-add-name-placeholder = Nama cabang baru
 topology-branch-add-confirm = Buat

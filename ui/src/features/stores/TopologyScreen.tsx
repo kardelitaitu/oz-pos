@@ -541,8 +541,26 @@ export default function TopologyScreen() {
                 }}
                 options={stores.map((s) => ({ value: s.id, label: s.name }))}
                 ariaLabel={l10n.getString('topology-branch-selector-aria')}
-                placeholder={l10n.getString('topology-branch-selector-label')}
-                disabled={deletingBranch}
+                /* With branches present a branch is always auto-selected, so
+                   the placeholder never shows — it only surfaces when the
+                   list settles empty, where the bare "Branch" label read
+                   like a fake selected value sitting on an openable empty
+                   dropdown. A failed store fetch also renders [] and must
+                   not claim the branches don't exist ("No branches yet"
+                   would lie — the load-error toast already fired), and the
+                   pre-resolution window keeps the plain label so a slow IPC
+                   roundtrip doesn't flash the empty-state text. */
+                placeholder={
+                  storesUnavailable
+                    ? l10n.getString('topology-branch-selector-unavailable')
+                    : storesResolvedRef.current && stores.length === 0
+                      ? l10n.getString('topology-branch-selector-empty')
+                      : l10n.getString('topology-branch-selector-label')
+                }
+                /* Nothing to pick while the list is empty (or still loading)
+                   — disabling also keeps the empty dropdown popover closed;
+                   the adjacent Add Branch button is the real action. */
+                disabled={deletingBranch || stores.length === 0}
               />
             </div>
             {addingBranch && atStoreLimit && (

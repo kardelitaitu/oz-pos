@@ -350,6 +350,8 @@ topology-apply-status-refreshing = Refreshing workspace data…
 # ── Canvas HUD (aria-hidden decorative text) ──
 topology-branch-selector-label = Branch
 topology-branch-selector-aria = Select topology branch
+topology-branch-selector-empty = No branches yet
+topology-branch-selector-unavailable = Branches unavailable
 topology-branch-add = Add Branch
 topology-branch-add-name-placeholder = New branch name
 topology-branch-add-confirm = Create
