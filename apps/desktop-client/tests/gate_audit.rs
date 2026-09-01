@@ -240,7 +240,7 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
         ],
     ),
     ("exchange_rates", 5, &["SETTINGS_EDIT", "SETTINGS_READ"]),
-    ("features", 0, &[]),
+    ("features", 2, &["SETTINGS_EDIT"]),
     ("gift_cards", 0, &[]),
     ("hardware", 0, &[]),
     ("health", 0, &[]),
