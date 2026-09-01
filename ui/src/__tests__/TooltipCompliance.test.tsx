@@ -85,4 +85,18 @@ describe('Tooltip edge compliance (portal)', () => {
     const mw = tooltip.style.maxWidth;
     expect(mw).toBeTruthy();
   });
+
+  it('neutralizes the CSS bottom so the fixed bubble does not stretch', () => {
+    // Regression: portal "top" tooltips use `bottom:` in CSS for positioning.
+    // When we clamp with inline `top`, the CSS `bottom` must be cleared
+    // (bottom: auto), otherwise both top+bottom are set on the fixed element
+    // and the bubble stretches vertically (wrong height).
+    renderTooltip();
+    showTooltip();
+    const tooltip = document.querySelector<HTMLElement>('.tooltip-content--portal')!;
+    // The clamped inline style must explicitly clear the CSS bottom.
+    expect(tooltip.style.bottom).toBe('auto');
+    const top = Number.parseFloat(tooltip.style.top);
+    expect(Number.isNaN(top)).toBe(false);
+  });
 });

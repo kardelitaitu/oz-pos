@@ -140,7 +140,20 @@ export default function Tooltip({
       style={
         portal
           ? clamped
-            ? { left: clamped.left, top: clamped.top, transform: 'none', maxWidth }
+            ? {
+                left: `${clamped.left}px`,
+                top: `${clamped.top}px`,
+                // Clear the opposing CSS anchor so the fixed bubble is not
+                // stretched between two insets (top+bottom or left+right),
+                // which would give it the wrong height/width.
+                right: 'auto',
+                bottom: 'auto',
+                // Inline left/top are already the final centered position,
+                // so drop the CSS translateX/Y centering transform. This also
+                // removes the scale-pop transition, but opacity fade remains.
+                transform: 'none',
+                maxWidth,
+              }
             : portalStyle
           : maxWidth ? { maxWidth } : undefined
       }
