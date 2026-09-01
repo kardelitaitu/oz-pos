@@ -9,6 +9,9 @@ import {
   normalizeTopologyGraph,
   normalizeWireDirection,
   validateTopologyGraph,
+  firstTopologyValidationError,
+  orderTopologyValidationErrors,
+  type TopologyValidationError,
 } from '@/features/stores/topologyContract';
 
 const branch = (id = 'branch-1'): TopologyNodeData => ({
@@ -1271,5 +1274,97 @@ describe('semantic topology contract', () => {
     expect(validateTopologyGraph(normalized, 'premium')).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: 'warehouse-missing-stock-routing' }),
     ]));
+  });
+});
+
+// ── ADR #45 §4.3 — validation ordering ─────────────────────────────
+
+const err = (code: string, nodeId?: string): TopologyValidationError => ({
+  code: code as TopologyValidationError['code'],
+  messageId: `topology-validation-${code}`,
+  ...(nodeId ? { nodeId } : {}),
+});
+const codes = (errors: TopologyValidationError[]): string[] => errors.map((e) => e.code);
+
+describe('orderTopologyValidationErrors', () => {
+  it('puts an unreadable graph ahead of everything else', () => {
+    const ordered = orderTopologyValidationErrors([
+      err('missing-location-input', 'ws-1'),
+      err('unsupported-schema-version'),
+      err('invalid-purpose', 'ws-1'),
+    ]);
+    expect(codes(ordered)[0]).toBe('unsupported-schema-version');
+  });
+
+  it('prefers a structurally impossible graph over a node with the wrong inputs', () => {
+    const ordered = orderTopologyValidationErrors([
+      err('missing-operation-input', 'kds-1'),
+      err('cycle-detected'),
+    ]);
+    expect(codes(ordered)).toEqual(['cycle-detected', 'missing-operation-input']);
+  });
+
+  it('prefers an illegal wire over a legal one that exceeds a capacity limit', () => {
+    const ordered = orderTopologyValidationErrors([
+      err('warehouse-at-capacity', 'wh-1'),
+      err('invalid-semantic-connection'),
+    ]);
+    expect(codes(ordered)).toEqual(['invalid-semantic-connection', 'warehouse-at-capacity']);
+  });
+
+  it('is stable within a tier, so insertion order is the tie-break', () => {
+    const ordered = orderTopologyValidationErrors([
+      err('missing-location-input', 'a'),
+      err('missing-location-input', 'b'),
+      err('missing-location-input', 'c'),
+    ]);
+    expect(ordered.map((e) => e.nodeId)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('sorts an unlisted code last without reordering the listed ones', () => {
+    // Guards the table: adding a code to the validator must not silently shuffle
+    // the priority of codes that are already ranked.
+    const ordered = orderTopologyValidationErrors([
+      err('some-future-code' as TopologyValidationError['code']),
+      err('missing-branch-location'),
+      err('cycle-detected'),
+    ]);
+    expect(codes(ordered)).toEqual(['missing-branch-location', 'cycle-detected', 'some-future-code']);
+  });
+
+  it('does not mutate the caller array', () => {
+    const input = [err('warehouse-tier-limit', 'wh-1'), err('duplicate-node')];
+    const before = codes(input);
+    orderTopologyValidationErrors(input);
+    expect(codes(input)).toEqual(before);
+  });
+
+  it('returns an empty result for no errors', () => {
+    expect(orderTopologyValidationErrors([])).toEqual([]);
+  });
+});
+
+describe('firstTopologyValidationError', () => {
+  it('reports the highest-priority failure, not the first pushed', () => {
+    // The behaviour this replaces was `errors[0]`, which depended on Set
+    // iteration and node insertion order — so the same graph could name a
+    // different "next step" after the merchant dragged a card.
+    const first = firstTopologyValidationError([
+      err('missing-location-input', 'ws-1'),
+      err('invalid-purpose', 'ws-2'),
+      err('duplicate-wire'),
+    ]);
+    expect(first?.code).toBe('duplicate-wire');
+  });
+
+  it('is independent of the order the errors arrived in', () => {
+    const a = [err('missing-operation-input'), err('cycle-detected')];
+    const b = [err('cycle-detected'), err('missing-operation-input')];
+    expect(firstTopologyValidationError(a)?.code).toBe(firstTopologyValidationError(b)?.code);
+    expect(firstTopologyValidationError(a)?.code).toBe('cycle-detected');
+  });
+
+  it('is undefined for a valid graph', () => {
+    expect(firstTopologyValidationError([])).toBeUndefined();
   });
 });

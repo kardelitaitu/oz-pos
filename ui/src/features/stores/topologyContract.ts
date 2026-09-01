@@ -981,5 +981,72 @@ export function validateTopologyGraph(
 export function firstTopologyValidationError(
   errors: TopologyValidationError[],
 ): TopologyValidationError | undefined {
-  return errors[0];
+  return orderTopologyValidationErrors(errors)[0];
+}
+
+/**
+ * ADR #45 §4.3 — the ordering the validation checklist needs.
+ *
+ * `firstTopologyValidationError` used to be `errors[0]`, i.e. whatever the
+ * validator happened to push first. That is not a rule: the validator walks
+ * `Set`s of node ids and object key order, and a saved diagram's node order is
+ * whatever the merchant dragged last. Two merchants with the same problem could
+ * be told to fix different things, and the same merchant reloading the same
+ * graph could see the "next step" move.
+ *
+ * Priority is by what an error makes impossible, not by a guess at merchant
+ * preference — each tier blocks the ones below it:
+ *
+ *  1. the graph cannot be read at all
+ *  2. the graph's shape is structurally impossible
+ *  3. a node or wire is not a legal member of the contract
+ *  4. a node is missing or over-supplied an input
+ *  5. a legal graph exceeds an operational limit
+ *
+ * Codes absent from the table sort last, stably, so adding a code never
+ * silently reorders the ones that are listed.
+ */
+const TOPOLOGY_ERROR_TIER: Readonly<Record<string, number>> = {
+  // 1 — unreadable
+  'unsupported-schema-version': 1,
+  'duplicate-node': 1,
+  'duplicate-wire': 1,
+  'unknown-wire-endpoint': 1,
+  // 2 — structurally impossible
+  'missing-branch-location': 2,
+  'multiple-branch-locations': 2,
+  'branch-location-missing-identity': 2,
+  'cycle-detected': 2,
+  // 3 — not a legal member of the contract
+  'ambiguous-legacy-wire': 3,
+  'invalid-semantic-connection': 3,
+  'invalid-purpose': 3,
+  'invalid-location-connection': 3,
+  'invalid-operation-source': 3,
+  'invalid-warehouse-operation-source': 3,
+  // 4 — wrong number of inputs
+  'missing-operation-input': 4,
+  'multiple-operation-inputs': 4,
+  'missing-location-input': 4,
+  'multiple-location-inputs': 4,
+  'missing-warehouse-input': 4,
+  'multiple-warehouse-inputs': 4,
+  'multiple-ticket-inputs': 4,
+  'warehouse-missing-stock-routing': 4,
+  // 5 — legal but over a limit
+  'warehouse-at-capacity': 5,
+  'warehouse-tier-limit': 5,
+};
+
+const UNRANKED_TIER = Number.MAX_SAFE_INTEGER;
+
+/** Sort validation errors into the order a merchant should be told to fix them
+ *  in. Stable, and never mutates the input. */
+export function orderTopologyValidationErrors(
+  errors: readonly TopologyValidationError[],
+): TopologyValidationError[] {
+  return errors
+    .map((error, index) => ({ error, index, tier: TOPOLOGY_ERROR_TIER[error.code] ?? UNRANKED_TIER }))
+    .sort((a, b) => a.tier - b.tier || a.index - b.index)
+    .map((ranked) => ranked.error);
 }
