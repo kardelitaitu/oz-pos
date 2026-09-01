@@ -378,6 +378,30 @@
     return { rate: null, updatedAt: '', live: false };
   }
 
+  // fxTimeLabel renders an FX updatedAt timestamp in WIB (UTC+7) — the
+  // operating timezone of the product — instead of the raw UTC clock time
+  // the chip used to show. Both producers (the stats API and
+  // fetchFxRate's toISOString) emit 'YYYY-MM-DDTHH:MM…Z'.
+  // Returns '' for unparseable input so the caller can drop the suffix
+  // rather than render garbage; a zone-less string falls back to the
+  // legacy raw "HH:MM UTC" (Date would parse it as browser-local and a
+  // +7 shift would then double-apply).
+  function fxTimeLabel(iso) {
+    if (!iso || typeof iso !== 'string') return '';
+    var utcAnchored = /Z$/i.test(iso) || /[+-]\d{2}:?\d{2}$/.test(iso);
+    if (!utcAnchored) {
+      var raw = iso.slice(11, 16);
+      return raw ? raw + ' UTC' : '';
+    }
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    var shifted = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+    if (isNaN(shifted.getTime())) return '';
+    var hh = ('0' + shifted.getUTCHours()).slice(-2);
+    var mm = ('0' + shifted.getUTCMinutes()).slice(-2);
+    return hh + ':' + mm + ' UTC+7';
+  }
+
   // exchangeUrlFrom validates the /exchange-issue response and builds the
   // redirect URL. B13 fix: login.js concatenated body.code unguarded — a
   // 200 response without a code sent the browser to /?code=undefined, the
@@ -976,6 +1000,7 @@
     setAuthMode: setAuthMode,
     busyWrap: busyWrap,
     fetchFxRate: fetchFxRate,
+    fxTimeLabel: fxTimeLabel,
     mountModal: mountModal,
     flashMessage: flashMessage,
     fetchWithTimeout: fetchWithTimeout,

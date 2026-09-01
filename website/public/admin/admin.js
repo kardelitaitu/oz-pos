@@ -115,7 +115,7 @@
       fxDot.style.color = fxLive ? 'var(--ok)' : 'var(--warn)';
       fx.appendChild(fxDot);
       fx.appendChild(document.createTextNode(`1 USD = ${fxRate.toLocaleString()} IDR`));
-      if (fxUpdatedAt) { fx.appendChild(el('span', 'small', ` (${fxUpdatedAt.slice(11,16)} UTC)`)); }
+      if (fxUpdatedAt) { const lbl = fxTimeLabel(fxUpdatedAt); if (lbl) fx.appendChild(el('span', 'small', ` (${lbl})`)); }
       if (!fxLive) fx.appendChild(el('span', 'small', t('common.stale')));
       head.appendChild(headTitle);
       head.appendChild(fx);

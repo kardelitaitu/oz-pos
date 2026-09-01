@@ -767,6 +767,30 @@ describe('admin-utils startCountdown (B18: OTP cooldown lifecycle)', () => {
   });
 });
 
+describe('admin-utils fxTimeLabel (FX chip shows WIB, not raw UTC)', () => {
+  it('shifts a UTC ISO timestamp to UTC+7', () => {
+    expect(utils.fxTimeLabel('2026-06-01T12:51:00Z')).toBe('19:51 UTC+7');
+    // Date-line rollover: 23:00 UTC is 06:00 the NEXT day in WIB.
+    expect(utils.fxTimeLabel('2026-06-01T23:00:00Z')).toBe('06:00 UTC+7');
+    expect(utils.fxTimeLabel('2026-06-01T16:59:59Z')).toBe('23:59 UTC+7');
+  });
+
+  it('accepts an explicit +HH:MM offset', () => {
+    // 09:00 at +00:30 = 08:30 UTC = 15:30 UTC+7.
+    expect(utils.fxTimeLabel('2026-06-01T09:00:00+00:30')).toBe('15:30 UTC+7');
+  });
+
+  it('falls back to raw UTC for a zone-less timestamp (no double-shift)', () => {
+    expect(utils.fxTimeLabel('2026-06-01T12:51:00')).toBe('12:51 UTC');
+  });
+
+  it('returns empty for junk or missing input so the suffix is dropped', () => {
+    expect(utils.fxTimeLabel('')).toBe('');
+    expect(utils.fxTimeLabel(undefined)).toBe('');
+    expect(utils.fxTimeLabel('not-a-date')).toBe('');
+  });
+});
+
 describe('admin-utils busyWrap (B19: double-click submitted the action twice)', () => {
   // The tenant detail modal's Revoke/Activate/Renew/Upgrade-save buttons
   // fired doAction on every click with no in-flight guard. Renew is
