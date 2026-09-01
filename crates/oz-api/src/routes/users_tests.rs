@@ -15,6 +15,7 @@ fn state() -> AppState {
         db_path: ":memory:".into(),
         port: 3099,
         cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
+        image_dir: std::path::PathBuf::from("./data/images"),
     }
 }
 

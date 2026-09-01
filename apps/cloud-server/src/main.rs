@@ -459,6 +459,9 @@ pub fn build_router(
         db_path: config.db_path.clone(),
         port: config.port,
         cors_origins: cors_origins.clone(),
+        // Spec 0046b §3.4: content-addressed image store on the Northflank
+        // volume (default `/data/images` in prod, `./data/images` in dev).
+        image_dir: oz_api::image_dir_from_env(),
     };
     let api_router = oz_api::router(api_state);
 

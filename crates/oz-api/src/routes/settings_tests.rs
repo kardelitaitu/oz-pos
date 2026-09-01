@@ -19,6 +19,7 @@ fn state_with(admin_key: Option<&str>) -> AppState {
         db_path: ":memory:".into(),
         port: 3099,
         cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
+        image_dir: std::path::PathBuf::from("./data/images"),
     }
 }
 
@@ -244,6 +245,7 @@ async fn scoped_key_falls_back_to_bare() {
         db_path: ":memory:".into(),
         port: 3099,
         cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
+        image_dir: std::path::PathBuf::from("./data/images"),
     };
     let app = router(state);
 
@@ -402,6 +404,7 @@ async fn pg_integration_settings_provision_per_tenant() {
         db_path: ":memory:".into(),
         port: 3099,
         cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
+        image_dir: std::path::PathBuf::from("./data/images"),
     };
     let app = router(state);
     let tenant_b = format!("{ns}-b");
