@@ -37,8 +37,6 @@ reqwest = { workspace = true }
 oz-hal = { workspace = true }
 oz-logging = { workspace = true }
 oz-lua = { workspace = true }
-oz-media = { workspace = true }
-oz-payment = { workspace = true }
 oz-plugin = { workspace = true }
 oz-security = { workspace = true }
 modules-crm = { workspace = true }

@@ -18,7 +18,6 @@ workspace = true
 oz-api = { workspace = true }
 oz-core = { workspace = true }
 oz-logging = { workspace = true }
-oz-media = { workspace = true }
 platform-sync = { workspace = true }
 axum = { workspace = true }
 serde = { workspace = true }
