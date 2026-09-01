@@ -272,6 +272,57 @@ fn truncate_prefix_long() {
 }
 
 #[test]
+fn redact_url_removes_userinfo() {
+    assert_eq!(
+        redact_url("postgresql://user:secret@localhost:5432/db"),
+        "postgresql://[redacted]@localhost:5432/db"
+    );
+}
+
+#[test]
+fn redact_url_no_userinfo_passthrough() {
+    let url = "postgresql://localhost:5432/db";
+    assert_eq!(redact_url(url), url);
+}
+
+#[test]
+fn redact_url_no_scheme_truncates() {
+    let url = "not-a-url-without-scheme";
+    assert_eq!(redact_url(url), url);
+}
+
+#[test]
+fn validator_errors_do_not_leak_credentials() {
+    // COR-3: the DATABASE_URL / REDIS_URL error messages must never
+    // embed userinfo (user:password@) — those land in long-retained logs.
+    let v = vars(&[("DATABASE_URL", "mysql://admin:hunter2@localhost/db")]);
+    let errs = validate_config_with(&v).unwrap_err();
+    let msg = errs
+        .iter()
+        .find(|e| e.key == "DATABASE_URL")
+        .map(|e| e.message.as_str())
+        .unwrap_or("");
+    assert!(
+        !msg.contains("hunter2"),
+        "DATABASE_URL error leaked password: {msg}"
+    );
+    assert!(msg.contains("[redacted]"));
+
+    let v = vars(&[("REDIS_URL", "mysql://admin:hunter2@localhost")]);
+    let errs = validate_config_with(&v).unwrap_err();
+    let msg = errs
+        .iter()
+        .find(|e| e.key == "REDIS_URL")
+        .map(|e| e.message.as_str())
+        .unwrap_or("");
+    assert!(
+        !msg.contains("hunter2"),
+        "REDIS_URL error leaked password: {msg}"
+    );
+    assert!(msg.contains("[redacted]"));
+}
+
+#[test]
 fn validate_config_live_does_not_panic() {
     // Production entry point — must never panic even in messy environments.
     let _ = validate_config();

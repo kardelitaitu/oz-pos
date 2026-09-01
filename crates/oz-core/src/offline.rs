@@ -59,7 +59,7 @@ impl SyncPriority {
 /// A queued offline transaction.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OfflineQueueItem {
-    /// Internal row id (UUID v4).
+    /// Internal row id (UUID v7).
     pub id: String,
     /// The action to perform (e.g. "complete_sale", "void_sale").
     pub action: String,

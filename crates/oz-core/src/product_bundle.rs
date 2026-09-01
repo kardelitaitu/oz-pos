@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 /// A product bundle — a single SKU that contains multiple sub-items.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProductBundle {
-    /// Internal row id (UUID v4).
+    /// Internal row id (UUID v7).
     pub id: String,
     /// The bundle's own SKU (must match an existing product).
     pub bundle_sku: String,
@@ -33,7 +33,7 @@ pub struct ProductBundle {
 /// An item within a bundle.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BundleItem {
-    /// Internal row id (UUID v4).
+    /// Internal row id (UUID v7).
     pub id: String,
     /// FK to [`ProductBundle::id`].
     pub bundle_id: String,

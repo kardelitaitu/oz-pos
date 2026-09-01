@@ -45,7 +45,7 @@ pub struct Snapshot {
 /// Flat product row matching the `products` table columns.
 #[derive(Debug, Deserialize)]
 pub(crate) struct SnapshotProduct {
-    /// Internal row id (UUID v4). If absent, a fresh UUID is generated.
+    /// Internal row id (UUID v7). If absent, a fresh UUID is generated.
     id: Option<String>,
     /// Stock-keeping unit — UNIQUE column used for the upsert conflict target.
     sku: String,
@@ -98,7 +98,7 @@ pub(crate) struct SnapshotProduct {
 /// Flat tax-rate row matching the `tax_rates` table columns.
 #[derive(Debug, Deserialize)]
 pub(crate) struct SnapshotTaxRate {
-    /// Internal row id (UUID v4) — used as the upsert conflict target.
+    /// Internal row id (UUID v7) — used as the upsert conflict target.
     id: String,
     /// Display name.
     name: String,
@@ -138,7 +138,7 @@ pub const SNAPSHOT_PIN_HASH_PLACEHOLDER: &str = "!snapshot-no-credential!";
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct SnapshotUser {
-    /// Internal row id (UUID v4).
+    /// Internal row id (UUID v7).
     pub(crate) id: Option<String>,
     /// Login username — UNIQUE column used for the upsert conflict target.
     pub(crate) username: String,

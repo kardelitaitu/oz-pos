@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 /// Maps 1:1 to the `suppliers` table.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Supplier {
-    /// Internal row id (UUID v4).
+    /// Internal row id (UUID v7).
     pub id: String,
     /// Unique supplier code (human-readable identifier).
     pub code: String,
