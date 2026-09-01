@@ -719,6 +719,55 @@ async fn attach_product_images(
     Ok(())
 }
 
+/// Compute the `missing_hashes` set-difference for a tenant (spec 0046b
+/// §3.4/§3.7): candidate hashes that the tenant references but the cloud's
+/// `image_refs` spine has no active (refcount > 0) row for. The desktop
+/// pushes exactly these first.
+pub async fn list_missing_hashes(
+    pool: &Pool,
+    tenant_id: &str,
+    candidates: &[String],
+) -> Result<Vec<String>, PgError> {
+    if candidates.is_empty() {
+        return Ok(vec![]);
+    }
+    let mut client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
+    let tx = client
+        .transaction()
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+
+    let placeholders: Vec<String> = (1..=candidates.len()).map(|i| format!("${i}")).collect();
+    let sql = format!(
+        "SELECT hash FROM image_refs WHERE tenant_id = $1 AND hash IN ({}) AND refcount > 0",
+        placeholders.join(", ")
+    );
+    let stmt = tx
+        .prepare(&sql)
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    let mut params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
+        vec![&tenant_id as &(dyn tokio_postgres::types::ToSql + Sync)];
+    for c in candidates {
+        params.push(c);
+    }
+    let rows = tx
+        .query(&stmt, &params)
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    let present: std::collections::HashSet<String> =
+        rows.iter().map(|r| r.get::<_, String>("hash")).collect();
+    tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
+    Ok(candidates
+        .iter()
+        .filter(|c| !present.contains(*c))
+        .cloned()
+        .collect())
+}
+
 /// List a tenant's products, ordered by name, with category name and stock.
 pub async fn list_products(
     pool: &Pool,

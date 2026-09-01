@@ -349,8 +349,17 @@ async fn products_list_returns_empty_array() {
     let resp = test_app().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let json = body_json(resp).await;
-    assert!(json.is_array(), "should return a JSON array");
-    assert_eq!(json.as_array().unwrap().len(), 0, "should be empty");
+    // Spec 0046b §3.4: the snapshot is wrapped with the missing_hashes nudge.
+    assert!(
+        json["products"].is_array(),
+        "should return a products array"
+    );
+    assert_eq!(
+        json["products"].as_array().unwrap().len(),
+        0,
+        "should be empty"
+    );
+    assert!(json["missing_hashes"].is_null() || json["missing_hashes"].is_array());
 }
 
 #[tokio::test]
@@ -382,8 +391,9 @@ async fn products_list_returns_seeded_products() {
     let resp = test_app_seeded().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let json = body_json(resp).await;
-    let arr = json.as_array().unwrap();
+    let arr = json["products"].as_array().unwrap();
     assert_eq!(arr.len(), 3, "should return 3 seeded products");
+    assert!(json["missing_hashes"].is_null() || json["missing_hashes"].is_array());
 }
 
 #[tokio::test]

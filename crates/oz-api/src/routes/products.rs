@@ -58,6 +58,19 @@ fn store_error_response(e: CoreError) -> Response {
 
 // ── Request / Response types ──────────────────────────────────────────
 
+/// Response body for the list-products endpoint (spec 0046b §3.4).
+/// Wraps the product array with the server-side `missing_hashes` nudge
+/// so the desktop knows exactly which hashes the cloud still lacks.
+#[derive(Serialize)]
+pub struct ListProductsResponse {
+    /// The tenant's products with category name, stock, and image assignments.
+    pub products: Vec<ProductWithDetails>,
+    /// Hashes referenced by the tenant's products but absent from the
+    /// cloud's image store (`image_refs`). Desktop pushes these first.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub missing_hashes: Vec<String>,
+}
+
 /// Request body for creating a new product.
 #[derive(Deserialize)]
 pub struct CreateProductRequest {
@@ -96,7 +109,7 @@ pub struct PatchStockResponse {
 // ── Handlers ──────────────────────────────────────────────────────────
 
 /// List the authenticated tenant's products, ordered by name, with category
-/// name and stock.
+/// name, stock, and the `missing_hashes` nudge (spec 0046b §3.4).
 pub async fn list_products(
     State(state): State<AppState>,
     Extension(claims): Extension<ApiTokenClaims>,
@@ -104,7 +117,20 @@ pub async fn list_products(
     if let Some(pool) = &state.pg {
         let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
         return match crate::pg::list_products(pool, tenant_id).await {
-            Ok(products) => Json(products).into_response(),
+            Ok(products) => {
+                let missing = crate::pg::list_missing_hashes(
+                    pool,
+                    tenant_id,
+                    &collect_image_hashes(&products),
+                )
+                .await
+                .unwrap_or_default();
+                Json(ListProductsResponse {
+                    products,
+                    missing_hashes: missing,
+                })
+                .into_response()
+            }
             Err(e) => e.into_response(),
         };
     }
@@ -112,9 +138,37 @@ pub async fn list_products(
     let store = Store::new(&db);
 
     match store.list_products() {
-        Ok(products) => Json(products).into_response(),
+        Ok(products) => {
+            let hashes = collect_image_hashes(&products);
+            let hash_refs: Vec<&str> = hashes.iter().map(String::as_str).collect();
+            let missing = store
+                .missing_hashes("default", &hash_refs)
+                .unwrap_or_default()
+                .into_iter()
+                .map(str::to_owned)
+                .collect();
+            Json(ListProductsResponse {
+                products,
+                missing_hashes: missing,
+            })
+            .into_response()
+        }
         Err(e) => store_error_response(e),
     }
+}
+
+/// Collect every content hash referenced by the products' image assignments.
+fn collect_image_hashes(products: &[ProductWithDetails]) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for p in products {
+        for img in &p.images {
+            if seen.insert(img.hash.clone()) {
+                out.push(img.hash.clone());
+            }
+        }
+    }
+    out
 }
 
 /// Get a single product by SKU, including category name and stock.
