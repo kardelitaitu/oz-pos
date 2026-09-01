@@ -2,11 +2,11 @@
 num: 45
 area: topology
 title: ADR #45: Topology Semantic Contract v2 — Endpoint Predicates, Kind Registry, Deliberate Cold Start, and Theme Parity
-status: Proposed
+status: Accepted — §1 implemented (2026-09-02); §2–§5 proposed
 ---
 # ADR #45: Topology Semantic Contract v2
 
-**Status:** Proposed
+**Status:** Accepted — §1 implemented (2026-09-02); §2–§5 proposed
 **Date:** 2026-09-02
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** topology, semantic-contract, cross-language-parity, node-kind-registry, cold-start, theming
@@ -30,27 +30,34 @@ the build on drift. The two files are byte-identical today.
 
 What is **not** in that contract is the second half of every rule: which *node
 kinds* may sit on each end of a row. Those predicates exist, are enforced, and
-are written four separate times in two languages with no parity guard between
-them.
+were written **six** separate times in two languages with no parity guard
+between them. (Line numbers below are as they stood before this change.)
 
-### The four shapes of one rule
+### The six shapes of one rule
 
-| Rule | Where it lives | What it checks |
+| # | Where it lived | What it checked |
 |---|---|---|
-| Row table | `topologySemantics.json:11-19` | source semantic × target semantic × relationship |
-| Instance predicates (5 rows) | `topology.rs:266-296` (hand-written `match`) | endpoint node types and workspace typeKeys |
-| Operation-row pre-filter | `topology.rs:510-521` | **target only**, then `continue` skips the contract check at `:522` |
-| Operation-row narrowing | `topologyCard.ts:346-359` (`operationRowAllowed`) | **both** endpoints, TypeScript only |
+| 1 | `topologySemantics.json:11-19` | source semantic × target semantic × relationship |
+| 2 | `topology.rs:266-296` — hand-written `match` | endpoint node types and workspace typeKeys, 5 rows |
+| 3 | `topology.rs:510-521` — pre-filter | **target only**, then `continue` skipped the contract check at `:522` |
+| 4 | `topologyCard.ts:346-359` — `operationRowAllowed` | **both** endpoints, generic row only |
+| 5 | `topologyContract.ts:473-510` — `semanticNodesMatchWire` | a full duplicate `switch` over all rows |
+| 6 | `topologyContract.ts:656-661` — pre-filter | target-only skip, mirroring #3 |
 
-Two consequences follow directly from those line numbers:
+Three consequences follow directly from those lines:
 
-1. **The `operation-out` match arm at `topology.rs:282-288` is unreachable.**
+1. **The `operation-out` match arm at `topology.rs:282-288` was unreachable.**
    Its two admitted shapes (`restaurant-pos → kds`, `store-pos → warehouse`) are
-   exactly the cases the pre-filter at `:510-519` already skips. Because the
-   pre-filter never inspects the source, a payload with an *unexpected* source on
-   `operation-out → operation-in / generic` into a KDS or warehouse bypasses the
-   semantic contract in Rust, while the TypeScript gate refuses the same wire.
-2. **The `location` row is not in the match at all.** It is enforced by a
+   exactly the cases the pre-filter at `:510-519` already skipped. Because the
+   pre-filter never inspected the source, a wire from *any other* node kind into
+   a KDS or warehouse operation input bypassed semantic validation in Rust
+   entirely — while the TypeScript gate refused to offer the same wire.
+2. **The TypeScript side had the same hole**, at `topologyContract.ts:656-661`,
+   and its own second copy of every predicate at `:473-510`. The live-validation
+   mirror that ADR #44 built to guarantee "badges agree with Apply" was therefore
+   agreeing with Apply *by coincidence of two hand-written copies*, not by
+   construction.
+3. **The `location` row was not in the match at all.** It is enforced by a
    dedicated block (`topology.rs:450-480`) whose rule is a *reference*, not a
    kind: the wire must originate from the graph's single branch node
    (`from_node_id == branch_id`) and land on a workspace or warehouse id. No
@@ -70,12 +77,22 @@ produced it was left in place. This ADR addresses the shape.
 
 ### Two adjacent findings from the same review
 
-**The kind vocabulary is already diverging.** `topologySemantics.json:9` declares
+**Two kind vocabularies, no single owner.** `topologySemantics.json:9` declares
 `workspaceTypeKeys: ["store-pos", "restaurant-pos", "kds"]`. The editor ignores
-that field and hardcodes its own list at
-`NodeTopologyEditor.tsx:307` — `['store-pos', 'restaurant-pos', 'kds',
-'warehouse']` — which adds `warehouse`, a value the contract classifies as a
-*node kind* (`nodeKinds`, `:10`), not a workspace typeKey.
+that field and hardcodes its own list at `NodeTopologyEditor.tsx:307` —
+`['store-pos', 'restaurant-pos', 'kds', 'warehouse']`. Neither list is the
+system's real enum: the seeded `workspace_types` table
+(`crates/oz-core/migrations/20260813_init.pg.sql:1601-1605`) carries five keys —
+`restaurant-pos`, `store-pos`, `warehouse`, `admin`, `kds`. So `warehouse` in
+the editor's list is not a bug, and the contract field is not wrong either; it
+is the *topology-relevant* subset wearing a name that implies exhaustiveness.
+Three lists, three meanings, no declared owner — which is precisely the
+condition that lets a fourth appear. §3 gives the registry that ownership.
+
+A related trap surfaced while testing: `general` is a **`purpose_key`**, not a
+`type_key` (`topology.rs:596` defaults purpose to `"general"`), yet it appears in
+the topology test fixtures in the `typeKey` slot. Any rule written to admit
+`general` there would be admitting an unregistered workspace type by accident.
 
 **Per-type knowledge is spread across eleven surfaces.** `topologyCard.ts` opens
 with the promise that "adding a new node type should be a one-entry change here —
@@ -154,7 +171,16 @@ Three constraints make this safe, and they are the substance of the decision:
   Both sides already compute the two halves (`node.type` + `metadata.typeKey` in
   TypeScript; `semantic_node_type` + `semantic_type_key` in Rust at
   `topology.rs:261-264`); canonicalizing them into one token turns every
-  predicate into a set lookup.
+  predicate into a set lookup. `store` folds into `branch-location` at this one
+  boundary, so the ADR #34 alias never reaches the contract.
+- **Family matching, discovered during implementation.** An endpoint token
+  written without a `:` suffix also covers that family: `workspace` admits
+  `workspace:store-pos`, while `workspace:store-pos` admits only itself. The
+  contract needs both registers — the Location row means "any workspace", the
+  Operation row means "this one" — and one prefix rule keeps the comparison a
+  line long in each language. Exact-token matching alone, which is what this ADR
+  originally specified, refused every legitimate Branch → workspace location
+  wire; the first run of the contract tests caught it.
 - **No boolean logic in the contract.** Predicates are tuple membership only.
   Rows that need AND/OR — like `operation-out`, whose two admitted pairs are
   *not* the cross product of their endpoints — are written as an explicit pair
@@ -163,14 +189,30 @@ Three constraints make this safe, and they are the substance of the decision:
 - **`@branch-root` is the only reserved token**, resolving to the graph's single
   Branch Location node. It exists so the location rule
   (`topology.rs:450-480`) can join the table instead of living beside it.
-  Unknown kinds and unknown `@`-tokens **fail closed**, matching how unknown
-  semantics already fail closed in `canSemanticPortsConnect`
+  Whether the graph has *exactly one* such node stays a separate graph-level
+  rule (`multiple-branch-locations`), enforced before the wire loop on both
+  sides. Unknown kinds, unknown `@`-tokens, and an empty `endpoints` list all
+  **fail closed** — a payload that lost its endpoints degrades to "no wire may
+  be authored" rather than silently to the looser row-only check, matching how
+  unknown semantics already fail closed in `canSemanticPortsConnect`
   (`topologyCard.ts:310-315`).
 
-Then delete the Rust `match` (`topology.rs:266-296`), the pre-filter
-(`:510-521`), and the TypeScript `operationRowAllowed` (`topologyCard.ts:346-359`).
-Both languages call one function of the shape
-`pairing_allows(row, from_kind, to_kind) -> bool`.
+The Rust `match` (`topology.rs:266-296`) and the TypeScript duplicate switch
+(`topologyContract.ts:473-510`) are deleted; both languages call one evaluator
+over the contract.
+
+**The two pre-filters were tightened, not deleted** — a deliberate departure
+from this ADR's original wording. They exist to route a genuine workspace
+operational feed to the specialized `invalid-operation-source` and
+`invalid-warehouse-operation-source` checks, so the merchant gets a specific
+message instead of the broad one; deleting them would trade a correctness hole
+for a worse error. The fix keeps the precedence and closes the hole by testing
+the **source** as well as the target: a workspace-sourced operation wire still
+skips the generic gate, and a hardware-, warehouse-, or branch-sourced one no
+longer slips past it. Folding those two specialized source checks into the
+contract is follow-up work, and until it lands the operation row's endpoints are
+advisory for authoring while the specialized checks remain the Apply-boundary
+authority for that row.
 
 **Deferred, deliberately:** wire *cardinality* (the one-location-wire-per-pair
 duplicate check at `topology.rs:450`, and the warehouse primary/operational input
@@ -344,6 +386,56 @@ live, silent, cross-language failure mode with a recorded precedent.
   snapshot must be byte-identical to the pre-refactor capture.
 - Manual: one graph per pairing row, applied through the real Apply gate, in both
   themes.
+
+---
+
+## Implementation record
+
+### §1 — contract v2 (shipped 2026-09-02, `e93868e2` + `b4399aa9`)
+
+`schemaVersion` is `2`; all seven rows carry `endpoints`. The TypeScript
+evaluator is `nodeKindToken` / `nodeKindOf` / `pairingAllowsEndpoints` /
+`pairingAdmitsKinds` / `pairingAllowsNodes` in `topologyCard.ts`, and the Rust
+twin is `node_kind_token` / `kind_token_admits` / `pairing_admits_kinds` in
+`topology.rs`. Deleted: `operationRowAllowed`, the `semanticNodesMatchWire`
+switch, and the Rust `match` with its unreachable arm. Both pre-filters now test
+the source as well as the target.
+
+**One merchant-visible behaviour change, intended.** A workspace whose
+`typeKey` the contract does not declare is no longer authorable as a stock or
+transfer source. Previously the canvas offered that wire and the Rust gate
+rejected it, so the merchant was invited to draw a relationship that could never
+persist. An unregistered type becomes authorable by declaring its endpoint rows.
+
+**Evidence.** `cargo test -p oz-core --lib topology` 47/47 (5 new);
+`topologyCard.test.ts` + `topologyContract.test.ts` 94/94 (3 new); the eight
+topology component suites 312/312; `tsc --noEmit` clean; `eslint` clean;
+`verify-topology-parity.py` OK. In the full UI suite, 11 tests fail — all 11
+reproduce with this change stashed, and every one names a preset fixture
+(`Downtown Branch`, `New Retail POS`), a `.topology-shortcuts-popover` CSS rule
+its component no longer has, or a hardcoded `18px` port padding: the concurrent
+preset-removal work, not this contract.
+
+### §2 — corpus test (not shipped)
+
+Interim measure: the TypeScript and Rust evaluator tests assert the **same**
+verdicts case by case, so a divergence in either language fails one of the two
+suites. This is mirroring, not generation — it catches drift in the evaluator
+but not drift in coverage when a row or kind is added. The generated corpus
+remains the real fix and still gates closing this ADR.
+
+### Follow-ups this slice surfaced
+
+1. `socketSemanticIds` (`topologyCard.ts:230-262`) still hands an unregistered
+   workspace type the generic `['stock-out','transfer-out']` output set
+   (`:261`). The card therefore advertises sockets that can never legally
+   connect — the exact "discoverable validity" violation ADR #34 §Context names.
+   Folding this into the §3 registry is the fix.
+2. The `invalid-operation-source` / `invalid-warehouse-operation-source` checks
+   are a seventh and eighth statement of the operation row's endpoints. They
+   give better messages and should stay, but the contract should generate them.
+3. Three workspace-type lists with three meanings and no owner (Context above).
+   §3 assigns the ownership.
 
 ---
 
