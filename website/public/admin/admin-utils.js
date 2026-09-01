@@ -278,8 +278,17 @@
     var row = el('tr');
     row.appendChild(el('td', null, tenant.email || '—'));
     var td1 = el('td'); td1.appendChild(statusPill(tenant.status)); row.appendChild(td1);
-    row.appendChild(el('td', null, (tenant.license && tenant.license.key) || '—'));
-    row.appendChild(el('td', null, (tenant.subscription && tenant.subscription.tierKey) || '—'));
+    // Merged license/tier cell — "[tier] date expired" (user-requested
+    // format). Tier prefers the billing subscription; expiry falls back
+    // license → subscription. The raw license key column was dropped;
+    // the key survives as the hover title so support can still see it.
+    var lic = tenant.license || {}, sub = tenant.subscription || {};
+    var tier = sub.tierKey || lic.tierKey || '';
+    var exp = sub.expiresAt || lic.expiresAt || '';
+    var combo = (tier ? '[' + tier + '] ' : '') + (exp ? String(exp).slice(0, 10) : '—');
+    var td2 = el('td', null, combo || '—');
+    if (combo && lic.key) { td2.title = combo + ' · ' + lic.key; }
+    row.appendChild(td2);
     // B37 (fuzz-found): a non-string truthy created (number/object from a
     // truncated payload) crashed .slice and killed the whole table render.
     row.appendChild(el('td', null, tenant.created ? String(tenant.created).slice(0, 10) : '—'));
@@ -1066,6 +1075,7 @@
     'th.expires': 'Expires',
     'th.licenseKey': 'License key',
     'th.license': 'License',
+    'th.licenseTier': 'License / Tier',
     'th.devices': 'Devices',
     'th.subscriptionStatus': 'Subscription status',
     'th.emailVerified': 'Email verified',

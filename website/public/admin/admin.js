@@ -295,7 +295,9 @@
       if (tenants.length === 0) { card.appendChild(el('p', 'empty', t('table.noTenantsMatch'))); c.appendChild(card); return; }
       const table = el('table');
       const thead = el('thead'); const tr = el('tr');
-      [t('th.email'),t('th.status'),t('th.license'),t('th.tier'),t('th.created'),''].forEach(h => tr.appendChild(el('th', null, h)));
+      // Columns (user-requested): email | status | license/tier merged
+      // ("[tier] date expired") | created | details action.
+      [t('th.email'),t('th.status'),t('th.licenseTier'),t('th.created'),''].forEach(h => tr.appendChild(el('th', null, h)));
       thead.appendChild(tr); table.appendChild(thead);
       const tbody = el('tbody');
       // B1 fix: the row builder moved to admin-utils.tenantRow — the old

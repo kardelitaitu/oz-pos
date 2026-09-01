@@ -236,18 +236,29 @@ describe('admin-utils tenantRow (B1: t() shadowing regression)', () => {
     email: 'a@b.c',
     status: 'active',
     license: { key: 'OZ-KEY' },
-    subscription: { tierKey: 'pro' },
+    subscription: { tierKey: 'pro', expiresAt: '2027-08-01T00:00:00Z' },
     created: '2026-08-01T10:00:00Z',
   };
 
-  it('renders all six cells without crashing', () => {
+  it('renders five cells: email, status, merged license/tier, created, action', () => {
     const row = utils.tenantRow(tenant, () => {});
     const cells = row.querySelectorAll('td');
-    expect(cells.length).toBe(6);
+    expect(cells.length).toBe(5);
     expect(cells[0].textContent).toBe('a@b.c');
-    expect(cells[2].textContent).toBe('OZ-KEY');
-    expect(cells[3].textContent).toBe('pro');
-    expect(cells[4].textContent).toBe('2026-08-01');
+    // merged "[tier] date expired" format, date = subscription expiry
+    expect(cells[2].textContent).toBe('[pro] 2027-08-01');
+    expect(cells[2].getAttribute('title')).toBe('[pro] 2027-08-01 · OZ-KEY');
+    expect(cells[3].textContent).toBe('2026-08-01');
+  });
+
+  it('expiry falls back to the license when the subscription has none', () => {
+    const row = utils.tenantRow({
+      id: 't2', status: 'active',
+      license: { key: 'OZ-L', tierKey: 'plus', expiresAt: '2026-12-25' },
+      subscription: {},
+    }, () => {});
+    const cells = row.querySelectorAll('td');
+    expect(cells[2].textContent).toBe('[plus] 2026-12-25');
   });
 
   it('labels the action button via i18n and wires the click to the tenant id', () => {
@@ -264,7 +275,7 @@ describe('admin-utils tenantRow (B1: t() shadowing regression)', () => {
     const cells = row.querySelectorAll('td');
     expect(cells[0].textContent).toBe('—');
     expect(cells[2].textContent).toBe('—');
-    expect(cells[4].textContent).toBe('—');
+    expect(cells[3].textContent).toBe('—');
   });
 });
 
