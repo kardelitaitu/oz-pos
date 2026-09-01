@@ -883,7 +883,13 @@ Obligations 2 and 3 are each a full slice on their own and neither is mechanical
    and type key. Building the graph to prove the hole was reachable showed the §1
    wire gate refuses that feed first, so the weak predicate was defence in depth
    that could never fire; the test now pins that ordering instead.
-   `invalid-warehouse-operation-source` is still hand-written and stays open.
+   `invalid-warehouse-operation-source` was still hand-written at that point; it
+   moved the same way in `862164ce`, so **follow-up #2 is now closed in both
+   languages for both variants.** Worth recording that the warehouse predicate
+   was never wrong — it checked kind alongside type key, unlike the KDS one — so
+   that change removed a duplicate rather than fixing a defect. Keeping those two
+   categories distinct is what stops the history implying a bug merchants never
+   hit.
 3. ~~Three workspace-type lists with three meanings and no owner~~ — **half
    resolved.** The editor's list is gone, derived from `typeSelectable`. The
    contract's `endpointWorkspaceTypeKeys` and the DB's `workspace_types` table remain
