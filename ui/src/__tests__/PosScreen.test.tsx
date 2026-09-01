@@ -122,7 +122,7 @@ vi.mock('@/api/products', () => ({
 }));
 
 vi.mock('@/api/bundles', () => ({
-  lookupBundleBySku: vi.fn((sku: string) => {
+  lookupBundleBySku: vi.fn((_sessionToken: string, sku: string) => {
     if (sku === 'BUNDLE-SKU-001') {
       return Promise.resolve({
         bundle: {
@@ -379,7 +379,7 @@ describe('PosScreen – bundle scanning toast', () => {
     // Wait for the bundle lookup to be called (confirms we got past
     // the barcode lookup and into the bundle path before the error).
     await waitFor(() => {
-      expect(vi.mocked(bundlesApi.lookupBundleBySku)).toHaveBeenCalledWith('BUNDLE-SKU-001');
+      expect(vi.mocked(bundlesApi.lookupBundleBySku)).toHaveBeenCalledWith('', 'BUNDLE-SKU-001');
     }, FAST_WAIT);
 
     // No toast should appear — the catch block swallowed the error.
@@ -414,7 +414,7 @@ describe('PosScreen – bundle scanning toast', () => {
     // Wait for the bundle lookup to be called (confirms we got past
     // the barcode lookup and into the bundle path before the error).
     await waitFor(() => {
-      expect(vi.mocked(bundlesApi.lookupBundleBySku)).toHaveBeenCalledWith('BUNDLE-SKU-001');
+      expect(vi.mocked(bundlesApi.lookupBundleBySku)).toHaveBeenCalledWith('', 'BUNDLE-SKU-001');
     }, FAST_WAIT);
 
     // No toast should appear — the catch block swallowed the error.

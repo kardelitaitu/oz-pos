@@ -733,7 +733,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
         }
 
         // 2. Fall back to bundle SKU expansion with proportional pricing.
-        const bundle = await lookupBundleBySku(code);
+        const bundle = await lookupBundleBySku(sessionToken, code);
         if (bundle && bundle.bundle.active) {
           const expanded = await expandBundleItems(
             bundle.items,

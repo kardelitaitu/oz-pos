@@ -3016,11 +3016,29 @@ const handlers: Record<string, (args: unknown) => unknown> = {
       ],
     },
   ],
+  'list_bundles_scoped': () => [
+    {
+      bundle: {
+        id: 'bundle-1', bundle_sku: 'BNDL-PC-1', name: 'PC Starter Bundle',
+        description: 'CPU + RAM + SSD combo', bundle_price_minor: 11500000, currency: 'IDR',
+        active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      },
+      items: [
+        { id: 'bundle-item-1', bundle_id: 'bundle-1', sku: 'CPU-R5-7600', qty: 1, unit_price_minor: 3150000 },
+        { id: 'bundle-item-2', bundle_id: 'bundle-1', sku: 'RAM-D5-32GB-CR', qty: 1, unit_price_minor: 1850000 },
+      ],
+    },
+  ],
   'get_bundle': () => null,
+  'get_bundle_scoped': () => null,
   'create_bundle': () => null,
+  'create_bundle_scoped': () => null,
   'update_bundle': () => null,
+  'update_bundle_scoped': () => null,
   'delete_bundle': () => null,
+  'delete_bundle_scoped': () => null,
   'lookup_bundle_by_sku': () => null,
+  'lookup_bundle_by_sku_scoped': () => null,
 
   // ═══════════════════════════════════════════════════════════════
   // HARDWARE

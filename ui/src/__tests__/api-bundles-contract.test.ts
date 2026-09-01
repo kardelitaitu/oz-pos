@@ -27,46 +27,46 @@ describe('bundles.ts API contract', () => {
     };
     const bundleWithItems = { bundle: { id: 'b1', ...args, bundle_price_minor: null, currency: 'IDR', description: '', active: true, created_at: '2026-01-01', updated_at: '2026-01-01' }, items: args.items };
     mockInvoke.mockResolvedValue(bundleWithItems);
-    const result = await createBundle(args);
-    expect(mockInvoke).toHaveBeenCalledWith('create_bundle', { args });
+    const result = await createBundle('tok-1', args);
+    expect(mockInvoke).toHaveBeenCalledWith('create_bundle_scoped', { sessionToken: 'tok-1', args });
     expect(result.bundle.bundle_sku).toBe('BUNDLE-001');
   });
 
   it('listBundles calls correct command (no args)', async () => {
     mockInvoke.mockResolvedValue([]);
-    await listBundles();
-    expect(mockInvoke).toHaveBeenCalledWith('list_bundles');
+    await listBundles('tok-1');
+    expect(mockInvoke).toHaveBeenCalledWith('list_bundles_scoped', { sessionToken: 'tok-1' });
   });
 
   it('getBundle calls correct command', async () => {
     mockInvoke.mockResolvedValue(null);
-    await getBundle('b1');
-    expect(mockInvoke).toHaveBeenCalledWith('get_bundle', { id: 'b1' });
+    await getBundle('tok-1', 'b1');
+    expect(mockInvoke).toHaveBeenCalledWith('get_bundle_scoped', { sessionToken: 'tok-1', id: 'b1' });
   });
 
   it('lookupBundleBySku calls correct command', async () => {
     mockInvoke.mockResolvedValue(null);
-    await lookupBundleBySku('BUNDLE-001');
-    expect(mockInvoke).toHaveBeenCalledWith('lookup_bundle_by_sku', { sku: 'BUNDLE-001' });
+    await lookupBundleBySku('tok-1', 'BUNDLE-001');
+    expect(mockInvoke).toHaveBeenCalledWith('lookup_bundle_by_sku_scoped', { sessionToken: 'tok-1', sku: 'BUNDLE-001' });
   });
 
   it('updateBundle calls correct command', async () => {
     const bundleWithItems = { bundle: { id: 'b1', bundle_sku: 'B-001', name: 'Updated', bundle_price_minor: null, currency: 'IDR', description: '', active: true, created_at: '2026-01-01', updated_at: '2026-01-01' }, items: [] };
     mockInvoke.mockResolvedValue(bundleWithItems);
-    await updateBundle(bundleWithItems);
-    expect(mockInvoke).toHaveBeenCalledWith('update_bundle', { bundle: bundleWithItems });
+    await updateBundle('tok-1', bundleWithItems);
+    expect(mockInvoke).toHaveBeenCalledWith('update_bundle_scoped', { sessionToken: 'tok-1', bundle: bundleWithItems });
   });
 
   it('deleteBundle calls correct command', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await deleteBundle('b1');
-    expect(mockInvoke).toHaveBeenCalledWith('delete_bundle', { id: 'b1' });
+    await deleteBundle('tok-1', 'b1');
+    expect(mockInvoke).toHaveBeenCalledWith('delete_bundle_scoped', { sessionToken: 'tok-1', id: 'b1' });
   });
 
   it('propagates errors', async () => {
     mockInvoke.mockRejectedValue(new Error('sku exists'));
     await expect(
-      createBundle({ bundle_sku: 'DUP', name: 'Dup', items: [] })
+      createBundle('tok-1', { bundle_sku: 'DUP', name: 'Dup', items: [] })
     ).rejects.toThrow('sku exists');
   });
 });
