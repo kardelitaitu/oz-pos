@@ -156,7 +156,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 console-subscriber = "0.4"
 
 # Shared build-dependencies
-embed-resource = "2"
+embed-resource = "3"
 
 # Shared dev-dependencies (hoisted for single source of truth)
 tempfile = "3"

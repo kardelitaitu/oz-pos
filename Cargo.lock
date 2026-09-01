@@ -1720,20 +1720,6 @@ checksum = "e079f19b08ca6239f47f8ba8509c11cf3ea30095831f7fed61441475edd8c449"
 
 [[package]]
 name = "embed-resource"
-version = "2.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d506610004cfc74a6f5ee7e8c632b355de5eca1f03ee5e5e0ec11b77d4eb3d61"
-dependencies = [
- "cc",
- "memchr",
- "rustc_version",
- "toml 0.8.2",
- "vswhom",
- "winreg 0.52.0",
-]
-
-[[package]]
-name = "embed-resource"
 version = "3.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c31a88c8d26de40ed18fe748c547845aa39de1db3afd958f8cb91579f3644bcb"
@@ -1743,7 +1729,7 @@ dependencies = [
  "rustc_version",
  "toml 1.1.2+spec-1.1.0",
  "vswhom",
- "winreg 0.55.0",
+ "winreg",
 ]
 
 [[package]]
@@ -4385,15 +4371,9 @@ dependencies = [
  "chrono",
  "clap",
  "csv",
- "embed-resource 2.5.2",
+ "embed-resource",
  "foundation",
  "oz-core",
- "oz-hal",
- "oz-logging",
- "oz-lua",
- "oz-payment",
- "oz-reporting",
- "oz-security",
  "rand 0.8.6",
  "rusqlite",
  "serde",
@@ -4413,7 +4393,7 @@ dependencies = [
  "chrono",
  "console-subscriber",
  "deadpool-postgres",
- "embed-resource 2.5.2",
+ "embed-resource",
  "hex",
  "hmac 0.12.1",
  "http-body-util",
@@ -4421,7 +4401,6 @@ dependencies = [
  "oz-api",
  "oz-core",
  "oz-logging",
- "oz-media",
  "platform-sync",
  "prometheus",
  "redis",
@@ -4461,9 +4440,7 @@ dependencies = [
  "modules-currency",
  "modules-inventory",
  "modules-loyalty",
- "modules-reporting",
  "modules-sales",
- "modules-settings",
  "modules-staff",
  "modules-tax",
  "modules-terminal",
@@ -4533,10 +4510,8 @@ name = "oz-lua"
 version = "0.0.34"
 dependencies = [
  "mlua",
- "oz-core",
  "serde",
  "serde_json",
- "tempfile",
  "thiserror 1.0.69",
  "tracing",
 ]
@@ -4546,15 +4521,10 @@ name = "oz-media"
 version = "0.0.34"
 dependencies = [
  "async-trait",
- "chrono",
- "foundation",
  "image",
- "serde",
- "serde_json",
  "sha2 0.10.9",
  "thiserror 1.0.69",
  "tokio",
- "uuid",
 ]
 
 [[package]]
@@ -4574,7 +4544,6 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
- "wiremock",
 ]
 
 [[package]]
@@ -4604,7 +4573,6 @@ version = "0.0.34"
 dependencies = [
  "chrono",
  "mlua",
- "oz-core",
  "oz-lua",
  "regex",
  "rusqlite",
@@ -4643,8 +4611,6 @@ dependencies = [
  "oz-hal",
  "oz-logging",
  "oz-lua",
- "oz-media",
- "oz-payment",
  "oz-plugin",
  "oz-reporting",
  "oz-security",
@@ -4695,8 +4661,6 @@ dependencies = [
  "oz-core",
  "oz-hal",
  "oz-logging",
- "oz-media",
- "oz-payment",
  "oz-reporting",
  "oz-security",
  "platform-core",
@@ -4712,7 +4676,6 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-opener",
- "tauri-plugin-updater",
  "tauri-plugin-window-state",
  "tempfile",
  "thiserror 1.0.69",
@@ -4740,7 +4703,6 @@ version = "0.0.34"
 dependencies = [
  "chrono",
  "hex",
- "oz-core",
  "rand 0.8.6",
  "security-framework",
  "serde",
@@ -7170,7 +7132,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc65d45c68858bfe420dd29e834b5d15dbecf8a07a8a16cf4d532c7b1f69d4b6"
 dependencies = [
  "dunce",
- "embed-resource 3.0.9",
+ "embed-resource",
  "toml 1.1.2+spec-1.1.0",
 ]
 
@@ -8918,16 +8880,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0592e1c9d151f854e6fd382574c3a0855250e1d9b2f99d9281c6e6391af352f1"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "winreg"
-version = "0.52.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a277a57398d4bfa075df44f501a17cfdf8542d224f0d36095a2adc7aee4ef0a5"
-dependencies = [
- "cfg-if",
- "windows-sys 0.48.0",
 ]
 
 [[package]]
