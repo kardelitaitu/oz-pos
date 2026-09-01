@@ -836,6 +836,23 @@ Obligations 2 and 3 are each a full slice on their own and neither is mechanical
    fields optional when `visiblePorts` excludes `'right'`; regenerate the golden;
    then empty the ledger last, so each step's failure is attributable.
 
+   **Follow-up #1 is CLOSED (2026-09-02).** Both steps shipped — `86f92003` for
+   `workspace:warehouse`, `06ae21ab` for `workspace:admin` — and
+   `UNAUTHORABLE_SOCKET_DEBT` is now an empty array, kept as an instrument rather
+   than deleted. The two-population tests written in round 14 did their job: one
+   of them failed the moment `admin` got its own row, which was the signal the
+   change was supposed to produce before acceptance, not after.
+
+   Two things this closed without pretending otherwise. The residual is real:
+   `workspace:*` still advertises stock and transfer, and any type the registry
+   has never heard of still resolves to it and gets those sockets. That is the
+   deliberate price of legacy nodes carrying no type key, and it is recorded in
+   the ledger comment rather than presented as a finished job. And one question
+   stayed open by design — `rightLabelId` / `rightAriaLabelId` are required on
+   `NodeKindEntry`, so both new rows carry two fields that can never render.
+   Making them conditional on `visiblePorts` is a type change with consumers to
+   audit, and it was left as its own piece of work rather than folded in.
+
    ---
 
    ~~The data-compatibility blocker on this is resolved, and it pointed the
