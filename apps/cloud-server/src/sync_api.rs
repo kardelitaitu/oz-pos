@@ -506,6 +506,26 @@ async fn snapshot_handler(
     //    changed.
     const SNAPSHOT_CACHE_TTL_SECS: u64 = 900;
 
+    // ADR #43 D4 — cross-instance snapshot cache: when a Redis backend is
+    // configured, try it BEFORE the in-process cache. A hit serves the
+    // stored bytes (version + data stored with a matching TTL); a miss or
+    // Redis error falls through to the in-process single-flight path, and
+    // a full recompute writes the result back to Redis.
+    if let Some(redis) = state.rate_limiter.redis() {
+        match redis.snapshot_get(tenant_id).await {
+            Ok(Some((_version, bytes))) => {
+                metrics::SYNC_PULL_DURATION_MS.observe(start.elapsed().as_secs_f64() * 1000.0);
+                return Ok(json_snapshot_response(bytes, if_none_match));
+            }
+            Ok(None) => {
+                // Cache miss — fall through to the in-process path.
+            }
+            Err(e) => {
+                tracing::debug!(tenant_id, error = %e, "Redis snapshot cache miss (error) — using in-process");
+            }
+        }
+    }
+
     // Fast path: fresh cache hit under the READ lock — zero DB access
     // (SOTA finding C: serve the stored bytes, no re-serialise).
     let entry = {
@@ -579,10 +599,22 @@ async fn snapshot_handler(
 
     *guard = Some(SnapshotData {
         generated_at: std::time::Instant::now(),
-        version,
+        version: version.clone(),
         bytes: bytes.clone(),
     });
     drop(guard);
+
+    // ADR #43 D4: write the freshly-computed snapshot back to Redis so
+    // other instances can serve it. A failure is non-fatal — the in-process
+    // cache already holds the bytes for this instance.
+    if let Some(redis) = state.rate_limiter.redis() {
+        if let Err(e) = redis
+            .snapshot_set(tenant_id, &version, &bytes, SNAPSHOT_CACHE_TTL_SECS)
+            .await
+        {
+            tracing::debug!(tenant_id, error = %e, "Redis snapshot write-back failed");
+        }
+    }
 
     // Opportunistically prune expired entries so a tenant that stops
     // polling cannot leave its entry in memory forever (unbounded growth

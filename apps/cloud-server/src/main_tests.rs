@@ -82,6 +82,7 @@ fn test_config() -> config::CloudServerConfig {
         square_webhook_signature_key: None,
         square_webhook_url: None,
         api_secret: None,
+        redis_url: None,
     }
 }
 

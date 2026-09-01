@@ -164,7 +164,24 @@ metric label (already done).
 
 ---
 
-## 3. Consequences
+## 3. Low-End & Single-Node Deployment Guidelines (What to Avoid or Treat with Caution)
+
+While designed for horizontal scaling, several items in Tiers 2–4 should **not** be deployed on a single budget / low-end instance (e.g., 0.5–1 vCPU, 512MB–1GB RAM on Northflank or a minimal VPS):
+
+- **D4 (Redis / Valkey Cache & Rate Limiter):**
+  - *Analysis:* Adding a Redis container on a budget server eats 50–100MB of RAM and adds localhost network hops.
+  - *Codebase Reality:* `apps/cloud-server/src/redis_backend.rs` includes complete in-process fallback.
+  - *Recommendation:* Keep Redis disabled on a single instance. The in-process `TokenBucket` (`apps/cloud-server/src/rate_limit.rs`) and `Arc<RwLock<Option<SnapshotData>>>` (`apps/cloud-server/src/sync_api.rs`) are zero-copy, sub-microsecond, and use virtually zero memory.
+- **D8 (OpenTelemetry / OTLP Export):**
+  - *Analysis:* Background OTLP batching, gRPC channels, and trace spans introduce non-trivial CPU and memory overhead.
+  - *Recommendation:* Stick to lightweight Prometheus counters and standard structured logging.
+- **D11 (On-The-Fly Responsive Image Sizing):**
+  - *Analysis:* Dynamic WebP transcoding on a 0.5–1 vCPU server will throttle POS checkout requests during concurrent image fetches.
+  - *Recommendation:* Pre-scale thumbnails during client upload or offload to an external CDN/storage layer.
+
+---
+
+## 4. Consequences
 
 **Positive**
 
@@ -198,7 +215,7 @@ metric label (already done).
 
 ---
 
-## 4. Open Questions
+## 5. Open Questions
 
 1. **Prepared statements on SQLite?** rusqlite has no server-side plan
    cache; the win is PG-only. Confirmed scope: D1 targets the PG branch.
@@ -214,7 +231,7 @@ metric label (already done).
 
 ---
 
-## 5. Related Documents
+## 6. Related Documents
 
 - ADR #10 — [Sync Performance Strategy](./2026-07-13-sync-performance-compression-batching.md)
 - ADR #21 — [Sync Conflict Resolution Strategy](./2026-07-20-sync-conflict-resolution-strategy.md)
@@ -222,3 +239,4 @@ metric label (already done).
 - Spec 0047 — OpenAPI Drift Guard & JWT Read Tiers
 - `docs/records/sqlite-pg-roles.md` — SQLite↔Postgres schema parity & RLS cutover
 - `scripts/rls-cutover.sql` — the pending RLS enforcement cutover (D9)
+

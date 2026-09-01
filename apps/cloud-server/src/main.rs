@@ -37,6 +37,7 @@ mod openapi;
 mod prune;
 mod rate_limit;
 mod redirect;
+mod redis_backend;
 mod shutdown;
 mod sync_api;
 mod sync_store;
@@ -135,6 +136,26 @@ fn parse_worker_threads(raw: Result<String, std::env::VarError>) -> usize {
             }
         },
         Err(_) => 2,
+    }
+}
+
+/// Connect the optional Redis backend (ADR #43 D4).
+///
+/// Returns `Some(backend)` when `OZ_REDIS_URL` is set and reachable, and
+/// `None` when the URL is unset, the connection was refused, or the URL is
+/// malformed — in every `None` case the server keeps working with the
+/// in-process snapshot cache and rate limiter (single-instance shape).
+async fn connect_redis(url: Option<&str>) -> Option<crate::redis_backend::RedisBackend> {
+    match url {
+        Some(url) => match crate::redis_backend::RedisBackend::connect(url).await {
+            Ok(Some(backend)) => Some(backend),
+            Ok(None) => None, // unreachable — fallback logged by connect()
+            Err(e) => {
+                tracing::warn!(error = %e, "Redis disabled — falling back to in-process");
+                None
+            }
+        },
+        None => None,
     }
 }
 
@@ -270,7 +291,13 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             email::start_report_sender_loop(conn.clone());
 
             // P8-1: Per-tenant rate limiter state + background cleanup.
-            let rate_limiter = RateLimiterState::new();
+            // ADR #43 D4: prefer the shared Redis token bucket when a
+            // backend is configured; the in-process shards remain the
+            // fallback.
+            let rate_limiter = match connect_redis(config.redis_url.as_deref()).await {
+                Some(redis) => RateLimiterState::with_redis(redis),
+                None => RateLimiterState::new(),
+            };
             start_rate_limit_cleanup(rate_limiter.clone());
 
             let app = build_router(state, rate_limiter, &config, None);
@@ -297,7 +324,10 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             };
 
             // P8-1: Per-tenant rate limiter state + background cleanup.
-            let rate_limiter = RateLimiterState::new();
+            let rate_limiter = match connect_redis(config.redis_url.as_deref()).await {
+                Some(redis) => RateLimiterState::with_redis(redis),
+                None => RateLimiterState::new(),
+            };
             start_rate_limit_cleanup(rate_limiter.clone());
 
             // Phase 1.5: P-1 offline-queue retention on Postgres (the SQLite

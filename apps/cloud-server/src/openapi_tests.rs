@@ -332,6 +332,7 @@ fn test_full_router() -> axum::Router {
         square_webhook_signature_key: None,
         square_webhook_url: None,
         api_secret: Some("test-secret".into()),
+        redis_url: None,
     };
     crate::build_router(
         state,
