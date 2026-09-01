@@ -30,7 +30,7 @@ topology-preset-retail-desc = Toko, gudang, dan terminal POS
 topology-preset-restaurant = Preset Restoran & KDS
 topology-preset-restaurant-desc = POS restoran, display dapur, dan gudang
 topology-presets-label = Preset
-topology-apply-changes = Terapkan Perubahan Topologi
+topology-apply-changes = Terapkan Topologi
 # Konfirmasi popup
 topology-apply-confirm-title = Konfirmasi Perubahan Topologi
 topology-apply-confirm-created = Dibuat

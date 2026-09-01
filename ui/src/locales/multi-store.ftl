@@ -32,7 +32,7 @@ topology-preset-retail-desc = Store, warehouse, and POS terminals
 topology-preset-restaurant = Restaurant & KDS Preset
 topology-preset-restaurant-desc = Restaurant POS, kitchen display, and warehouse
 topology-presets-label = Presets
-topology-apply-changes = Apply Topology Changes
+topology-apply-changes = Apply Topology
 # Confirmation popup
 topology-apply-confirm-title = Confirm Topology Changes
 topology-apply-confirm-created = Created

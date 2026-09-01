@@ -2,25 +2,16 @@ import type { ReactNode } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { Button } from '@/components/Button';
 import { CheckIcon, ChevronDownIcon } from './NodeTopologyIcons';
-import { TopologyShortcutsHelp } from './topologyShortcutsHelp';
 
 /**
  * Topology editor header — extracted from `NodeTopologyEditor.tsx`
  * (Phase 2 split). Presentational: every action is a prop so the parent
  * keeps all canvas state and save logic. The header renders the sr-only
  * builder heading, the parent's branch toolbar slot, the view-only note,
- * the tier badge, the presets popover, the Apply button, the unsaved-diff
- * chip, and the shortcuts help popover.
+ * the tier badge, the presets popover, and the Apply button.
  */
 
 export type TopologyPreset = 'retail' | 'restaurant';
-
-export interface TopologyDirtySummary {
-  created: number;
-  updated: number;
-  archived: number;
-  typeChanged: number;
-}
 
 export interface TopologyHeaderProps {
   /** Localizer for permission tooltip + diff chip strings. */
@@ -39,12 +30,6 @@ export interface TopologyHeaderProps {
   onTogglePresets: () => void;
   /** Parent decides dirty-check vs direct load for the chosen preset. */
   onLoadPreset: (preset: TopologyPreset) => void;
-  /** Null when the canvas is clean (no chip rendered). */
-  dirtySummary: TopologyDirtySummary | null;
-  topologyRevision: number;
-  showShortcuts: boolean;
-  onToggleShortcuts: () => void;
-  onCloseShortcuts: () => void;
 }
 
 export function TopologyHeader({
@@ -58,11 +43,6 @@ export function TopologyHeader({
   presetsOpen,
   onTogglePresets,
   onLoadPreset,
-  dirtySummary,
-  topologyRevision,
-  showShortcuts,
-  onToggleShortcuts,
-  onCloseShortcuts,
 }: TopologyHeaderProps) {
   return (
     <div className="node-topology-header">
@@ -118,31 +98,8 @@ export function TopologyHeader({
           onClick={onApply}
           icon={<CheckIcon size={16} />}
         >
-          <Localized id="topology-apply-changes">Apply Topology Changes</Localized>
+          <Localized id="topology-apply-changes">Apply Topology</Localized>
         </Button>
-
-        {dirtySummary && (
-          <span className="topology-dirty-chip" role="status">
-            <span className="topology-dirty-dot" aria-hidden="true" />
-            <Localized id="topology-unsaved">Unsaved changes</Localized>
-            <span className="topology-diff-summary">
-              {l10n.getString('topology-apply-workspace-diff', {
-                created: dirtySummary.created,
-                updated: dirtySummary.updated,
-                archived: dirtySummary.archived,
-                typeChanged: dirtySummary.typeChanged,
-                from: topologyRevision,
-                to: topologyRevision + 1,
-              })}
-            </span>
-          </span>
-        )}
-
-        <TopologyShortcutsHelp
-          open={showShortcuts}
-          onToggle={onToggleShortcuts}
-          onClose={onCloseShortcuts}
-        />
       </div>
     </div>
   );

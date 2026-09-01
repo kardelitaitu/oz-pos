@@ -933,13 +933,6 @@ export default function NodeTopologyEditor({
   const [confirmDeleteMany, setConfirmDeleteMany] = useState<string[] | null>(null);
   const [confirmPreset, setConfirmPreset] = useState<'retail' | 'restaurant' | null>(null);
 
-  /** Shortcuts help popover open state — owned here because the central
-   *  keydown handler toggles it on F1; the button/popover JSX and its
-   *  Escape + outside-click dismissal live in `TopologyShortcutsHelp`. */
-  const [showShortcuts, setShowShortcuts] = useState(false);
-  const toggleShortcuts = useCallback(() => setShowShortcuts((p) => !p), []);
-  const closeShortcuts = useCallback(() => setShowShortcuts(false), []);
-
   /** Right-side tool rack panel state. Collapsed on mount so the editor
    *  opens on a clean canvas — arriving from the home screen's "Add
    *  Workspace" (or anywhere else) should not auto-expand the add-node
@@ -2928,14 +2921,6 @@ export default function NodeTopologyEditor({
       // auto-fit must never yank it afterwards (even Delete/Undo, which
       // change the content key, must not trigger a refit).
       userInteractedRef.current = true;
-      // F1 — help: toggle the shortcuts popover. Deliberately BEFORE the
-      // typing/rack guards: help is never an accidental canvas edit, so it
-      // works even while typing or with a rack control focused.
-      if (e.key === 'F1') {
-        e.preventDefault();
-        setShowShortcuts((v) => !v);
-        return;
-      }
       // Guard: don't handle canvas shortcuts while the user is typing in a text field.
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
@@ -5220,11 +5205,6 @@ export default function NodeTopologyEditor({
         presetsOpen={presetsOpen}
         onTogglePresets={() => setPresetsOpen((o) => !o)}
         onLoadPreset={handleLoadPreset}
-        dirtySummary={dirtySummary}
-        topologyRevision={topologyRevision}
-        showShortcuts={showShortcuts}
-        onToggleShortcuts={toggleShortcuts}
-        onCloseShortcuts={closeShortcuts}
       />
 
       <div className="node-topology-main">
@@ -5314,6 +5294,22 @@ export default function NodeTopologyEditor({
                 </Localized>
               </span>
             </div>
+          )}
+          {dirtySummary && (
+            <span className="topology-dirty-chip" role="status" onMouseDown={(e) => e.stopPropagation()}>
+              <span className="topology-dirty-dot" aria-hidden="true" />
+              <Localized id="topology-unsaved">Unsaved changes</Localized>
+              <span className="topology-diff-summary">
+                {l10n.getString('topology-apply-workspace-diff', {
+                  created: dirtySummary.created,
+                  updated: dirtySummary.updated,
+                  archived: dirtySummary.archived,
+                  typeChanged: dirtySummary.typeChanged,
+                  from: topologyRevision,
+                  to: topologyRevision + 1,
+                })}
+              </span>
+            </span>
           )}
           {totalIssues > 0 && (
             <TopologyValidationWidget

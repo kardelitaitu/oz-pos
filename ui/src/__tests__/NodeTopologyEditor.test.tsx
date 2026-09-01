@@ -496,12 +496,12 @@ const openPresetsAndClick = (presetText: string) => {
 
 /**
  * Complete the Apply flow through the PIN confirmation popup (the redesign
- * gates Apply behind a 4+ digit PIN). Clicks Apply Topology Changes, types
+ * gates Apply behind a 4+ digit PIN). Clicks Apply Topology, types
  * the PIN, and confirms; returns after the verifyPin promise settles. The
  * verifyPin module mock accepts any PIN.
  */
 const applyWithPin = async (pin = '1234') => {
-  fireEvent.click(screen.getByText('Apply Topology Changes'));
+  fireEvent.click(screen.getByText('Apply Topology'));
   const input = document.getElementById('topology-apply-pin') as HTMLInputElement | null;
   if (!input) throw new Error('Apply PIN input not found');
   fireEvent.change(input, { target: { value: pin } });
@@ -1703,7 +1703,7 @@ describe('NodeTopologyEditor Component', () => {
     const onSave = vi.fn();
     renderEditor({ onSave, canSave: false });
 
-    const applyBtn = screen.getByText('Apply Topology Changes');
+    const applyBtn = screen.getByText('Apply Topology');
     expect(applyBtn).toBeDisabled();
     expect(screen.getByText(/View-only/)).toBeInTheDocument();
 
@@ -1715,10 +1715,10 @@ describe('NodeTopologyEditor Component', () => {
 
   it('enables Apply by default (canSave=true)', async () => {
     renderEditor({ onSave: vi.fn() });
-    expect(screen.getByText('Apply Topology Changes')).not.toBeDisabled();
+    expect(screen.getByText('Apply Topology')).not.toBeDisabled();
   });
 
-  it('delegates the Apply payload when Apply Topology Changes is clicked', async () => {
+  it('delegates the Apply payload when Apply Topology is clicked', async () => {
     const onSave = vi.fn();
     renderEditor({ onSave });
 
@@ -2013,7 +2013,7 @@ describe('NodeTopologyEditor Component', () => {
       renderEditor({ onSave });
       await waitFor(() => expect(getNodeCount()).toBe(4));
 
-      fireEvent.click(screen.getByText('Apply Topology Changes'));
+      fireEvent.click(screen.getByText('Apply Topology'));
 
       // The Apply gate opens the issues panel (so the user sees EVERY
       // blocking issue at once) and toasts a block summary instead of a
@@ -4158,43 +4158,6 @@ describe('NodeTopologyEditor — duplicate detection vs defaulted ports', () => 
   });
 });
 
-// ── F1 shortcuts help ───────────────────────────────────────────
-
-describe('NodeTopologyEditor — F1 shortcuts help', () => {
-  it('F1 opens the shortcuts popover and a second F1 closes it', () => {
-    renderEditor();
-    expect(document.querySelector('.topology-shortcuts-popover')).toBeNull();
-
-    fireEvent.keyDown(window, { key: 'F1' });
-    expect(document.querySelector('.topology-shortcuts-popover')).not.toBeNull();
-    // The help lists its own trigger.
-    expect(screen.getByText('Show keyboard shortcuts')).not.toBeNull();
-    expect(screen.getByText('F1')).not.toBeNull();
-
-    fireEvent.keyDown(window, { key: 'F1' });
-    expect(document.querySelector('.topology-shortcuts-popover')).toBeNull();
-  });
-
-  it('F1 works while focus is on a rack control (not swallowed by the rack guard)', () => {
-    renderEditor();
-    // Canvas shortcuts are normally inert when a rack control has focus.
-    (document.querySelector('.node-tool-rack button') as HTMLElement | null)?.focus();
-
-    fireEvent.keyDown(window, { key: 'F1' });
-    expect(document.querySelector('.topology-shortcuts-popover')).not.toBeNull();
-  });
-
-  it('F1 lists the flagship gestures: Space+drag pan and Alt+drag duplicate', () => {
-    renderEditor();
-    fireEvent.keyDown(window, { key: 'F1' });
-
-    expect(screen.getByText('Pan the canvas')).not.toBeNull();
-    expect(screen.getByText('Space + Drag')).not.toBeNull();
-    expect(screen.getByText('Duplicate by dragging')).not.toBeNull();
-    expect(screen.getByText('Alt + Drag')).not.toBeNull();
-  });
-});
-
 // ── Canvas shortcuts vs focused chrome controls ─────────────────
 
 describe('NodeTopologyEditor — canvas shortcuts vs focused chrome', () => {
@@ -4282,7 +4245,7 @@ describe('NodeTopologyEditor — canvas shortcuts vs focused chrome', () => {
     fireEvent.mouseUp(firstNode);
     expect(document.querySelector('.node-selected')).not.toBeNull();
 
-    const applyBtn = screen.getByText('Apply Topology Changes');
+    const applyBtn = screen.getByText('Apply Topology');
     applyBtn.focus();
     fireEvent.keyDown(applyBtn, { key: 'Delete' });
 
@@ -7630,45 +7593,6 @@ describe('NodeTopologyEditor — unsaved-changes indicator', () => {
     expect(summary()).toContain('0 created');
     expect(summary()).toContain('0 archived');
     expect(summary()).toContain('0 updated');
-  });
-});
-
-// ── Shortcuts help popover ───────────────────────────────────────
-
-describe('NodeTopologyEditor — shortcuts help popover', () => {
-  it('opens on the help button and lists the canvas shortcuts', () => {
-    renderEditor();
-    const helpBtn = screen.getByRole('button', { name: 'Keyboard shortcuts' });
-
-    fireEvent.click(helpBtn);
-    expect(helpBtn).toHaveAttribute('aria-expanded', 'true');
-    expect(document.querySelector('.topology-shortcuts-popover')).not.toBeNull();
-    expect(screen.getByText('Spawn a node from the palette slot')).toBeInTheDocument();
-  });
-
-  it('closes on Escape and on an outside click', () => {
-    renderEditor();
-    const helpBtn = screen.getByRole('button', { name: 'Keyboard shortcuts' });
-
-    fireEvent.click(helpBtn);
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(document.querySelector('.topology-shortcuts-popover')).toBeNull();
-
-    fireEvent.click(helpBtn);
-    fireEvent.mouseDown(document.body);
-    expect(document.querySelector('.topology-shortcuts-popover')).toBeNull();
-  });
-
-  it('documents Shift+drag as an additive marquee gesture', () => {
-    renderEditor();
-    const helpBtn = screen.getByRole('button', { name: 'Keyboard shortcuts' });
-
-    fireEvent.click(helpBtn);
-    // Every other canvas gesture (Space+drag pan, Alt+drag duplicate) has a
-    // help row; the additive Shift+drag marquee must be discoverable too —
-    // both the kbd glyph and its FTL description.
-    expect(screen.getByText('Shift + Drag')).toBeInTheDocument();
-    expect(screen.getByText('Add to the selection')).toBeInTheDocument();
   });
 });
 
