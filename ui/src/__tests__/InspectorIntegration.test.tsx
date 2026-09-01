@@ -254,7 +254,8 @@ describe('Inspector drawer integration (Phase 2)', () => {
   it('selecting a hardware node shows the hardware inspector with editable name/subtitle', async () => {
     renderEditor();
 
-    // Add a hardware node so we can select it
+    // Open the add panel and add a hardware node so we can select it
+    openRackPanel('add');
     fireEvent.click(screen.getByText('+ Hardware Node'));
 
     await waitFor(() => {

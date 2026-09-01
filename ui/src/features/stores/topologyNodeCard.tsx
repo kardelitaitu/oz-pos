@@ -381,7 +381,7 @@ function TopologyNodeCardImpl({
       )}
 
       {/* ── Footer: stacked per-semantic port rows ──────────────── */}
-      <div className="node-footer" onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} role="presentation">
+<div className="node-footer" onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} role="presentation">
         <div className="node-port-column node-port-column--left">
           {leftRows.map((_semantic, variantIndex) => (
             <button

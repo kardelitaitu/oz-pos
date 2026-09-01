@@ -373,7 +373,7 @@ const SELECTION_ANNOUNCE_SETTLE_MS = 120;
 /** Branch Location profile fields — fetched lazily from the backend. */
 function BranchLocationFields({ nodeId, sessionToken, l10n, beginInspectorEdit }: {
   nodeId: string;
-  sessionToken: string;
+  sessionToken: string | null | undefined;
   l10n: ReturnType<typeof useLocalization>['l10n'];
   beginInspectorEdit: (id: string) => void;
 }) {
@@ -401,7 +401,7 @@ function BranchLocationFields({ nodeId, sessionToken, l10n, beginInspectorEdit }
   const queuedRef = useRef(false);
 
   const persist = useCallback(async () => {
-    if (!profileRef.current) return;
+    if (!sessionToken || !profileRef.current) return;
     if (saveInFlightRef.current) {
       // A save is running; mark a newer edit arrived so the loop re-reads
       // the latest draft instead of the snapshot already in flight.
@@ -435,6 +435,13 @@ function BranchLocationFields({ nodeId, sessionToken, l10n, beginInspectorEdit }
 
   useEffect(() => {
     let cancelled = false;
+    // Session token resolves asynchronously after the workspace is selected.
+    // Do not fire a scoped IPC call with a null token — keep the section in
+    // its loading state until the token is available (effect re-runs on change).
+    if (!sessionToken) {
+      setLoading(true);
+      return () => { cancelled = true; };
+    }
     setLoading(true);
     getStoreProfileScoped(sessionToken, nodeId)
       .then((p) => { if (!cancelled) { setProfile(p); setLoading(false); } })

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { LocalizationProvider, ReactLocalization } from '@fluent/react';
 import type { ReactElement, ReactNode } from 'react';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import SessionLockScreen from '@/features/auth/SessionLockScreen';
 
 // vi.hoisted ensures the mock references exist before vitest hoists the
@@ -72,7 +73,9 @@ function withProviders(children: ReactNode): ReactElement {
 
   return (
     <LocalizationProvider l10n={l10n}>
-      {children}
+      <ToastProvider>
+        {children}
+      </ToastProvider>
     </LocalizationProvider>
   );
 }

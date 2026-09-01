@@ -195,35 +195,46 @@ export default function SessionLockScreen({
     <div className="session-lock-overlay" data-testid="session-lock-screen">
       <div className="session-lock-backdrop" aria-hidden="true" />
 
+      {/* ── Viewport header: clock + date ────────────────────────────
+         Absolutely positioned so it never joins the flex flow that
+         centres the card. The keypad must land on exactly the same
+         box as the login PIN step, so nothing outside the card may
+         push it around. */}
+      <div className="session-lock-header">
+        <div className="session-lock-time">{timeStr}</div>
+        <div className="session-lock-date">{dateStr}</div>
+      </div>
+
+      {/* Shrink-wraps the card and anchors the notice slot below it. */}
+      <div className="session-lock-stage">
       <div className="session-lock-card" ref={cardRef}>
-        {/* ── Top bar: clock + lock icon on one line (mirrors the login PIN step) ── */}
+        {/* Lock badge — card-corner counterpart of login's top-right
+            close button. Decorative: the lock state is already exposed
+            by the PIN pad's accessible label. */}
+        <div className="session-lock-lock-badge" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+        </div>
+
+        {/* ── Top bar: PIN dots (same band, same role as the login PIN step) ── */}
         <div className="session-lock-top-bar">
-          <div className="session-lock-clock-row">
-            <div className="session-lock-time">{timeStr}</div>
-            <div className="session-lock-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-            </div>
+          <div className="session-lock-pin-dots" aria-label={requiredLocalized(l10n, 'session-lock-pin-aria', { length: String(pin.length), max: String(MAX_PIN_LENGTH) })}>
+            {Array.from({ length: MAX_PIN_LENGTH }, (_, i) => (
+              <span
+                key={i}
+                className={`session-lock-pin-dot ${i < pin.length ? 'session-lock-pin-dot--filled' : ''}`}
+              />
+            ))}
           </div>
-          <div className="session-lock-date">{dateStr}</div>
         </div>
 
-        {/* ── Main area: PIN dots + keypad ── */}
+        {/* ── Main area: keypad only ───────────────────────────────
+           Kept as the sole child so the keypad is centred in an
+           identically-sized band to login's — that is what makes the
+           lock → login transition feel like nothing moved. */}
         <div className="session-lock-main-area">
-
-        {/* PIN dots */}
-        <div className="session-lock-pin-dots" aria-label={requiredLocalized(l10n, 'session-lock-pin-aria', { length: String(pin.length), max: String(MAX_PIN_LENGTH) })}>
-          {Array.from({ length: MAX_PIN_LENGTH }, (_, i) => (
-            <span
-              key={i}
-              className={`session-lock-pin-dot ${i < pin.length ? 'session-lock-pin-dot--filled' : ''}`}
-            />
-          ))}
-        </div>
-
-        {/* PIN pad */}
         {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
         <div
           id="session-lock-pin-pad"
@@ -279,10 +290,19 @@ export default function SessionLockScreen({
                 <line x1="18" y1="9" x2="12" y2="15" />
                 <line x1="12" y1="9" x2="18" y2="15" />
               </svg>
-            </button>          </div>
+            </button>
+          </div>
+        </div>
         </div>
 
-        {/* U1: Error + visible countdown timer — below the keypad */}
+        {/* ── Bottom bar: spacer band (mirrors the login step-dots band) ── */}
+        <div className="session-lock-bottom-bar" aria-hidden="true" />
+      </div>
+
+      {/* ── Notices: error + lockout countdown ─────────────────────
+         Rendered outside the card so a growing error banner can never
+         reflow the keypad out of its login-matching position. */}
+      <div className="session-lock-notice">
         {error && (
           <div className="session-lock-error" role="alert" aria-live="polite">
             <AlertIcon />
@@ -294,10 +314,7 @@ export default function SessionLockScreen({
             {requiredLocalized(l10n, 'session-lock-lockout', { seconds: String(lockoutRemaining) })}
           </div>
         )}
-        </div>
-
-        {/* ── Bottom bar: spacer band (mirrors the login step-dots band) ── */}
-        <div className="session-lock-bottom-bar" aria-hidden="true" />
+      </div>
       </div>
 
       {/* ── Footer: version + connection status pills (login-style) ── */}
