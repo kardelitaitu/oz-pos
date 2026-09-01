@@ -8,6 +8,14 @@
   border-radius: var(--radius-lg);
 }
 
+/* Inline variant: no pill/box chrome — for embedding in a larger bar. */
+.statusbar--bare {
+  background: transparent;
+  border: none;
+  padding: 0;
+  gap: var(--space-2);
+}
+
 .statusbar-item {
   display: flex;
   align-items: center;

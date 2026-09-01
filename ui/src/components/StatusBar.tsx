@@ -90,8 +90,11 @@ function StatusItem({ kind, tone, label, tooltip, onClick }: StatusItemProps) {
  * Colors follow latency thresholds: green < 1 s, yellow 1–3 s, red >= 3 s
  * (or unreachable). While checking, the icon slowly blinks grey. Hovering
  * shows a native tooltip; clicking raises a toast with the same detail.
+ *
+ * When `bare` is set the surrounding pill/box chrome is omitted so the icon
+ * row can sit inline inside a larger container (e.g. the shell StatusBar).
  */
-export default function StatusBar() {
+export default function StatusBar({ bare = false }: { bare?: boolean }) {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
 
@@ -134,7 +137,7 @@ export default function StatusBar() {
   const notify = (msg: string) => addToast({ type: 'info', message: msg });
 
   return (
-    <div className="statusbar" role="group" aria-label={requiredLocalized(l10n, 'statusbar-group-aria')}>
+    <div className={`statusbar${bare ? ' statusbar--bare' : ''}`} role="group" aria-label={requiredLocalized(l10n, 'statusbar-group-aria')}>
       <StatusItem kind="key" tone={authTone} label={authLabel} tooltip={authTooltip} onClick={() => notify(authTooltip)} />
       <StatusItem kind="sync" tone={syncTone} label={syncLabel} tooltip={syncTooltip} onClick={() => notify(syncTooltip)} />
       <StatusItem kind="download" tone={versionTone} label={versionLabel} tooltip={versionTooltip} onClick={() => notify(versionTooltip)} />

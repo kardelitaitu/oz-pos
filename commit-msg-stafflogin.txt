@@ -1,9 +1,0 @@
-feat(ui): replace inline connection pills with StatusBar on StaffLogin and SessionLock
-
-Replace the old inline connection-status pills for auth + sync on both
-StaffLoginScreen and SessionLockScreen with the unified StatusBar
-component (3 colored SVG icons: auth, sync, version).
-
-Remove now-unused useSyncConnection and testAuthConnection state and
-effects from both screens. Update SessionLockScreen tests to mock
-StatusBar (its internals are covered in StatusBarActivation.test.tsx).

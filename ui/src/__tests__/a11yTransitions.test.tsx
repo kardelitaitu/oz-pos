@@ -245,7 +245,7 @@ describe('A11Y-12 — toast live-region announcements', () => {
 describe('A11Y-12 — StatusBar polite live regions', () => {
   it('announces app status via a polite role="status" region', async () => {
     mockOfflineSummary.mockResolvedValue({ conflictCount: 0 });
-    renderWithFluent(<StatusBar />);
+    renderWithFluent(<ToastProvider><StatusBar /></ToastProvider>);
 
     await waitFor(() => {
       expect(mockOfflineSummary).toHaveBeenCalled();
@@ -258,7 +258,7 @@ describe('A11Y-12 — StatusBar polite live regions', () => {
 
   it('announces conflict count in a polite live region when present', async () => {
     mockOfflineSummary.mockResolvedValue({ conflictCount: 3 });
-    renderWithFluent(<StatusBar />);
+    renderWithFluent(<ToastProvider><StatusBar /></ToastProvider>);
 
     await waitFor(() => {
       expect(document.querySelector('.statusbar-conflict')).not.toBeNull();
