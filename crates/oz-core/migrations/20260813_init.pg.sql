@@ -1009,6 +1009,10 @@ CREATE TABLE IF NOT EXISTS gift_card_transactions (
     created_at          TEXT NOT NULL
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS uq_gift_card_redeem_sale
+    ON gift_card_transactions(gift_card_id, sale_id)
+    WHERE txn_type = 'redeem' AND sale_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS "kds_orders" (
     id              TEXT PRIMARY KEY,
     -- One order per sale AND kitchen zone: a sale with items in multiple
