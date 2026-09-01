@@ -240,6 +240,7 @@ body {
   cursor: pointer;
   white-space: nowrap;
   user-select: none;
+  text-decoration: none;
   transition: background var(--dur-fast) var(--ease-standard),
               border-color var(--dur-fast), box-shadow var(--dur-fast),
               transform var(--dur-fast), color var(--dur-fast);
