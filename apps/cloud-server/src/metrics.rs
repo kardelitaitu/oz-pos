@@ -122,6 +122,48 @@ pub static WEBHOOK_5XX_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
     c
 });
 
+// ── Image storage (spec 0046b §3.4/§3.7) ──────────────────────────────
+
+/// Total bytes currently stored for the tenant's active image refs
+/// (refcount > 0). Set by the GC cycle via [`set_image_bytes_gauge`].
+/// Alerts key off the 4 GB soft limit (§3.7) — a tenant approaching it
+/// should be audited for large catalogs or leaked bytes.
+pub static IMAGE_BYTES_USED: LazyLock<prometheus::GaugeVec> = LazyLock::new(|| {
+    let g = prometheus::GaugeVec::new(
+        Opts::new(
+            "oz_image_bytes_used",
+            "Total bytes stored for active image refs, by tenant",
+        ),
+        &["tenant"],
+    )
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(g.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
+    g
+});
+
+/// Total number of orphaned image files deleted by the GC loop
+/// (spec 0046b §3.4). A rising count confirms the sweep is reclaiming
+/// space; a flat count while refcount=0 rows age past the 24h grace
+/// signals the GC path is not covering them.
+pub static IMAGE_GC_DELETED_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
+    let c = Counter::new(
+        "oz_image_gc_deleted_total",
+        "Total orphaned image files deleted by the GC loop",
+    )
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(c.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
+    c
+});
+
+/// Set the per-tenant image bytes gauge. Callers should pass the result
+/// of `Store::image_bytes_used(tenant_id)` (0 when the query fails — the
+/// gauge is best-effort observability, not a hard contract).
+pub fn set_image_bytes_gauge(tenant_id: &str, bytes: i64) {
+    IMAGE_BYTES_USED
+        .with_label_values(&[tenant_id])
+        .set(bytes.max(0) as f64);
+}
+
 // ── Histograms ────────────────────────────────────────────────────────
 
 /// Duration of push requests in milliseconds.

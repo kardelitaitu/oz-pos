@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::metrics;
 use oz_core::db::Store;
 use rusqlite::Connection;
 use tokio::sync::Mutex;
@@ -98,6 +99,12 @@ async fn run_image_gc_cycle(db: &Arc<Mutex<Connection>>, image_dir: &PathBuf) {
                             }
                         }
                         total_count += count;
+                        // Observability (spec 0046b §3.7): a rising GC counter
+                        // confirms the sweep is reclaiming space; the bytes
+                        // gauge feeds the 4 GB soft-alert per tenant.
+                        metrics::IMAGE_GC_DELETED_TOTAL.inc_by(count as f64);
+                        let used = store.image_bytes_used(tenant_id).unwrap_or(0);
+                        metrics::set_image_bytes_gauge(tenant_id, used);
                         info!(
                             tenant = %tenant_id,
                             count,
