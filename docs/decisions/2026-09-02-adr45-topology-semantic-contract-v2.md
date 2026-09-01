@@ -1012,6 +1012,47 @@ Recommendation is 2 for §4.3 and 1 as its own later slice. Option 1 is the corr
 end state but it is a refactor of the backend validator's shape, not something to
 fold into a UI change.
 
+## Validation-code coverage: TS 24 vs core 14 (2026-09-02)
+
+Compared the codes the TypeScript validator can emit against those the core Rust
+validator emits. The first count said **ten TS codes had no backend check**. That
+number was wrong by roughly five times, and the ways it was wrong are the useful
+part.
+
+Breakdown of the ten, each verified individually:
+
+- **Four were a regex artifact.** `missing-operation-input`,
+  `multiple-operation-inputs`, `missing-location-input`,
+  `multiple-location-inputs` are all emitted in `topology.rs` — but through a
+  *conditional expression* as the first argument to `topology_validation(...)`,
+  not a literal string. A pattern anchored on `topology_validation("code"` cannot
+  see them. The code was fine; my extraction was too narrow.
+- **Three live at another layer, by design.** `unsupported-schema-version` is
+  enforced on read in `semantics.rs:235` (see the two-version-axes note in §2 —
+  the envelope version is a read gate, not a graph rule). `warehouse-at-capacity`
+  and `warehouse-missing-stock-routing` are enforced in the desktop-client
+  `persistence.rs`, which is where Apply actually runs.
+- **One is a code-name divergence, not a gap.** `unknown-wire-endpoint` has no
+  backend equivalent, but a probe with a wire pointing at a nonexistent node is
+  refused — as `invalid-location-connection`. The graph is rejected either way.
+  What differs is the label, so the live checklist and Apply can name the same
+  defect with two different codes.
+
+**Two remain genuinely unconfirmed**, and are recorded as open rather than as
+findings, because I did not verify them the way I verified the other eight:
+
+1. `warehouse-tier-limit` — the editor enforces a per-subscription-tier warehouse
+   cap; no topology-level tier check was found in the Rust tree. The nearest
+   matches are staff/user tier gates, which are a different rule. If the cap is
+   only client-side, it is an entitlement the backend does not defend.
+2. `multiple-ticket-inputs` — no Rust reference found at all.
+
+Method note, since it is the second round running: every one of these was settled
+by a probe or a whole-tree grep, not by reading one file. The tempting headline was
+"ten validation rules exist only in the UI" and it would have been wrong eight
+times.
+
+## §4.2 UI swap — verified spec, not yet done (2026-09-02)
 ## §4.2 UI swap — verified spec, not yet done (2026-09-02)
 For twenty rounds this was described as "too large for the current window". The
 premise was checked rather than repeated, and it was mostly wrong. Everything
