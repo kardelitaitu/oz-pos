@@ -48,7 +48,12 @@
 /* ── Checking: slowly blinking grey ────────────────────────────── */
 .statusbar-item.statusbar-tone--checking {
   color: var(--color-fg-tertiary);
-  animation: statusbar-blink 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .statusbar-item.statusbar-tone--checking {
+    animation: statusbar-blink 1.6s ease-in-out infinite;
+  }
 }
 
 @keyframes statusbar-blink {
