@@ -391,6 +391,23 @@ CREATE TABLE IF NOT EXISTS payment_settlements (
     updated_at   TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
 );
 
+CREATE TABLE IF NOT EXISTS image_refs (
+    tenant_id  TEXT NOT NULL,
+    hash       TEXT NOT NULL,
+    refcount   BIGINT NOT NULL DEFAULT 0,
+    bytes      BIGINT NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    PRIMARY KEY (tenant_id, hash)
+);
+
+CREATE TABLE IF NOT EXISTS image_push_queue (
+    hash            TEXT NOT NULL PRIMARY KEY,
+    size_bytes      BIGINT NOT NULL,
+    attempts        BIGINT NOT NULL DEFAULT 0,
+    next_attempt_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    enqueued_at     TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+);
+
 CREATE TABLE IF NOT EXISTS exchange_rates (
     id              TEXT PRIMARY KEY,
     from_currency   TEXT NOT NULL REFERENCES currencies(code),
@@ -1326,6 +1343,8 @@ CREATE INDEX IF NOT EXISTS idx_held_carts_bill_type ON held_carts(bill_type);
 
 CREATE INDEX IF NOT EXISTS idx_held_carts_created_at ON held_carts(created_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_image_refs_tenant ON image_refs(tenant_id);
+
 CREATE INDEX IF NOT EXISTS idx_inv_shifts_location
     ON inventory_shifts(location_id, started_at);
 
@@ -1692,6 +1711,7 @@ ON CONFLICT DO NOTHING;
 
 -- tenant_id tables NOT yet under RLS (write path must populate
 -- tenant_id before each can be added to RLS_TABLES):
+--   image_refs
 --   sale_lines
 --
 -- ── Row-Level Security: tenant isolation (PG-only) ─────────────────────
