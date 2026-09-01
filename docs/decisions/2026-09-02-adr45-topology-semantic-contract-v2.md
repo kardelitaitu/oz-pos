@@ -1083,7 +1083,31 @@ by a probe or a whole-tree grep, not by reading one file. The tempting headline 
 "ten validation rules exist only in the UI" and it would have been wrong eight
 times.
 
-## §4.2 UI swap — verified spec, not yet done (2026-09-02)
+### Second whole-suite sweep (2026-09-02, after rounds 26-36)
+
+Eight rounds changed code after the sweep above and none of them re-ran the full
+suite - the exact gap round 20 named. Run now:
+
+| Gate | Round 23 | Now | Delta |
+|---|---|---|---|
+| UI test files | 409 | **410** | +1 (`topologyValidationParity`) |
+| UI tests | 7754 | **7774** | +20 |
+| UI failures | 4 | **4** | same four |
+| `oz-core` topology | 52 | **58** | +6 |
+| `oz-pos-app` topology | 329 | **329** | 0 |
+
+The +20 is fully accounted: 10 ordering tests, 4 priority-table guards, 6 parity
+tests. Nothing appeared and nothing went missing. The four failures are identical
+to round 20's and round 23's - `NodeTopologyEditorDevMock`, `themeTokenCompliance`,
+`popoverSurfaceCompliance`, `SettingsPage` - all pre-existing, all deferred.
+
+What actually needed proving was round 26. It rewrote
+`firstTopologyValidationError` from `errors[0]` into a sorted return, and that
+function feeds the editor's validation display. Changing which error a merchant is
+shown first is exactly the edit that passes every test mentioning topology and
+breaks one that does not mention it at all. Nothing broke - but until this run that
+was untested optimism.
+
 ## §4.2 UI swap — verified spec, not yet done (2026-09-02)
 For twenty rounds this was described as "too large for the current window". The
 premise was checked rather than repeated, and it was mostly wrong. Everything
