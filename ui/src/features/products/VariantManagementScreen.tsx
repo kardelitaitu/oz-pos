@@ -12,6 +12,7 @@ import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup, requiredLocalized, EmptyState } from '@/frontend/shared';
 import { NoVariantsIcon } from '@/components/EmptyStateIllustrations';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { minorUnitExponent } from '@/types/domain';
 
 interface Props {
@@ -42,6 +43,8 @@ const EMPTY_FORM: VariantForm = {
 
 /** Variant management screen — manage product variants (size, colour, etc.) with separate SKU, pricing, and barcode. */
 export default function VariantManagementScreen({ productSku, productName, onClose }: Props) {
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
   const [variants, setVariants] = useState<ProductVariantDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -62,14 +65,14 @@ export default function VariantManagementScreen({ productSku, productName, onClo
     setLoading(true);
     setLoadError(null);
     try {
-      const dtos = await listProductVariants(productSku);
+      const dtos = await listProductVariants(sessionToken, productSku);
       setVariants(dtos);
     } catch {
       setLoadError('variant-mgmt-error-load');
     } finally {
       setLoading(false);
     }
-  }, [productSku]);
+  }, [productSku, sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -116,7 +119,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
       }
 
       if (editingSku) {
-        await updateProductVariant({
+        await updateProductVariant(sessionToken, {
           sku: editingSku,
           name: form.name,
           priceMinor: hasPrice ? priceMinor : null,
@@ -126,7 +129,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
           isActive: form.isActive,
         });
       } else {
-        await createProductVariant({
+        await createProductVariant(sessionToken, {
           parentSku: productSku,
           name: form.name,
           sku: form.sku,
@@ -143,14 +146,14 @@ export default function VariantManagementScreen({ productSku, productName, onClo
     } finally {
       setSaving(false);
     }
-  }, [form, editingSku, productSku, load, l10n]);
+  }, [form, editingSku, productSku, load, l10n, sessionToken]);
 
   const handleDelete = useCallback(async () => {
     if (!confirmDeleteSku) return;
     setDeletingSku(confirmDeleteSku);
     setDeleteError(null);
     try {
-      await deleteProductVariant(confirmDeleteSku);
+      await deleteProductVariant(sessionToken, confirmDeleteSku);
       setConfirmDeleteSku(null);
       await load();
     } catch {
@@ -159,7 +162,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
     } finally {
       setDeletingSku(null);
     }
-  }, [confirmDeleteSku, load, l10n]);
+  }, [confirmDeleteSku, load, l10n, sessionToken]);
 
   return (
     <div className="product-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('variant-mgmt-overlay-aria', { name: productName })}>

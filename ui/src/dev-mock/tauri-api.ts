@@ -1974,6 +1974,11 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'create_product_variant': () => ({ sku: 'VAR-NEW' }),
   'update_product_variant': () => ({ sku: 'VAR-UPD' }),
   'delete_product_variant': () => null,
+  'list_product_variants_scoped': () => [],
+  'get_product_variant_scoped': () => null,
+  'create_product_variant_scoped': () => ({ sku: 'VAR-NEW' }),
+  'update_product_variant_scoped': () => ({ sku: 'VAR-UPD' }),
+  'delete_product_variant_scoped': () => null,
 
   // ═══════════════════════════════════════════════════════════════
   // CATEGORIES
