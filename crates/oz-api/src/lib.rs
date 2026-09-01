@@ -39,6 +39,8 @@ next: none | perf: N/A
 pub mod auth;
 /// Postgres data layer for the REST handlers (Phase 1.2).
 pub mod pg;
+/// Read-tier presets, READ_KEY_MAP, and read-gate middleware (0047 F2–F3).
+pub mod read_tiers;
 /// Axum route handlers (health, tokens, products, categories, sales).
 pub mod routes;
 
@@ -90,6 +92,28 @@ pub struct AppState {
     /// origin (explicit dev opt-in). Defaults to the documented allowlist
     /// in `docs/archived/2026-08-15-unify-auth-and-sync.md` §11; overridable via `OZ_CORS_ORIGINS`.
     pub cors_origins: Vec<String>,
+
+    /// Directory where content-addressed product images are stored
+    /// (spec 0046b §3.4). Resolved from `OZ_IMAGE_DIR` (default
+    /// `/data/images` in prod, `./data/images` in dev). Created on startup.
+    pub image_dir: std::path::PathBuf,
+}
+
+/// Resolve the image storage directory from `OZ_IMAGE_DIR`.
+///
+/// Defaults to `/data/images` (the Northflank persistent volume mount in
+/// production) and `./data/images` in dev when the env var is unset.
+pub fn image_dir_from_env() -> std::path::PathBuf {
+    match std::env::var("OZ_IMAGE_DIR") {
+        Ok(v) if !v.trim().is_empty() => std::path::PathBuf::from(v),
+        _ if std::env::var("OZ_PRODUCTION")
+            .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "on" | "ON"))
+            .unwrap_or(false) =>
+        {
+            std::path::PathBuf::from("/data/images")
+        }
+        _ => std::path::PathBuf::from("./data/images"),
+    }
 }
 
 /// Default CORS allowlist — the documented origins in
@@ -197,6 +221,7 @@ impl AppState {
             db_path: ":memory:".into(),
             port: 3099,
             cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
+            image_dir: std::path::PathBuf::from("./data/images"),
         }
     }
 }
@@ -278,6 +303,19 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/sales/{id}/status",
             patch(routes::sales::update_sale_status),
         )
+        .route(
+            "/api/v1/images",
+            put(routes::images::put_image).post(routes::images::put_image_batch),
+        )
+        .route("/api/v1/images:pack", get(routes::images::get_image_pack))
+        .route(
+            "/api/v1/images:missing",
+            get(routes::images::get_image_missing),
+        )
+        .route("/api/v1/images/{hash16}", get(routes::images::get_image))
+        // Read-tier gate runs INSIDE auth (auth inserts claims first, then
+        // this gates GETs against them) — spec 0047 F3.
+        .layer(middleware::from_fn(read_tiers::read_gate_middleware))
         .layer(middleware::from_fn(auth::auth_middleware));
 
     Router::new()
@@ -345,6 +383,11 @@ pub async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // before any request can hit the dev-secret fallback.
     validate_production_secrets(production, api_secret_env.as_deref(), admin_key.as_deref())
         .map_err(|e| format!("startup rejected: {e}"))?;
+    let image_dir = image_dir_from_env();
+    // Spec 0046b §3.4: create the image byte-store directory on startup —
+    // no entrypoint change needed (the Northflank volume is already mounted).
+    std::fs::create_dir_all(&image_dir)
+        .map_err(|e| format!("creating image directory {}: {e}", image_dir.display()))?;
     let state = AppState {
         db: Arc::new(Mutex::new(conn)),
         pg: None,
@@ -356,6 +399,7 @@ pub async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .and_then(|p| p.parse().ok())
             .unwrap_or(3099),
         cors_origins: cors_origins_from_env(),
+        image_dir,
     };
 
     let port = state.port;

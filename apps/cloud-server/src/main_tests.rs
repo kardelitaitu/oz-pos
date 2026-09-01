@@ -32,6 +32,37 @@ fn configured_admin_key_non_empty_is_some() {
     );
 }
 
+// ── OZ_WORKER_THREADS semantics ────────────────────────────────────
+
+#[test]
+fn worker_threads_unset_defaults_to_two() {
+    assert_eq!(parse_worker_threads(Err(std::env::VarError::NotPresent)), 2);
+}
+
+#[test]
+fn worker_threads_valid_value_is_used() {
+    assert_eq!(parse_worker_threads(Ok("4".into())), 4);
+    assert_eq!(parse_worker_threads(Ok("16".into())), 16);
+}
+
+#[test]
+fn worker_threads_zero_maps_to_cpu_count() {
+    // 0 = auto: logical CPU count (available_parallelism), never 0.
+    let n = parse_worker_threads(Ok("0".into()));
+    assert!(n >= 1, "0 must map to a real CPU count, got {n}");
+}
+
+#[test]
+fn worker_threads_garbage_falls_back_to_two() {
+    assert_eq!(parse_worker_threads(Ok("banana".into())), 2);
+    assert_eq!(parse_worker_threads(Ok("-3".into())), 2);
+}
+
+#[test]
+fn worker_threads_trims_whitespace() {
+    assert_eq!(parse_worker_threads(Ok(" 8 ".into())), 8);
+}
+
 /// Helper: create a default config for tests.
 fn test_config() -> config::CloudServerConfig {
     config::CloudServerConfig {
@@ -51,6 +82,7 @@ fn test_config() -> config::CloudServerConfig {
         square_webhook_signature_key: None,
         square_webhook_url: None,
         api_secret: None,
+        redis_url: None,
     }
 }
 
@@ -65,6 +97,7 @@ fn test_app() -> Router {
         db: Arc::new(Mutex::new(fresh_db())),
         pg: None,
         started_at: Instant::now(),
+        health_depth_cache: HealthDepthCache::default(),
         stripe_webhook_secret: None,
         square_webhook_signature_key: None,
         square_webhook_url: None,
@@ -249,6 +282,7 @@ async fn cloud_health_reports_queue_depth() {
         db: Arc::new(Mutex::new(fresh_db())),
         pg: None,
         started_at: Instant::now(),
+        health_depth_cache: HealthDepthCache::default(),
         stripe_webhook_secret: None,
         square_webhook_signature_key: None,
         square_webhook_url: None,
@@ -291,6 +325,7 @@ async fn cloud_health_reports_last_sync_at() {
         db: Arc::new(Mutex::new(fresh_db())),
         pg: None,
         started_at: Instant::now(),
+        health_depth_cache: HealthDepthCache::default(),
         stripe_webhook_secret: None,
         square_webhook_signature_key: None,
         square_webhook_url: None,
@@ -379,6 +414,7 @@ async fn sync_push_and_pull_roundtrip() {
         db: Arc::new(Mutex::new(fresh_db())),
         pg: None,
         started_at: Instant::now(),
+        health_depth_cache: HealthDepthCache::default(),
         stripe_webhook_secret: None,
         square_webhook_signature_key: None,
         square_webhook_url: None,
@@ -468,6 +504,7 @@ async fn multi_tenant_tenant_a_push_invisible_to_tenant_b() {
         db: Arc::new(Mutex::new(fresh_db())),
         pg: None,
         started_at: Instant::now(),
+        health_depth_cache: HealthDepthCache::default(),
         stripe_webhook_secret: None,
         square_webhook_signature_key: None,
         square_webhook_url: None,
@@ -517,6 +554,7 @@ async fn multi_tenant_bidirectional_isolation() {
         db: Arc::new(Mutex::new(fresh_db())),
         pg: None,
         started_at: Instant::now(),
+        health_depth_cache: HealthDepthCache::default(),
         stripe_webhook_secret: None,
         square_webhook_signature_key: None,
         square_webhook_url: None,
@@ -573,6 +611,7 @@ async fn multi_tenant_status_scoped_per_tenant() {
         db: Arc::new(Mutex::new(fresh_db())),
         pg: None,
         started_at: Instant::now(),
+        health_depth_cache: HealthDepthCache::default(),
         stripe_webhook_secret: None,
         square_webhook_signature_key: None,
         square_webhook_url: None,
@@ -627,6 +666,7 @@ async fn multi_tenant_default_tenant_isolation() {
         db: Arc::new(Mutex::new(fresh_db())),
         pg: None,
         started_at: Instant::now(),
+        health_depth_cache: HealthDepthCache::default(),
         stripe_webhook_secret: None,
         square_webhook_signature_key: None,
         square_webhook_url: None,
@@ -675,6 +715,7 @@ async fn lifecycle_free_tenant_upgraded_via_webhook_can_sync() {
         db: Arc::new(Mutex::new(fresh_db())),
         pg: None,
         started_at: Instant::now(),
+        health_depth_cache: HealthDepthCache::default(),
         stripe_webhook_secret: Some(secret.to_string()),
         square_webhook_signature_key: None,
         square_webhook_url: None,
@@ -799,6 +840,7 @@ async fn pg_integration_health_fails_fast_when_pool_exhausted() {
         db: Arc::new(Mutex::new(fresh_db())),
         pg: Some(pool.clone()),
         started_at: Instant::now(),
+        health_depth_cache: HealthDepthCache::default(),
         stripe_webhook_secret: None,
         square_webhook_signature_key: None,
         square_webhook_url: None,

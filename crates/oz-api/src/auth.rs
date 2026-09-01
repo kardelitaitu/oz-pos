@@ -60,6 +60,13 @@ pub struct ApiTokenClaims {
     /// P3). `None` for admin-minted or legacy tokens.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_id: Option<String>,
+
+    /// Read-tier permission keys (spec 0047 Part B). `None` = legacy
+    /// full-read — every GET is allowed, byte-compatible with tokens
+    /// minted before this field existed. When present, GETs are gated
+    /// through the registry (`has_permission`) with a 403 on denial.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permissions: Option<Vec<String>>,
 }
 
 /// Response body returned when a new token is created.
@@ -155,6 +162,28 @@ pub fn create_token_scoped(
     terminal_id: Option<&str>,
     secret: Option<&str>,
 ) -> Result<TokenResponse, jsonwebtoken::errors::Error> {
+    create_token_full(subject, expiry_hours, tenant_id, terminal_id, None, secret)
+}
+
+/// Mint a token with optional read-tier permissions (spec 0047 Part B).
+///
+/// `permissions` is a list of registry keys that narrow the token's GET
+/// surface: when `Some`, reads are gated through `has_permission` and a
+/// denied key yields 403. `None` preserves the legacy full-read contract
+/// (byte-compatible with pre-tier tokens — the claim is skipped entirely).
+///
+/// # Errors
+///
+/// Returns an error if the JWT encoding fails (extremely rare; requires
+/// a malformed key or a serialization bug).
+pub fn create_token_full(
+    subject: &str,
+    expiry_hours: Option<i64>,
+    tenant_id: Option<&str>,
+    terminal_id: Option<&str>,
+    permissions: Option<&[String]>,
+    secret: Option<&str>,
+) -> Result<TokenResponse, jsonwebtoken::errors::Error> {
     let hours = expiry_hours.unwrap_or(DEFAULT_EXPIRY_HOURS);
     let now = Utc::now();
     let exp_time = now + Duration::hours(hours);
@@ -167,6 +196,7 @@ pub fn create_token_scoped(
         iat: now.timestamp() as usize,
         tenant_id: tenant_id.map(|s| s.to_owned()),
         terminal_id: terminal_id.map(|s| s.to_owned()),
+        permissions: permissions.map(|p| p.to_vec()),
     };
 
     let secret = signing_secret(secret);

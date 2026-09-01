@@ -69,6 +69,8 @@ pub mod pos;
 pub mod product_variants;
 /// Product CRUD commands.
 pub mod products;
+/// Product/Menu image ingest commands (spec 0046b).
+pub mod products_images;
 /// Promotion commands.
 pub mod promotions;
 /// Purchasing / purchase-order commands.

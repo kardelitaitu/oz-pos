@@ -3,7 +3,9 @@ import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization, Localized } from '@fluent/react';
 import { DEFAULT_LOW_STOCK_THRESHOLD, DEFAULT_HIGH_STOCK_THRESHOLD, formatMoney, type Money, type Sku } from '@/types/domain';
 import type { ProductDto, CategoryDto } from '@/api/products';
-import type { RetailColumn } from './hooks/useRetailColumnPrefs';
+import { ProductThumb } from '@/components/ProductThumb';
+import { Grid, type CellComponentProps } from 'react-window';
+import type { RetailColumn, RetailViewMode } from './hooks/useRetailColumnPrefs';
 import ScaleIndicator from './ScaleIndicator';
 
 // ── Price volatility ───────────────────────────────────────────────
@@ -45,6 +47,8 @@ export interface ProductGridData {
   visibleColumns: readonly RetailColumn[];
   /** Whether retired (inactive) products are hidden from the grid. */
   hideInactive: boolean;
+  /** Retail POS product-list view mode (spec 0046b §3.5). */
+  viewMode: RetailViewMode;
 }
 
 export interface ProductGridActions {
@@ -68,6 +72,8 @@ export interface ProductGridActions {
   onToggleHideInactive: (hide: boolean) => void;
   /** Open the row context menu at a viewport position (ADR #38 D1). */
   onRowContextMenu: (product: ProductDto, x: number, y: number) => void;
+  /** Switch the product-list view mode between text table and image grid. */
+  onSetViewMode: (mode: RetailViewMode) => void;
 }
 
 export interface RetailProductGridProps {
@@ -371,6 +377,44 @@ const ProductCard = memo(function ProductCard({ product, catHue, formatMoney, ha
   );
 });
 
+// ── Image-grid tile constants & cell component ────────────────────────
+
+const TILE_WIDTH = 140;
+const TILE_HEIGHT = 150;
+const TILE_GAP = 12;
+
+interface ProductTileCellExtraProps {
+  products: readonly ProductDto[];
+  catHue: (catId: string | null) => number;
+  columnCount: number;
+  onAddProduct: (p: ProductDto) => void;
+}
+
+const ProductTileCell = function ProductTileCell({
+  columnIndex, rowIndex, style, products, catHue, columnCount, onAddProduct,
+}: CellComponentProps<ProductTileCellExtraProps>) {
+  const idx = rowIndex * columnCount + columnIndex;
+  if (idx >= products.length) return null;
+  const product = products[idx]!;
+  const isOutOfStock = !product.in_stock || (product.stock_qty != null && product.stock_qty <= 0);
+  return (
+    <div style={{ ...style, padding: TILE_GAP / 2 }}>
+      <button
+        type="button"
+        className={`retail-tile${isOutOfStock ? ' retail-tile--disabled' : ''}`}
+        onClick={() => { if (!isOutOfStock) onAddProduct(product); }}
+        disabled={isOutOfStock}
+        aria-label={`${product.name} ${formatMoney(product.price)}${isOutOfStock ? ' (out of stock)' : ''}`}
+        style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 4, padding: 8, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm, 4px)', background: 'var(--color-bg)', cursor: isOutOfStock ? 'not-allowed' : 'pointer' }}
+      >
+        <ProductThumb hash={product.image_hash ?? null} name={product.name} hue={catHue(product.category)} size={TILE_WIDTH - 16} className="retail-tile-thumb" />
+        <span className="retail-tile-name" style={{ fontSize: 'var(--text-xs)', fontWeight: 600, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>{product.name}</span>
+        <span className="retail-tile-price" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-fg-secondary)' }}>{formatMoney(product.price)}</span>
+      </button>
+    </div>
+  );
+};
+
 // ── Main component ─────────────────────────────────────────────────
 
 /** Product grid — categories, search, product table with sorting, pagination, SKU input, and scale indicator. */
@@ -384,6 +428,25 @@ export default function RetailProductGrid({
 }: RetailProductGridProps) {
   const { l10n } = useLocalization();
   const [columnMenuOpen, setColumnMenuOpen] = useState(false);
+
+  // ── Image-grid container measurement (react-window v2 responsive cols) ──
+  const [gridWidth, setGridWidth] = useState(0);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const gridContainerRef = useCallback((el: HTMLDivElement | null) => {
+    if (resizeObserverRef.current) {
+      resizeObserverRef.current.disconnect();
+      resizeObserverRef.current = null;
+    }
+    if (el) {
+      const ro = new ResizeObserver(([entry]) => {
+        if (entry) setGridWidth(entry.contentRect.width);
+      });
+      ro.observe(el);
+      resizeObserverRef.current = ro;
+    }
+  }, []);
+  const gridColCount = Math.max(1, Math.floor((gridWidth + TILE_GAP) / (TILE_WIDTH + TILE_GAP)));
+  const gridCellWidth = gridWidth > 0 ? Math.floor((gridWidth - (gridColCount - 1) * TILE_GAP) / gridColCount) : TILE_WIDTH;
 
   const {
     productsLoading,
@@ -404,6 +467,7 @@ export default function RetailProductGrid({
     filterLowStock,
     visibleColumns,
     hideInactive,
+    viewMode,
   } = data;
 
   const renderHeader = (field: SortField, colClass: string, labelId: string, center = false, end = false) => (
@@ -502,6 +566,19 @@ export default function RetailProductGrid({
             {sortField === 'popularity' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ''}
           </span>
         </button>
+        <div className="retail-view-toggle-wrap">
+          <button
+            type="button"
+            className={`retail-view-toggle-btn${viewMode === 'grid' ? ' retail-view-toggle-btn--active' : ''}`}
+            onClick={() => actions.onSetViewMode(viewMode === 'grid' ? 'text' : 'grid')}
+            aria-pressed={viewMode === 'grid'}
+            title={requiredLocalized(l10n, viewMode === 'grid' ? 'retail-view-grid-title' : 'retail-view-text-title')}
+          >
+            {viewMode === 'grid'
+              ? requiredLocalized(l10n, 'retail-view-text-label')
+              : requiredLocalized(l10n, 'retail-view-grid-label')}
+          </button>
+        </div>
         <div className="retail-col-toggle-wrap">
           <button
             type="button"
@@ -590,6 +667,26 @@ export default function RetailProductGrid({
                 ? (requiredLocalized(l10n, 'retail-no-products-in-category'))
                 : (requiredLocalized(l10n, 'retail-no-products'))}
         </div>
+      ) : viewMode === 'grid' ? (
+        <div ref={gridContainerRef} className="retail-grid" data-testid="product-grid-scroll">
+          {gridWidth > 0 && (
+            <Grid
+              cellComponent={ProductTileCell}
+              cellProps={{
+                products: filteredProducts,
+                catHue,
+                columnCount: gridColCount,
+                onAddProduct: actions.onAddProduct,
+              }}
+              columnCount={gridColCount}
+              columnWidth={gridCellWidth}
+              rowCount={Math.ceil(filteredProducts.length / gridColCount)}
+              rowHeight={TILE_HEIGHT + TILE_GAP}
+              overscanCount={4}
+              style={{ height: '100%', width: '100%' }}
+            />
+          )}
+        </div>
       ) : (
         <div className="retail-grid" data-testid="product-grid-scroll">
           <table className="retail-product-table">
@@ -634,7 +731,7 @@ export default function RetailProductGrid({
           </table>
         </div>
       )}
-      {totalPages > 1 && (
+      {viewMode === 'text' && totalPages > 1 && (
         <div className="retail-page-nav" role="navigation" aria-label={requiredLocalized(l10n, 'retail-page-nav-aria')}>
           <button type="button" className="retail-page-btn" disabled={productPage === 0} onClick={() => actions.onSetProductPage((p) => p - 1)} aria-label={requiredLocalized(l10n, 'retail-page-prev-aria')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>

@@ -28,6 +28,8 @@ tempfile = "3"
 [dependencies]
 foundation = { workspace = true }
 oz-core = { workspace = true }
+reqwest = { workspace = true }
+rand = { workspace = true }
 oz-hal = { workspace = true }
 oz-logging = { workspace = true }
 oz-media = { workspace = true }
@@ -46,7 +48,7 @@ modules-currency = { workspace = true }
 platform-core = { workspace = true }
 platform-kernel = { workspace = true }
 platform-startup = { workspace = true }
-tauri = { workspace = true, features = [] }
+tauri = { workspace = true, features = ["protocol-asset"] }
 tauri-plugin-updater = { workspace = true }
 tauri-plugin-clipboard-manager = { workspace = true }
 tauri-plugin-window-state = { workspace = true }

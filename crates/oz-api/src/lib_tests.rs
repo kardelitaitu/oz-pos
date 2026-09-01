@@ -18,6 +18,14 @@ fn test_app() -> Router {
     router(state)
 }
 
+/// Helper: build a router with an operator admin key configured (D1
+/// residual — master-data writes require `X-Admin-Key` when set).
+fn test_app_with_admin_key() -> Router {
+    let mut state = AppState::test(fresh_conn());
+    state.admin_key = Some("operator-key".into());
+    router(state)
+}
+
 /// Helper: build a router with seeded products, categories, and inventory.
 fn test_app_seeded() -> Router {
     let conn = fresh_conn();
@@ -42,6 +50,7 @@ fn test_app_seeded() -> Router {
         db_path: ":memory:".into(),
         port: 3099,
         cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
+        image_dir: std::path::PathBuf::from("./data/images"),
     };
     router(state)
 }
@@ -348,8 +357,17 @@ async fn products_list_returns_empty_array() {
     let resp = test_app().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let json = body_json(resp).await;
-    assert!(json.is_array(), "should return a JSON array");
-    assert_eq!(json.as_array().unwrap().len(), 0, "should be empty");
+    // Spec 0046b §3.4: the snapshot is wrapped with the missing_hashes nudge.
+    assert!(
+        json["products"].is_array(),
+        "should return a products array"
+    );
+    assert_eq!(
+        json["products"].as_array().unwrap().len(),
+        0,
+        "should be empty"
+    );
+    assert!(json["missing_hashes"].is_null() || json["missing_hashes"].is_array());
 }
 
 #[tokio::test]
@@ -381,8 +399,9 @@ async fn products_list_returns_seeded_products() {
     let resp = test_app_seeded().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let json = body_json(resp).await;
-    let arr = json.as_array().unwrap();
+    let arr = json["products"].as_array().unwrap();
     assert_eq!(arr.len(), 3, "should return 3 seeded products");
+    assert!(json["missing_hashes"].is_null() || json["missing_hashes"].is_array());
 }
 
 #[tokio::test]
@@ -667,6 +686,7 @@ fn test_app_with_roles() -> Router {
         db_path: ":memory:".into(),
         port: 3099,
         cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
+        image_dir: std::path::PathBuf::from("./data/images"),
     };
     router(state)
 }
@@ -1185,4 +1205,206 @@ fn api1_signing_secret_fallback_is_dev_constant() {
         let secret = crate::auth::signing_secret_for_tests();
         assert_eq!(secret, "oz-pos-dev-secret-change-in-production");
     }
+}
+
+// ── D1 residual (API-4): admin-key write tier ────────────────────────
+
+/// POST with a JWT plus an optional `X-Admin-Key` header.
+fn post_json_with_admin_key(
+    uri: &str,
+    token: &str,
+    body: &str,
+    admin_key: Option<&str>,
+) -> Request<Body> {
+    let mut builder = Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header("Authorization", format!("Bearer {token}"))
+        .header("Content-Type", "application/json");
+    if let Some(key) = admin_key {
+        builder = builder.header("x-admin-key", key);
+    }
+    builder.body(Body::from(body.to_owned())).unwrap()
+}
+
+/// PATCH with a JWT plus an optional `X-Admin-Key` header.
+fn patch_with_admin_key(
+    uri: &str,
+    token: &str,
+    body: &str,
+    admin_key: Option<&str>,
+) -> Request<Body> {
+    let mut builder = Request::builder()
+        .method("PATCH")
+        .uri(uri)
+        .header("Authorization", format!("Bearer {token}"))
+        .header("Content-Type", "application/json");
+    if let Some(key) = admin_key {
+        builder = builder.header("x-admin-key", key);
+    }
+    builder.body(Body::from(body.to_owned())).unwrap()
+}
+
+/// DELETE with a JWT plus an optional `X-Admin-Key` header.
+fn delete_with_admin_key(uri: &str, token: &str, admin_key: Option<&str>) -> Request<Body> {
+    let mut builder = Request::builder()
+        .method("DELETE")
+        .uri(uri)
+        .header("Authorization", format!("Bearer {token}"));
+    if let Some(key) = admin_key {
+        builder = builder.header("x-admin-key", key);
+    }
+    builder.body(Body::empty()).unwrap()
+}
+
+/// Mint a terminal-scoped token (device credential — must be denied for
+/// master-data writes even with a valid admin key header).
+fn terminal_token() -> String {
+    auth::create_token_scoped("device", Some(1), None, Some("term-1"), None)
+        .unwrap()
+        .token
+}
+
+#[tokio::test]
+async fn write_routes_require_admin_key_when_configured() {
+    let app = test_app_with_admin_key();
+    let token = auth::create_token("script", Some(1), None, None).unwrap();
+
+    let cases: Vec<(&str, &str, Request<Body>)> = vec![
+        (
+            "POST /api/v1/products",
+            "create_product",
+            post_json_with_admin_key(
+                "/api/v1/products",
+                &token.token,
+                r#"{"sku":"GATED-1","name":"Gated","price":{"minor_units":100,"currency":"USD"}}"#,
+                None,
+            ),
+        ),
+        (
+            "PATCH /api/v1/products/{sku}/stock",
+            "patch_stock",
+            patch_with_admin_key(
+                "/api/v1/products/GATED-1/stock",
+                &token.token,
+                r#"{"delta":5}"#,
+                None,
+            ),
+        ),
+        (
+            "POST /api/v1/tax-rates",
+            "create_tax_rate",
+            post_json_with_admin_key(
+                "/api/v1/tax-rates",
+                &token.token,
+                r#"{"name":"Gated VAT","rate_bps":1000,"is_default":false,"is_inclusive":false}"#,
+                None,
+            ),
+        ),
+        (
+            "POST /api/v1/exchange-rates",
+            "create_rate",
+            post_json_with_admin_key(
+                "/api/v1/exchange-rates",
+                &token.token,
+                r#"{"from_currency":"USD","to_currency":"IDR","rate_millionths":16000000}"#,
+                None,
+            ),
+        ),
+        (
+            "DELETE /api/v1/exchange-rates/{id}",
+            "delete_rate",
+            delete_with_admin_key("/api/v1/exchange-rates/some-id", &token.token, None),
+        ),
+    ];
+
+    for (label, _op, req) in cases {
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::UNAUTHORIZED,
+            "{label} must require the admin key when configured (no header → 401)"
+        );
+        let json = body_json(resp).await;
+        assert_eq!(
+            json["error"], "invalid_admin_key",
+            "{label} must return invalid_admin_key"
+        );
+    }
+}
+
+#[tokio::test]
+async fn write_routes_reject_terminal_tokens_with_admin_key() {
+    let app = test_app_with_admin_key();
+    let token = terminal_token();
+
+    let cases: Vec<(&str, Request<Body>)> = vec![
+        (
+            "POST /api/v1/products",
+            post_json_with_admin_key(
+                "/api/v1/products",
+                &token,
+                r#"{"sku":"GATED-2","name":"Gated","price":{"minor_units":100,"currency":"USD"}}"#,
+                Some("operator-key"),
+            ),
+        ),
+        (
+            "POST /api/v1/tax-rates",
+            post_json_with_admin_key(
+                "/api/v1/tax-rates",
+                &token,
+                r#"{"name":"Gated VAT 2","rate_bps":1000,"is_default":false,"is_inclusive":false}"#,
+                Some("operator-key"),
+            ),
+        ),
+        (
+            "POST /api/v1/exchange-rates",
+            post_json_with_admin_key(
+                "/api/v1/exchange-rates",
+                &token,
+                r#"{"from_currency":"USD","to_currency":"EUR","rate_millionths":920000}"#,
+                Some("operator-key"),
+            ),
+        ),
+    ];
+
+    for (label, req) in cases {
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::FORBIDDEN,
+            "{label} must reject terminal-scoped tokens (403) even with the admin key"
+        );
+        let json = body_json(resp).await;
+        assert_eq!(json["error"], "insufficient_scope");
+    }
+}
+
+#[tokio::test]
+async fn write_routes_accept_admin_key_when_configured() {
+    let app = test_app_with_admin_key();
+    let token = auth::create_token("script", Some(1), None, None).unwrap();
+
+    let resp = app
+        .clone()
+        .oneshot(post_json_with_admin_key(
+            "/api/v1/products",
+            &token.token,
+            r#"{"sku":"OK-1","name":"Fine","price":{"minor_units":100,"currency":"USD"}}"#,
+            Some("operator-key"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    let resp = app
+        .oneshot(post_json_with_admin_key(
+            "/api/v1/tax-rates",
+            &token.token,
+            r#"{"name":"Fine VAT","rate_bps":1000,"is_default":false,"is_inclusive":false}"#,
+            Some("operator-key"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
 }

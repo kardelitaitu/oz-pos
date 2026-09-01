@@ -16,6 +16,7 @@ fn state() -> AppState {
         db_path: ":memory:".into(),
         port: 3099,
         cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
+        image_dir: std::path::PathBuf::from("./data/images"),
     }
 }
 
@@ -27,6 +28,24 @@ fn create(from: &str, to: &str, rate: i64, date: Option<&str>) -> CreateExchange
         source: "e2e".into(),
         effective_date: date.map(|s| s.to_owned()),
     }
+}
+
+/// Non-terminal admin claims — passes the admin-write gate (dev mode,
+/// no admin key configured).
+fn admin_claims() -> Extension<ApiTokenClaims> {
+    Extension(ApiTokenClaims {
+        sub: "admin-test".into(),
+        jti: "jti-admin".into(),
+        exp: 9999999999,
+        iat: 1000000000,
+        tenant_id: Some("tenant-a".into()),
+        terminal_id: None,
+        permissions: None,
+    })
+}
+
+fn empty_headers() -> HeaderMap {
+    HeaderMap::new()
 }
 
 async fn json_body(resp: Response) -> serde_json::Value {
@@ -56,6 +75,8 @@ async fn create_list_latest_delete_roundtrip() {
     let s = state();
     let resp = create_rate(
         State(s.clone()),
+        empty_headers(),
+        admin_claims(),
         Json(create("USD", "IDR", 16_000_000, Some("2026-08-01"))),
     )
     .await
@@ -74,6 +95,8 @@ async fn create_list_latest_delete_roundtrip() {
     // CUR-11 bounded listing: two history rows, one per-pair row.
     let _ = create_rate(
         State(s.clone()),
+        empty_headers(),
+        admin_claims(),
         Json(create("USD", "IDR", 16_500_000, Some("2026-08-15"))),
     )
     .await
@@ -94,7 +117,7 @@ async fn create_list_latest_delete_roundtrip() {
     assert_eq!(resp.status(), StatusCode::OK);
     assert_eq!(json_body(resp).await["effective_date"], "2026-08-15");
 
-    let resp = delete_rate(State(s.clone()), Path(id))
+    let resp = delete_rate(State(s.clone()), empty_headers(), admin_claims(), Path(id))
         .await
         .into_response();
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
@@ -104,7 +127,7 @@ async fn create_list_latest_delete_roundtrip() {
     assert_eq!(arr.len(), 1, "only the second history row remains");
     assert_eq!(arr[0]["rate_millionths"], 16_500_000);
     let id2 = arr[0]["id"].as_str().unwrap().to_owned();
-    let resp = delete_rate(State(s.clone()), Path(id2))
+    let resp = delete_rate(State(s.clone()), empty_headers(), admin_claims(), Path(id2))
         .await
         .into_response();
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
@@ -118,6 +141,8 @@ async fn latest_rate_path_is_case_insensitive() {
     seed_currency(&s, "EUR", "978", "Euro").await;
     let _ = create_rate(
         State(s.clone()),
+        empty_headers(),
+        admin_claims(),
         Json(create("USD", "EUR", 920_000, Some("2026-08-01"))),
     )
     .await
@@ -143,28 +168,45 @@ async fn latest_rate_unknown_pair_is_404() {
 
 #[tokio::test]
 async fn create_rejects_non_positive_rate() {
-    let resp = create_rate(State(state()), Json(create("USD", "IDR", 0, None)))
-        .await
-        .into_response();
+    let resp = create_rate(
+        State(state()),
+        empty_headers(),
+        admin_claims(),
+        Json(create("USD", "IDR", 0, None)),
+    )
+    .await
+    .into_response();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
 async fn create_rejects_same_currency_pair() {
-    let resp = create_rate(State(state()), Json(create("USD", "USD", 1_000_000, None)))
-        .await
-        .into_response();
+    let resp = create_rate(
+        State(state()),
+        empty_headers(),
+        admin_claims(),
+        Json(create("USD", "USD", 1_000_000, None)),
+    )
+    .await
+    .into_response();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
 async fn create_rejects_non_iso_codes() {
-    let resp = create_rate(State(state()), Json(create("US", "IDR", 1_000_000, None)))
-        .await
-        .into_response();
+    let resp = create_rate(
+        State(state()),
+        empty_headers(),
+        admin_claims(),
+        Json(create("US", "IDR", 1_000_000, None)),
+    )
+    .await
+    .into_response();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     let resp = create_rate(
         State(state()),
+        empty_headers(),
+        admin_claims(),
         Json(create("DOLLAR", "IDR", 1_000_000, None)),
     )
     .await
@@ -178,6 +220,8 @@ async fn create_rejects_malformed_effective_date() {
     // parser accepts non-zero-padded dates, and REST mirrors it.
     let resp = create_rate(
         State(state()),
+        empty_headers(),
+        admin_claims(),
         Json(create("USD", "IDR", 1_000_000, Some("not-a-date"))),
     )
     .await
@@ -185,6 +229,8 @@ async fn create_rejects_malformed_effective_date() {
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     let resp = create_rate(
         State(state()),
+        empty_headers(),
+        admin_claims(),
         Json(create("USD", "IDR", 1_000_000, Some("2026-13-01"))),
     )
     .await
@@ -196,7 +242,9 @@ async fn create_rejects_malformed_effective_date() {
 async fn create_defaults_effective_date_to_today_and_source_to_manual() {
     let mut req = create("USD", "IDR", 149_000_000, None);
     req.source = String::new();
-    let resp = create_rate(State(state()), Json(req)).await.into_response();
+    let resp = create_rate(State(state()), empty_headers(), admin_claims(), Json(req))
+        .await
+        .into_response();
     assert_eq!(resp.status(), StatusCode::CREATED);
     let created = json_body(resp).await;
     // Today (UTC) as YYYY-MM-DD — shape pin, not an exact clock pin.
@@ -212,12 +260,16 @@ async fn create_duplicate_pair_date_is_409() {
     seed_currency(&s, "SGD", "702", "Singapore Dollar").await;
     let _ = create_rate(
         State(s.clone()),
+        empty_headers(),
+        admin_claims(),
         Json(create("USD", "SGD", 1_300_000, Some("2026-08-01"))),
     )
     .await
     .into_response();
     let resp = create_rate(
         State(s),
+        empty_headers(),
+        admin_claims(),
         Json(create("USD", "SGD", 1_350_000, Some("2026-08-01"))),
     )
     .await
@@ -227,9 +279,14 @@ async fn create_duplicate_pair_date_is_409() {
 
 #[tokio::test]
 async fn delete_unknown_id_is_404() {
-    let resp = delete_rate(State(state()), Path("no-such-id".into()))
-        .await
-        .into_response();
+    let resp = delete_rate(
+        State(state()),
+        empty_headers(),
+        admin_claims(),
+        Path("no-such-id".into()),
+    )
+    .await
+    .into_response();
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 }
 

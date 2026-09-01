@@ -14,9 +14,9 @@
 //! no RLS — same treatment as `categories`), so no tenant stamping here.
 
 use axum::{
-    Json,
+    Extension, Json,
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
@@ -25,7 +25,9 @@ use modules_currency::repository::CurrencyRepository;
 use oz_core::CoreError;
 
 use crate::AppState;
+use crate::auth::ApiTokenClaims;
 use crate::pg::{self, ExchangeRateDto};
+use crate::routes::tokens::require_admin_write;
 
 /// Convert a [`CoreError`] from the SQLite fallback path into an HTTP
 /// response — same mapping as the tax-rates route (kept local per the
@@ -162,8 +164,17 @@ pub async fn latest_rate(
 /// `POST /api/v1/exchange-rates`
 pub async fn create_rate(
     State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(claims): Extension<ApiTokenClaims>,
     Json(body): Json<CreateExchangeRateRequest>,
 ) -> Response {
+    // D1 residual (API-4): exchange-rate creation mutates money-relevant
+    // master data — gate on the operator admin key + reject terminal
+    // credentials.
+    if let Err(resp) = require_admin_write(&headers, &claims, state.admin_key.as_deref()) {
+        return resp;
+    }
+
     let effective = body
         .effective_date
         .clone()
@@ -228,7 +239,18 @@ pub async fn create_rate(
 }
 
 /// `DELETE /api/v1/exchange-rates/{id}`
-pub async fn delete_rate(State(state): State<AppState>, Path(id): Path<String>) -> Response {
+pub async fn delete_rate(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(claims): Extension<ApiTokenClaims>,
+    Path(id): Path<String>,
+) -> Response {
+    // D1 residual (API-4): rate deletion mutates money-relevant master
+    // data — gate on the operator admin key + reject terminal credentials.
+    if let Err(resp) = require_admin_write(&headers, &claims, state.admin_key.as_deref()) {
+        return resp;
+    }
+
     if let Some(pool) = &state.pg {
         return match pg::delete_exchange_rate_pg(pool, &id).await {
             Ok(()) => StatusCode::NO_CONTENT.into_response(),

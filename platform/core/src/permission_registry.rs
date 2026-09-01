@@ -501,6 +501,12 @@ pub const REGISTRY: &[PermissionEntry] = &[
         sensitive: false,
         description: "Legacy seed key — category create/update/delete. Kept byte-identical.",
     },
+    PermissionEntry {
+        key: "categories:read",
+        family: "categories",
+        sensitive: false,
+        description: "Read product categories (spec 0047 read-tier map).",
+    },
     // ── plugins ──────────────────────────────────────────────────
     PermissionEntry {
         key: "plugins:manage",
@@ -553,6 +559,20 @@ pub const REGISTRY: &[PermissionEntry] = &[
         family: "security",
         sensitive: true,
         description: "Rotate at-rest encryption keys and inspect key state.",
+    },
+    // ── reference (global read-tier reference data, spec 0047) ──
+    PermissionEntry {
+        key: "reference:read",
+        family: "reference",
+        sensitive: false,
+        description: "Read global reference data (tax rates, exchange rates, categories).",
+    },
+    // ── plan ─────────────────────────────────────────────────────
+    PermissionEntry {
+        key: "plan:read",
+        family: "plan",
+        sensitive: false,
+        description: "Read the tenant's cloud sync plan (spec 0047 read tiers).",
     },
     // ── data ─────────────────────────────────────────────────────
     PermissionEntry {

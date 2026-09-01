@@ -100,6 +100,13 @@ pub struct CloudServerConfig {
     /// JWT signing secret for `POST /api/v1/tokens`.
     /// Falls back to a hard-coded dev secret when unset.
     pub api_secret: Option<String>,
+
+    /// Optional Redis/Valkey URL (ADR #43 D4), e.g. `redis://...`.
+    /// When set and reachable, the snapshot cache and rate limiter are
+    /// shared across instances via Redis (Lua token bucket). When unset or
+    /// unreachable, the server falls back to the in-process
+    /// implementations — single-instance deployments need nothing new.
+    pub redis_url: Option<String>,
 }
 
 impl CloudServerConfig {
@@ -181,6 +188,7 @@ impl CloudServerConfig {
             square_webhook_url: std::env::var("SQUARE_WEBHOOK_URL").ok(),
             production,
             api_secret,
+            redis_url: std::env::var("OZ_REDIS_URL").ok().filter(|s| !s.is_empty()),
         })
     }
 }

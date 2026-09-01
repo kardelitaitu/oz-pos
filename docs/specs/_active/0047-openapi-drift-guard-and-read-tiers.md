@@ -1,6 +1,6 @@
 # Spec 0047 — OpenAPI Drift Guard + JWT Read Tiers
 
-**Status:** draft for review · **Created:** 2026-08-31 · **Scope:** cloud-server, oz-api, platform-core, website docs
+**Status:** implemented (2026-09-01) · **Created:** 2026-08-31 · **Scope:** cloud-server, oz-api, platform-core, website docs
 **Related:** 0046b (images — untouched), user-role campaign residual (D1/API-4), ADR #35 (permission registry)
 
 ---

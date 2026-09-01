@@ -166,6 +166,28 @@ fn now_rfc3339() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
+/// Bump the per-tenant snapshot version counter (ADR #43 D2).
+///
+/// Call inside the SAME transaction as the reference-data write (product,
+/// tax rate, user). The snapshot handler reads this counter instead of
+/// running a 3-table COUNT + MAX(updated_at) stamp query on every cache
+/// miss, so a bump here makes the next snapshot revalidation see the
+/// change (near-instant propagation) at the cost of one PK upsert.
+async fn bump_snapshot_version(
+    tx: &tokio_postgres::Transaction<'_>,
+    tenant_id: &str,
+) -> Result<(), PgError> {
+    let now = now_rfc3339();
+    tx.execute(
+        "INSERT INTO snapshot_versions (tenant_id, version, updated_at) VALUES ($1, 1, $2)
+         ON CONFLICT (tenant_id) DO UPDATE SET version = snapshot_versions.version + 1, updated_at = EXCLUDED.updated_at",
+        &[&tenant_id, &now],
+    )
+    .await
+    .map_err(|e| PgError::Db(e.to_string()))?;
+    Ok(())
+}
+
 fn currency_str(currency: &Currency) -> Result<String, PgError> {
     std::str::from_utf8(&currency.0)
         .map(str::to_owned)
@@ -320,6 +342,8 @@ pub async fn create_tax_rate(
     .await
     .map_err(|e| PgError::Db(e.to_string()))?;
 
+    bump_snapshot_version(&tx, tenant_id).await?;
+
     tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
 
     Ok(TaxRate {
@@ -332,7 +356,6 @@ pub async fn create_tax_rate(
         updated_at: now,
     })
 }
-
 // ── Users ─────────────────────────────────────────────────────────────
 
 /// Create a user, scoped to `tenant_id`, mirroring `Store::create_user`
@@ -429,6 +452,8 @@ pub async fn create_user(
     )
     .await
     .map_err(|e| PgError::Db(e.to_string()))?;
+
+    bump_snapshot_version(&tx, tenant_id).await?;
 
     tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
 
@@ -561,7 +586,7 @@ const PRODUCT_SELECT: &str = "SELECT p.id, p.sku, p.name, p.price_minor, p.curre
      p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at, \
      p.track_serial, p.product_type, p.version, \
      p.cost_minor, p.brand, p.rack_location, p.notes, p.unit, \
-     p.is_active, p.default_supplier_id, p.popularity_score, \
+     p.is_active, p.default_supplier_id, p.popularity_score, p.image_hash, \
      c.name AS category_name, \
      COALESCE((SELECT SUM(ss.qty)::bigint FROM stock_summary ss WHERE ss.item_id = p.id), i.qty) AS stock_qty \
      FROM products p \
@@ -636,6 +661,7 @@ fn pg_row_to_product_with_details(
         default_supplier_id: row
             .try_get("default_supplier_id")
             .map_err(|e| PgError::Db(e.to_string()))?,
+        image_hash: row.try_get("image_hash").ok(),
     };
 
     Ok(ProductWithDetails {
@@ -649,7 +675,122 @@ fn pg_row_to_product_with_details(
         popularity_score: row
             .try_get("popularity_score")
             .map_err(|e| PgError::Db(e.to_string()))?,
+        images: Vec::new(), // populated by the list/get loaders
     })
+}
+
+/// Load product image assignments for the given product IDs and attach
+/// them to the respective `ProductWithDetails` (spec 0046b §3.4).
+async fn attach_product_images(
+    tx: &tokio_postgres::Transaction<'_>,
+    tenant_id: &str,
+    products: &mut [ProductWithDetails],
+) -> Result<(), PgError> {
+    if products.is_empty() {
+        return Ok(());
+    }
+    let ids: Vec<&str> = products.iter().map(|p| p.product.id.as_str()).collect();
+    // Build a parameterised query with placeholders
+    let placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("${i}")).collect();
+    let sql = format!(
+        "SELECT product_id, slot, hash, position FROM product_images \
+         WHERE product_id IN ({}) ORDER BY slot ASC",
+        placeholders.join(", ")
+    );
+    let stmt = tx
+        .prepare(&sql)
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = ids
+        .iter()
+        .map(|s| s as &(dyn tokio_postgres::types::ToSql + Sync))
+        .collect();
+    let rows = tx
+        .query(&stmt, &params)
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    let mut by_product: std::collections::HashMap<
+        String,
+        Vec<oz_core::db::products::ProductImage>,
+    > = std::collections::HashMap::new();
+    for row in rows {
+        let product_id: String = row
+            .try_get("product_id")
+            .map_err(|e| PgError::Db(e.to_string()))?;
+        let slot: i32 = row
+            .try_get("slot")
+            .map_err(|e| PgError::Db(e.to_string()))?;
+        let hash: String = row
+            .try_get("hash")
+            .map_err(|e| PgError::Db(e.to_string()))?;
+        let position: i32 = row
+            .try_get("position")
+            .map_err(|e| PgError::Db(e.to_string()))?;
+        by_product
+            .entry(product_id)
+            .or_default()
+            .push(oz_core::db::products::ProductImage {
+                slot,
+                hash,
+                position,
+            });
+    }
+    for p in products.iter_mut() {
+        if let Some(imgs) = by_product.remove(&p.product.id) {
+            p.images = imgs;
+        }
+    }
+    let _ = tenant_id; // RLS scoping already applied on the transaction
+    Ok(())
+}
+
+/// Compute the `missing_hashes` set-difference for a tenant (spec 0046b
+/// §3.4/§3.7): candidate hashes that the tenant references but the cloud's
+/// `image_refs` spine has no active (refcount > 0) row for. The desktop
+/// pushes exactly these first.
+pub async fn list_missing_hashes(
+    pool: &Pool,
+    tenant_id: &str,
+    candidates: &[String],
+) -> Result<Vec<String>, PgError> {
+    if candidates.is_empty() {
+        return Ok(vec![]);
+    }
+    let mut client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
+    let tx = client
+        .transaction()
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+
+    let placeholders: Vec<String> = (1..=candidates.len()).map(|i| format!("${i}")).collect();
+    let sql = format!(
+        "SELECT hash FROM image_refs WHERE tenant_id = $1 AND hash IN ({}) AND refcount > 0",
+        placeholders.join(", ")
+    );
+    let stmt = tx
+        .prepare(&sql)
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    let mut params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
+        vec![&tenant_id as &(dyn tokio_postgres::types::ToSql + Sync)];
+    for c in candidates {
+        params.push(c);
+    }
+    let rows = tx
+        .query(&stmt, &params)
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    let present: std::collections::HashSet<String> =
+        rows.iter().map(|r| r.get::<_, String>("hash")).collect();
+    tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
+    Ok(candidates
+        .iter()
+        .filter(|c| !present.contains(*c))
+        .cloned()
+        .collect())
 }
 
 /// List a tenant's products, ordered by name, with category name and stock.
@@ -673,9 +814,13 @@ pub async fn list_products(
         )
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
-    let result = rows.iter().map(pg_row_to_product_with_details).collect();
+    let mut result: Vec<ProductWithDetails> = rows
+        .iter()
+        .map(pg_row_to_product_with_details)
+        .collect::<Result<_, _>>()?;
+    attach_product_images(&tx, tenant_id, &mut result).await?;
     tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
-    result
+    Ok(result)
 }
 
 /// Get a single product by SKU (tenant-scoped), including category name and
@@ -701,7 +846,12 @@ pub async fn get_product(
         )
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
-    let result = row.map(|r| pg_row_to_product_with_details(&r)).transpose();
+    let mut result = row.map(|r| pg_row_to_product_with_details(&r)).transpose();
+    // Attach images for the single product.
+    if let Ok(Some(ref mut p)) = result {
+        let mut slice = std::slice::from_mut(p);
+        attach_product_images(&tx, tenant_id, &mut slice).await?;
+    }
     tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
     result
 }
@@ -803,6 +953,8 @@ pub async fn create_product(
         .map_err(|e| PgError::Db(e.to_string()))?;
     }
 
+    bump_snapshot_version(&tx, tenant_id).await?;
+
     tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
 
     Ok(ProductWithDetails {
@@ -826,6 +978,7 @@ pub async fn create_product(
             unit: None,
             is_active: true,
             default_supplier_id: None,
+            image_hash: None,
         },
         category_name: None,
         stock_qty: if initial_stock > 0 {
@@ -834,6 +987,7 @@ pub async fn create_product(
             None
         },
         popularity_score: 0.0,
+        images: Vec::new(),
     })
 }
 

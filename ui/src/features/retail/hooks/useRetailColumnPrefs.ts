@@ -34,11 +34,17 @@ export interface RetailColumnPrefs {
   visibleColumns: RetailColumn[];
   /** Hide retired (inactive) products from the grid. */
   hideInactive: boolean;
+  /** Retail POS product-list view mode (spec 0046b §3.5). */
+  viewMode: RetailViewMode;
 }
+
+/** Retail POS product-list view modes: text-only table or image grid. */
+export type RetailViewMode = 'text' | 'grid';
 
 const DEFAULTS: RetailColumnPrefs = {
   visibleColumns: [...RETAIL_COLUMN_DEFAULTS],
   hideInactive: false,
+  viewMode: 'text',
 };
 
 const STORAGE_KEY_PREFIX = 'oz-retail-cols-';
@@ -56,6 +62,7 @@ function readLocalPrefs(userId: string): RetailColumnPrefs | null {
     return {
       visibleColumns: valid.length > 0 ? valid : [...RETAIL_COLUMN_DEFAULTS],
       hideInactive: parsed.hideInactive === true,
+      viewMode: parsed.viewMode === 'grid' ? 'grid' : 'text',
     };
   } catch {
     return null;
@@ -82,6 +89,7 @@ export function useRetailColumnPrefs(): {
   prefs: RetailColumnPrefs;
   toggleColumn: (col: RetailColumn) => void;
   setHideInactive: (hide: boolean) => void;
+  setViewMode: (mode: RetailViewMode) => void;
   loading: boolean;
 } {
   const { session } = useAuth();
@@ -103,6 +111,7 @@ export function useRetailColumnPrefs(): {
         const serverPrefs: RetailColumnPrefs = {
           visibleColumns: parseColumns(raw['retail_visible_columns']),
           hideInactive: raw['retail_hide_inactive'] === 'true',
+          viewMode: raw['retail_view_mode'] === 'grid' ? 'grid' : 'text',
         };
         setPrefs(serverPrefs);
         writeLocalPrefs(userId, serverPrefs);
@@ -158,7 +167,19 @@ export function useRetailColumnPrefs(): {
     [userId, persist],
   );
 
-  return { prefs, toggleColumn, setHideInactive, loading };
+  const setViewMode = useCallback(
+    (mode: RetailViewMode) => {
+      setPrefs((p) => {
+        const next = { ...p, viewMode: mode };
+        writeLocalPrefs(userId, next);
+        return next;
+      });
+      persist({ retail_view_mode: mode });
+    },
+    [userId, persist],
+  );
+
+  return { prefs, toggleColumn, setHideInactive, setViewMode, loading };
 }
 
 /** Parse the stored JSON column array, falling back to defaults. */

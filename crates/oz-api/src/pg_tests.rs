@@ -515,7 +515,7 @@ async fn pg_integration_rest_rls_non_owner() {
              GRANT SELECT, INSERT, UPDATE, DELETE ON products, sales, users,\n\
                  tax_rates, tenant_plans, sync_terminals, roles,\n\
                  sale_lines, categories, inventory, stock_movements,\n\
-                 stock_summary TO oz_rest_probe;",
+                 stock_summary, product_images, image_refs TO oz_rest_probe;",
         )
         .await
         .expect("probe role setup should succeed");

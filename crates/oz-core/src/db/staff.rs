@@ -485,6 +485,31 @@ impl Store<'_> {
         role_id: &str,
         is_active: bool,
     ) -> Result<User, CoreError> {
+        // F-1: the user row and its assignment role sync are one logical
+        // write.  Callers that already hold a transaction (e.g.
+        // `update_staff_scoped` in the desktop client) MUST use
+        // `update_user_in_tx` instead to avoid a nested BEGIN.
+        let tx = self.conn.unchecked_transaction()?;
+        let user =
+            Store::new(&tx).update_user_in_tx(id, username, display_name, role_id, is_active)?;
+        tx.commit()?;
+        Ok(user)
+    }
+
+    /// The body of [`Self::update_user`], writing on `self.conn` WITHOUT
+    /// opening a transaction — the caller must already hold one on this
+    /// connection.  `update_staff_scoped` in the desktop client needs this
+    /// because it wraps the whole profile+PIN+assignment update in one
+    /// outer transaction (same shape as the `create_user_in_tx` precedent
+    /// from `3cb756db`).
+    pub fn update_user_in_tx(
+        &self,
+        id: &str,
+        username: &str,
+        display_name: &str,
+        role_id: &str,
+        is_active: bool,
+    ) -> Result<User, CoreError> {
         let username = username.trim().to_lowercase();
         if display_name.trim().is_empty() {
             return Err(CoreError::Validation {
@@ -502,10 +527,7 @@ impl Store<'_> {
         }
 
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        // F-1: same transaction discipline as create_user — the user update
-        // and its assignment role sync are one logical write.
-        let tx = self.conn.unchecked_transaction()?;
-        let rows = tx.execute(
+        let rows = self.conn.execute(
             "UPDATE users SET username = ?1, display_name = ?2, role_id = ?3, is_active = ?4, updated_at = ?5 WHERE id = ?6",
             params![username, display_name.trim(), role_id, is_active, now, id],
         )?;
@@ -517,13 +539,12 @@ impl Store<'_> {
         }
         // Keep the assignment role in sync — the scope columns and scope rows
         // of an existing assignment are preserved (only the role follows).
-        tx.execute(
+        self.conn.execute(
             "INSERT INTO assignments (user_id, role_id, scope_mode, branch_scope, workspace_scope, updated_at)
              VALUES (?1, ?2, 'global', 'all', 'all', ?3)
              ON CONFLICT(user_id) DO UPDATE SET role_id = excluded.role_id, updated_at = excluded.updated_at",
             params![id, role_id, now],
         )?;
-        tx.commit()?;
         self.get_user(id)?.ok_or_else(|| CoreError::NotFound {
             entity: "user",
             id: id.to_owned(),

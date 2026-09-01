@@ -20,6 +20,7 @@ fn test_app() -> axum::Router {
         db_path: ":memory:".into(),
         port: 3099,
         cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
+        image_dir: std::path::PathBuf::from("./data/images"),
     };
     router(state)
 }
@@ -169,6 +170,7 @@ async fn set_plan_requires_admin_key_when_configured() {
         db_path: ":memory:".into(),
         port: 3099,
         cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
+        image_dir: std::path::PathBuf::from("./data/images"),
     };
     let app = router(state);
 

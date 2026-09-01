@@ -33,6 +33,7 @@ tempfile = "3"
 foundation = { workspace = true }
 lettre = { workspace = true }
 oz-core = { workspace = true }
+reqwest = { workspace = true }
 oz-hal = { workspace = true }
 oz-logging = { workspace = true }
 oz-lua = { workspace = true }
@@ -54,7 +55,7 @@ platform-core = { workspace = true }
 platform-kernel = { workspace = true }
 platform-startup = { workspace = true }
 platform-sync = { workspace = true }
-tauri = { workspace = true, features = [] }
+tauri = { workspace = true, features = ["protocol-asset"] }
 tauri-plugin-updater = { workspace = true }
 tauri-plugin-dialog = { workspace = true }
 tauri-plugin-clipboard-manager = { workspace = true }
@@ -74,6 +75,9 @@ hmac = { workspace = true }
 sha2 = { workspace = true }
 snow = { workspace = true }
 hex = { workspace = true }
+rand = { workspace = true }
+image = { workspace = true }
+webp = { workspace = true }
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem

@@ -718,7 +718,7 @@ pub async fn update_staff_scoped(
         // ADR #35 D6 incomplete-profile semantics: assigning a role that
         // grants sensitive permissions requires a complete profile.
         store.require_role_assignable(&args.id, &args.role_id)?;
-        store.update_user(
+        store.update_user_in_tx(
             &args.id,
             &args.username,
             &args.display_name,
