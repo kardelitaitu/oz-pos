@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+publish.workspace = true
 description = "WhatsApp Cloud API notification client for OZ-POS — template messaging, media support, webhook verification, and mock driver for testing."
 
 # Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).

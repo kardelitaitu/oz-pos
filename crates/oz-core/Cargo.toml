@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+publish.workspace = true
 description = "Domain types for OZ-POS: money, currency, cart, sale, inventory."
 
 # Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
@@ -20,9 +21,7 @@ modules-loyalty = { workspace = true }
 modules-staff = { workspace = true }
 modules-terminal = { workspace = true }
 modules-currency = { workspace = true }
-modules-settings = { workspace = true }
 modules-tax = { workspace = true }
-modules-reporting = { workspace = true }
 serde = { workspace = true }
 rusqlite = { workspace = true }
 thiserror = { workspace = true }

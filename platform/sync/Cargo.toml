@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+publish.workspace = true
 description = "Sync engine: offline queue, HTTP transport, push/pull replication, and conflict resolution for OZ-POS."
 
 # Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
