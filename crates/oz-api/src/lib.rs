@@ -1,7 +1,7 @@
 /*
-last audited 25-07-26 by RSA-Agent (oz-api slice A: lib deep read; API-1 FIXED 25-07-26)
+last audited DD-MM-YY by DSH-Agent
 crate: oz-api | status: SAFE | lint: CLEAN
-findings: clean server scaffold — security headers on every response (nosniff/DENY/CSP, prod-only HSTS), CORS fail-closed parse with documented dev opt-in, RUST-07 startup Results; API-1 FIXED — serve() validates production secret requirements (validate_production_secrets) and refuses to boot when OZ_PRODUCTION=1 without OZ_API_SECRET/OZ_ADMIN_KEY, closing the known-constant JWT forgery path on misconfigured deployments; settings+plan routes sit in the public router but each handler admin-key-gates internally (verified)
+findings: 0 unsafe blocks. 2 production .expect() calls in tokens.rs — both "HMAC accepts any key length" with fixed-size key input (documented-invariant, same pattern as oz-crypto). Doc-comment example in lib.rs also uses expect in a //! block (not production code). Security headers, CORS fail-closed, production-secret validation (API-1). Clean server scaffold.
 next: none | perf: N/A
 */
 
