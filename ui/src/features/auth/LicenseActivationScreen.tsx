@@ -5,20 +5,12 @@ import { activateLicense, getHardwareFingerprint, getMachineId } from '@/api/lic
 import { detectTrialVertical } from '@/utils/trial-vertical';
 import { detectBundleId } from '@/utils/bundle';
 import { getVersion, getLocalIp } from '@/api/system';
-import ConnectionStatus from '@/components/ConnectionStatus';
-import MachineIdStatus from '@/components/MachineIdStatus';
+import StatusBar from '@/components/StatusBar';
 import { Localized, useLocalization } from '@fluent/react';
 import ThemeToggle from '@/frontend/shell/ThemeToggle';
 import { l10nErrorMessage } from '@/utils/app-error';
 import { plainErrorMessage } from '@/utils/app-error';
 import './LicenseActivationScreen.css';
-
-// ── Environment / service URLs (extracted for configurability) ─────
-// Unified deployment (auth + sync on one host, ADR #11) — the old
-// standalone license service URL was folded into this single host.
-const AUTH_SERVICE_URL =
-  (import.meta.env['VITE_AUTH_SERVICE_URL'] as string | undefined)
-  ?? 'https://license.ozpos.my.id';
 
 /** Props for the LicenseActivationScreen component. */
 export interface LicenseActivationScreenProps {
@@ -332,15 +324,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
       </div>
 
       <div className="license-server-status-container">
-        <ConnectionStatus 
-          label={requiredLocalized(l10n, 'staff-login-connection-auth')} 
-          url={AUTH_SERVICE_URL} 
-        />
-        <ConnectionStatus 
-          label={requiredLocalized(l10n, 'staff-login-connection-sync')} 
-          url={AUTH_SERVICE_URL} 
-        />
-        <MachineIdStatus />
+        <StatusBar />
       </div>
 
       <div className="activation-device-info">
