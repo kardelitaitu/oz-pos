@@ -144,11 +144,15 @@
       // --- Revenue section: full-width trend + tier/provider distribution ---
       c.appendChild(el('h2', 'section-title', t('section.revenue')));
       const chartGrid = el('div', 'chart-grid');
+      // Chart canvas variant: the 1280-wide "wide" canvases are 1:1 on a
+      // desktop full-row card but downscale chart text to ~3px on a phone
+      // card. The phone variant renders ~1:1 (labels at true size).
+      const cv = window.matchMedia && window.matchMedia('(max-width: 640px)').matches ? { phone: true } : { wide: true };
 
       // Revenue trend (spans the full row — the hero chart)
       const revCard = el('div', 'chart-card chart-card--wide');
       revCard.appendChild(el('h3', null, t('chart.revenueTrendIdr')));
-      revCard.innerHTML += svgChart('rev', m.revenueTrend, ['idr'], { area: true, wide: true, fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt' });
+      revCard.innerHTML += svgChart('rev', m.revenueTrend, ['idr'], Object.assign({ area: true, fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt' }, cv));
       chartGrid.appendChild(revCard);
 
       // Tier distribution (donut)
@@ -183,13 +187,13 @@
       // Subscriber growth
       const subCard = el('div', 'chart-card');
       subCard.appendChild(el('h3', null, t('chart.subscriberGrowth')));
-      subCard.innerHTML += svgChart('subs', m.subscriberGrowth, ['count'], { area: true });
+      subCard.innerHTML += svgChart('subs', m.subscriberGrowth, ['count'], Object.assign({ area: true }, cv));
       chartGrid2.appendChild(subCard);
 
       // Signups per month (bar chart — extracted to admin-utils.svgBarChart)
       const signupCard = el('div', 'chart-card');
       signupCard.appendChild(el('h3', null, t('chart.signupsPerMonth')));
-      signupCard.innerHTML += svgBarChart('signups', m.signupsPerMonth, { valueKey: 'count', color: 'var(--accent)' });
+      signupCard.innerHTML += svgBarChart('signups', m.signupsPerMonth, Object.assign({ valueKey: 'count', color: 'var(--accent)' }, cv));
       chartGrid2.appendChild(signupCard);
 
       // Churn per month — B3 fix: the server's churnPerMonth rows carry the
@@ -199,7 +203,7 @@
       // bars read better with room.
       const churnCard = el('div', 'chart-card chart-card--wide');
       churnCard.appendChild(el('h3', null, t('chart.churnCanceled')));
-      churnCard.innerHTML += svgBarChart('churn', m.churnPerMonth, { valueKey: 'churn', color: 'var(--bad)', wide: true });
+      churnCard.innerHTML += svgBarChart('churn', m.churnPerMonth, Object.assign({ valueKey: 'churn', color: 'var(--bad)' }, cv));
       chartGrid2.appendChild(churnCard);
 
       c.appendChild(chartGrid2);
@@ -278,7 +282,10 @@
       toolbar.appendChild(totalLabel);
       c.appendChild(toolbar);
 
-      const card = el('div', 'card'); card.appendChild(el('h2', null, t('table.tenants')));
+      // table-card (not just card): the tenants table keeps its readable
+      // column widths on phones and scrolls horizontally INSIDE the card
+      // instead of pushing the whole page wide (mobile audit finding).
+      const card = el('div', 'card table-card'); card.appendChild(el('h2', null, t('table.tenants')));
       if (tenants.length === 0) { card.appendChild(el('p', 'empty', t('table.noTenantsMatch'))); c.appendChild(card); return; }
       const table = el('table');
       const thead = el('thead'); const tr = el('tr');
@@ -606,8 +613,9 @@
           const errs = buckets.reduce((a, b) => a + (b.err || 0), 0);
           trMeta.textContent = total + ' requests · ' + errs + ' errors / 24h';
           // sparkline() returns an SVG string with only generated labels —
-          // labels are escaped inside the helper before injection.
-          trWrap.innerHTML = sparkline(buckets);
+          // labels are escaped inside the helper before injection. The
+          // phone canvas keeps labels near true size on small screens.
+          trWrap.innerHTML = sparkline(buckets, window.matchMedia && window.matchMedia('(max-width: 640px)').matches ? { phone: true } : null);
         }
 
         // ── Loaders for the two cards created above the logs panel ──────

@@ -90,11 +90,17 @@
     // (10px labels rendered ~22px, "too zoomed in"). At 1280 the rendered
     // scale is ~1.0, so viewBox font sizes are the rendered sizes.
     var wide = !!(opts && opts.wide);
-    var w = wide ? 1280 : 600, h = wide ? 220 : 180, px = wide ? 56 : 40, py = wide ? 24 : 20;
+    // opts.phone: a ~350-unit canvas rendered ~1:1 on a phone card, so
+    // viewBox font sizes are true rendered sizes (no downscaling).
+    var phone = !wide && !!(opts && opts.phone);
+    var w = wide ? 1280 : (phone ? 350 : 600);
+    var h = wide ? 220 : (phone ? 230 : 180);
+    var px = wide ? 56 : 40;
+    var py = wide ? 24 : 20;
     // Wide adds right padding so the last point's centered label stays
     // inside the viewBox; narrow keeps its exact legacy geometry.
-    var pw = wide ? w - px - 24 : w - px;
-    var ph = wide ? h - py - 36 : h - py - 20;
+    var pw = wide ? w - px - 24 : (phone ? w - px - 8 : w - px);
+    var ph = wide ? h - py - 36 : (phone ? h - py - 30 : h - py - 20);
     var max = Math.max.apply(null, vals);
     var min = 0;
     var rng = max - min || 1;
@@ -124,17 +130,19 @@
     var yLabels = '';
     for (var i = 0; i <= 4; i++) {
       var v = min + (rng / 4) * i;
-      yLabels += '<text x="' + (px - 5) + '" y="' + (y(v) + 3) + '" text-anchor="end" fill="var(--muted)" font-size="10">' + (opts && opts.fmt ? opts.fmt(v) : Math.round(v)) + '</text>';
+      var fs = phone ? 11 : 10;
+      yLabels += '<text x="' + (px - 5) + '" y="' + (y(v) + 3) + '" text-anchor="end" fill="var(--muted)" font-size="' + fs + '">' + (opts && opts.fmt ? opts.fmt(v) : Math.round(v)) + '</text>';
     }
     var xLabels = '';
     // Wide canvas fits a label under every point; narrow keeps the
-    // every-other-point legacy density.
-    var step = wide ? 1 : 2;
+    // every-other-point legacy density; phone uses every third point
+    // so labels never collide at true size.
+    var step = wide ? 1 : (phone ? 3 : 2);
     data.forEach(function (d, i) {
       if (i % step === 0 || i === data.length - 1) {
         // B5 fix: the M1 guard protected values but not labels — a row
         // without month threw on .slice and killed the whole dashboard.
-        xLabels += '<text x="' + x(i) + '" y="' + (py + ph + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="9">' + escapeHtml(d.month ? String(d.month).slice(5) : '') + '</text>';
+        xLabels += '<text x="' + x(i) + '" y="' + (py + ph + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="' + (phone ? 10 : 9) + '">' + escapeHtml(d.month ? String(d.month).slice(5) : '') + '</text>';
       }
     });
     return '<svg viewBox="0 0 ' + w + ' ' + h + '" class="chart-svg">' + grid + fills + paths + yLabels + xLabels + '</svg>';
@@ -322,8 +330,12 @@
     // SVG stretches across the row (same "too zoomed in" defect as the
     // line chart).
     var wide = !!(opts && opts.wide);
-    var w = wide ? 1280 : 620, h = wide ? 220 : 180;
-    var baseline = wide ? 190 : 150, topPad = wide ? 30 : 10;
+    // opts.phone: ~350-unit canvas rendered ~1:1 on a phone card.
+    var phone = !wide && !!(opts && opts.phone);
+    var w = wide ? 1280 : (phone ? 350 : 620);
+    var h = wide ? 220 : (phone ? 200 : 180);
+    var baseline = wide ? 190 : (phone ? 160 : 150);
+    var topPad = wide ? 30 : (phone ? 26 : 10);
     var plotH = baseline - topPad;
     var maxS = Math.max.apply(null, data.map(function (d) { return Number(d[valueKey]) || 0; }));
     var barW = (w - 20) / data.length;
@@ -336,11 +348,12 @@
       // drawn width and center it in the slot so bars stay elegant.
       var bw = Math.min(barW * 0.7, 48);
       var cx = bx + barW / 2;
+      var vfs = phone ? 11 : 10, lfs = phone ? 10 : 9;
       bars += '<rect x="' + (cx - bw / 2) + '" y="' + (baseline - bh) + '" width="' + bw + '" height="' + bh + '" rx="4" fill="' + (opts && opts.color || 'var(--primary)') + '"/>' +
-        '<text x="' + cx + '" y="' + (baseline - bh - 6) + '" text-anchor="middle" fill="var(--text)" font-size="10" font-weight="600">' + v + '</text>' +
-        '<text x="' + cx + '" y="' + (baseline + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="9">' + escapeHtml(d.month ? d.month.slice(5) : '') + '</text>';
+        '<text x="' + cx + '" y="' + (baseline - bh - 6) + '" text-anchor="middle" fill="var(--text)" font-size="' + vfs + '" font-weight="600">' + v + '</text>' +
+        '<text x="' + cx + '" y="' + (baseline + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="' + lfs + '">' + escapeHtml(d.month ? d.month.slice(5) : '') + '</text>';
     });
-    return '<svg viewBox="0 0 ' + w + ' ' + h + '"' + (wide ? '' : ' style="max-height:180px"') + ' class="chart-svg">' + bars + '</svg>';
+    return '<svg viewBox="0 0 ' + w + ' ' + h + '"' + ((wide || phone) ? '' : ' style="max-height:180px"') + ' class="chart-svg">' + bars + '</svg>';
   }
 
   // timeoutSignal builds an AbortSignal for a request, degrading to NO
@@ -501,11 +514,14 @@
   // (caller sets innerHTML). buckets: [{t: ISO, req, err}] ascending.
   // Errors overlay as a red line scaled to their own max (error counts
   // are orders of magnitude smaller than requests).
-  function sparkline(buckets) {
+  function sparkline(buckets, opts) {
     if (!Array.isArray(buckets) || buckets.length < 2) {
       return '<div class="chart-empty">' + escapeHtml(t('health.trafficEmpty')) + '</div>';
     }
-    var w = 620, h = 150, baseline = 118, top = 18, pad = 10;
+    // opts.phone: ~340-unit canvas matches a phone card width, keeping
+    // the edge labels near their true size instead of ~0.55×.
+    var phone = !!(opts && opts.phone);
+    var w = phone ? 340 : 620, h = 150, baseline = 118, top = 18, pad = 10;
     var plotW = w - pad * 2, plotH = baseline - top;
     var maxR = Math.max.apply(null, buckets.map(function (b) { return Number(b && b.req) || 0; }));
     var maxE = Math.max.apply(null, buckets.map(function (b) { return Number(b && b.err) || 0; }));
@@ -524,13 +540,14 @@
       errs = '<polyline points="' + ePts + '" fill="none" stroke="var(--danger)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>';
     }
     var t0 = logTsWib(buckets[0].t), t1 = logTsWib(buckets[buckets.length - 1].t);
+    var lfs = phone ? 11 : 10;
     return '<svg viewBox="0 0 ' + w + ' ' + h + '" class="chart-svg spark-svg" preserveAspectRatio="none">' +
       '<path d="' + area + '" fill="var(--tint-primary-bg)" stroke="none"/>' +
       '<polyline points="' + buckets.map(function (b, i) { return x(i) + ',' + yR(Number(b.req) || 0).toFixed(1); }).join(' ') + '" fill="none" stroke="var(--primary)" stroke-width="2" vector-effect="non-scaling-stroke"/>' +
       errs +
       '<line x1="' + pad + '" y1="' + baseline + '" x2="' + (w - pad) + '" y2="' + baseline + '" stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>' +
-      '<text x="' + pad + '" y="' + (baseline + 18) + '" fill="var(--muted)" font-size="10">' + escapeHtml(t0) + '</text>' +
-      '<text x="' + (w - pad) + '" y="' + (baseline + 18) + '" text-anchor="end" fill="var(--muted)" font-size="10">' + escapeHtml(t1) + '</text>' +
+      '<text x="' + pad + '" y="' + (baseline + 18) + '" fill="var(--muted)" font-size="' + lfs + '">' + escapeHtml(t0) + '</text>' +
+      '<text x="' + (w - pad) + '" y="' + (baseline + 18) + '" text-anchor="end" fill="var(--muted)" font-size="' + lfs + '">' + escapeHtml(t1) + '</text>' +
       '</svg>';
   }
 

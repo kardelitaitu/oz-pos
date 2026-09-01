@@ -921,6 +921,41 @@ describe('admin-utils relTime / sparkline / nfStatusCard / uptimeRows (health v2
   });
 });
 
+describe('admin-utils phone chart variants (mobile 1:1 canvases)', () => {
+  const months = Array.from({ length: 8 }, (_, i) => ({ month: '2026-0' + (i + 1), idr: 1000000 + i * 500000, count: 5 + i, churn: i % 3 }));
+
+  it('svgChart phone canvas is ~350 wide with larger labels and sparse ticks', () => {
+    const svg = utils.svgChart('rev', months, ['idr'], { area: true, phone: true, fmt: (v: number) => 'Rp' + (v / 1000000).toFixed(1) + 'jt' });
+    expect(svg).toContain('viewBox="0 0 350 230"');
+    expect(svg).toContain('font-size="11"');
+    expect(svg).toContain('font-size="10"');
+    // step 3 on 8 points → labels at 0,3,6,7 (last always shown)
+    expect(svg.match(/text-anchor="middle" fill="var\(--muted\)"/g)!.length).toBe(4);
+    expect(svg).toMatch(/d="M \d/);
+  });
+
+  it('svgChart wide canvas is unchanged (1280×220)', () => {
+    const svg = utils.svgChart('rev', months, ['idr'], { wide: true });
+    expect(svg).toContain('viewBox="0 0 1280 220"');
+  });
+
+  it('svgBarChart phone canvas is ~350×200 with 11px values', () => {
+    const svg = utils.svgBarChart('s', months, { valueKey: 'count', phone: true });
+    expect(svg).toContain('viewBox="0 0 350 200"');
+    expect(svg).toContain('font-size="11" font-weight="600"');
+    expect(svg).not.toContain('max-height');
+  });
+
+  it('sparkline phone canvas is ~340 wide', () => {
+    const svg = utils.sparkline([
+      { t: '2026-09-01T13:00:00Z', req: 4, err: 0 },
+      { t: '2026-09-01T13:01:00Z', req: 9, err: 1 },
+    ], { phone: true });
+    expect(svg).toContain('viewBox="0 0 340 150"');
+    expect(svg).toContain('font-size="11"');
+  });
+});
+
 describe('admin-utils busyWrap (B19: double-click submitted the action twice)', () => {
   // The tenant detail modal's Revoke/Activate/Renew/Upgrade-save buttons
   // fired doAction on every click with no in-flight guard. Renew is

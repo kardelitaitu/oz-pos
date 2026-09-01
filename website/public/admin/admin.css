@@ -665,8 +665,8 @@ select.input {
 .fx-chip-stale { color: var(--warning); }
 
 /* ── Health — platform log view (Northflank via worker proxy) ──────── */
-.logs-head { display: flex; align-items: center; gap: 1rem; margin-bottom: .75rem; }
-.logs-head h2 { margin: 0; flex: 1; }
+.logs-head { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: .75rem; }
+.logs-head h2 { margin: 0; flex: 1 1 auto; }
 .log-meta { font-size: 11px; }
 .log-view {
   background: var(--ghost-bg);
@@ -721,7 +721,7 @@ select.input {
 .up-dot--bad { background: var(--danger); box-shadow: 0 0 0 3px var(--tint-danger-bg); }
 .up-name { flex: 1; min-width: 0; }
 .up-vantage {
-  flex-shrink: 0; font-size: 9.5px; font-weight: 600; text-transform: uppercase;
+  flex-shrink: 0; font-size: 10px; font-weight: 600; text-transform: uppercase;
   letter-spacing: .04em; color: var(--text-muted);
   border: 1px solid var(--border); border-radius: 999px; padding: 1px 6px;
 }
@@ -731,7 +731,7 @@ select.input {
 .log-line--err .log-ts { color: var(--danger); opacity: .7; }
 .spark-svg { width: 100%; height: 150px; display: block; }
 .lines-sel {
-  padding: 4px 8px; border-radius: var(--r-sm); border: 1px solid var(--border);
+  padding: 4px 8px; min-height: 32px; border-radius: var(--r-sm); border: 1px solid var(--border);
   background: var(--seg-active); color: var(--text); font-size: 12px;
 }
 
@@ -749,6 +749,9 @@ select.input {
   .topbar-actions { margin-left: auto; }
   .wrap { padding: 1rem; }
   .chart-card { padding: 1rem; }
+  .svc-grid { grid-template-columns: 1fr; }
+  /* iOS zooms the viewport on focus when an input's font-size is < 16px. */
+  .input, .lines-sel, select.search-input { font-size: 16px; }
 }
 @media (max-width: 480px) {
   .kpi-grid { grid-template-columns: 1fr; gap: .7rem; }
@@ -766,9 +769,13 @@ select.input {
   .donut-row .donut-chart { width: 100%; max-width: 160px; }
   .donut-row .donut-legend { flex: 1 1 auto; width: 100%; }
   .wrap { padding: .75rem; }
-  .nav-btn { font-size: 12px; padding: 6px 10px; }
+  .nav-btn { font-size: 12px; padding: 8px 10px; }
   .topbar-inner { gap: .75rem; }
   .topbar-actions { gap: .4rem; }
+  /* Tenant detail / tier dialogs: full-width stacked actions on phones. */
+  .modal { padding: 1.1rem; border-radius: var(--r-md); }
+  .modal-actions { flex-direction: column-reverse; }
+  .modal-actions .btn { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
