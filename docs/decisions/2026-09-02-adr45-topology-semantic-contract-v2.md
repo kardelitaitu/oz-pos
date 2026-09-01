@@ -760,8 +760,12 @@ Obligations 2 and 3 are each a full slice on their own and neither is mechanical
      node with no type key keeps POS endpoints at the contract.
    - `cardKindToken({ type: 'workspace' })` with no type key → `workspace:*`, so
      that same node renders from the fallback row.
-   - `workspace:admin` has no row of its own, so it ALSO resolves to
-     `workspace:*`.
+   - `workspace:admin` has no row of its own, so `nodeKindEntry`'s
+     `?? NODE_KIND_REGISTRY['workspace:*']` hands it the same row. (Corrected the
+     round after this was written: `cardKindToken` does NOT collapse an explicit
+     unknown key to `workspace:*` — it keeps `workspace:admin`. The conflation is
+     in the entry lookup, one step later. The conclusion is unchanged; the
+     mechanism as first stated was wrong, and a test now pins the real one.)
 
    Deleting the row's `rightSemantics` would therefore strip visible stock-out
    and transfer-out ports from legacy store nodes that the contract says may

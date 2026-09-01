@@ -256,3 +256,45 @@ function kindToNode(kind: string): TopologyNodeData {
   if (kind === 'workspace:*') return node('workspace');
   return node('workspace', kind.replace('workspace:', ''));
 }
+
+// ADR #45 §3 follow-up #1. The ledger above records that the fallback row
+// advertises sockets the contract will never authorize. It does NOT say the row
+// may be emptied, and that misreading is easy to reach from the ledger alone -
+// round 13 nearly shipped it. These tests pin why: `workspace:*` is the
+// rendering row for two populations whose contract answers differ, so one edit
+// satisfies the ledger and regresses the first population at the same time.
+describe('the workspace:* fallback row serves two populations', () => {
+  it('renders a type-less legacy store from the fallback while the contract treats it as store-pos', () => {
+    const legacy = node('workspace');
+    expect(cardKindToken(legacy)).toBe('workspace:*');
+    expect(nodeKindToken('workspace', undefined)).toBe('workspace:store-pos');
+    // The two functions disagree on purpose. Under the identity the contract
+    // gives this node, the stock feed the fallback row shows is legitimate.
+    expect(
+      pairingAdmitsKinds('stock-out', 'stock-in', 'workspace:store-pos', 'warehouse'),
+    ).toBe(true);
+  });
+
+  it('renders an unregistered workspace type from the fallback row, where nothing is authorizable', () => {
+    const admin = node('workspace', 'admin');
+    // cardKindToken does distinguish the two populations: an explicit but
+    // unregistered type key stays itself rather than collapsing to the
+    // wildcard. The conflation happens one step later, in nodeKindEntry, whose
+    // `?? NODE_KIND_REGISTRY['workspace:*']` gives this token the same row the
+    // type-less legacy node gets. That is the mechanism, and round 13 had it
+    // wrong while having the conclusion right.
+    expect(cardKindToken(admin)).toBe('workspace:admin');
+    expect(NODE_KIND_REGISTRY['workspace:admin']).toBeUndefined();
+    expect(
+      pairingAdmitsKinds('stock-out', 'stock-in', 'workspace:admin', 'warehouse'),
+    ).toBe(false);
+  });
+
+  it('resolves both populations to one identical row, which is what makes deletion unsafe', () => {
+    // The shared row is the hazard: one edit satisfies the ledger and strips
+    // ports the legacy population may legitimately use. If this ever fails, the
+    // two have been given separate rows and the ledger can be emptied by editing
+    // only the unregistered one.
+    expect(nodeKindEntry(node('workspace'))).toBe(nodeKindEntry(node('workspace', 'admin')));
+  });
+});
