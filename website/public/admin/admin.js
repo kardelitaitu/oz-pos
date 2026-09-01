@@ -1,7 +1,7 @@
     const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'https://license.ozpos.my.id';
     let currentTab = 'dashboard';
-    // Health-tab auto-refresh interval handles; cleared on every
-    // renderHealth so tab switches never leave orphan timers firing.
+    // Health-tab auto-refresh interval handles; cleared when the health
+    // tab is left so tab switches never leave orphan timers firing.
     let healthTimers = [];
 
     // ── FX rate (live from open.er-api.com, fallback to 16000) ───
@@ -62,10 +62,11 @@
     // response landing after the user switched tabs overwrote the tenants/
     // health view. Same last-click-wins pattern as renderTenants (B15).
     const dashboardGuard = createSeqGuard();
-    async function renderDashboard() {
-      const c = document.getElementById('content');
+    async function renderDashboard(background) {
+      // Build into a detached fragment and swap only when fully rendered —
+      // a background refresh never flashes a skeleton over the live view.
+      const c = el('div');
       const seq = dashboardGuard.next();
-      c.innerHTML = '<div class="skeleton" style="height:8rem"></div>';
 
       // Load real stats; on failure show an error state (no MOCK fallback).
       let stats = null;
@@ -76,8 +77,10 @@
       if (!stats) {
         // api() already rendered an "Access denied" screen for 401/403 —
         // don't overwrite it with a generic error. Only show the retry UI
-        // for network / server errors.
+        // for network / server errors. A BACKGROUND refresh keeps the
+        // last good view mounted instead of replacing it with an error.
         if (loadError && loadError.authDenied) { return; }
+        if (background) { return; }
         c.innerHTML =
           '<div class="card" style="text-align:center;padding:2rem">' +
           '<h2 style="margin:0 0 .5rem;color:var(--bad)">' + t('common.statsUnavailable') + '</h2>' +
@@ -85,7 +88,8 @@
           '<button class="btn" id="retry-stats">' + t('common.retry') + '</button>' +
           '</div>';
         const retry = document.getElementById('retry-stats');
-        if (retry) { retry.addEventListener('click', renderDashboard); }
+        if (retry) { retry.addEventListener('click', () => renderDashboard(false)); }
+        setTabContent('dashboard', c);
         return;
       }
       // B6 fix: normalizeStats guarantees the array/kpis shapes the render
@@ -221,20 +225,56 @@
       if (m.expiringSoon && m.expiringSoon.length > 0) {
         c.appendChild(tableCard(t('table.expiringSoon'), [t('th.email'),t('th.tier'),t('th.expires'),t('th.daysLeft')], m.expiringSoon.map(d => [d.email, d.tier, d.expiresAt, String(d.daysLeft)])));
       }
+      setTabContent('dashboard', c);
     }
 
 // kpiC, tableCard are defined in admin-utils.js (loaded first).
 
-    // ── Tab switching ──────────────────────────────────────────────
+    // ── Tab switching: cached DOM + per-card background refresh ─────
+    // Clicking back to an earlier tab used to re-fetch everything and
+    // rebuild the DOM from zero (a full reload per switch). Each tab's
+    // DOM is now built once and cached; revisiting mounts it instantly
+    // and every card refreshes its own data BEHIND the cached view
+    // (stale-while-revalidate) — content swaps only when fresh data has
+    // fully arrived, so there is never a skeleton flash.
+    const tabCache = { dashboard: null, tenants: null, health: null };
+    function setTabContent(name, node) {
+      tabCache[name] = node;
+      if (currentTab === name) {
+        const content = document.getElementById('content');
+        content.innerHTML = '';
+        content.appendChild(node);
+      }
+    }
+    function refreshTab(name) {
+      // Never yank state from under an open dialog.
+      if (document.querySelector('.modal-back')) return;
+      if (name === 'dashboard') renderDashboard(true);
+      if (name === 'tenants') renderTenants(true);
+      if (name === 'health') { startHealthAuto(); if (healthLoader) healthLoader.refreshAll(); }
+    }
+    function showTab(name) {
+      if (currentTab === 'health' && name !== 'health') stopHealthAuto();
+      currentTab = name;
+      if (!tabCache[name]) {
+        const content = document.getElementById('content');
+        content.innerHTML = '<div class="skeleton" style="height:8rem"></div>';
+        if (name === 'dashboard') renderDashboard(false);
+        if (name === 'tenants') renderTenants(false);
+        if (name === 'health') buildHealthTab();
+        return;
+      }
+      const content = document.getElementById('content');
+      content.innerHTML = '';
+      content.appendChild(tabCache[name]);
+      refreshTab(name);
+    }
     // B38: use setNavActive so aria-current moves with .nav-active — the
     // screen reader must know which admin section is open.
     document.querySelectorAll('.nav-btn').forEach(tab => {
       tab.addEventListener('click', () => {
         setNavActive(document.querySelectorAll('.nav-btn'), tab);
-        currentTab = tab.dataset.tab;
-        if (currentTab === 'dashboard') renderDashboard();
-        if (currentTab === 'tenants') renderTenants();
-        if (currentTab === 'health') renderHealth();
+        showTab(tab.dataset.tab);
       });
     });
 
@@ -249,21 +289,21 @@
     // last-arrival-wins).
     const tenantsGuard = createSeqGuard();
 
-    async function renderTenants() {
-      const c = document.getElementById('content');
+    async function renderTenants(background) {
+      // Detached build + single swap: a background refresh (cache hit,
+      // pagination, search) never flashes a skeleton over the live view.
+      const c = el('div');
       const seq = tenantsGuard.next();
-      c.innerHTML = '<div class="card"><p class="empty">' + t('common.loadingTenants') + '</p></div>';
+      if (!background) c.appendChild(el('p', 'empty', t('common.loadingTenants')));
       let data;
       try {
         const qs = '?page=' + tenantsPage + '&perPage=' + tenantsPerPage +
           (tenantsSearch ? '&search=' + encodeURIComponent(tenantsSearch) : '');
         data = await api('/api/v1/admin/tenants' + qs);
-      } catch (err) { if (!tenantsGuard.isCurrent(seq)) { return; } if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">' + t('common.failedToLoadTenants') + '</p></div>'; return; }
+      } catch (err) { if (!tenantsGuard.isCurrent(seq)) { return; } if (err && err.authDenied) { return; } if (background) { return; } c.appendChild(el('p', 'empty', t('common.failedToLoadTenants'))); setTabContent('tenants', c); return; }
       if (!tenantsGuard.isCurrent(seq)) { return; } // a newer request superseded this one
       tenants = data.tenants || [];
       tenantsTotal = data.total || 0;
-
-      c.innerHTML = '';
 
       // ── Search + pagination toolbar ─────────────────────────────
       const toolbar = el('div', 'tenant-toolbar');
@@ -292,7 +332,7 @@
       // column widths on phones and scrolls horizontally INSIDE the card
       // instead of pushing the whole page wide (mobile audit finding).
       const card = el('div', 'card table-card'); card.appendChild(el('h2', null, t('table.tenants')));
-      if (tenants.length === 0) { card.appendChild(el('p', 'empty', t('table.noTenantsMatch'))); c.appendChild(card); return; }
+      if (tenants.length === 0) { card.appendChild(el('p', 'empty', t('table.noTenantsMatch'))); c.appendChild(card); setTabContent('tenants', c); return; }
       const table = el('table');
       const thead = el('thead'); const tr = el('tr');
       // Columns (user-requested): email | status | license/tier merged
@@ -322,6 +362,7 @@
         nav.appendChild(next);
         c.appendChild(nav);
       }
+      setTabContent('tenants', c);
     }
 
     // ── Tenant detail (from ADR #42 Phase 3) ────────────────────────
@@ -436,33 +477,73 @@
     }
 
     // ── Health tab ──────────────────────────────────────────────────
-    async function renderHealth() {
-      healthTimers.forEach(clearInterval); healthTimers = [];
-      const c = document.getElementById('content'); c.innerHTML = '<div class="card"><p class="empty">' + t('common.loading') + '</p></div>';
-      try { const h = await api('/api/v1/admin/health');
-        c.innerHTML = ''; const card = el('div', 'card'); card.appendChild(el('h2', null, t('health.title')));
-        const kv = el('div'); kv.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.82rem';
-        const status = h.status === 'ok' ? t('health.ok') : t('health.degraded');
-        kv.innerHTML = '<span class="muted">'+t('health.status')+'</span><span style="text-align:right">'+escapeHtml(status)+'</span>' +
-          '<span class="muted">'+t('health.database')+'</span><span style="text-align:right">'+(h.db_ok?t('health.connected'):t('health.unreachable'))+'</span>' +
-          '<span class="muted">'+t('health.smtp')+'</span><span style="text-align:right">'+(h.smtp_host?t('health.configured'):t('health.notConfigured'))+'</span>' +
-          '<span class="muted">'+t('health.version')+'</span><span style="text-align:right">'+escapeHtml(h.version||'—')+'</span>' +
-          '<span class="muted">'+t('health.time')+'</span><span style="text-align:right">'+escapeHtml(h.time||'—')+'</span>';
-        card.appendChild(kv);
-        // Auto-refresh control lives in the card's header row (title left,
-        // toggle + updated-ago right) — not as an orphan strip floating
-        // between two cards.
-        const cardHead = el('div', 'card-head');
-        cardHead.appendChild(el('h2', null, t('health.title')));
-        const autoBtn = el('button', 'btn btn-ghost btn-sm', t('health.autoOn'));
-        autoBtn.type = 'button';
-        const updatedAgo = el('span', 'muted log-meta', '');
-        const headRight = el('div', 'card-head-right');
-        headRight.appendChild(updatedAgo); headRight.appendChild(autoBtn);
-        cardHead.appendChild(headRight);
-        card.appendChild(cardHead);
-        c.appendChild(card);
-        let autoOn = true; let lastRefresh = 0;
+    // ── Health tab: built once, cached, refreshed per card ───────────
+    // The old renderHealth() re-fetched /admin/health and rebuilt the
+    // whole tab on EVERY visit. Now the DOM is built once and cached;
+    // revisiting mounts it instantly while each card refreshes its own
+    // data behind the cached view (stale-while-revalidate). Timer and
+    // toggle state live at module scope so they survive tab switches;
+    // auto-refresh only runs while the health tab is visible.
+    let healthAutoOn = true;
+    let healthLastRefresh = 0;
+    let healthUpdatedAgo = null;
+    let healthLoader = null; // set by buildHealthTab: { refreshAll, refreshAuto }
+    function stopHealthAuto() { healthTimers.forEach(clearInterval); healthTimers = []; }
+    function startHealthAuto() {
+      stopHealthAuto();
+      healthTimers.push(setInterval(() => { if (healthAutoOn && document.visibilityState !== 'hidden') refreshAutoHealth(); }, 60000));
+      healthTimers.push(setInterval(() => {
+        if (healthUpdatedAgo) healthUpdatedAgo.textContent = healthLastRefresh ? (t('health.updated') + ' ' + relTime(new Date(healthLastRefresh).toISOString())) : '';
+      }, 5000));
+    }
+    function refreshAutoHealth() {
+      // Same cadence and scope as the original auto-refresh — the two
+      // heaviest proxies (NF logs, CF deploys) refresh on demand only.
+      if (healthLoader) healthLoader.refreshAuto();
+      healthLastRefresh = Date.now();
+    }
+    function buildHealthTab() {
+      stopHealthAuto();
+      const c = el('div');
+      const card = el('div', 'card');
+      // Auto-refresh control lives in the card's header row (title left,
+      // toggle + updated-ago right) — not as an orphan strip floating
+      // between two cards. (The old build also appended the title twice.)
+      const cardHead = el('div', 'card-head');
+      cardHead.appendChild(el('h2', null, t('health.title')));
+      const autoBtn = el('button', 'btn btn-ghost btn-sm', t('health.autoOn'));
+      autoBtn.type = 'button';
+      const updatedAgo = el('span', 'muted log-meta', '');
+      const headRight = el('div', 'card-head-right');
+      headRight.appendChild(updatedAgo); headRight.appendChild(autoBtn);
+      cardHead.appendChild(headRight);
+      card.appendChild(cardHead);
+      // kv values are live element references updated in place by
+      // loadHealthKv — the grid is never rebuilt, so a background
+      // refresh cannot flash the row.
+      const kv = el('div'); kv.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.82rem';
+      const kvValue = (label) => { kv.appendChild(el('span', 'muted', label)); const v = el('span', null, '—'); v.style.textAlign = 'right'; kv.appendChild(v); return v; };
+      const kvStatus = kvValue(t('health.status'));
+      const kvDb = kvValue(t('health.database'));
+      const kvSmtp = kvValue(t('health.smtp'));
+      const kvVersion = kvValue(t('health.version'));
+      const kvTime = kvValue(t('health.time'));
+      card.appendChild(kv);
+      c.appendChild(card);
+      healthUpdatedAgo = updatedAgo;
+      const healthKvGuard = createSeqGuard();
+      async function loadHealthKv() {
+        const seq = healthKvGuard.next();
+        let h = null;
+        try { h = await api('/api/v1/admin/health'); } catch (e) { h = null; }
+        if (!healthKvGuard.isCurrent(seq)) { return; }
+        if (!h) { return; } // background refresh: keep the last known values
+        kvStatus.textContent = h.status === 'ok' ? t('health.ok') : t('health.degraded');
+        kvDb.textContent = h.db_ok ? t('health.connected') : t('health.unreachable');
+        kvSmtp.textContent = h.smtp_host ? t('health.configured') : t('health.notConfigured');
+        kvVersion.textContent = h.version || '—';
+        kvTime.textContent = h.time || '—';
+      }
 
         // ── Cloud Service card (Northflank metadata via worker proxy) ───
         const svcCard = el('div', 'card table-card');
@@ -540,7 +621,6 @@
           logWrap.appendChild(logView(body.lines));
         }
         refreshBtn.addEventListener('click', loadLogs);
-        loadLogs();
 
         // ── Cloudflare deployments (worker oz-pos, via the worker proxy) ─
         // Same trust shape as the log panel: the CF token lives in a Worker
@@ -582,7 +662,6 @@
           cfWrap.appendChild(cfDeployRows(body.deploys));
         }
         cfRefresh.addEventListener('click', loadDeploys);
-        loadDeploys();
 
         // ── Worker runtime logs (Cloudflare observability, via proxy) ───
         const wlCard = el('div', 'card table-card');
@@ -743,21 +822,26 @@
         upRefresh.addEventListener('click', loadUptime);
         wlRefresh.addEventListener('click', loadWorkerLogs);
         trRefresh.addEventListener('click', loadTraffic);
-        function refreshAll() {
-          loadService(); loadUptime(); loadWorkerLogs(); loadTraffic();
-          lastRefresh = Date.now();
-        }
         autoBtn.addEventListener('click', () => {
-          autoOn = !autoOn;
-          autoBtn.textContent = autoOn ? t('health.autoOn') : t('health.autoOff');
+          healthAutoOn = !healthAutoOn;
+          autoBtn.textContent = healthAutoOn ? t('health.autoOn') : t('health.autoOff');
         });
-        healthTimers.push(setInterval(() => { if (autoOn && document.visibilityState !== 'hidden') refreshAll(); }, 60000));
-        healthTimers.push(setInterval(() => {
-          updatedAgo.textContent = lastRefresh ? (t('health.updated') + ' ' + relTime(new Date(lastRefresh).toISOString())) : '';
-        }, 5000));
-        loadService(); loadUptime(); loadWorkerLogs(); loadTraffic();
-        lastRefresh = Date.now();
-      } catch (err) { if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">' + t('common.failedToLoadHealth') + '</p></div>'; }
+        healthLoader = {
+          // Revisit + first build: every card, including the kv row.
+          refreshAll() {
+            loadService(); loadUptime(); loadLogs(); loadDeploys(); loadWorkerLogs(); loadTraffic();
+            loadHealthKv();
+            healthLastRefresh = Date.now();
+          },
+          // 60s auto-tick: same scope as the original auto-refresh (the
+          // two heaviest proxies stay on-demand only).
+          refreshAuto() {
+            loadService(); loadUptime(); loadWorkerLogs(); loadTraffic();
+          },
+        };
+        setTabContent('health', c);
+        startHealthAuto();
+        healthLoader.refreshAll();
     }
 
     // ── Flash ───────────────────────────────────────────────────────
