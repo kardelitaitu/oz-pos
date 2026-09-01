@@ -972,8 +972,47 @@ count on this machine, which is an environment limit and not a test failure.
 
 ---
 
-## §4.2 UI swap — verified spec, not yet done (2026-09-02)
+## §4.3 prerequisite is half a prerequisite (2026-09-02)
 
+Round 26 recorded the ordering rule as §4.3's finished prerequisite. That was
+wrong in a way worth writing down, because it is the exact failure mode this ADR
+is named for.
+
+The rule orders the **TypeScript** list. The backend does not have a list:
+`validate_semantic_json` has fourteen `return Err(topology_validation(...))` sites
+and collects nothing, so it short-circuits on the first failure it happens to
+encounter in traversal order. The TypeScript validator has twenty-five
+`errors.push` sites and now sorts them by tier.
+
+Both surfaces reach the merchant. The live checklist is the TS list; the Apply
+rejection is the Rust single error, surfaced through `TopologyApplyValidationError`
+(`NodeTopologyEditor.tsx:2148`). So a merchant can be told "fix the cycle" by the
+checklist and "this wire has an incompatible semantic connection" by Apply, for the
+same graph.
+
+This is not a correctness bug — Apply still refuses what it should refuse, and the
+tier ordering is still strictly better than `errors[0]`. It is a **presentation
+divergence between two implementations of one rule**, which is what sections 1-3
+spent this whole slice eliminating in the pairing table.
+
+What §4.3 actually needs, and the choice it forces:
+
+1. **Order the Rust side too** — convert fourteen short-circuits into a collected,
+   sorted result. Largest change, and the only one that makes the two surfaces
+   agree by construction rather than by luck.
+2. **Let the checklist defer to Apply** — render the TS ordering only while no
+   Apply has happened, and replace it with the backend's error once one has.
+   Smallest change, and honest: the backend is the authority, so the checklist
+   should not compete with it.
+3. **Accept the divergence and label it** — cheapest, and probably wrong: a
+   checklist that contradicts the button next to it teaches merchants to ignore
+   both.
+
+Recommendation is 2 for §4.3 and 1 as its own later slice. Option 1 is the correct
+end state but it is a refactor of the backend validator's shape, not something to
+fold into a UI change.
+
+## §4.2 UI swap — verified spec, not yet done (2026-09-02)
 For twenty rounds this was described as "too large for the current window". The
 premise was checked rather than repeated, and it was mostly wrong. Everything
 needed is already in scope:
