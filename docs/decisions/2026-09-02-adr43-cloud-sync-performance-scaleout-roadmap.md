@@ -113,8 +113,15 @@ replica; until then the in-process implementations are authoritative.
 Add a second deadpool pool pointed at a PG read replica; route the
 read-only sync surface (pull, status, snapshot) to it while writes stay
 on the primary. `SyncStore` gains a `PostgresReadReplica(Pool)` variant.
-*Decision:* deferred until traffic justifies replica infrastructure;
-the `SyncStore` enum makes the routing change localized.
+*Decision:* **DEFERRED — until we actually get high traffic.** A read
+replica doubles the Postgres footprint (compute + storage + replication
+latency) for a benefit the current load does not need: today the sync
+read volume (status heartbeat, pull, snapshot) fits comfortably on the
+single primary, and the read/write mix on one small instance stays far
+below the primary's ceiling. Deferral triggers: sustained
+requests-per-second where primary CPU or connection count approaches its
+ceiling, or read latency regressions under load. The `SyncStore` enum
+makes the routing change localized when we reach that point.
 
 **D6. PgBouncer (transaction mode) as the connection front.**
 Amortize N app instances × pool_size onto few PG connections. Deployment
@@ -148,8 +155,16 @@ with a maintenance window and full regression run.
 **D10. Incremental snapshot (delta) endpoint.**
 Client sends its last-known `updated_at` per reference table; server
 returns only rows changed since, with the full snapshot as the anchor-
-expiry fallback. *Decision:* defer until catalog sizes demonstrably hurt
-bandwidth; the full-snapshot + ETag path is adequate for small tenants.
+expiry fallback. *Decision:* **DEFERRED — until we actually get high
+traffic / large catalogs.** The delta protocol adds client + server
+complexity (per-table anchors, merge semantics, cache interplay) for a
+problem the current tenants do not have: today's catalogs are small
+enough that the full-snapshot + ETag/304 path already returns cheaply
+(and 304 means most anchor-expired pulls transfer zero bytes). Deferral
+triggers: sustained large-catalog tenants (10k+ reference rows) where
+full-snapshot bytes or CPU demonstrably hurt bandwidth, or measurable
+transfer cost per terminal. The full snapshot stays the fallback
+regardless.
 
 **D11. Responsive image serving.**
 Add on-the-fly WebP sizing (thumbnail vs detail) behind the existing
