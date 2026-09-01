@@ -285,7 +285,7 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
             "PROMOTIONS_EDIT",
         ],
     ),
-    ("purchasing", 0, &[]),
+    ("purchasing", 10, &["PURCHASING_MANAGE", "PURCHASING_VIEW"]),
     ("refunds", 3, &["SALES_PROCESS", "SALES_REFUND"]),
     ("reports", 1, &["REPORTS_EXPORT", "REPORTS_VIEW"]),
     ("scale", 0, &[]),

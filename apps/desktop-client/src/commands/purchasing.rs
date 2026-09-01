@@ -691,7 +691,9 @@ pub async fn receive_purchase_order_with_lines_scoped(
 ) -> Result<PurchaseOrderDto, AppError> {
     let (session, _conn) = state.resolve_scope(&session_token)?;
     // F-017: enforce per-domain permission on this scoped command.
-    require_permission_for_session(&state, &session, permissions::PURCHASING_VIEW).await?;
+    // Receiving a PO mutates stock — require PURCHASING_MANAGE (write),
+    // matching receive_purchase_order_scoped, not PURCHASING_VIEW (read).
+    require_permission_for_session(&state, &session, permissions::PURCHASING_MANAGE).await?;
     let db = _conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
