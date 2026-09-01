@@ -184,6 +184,10 @@ import {
   loadTopology,
   applyTopologyDiff,
   canSaveTopology,
+  saveTopologyTemplate,
+  loadTopologyTemplate,
+  listTopologyTemplates,
+  deleteTopologyTemplate,
 } from '@/api/topology';
 
 describe('topology.ts IPC contract', () => {
@@ -260,6 +264,74 @@ describe('topology.ts IPC contract', () => {
     mockInvoke.mockResolvedValue(null);
     const result = await loadTopology();
     expect(result).toBeNull();
+  });
+
+  // ── Diagram templates (ADR #45 §4.2) ──────────────────────────────
+  //
+  // The backend resolves a MISSING branchId to the unscoped legacy key and a
+  // PRESENT one to a branch-scoped key. Sending `branchId: undefined` is not the
+  // same as omitting it across the IPC boundary, so these pin the shaping rule
+  // rather than trusting it: a template saved for one branch must never land in
+  // every branch's list.
+
+  it('saveTopologyTemplate omits branchId entirely when the caller has no branch', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await saveTopologyTemplate('tok', 'Opening', { nodes: [], wires: [] });
+    const args = mockInvoke.mock.calls[0]![1] as Record<string, unknown>;
+    expect(mockInvoke.mock.calls[0]![0]).toBe('save_topology_template');
+    expect('branchId' in args).toBe(false);
+    expect(args).toEqual({ sessionToken: 'tok', name: 'Opening', payload: { nodes: [], wires: [] } });
+  });
+
+  it('saveTopologyTemplate scopes to the branch when one is given', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await saveTopologyTemplate('tok', 'Opening', { nodes: [] }, 'branch-a');
+    expect(mockInvoke).toHaveBeenCalledWith('save_topology_template', {
+      sessionToken: 'tok',
+      name: 'Opening',
+      payload: { nodes: [] },
+      branchId: 'branch-a',
+    });
+  });
+
+  it('listTopologyTemplates returns the backend order untouched', async () => {
+    // Sorting is the backend's job (case-insensitive, stable). Re-sorting here
+    // would silently disagree with the persisted order for non-ASCII names.
+    mockInvoke.mockResolvedValue(['Alpha', 'café', 'mike']);
+    await expect(listTopologyTemplates('tok', 'branch-a')).resolves.toEqual(['Alpha', 'café', 'mike']);
+    expect(mockInvoke).toHaveBeenCalledWith('list_topology_templates', {
+      sessionToken: 'tok',
+      branchId: 'branch-a',
+    });
+  });
+
+  it('listTopologyTemplates omits branchId when unscoped', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listTopologyTemplates('tok');
+    const args = mockInvoke.mock.calls[0]![1] as Record<string, unknown>;
+    expect('branchId' in args).toBe(false);
+  });
+
+  it('loadTopologyTemplate passes the name through without trimming', async () => {
+    // Trimming is a backend rule (normalize_template_name). Trimming here too
+    // would mean two definitions of "the same" template name.
+    mockInvoke.mockResolvedValue({ nodes: [] });
+    await loadTopologyTemplate('tok', '  Opening  ', 'branch-a');
+    expect(mockInvoke).toHaveBeenCalledWith('load_topology_template', {
+      sessionToken: 'tok',
+      name: '  Opening  ',
+      branchId: 'branch-a',
+    });
+  });
+
+  it('deleteTopologyTemplate reports whether anything was deleted', async () => {
+    mockInvoke.mockResolvedValue(false);
+    await expect(deleteTopologyTemplate('tok', 'Gone', 'branch-a')).resolves.toBe(false);
+    expect(mockInvoke).toHaveBeenCalledWith('delete_topology_template', {
+      sessionToken: 'tok',
+      name: 'Gone',
+      branchId: 'branch-a',
+    });
   });
 
 });
