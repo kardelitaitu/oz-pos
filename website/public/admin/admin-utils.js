@@ -103,7 +103,10 @@
       var pts = data.map(function (d, i) { return x(i) + ',' + y(Number(d[s]) || 0); }).join(' L ');
       paths += '<path d="M ' + pts + '" stroke="' + (colors[s] || 'var(--primary)') + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" class="chart-line"/>';
       if (opts && opts.area) {
-        var base = x(0) + ',' + (py + ph) + ' L ' + pts + ' L ' + x(data.length - 1) + ',' + (py + ph) + ' Z';
+        // B42: the area path was missing its leading "M" — an invalid
+        // d= meant the browser dropped the whole element, so the 10%
+        // area shading under the line silently never rendered.
+        var base = 'M ' + x(0) + ',' + (py + ph) + ' L ' + pts + ' L ' + x(data.length - 1) + ',' + (py + ph) + ' Z';
         fills += '<path d="' + base + '" fill="' + (colors[s] || 'var(--primary)') + '" opacity=".1"/>';
       }
     });
@@ -192,6 +195,21 @@
     if (sub) body.appendChild(el('div', 'kpi-sub', sub));
     s.appendChild(body);
     return s;
+  }
+
+  // statC builds the design-language tinted stat card ("Card Colour
+  // Variants"): 8–10% semantic background + 20% border, hero 24px/800
+  // number in the semantic colour, small label beneath — "one number, one
+  // semantic colour, one label". variant: primary|success|warning|danger|info;
+  // unknown variants fall back to primary so a typo can never render
+  // an unstyled card.
+  function statC(label, value, sub, variant) {
+    var v = ['primary', 'success', 'warning', 'danger', 'info'].indexOf(variant) !== -1 ? variant : 'primary';
+    var card = el('div', 'stat stat--' + v);
+    card.appendChild(el('div', 'stat-value', value));
+    card.appendChild(el('div', 'stat-label', label));
+    if (sub) card.appendChild(el('div', 'stat-sub', sub));
+    return card;
   }
 
   // tableCard builds a card with a header + data table (or an empty state).
@@ -735,6 +753,9 @@
   // fall back to the key itself so the UI never shows a blank label).
   var STRINGS = {
     'dashboard.title': 'Dashboard',
+    'section.revenue': 'Revenue',
+    'section.growth': 'Growth',
+    'common.active': 'active',
     'kpi.totalUsers': 'Total Users',
     'kpi.totalSubscribers': 'Total Subscribers',
     'kpi.mrr': 'MRR',
@@ -915,6 +936,7 @@
     svgChart: svgChart,
     svgDonut: svgDonut,
     kpiC: kpiC,
+    statC: statC,
     tableCard: tableCard,
     tenantRow: tenantRow,
     tenantDetailRows: tenantDetailRows,

@@ -136,6 +136,28 @@ describe('admin-utils kpiC', () => {
   });
 });
 
+describe('admin-utils statC (design-language tinted stat card)', () => {
+  it('builds a tinted stat card with value + label + sub', () => {
+    const s = utils.statC('Orders Today', '142', 'caption', 'primary');
+    expect(s.className).toBe('stat stat--primary');
+    expect(s.querySelector('.stat-value').textContent).toBe('142');
+    expect(s.querySelector('.stat-label').textContent).toBe('Orders Today');
+    expect(s.querySelector('.stat-sub').textContent).toBe('caption');
+  });
+
+  it('maps every known variant to its class', () => {
+    for (const v of ['primary', 'success', 'warning', 'danger', 'info']) {
+      expect(utils.statC('L', '1', '', v).className).toBe('stat stat--' + v);
+    }
+  });
+
+  it('falls back to primary for unknown variants and omits empty sub', () => {
+    const s = utils.statC('X', '1', '', 'chartreuse');
+    expect(s.className).toBe('stat stat--primary');
+    expect(s.querySelector('.stat-sub')).toBeNull();
+  });
+});
+
 describe('admin-utils i18n (H3)', () => {
   it('t() returns the localized string for known keys', () => {
     expect(utils.t('kpi.totalUsers')).toBe('Total Users');

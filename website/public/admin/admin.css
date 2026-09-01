@@ -71,6 +71,13 @@
   --tint-danger-bg: rgba(252,61,57,.12);
   --tint-info-bg: rgba(95,201,248,.15);
   --tint-pink-bg: rgba(252,49,88,.12);
+
+  /* Tint borders — spec stat cards pair a 8–10% bg with a 20% border */
+  --tint-primary-border: rgba(20,126,251,.2);
+  --tint-success-border: rgba(83,215,105,.2);
+  --tint-warning-border: rgba(253,148,38,.2);
+  --tint-danger-border: rgba(252,61,57,.2);
+  --tint-info-border: rgba(95,201,248,.2);
 }
 
 :root[data-theme="dark"] {
@@ -464,8 +471,95 @@ select.input {
 }
 .kpi-sub { color: var(--text-muted); font-size: 11.5px; margin-top: 4px; overflow-wrap: anywhere; }
 
+/* ── Page head — one h1 per page + muted context caption + FX chip ── */
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: .25rem 0 1.25rem;
+}
+.page-head h1 { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; margin: 0; }
+.page-head .page-sub { color: var(--text-muted); font-size: 12px; margin: 3px 0 0; }
+
+/* ── Hero — the ONE brand-colored highlight card per view ──────────
+   Spec "Highlight" card: primary fill, white text, shadow-md, r-lg.
+   One per screen; revenue is the hero of a revenue dashboard.        */
+.hero-card {
+  background: var(--primary);
+  color: var(--text-on-color);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+  padding: 1.5rem;
+}
+.hero-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  opacity: .7;
+  margin-bottom: .5rem;
+}
+.hero-value {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.hero-sub { font-size: 12px; opacity: .85; margin-top: .5rem; }
+
+/* ── Stat cards — spec "Card Colour Variants": 8–10% tinted bg + ────
+   20% border, hero 24px/800 number in the semantic colour, small
+   label. Used sparingly (4 stats; a full row of colored cards would
+   read as decoration).                                                */
+.stat-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  margin-top: 1.25rem;
+}
+.stat {
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  padding: 1.25rem 1rem;
+  text-align: center;
+  min-width: 0;
+}
+.stat-value {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.stat-label { font-size: 11px; font-weight: 600; margin-top: 4px; }
+.stat-sub { font-size: 11px; margin-top: 2px; color: var(--text-muted); }
+.stat--primary { background: var(--tint-primary-bg); border-color: var(--tint-primary-border); }
+.stat--primary .stat-value, .stat--primary .stat-label { color: var(--primary); }
+.stat--success { background: var(--tint-success-bg); border-color: var(--tint-success-border); }
+.stat--success .stat-value, .stat--success .stat-label { color: var(--success); }
+.stat--warning { background: var(--tint-warning-bg); border-color: var(--tint-warning-border); }
+.stat--warning .stat-value, .stat--warning .stat-label { color: var(--warning); }
+.stat--danger { background: var(--tint-danger-bg); border-color: var(--tint-danger-border); }
+.stat--danger .stat-value, .stat--danger .stat-label { color: var(--danger); }
+.stat--info { background: var(--tint-info-bg); border-color: var(--tint-info-border); }
+.stat--info .stat-value, .stat--info .stat-label { color: var(--info); }
+
+/* ── Section titles — quiet uppercase kickers between dashboard bands */
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-muted);
+  margin: 1.75rem 0 .75rem;
+}
+
 /* ── Chart cards ───────────────────────────────────────────────────── */
-.chart-grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-top: 1.25rem; }
+.chart-grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.chart-card--wide { grid-column: 1 / -1; }
 .chart-card {
   background: var(--bg-surface);
   border: 1px solid var(--border);
@@ -552,6 +646,9 @@ select.input {
 @media (max-width: 800px) {
   .chart-grid { grid-template-columns: 1fr; gap: 1rem; }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: .8rem; }
+  .stat-grid { grid-template-columns: repeat(2, 1fr); gap: .8rem; }
+  .hero-card { padding: 1.25rem; }
+  .hero-value { font-size: 26px; }
   .topbar-inner { flex-wrap: wrap; padding: .5rem 1rem; }
   .brand { margin-right: auto; }
   .nav { order: 3; width: 100%; justify-content: center; margin-left: 0; padding-top: .4rem; border-top: 1px solid var(--border); }
@@ -561,6 +658,11 @@ select.input {
 }
 @media (max-width: 480px) {
   .kpi-grid { grid-template-columns: 1fr; gap: .7rem; }
+  .stat-grid { grid-template-columns: repeat(2, 1fr); gap: .7rem; }
+  .stat { padding: 1rem .75rem; }
+  .stat-value { font-size: 20px; }
+  .hero-value { font-size: 23px; }
+  .page-head h1 { font-size: 18px; }
   .kpi { padding: .85rem 1rem; gap: .7rem; }
   .kpi-icon { width: 30px; height: 30px; }
   .kpi-icon svg { width: 15px; height: 15px; }

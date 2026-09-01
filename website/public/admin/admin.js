@@ -104,9 +104,12 @@
 
       c.innerHTML = '';
 
-      // --- FX chip ---
-      const top = el('div', null);
-      top.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem';
+      // --- Page head: title + context caption + FX chip (design-language
+      //     page header — one h1 per page, secondary caption in muted) ---
+      const head = el('div', 'page-head');
+      const headTitle = el('div');
+      headTitle.appendChild(el('h1', null, t('dashboard.title')));
+      headTitle.appendChild(el('p', 'page-sub', t('kpi.totalSubscribers') + ' ' + m.kpis.totalSubscribers + ' · ' + t('kpi.activeTerminals') + ' ' + m.kpis.activeDevices));
       const fx = el('div', 'fx-chip');
       const fxDot = el('span', null, fxLive ? '●' : '○');
       fxDot.style.color = fxLive ? 'var(--ok)' : 'var(--warn)';
@@ -114,43 +117,36 @@
       fx.appendChild(document.createTextNode(`1 USD = ${fxRate.toLocaleString()} IDR`));
       if (fxUpdatedAt) { fx.appendChild(el('span', 'small', ` (${fxUpdatedAt.slice(11,16)} UTC)`)); }
       if (!fxLive) fx.appendChild(el('span', 'small', t('common.stale')));
-      top.appendChild(fx);
-      c.appendChild(top);
+      head.appendChild(headTitle);
+      head.appendChild(fx);
+      c.appendChild(head);
 
-      // --- KPI grid ---
-      const ICONS = {
-        users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Users"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
-        subscribers: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Subscribers"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
-        mrr: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="MRR"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
-        devices: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Devices"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
-        trend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Revenue trend"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',
-        conversion: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Conversion"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>',
-        arpu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="ARPU"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
-      };
-      const kpiGrid = el('div', 'kpi-grid');
-      kpiGrid.appendChild(kpiC(t('kpi.totalUsers'), String(m.kpis.totalUsers), `active: ${m.kpis.activeUsers}`, ICONS.users, 'kpi-icon-blue'));
-      kpiGrid.appendChild(kpiC(t('kpi.totalSubscribers'), String(m.kpis.totalSubscribers), t('toolbar.nonFree'), ICONS.subscribers, 'kpi-icon-green'));
-      kpiGrid.appendChild(kpiC(t('kpi.mrr'), fmtUsd(m.kpis.mrrUsd), '', ICONS.mrr, 'kpi-icon-orange'));
-      kpiGrid.appendChild(kpiC(t('kpi.monthlyGrossIdr'), fmtIdr(mrrIdr), `≈ $${m.kpis.mrrUsd} × ${fxRate.toLocaleString()}`, ICONS.trend, 'kpi-icon-cyan'));
-      kpiGrid.appendChild(kpiC(t('kpi.arpu'), fmtUsd(m.kpis.arpuUsd), t('toolbar.perSubscriber'), ICONS.arpu, 'kpi-icon-pink'));
-      kpiGrid.appendChild(kpiC(t('kpi.activeTerminals'), String(m.kpis.activeDevices), '', ICONS.devices, 'kpi-icon-blue'));
-      kpiGrid.appendChild(kpiC(t('kpi.trialToPaid'), m.kpis.trialToPaidRate + '%', t('toolbar.conversionRate'), ICONS.conversion, 'kpi-icon-green'));
-      c.appendChild(kpiGrid);
+      // --- Hero: the ONE brand-colored highlight card per view
+      //     (design-language → Cards → Highlight) — revenue is the hero. ---
+      const hero = el('div', 'hero-card');
+      hero.appendChild(el('div', 'hero-label', t('kpi.monthlyGrossIdr')));
+      hero.appendChild(el('div', 'hero-value', fmtIdr(mrrIdr)));
+      hero.appendChild(el('div', 'hero-sub', `≈ $${m.kpis.mrrUsd} × ${fxRate.toLocaleString()} · ${t('kpi.mrr')} ${fmtUsd(m.kpis.mrrUsd)} · ${t('kpi.arpu')} ${fmtUsd(m.kpis.arpuUsd)}`));
+      c.appendChild(hero);
 
-      // --- Charts row ---
+      // --- Stats row: tinted stat cards (spec: tinted bg + 20% border +
+      //     hero number in the semantic color, used sparingly) ---
+      const statGrid = el('div', 'stat-grid');
+      statGrid.appendChild(statC(t('kpi.totalUsers'), String(m.kpis.totalUsers), m.kpis.activeUsers + ' ' + t('common.active'), 'primary'));
+      statGrid.appendChild(statC(t('kpi.totalSubscribers'), String(m.kpis.totalSubscribers), t('toolbar.nonFree'), 'success'));
+      statGrid.appendChild(statC(t('kpi.activeTerminals'), String(m.kpis.activeDevices), t('toolbar.perSubscriber'), 'info'));
+      statGrid.appendChild(statC(t('kpi.trialToPaid'), m.kpis.trialToPaidRate + '%', t('toolbar.conversionRate'), 'warning'));
+      c.appendChild(statGrid);
+
+      // --- Revenue section: full-width trend + tier/provider distribution ---
+      c.appendChild(el('h2', 'section-title', t('section.revenue')));
       const chartGrid = el('div', 'chart-grid');
 
-      // Revenue trend
-      const revCard = el('div', 'chart-card');
+      // Revenue trend (spans the full row — the hero chart)
+      const revCard = el('div', 'chart-card chart-card--wide');
       revCard.appendChild(el('h3', null, t('chart.revenueTrendIdr')));
       revCard.innerHTML += svgChart('rev', m.revenueTrend, ['idr'], { area: true, fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt' });
       chartGrid.appendChild(revCard);
-
-      // Subscriber growth
-      const subCard = el('div', 'chart-card');
-      subCard.appendChild(el('h3', null, t('chart.subscriberGrowth')));
-      subCard.innerHTML += svgChart('subs', m.subscriberGrowth, ['count'], { area: true });
-      chartGrid.appendChild(subCard);
 
       // Tier distribution (donut)
       const tierCard = el('div', 'chart-card');
@@ -175,23 +171,35 @@
       provRow.appendChild(legendDiv2);
       provCard.appendChild(provRow);
       chartGrid.appendChild(provCard);
+      c.appendChild(chartGrid);
+
+      // --- Growth section: subscribers + signups + monthly churn ---
+      c.appendChild(el('h2', 'section-title', t('section.growth')));
+      const chartGrid2 = el('div', 'chart-grid');
+
+      // Subscriber growth
+      const subCard = el('div', 'chart-card');
+      subCard.appendChild(el('h3', null, t('chart.subscriberGrowth')));
+      subCard.innerHTML += svgChart('subs', m.subscriberGrowth, ['count'], { area: true });
+      chartGrid2.appendChild(subCard);
 
       // Signups per month (bar chart — extracted to admin-utils.svgBarChart)
       const signupCard = el('div', 'chart-card');
       signupCard.appendChild(el('h3', null, t('chart.signupsPerMonth')));
       signupCard.innerHTML += svgBarChart('signups', m.signupsPerMonth, { valueKey: 'count', color: 'var(--accent)' });
-      chartGrid.appendChild(signupCard);
+      chartGrid2.appendChild(signupCard);
 
       // Churn per month — B3 fix: the server's churnPerMonth rows carry the
       // number in `churn` (count is Go's zero value), so the old inline code
       // reading d.count rendered permanently-zero/NaN bars. Churn also reused
-      // the signups barW; each chart now sizes itself.
-      const churnCard = el('div', 'chart-card');
+      // the signups barW; each chart now sizes itself. Wide row: monthly
+      // bars read better with room.
+      const churnCard = el('div', 'chart-card chart-card--wide');
       churnCard.appendChild(el('h3', null, t('chart.churnCanceled')));
       churnCard.innerHTML += svgBarChart('churn', m.churnPerMonth, { valueKey: 'churn', color: 'var(--bad)' });
-      chartGrid.appendChild(churnCard);
+      chartGrid2.appendChild(churnCard);
 
-      c.appendChild(chartGrid);
+      c.appendChild(chartGrid2);
 
       // --- Tables ---
       // Top subscribers
