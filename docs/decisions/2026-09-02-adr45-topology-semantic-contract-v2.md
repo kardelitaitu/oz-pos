@@ -780,6 +780,36 @@ Obligations 2 and 3 are each a full slice on their own and neither is mechanical
    touching a legacy node. That is a rendering change for legacy stores, so it
    needs its own characterization pass first — not a two-line deletion.
 
+   **Measured (2026-09-02, next round): that route is not free, and there is a
+   better one.** The two rows are not near-identical as assumed:
+
+   | | `workspace:store-pos` | `workspace:*` |
+   |---|---|---|
+   | `rightSemantics` | `stock-out, transfer-out, operation-out` | `stock-out, transfer-out` |
+   | `icon` | `CartIcon` | `PosIcon` |
+
+   So retargeting the type-less token at `workspace:store-pos` would **grant
+   legacy nodes an `operation-out` socket they do not currently have** and change
+   their glyph. The first is a capability change — defensible, since the contract
+   already treats the node as `store-pos` and declares `workspace:store-pos ->
+   workspace:kds`, so a legacy store arguably should be able to feed a KDS — but
+   it is a product decision, not a cleanup, and the icon change is visible either
+   way.
+
+   The route that needs no decision: give the unregistered types their **own**
+   rows with no output sockets, and leave `workspace:*` alone. `workspace:admin`
+   and `workspace:warehouse` reach the fallback only through `nodeKindEntry`'s
+   `??`, so an explicit row pre-empts it for them and nothing about a type-less
+   legacy node changes at all. That empties all four ledger entries, and the
+   equality test from round 14 keeps failing if anyone later collapses the two
+   populations back together.
+
+   Not done for lack of context, not for lack of clarity. The edit is four lines
+   of registry plus emptying `UNAUTHORABLE_SOCKET_DEBT`, and it must be followed
+   by the full UI topology suite — `NodeTopologyEditor.test.tsx` in particular,
+   which is the only thing likely to hold an assertion that an admin card has
+   stock sockets.
+
    ---
 
    ~~The data-compatibility blocker on this is resolved, and it pointed the
