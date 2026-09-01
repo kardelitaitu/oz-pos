@@ -68,7 +68,7 @@ import {
   legacyWireResolutionOptions,
   socketSemanticIds,
   type WireRelationshipOption,
-  NODE_TYPE_ICON,
+  iconForNode,
   SELECTABLE_WORKSPACE_TYPE_KEYS,
   workspaceTypeLabel,
   settingsCardForTypeKey,
@@ -5708,7 +5708,7 @@ export default function NodeTopologyEditor({
         </div>
 
         {selectedNode && (() => {
-          const NodeIcon = NODE_TYPE_ICON[selectedNode.type];
+          const NodeIcon = iconForNode(selectedNode);
           const typeColors: Record<string, string> = {
             store: 'var(--color-warning, #f59e0b)',
             workspace: 'var(--color-accent, #5a9fd4)',

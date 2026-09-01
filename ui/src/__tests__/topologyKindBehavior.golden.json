@@ -409,7 +409,7 @@
             "right": "topology-port-generic-out"
           }
         ],
-        "icon": "PosIcon",
+        "icon": "CartIcon",
         "settingsCard": "WorkspaceStorePosSettings",
         "copySanitization": {
           "keepsStoreProfileId": true
@@ -558,7 +558,7 @@
             "right": "topology-port-generic-out"
           }
         ],
-        "icon": "PosIcon",
+        "icon": "UtensilsIcon",
         "settingsCard": "WorkspaceRestaurantPosSettings",
         "copySanitization": {
           "keepsStoreProfileId": true
@@ -705,7 +705,7 @@
             "right": "topology-port-generic-out"
           }
         ],
-        "icon": "PosIcon",
+        "icon": "NodesIcon",
         "settingsCard": "WorkspaceKdsSettings",
         "copySanitization": {
           "keepsStoreProfileId": true

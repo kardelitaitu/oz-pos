@@ -4,11 +4,11 @@ import { resolve } from 'path';
 import type { TopologyNodeData } from '@/features/stores/NodeTopologyEditor';
 import {
   gatingSemanticId,
+  iconForNode,
   isKdsNode,
   isRestaurantPosNode,
   leftPortLabelId,
   leftPortVariants,
-  NODE_TYPE_ICON,
   nodeKindOf,
   portAriaLabelId,
   portLabelId,
@@ -117,7 +117,7 @@ function probeNode(node: TopologyNodeData) {
       left: semanticPortLabelId(node, 'left', semantic),
       right: semanticPortLabelId(node, 'right', semantic),
     })),
-    icon: componentName(NODE_TYPE_ICON[node.type]),
+    icon: componentName(iconForNode(node)),
     settingsCard: node.type === 'workspace'
       ? componentName(settingsCardForTypeKey(String(node.metadata?.['typeKey'] ?? '')))
       : '<not-a-workspace>',

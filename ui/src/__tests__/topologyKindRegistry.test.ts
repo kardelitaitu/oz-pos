@@ -8,13 +8,20 @@ import {
   NODE_KIND_REGISTRY,
   nodeKindEntry,
   nodeKindToken,
-  NODE_TYPE_ICON,
   pairingAdmitsKinds,
   SELECTABLE_WORKSPACE_TYPE_KEYS,
   socketSemanticIds,
   visiblePortsForNode,
   workspaceTypeLabel,
 } from '@/features/stores/topologyCard';
+import {
+  CartIcon,
+  NodesIcon,
+  PrinterIcon,
+  StoreIcon,
+  UtensilsIcon,
+  WarehouseIcon,
+} from '@/features/stores/NodeTopologyIcons';
 import topologySemantics from '@/features/stores/topologySemantics.json';
 
 // ADR #45 §3 — the kind registry, and the loop it closes with §1.
@@ -106,16 +113,34 @@ describe('node kind registry (ADR #45 §3)', () => {
     expect(nodeKindToken('store', undefined)).toBe(cardKindToken(node('store')));
   });
 
-  it('exposes the same glyph the pre-registry map produced', () => {
-    // The refactor moved icons into a kind-keyed table. If any of these drift
-    // from the legacy type-keyed map, the canvas changed under the merchant.
-    for (const type of ['store', 'workspace', 'warehouse', 'hardware'] as const) {
-      expect(iconForNode(node(type))).toBe(NODE_TYPE_ICON[type]);
-    }
-    // Known defect, pinned so a fix is a decision rather than a surprise: the
-    // registry CAN express per-kind icons, and today every workspace kind
-    // still chooses the same POS glyph.
-    expect(iconForNode(node('workspace', 'kds'))).toBe(iconForNode(node('workspace', 'store-pos')));
+  it('gives each workspace kind the glyph the tool rack offers it', () => {
+    // ADR #45 §3: the rack was already choosing per-kind glyphs — a cart for
+    // retail, a fork for restaurant, a node cluster for the kitchen display —
+    // while the canvas drew all three as `PosIcon`, because the old icon map
+    // was keyed on node.type and could not express the difference. A merchant
+    // clicked a fork and got a till. The registry keys on kind, so the two
+    // surfaces can finally agree.
+    expect(iconForNode(node('workspace', 'store-pos'))).toBe(CartIcon);
+    expect(iconForNode(node('workspace', 'restaurant-pos'))).toBe(UtensilsIcon);
+    expect(iconForNode(node('workspace', 'kds'))).toBe(NodesIcon);
+    // Distinctness is the actual property being protected: three names, three
+    // glyphs. A regression that re-unifies them fails here.
+    const glyphs = new Set([
+      iconForNode(node('workspace', 'store-pos')),
+      iconForNode(node('workspace', 'restaurant-pos')),
+      iconForNode(node('workspace', 'kds')),
+    ]);
+    expect(glyphs.size).toBe(3);
+  });
+
+  it('keeps the non-workspace glyphs and always resolves one', () => {
+    expect(iconForNode(node('store'))).toBe(StoreIcon);
+    expect(iconForNode(node('warehouse'))).toBe(WarehouseIcon);
+    expect(iconForNode(node('hardware'))).toBe(PrinterIcon);
+    // An unregistered type falls back to a real glyph, never undefined — the
+    // card renders the icon without a null check.
+    expect(iconForNode(node('workspace', 'pharmacy-pos'))).toBeDefined();
+    expect(iconForNode(node('workspace'))).toBeDefined();
   });
 
   it('derives gating from the socket list rather than restating it', () => {

@@ -12,6 +12,9 @@ import {
   PosIcon,
   WarehouseIcon,
   PrinterIcon,
+  CartIcon,
+  UtensilsIcon,
+  NodesIcon,
 } from './NodeTopologyIcons';
 import topologySemantics from './topologySemantics.json';
 
@@ -604,7 +607,7 @@ export const NODE_KIND_REGISTRY: Readonly<Record<string, NodeKindEntry>> = {
     records: { left: 'location-in' },
     rightLabelId: 'topology-port-workspace-out',
     rightAriaLabelId: NEUTRAL_ARIA,
-    icon: PosIcon,
+    icon: CartIcon,
     settingsCard: WorkspaceStorePosSettings,
     typeLabelId: 'topology-ws-type-store-pos',
     typeSelectable: true,
@@ -619,7 +622,7 @@ export const NODE_KIND_REGISTRY: Readonly<Record<string, NodeKindEntry>> = {
     records: { left: 'location-in' },
     rightLabelId: 'topology-port-workspace-out',
     rightAriaLabelId: NEUTRAL_ARIA,
-    icon: PosIcon,
+    icon: UtensilsIcon,
     settingsCard: WorkspaceRestaurantPosSettings,
     typeLabelId: 'topology-ws-type-restaurant-pos',
     typeSelectable: true,
@@ -632,7 +635,7 @@ export const NODE_KIND_REGISTRY: Readonly<Record<string, NodeKindEntry>> = {
     records: { left: 'operation-in' },
     rightLabelId: 'topology-port-ticket-out',
     rightAriaLabelId: 'topology-port-ticket-out-aria',
-    icon: PosIcon,
+    icon: NodesIcon,
     settingsCard: WorkspaceKdsSettings,
     typeLabelId: 'topology-ws-type-kds',
     typeSelectable: true,

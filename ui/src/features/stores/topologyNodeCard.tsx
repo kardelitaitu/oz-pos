@@ -9,12 +9,12 @@
  * useMemo. The l10n object from @fluent/react is stable by construction.
  */
 
-import { memo, type ReactNode, type RefObject, type SetStateAction, type Dispatch } from 'react';
+import { createElement, memo, type ReactNode, type RefObject, type SetStateAction, type Dispatch } from 'react';
 import type { ReactLocalization } from '@fluent/react';
 import type { TopologyNodeData, PortName } from './NodeTopologyEditor';
 import type { TopologyValidationError } from './topologyContract';
 import {
-  NODE_TYPE_ICON,
+  iconForNode,
   socketSemanticIds,
   semanticPortLabelId,
   topologyUiString,
@@ -201,7 +201,12 @@ function TopologyNodeCardImpl({
       <div className="node-header node-titlebar">
         {/* Region 1: node type icon */}
         <span className="node-type-icon">
-          {(() => { const Icon = NODE_TYPE_ICON[node.type]; return <Icon size={16} />; })()}
+          {/* The icon is a module-level component resolved from the kind
+              registry (ADR #45 §3), not a component defined here — so this is
+              createElement of an existing type rather than JSX with a
+              computed tag, which `react-hooks/static-components` cannot tell
+              apart from a render-local component. */}
+          {createElement(iconForNode(node), { size: 16 })}
         </span>
 
         {/* Region 2: node title (flexible — grows to fill) */}

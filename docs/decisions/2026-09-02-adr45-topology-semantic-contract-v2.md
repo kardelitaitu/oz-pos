@@ -565,11 +565,27 @@ consumer filtered out the list's own fourth member; selectability is now
 `typeSelectable` on the row, and `SELECTABLE_WORKSPACE_TYPE_KEYS` is derived
 from it.
 
-**Not done in this slice, on purpose:** the KDS icon defect. The registry *can*
-express a per-kind icon and `iconForNode` reads it, but every workspace row
-still names `PosIcon`, and a test pins that equality so the fix has to be
-deliberate. Changing it edits the golden, which is the mechanism working as
-designed rather than a hurdle.
+**The KDS icon defect is fixed as its own deliberate golden change.** The
+registry keys on kind, so it could finally express what the tool rack had been
+offering all along: a cart for a retail terminal, a fork for a restaurant
+terminal, a node cluster for a kitchen display — while the canvas drew all three
+as `PosIcon` because the old map was keyed on `node.type`. The three workspace
+rows now name those glyphs, and the card and inspector resolve them through
+`iconForNode`. `topologyKindBehavior.golden.json` regenerated with **exactly six
+changed lines, three `-` and three `+`, all of them `"icon"`** — the surgical
+diff is the evidence that nothing else moved. `NODE_TYPE_ICON` stays for the
+context menu's add-node list, which iterates node *types* and is correct to do
+so.
+
+This is the mechanism the freeze exists to provide: a behaviour change is a
+golden diff you read, not a claim in a commit message.
+
+One lint rule had to be satisfied honestly rather than bypassed:
+`react-hooks/static-components` flags JSX with a computed tag (`<Icon />` where
+`Icon` came from a function call) as a render-local component. The lookup
+returns an existing module-level component, so the code now says
+`createElement(iconForNode(node), { size: 16 })`, which states that intent
+directly instead of looking like a violation.
 
 ### Follow-ups this slice surfaced
 
