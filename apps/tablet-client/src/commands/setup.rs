@@ -5,7 +5,7 @@
 //! `get_setup_status` lets the front-end decide whether to show the
 //! wizard or go straight to the main app.
 
-use oz_core::{FeatureRegistry, Settings, Store, features};
+use oz_core::{FeatureRegistry, Settings, features};
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
@@ -88,10 +88,14 @@ pub async fn complete_setup(
     // Save features + preset + completed flag in a single transaction.
     let tx = db.unchecked_transaction()?;
     {
-        let store = Store::new(&tx);
-
         // 1. Persist features.
-        store.save_features(&registry)?;
+        // RUST-08: write feature rows directly into the outer transaction.
+        // `store.save_features` -> Settings::set_batch opens its OWN
+        // unchecked_transaction, which would be a nested BEGIN inside the
+        // tx above ("cannot start a transaction within a transaction").
+        for (key, value) in registry.to_settings_rows() {
+            Settings::set(&tx, &key, &value)?;
+        }
 
         // 2. Prune stale feature rows that are no longer enabled.
         Settings::prune_stale_features(&tx, &registry)?;

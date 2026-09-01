@@ -1,5 +1,5 @@
 use super::*;
-use oz_core::migrations;
+use oz_core::{Store, migrations};
 use rusqlite::Connection;
 
 /// Create a fresh in-memory connection with migrations applied.
