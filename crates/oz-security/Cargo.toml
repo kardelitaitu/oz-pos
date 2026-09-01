@@ -16,7 +16,7 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 rand = { workspace = true }
 zeroize = "1"
-hex = "0.4"
+hex = { workspace = true }
 chrono = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]

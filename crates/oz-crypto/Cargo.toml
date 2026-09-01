@@ -13,7 +13,7 @@ workspace = true
 aes-gcm = { workspace = true }
 rand = { workspace = true }
 sha2 = { workspace = true }
-base64 = "0.22"
+base64 = { workspace = true }
 thiserror = { workspace = true }
 hmac = { workspace = true }
-hex = "0.4"
+hex = { workspace = true }
