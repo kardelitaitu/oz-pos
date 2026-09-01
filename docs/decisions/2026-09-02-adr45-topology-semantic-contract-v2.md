@@ -972,6 +972,42 @@ count on this machine, which is an environment limit and not a test failure.
 
 ---
 
+## §4.2 UI swap — verified spec, not yet done (2026-09-02)
+
+For twenty rounds this was described as "too large for the current window". The
+premise was checked rather than repeated, and it was mostly wrong. Everything
+needed is already in scope:
+
+- All four call sites are `useCallback` event handlers, not render paths or
+  effects: `handleSaveTemplate` (L2055), `handleLoadTemplate` (L2171),
+  `handleDeleteTemplate` (L2183), `openTemplates` (L2190).
+- `sessionToken` is already destructured in the same component at L494 from
+  `useWorkspace()`, and `branchId` is already in use at L1501 and L1682. **No
+  prop-threading is required** — that was the assumed blocker, and it does not
+  exist.
+- The async-in-handler pattern is already present nearby (`confirmApply`, L2063),
+  with the `await` + toast + error path the swap needs.
+
+So the work is four small edits and one import change, not a refactor. Two things
+still make it a real task rather than a mechanical one, and both belong in the
+same commit:
+
+1. `loadTemplate` returns `TopologyExportPayload`; the IPC client returns
+   `unknown`. The swap needs a narrowing check at the load site rather than a
+   cast, or a corrupt template becomes a runtime shape error inside the editor.
+2. `openTemplates` is the natural migration trigger — migrate, then list, in one
+   handler. That puts the round trips on the first template-panel open of an
+   upgraded install, which is the right moment and needs a toast on partial
+   failure rather than silence.
+
+Recorded rather than attempted: converting three of four handlers and running out
+of window leaves an editor reading templates from two places at once, which is
+worse than today's single-source state. The premise check is the actual gain — the
+blocker named for twenty rounds was not real, and the next session should expect
+this to be a short piece of work.
+
+---
+
 ## Related decisions
 
 - [ADR #22: Visual Node-Based Store & Workspace Topology Builder](./2026-07-20-node-based-store-topology-builder.md)
