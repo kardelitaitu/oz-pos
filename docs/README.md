@@ -37,4 +37,6 @@
 - **Audit findings:** tracked in [`records/audit-open-findings.md`](./records/audit-open-findings.md)
 - **Status vocabulary:** `Proposed / Accepted / Implemented / Partially Implemented / Superseded / Archived`
 
-> last audited 31-08-26 by docs-auditor — all 10 linked key files resolve; archived count (27) accurate; the 3 unlisted dirs (`coverage/` generated report, `src/`+`theme/` retired-mdbook vestiges — `book.toml` now in `archived/`) are correctly excluded from this curated index
+> last audited 31-08-26 by docs-auditor
+
+> Audit note: all 10 linked key files resolve; archived count (27) accurate; the 3 unlisted dirs (`coverage/` generated report, `src/`+`theme/` retired-mdbook vestiges — `book.toml` now in `archived/`) are correctly excluded from this curated index
