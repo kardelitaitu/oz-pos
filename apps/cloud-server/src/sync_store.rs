@@ -509,12 +509,20 @@ impl SyncStore {
         }
     }
 
-    /// Compute a cheap version stamp for a tenant's snapshot reference data.
+    /// Compute the version token for a tenant's snapshot reference data.
     ///
-    /// The stamp is the per-table (row count, MAX(updated_at)) triple joined
-    /// into one string. It changes when any product / tax rate / user is
-    /// inserted, updated, OR deleted, so the snapshot handler can revalidate
-    /// "nothing changed" without serialising the full 3-table snapshot.
+    /// On PostgreSQL this reads the per-tenant counter from
+    /// `snapshot_versions` (ADR #43 D2) — a single PK read that changes
+    /// whenever a reference-data write (create_product / create_tax_rate /
+    /// create_user) bumps it in the same transaction, so the snapshot
+    /// handler revalidates "nothing changed" without re-scanning the three
+    /// reference tables.  An absent row means no hooked write has run for
+    /// this tenant: version 0, and the first write makes the next
+    /// revalidation see the change.
+    ///
+    /// On SQLite the version stamp is the per-table (row count,
+    /// MAX(updated_at)) triple joined into one string — the fallback for
+    /// backends with no write hook (dev / single-node).
     pub async fn snapshot_version(&self, tenant_id: &str) -> Result<String, String> {
         match self {
             Self::Sqlite(conn) => {
@@ -539,22 +547,16 @@ impl SyncStore {
                     .await
                     .map_err(|e| e.to_string())?;
                 let stmt = tx
-                    .prepare_cached(
-                        "SELECT \
-                         (SELECT COUNT(*)::text || ':' || COALESCE(MAX(updated_at)::text, '') \
-                          FROM products WHERE tenant_id = $1) || '|' || \
-                         (SELECT COUNT(*)::text || ':' || COALESCE(MAX(updated_at)::text, '') \
-                          FROM tax_rates WHERE tenant_id = $1) || '|' || \
-                         (SELECT COUNT(*)::text || ':' || COALESCE(MAX(updated_at)::text, '') \
-                          FROM users WHERE tenant_id = $1)",
-                    )
+                    .prepare_cached("SELECT version FROM snapshot_versions WHERE tenant_id = $1")
                     .await
                     .map_err(|e| e.to_string())?;
-                tx.query_opt(&stmt, &[&tenant_id])
+                Ok(tx
+                    .query_opt(&stmt, &[&tenant_id])
                     .await
                     .map_err(|e| e.to_string())?
-                    .map(|r| r.try_get::<_, String>(0).map_err(|e| e.to_string()))
-                    .unwrap_or_else(|| Ok(String::new()))
+                    .map(|r| r.get::<_, i64>(0))
+                    .unwrap_or(0)
+                    .to_string())
             }
         }
     }

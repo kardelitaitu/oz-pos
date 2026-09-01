@@ -166,6 +166,28 @@ fn now_rfc3339() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
+/// Bump the per-tenant snapshot version counter (ADR #43 D2).
+///
+/// Call inside the SAME transaction as the reference-data write (product,
+/// tax rate, user). The snapshot handler reads this counter instead of
+/// running a 3-table COUNT + MAX(updated_at) stamp query on every cache
+/// miss, so a bump here makes the next snapshot revalidation see the
+/// change (near-instant propagation) at the cost of one PK upsert.
+async fn bump_snapshot_version(
+    tx: &tokio_postgres::Transaction<'_>,
+    tenant_id: &str,
+) -> Result<(), PgError> {
+    let now = now_rfc3339();
+    tx.execute(
+        "INSERT INTO snapshot_versions (tenant_id, version, updated_at) VALUES ($1, 1, $2)
+         ON CONFLICT (tenant_id) DO UPDATE SET version = snapshot_versions.version + 1, updated_at = EXCLUDED.updated_at",
+        &[&tenant_id, &now],
+    )
+    .await
+    .map_err(|e| PgError::Db(e.to_string()))?;
+    Ok(())
+}
+
 fn currency_str(currency: &Currency) -> Result<String, PgError> {
     std::str::from_utf8(&currency.0)
         .map(str::to_owned)
@@ -320,6 +342,8 @@ pub async fn create_tax_rate(
     .await
     .map_err(|e| PgError::Db(e.to_string()))?;
 
+    bump_snapshot_version(&tx, tenant_id).await?;
+
     tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
 
     Ok(TaxRate {
@@ -332,7 +356,6 @@ pub async fn create_tax_rate(
         updated_at: now,
     })
 }
-
 // ── Users ─────────────────────────────────────────────────────────────
 
 /// Create a user, scoped to `tenant_id`, mirroring `Store::create_user`
@@ -429,6 +452,8 @@ pub async fn create_user(
     )
     .await
     .map_err(|e| PgError::Db(e.to_string()))?;
+
+    bump_snapshot_version(&tx, tenant_id).await?;
 
     tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
 
@@ -927,6 +952,8 @@ pub async fn create_product(
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
     }
+
+    bump_snapshot_version(&tx, tenant_id).await?;
 
     tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
 

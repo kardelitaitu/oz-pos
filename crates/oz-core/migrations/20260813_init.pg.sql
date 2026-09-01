@@ -408,6 +408,12 @@ CREATE TABLE IF NOT EXISTS image_push_queue (
     enqueued_at     TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
 );
 
+CREATE TABLE IF NOT EXISTS snapshot_versions (
+    tenant_id  TEXT PRIMARY KEY,
+    version    BIGINT NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+);
+
 CREATE TABLE IF NOT EXISTS exchange_rates (
     id              TEXT PRIMARY KEY,
     from_currency   TEXT NOT NULL REFERENCES currencies(code),
@@ -1713,6 +1719,7 @@ ON CONFLICT DO NOTHING;
 -- tenant_id before each can be added to RLS_TABLES):
 --   image_refs
 --   sale_lines
+--   snapshot_versions
 --
 -- ── Row-Level Security: tenant isolation (PG-only) ─────────────────────
 -- Curated coverage list (RLS_TABLES in scripts/generate-pg-migration.py);
