@@ -253,3 +253,156 @@ fn read_key_map_covers_all_protected_get_routes() {
         );
     }
 }
+
+// ── Tier matrix (spec 0047 F3) ──────────────────────────────────────
+
+/// Register every READ_KEY_MAP path on a probe router.
+fn matrix_app() -> Router {
+    async fn ok_handler() -> StatusCode {
+        StatusCode::OK
+    }
+    let handler = get(ok_handler);
+    let mut router = Router::new();
+    for entry in READ_KEY_MAP {
+        router = router.route(entry.path, handler.clone());
+    }
+    router.layer(middleware::from_fn(read_gate_middleware))
+}
+
+/// Concrete URL for a READ_KEY_MAP path template.
+fn concrete_url(template: &str) -> String {
+    template
+        .replace("{sku}", "TEST-SKU")
+        .replace("{id}", "00000000-0000-0000-0000-000000000000")
+        .replace("{from}", "USD")
+        .replace("{to}", "IDR")
+        .replace("{hash16}", "aaaaaaaaaaaaaaaa")
+}
+
+/// Expected grant for a preset across the map:
+/// `(path, granted)` where granted = has_permission(preset_keys, key).
+fn preset_matrix(preset: &[&str]) -> Vec<(&'static str, bool)> {
+    READ_KEY_MAP
+        .iter()
+        .map(|e| {
+            let owned: Vec<String> = preset.iter().map(|k| k.to_string()).collect();
+            (e.path, oz_core::has_permission(&owned, e.key))
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn tier_matrix_terminal_preset_grants_only_read_keys() {
+    let app = matrix_app();
+    let matrix = preset_matrix(TERMINAL_PRESET);
+
+    // Sanity: the terminal preset must reach products/categories/reference
+    // reads but never sales (PII-scoped).
+    let granted: Vec<&str> = matrix.iter().filter(|(_, g)| *g).map(|(p, _)| *p).collect();
+    assert!(granted.contains(&"/api/v1/products"));
+    assert!(granted.contains(&"/api/v1/categories"));
+    assert!(granted.contains(&"/api/v1/tenants/me/plan"));
+    assert!(!granted.contains(&"/api/v1/sales/{id}"));
+
+    for (template, expected) in &matrix {
+        let resp = app
+            .clone()
+            .oneshot(req_with_claims(
+                &concrete_url(template),
+                claims(Some(
+                    TERMINAL_PRESET.iter().map(|k| k.to_string()).collect(),
+                )),
+            ))
+            .await
+            .unwrap();
+        let expected_status = if *expected {
+            StatusCode::OK
+        } else {
+            StatusCode::FORBIDDEN
+        };
+        assert_eq!(
+            resp.status(),
+            expected_status,
+            "terminal preset on {template}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn tier_matrix_dashboard_preset_never_reaches_pii() {
+    let app = matrix_app();
+    let matrix = preset_matrix(DASHBOARD_PRESET);
+    for (template, expected) in &matrix {
+        let resp = app
+            .clone()
+            .oneshot(req_with_claims(
+                &concrete_url(template),
+                claims(Some(
+                    DASHBOARD_PRESET.iter().map(|k| k.to_string()).collect(),
+                )),
+            ))
+            .await
+            .unwrap();
+        let expected_status = if *expected {
+            StatusCode::OK
+        } else {
+            StatusCode::FORBIDDEN
+        };
+        assert_eq!(
+            resp.status(),
+            expected_status,
+            "dashboard preset on {template}"
+        );
+    }
+    // The PII route must be denied for the dashboard preset.
+    let pii_resp = app
+        .oneshot(req_with_claims(
+            &concrete_url("/api/v1/sales/{id}"),
+            claims(Some(
+                DASHBOARD_PRESET.iter().map(|k| k.to_string()).collect(),
+            )),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(pii_resp.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn tier_matrix_grandfathered_token_without_claim_passes_everything() {
+    let app = matrix_app();
+    for entry in READ_KEY_MAP {
+        let resp = app
+            .clone()
+            .oneshot(req_with_claims(&concrete_url(entry.path), claims(None)))
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::OK,
+            "legacy full-read must pass {}",
+            entry.path
+        );
+    }
+}
+
+#[tokio::test]
+async fn tier_matrix_audit_preset_only_reads_audit_and_reports() {
+    let app = matrix_app();
+    let matrix = preset_matrix(AUDIT_PRESET);
+    for (template, expected) in &matrix {
+        let resp = app
+            .clone()
+            .oneshot(req_with_claims(
+                &concrete_url(template),
+                claims(Some(AUDIT_PRESET.iter().map(|k| k.to_string()).collect())),
+            ))
+            .await
+            .unwrap();
+        let expected_status = if *expected {
+            StatusCode::OK
+        } else {
+            StatusCode::FORBIDDEN
+        };
+        assert_eq!(resp.status(), expected_status, "audit preset on {template}");
+    }
+}

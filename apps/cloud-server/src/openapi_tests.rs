@@ -455,3 +455,59 @@ fn security_coverage_walk_every_operation() {
         violations.join("\n")
     );
 }
+
+// ── Drift-guard assertion 4 (spec 0047 §3) — READ_KEY_MAP coverage ──
+
+/// Every protected GET operation in the spec must have a corresponding
+/// entry in `oz_api::read_tiers::READ_KEY_MAP`.  Public/health/docs and
+/// sync routes are excluded (they keep their own gating).
+#[test]
+fn every_spec_get_operation_has_read_key_entry() {
+    let spec = openapi_spec();
+    let paths = spec["paths"].as_object().unwrap();
+
+    let mut missing = Vec::new();
+
+    for (path, methods) in paths {
+        for (method, operation) in methods.as_object().unwrap() {
+            // Non-GET methods are not in the read-key map.
+            if *method != "get" {
+                continue;
+            }
+            // Public routes (no bearerAuth) are excluded from the map.
+            let has_bearer = operation
+                .get("security")
+                .and_then(|s| s.as_array())
+                .is_some_and(|arr| {
+                    arr.iter().any(|entry| {
+                        entry
+                            .as_object()
+                            .is_some_and(|m| m.contains_key("bearerAuth"))
+                    })
+                });
+            if !has_bearer {
+                continue;
+            }
+            // Sync routes keep their existing gating (spec 0047 §4 F3) —
+            // they are excluded from the read-key map.
+            if path.starts_with("/api/sync/") {
+                continue;
+            }
+
+            // Check if READ_KEY_MAP has an entry for this (method, path).
+            let in_map = oz_api::read_tiers::READ_KEY_MAP
+                .iter()
+                .any(|e| e.method == "GET" && e.path == path.as_str());
+            if !in_map {
+                missing.push(format!("GET {path}"));
+            }
+        }
+    }
+
+    assert!(
+        missing.is_empty(),
+        "Drift detected — {} GET operation(s) in the spec have no READ_KEY_MAP entry:\n{}",
+        missing.len(),
+        missing.join("\n")
+    );
+}
