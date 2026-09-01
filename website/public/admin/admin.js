@@ -350,13 +350,39 @@
         }
         tenantDetailRows(data).forEach(pair => addRow(pair[0], pair[1]));
         box.appendChild(kv);
+        // Drop the pre-fetch loading backdrop before mounting — mountModal
+        // appends, so the stale "Loading…" card would otherwise stay
+        // mounted underneath the real dialog (two modal-backs stacked).
+        modal.innerHTML = '';
         const actions = el('div', null); actions.style.cssText = 'display:flex;gap:.4rem;margin-top:.8rem;flex-wrap:wrap';
         // B19: busyWrap (single-flight guard) on every action button —
         // Renew POSTs +365 days per call, so a double-click granted 730.
-        if (tenant.status === 'active') { const revoke = el('button', 'btn btn-sm btn-bad', t('tenant.revoke')); revoke.addEventListener('click', busyWrap(revoke, () => doAction(id,'revoke',t('tenant.revoked'),undefined,closeModal))); actions.appendChild(revoke); }
-        if (tenant.status !== 'active') { const activate = el('button', 'btn btn-sm btn-ok', t('tenant.activate')); activate.addEventListener('click', busyWrap(activate, () => doAction(id,'activate',t('tenant.activated'),undefined,closeModal))); actions.appendChild(activate); }
-        const renew = el('button', 'btn btn-sm', t('tenant.renew365')); renew.addEventListener('click', busyWrap(renew, () => doAction(id,'renew',t('tenant.renewed'),'{"days":365}',closeModal))); actions.appendChild(renew);
-        const upgrade = el('button', 'btn btn-sm btn-warn', t('tenant.upgrade')); upgrade.addEventListener('click', () => upgradePrompt(id,data)); actions.appendChild(upgrade);
+        if (tenant.status === 'active') {
+          // Confirm-by-email: revoke used to fire on a single click.
+          const revoke = el('button', 'btn btn-sm btn-bad', t('tenant.revoke'));
+          revoke.addEventListener('click', () => {
+            // Close the detail dialog first — the confirm replaces it
+            // (no two-dialog stack fighting over ESC/backdrop clicks).
+            closeModal();
+            // Body '{}' (not undefined): api() only sets method POST when
+            // a body is given, and the server registers revoke as POST-only —
+            // undefined body sent a GET and the action silently 404'd.
+            const rc = revokeConfirmModal(tenant.email, () => doAction(id, 'revoke', t('tenant.revoked'), '{}', closeConfirm));
+            var closeConfirm = mountModal(modal, rc.box);
+            rc.cancelBtn.addEventListener('click', closeConfirm);
+          });
+          actions.appendChild(revoke);
+        }
+        if (tenant.status !== 'active') { const activate = el('button', 'btn btn-sm btn-ok', t('tenant.activate')); activate.addEventListener('click', busyWrap(activate, () => doAction(id,'activate',t('tenant.activated'),'{}',closeModal))); actions.appendChild(activate); }
+        // Guarded renew: the endpoint 404s ("no subscription found") when
+        // the tenant has no subscription record — disable + reword instead
+        // of letting the admin press a button that can only fail.
+        const hasSub = !!data.subscription;
+        const renew = el('button', 'btn btn-sm', hasSub ? t('tenant.renew365') : t('tenant.renewNoSub'));
+        if (hasSub) { renew.addEventListener('click', busyWrap(renew, () => doAction(id,'renew',t('tenant.renewed'),'{"days":365}',closeModal))); }
+        else { renew.disabled = true; renew.title = t('tenant.renewNoSubTip'); renew.setAttribute('aria-disabled', 'true'); }
+        actions.appendChild(renew);
+        const upgrade = el('button', 'btn btn-sm btn-warn', t('tenant.upgrade')); upgrade.addEventListener('click', () => { closeModal(); upgradePrompt(id,data); }); actions.appendChild(upgrade);
         box.appendChild(actions);
         // B11: mountModal owns the backdrop/ESC/close wiring and always
         // detaches the keydown listener — the old inline blocks leaked one
@@ -383,6 +409,14 @@
       box.appendChild(el('h3', null, t('tenant.changeTier')));
       const p = el('p', 'small'); p.style.marginBottom = '.6rem'; p.textContent = t('tenant.currentTier') + ((data.subscription && data.subscription.tierKey) || 'none');
       box.appendChild(p);
+      // Tier-override honesty: the server silently no-ops when the tenant
+      // has no subscription record (finds 0 rows, saves nothing, still
+      // returns ok). Warn and disable Save instead of pretending.
+      if (!data.subscription) {
+        const warn = el('p', 'small', t('tenant.noSubWarn'));
+        warn.style.cssText = 'color:var(--bad);margin:.2rem 0 .6rem';
+        box.appendChild(warn);
+      }
       // Tier override dropdown — hardcoded to non-free plans (server-side
       // upgradeable tiers only; 'free' is excluded because a free tenant
       // gets a tier-override when they subscribe, not via admin override).
@@ -394,7 +428,10 @@
       const act = el('div', 'modal-actions');
       const closeModal = mountModal(modal, box);
       const cancel = el('button', 'btn btn-ghost', t('tenant.cancel')); cancel.addEventListener('click', closeModal); act.appendChild(cancel);
-      const save = el('button', 'btn', t('tenant.save')); save.addEventListener('click', busyWrap(save, async () => { await doAction(id,'tier-override',t('tenant.tierChanged'),JSON.stringify({tier_key:select.value,reason:reason.value||'admin override'}),closeModal); })); act.appendChild(save);
+      const save = el('button', 'btn', t('tenant.save'));
+      if (!data.subscription) { save.disabled = true; save.title = t('tenant.noSubWarn'); save.setAttribute('aria-disabled', 'true'); }
+      else { save.addEventListener('click', busyWrap(save, async () => { await doAction(id,'tier-override',t('tenant.tierChanged'),JSON.stringify({tier_key:select.value,reason:reason.value||'admin override'}),closeModal); })); }
+      act.appendChild(save);
       box.appendChild(act);
     }
 

@@ -2,7 +2,7 @@
 // Unit tests for the admin dashboard's pure helpers (H2 hardening).
 // The helpers live in public/admin/admin-utils.js — a UMD module that
 // exports for Node/vitest and defines window.AdminUtils in the browser.
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import utils from '../../public/admin/admin-utils.js';
 
 describe('admin-utils escapeHtml', () => {
@@ -287,25 +287,98 @@ describe('admin-utils tenantDetailRows (B2: t() shadowing regression)', () => {
     devices: [{ id: 'd1' }, { id: 'd2' }],
   };
 
-  it('builds the 8 key/value rows without crashing', () => {
+  it('builds the 9 key/value rows (phone added, devices last) without crashing', () => {
     const rows = utils.tenantDetailRows(data);
-    expect(rows.length).toBe(8);
+    expect(rows.length).toBe(9);
     // B16 superseded the raw-enum expectation: status rows carry labels.
     expect(rows[0]).toEqual(['Status', 'Active']);
     expect(rows[1]).toEqual(['Email verified', '✓']);
-    expect(rows[2]).toEqual(['Created', '2026-08-01']);
-    expect(rows[3]).toEqual(['License key', 'OZ-KEY']);
-    expect(rows[4]).toEqual(['Tier', 'pro']);
-    expect(rows[5]).toEqual(['Subscription status', 'Active']);
-    expect(rows[6]).toEqual(['Expires', '2027-08-01']);
-    expect(rows[7]).toEqual(['Devices', 2]);
+    expect(rows[2]).toEqual(['Phone', '—']);
+    expect(rows[3]).toEqual(['Created', '2026-08-01']);
+    expect(rows[4]).toEqual(['License key', 'OZ-KEY']);
+    expect(rows[5]).toEqual(['Tier', 'pro']);
+    expect(rows[6]).toEqual(['Subscription status', 'Active']);
+    expect(rows[7]).toEqual(['Expires', '2027-08-01']);
+    expect(rows[8]).toEqual(['Devices', 2]);
+  });
+
+  it('includes phone when present, grace only when set', () => {
+    const rows = utils.tenantDetailRows({
+      tenant: { status: 'active', emailVerified: true, created: '2026-08-01', phone: '+62 812-3456-7890' },
+      license: { key: 'OZ-K' },
+      subscription: { tierKey: 'pro', status: 'active', expiresAt: '2027-08-01' },
+      devices: [],
+    });
+    const labels = rows.map((r: [string, string]) => r[0]);
+    expect(labels).toContain('Phone');
+    expect(labels).not.toContain('Grace until');
+    // position: right after Email verified
+    expect(labels.indexOf('Phone')).toBe(labels.indexOf('Email verified') + 1);
+  });
+
+  it('shows the grace row when graceUntil is set', () => {
+    const rows = utils.tenantDetailRows({
+      tenant: { status: 'active' },
+      subscription: { tierKey: 'pro', graceUntil: '2026-09-10' },
+    });
+    const labels = rows.map((r: [string, string]) => r[0]);
+    expect(labels).toContain('Grace until');
+    expect(rows.find((r: [string, string]) => r[0] === 'Grace until')![1]).toBe('2026-09-10');
   });
 
   it('handles a fully empty payload with em-dash values', () => {
     const rows = utils.tenantDetailRows({});
-    expect(rows.length).toBe(8);
+    expect(rows.length).toBe(9);
     expect(rows[0][1]).toBe('—');
-    expect(rows[7][1]).toBe(0);
+    expect(rows[8][1]).toBe(0);
+  });
+});
+
+describe('admin-utils revokeConfirmModal (confirm-by-email guard)', () => {
+  const setup = () => {
+    const confirmSpy = vi.fn();
+    const { box, cancelBtn } = utils.revokeConfirmModal('Owner@Example.com ', confirmSpy);
+    document.body.appendChild(box);
+    return { box, cancelBtn, confirmSpy };
+  };
+  const teardown = () => document.querySelectorAll('.modal').forEach(m => m.remove());
+
+  afterEach(teardown);
+
+  it('confirm stays disabled until the typed email matches (trim+case-insensitive)', () => {
+    const { box, confirmSpy } = setup();
+    const input = box.querySelector('input') as HTMLInputElement;
+    const confirm = [...box.querySelectorAll('button')].find(b => b.textContent === 'Revoke') as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    input.value = 'wrong@b.c';
+    input.dispatchEvent(new Event('input'));
+    expect(confirm.disabled).toBe(true);
+    input.value = 'owner@example.com';
+    input.dispatchEvent(new Event('input'));
+    expect(confirm.disabled).toBe(false);
+    confirm.click();
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a live mismatch hint while typing, hides it on match/clear', () => {
+    const { box } = setup();
+    const input = box.querySelector('input') as HTMLInputElement;
+    const err = box.querySelector('p[style*="danger"]') as HTMLElement;
+    input.value = 'wron';
+    input.dispatchEvent(new Event('input'));
+    expect(err.style.display).toBe('block');
+    input.value = 'owner@example.com';
+    input.dispatchEvent(new Event('input'));
+    expect(err.style.display).toBe('none');
+    input.value = '';
+    input.dispatchEvent(new Event('input'));
+    expect(err.style.display).contains('none');
+  });
+
+  it('cancel button is returned for the caller to wire', () => {
+    const { box, cancelBtn } = setup();
+    expect(box.contains(cancelBtn)).toBe(true);
+    expect(cancelBtn.textContent).toBe('Cancel');
   });
 });
 

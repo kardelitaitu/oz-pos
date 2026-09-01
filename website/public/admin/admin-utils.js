@@ -305,16 +305,64 @@
   function tenantDetailRows(data) {
     var tenant = data.tenant || {}, lic = data.license || {}, sub = data.subscription || {};
     var devices = Array.isArray(data.devices) ? data.devices : []; // B37 class
-    return [
+    var rows = [
       [t('th.status'), statusLabel(tenant.status)],
       [t('th.emailVerified'), tenant.emailVerified ? '✓' : '○'],
+      [t('tenant.phone'), tenant.phone || '—'],
       [t('th.created'), tenant.created ? String(tenant.created).slice(0, 10) : '—'],
       [t('th.licenseKey'), lic.key || '—'],
       [t('th.tier'), sub.tierKey || lic.tierKey || '—'],
       [t('th.subscriptionStatus'), statusLabel(sub.status)],
       [t('th.expires'), sub.expiresAt || '—'],
+      // Grace is a conditional hardship state — show the row only when
+      // the tenant is actually in one (avoids a meaningless '—' row for
+      // the 95% of tenants not in grace).
+      sub.graceUntil ? [t('tenant.graceUntil'), sub.graceUntil] : null,
       [t('th.devices'), devices.length],
     ];
+    return rows.filter(function (r) { return r; });
+  }
+
+  // revokeConfirmModal builds the confirm-by-email dialog for the
+  // destructive revoke action (previously one click — no guard at all).
+  // The confirm button stays disabled until the typed email matches the
+  // tenant's address (trimmed, case-insensitive); a live mismatch hint
+  // appears when text is present. Returns { box, cancelBtn } — the
+  // caller mounts it and wires cancel to its closeModal.
+  function revokeConfirmModal(email, onConfirm) {
+    var box = el('div', 'modal');
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+    box.appendChild(el('h3', null, t('tenant.revokeTitle')));
+    var p = el('p', 'small');
+    p.style.marginBottom = '.6rem';
+    p.textContent = t('tenant.revokeHint') + (email || '—');
+    box.appendChild(p);
+    var input = el('input', 'input');
+    input.placeholder = t('tenant.revokePlaceholder');
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    box.appendChild(input);
+    var err = el('p', 'small', t('tenant.revokeMismatch'));
+    err.style.cssText = 'color:var(--danger);margin:.4rem 0 0;display:none';
+    box.appendChild(err);
+    var act = el('div', 'modal-actions');
+    var cancelBtn = el('button', 'btn btn-ghost', t('tenant.cancel'));
+    act.appendChild(cancelBtn);
+    var confirmBtn = el('button', 'btn btn-bad', t('tenant.revoke'));
+    confirmBtn.disabled = true;
+    var matches = function () { return input.value.trim().toLowerCase() === String(email || '').trim().toLowerCase(); };
+    input.addEventListener('input', function () {
+      confirmBtn.disabled = !matches();
+      err.style.display = input.value.trim() === '' || matches() ? 'none' : 'block';
+    });
+    act.appendChild(confirmBtn);
+    box.appendChild(act);
+    // busyWrap (B19): one confirm click fires exactly one revoke POST.
+    confirmBtn.addEventListener('click', busyWrap(confirmBtn, function () {
+      if (matches()) onConfirm();
+    }));
+    return { box: box, cancelBtn: cancelBtn };
   }
 
   // svgBarChart renders a simple bar chart as an SVG string (extracted
@@ -1076,6 +1124,15 @@
     'th.licenseKey': 'License key',
     'th.license': 'License',
     'th.licenseTier': 'License / Tier',
+    'tenant.phone': 'Phone',
+    'tenant.graceUntil': 'Grace until',
+    'tenant.revokeTitle': 'Revoke tenant access',
+    'tenant.revokeHint': 'This disables the tenant immediately. Type their email to confirm: ',
+    'tenant.revokePlaceholder': 'tenant email',
+    'tenant.revokeMismatch': 'Email does not match yet.',
+    'tenant.renewNoSub': 'Renew (no subscription)',
+    'tenant.renewNoSubTip': 'No subscription record — renew would fail. Grant one via the license API first.',
+    'tenant.noSubWarn': 'This tenant has NO subscription record — saving would silently do nothing server-side.',
     'th.devices': 'Devices',
     'th.subscriptionStatus': 'Subscription status',
     'th.emailVerified': 'Email verified',
@@ -1267,6 +1324,7 @@
     tableCard: tableCard,
     tenantRow: tenantRow,
     tenantDetailRows: tenantDetailRows,
+    revokeConfirmModal: revokeConfirmModal,
     svgBarChart: svgBarChart,
     normalizeStats: normalizeStats,
     startLockoutCountdown: startLockoutCountdown,
