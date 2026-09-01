@@ -18,7 +18,6 @@ import {
 
 describe('tables.ts API contract', () => {
   const TOKEN = 'tok_tables';
-  const USER_ID = 'u1';
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -30,10 +29,10 @@ describe('tables.ts API contract', () => {
     active_sale_id: null, section: 'main', active: true, sort_order: 1,
   };
 
-  it('listTables calls correct command (no args)', async () => {
+  it('listTables calls correct command (session-scoped)', async () => {
     mockInvoke.mockResolvedValue([]);
-    await listTables();
-    expect(mockInvoke).toHaveBeenCalledWith('list_tables', { section: null });
+    await listTables(TOKEN);
+    expect(mockInvoke).toHaveBeenCalledWith('list_tables_scoped', { sessionToken: TOKEN, section: null });
   });
 
   it('listTablesScoped calls correct command', async () => {
@@ -42,10 +41,10 @@ describe('tables.ts API contract', () => {
     expect(mockInvoke).toHaveBeenCalledWith('list_tables_scoped', { sessionToken: TOKEN, section: null });
   });
 
-  it('createTable calls correct command', async () => {
+  it('createTable calls correct command (session-scoped)', async () => {
     mockInvoke.mockResolvedValue(table);
-    const result = await createTable(USER_ID, table);
-    expect(mockInvoke).toHaveBeenCalledWith('create_table', { userId: USER_ID, args: table });
+    const result = await createTable(TOKEN, table);
+    expect(mockInvoke).toHaveBeenCalledWith('create_table_scoped', { sessionToken: TOKEN, table });
     expect(result.id).toBe('t1');
   });
 
@@ -55,22 +54,22 @@ describe('tables.ts API contract', () => {
     expect(mockInvoke).toHaveBeenCalledWith('create_table_scoped', { sessionToken: TOKEN, table });
   });
 
-  it('updateTable calls correct command', async () => {
+  it('updateTable calls correct command (session-scoped)', async () => {
     mockInvoke.mockResolvedValue(table);
-    await updateTable(USER_ID, table);
-    expect(mockInvoke).toHaveBeenCalledWith('update_table', { userId: USER_ID, table });
+    await updateTable(TOKEN, table);
+    expect(mockInvoke).toHaveBeenCalledWith('update_table_scoped', { sessionToken: TOKEN, table });
   });
 
-  it('deleteTable calls correct command', async () => {
+  it('deleteTable calls correct command (session-scoped)', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await deleteTable(USER_ID, 't1');
-    expect(mockInvoke).toHaveBeenCalledWith('delete_table', { userId: USER_ID, id: 't1' });
+    await deleteTable(TOKEN, 't1');
+    expect(mockInvoke).toHaveBeenCalledWith('delete_table_scoped', { sessionToken: TOKEN, id: 't1' });
   });
 
-  it('updateTableStatus calls correct command', async () => {
+  it('updateTableStatus calls correct command (session-scoped)', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await updateTableStatus(USER_ID, 't1', 'occupied');
-    expect(mockInvoke).toHaveBeenCalledWith('update_table_status', { userId: USER_ID, id: 't1', status: 'occupied' });
+    await updateTableStatus(TOKEN, 't1', 'occupied');
+    expect(mockInvoke).toHaveBeenCalledWith('update_table_status_scoped', { sessionToken: TOKEN, id: 't1', status: 'occupied' });
   });
 
   it('updateTableStatusScoped calls correct command', async () => {
@@ -81,6 +80,6 @@ describe('tables.ts API contract', () => {
 
   it('propagates errors', async () => {
     mockInvoke.mockRejectedValue(new Error('table in use'));
-    await expect(updateTableStatus(USER_ID, 't1', 'occupied')).rejects.toThrow('table in use');
+    await expect(updateTableStatus(TOKEN, 't1', 'occupied')).rejects.toThrow('table in use');
   });
 });
