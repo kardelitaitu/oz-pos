@@ -228,3 +228,88 @@ describe('diagram templates (localStorage)', () => {
     expect(loadTemplate('broken')).toBeNull();
   });
 });
+
+// ADR #45 §4.2 — the forward migration. Its whole purpose is that nobody loses a
+// template they had already saved, so the ordering is the contract: the local
+// copy goes away only once the backend has taken it.
+describe('migrateLocalTemplates', () => {
+  beforeEach(() => localStorage.clear());
+
+  const imported = async () =>
+    (await import('@/features/stores/topologyExport')).migrateLocalTemplates;
+
+  it('moves each template to the backend and clears it locally', async () => {
+    saveTemplate('Main Floor', nodes, wires);
+    saveTemplate('Patio', nodes, wires);
+    const sent: string[] = [];
+    const migrate = await imported();
+
+    const result = await migrate(async (name) => { sent.push(name); });
+
+    expect(sent.sort()).toEqual(['Main Floor', 'Patio']);
+    expect(result.migrated.sort()).toEqual(['Main Floor', 'Patio']);
+    expect(result.failed).toEqual([]);
+    expect(listTemplates()).toEqual([]);
+  });
+
+  it('passes the parsed payload, not a JSON string inside a string', async () => {
+    saveTemplate('Main Floor', nodes, wires);
+    const migrate = await imported();
+    let seen: unknown;
+
+    await migrate(async (_name, payload) => { seen = payload; });
+
+    expect(seen).not.toBeInstanceOf(String);
+    expect((seen as { nodes: unknown }).nodes).toEqual(nodes);
+  });
+
+  it('keeps the local copy when the backend refuses it', async () => {
+    // The property the rest of this file exists to protect. A migration that
+    // clears storage before the write lands is worse than no migration at all.
+    saveTemplate('Main Floor', nodes, wires);
+    const migrate = await imported();
+
+    const result = await migrate(async () => { throw new Error('storage full'); });
+
+    expect(result.migrated).toEqual([]);
+    expect(result.failed).toEqual(['Main Floor']);
+    expect(listTemplates()).toEqual(['Main Floor']);
+    expect(loadTemplate('Main Floor')).not.toBeNull();
+  });
+
+  it('clears only the templates that landed when one of several fails', async () => {
+    saveTemplate('Good', nodes, wires);
+    saveTemplate('Bad', nodes, wires);
+    const migrate = await imported();
+
+    const result = await migrate(async (name) => {
+      if (name === 'Bad') throw new Error('rejected');
+    });
+
+    expect(result.migrated).toEqual(['Good']);
+    expect(result.failed).toEqual(['Bad']);
+    expect(listTemplates()).toEqual(['Bad']);
+  });
+
+  it('leaves a corrupt template in place without calling the backend', async () => {
+    localStorage.setItem('oz-topology-template:broken', 'not json');
+    const migrate = await imported();
+    let calls = 0;
+
+    const result = await migrate(async () => { calls += 1; });
+
+    expect(calls).toBe(0);
+    expect(result.failed).toEqual(['broken']);
+    expect(localStorage.getItem('oz-topology-template:broken')).not.toBeNull();
+  });
+
+  it('is a no-op when there is nothing to migrate', async () => {
+    const migrate = await imported();
+    let calls = 0;
+
+    const result = await migrate(async () => { calls += 1; });
+
+    expect(calls).toBe(0);
+    expect(result).toEqual({ migrated: [], failed: [] });
+  });
+});

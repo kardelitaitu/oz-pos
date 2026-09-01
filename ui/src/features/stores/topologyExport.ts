@@ -191,6 +191,53 @@ export function listTemplates(): string[] {
   return names.sort((a, b) => a.localeCompare(b));
 }
 
+/** ADR #45 §4.2 — move browser-saved templates into per-branch storage.
+ *
+ *  Templates used to live only in `localStorage`, so a merchant's saved diagrams
+ *  were bound to one device and vanished on a terminal reinstall. The backend now
+ *  stores them per branch; this is the forward migration that keeps what was
+ *  already saved.
+ *
+ *  The one property that matters: **a local copy is removed only after the
+ *  backend has accepted it.** A failure leaves the template exactly where it was,
+ *  so a half-finished migration cannot be worse than no migration. Callers should
+ *  surface `failed` rather than swallow it.
+ *
+ *  `save` is injected rather than imported so this module keeps no dependency on
+ *  the IPC layer, which also makes the ordering testable without a transport.
+ *  It receives the parsed payload, so the backend stores a JSON object and not a
+ *  string inside a string. */
+export async function migrateLocalTemplates(
+  save: (name: string, payload: TopologyExportPayload) => Promise<void>,
+): Promise<{ migrated: string[]; failed: string[] }> {
+  const migrated: string[] = [];
+  const failed: string[] = [];
+  for (const name of listTemplates()) {
+    const key = `${TOPOLOGY_TEMPLATE_PREFIX}${name}`;
+    let payload: TopologyExportPayload | null = null;
+    try {
+      payload = deserializeTopology(localStorage.getItem(key) ?? '');
+    } catch {
+      payload = null;
+    }
+    if (payload === null) {
+      // Unreadable locally and therefore unsaveable remotely. Left in place: it
+      // is already broken, and deleting a merchant's only copy of a thing we
+      // could not read is not this function's call to make.
+      failed.push(name);
+      continue;
+    }
+    try {
+      await save(name, payload);
+      localStorage.removeItem(key);
+      migrated.push(name);
+    } catch {
+      failed.push(name);
+    }
+  }
+  return { migrated, failed };
+}
+
 /** Delete a saved template by name. */
 export function deleteTemplate(name: string): void {
   try {
