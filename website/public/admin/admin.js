@@ -277,7 +277,13 @@
       searchBtn.addEventListener('click', () => { tenantsSearch = searchBox.value.trim(); tenantsPage = 1; renderTenants(); });
       const clearBtn = el('button', 'btn btn-sm btn-ghost', t('toolbar.clear'));
       clearBtn.addEventListener('click', () => { tenantsSearch = ''; searchBox.value = ''; tenantsPage = 1; renderTenants(); });
-      toolbar.appendChild(searchBox); toolbar.appendChild(searchBtn); toolbar.appendChild(clearBtn);
+      // Search field wrapper: icon + input, so the search affordance is
+      // obvious in both themes (the bare field was nearly invisible on
+      // the white card in light theme).
+      const searchField = el('div', 'search-field');
+      searchField.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>';
+      searchField.appendChild(searchBox);
+      toolbar.appendChild(searchField); toolbar.appendChild(searchBtn); toolbar.appendChild(clearBtn);
       const totalLabel = el('span', 'tenant-total', t('toolbar.showing') + tenants.length + t('toolbar.of') + tenantsTotal);
       toolbar.appendChild(totalLabel);
       c.appendChild(toolbar);

@@ -13,6 +13,11 @@
   --bg: #f4f5f7;
   --bg-surface: #ffffff;
   --border: #dfe1e6;
+  /* Input borders must out-rank decorative hairlines: on light theme the
+     default border sits too close to white + ghost fill (search box was
+     nearly invisible on the white card). */
+  --border-strong: #b9bec8;
+  --bg-input: #ffffff;
   --text: #1a1d23;
   --text-muted: #8e8e93;
   --text-on-color: #ffffff;
@@ -88,6 +93,9 @@
   --bg: #12141a;
   --bg-surface: #1c1f27;
   --border: #2a2e39;
+  /* Dark: inputs lift one step above the card instead of sinking. */
+  --border-strong: #4a5060;
+  --bg-input: #22262f;
   --text: #e8eaef;
   --text-muted: #8b93a3;
   --ghost-bg: #262a34;
@@ -382,8 +390,8 @@ td { font-variant-numeric: tabular-nums; }
 
 /* ── Inputs (spec: 36px well, r-sm, focus ring inset primary) ─────── */
 .input {
-  background: var(--ghost-bg);
-  border: 1px solid var(--border);
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
   border-radius: var(--r-sm);
   padding: 0 .75rem;
   height: 36px;
@@ -391,13 +399,15 @@ td { font-variant-numeric: tabular-nums; }
   font-family: inherit;
   font-size: 13px;
   width: 100%;
-  transition: border-color var(--dur-fast);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
 }
 .input::placeholder { color: var(--text-muted); }
+.input:hover { border-color: var(--text-muted); }
 .input:focus, .input:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: -2px;
+  outline: none;
   border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--tint-primary-bg);
 }
 select.input {
   appearance: none;
@@ -632,7 +642,13 @@ select.input {
 
 /* ── Tenants toolbar + pagination ──────────────────────────────────── */
 .tenant-toolbar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .75rem; }
-.tenant-toolbar .search-input { flex: 1 1 240px; max-width: 360px; }
+.tenant-toolbar .search-field { flex: 1 1 240px; max-width: 360px; }
+.search-field { position: relative; min-width: 0; }
+.search-field svg {
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  width: 14px; height: 14px; color: var(--text-muted); pointer-events: none;
+}
+.search-field .search-input { padding-left: 2.1rem; }
 .tenant-toolbar .tenant-total { margin-left: auto; color: var(--text-muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .pagination { display: flex; align-items: center; gap: .75rem; justify-content: center; margin-top: 1.25rem; }
 .pagination .page-info { color: var(--text-muted); font-size: 12px; font-family: var(--font-mono); }
