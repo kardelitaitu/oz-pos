@@ -466,6 +466,57 @@ specialized operation-source checks (follow-up #2) or `socketSemanticIds`'
 capability fallthrough (follow-up #1), both of which can still make the canvas
 and the gate disagree for reasons other than endpoint kinds.
 
+### §3 — behavior freeze (shipped 2026-09-02) and what it revealed
+
+`ui/src/__tests__/topologyKindBehavior.test.ts` captures every observable
+behaviour of the eleven per-type surfaces — sockets, semantics, gating and
+recording ids, labels, aria labels, icons, settings cards, copy sanitization —
+across eleven probes, into `topologyKindBehavior.golden.json`. The registry
+refactor must leave that file byte-identical; if it changes, the refactor
+changed behaviour and that has to be argued, not merged. The repo uses no
+snapshot framework anywhere (0 uses of `toMatchSnapshot`), so the freeze is an
+explicit golden with the same regeneration discipline as the §2 corpus
+(`TOPOLOGY_BEHAVIOR_UPDATE=1`).
+
+Reading the freeze surfaced four things the source review had missed:
+
+1. **Every workspace kind renders the same icon.** `NODE_TYPE_ICON` is keyed on
+   `node.type`, so `store-pos`, `restaurant-pos`, and `kds` all resolve to
+   `PosIcon` — in the card (`topologyNodeCard.tsx:204`), the inspector
+   (`NodeTopologyEditor.tsx:5710`), and the context menu
+   (`topologyContextMenu.tsx:207`). Meanwhile the tool rack offers
+   `UtensilsIcon`, `CartIcon`, and `NodesIcon` for those same three
+   (`topologyToolRack.tsx:128-130`). Workspaces are the only nodes whose
+   add-icon differs from their canvas icon: a merchant clicks a fork and knife
+   and gets a POS terminal. A structure keyed on `node.type` **cannot** express
+   a per-kind icon, which is the strongest argument for the registry.
+2. **The unregistered-type fallthrough is confirmed empirically.**
+   `workspace:warehouse`, `workspace:admin`, `workspace:general`, and a
+   workspace with no typeKey all receive `stock-out, transfer-out` sockets and
+   `WorkspaceStorePosSettings`. After §1 the contract refuses every wire from
+   those sockets, so those cards advertise inputs and outputs that can never
+   legally connect — follow-up #1, now measured rather than inferred.
+3. **Right-socket order is meaningful and differs by kind**: `store-pos` yields
+   `stock, transfer, operation` while `restaurant-pos` yields
+   `operation, stock, transfer`. The registry must preserve order, not become a
+   set. The freeze pins it.
+4. **Two contract fields have no production readers at all.** Neither
+   `nodeKinds` nor `workspaceTypeKeys` is read by any TypeScript or Rust
+   production code; the only readers are the §2 corpus tests, which now make
+   them load-bearing as a coverage forcing function — a declared kind that the
+   corpus does not probe fails. That is a legitimate role, but it is not the
+   role the field names imply, and §3 should say so out loud.
+
+This also corrects §Context's framing of the three lists. `WORKSPACE_TYPE_KEYS`
+has exactly one consumer, `NodeTopologyEditor.tsx:5841`, which filters out its
+own fourth member (`k !== 'warehouse'`) — the entry exists only to be removed.
+The honest description is three lists with three *different* jobs: the DB enum
+(what the system supports), the contract field (what the semantic contract
+declares endpoints for, now also what the corpus must probe), and the palette
+list (what a merchant may add). "Derive the editor list from the registry" is
+therefore wrong as originally written: the registry should **own** the palette
+list as its own declared concern, not inherit it from the contract.
+
 ### Follow-ups this slice surfaced
 
 1. `socketSemanticIds` (`topologyCard.ts:230-262`) still hands an unregistered
