@@ -300,11 +300,15 @@ pub fn run() {
                 // minus present on disk) and downloads primaries first,
                 // up to 40 images per cycle with 2 GETs in flight; LRU
                 // eviction keeps the cache within the 256 MB budget.
+                // Wakes on jittered cadence (configurable via OZ_IMG_PULL_*).
                 platform_startup::spawn_daemon("tablet image download", async move {
                     let mut manager = crate::image_download::ImageDownloadManager::new();
-                    let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+                    // Initial delay so the daemon doesn't hammer on boot.
+                    tokio::time::sleep(std::time::Duration::from_secs(
+                        crate::image_download::jitter_min(),
+                    ))
+                    .await;
                     loop {
-                        interval.tick().await;
                         match app_handle.try_state::<AppState>() {
                             Some(state) => {
                                 let cache_dir = state
@@ -324,6 +328,11 @@ pub fn run() {
                                 );
                             }
                         }
+                        tokio::time::sleep(crate::image_download::rand_jitter(
+                            crate::image_download::jitter_min(),
+                            crate::image_download::jitter_max(),
+                        ))
+                        .await;
                     }
                 });
 

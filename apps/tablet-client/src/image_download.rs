@@ -6,33 +6,61 @@
 //! (referenced hashes minus files present on disk) — no polling of "what's
 //! new".  Downloads are **primary-first** (slot-1 before slot 2..5),
 //! per-hash `GET /api/v1/images/{hash16}` (immutable `Cache-Control` +
-//! per-hash 404 granularity), at most [`CYCLE_CAP`] images per cycle with 2
+//! per-hash 404 granularity), at most `cycle_cap()` (default 40) images per
+//! cycle with 2
 //! in-flight GETs.  An LRU tracker evicts the least-recently-used files when
 //! the cache exceeds the configured budget (default 256 MB).
 
 use std::collections::VecDeque;
-use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::UNIX_EPOCH;
 
 use oz_core::sync_client::SyncConfig;
-use tokio::sync::Semaphore;
 
-/// ── Constants (env-tunable per spec §3.6) ─────────────────────────────
+/// ── Configuration (tunable — tweak at the top) ─────────────────────────
+///
+/// All pull-scheduler knobs are collected here.  They ship with sensible
+/// defaults for single-region fleets (≤100 devices, ≤50k images/tenant).
+/// Override any via the corresponding `OZ_IMG_*` env var at container
+/// launch.
+///
+/// | Accessor | Default | Env var | Purpose |
+/// |---|---|---|---|
+/// | `jitter_min()` | 60 s | `OZ_IMG_PULL_JITTER_MIN` | Min wake interval |
+/// | `jitter_max()` | 300 s | `OZ_IMG_PULL_JITTER_MAX` | Max wake interval |
+/// | `cycle_cap()` | 40 | `OZ_IMG_PULL_CYCLE_CAP` | Max images per cycle |
+/// | `max_in_flight()` | 2 | `OZ_IMG_PULL_MAX_IN_FLIGHT` | Concurrent GETs |
+/// | `default_budget_bytes()` | 256 MB | `OZ_IMG_PULL_BUDGET_BYTES` | LRU eviction budget |
 
-/// Jitter lower bound (seconds).
-const JITTER_MIN: u64 = 60;
+pub(crate) fn jitter_min() -> u64 {
+    env_or("OZ_IMG_PULL_JITTER_MIN", 60)
+}
+pub(crate) fn jitter_max() -> u64 {
+    env_or("OZ_IMG_PULL_JITTER_MAX", 300)
+}
+fn cycle_cap() -> usize {
+    env_or("OZ_IMG_PULL_CYCLE_CAP", 40)
+}
+fn max_in_flight() -> usize {
+    env_or("OZ_IMG_PULL_MAX_IN_FLIGHT", 2)
+}
+fn default_budget_bytes() -> u64 {
+    env_or("OZ_IMG_PULL_BUDGET_BYTES", 256 * 1024 * 1024)
+}
 
-/// Jitter upper bound (seconds).
-const JITTER_MAX: u64 = 300;
+/// Generate a uniform random delay in [min, max] seconds.
+pub(crate) fn rand_jitter(min: u64, max: u64) -> std::time::Duration {
+    use rand::Rng;
+    let secs = rand::thread_rng().gen_range(min..=max);
+    std::time::Duration::from_secs(secs)
+}
 
-/// Maximum images downloaded per cycle.
-const CYCLE_CAP: usize = 40;
-
-/// Maximum in-flight GETs per cycle.
-const MAX_IN_FLIGHT: usize = 2;
-
-/// Default LRU budget (256 MB ≈ ~12k images ≈ a 5k-catalog with margins).
-const DEFAULT_BUDGET_BYTES: u64 = 256 * 1024 * 1024;
+/// Read a parseable value from the environment, falling back to `default`.
+fn env_or<T: std::str::FromStr>(name: &str, default: T) -> T {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
+}
 
 /// ── LRU tracker ────────────────────────────────────────────────────────
 
@@ -60,7 +88,7 @@ impl LruTracker {
 
     /// The default 256 MB budget.
     pub fn with_default_budget() -> Self {
-        Self::new(DEFAULT_BUDGET_BYTES)
+        Self::new(default_budget_bytes())
     }
 
     /// Record a cache hit / download: removes any prior entry and re-adds
@@ -160,8 +188,8 @@ impl ImageDownloadManager {
     /// Phases (never holding the DB lock across the network):
     /// 1. Brief lock — resolve sync config + referenced hash set.
     /// 2. Async — compute missing (referenced minus present on disk),
-    ///    download primaries first, up to [`CYCLE_CAP`] per cycle, 2 GETs
-    ///    in flight.
+    ///    download primaries first, up to `cycle_cap()` per cycle (default
+    ///    40, tunable via `OZ_IMG_PULL_CYCLE_CAP`), 2 GETs in flight.
     /// 3. Brief lock — persist any hash-state (not required for v1; the
     ///    missing set is recomputed every cycle = self-healing).
     pub async fn run_cycle(
@@ -216,9 +244,9 @@ impl ImageDownloadManager {
         let mut tasks = tokio::task::JoinSet::new();
         let mut downloaded = 0usize;
 
-        let mut iter = missing.iter().take(CYCLE_CAP).peekable();
+        let mut iter = missing.iter().take(cycle_cap()).peekable();
         while iter.peek().is_some() || !tasks.is_empty() {
-            while tasks.len() < MAX_IN_FLIGHT {
+            while tasks.len() < max_in_flight() {
                 match iter.next() {
                     Some((hash, _slot)) => {
                         let url = format!("{base_url}/api/v1/images/{hash}");
@@ -314,13 +342,6 @@ impl ImageDownloadManager {
             let _ = std::fs::remove_file(img_dir.join(format!("{hash}.webp")));
         }
     }
-}
-
-/// Generate a uniform random delay in [min, max] seconds.
-fn rand_jitter(min: u64, max: u64) -> std::time::Duration {
-    use rand::Rng;
-    let secs = rand::thread_rng().gen_range(min..=max);
-    std::time::Duration::from_secs(secs)
 }
 
 #[cfg(test)]

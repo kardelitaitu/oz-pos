@@ -16,19 +16,40 @@ use oz_core::Store;
 use oz_core::sync_client::SyncConfig;
 use tokio::sync::Mutex;
 
-/// ── Constants ──────────────────────────────────────────────────────────
+/// ── Configuration (tunable — tweak at the top) ─────────────────────────
+///
+/// All push-scheduler knobs are collected here.  They ship with sensible
+/// defaults for single-region fleets (≤100 devices, ≤50k images/tenant).
+/// Override any via the corresponding `OZ_IMG_*` env var at container
+/// launch.
+///
+/// | Accessor | Default | Env var | Purpose |
+/// |---|---|---|---|
+/// | `batch_max_images()` | 16 | `OZ_IMG_PUSH_BATCH` | Max images per POST |
+/// | `batch_max_bytes()` | 512 KB | — | Max payload per POST |
+/// | `jitter_min()` | 60 s | `OZ_IMG_PUSH_JITTER_MIN` | Min wake interval |
+/// | `jitter_max()` | 300 s | `OZ_IMG_PUSH_JITTER_MAX` | Max wake interval |
 
-/// Maximum images per batch push.
-const BATCH_MAX_IMAGES: usize = 16;
+fn batch_max_images() -> usize {
+    env_or("OZ_IMG_PUSH_BATCH", 16)
+}
+fn batch_max_bytes() -> usize {
+    512 * 1024
+}
+fn jitter_min() -> u64 {
+    env_or("OZ_IMG_PUSH_JITTER_MIN", 60)
+}
+fn jitter_max() -> u64 {
+    env_or("OZ_IMG_PUSH_JITTER_MAX", 300)
+}
 
-/// Maximum total batch payload in bytes (512 KB).
-const BATCH_MAX_BYTES: usize = 512 * 1024;
-
-/// Jitter lower bound (seconds).
-const JITTER_MIN: u64 = 60;
-
-/// Jitter upper bound (seconds).
-const JITTER_MAX: u64 = 300;
+/// Read a parseable value from the environment, falling back to `default`.
+fn env_or<T: std::str::FromStr>(name: &str, default: T) -> T {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
+}
 
 /// ── Types ──────────────────────────────────────────────────────────────
 
@@ -67,10 +88,10 @@ impl ImagePushScheduler {
     pub async fn run(&self) {
         tracing::info!("image push scheduler started");
         // Initial delay so the daemon doesn't hammer the server on boot.
-        tokio::time::sleep(std::time::Duration::from_secs(JITTER_MIN)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(jitter_min())).await;
         loop {
             self.drain_once().await;
-            tokio::time::sleep(rand_jitter(JITTER_MIN, JITTER_MAX)).await;
+            tokio::time::sleep(rand_jitter(jitter_min(), jitter_max())).await;
         }
     }
 
@@ -81,7 +102,9 @@ impl ImagePushScheduler {
             let db = self.db.lock().await;
             let store = Store::new(&db);
             let config = SyncConfig::from_settings(&store).ok().flatten();
-            let pending = store.peek_push_batch(BATCH_MAX_IMAGES).unwrap_or_default();
+            let pending = store
+                .peek_push_batch(batch_max_images())
+                .unwrap_or_default();
             (config, pending)
         };
 
@@ -103,7 +126,7 @@ impl ImagePushScheduler {
         };
 
         // Phase 2: read files from the app cache (no DB lock held).
-        let mut frames: Vec<u8> = Vec::with_capacity(BATCH_MAX_BYTES.min(8192));
+        let mut frames: Vec<u8> = Vec::with_capacity(batch_max_bytes().min(8192));
         let mut batch_hashes: Vec<String> = Vec::with_capacity(pending.len());
         let mut total_bytes = 0usize;
 
@@ -112,8 +135,8 @@ impl ImagePushScheduler {
             match tokio::fs::read(&path).await {
                 Ok(bytes) => {
                     let frame_len = 4 + bytes.len(); // u32 length prefix + payload
-                    if batch_hashes.len() >= BATCH_MAX_IMAGES
-                        || total_bytes + frame_len > BATCH_MAX_BYTES
+                    if batch_hashes.len() >= batch_max_images()
+                        || total_bytes + frame_len > batch_max_bytes()
                     {
                         break;
                     }
