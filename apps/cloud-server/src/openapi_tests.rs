@@ -396,3 +396,62 @@ fn concrete_url(template: &str) -> String {
         .replace("{tenant_id}", "tenant-a")
         .replace("{hash16}", "aaaaaaaaaaaaaaaa")
 }
+
+/// Every operation in the spec must declare `security: [{bearerAuth: []}]`
+/// unless the path is on the explicit public allowlist.  A new endpoint
+/// silently missing the security block becomes a red test (spec 0047 §3
+/// assertion 3 — the mechanical audit-stamp guard).
+#[test]
+fn security_coverage_walk_every_operation() {
+    let spec = openapi_spec();
+    let paths = spec["paths"].as_object().unwrap();
+
+    /// Paths that are intentionally public (no bearerAuth).  Everything
+    /// else must carry bearerAuth.
+    fn is_public(path: &str) -> bool {
+        path == "/health"
+            || path == "/api/health"
+            || path == "/api/v1/health"
+            || path == "/metrics"
+            || path == "/api/openapi.json"
+            || path == "/api/docs"
+            || path == "/api/docs/scalar"
+            || path == "/api/v1/tokens" // mints tokens — cannot require one
+            // Admin-key gated (X-Admin-Key header), not JWT — so no
+            // bearerAuth; they are public in the JWT sense.
+            || path == "/api/v1/terminals"
+            || path == "/api/v1/tenants/{tenant_id}/plan"
+            || path.starts_with("/api/webhooks/")
+    }
+
+    let mut violations = Vec::new();
+    for (path, methods) in paths {
+        for (method, operation) in methods.as_object().unwrap() {
+            let has_bearer = operation
+                .get("security")
+                .and_then(|s| s.as_array())
+                .is_some_and(|arr| {
+                    arr.iter().any(|entry| {
+                        entry
+                            .as_object()
+                            .is_some_and(|m| m.contains_key("bearerAuth"))
+                    })
+                });
+            if is_public(path) {
+                // Public endpoints must NOT require auth.
+                if has_bearer {
+                    violations.push(format!("{method} {path} is public but declares bearerAuth"));
+                }
+            } else if !has_bearer {
+                violations.push(format!("{method} {path} is missing bearerAuth security"));
+            }
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "Security-coverage drift — {} violation(s):\n{}",
+        violations.len(),
+        violations.join("\n")
+    );
+}

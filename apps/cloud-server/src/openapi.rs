@@ -628,7 +628,7 @@ fn build_paths() -> Value {
             "post": {
                 "tags": ["Terminals"],
                 "summary": "Register a new terminal",
-                "description": "Registers a terminal for client-credential token minting (ADR sync-auth-hardening P3). Returns a device secret that must be stored securely — it is only returned once.",
+                "description": "Registers a terminal for client-credential token minting (ADR sync-auth-hardening P3). Returns a device secret that must be stored securely — it is only returned once. Gated by the same OZ_ADMIN_KEY as token minting (X-Admin-Key header).",
                 "operationId": "registerTerminal",
                 "requestBody": {
                     "required": true,
