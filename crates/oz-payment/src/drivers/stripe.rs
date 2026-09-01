@@ -1,8 +1,8 @@
 /*
 last audited 31-08-26 by TDD-Agent (round M; PAY-2 closed for charges when the caller supplies a key)
 crate: oz-payment | status: SAFE | lint: CLEAN
-findings: capture_method manual correctly maps authorize/capture model; PAY-2 FIXED for authorize — idempotency_key_for() forwards PaymentRequest.idempotency_key as the Idempotency-Key header, verbatim, or omits the header when absent or blank (blank must not be sent: Some("") would put every caller who leaves the field empty into one shared key and Stripe would reject each later charge as a conflict). The tell that this was an oversight rather than a decision: parse_error already mapped Stripe's idempotency_error code to PaymentError::Duplicate, so the driver handled a duplicate-key rejection it could never receive. PAY-2 CLOSED for refunds 09-09-26: refund() now accepts a caller-supplied idempotency_key forwarded as the Idempotency-Key header. PAY-3 CLOSED 09-09-26: refund() honors Some(amount) — partial refunds send the amount, None keeps Stripe's full-refund default. COR-31 CLOSED 09-09-26: HTTP client bounded (10s connect / 30s total) — safe because charges carry keys and refunds accept a caller-supplied key. PAY-4 STILL OPEN: classifier sends most card_error declines to InvalidCard (message.contains("card") heuristic; "card_error => Declined" arm nearly unreachable); no confirm step — card-not-present intents stay requires_payment_method unless confirmed elsewhere
-next: fix decline classification. | perf: N/A
+findings: capture_method manual correctly maps authorize/capture model; PAY-2 FIXED for authorize — idempotency_key_for() forwards PaymentRequest.idempotency_key as the Idempotency-Key header, verbatim, or omits the header when absent or blank (blank must not be sent: Some("") would put every caller who leaves the field empty into one shared key and Stripe would reject each later charge as a conflict). The tell that this was an oversight rather than a decision: parse_error already mapped Stripe's idempotency_error code to PaymentError::Duplicate, so the driver handled a duplicate-key rejection it could never receive. PAY-2 CLOSED for refunds 09-09-26: refund() now accepts a caller-supplied idempotency_key forwarded as the Idempotency-Key header. PAY-3 CLOSED 09-09-26: refund() honors Some(amount) — partial refunds send the amount, None keeps Stripe's full-refund default. COR-31 CLOSED 09-09-26: HTTP client bounded (10s connect / 30s total) — safe because charges carry keys and refunds accept a caller-supplied key. PAY-4 CLOSED 09-09-26: classifier rewritten — card_data codes (expired_card/incorrect_number/incorrect_cvc/incorrect_zip) map to InvalidCard, everything else on card_error (including card_declined, processing_error, and code-less declines) maps to Declined; the message.contains("card") heuristic is gone. no confirm step — card-not-present intents stay requires_payment_method unless confirmed elsewhere
+next: none | perf: N/A
 */
 //! Stripe payment processor — implements [`PaymentProcessor`] using the
 //! Stripe REST API directly via `reqwest`.
@@ -295,6 +295,17 @@ impl StripePaymentProcessor {
     }
 
     /// Classify a Stripe error type into a specific PaymentError variant.
+    ///
+    /// PAY-4: the previous version used `message.contains("card")` as a
+    /// heuristic, which sent most card_error declines (including the generic
+    /// "Your card was declined.") to [`PaymentError::InvalidCard`] instead of
+    /// [`PaymentError::Declined`]. The `card_error => Declined` arm was
+    /// nearly unreachable. Now:
+    ///
+    /// | Code | Maps to |
+    /// |------|---------|
+    /// | `expired_card`, `incorrect_number`, `incorrect_cvc`, `incorrect_zip` | `InvalidCard` — card data problem |
+    /// | `card_declined`, `processing_error`, other codes, or no code | `Declined` — bank/processor refused |
     fn classify_stripe_error(
         error_type: &str,
         message: Option<&str>,
@@ -302,18 +313,16 @@ impl StripePaymentProcessor {
     ) -> PaymentError {
         let msg = message.unwrap_or(error_type).to_string();
         match error_type {
-            "card_error" | "invalid_request_error"
-                if code == Some("card_declined")
-                    || code == Some("processing_error")
-                    || code == Some("incorrect_number")
-                    || code == Some("expired_card")
-                    || code == Some("incorrect_cvc")
-                    || code == Some("incorrect_zip")
-                    || message.is_some_and(|m| m.contains("card")) =>
-            {
-                PaymentError::InvalidCard(msg)
-            }
-            "card_error" => PaymentError::Declined(msg),
+            "card_error" => match code {
+                // Card-data problems: the instrument itself is bad.
+                Some("expired_card")
+                | Some("incorrect_number")
+                | Some("incorrect_cvc")
+                | Some("incorrect_zip") => PaymentError::InvalidCard(msg),
+                // Everything else — including card_declined, processing_error,
+                // and any future code — is a decline.
+                _ => PaymentError::Declined(msg),
+            },
             "idempotency_error" => PaymentError::Duplicate(msg),
             "invalid_request_error"
             | "api_error"

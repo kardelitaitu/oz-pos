@@ -489,6 +489,10 @@ async fn authorize_sends_correct_json_body() {
     assert_eq!(body["amount_money"]["currency"], "USD", "body: {body}");
     assert_eq!(body["source_id"], "EXTERNAL", "body: {body}");
     assert_eq!(body["location_id"], MOCK_LOCATION_ID, "body: {body}");
+    // PAY-5: authorize must be a two-phase hold — Square's default
+    // autocomplete:true would capture immediately and break the
+    // authorize→capture lifecycle against the real API.
+    assert_eq!(body["autocomplete"], false, "body: {body}");
     assert!(
         body["idempotency_key"].as_str().unwrap_or("").len() >= 36,
         "body: {body}"

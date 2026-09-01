@@ -1,8 +1,8 @@
 /*
 last audited 31-08-26 by TDD-Agent (round M; PAY-2 closed for charges, still open for refunds)
 crate: oz-payment | status: SAFE | lint: CLEAN
-findings: PAY-2 FIXED for authorize — idempotency_key_for() now honors PaymentRequest.idempotency_key verbatim and falls back to a fresh Uuid::now_v7() only when it is absent or blank. Blank must not be sent as-is: Some("") would put every caller who leaves the field empty into ONE shared idempotency key, and Square would then reject every charge after the first as a duplicate. Verbatim (no charset sanitizing, no length clamp) because a clamp maps two distinct caller keys onto one, and a collision here silently drops a legitimate charge — a loud API rejection is the better failure. authorize is the only CreatePaymentRequest site, and sale() delegates through it, so all charges are covered. PAY-2 CLOSED for refunds 09-09-26: refund() now accepts a caller-supplied idempotency_key (honoured when present; fresh Uuid fallback when absent). PAY-3 CLOSED 09-09-26: full refund (None) now resolves the original charge amount via GET /payments/{id} instead of sending zero-amount USD. COR-31 CLOSED 09-09-26: HTTP client bounded (10s connect / 30s total) — safe because charges carry keys and refunds accept a caller-supplied key. PAY-5 still open: Square auto_capture=true default means authorize already captures — default sale() authorize->complete would fail against real API (tests pass via canned wiremock responses); currency hard-error on unknown codes good (PA-02)
-next: resolve refund(None) amount, set auto_capture=false. | perf: N/A
+findings: PAY-2 FIXED for authorize — idempotency_key_for() now honors PaymentRequest.idempotency_key verbatim and falls back to a fresh Uuid::now_v7() only when it is absent or blank. Blank must not be sent as-is: Some("") would put every caller who leaves the field empty into ONE shared idempotency key, and Square would then reject every charge after the first as a duplicate. Verbatim (no charset sanitizing, no length clamp) because a clamp maps two distinct caller keys onto one, and a collision here silently drops a legitimate charge — a loud API rejection is the better failure. authorize is the only CreatePaymentRequest site, and sale() delegates through it, so all charges are covered. PAY-2 CLOSED for refunds 09-09-26: refund() now accepts a caller-supplied idempotency_key (honoured when present; fresh Uuid fallback when absent). PAY-3 CLOSED 09-09-26: full refund (None) now resolves the original charge amount via GET /payments/{id} instead of sending zero-amount USD. COR-31 CLOSED 09-09-26: HTTP client bounded (10s connect / 30s total) — safe because charges carry keys and refunds accept a caller-supplied key. PAY-5 CLOSED 09-09-26: CreatePaymentRequest now sends autocomplete: false — authorize is a two-phase hold (APPROVED), not an immediate capture; the default sale() authorize→capture lifecycle now works against the real API. currency hard-error on unknown codes good (PA-02)
+next: none | perf: N/A
 */
 //! Square payment processor — implements [`PaymentProcessor`] using the
 //! Square REST API directly via `reqwest`.
@@ -76,6 +76,13 @@ struct CreatePaymentRequest {
     location_id: String,
     reference_id: Option<String>,
     note: Option<String>,
+    /// PAY-5: `false` keeps authorize as a two-phase hold. Square defaults
+    /// to `autocomplete: true` (authorize immediately captures), which
+    /// would make the trait's authorize→capture model fail against the
+    /// real API — capture on an already-completed payment errors. With
+    /// `autocomplete: false` the payment returns APPROVED and capture's
+    /// POST /payments/{id}/complete transitions it to COMPLETED.
+    autocomplete: bool,
 }
 
 /// Request body for Square Refund.
@@ -364,6 +371,8 @@ impl PaymentProcessor for SquarePaymentProcessor {
             location_id: self.location_id.clone(),
             reference_id: request.reference.clone(),
             note: request.description.clone(),
+            // PAY-5: two-phase authorize — hold only, capture later.
+            autocomplete: false,
         };
 
         let (status, body_text) = self.post("/payments", &body).await?;
