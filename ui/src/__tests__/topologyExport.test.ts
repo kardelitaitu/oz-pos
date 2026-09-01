@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   TOPOLOGY_EXPORT_FORMAT,
   TOPOLOGY_EXPORT_VERSION,
@@ -311,5 +313,48 @@ describe('migrateLocalTemplates', () => {
 
     expect(calls).toBe(0);
     expect(result).toEqual({ migrated: [], failed: [] });
+  });
+});
+
+// ── ADR #45 §4.2 — migration-wiring canary ───────────────────────────────
+//
+// Round 39 found that `migrateLocalTemplates` is defined and covered by six tests
+// and called by NOTHING in production. That is fine on its own. What is not fine
+// is the change it enables: once the editor lists templates from per-branch
+// storage, any template still sitting in localStorage disappears from the only UI
+// that can reach it. Every one of the 510 editor tests would pass that bug,
+// because none of them simulate an upgraded install.
+//
+// So this pins the invariant instead. It reads the editor source the way
+// topologyValidationParity.test.ts reads the validators, for the same reason: the
+// thing being checked is "does this call site exist", and no runtime assertion in a
+// unit test can see an absent call.
+//
+// When the swap lands, the FIRST test below fails. That is the canary firing, not a
+// regression: rewrite it to assert the new state, and while you are there confirm
+// the migration is invoked BEFORE the first listing, not after - the ordering is
+// what decides whether anyone's templates survive the upgrade.
+
+describe('template migration wiring (canary)', () => {
+  const editorSource = readFileSync(
+    join(process.cwd(), 'src/features/stores/NodeTopologyEditor.tsx'),
+    'utf8',
+  );
+  const usesBackendTemplates = /\b(?:save|load|list|delete)TopologyTemplates?\s*\(/.test(editorSource);
+  const invokesMigration = /\bmigrateLocalTemplates\s*\(/.test(editorSource);
+
+  it('documents today: the editor still reads templates from localStorage only', () => {
+    expect(usesBackendTemplates).toBe(false);
+    expect(invokesMigration).toBe(false);
+  });
+
+  it('never lets the editor reach for backend templates without running the migration', () => {
+    // The half-swap is the dangerous one: switching the listing while leaving the
+    // migration uncalled is silent data loss, and this is the only test that
+    // notices.
+    if (usesBackendTemplates) {
+      expect(invokesMigration, 'backend templates are in use but the migration is never invoked').toBe(true);
+    }
+    expect(usesBackendTemplates || !usesBackendTemplates).toBe(true);
   });
 });
