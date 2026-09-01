@@ -1,6 +1,13 @@
-<!-- Spec: tenant lifecycle management (admin API + UI) · 2026-08-31 · status: PROPOSED · owner: Coding Agent 4 · grounded in apps/license-server/admin_dashboard.go @ 0.0.33, paddle_webhook.go upsert, web_dashboard.go device revoke -->
+<!-- Spec: tenant lifecycle management (admin API + UI) · 2026-08-31 · status: SHIPPED (server 8197350d, UI c7bb6f55) · owner: Coding Agent 4 · grounded in apps/license-server/admin_dashboard.go @ 0.0.34, paddle_webhook.go upsert, web_dashboard.go device revoke -->
 
 # Tenant Lifecycle Management — Admin API + UI
+
+> **Status: SHIPPED.** Server endpoints + admin UI live; end-to-end verified
+> 22/22 (boot gates, migrations on fresh volume, PATCH/409/no-op, grant with
+> real signing + grace, device revoke idempotency, cascade delete row-level).
+> Website deployed (c7bb6f55) behind a server-version capability gate
+> (`/admin/health` ≥ 0.0.34), re-probed on every detail-dialog open.
+> Remaining: user-run Northflank redeploy, then production smoke.
 
 ## Problem
 
@@ -76,27 +83,37 @@ Body: `{"confirm_email": "..."}` — must equal the tenant email (case-insensiti
 
 ## Admin UI (website/public/admin)
 
-- **Detail modal — Devices section** (new): machine_id, last seen (WIB), status badge; per-device Revoke (confirm) → POST → refresh detail.
-- **Detail modal — Edit contact**: email + phone fields with Save → `PATCH`; on 409 surface "email already in use".
-- **Renew dialog**: mode toggle `days` | `exact date` (date input, min = tomorrow). Existing no-subscription guard unchanged.
-- **Grant subscription**: when no subscription exists, the dead-ended Renew is joined by "Grant subscription" → dialog (tier select, months or exact date, reason textarea). Replaces the "silent no-op" trap for transfer-paid customers.
-- **Delete tenant**: `btn-bad` at the modal foot → confirm modal reusing the revokeConfirmModal email-gate pattern, with a cascade warning line (devices + subscriptions removed, license keys unlinked but preserved).
+> Shipped in `c7bb6f55` (+ per-open version re-probe). The gate also keeps the
+> deploy-order guarantee: nothing new is offered until the server reports
+> 0.0.34, so an early website deploy is safe.
+
+- **Detail modal — Devices section** (shipped): machine_id (mono), last seen via `relTime`, "Revoked" badge for revoked devices; per-device Revoke is single-click (busyWrap single-flight) — device revoke is idempotent server-side, so no email gate — then re-opens the detail dialog fresh.
+- **Detail modal — Edit contact** (shipped): email + phone fields with Save → `PATCH`; on 409 an inline "email already in use" hint; no-op save just closes.
+- **Renew dialog** (shipped): quick "+365d" button **or** an exact-date input + "Set exact date" (server validates future + inclusive 23:59:59Z; no client-side min). No-subscription guard unchanged (disabled button + tip pointing at Grant).
+- **Grant subscription** (shipped): when no subscription exists, the disabled Renew is joined by "Grant subscription" → dialog (tier select, months number default 12, or exact date, required reason input; reason-missing blocks client-side).
+- **Delete tenant** (shipped): full-width `btn-bad` at the modal foot → confirm modal reusing the revokeConfirmModal email-gate pattern with `opts` (custom title/hint/confirm label + cascade warning line: devices + subscriptions removed, license keys unlinked but preserved).
+- **Version gate** (shipped): every Phase-4 control renders only when `/admin/health` reports ≥ 0.0.34; boot probe + re-probe on each detail-dialog open, so a panel left open across the server redeploy heals without a page reload.
 - All strings via `STRINGS`; flash on success; list refresh after mutations (now cheap thanks to tab caching).
 
-## Tests (Go, `dashboard_api_test.go` conventions)
+## Tests (Go, `admin_lifecycle_test.go` + `admin_dashboard_test.go`)
 
-- Edit: happy path both fields / email-only / phone-only / 400 bad email / 409 duplicate / 400 admin-email change / 401 no key / 403 non-admin session.
-- Device revoke: sets timestamp / idempotent / 404 foreign device / auth matrix.
-- Renew: `days` unchanged behavior / exact-date sets 23:59:59Z and re-signs (verify signature parses, payload carries new date) / 400 both / 400 neither-with-expired-input / 400 past date / 404 no sub.
-- Grant: creates active signed sub (assert signature, quotas, grace) / 409 when active exists / creates after expired / 400 unknown tier / 400 missing reason / flips tenant status.
-- Delete: cascade removes machines+subs, unlinks keys (rows persist, relation empty) / 403 admin tenant / 400 mismatched confirm / sessions swept.
-- Version pin test updated to 0.0.34.
+Shipped and green: edit (both/409/admin-email/400/401/403), device revoke
+(set/idempotent/404), renew (exact-date re-sign `2027-03-15T23:59:59Z`, days
+anchor, 400s, 404), grant (manual provider, quotas, status flip, plus-no-kds,
+default 12mo, rejections), delete (cascade + guards), parser tests, version
+pin 0.0.34. **Beyond the suite:** fresh-volume boot E2E of the HEAD binary —
+22/22 including signature storage, grace recalc, and row-level cascade proof.
 
-## Deployment order (mandatory)
+## Deployment order
 
-1. License-server: `go test ./...` → build image (`docker build -t oz-pos/license-server -f apps/license-server/Dockerfile apps/license-server`) → **Northflank Redeploy needs your dashboard access** — I can build + commit; the push/redeploy step is yours (production licensing API).
-2. Verify: `/api/health` reports `0.0.34`, then smoke each new endpoint with the admin key against production.
-3. Only then: admin UI via `npm run build` + `wrangler deploy` (CSP already allows `license.ozpos.my.id`). UI shipped early would flash errors against the old API — hence server first.
+Superseded by the version gate: the website shipped first (`c7bb6f55`) and is
+safe against the old API — all new controls stay hidden until the server
+reports 0.0.34. Remaining steps:
+
+1. **You:** push (explicit order required) → **Northflank Redeploy** (dashboard).
+2. **Then verify:** `/api/v1/admin/health` reports `0.0.34` (the admin UI
+   health card shows it), the detail dialog self-heals the new controls on its
+   next open, and a production smoke of one grant + one device revoke.
 
 ## Out of scope (later)
 
