@@ -137,8 +137,10 @@ export default function TopologyScreen() {
       .then((licStatus) => { setLicenseTier(licStatus.tier.toLowerCase()); })
       .catch(() => { setLicenseTier('free'); });
 
+    if (!sessionToken) return; // not ready yet — effect re-runs when it resolves
+
     try {
-      const storeData = await listStoresScoped(sessionToken!);
+      const storeData = await listStoresScoped(sessionToken);
       setStores(storeData);
       setStoresUnavailable(false);
       storesResolvedRef.current = true;
@@ -151,7 +153,7 @@ export default function TopologyScreen() {
         type: 'error',
       });
     }
-  }, [addToast, l10n]);
+  }, [addToast, l10n, sessionToken]);
 
   /** Fetch the workspace instances for the selected branch. Runs on mount
    *  AND whenever the branch selector changes: each branch owns its own
