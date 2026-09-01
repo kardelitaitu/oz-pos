@@ -133,13 +133,6 @@
   color: var(--color-fg-secondary);
 }
 
-/* ── Sub hint ────────────────────────────────────────────────────── */
-
-.session-lock-sub {
-  font-size: var(--text-sm);
-  color: var(--color-fg-secondary);
-}
-
 /* ── PIN dots ────────────────────────────────────────────────────── */
 
 .session-lock-pin-dots {

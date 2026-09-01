@@ -60,7 +60,6 @@ staff-login-connection-sync = Sync
 staff-login-clear = Clear
 session-lock-expired = Session expired. Please log in again.
 session-lock-invalid-pin = Invalid PIN
-session-lock-enter-pin = Enter PIN to unlock
 session-lock-pin-aria = PIN: { $length } of { $max } digits entered
 session-lock-pad-aria = PIN pad
 session-lock-lockout = Wait { $seconds }s.
@@ -121,11 +120,6 @@ describe('SessionLockScreen rendering', () => {
     const dateEl = document.querySelector('.session-lock-date');
     expect(dateEl).toBeTruthy();
     expect(dateEl?.textContent).toBeTruthy();
-  });
-
-  it('shows "Enter PIN to unlock" message', () => {
-    renderScreen();
-    expect(screen.getByText('Enter PIN to unlock')).toBeInTheDocument();
   });
 
   it('renders 4 PIN dots (all unfilled)', () => {
@@ -453,10 +447,9 @@ describe('SessionLockScreen visual contract', () => {
     expect(topBar?.querySelector('.session-lock-date')?.textContent).toBeTruthy();
   });
 
-  it('places hint, dots, and keypad in the main area', () => {
+  it('places dots and keypad in the main area', () => {
     renderScreen();
     const mainArea = document.querySelector('.session-lock-main-area');
-    expect(mainArea?.querySelector('.session-lock-sub')).toBeTruthy();
     expect(mainArea?.querySelectorAll('.session-lock-pin-dot')).toHaveLength(4);
     expect(mainArea?.querySelector('.session-lock-pad')).toBeTruthy();
   });

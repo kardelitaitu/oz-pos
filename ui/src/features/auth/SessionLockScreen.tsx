@@ -208,9 +208,8 @@ export default function SessionLockScreen({
           <div className="session-lock-date">{dateStr}</div>
         </div>
 
-        {/* ── Main area: hint + PIN dots + keypad ── */}
+        {/* ── Main area: PIN dots + keypad ── */}
         <div className="session-lock-main-area">
-          <div className="session-lock-sub">{requiredLocalized(l10n, 'session-lock-enter-pin')}</div>
 
         {/* PIN dots */}
         <div className="session-lock-pin-dots" aria-label={requiredLocalized(l10n, 'session-lock-pin-aria', { length: String(pin.length), max: String(MAX_PIN_LENGTH) })}>
