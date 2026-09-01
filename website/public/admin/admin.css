@@ -710,7 +710,7 @@ select.input {
 .health-bar { display: flex; align-items: center; gap: 1rem; margin: 0 0 .75rem; }
 .svc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; font-size: .82rem; }
 .status-chip { font-weight: 600; font-size: 11px; padding: 2px 8px; border-radius: 999px; }
-.status-ok { background: var(--tint-success-bg); color: var(--success); }
+.status-ok { background: transparent; color: var(--success); }
 .status-warn { background: var(--tint-warning-bg); color: var(--warning); }
 .status-bad { background: var(--tint-danger-bg); color: var(--danger); }
 .mono-cell { font-size: 12px; }
