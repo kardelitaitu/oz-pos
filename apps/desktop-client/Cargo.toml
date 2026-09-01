@@ -33,6 +33,7 @@ tempfile = "3"
 foundation = { workspace = true }
 lettre = { workspace = true }
 oz-core = { workspace = true }
+reqwest = { workspace = true }
 oz-hal = { workspace = true }
 oz-logging = { workspace = true }
 oz-lua = { workspace = true }
@@ -74,6 +75,7 @@ hmac = { workspace = true }
 sha2 = { workspace = true }
 snow = { workspace = true }
 hex = { workspace = true }
+rand = { workspace = true }
 image = { workspace = true }
 webp = { workspace = true }
 

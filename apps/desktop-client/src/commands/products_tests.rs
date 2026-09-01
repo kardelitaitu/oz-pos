@@ -179,6 +179,7 @@ fn product_dto_serialize() {
         default_supplier_id: None,
         popularity_score: 0.0,
         image_hash: None,
+        images: None,
     };
     let json = serde_json::to_value(&dto).unwrap();
     assert_eq!(json["sku"], "COFFEE");
@@ -212,6 +213,7 @@ fn product_dto_debug() {
         default_supplier_id: None,
         popularity_score: 0.0,
         image_hash: None,
+        images: None,
     };
     let d = format!("{dto:?}");
     assert!(d.contains("Green Tea"));

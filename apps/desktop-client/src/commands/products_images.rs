@@ -146,6 +146,11 @@ pub async fn products_set_image_scoped(
     let store = Store::new(&db);
     store.set_product_image(&product_id, slot, &hash16)?;
 
+    // Enqueue for the cloud push scheduler (spec 0046b §3.6). The bytes are
+    // already transcoded + content-hashed; only the pending-upload bookkeeping
+    // happens here — the network leg never blocks the editor.
+    store.enqueue_image_push(&hash16, webp_bytes.len() as i64)?;
+
     tracing::info!(product_id, slot, hash = %hash16, "product image set");
     Ok(hash16)
 }

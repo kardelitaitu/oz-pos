@@ -23,6 +23,9 @@ pub mod commands;
 pub mod email_scheduler;
 /// Single error type for every Tauri command.
 pub mod error;
+/// Image push scheduler daemon (spec 0046b §3.6) — drains the local
+/// `image_push_queue` to the cloud batch endpoint on a jittered cadence.
+mod image_push;
 /// LAN event forwarding for multi-terminal setups.
 ///
 /// Multi-terminal: each POS terminal runs its own process with its own
@@ -276,6 +279,27 @@ pub fn run() {
             platform_startup::spawn_daemon("prune daemon", async move {
                 platform_sync::daemon::SyncDaemon::start_prune_task(prune_db);
             });
+
+            // ── Background image push daemon (spec 0046b §3.6) ───────
+            // Drains the local `image_push_queue` to the cloud batch
+            // endpoint on a jittered cadence (60–300 s). No-ops until sync
+            // is configured (SyncConfig::from_settings returns None) and
+            // while the queue is empty.
+            {
+                let push_db = app.state::<AppState>().db.clone();
+                let push_app_handle = app.handle().clone();
+                platform_startup::spawn_daemon("image push", async move {
+                    let cache_dir = push_app_handle
+                        .path()
+                        .app_cache_dir()
+                        .unwrap_or_else(|e| {
+                            tracing::warn!(error = %e, "image push: no app cache dir");
+                            std::path::PathBuf::from(".")
+                        });
+                    let scheduler = crate::image_push::ImagePushScheduler::new(push_db, cache_dir);
+                    scheduler.run().await;
+                });
+            }
 
             // ── Background email report scheduler ──────────────────
             let email_db = app.state::<AppState>().db.clone();
