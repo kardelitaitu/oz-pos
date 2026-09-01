@@ -403,15 +403,20 @@
           '<span class="muted">'+t('health.smtp')+'</span><span style="text-align:right">'+(h.smtp_host?t('health.configured'):t('health.notConfigured'))+'</span>' +
           '<span class="muted">'+t('health.version')+'</span><span style="text-align:right">'+escapeHtml(h.version||'—')+'</span>' +
           '<span class="muted">'+t('health.time')+'</span><span style="text-align:right">'+escapeHtml(h.time||'—')+'</span>';
-        card.appendChild(kv); c.appendChild(card);
-
-        // ── Health toolbar (auto-refresh + updated-ago label) ───────────
-        const healthBar = el('div', 'health-bar');
+        card.appendChild(kv);
+        // Auto-refresh control lives in the card's header row (title left,
+        // toggle + updated-ago right) — not as an orphan strip floating
+        // between two cards.
+        const cardHead = el('div', 'card-head');
+        cardHead.appendChild(el('h2', null, t('health.title')));
         const autoBtn = el('button', 'btn btn-ghost btn-sm', t('health.autoOn'));
         autoBtn.type = 'button';
         const updatedAgo = el('span', 'muted log-meta', '');
-        healthBar.appendChild(autoBtn); healthBar.appendChild(updatedAgo);
-        c.appendChild(healthBar);
+        const headRight = el('div', 'card-head-right');
+        headRight.appendChild(updatedAgo); headRight.appendChild(autoBtn);
+        cardHead.appendChild(headRight);
+        card.appendChild(cardHead);
+        c.appendChild(card);
         let autoOn = true; let lastRefresh = 0;
 
         // ── Cloud Service card (Northflank metadata via worker proxy) ───

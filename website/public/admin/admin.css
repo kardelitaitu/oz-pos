@@ -707,7 +707,9 @@ select.input {
 }
 
 /* ── Health — toolbar, service status, uptime, traffic ─────────────── */
-.health-bar { display: flex; align-items: center; gap: 1rem; margin: 0 0 .75rem; }
+.card-head { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: .85rem; }
+.card-head h2 { margin: 0; flex: 1 1 auto; }
+.card-head-right { display: flex; align-items: center; gap: .6rem; margin-left: auto; }
 .svc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; font-size: .82rem; }
 .status-chip { font-weight: 600; font-size: 11px; padding: 2px 8px; border-radius: 999px; }
 .status-ok { background: transparent; color: var(--success); }
@@ -770,7 +772,8 @@ select.input {
   .donut-row .donut-legend { flex: 1 1 auto; width: 100%; }
   .wrap { padding: .75rem; }
   .nav-btn { font-size: 12px; padding: 8px 10px; }
-  .topbar-inner { gap: .75rem; }
+  /* Align the topbar gutter with the content gutter (both 12px). */
+  .topbar-inner { gap: .75rem; padding-left: .75rem; padding-right: .75rem; }
   .topbar-actions { gap: .4rem; }
   /* Tenant detail / tier dialogs: full-width stacked actions on phones. */
   .modal { padding: 1.1rem; border-radius: var(--r-md); }
