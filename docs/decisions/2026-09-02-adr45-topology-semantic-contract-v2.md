@@ -712,9 +712,36 @@ Obligations 2 and 3 are each a full slice on their own and neither is mechanical
    types in the contract, or make the `workspace:*` row advertise no output
    socket at all. Either edit shrinks the ledger to empty and the test forces
    its deletion.
+
+   **The data-compatibility blocker on this is resolved (2026-09-02), and it
+   pointed the opposite way from what was assumed.** The worry was that removing
+   the sockets could orphan wires already saved in a merchant diagram. It cannot:
+   every write goes `save_topology_json_at_key_with_revision` →
+   `validate_semantic_ownership` → `validate_semantic_json`, which refuses any
+   wire the contract gate rejects. A stock or transfer wire leaving an
+   unregistered workspace type was never persistable, so there is nothing on disk
+   to orphan — the only graphs that ever held one were unsaved canvases, which is
+   precisely what §4 wants to make unauthorable.
+
+   One carve-out to know before editing: `validate_semantic_json` skips the
+   contract gate for `operation-out → operation-in` wires of relationship
+   `generic` leaving a workspace, leaving those to the specialised checks. Stock
+   and transfer are not in that pre-filter, so the reasoning above holds for all
+   four ledger entries. It does not hold for operation wires, where the
+   specialised check is the only gate — which is why item 2 mattered.
 2. The `invalid-operation-source` / `invalid-warehouse-operation-source` checks
    are a seventh and eighth statement of the operation row's endpoints. They
    give better messages and should stay, but the contract should generate them.
+
+   **Done for `invalid-operation-source` (2026-09-02)**, in both languages:
+   `topologyContract.ts` and `crates/oz-core/src/topology.rs` now ask
+   `pairingAdmitsKinds` / `pairing_admits_kinds` rather than testing a type key
+   alone. The Rust set was also inconsistent with its own neighbour —
+   `restaurant_pos_ids` checked type key only while `retail_pos_ids` checked kind
+   and type key. Building the graph to prove the hole was reachable showed the §1
+   wire gate refuses that feed first, so the weak predicate was defence in depth
+   that could never fire; the test now pins that ordering instead.
+   `invalid-warehouse-operation-source` is still hand-written and stays open.
 3. ~~Three workspace-type lists with three meanings and no owner~~ — **half
    resolved.** The editor's list is gone, derived from `typeSelectable`. The
    contract's `endpointWorkspaceTypeKeys` and the DB's `workspace_types` table remain
