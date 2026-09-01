@@ -8,7 +8,7 @@
 //!
 //! Invariants enforced here:
 //! - slot 1..=5 validation
-//! - menu item (`product_type = 'menu'`) has exactly 1 image (slot 1 only)
+//! - menu item (`product_type = 'restaurant'`) has exactly 1 image (slot 1 only)
 //! - clearing slot 1 on a menu item is refused
 //! - clearing slot 1 while alternatives exist promotes the first alternative
 //!   (lowest `position`, tie-break lowest `slot`) to primary in the same
@@ -71,10 +71,10 @@ impl Store<'_> {
                 other => CoreError::Internal(format!("reading product_type: {other}")),
             })?;
 
-        if product_type == "menu" && slot != 1 {
+        if product_type == "restaurant" && slot != 1 {
             return Err(CoreError::Validation {
                 field: "slot",
-                message: "menu items can only have slot 1 (primary image)".into(),
+                message: "menu items (restaurant type) can only have slot 1 (primary image)".into(),
             });
         }
 
@@ -148,11 +148,11 @@ impl Store<'_> {
                 other => CoreError::Internal(format!("reading product: {other}")),
             })?;
 
-        // Menu invariant: cannot clear slot 1
-        if product_type == "menu" && slot == 1 {
+        // Menu invariant: restaurant-type items always have exactly 1 image
+        if product_type == "restaurant" && slot == 1 {
             return Err(CoreError::Validation {
                 field: "slot",
-                message: "menu items must always have exactly 1 image; clear the image by replacing it, not by removing it".into(),
+                message: "menu items (restaurant type) must always have exactly 1 image; clear the image by replacing it, not by removing it".into(),
             });
         }
 

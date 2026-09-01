@@ -121,7 +121,7 @@ fn set_image_out_of_range_slot_rejected() {
 fn set_image_menu_item_only_slot_1() {
     let conn = fresh_db();
     let store = Store::new(&conn);
-    let pid = seed_product(&conn, "M", "menu");
+    let pid = seed_product(&conn, "M", "restaurant");
 
     store.set_product_image(&pid, 1, "abc").unwrap();
     assert_eq!(image_hash(&conn, &pid), Some("abc".into()));
@@ -182,7 +182,7 @@ fn clear_image_promotes_first_alternative() {
 fn clear_image_menu_item_slot_1_refused() {
     let conn = fresh_db();
     let store = Store::new(&conn);
-    let pid = seed_product(&conn, "M", "menu");
+    let pid = seed_product(&conn, "M", "restaurant");
 
     store.set_product_image(&pid, 1, "abc").unwrap();
 
