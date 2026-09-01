@@ -11,6 +11,7 @@ next: none | perf: N/A
 //! in a default [`prometheus::Registry`] and exposed via `GET /metrics`.
 
 use std::sync::LazyLock;
+use std::time::Instant;
 
 use prometheus::{
     Counter, CounterVec, Histogram, HistogramOpts, HistogramVec, Opts, Registry, TextEncoder,
@@ -284,6 +285,78 @@ pub fn render_metrics() -> String {
     encoder
         .encode_to_string(&REGISTRY.gather())
         .unwrap_or_default()
+}
+
+/// Cache TTL for the rendered `/metrics` body (ADR #43 D3).
+///
+/// Prometheus scrapes on a fixed interval (commonly 15s); re-encoding the
+/// full exposition on every scrape is wasted CPU, and under a scrape burst
+/// (multiple scrapers, load-balanced probes) the identical text is encoded
+/// once per request.  A short TTL absorbs those bursts while keeping the
+/// exposed values fresh enough for alerting.
+const METRICS_RENDER_TTL: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// A tiny TTL cache for the rendered `/metrics` text.
+///
+/// Holds the last rendered exposition plus the `Instant` it was produced.
+/// The critical section is only the check-and-set on the cached string —
+/// the (relatively costly) `gather()` + text encode happens *outside* the
+/// lock, so concurrent scrapers never serialize on the encoder; the first
+/// one after expiry re-renders and everyone else reads the stored text.
+struct MetricsRenderCache {
+    inner: std::sync::Mutex<Option<(Instant, String)>>,
+}
+
+impl MetricsRenderCache {
+    fn new() -> Self {
+        Self {
+            inner: std::sync::Mutex::new(None),
+        }
+    }
+
+    /// Return the cached exposition if it is younger than `ttl`.
+    ///
+    /// Returns `None` when empty or expired, signalling the caller to
+    /// re-render (which then populates the cache via [`Self::store`]).
+    fn get(&self, ttl: std::time::Duration) -> Option<String> {
+        let guard = match self.inner.lock() {
+            Ok(g) => g,
+            // Poisoned lock: the holder panicked mid-render; treat as a
+            // cache miss so the endpoint stays available rather than
+            // propagating a poisoned state forever.
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let (at, text) = (*guard).as_ref()?;
+        if at.elapsed() < ttl {
+            Some(text.clone())
+        } else {
+            None
+        }
+    }
+
+    /// Store a freshly rendered exposition.
+    fn store(&self, text: String) {
+        let mut guard = match self.inner.lock() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        *guard = Some((Instant::now(), text));
+    }
+}
+
+/// Render all registered metrics, caching the text for up to
+/// [`METRICS_RENDER_TTL`] (ADR #43 D3).
+///
+/// The Prometheus endpoint calls this instead of [`render_metrics`] so that
+/// a scrape burst re-encodes at most once per TTL window.
+pub fn render_metrics_cached() -> String {
+    static CACHE: LazyLock<MetricsRenderCache> = LazyLock::new(MetricsRenderCache::new);
+    if let Some(cached) = CACHE.get(METRICS_RENDER_TTL) {
+        return cached;
+    }
+    let text = render_metrics();
+    CACHE.store(text.clone());
+    text
 }
 
 #[cfg(test)]

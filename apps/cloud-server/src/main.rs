@@ -375,7 +375,7 @@ struct HealthResponse {
 /// `GET /metrics` — Prometheus metrics endpoint.
 /// Public, no auth required (same as /health).
 async fn metrics_handler() -> String {
-    crate::metrics::render_metrics()
+    crate::metrics::render_metrics_cached()
 }
 
 /// `GET /health` — public health check, no auth required.
