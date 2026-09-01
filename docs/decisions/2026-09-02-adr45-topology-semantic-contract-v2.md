@@ -2,11 +2,11 @@
 num: 45
 area: topology
 title: ADR #45: Topology Semantic Contract v2 — Endpoint Predicates, Kind Registry, Deliberate Cold Start, and Theme Parity
-status: Accepted — §1–§3, §4.1, §5, §4.2 storage + migration, §4.3 ordering rule + backend parity implemented (2026-09-02); §4.2 UI swap and §4.3 checklist UI proposed
+status: Accepted — §1–§3, §4.1, §5, §4.2 storage + IPC + migration function, §4.3 ordering rule + backend parity implemented (2026-09-02); §4.2 UI swap and §4.3 checklist UI proposed
 ---
 # ADR #45: Topology Semantic Contract v2
 
-**Status:** Accepted — §1–§3, §4.1, §5, §4.2 storage + migration, §4.3 ordering rule + backend parity implemented (2026-09-02); §4.2 UI swap and §4.3 checklist UI proposed
+**Status:** Accepted — §1–§3, §4.1, §5, §4.2 storage + IPC + migration function, §4.3 ordering rule + backend parity implemented (2026-09-02); §4.2 UI swap and §4.3 checklist UI proposed
 **Date:** 2026-09-02
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** topology, semantic-contract, cross-language-parity, node-kind-registry, cold-start, theming
