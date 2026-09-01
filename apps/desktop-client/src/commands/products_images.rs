@@ -181,6 +181,50 @@ pub async fn products_clear_image_scoped(
     Ok(())
 }
 
+// ── Command: list images ───────────────────────────────────────────────
+
+/// List the image assignments for a product (slots 1..=5), ordered by slot.
+///
+/// The editor flow calls this on open to show the primary + alternatives.
+#[tauri::command]
+pub async fn products_list_images_scoped(
+    session_token: String,
+    product_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<ProductImageDto>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_READ).await?;
+
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let images = store.list_product_images(&product_id)?;
+    Ok(images
+        .into_iter()
+        .map(|img| ProductImageDto {
+            slot: img.slot,
+            hash: img.hash,
+            position: img.position,
+        })
+        .collect())
+}
+
+/// A product image assignment returned to the front-end.
+#[derive(Debug, serde::Serialize)]
+pub struct ProductImageDto {
+    /// Slot 1 = primary; slots 2..5 = alternatives.
+    pub slot: i32,
+    /// Content-addressed hash (first 16 hex chars of sha-256).
+    pub hash: String,
+    /// Display order of alternatives (0-based).
+    pub position: i32,
+}
+
 // ── Image pipeline helpers ─────────────────────────────────────────────
 
 /// Detect the image format from magic bytes. Returns the format name on

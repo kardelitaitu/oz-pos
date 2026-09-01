@@ -623,6 +623,7 @@ pub fn run() {
             commands::products::record_product_search_scoped,
             commands::products_images::products_set_image_scoped,
             commands::products_images::products_clear_image_scoped,
+            commands::products_images::products_list_images_scoped,
             commands::browser::open_product_images_scoped,
             commands::promotions::list_promotions_scoped,
             commands::promotions::get_promotion_scoped,
