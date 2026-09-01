@@ -17,12 +17,6 @@ workspace = true
 [dependencies]
 foundation = { workspace = true }
 oz-core = { workspace = true }
-oz-hal = { workspace = true }
-oz-lua = { workspace = true }
-oz-security = { workspace = true }
-oz-payment = { workspace = true }
-oz-reporting = { workspace = true }
-oz-logging = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 clap = { workspace = true }
