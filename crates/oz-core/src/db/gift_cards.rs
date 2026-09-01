@@ -1,9 +1,9 @@
 //! Gift cards CRUD — issue, redeem, top-up, freeze, balance checks.
 /*
-last audited 25-07-26 by RSA-Agent (oz-core slice B3: gift cards deep read)
-crate: oz-core | status: SAFE | lint: CLEAN
-findings: stored-value paths sound (PA-01 atomic conditional UPDATE both directions with i64::MAX overflow guard on top-up; in-tx balance re-read keeps ledger rows accurate under concurrency; expiry parse-fail treats card as expired — fail-safe; RUST-07 recoverable lookups documented); COR-15 LOW: redeem idempotency (card, sale_id) is check-then-act with NO unique index behind it — race-safe only under the single-connection mutex; loyalty earn/redeem has the unique projection index, gift cards do not — becomes MEDIUM under multi-terminal sync replay; COR-16 INFO: list_gift_cards search does not escape LIKE wildcards (customers/audit pattern does); COR-17 INFO: card PIN stored plaintext (acceptable local-POS threat model; revisit before cloud sync)
-next: partial UNIQUE index on gift_card_transactions(gift_card_id, sale_id) WHERE txn_type='redeem' (COR-15); escape LIKE search (COR-16) | perf: N+1 txn fetch in list_gift_cards is bounded at 5/card
+last audited DD-MM-YY by DSH-Agent
+crate: oz-core (gift_cards) | status: SAFE | lint: CLEAN
+findings: stored-value paths sound (PA-01 atomic conditional UPDATE both directions with i64::MAX overflow guard on top-up; in-tx balance re-read keeps ledger rows accurate under concurrency; expiry parse-fail treats card as expired — fail-safe; RUST-07 recoverable lookups documented). COR-15 FIXED DD-MM-YY — partial UNIQUE index uq_gift_card_redeem_sale (migration 20260901) closes the redeem idempotency gap under sync replay. COR-16 FIXED DD-MM-YY — list_gift_cards search + issued_to now escape LIKE wildcards (ESCAPE '\', same as customers/audit). COR-17 INFO: card PIN stored plaintext (acceptable local-POS threat model; revisit before cloud sync).
+next: none | perf: N+1 txn fetch in list_gift_cards is bounded at 5/card
 */
 
 use rusqlite::params;
@@ -192,9 +192,15 @@ impl Store<'_> {
         let mut param_idx = 1;
 
         if let Some(ref search) = filter.search {
-            let pattern = format!("%{}%", search);
+            // COR-16: escape LIKE wildcards so user input with literal % or _
+            // does not broaden the match (same pattern as customers.rs/audit.rs).
+            let escaped = search
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_");
+            let pattern = format!("%{}%", escaped);
             where_clauses.push(format!(
-                "(g.card_number LIKE ?{param_idx} OR g.issued_to LIKE ?{param_idx})"
+                "(g.card_number LIKE ?{param_idx} ESCAPE '\\' OR g.issued_to LIKE ?{param_idx} ESCAPE '\\')"
             ));
             param_values.push(Box::new(pattern));
             param_idx += 1;
@@ -207,8 +213,13 @@ impl Store<'_> {
         }
 
         if let Some(ref issued_to) = filter.issued_to {
-            let pattern = format!("%{}%", issued_to);
-            where_clauses.push(format!("g.issued_to LIKE ?{param_idx}"));
+            // COR-16: same wildcard escaping as the search filter.
+            let escaped = issued_to
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_");
+            let pattern = format!("%{}%", escaped);
+            where_clauses.push(format!("g.issued_to LIKE ?{param_idx} ESCAPE '\\'"));
             param_values.push(Box::new(pattern));
             param_idx += 1;
         }
