@@ -236,6 +236,8 @@ fn migrations_create_expected_tables() {
         "assignments",
         "assignment_branches",
         "assignment_workspaces",
+        // ── Spec 0046b (migration 20260901_product_images) ──
+        "product_images",
     ];
 
     for table in &expected_tables {
@@ -358,12 +360,13 @@ fn seed_data_bootstraps_essential_rows() {
     );
 }
 
-/// Pin the consolidated schema surface: 99 tables, 137 indexes (123 in
+/// Pin the consolidated schema surface: 100 tables, 139 indexes (123 in
 /// init plus the two per-tenant unique indexes from
 /// `20260815_tenant_unique_indexes.sql` plus 4 multi-KDS indexes from
 /// `20260820_kds_devices.sql` plus 4 media/EDC indexes from
 /// `20260824_media_edc.sql` plus 3 payment indexes from
-/// `20260825_payment_infra.sql`), 4 triggers. (The generated
+/// `20260825_payment_infra.sql` plus 2 product-image indexes from
+/// `20260901_product_images.sql`), 4 triggers. (The generated
 /// `*.pg.sql` Postgres port is excluded — see
 /// [`pg_init_declares_same_table_surface_as_sqlite`].) A count assertion catches a table/index/trigger silently
 /// dropping out of `init.sql` — something a name-list check misses when a
@@ -373,13 +376,14 @@ fn init_sql_creates_complete_schema_surface() {
     let mut conn = fresh();
     run(&mut conn).unwrap();
 
-    // The runner adds `schema_migrations` on top of the 97 init tables.
+    // All migrations applied (init + incremental) yield 100 tables,
+    // excluding the runner's `schema_migrations` bookkeeping table.
     assert_eq!(
         row_count(
             &conn,
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'schema_migrations'",
         ),
-        99,
+        100,
         "table surface drifted"
     );
     assert_eq!(
@@ -387,7 +391,7 @@ fn init_sql_creates_complete_schema_surface() {
             &conn,
             "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'",
         ),
-        137,
+        139,
         "index surface drifted"
     );
     assert_eq!(
@@ -505,6 +509,7 @@ fn existing_db_with_legacy_rows_upgrades_idempotently() {
             "20260827_refunds_tenant.sql".to_string(),
             "20260831_loyalty_multiplier_fixedpoint.sql".to_string(),
             "20260831_per_tenant_unique_rebuild.sql".to_string(),
+            "20260901_product_images.sql".to_string(),
         ]
     );
 
@@ -536,7 +541,7 @@ fn existing_db_with_legacy_rows_upgrades_idempotently() {
             &conn,
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'schema_migrations'"
         ),
-        99,
+        100,
         "table surface must be unchanged after upgrade"
     );
 }

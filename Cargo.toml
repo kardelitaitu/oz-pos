@@ -132,6 +132,14 @@ regex = "1"
 mdns-sd = "0.10"
 zip = "2"
 
+# ── Image ingest (spec 0046b) ─────────────────────────────────────────
+# Desktop-client only: the authoring device transcodes product/menu images
+# (decode via `image`, lossy WebP q40 encode via `webp`/libwebp). Tablet
+# renders + downloads only; cloud re-verifies magic + sha-256 only. Neither
+# links these. See docs/specs/_active/0046b-product-menu-images.md §3.3 + §5.6.
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+webp = "0.3"
+
 # Benchmarking
 criterion = { version = "0.5", features = ["html_reports"] }
 console-subscriber = "0.4"

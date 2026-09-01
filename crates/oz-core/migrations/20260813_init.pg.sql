@@ -543,7 +543,7 @@ CREATE TABLE IF NOT EXISTS "products" (
     is_active BIGINT NOT NULL DEFAULT 1,
     default_supplier_id TEXT REFERENCES suppliers(id),
     popularity_score DOUBLE PRECISION NOT NULL DEFAULT 0
-);
+, image_hash TEXT);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_products_tenant_sku ON products(tenant_id, sku);
 
@@ -905,6 +905,15 @@ CREATE TABLE IF NOT EXISTS "product_bundles" (
     updated_at  TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
     tenant_id TEXT NOT NULL DEFAULT 'default',
     FOREIGN KEY (tenant_id, bundle_sku) REFERENCES products(tenant_id, sku)
+);
+
+CREATE TABLE IF NOT EXISTS product_images (
+    product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    slot       BIGINT NOT NULL CHECK (slot BETWEEN 1 AND 5),
+    hash       TEXT NOT NULL,
+    position   BIGINT NOT NULL DEFAULT 0,   -- display order of alternatives
+    updated_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    PRIMARY KEY (product_id, slot)
 );
 
 CREATE TABLE IF NOT EXISTS "user_workspace_instances" (
@@ -1416,6 +1425,10 @@ CREATE INDEX IF NOT EXISTS idx_payments_sale_id ON payments(sale_id);
 CREATE INDEX IF NOT EXISTS idx_po_lines_po_id ON purchase_order_lines(po_id);
 
 CREATE INDEX IF NOT EXISTS idx_product_activity_sku ON product_activity(sku);
+
+CREATE INDEX IF NOT EXISTS idx_product_images_hash ON product_images(hash);
+
+CREATE INDEX IF NOT EXISTS idx_product_images_product ON product_images(product_id);
 
 CREATE INDEX IF NOT EXISTS idx_product_modifier_groups_product ON product_modifier_groups(product_id);
 

@@ -41,6 +41,9 @@ mod products_stock_query;
 #[path = "products_stock_adjust.rs"]
 mod products_stock_adjust;
 
+#[path = "products_images.rs"]
+mod products_images;
+
 // ── Enriched product type ────────────────────────────────────────────
 
 /// A [`Product`] enriched with category name and stock quantity from

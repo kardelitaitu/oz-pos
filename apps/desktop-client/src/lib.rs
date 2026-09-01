@@ -621,6 +621,8 @@ pub fn run() {
             commands::products::get_product_track_serial_scoped,
             commands::products::get_product_track_serial_batch_scoped,
             commands::products::record_product_search_scoped,
+            commands::products_images::products_set_image_scoped,
+            commands::products_images::products_clear_image_scoped,
             commands::browser::open_product_images_scoped,
             commands::promotions::list_promotions_scoped,
             commands::promotions::get_promotion_scoped,
