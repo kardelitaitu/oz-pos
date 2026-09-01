@@ -54,7 +54,16 @@ impl RoundingMode {
         debug_assert!(divisor > 0, "divisor must be positive");
         match self {
             Self::Truncate => Some(numerator / divisor),
-            Self::HalfUp => numerator.checked_add(divisor / 2).map(|n| n / divisor),
+            Self::HalfUp => {
+                if numerator % divisor == 0 {
+                    // Exact division — no rounding needed.
+                    // The checked_add formula below shifts exact negative
+                    // results (e.g. HalfUp.divide(-4, 2) → -1, not -2).
+                    Some(numerator / divisor)
+                } else {
+                    numerator.checked_add(divisor / 2).map(|n| n / divisor)
+                }
+            }
         }
     }
 }
@@ -173,6 +182,26 @@ mod tests {
         // i64::MAX / 2 would overflow when adding divisor/2
         let result = RoundingMode::HalfUp.divide(i64::MAX, 2);
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn halfup_negative_exact_division_does_not_shift() {
+        // Regression: (n + d/2) / d with truncating division gives
+        // wrong result for exact negative division (e.g. -4/2 returns
+        // -1, not -2). The exact-division guard fixes this.
+        assert_eq!(RoundingMode::HalfUp.divide(-4, 2).unwrap(), -2);
+        assert_eq!(RoundingMode::HalfUp.divide(-6, 2).unwrap(), -3);
+        assert_eq!(RoundingMode::HalfUp.divide(4, 2).unwrap(), 2);
+    }
+
+    #[test]
+    fn halfup_negative_rounds_correctly() {
+        // -5/2 = -2.5 → round half up (toward +∞) → -2
+        assert_eq!(RoundingMode::HalfUp.divide(-5, 2).unwrap(), -2);
+        // -3/2 = -1.5 → -1
+        assert_eq!(RoundingMode::HalfUp.divide(-3, 2).unwrap(), -1);
+        // -7/10 = -0.7 → 0
+        assert_eq!(RoundingMode::HalfUp.divide(-7, 10).unwrap(), 0);
     }
 
     #[test]
