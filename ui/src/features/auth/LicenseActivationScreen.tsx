@@ -18,7 +18,7 @@ import './LicenseActivationScreen.css';
 // standalone license service URL was folded into this single host.
 const AUTH_SERVICE_URL =
   (import.meta.env['VITE_AUTH_SERVICE_URL'] as string | undefined)
-  ?? 'https://oz--cloud--76cyv4d6bn54.code.run';
+  ?? 'https://license.ozpos.my.id';
 
 /** Props for the LicenseActivationScreen component. */
 export interface LicenseActivationScreenProps {
