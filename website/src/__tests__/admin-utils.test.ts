@@ -848,6 +848,77 @@ describe('admin-utils cfDeployRows (health Cloudflare deployments)', () => {
   });
 });
 
+describe('admin-utils relTime / sparkline / nfStatusCard / uptimeRows (health v2)', () => {
+  const NOW = Date.parse('2026-09-01T15:00:00Z');
+
+  it('relTime buckets deltas and handles junk', () => {
+    expect(utils.relTime('2026-09-01T14:59:56Z', NOW)).toBe('just now');
+    expect(utils.relTime('2026-09-01T14:59:30Z', NOW)).toBe('30s ago');
+    expect(utils.relTime('2026-09-01T14:56:00Z', NOW)).toBe('4m ago');
+    expect(utils.relTime('2026-09-01T12:00:00Z', NOW)).toBe('3h ago');
+    expect(utils.relTime('2026-08-30T15:00:00Z', NOW)).toBe('2d ago');
+    expect(utils.relTime('garbage', NOW)).toBe('');
+  });
+
+  it('sparkline draws an area path starting with M and WIB edge labels', () => {
+    const svg = utils.sparkline([
+      { t: '2026-09-01T13:00:00Z', req: 4, err: 0 },
+      { t: '2026-09-01T13:01:00Z', req: 9, err: 1 },
+      { t: '2026-09-01T13:02:00Z', req: 2, err: 0 },
+    ]);
+    expect(svg).toContain('class="chart-svg spark-svg"');
+    expect(svg).toMatch(/d="M \d/);
+    expect(svg).toContain('stroke="var(--danger)"');
+    expect(svg).toContain('20:00');
+    expect(svg).toContain('20:02');
+  });
+
+  it('sparkline falls back to the empty state', () => {
+    expect(utils.sparkline([])).toContain('chart-empty');
+    expect(utils.sparkline([{ t: 'x', req: 0 }])).toContain('chart-empty');
+  });
+
+  it('nfStatusCard renders status chip, running sha and fields', () => {
+    const v = utils.nfStatusCard({
+      deploymentStatus: 'COMPLETED', deploymentReason: 'DEPLOYING', buildStatus: 'SUCCESS',
+      deployedSha: 'e0046a6fbd507b02f60bd1a868c53f83dea167bf', branch: 'main',
+      region: 'nf-europe-west', instances: 1, updatedAt: '2026-09-01T03:20:20.172Z',
+    });
+    expect(v.querySelector('.status-ok')).not.toBeNull();
+    expect(v.querySelector('.deploy-sha').textContent).toBe('e0046a6f');
+    expect(v.textContent).toContain('main');
+    expect(v.textContent).toContain('nf-europe-west');
+  });
+
+  it('nfStatusCard marks non-completed deployment as warn', () => {
+    const v = utils.nfStatusCard({ deploymentStatus: 'DEPLOYING', instances: 2 });
+    expect(v.querySelector('.status-warn')).not.toBeNull();
+  });
+
+  it('uptimeRows renders dots, latency and error text', () => {
+    const v = utils.uptimeRows([
+      { name: 'license api', up: true, ms: 42 },
+      { name: 'admin', up: false, ms: 5000, error: 'HTTP 502' },
+    ]);
+    const rows = v.querySelectorAll('.up-row');
+    expect(rows.length).toBe(2);
+    expect(rows[0].querySelector('.up-dot--ok')).not.toBeNull();
+    expect(rows[0].querySelector('.up-ms').textContent).toBe('42 ms');
+    expect(rows[1].querySelector('.up-dot--bad')).not.toBeNull();
+    expect(rows[1].querySelector('.up-err').textContent).toBe('HTTP 502');
+  });
+
+  it('logView highlights error lines', () => {
+    const v = utils.logView([
+      { ts: '2026-09-01T12:00:00Z', log: 'all good' },
+      { ts: '2026-09-01T12:01:00Z', log: 'scanner: failed to connect' },
+    ]);
+    const rows = v.querySelectorAll('.log-line');
+    expect(rows[0].className).not.toContain('log-line--err');
+    expect(rows[1].className).toContain('log-line--err');
+  });
+});
+
 describe('admin-utils busyWrap (B19: double-click submitted the action twice)', () => {
   // The tenant detail modal's Revoke/Activate/Renew/Upgrade-save buttons
   // fired doAction on every click with no in-flight guard. Renew is

@@ -436,10 +436,12 @@
       return wrap;
     }
     lines.forEach(function (l) {
-      var row = el('div', 'log-line');
+      var msgText = stripAnsi(l && l.log);
+      var isErr = /\b(error|failed|exception|fatal|panic)\b/i.test(msgText);
+      var row = el('div', 'log-line' + (isErr ? ' log-line--err' : ''));
       var ts = l && l.ts ? logTsWib(l.ts) : '';
       if (ts) row.appendChild(el('span', 'log-ts', ts));
-      row.appendChild(el('span', 'log-msg', stripAnsi(l && l.log)));
+      row.appendChild(el('span', 'log-msg', msgText));
       wrap.appendChild(row);
     });
     return wrap;
@@ -474,6 +476,119 @@
       row.appendChild(el('span', 'deploy-chip deploy-chip--' + (trig === 'secret' ? 'secret' : 'deploy'), trig));
       var ts = d && d.time ? logTsWib(d.time) : '';
       if (ts) row.appendChild(el('span', 'deploy-time', ts + ' WIB'));
+      wrap.appendChild(row);
+    });
+    return wrap;
+  }
+
+  // relTime renders a coarse relative timestamp ("just now", "4m ago",
+  // "3h ago", "2d ago"). nowMs is injectable so tests are deterministic.
+  // Returns '' for junk input.
+  function relTime(iso, nowMs) {
+    if (!iso || typeof iso !== 'string') return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    var now = typeof nowMs === 'number' && isFinite(nowMs) ? nowMs : Date.now();
+    var s = Math.floor((now - d.getTime()) / 1000);
+    if (s < 10) return t('health.justNow');
+    if (s < 60) return s + 's' + t('health.agoSuffix');
+    if (s < 3600) return Math.floor(s / 60) + 'm' + t('health.agoSuffix');
+    if (s < 86400) return Math.floor(s / 3600) + 'h' + t('health.agoSuffix');
+    return Math.floor(s / 86400) + 'd' + t('health.agoSuffix');
+  }
+
+  // sparkline renders a request-per-minute area chart as an SVG string
+  // (caller sets innerHTML). buckets: [{t: ISO, req, err}] ascending.
+  // Errors overlay as a red line scaled to their own max (error counts
+  // are orders of magnitude smaller than requests).
+  function sparkline(buckets) {
+    if (!Array.isArray(buckets) || buckets.length < 2) {
+      return '<div class="chart-empty">' + escapeHtml(t('health.trafficEmpty')) + '</div>';
+    }
+    var w = 620, h = 150, baseline = 118, top = 18, pad = 10;
+    var plotW = w - pad * 2, plotH = baseline - top;
+    var maxR = Math.max.apply(null, buckets.map(function (b) { return Number(b && b.req) || 0; }));
+    var maxE = Math.max.apply(null, buckets.map(function (b) { return Number(b && b.err) || 0; }));
+    if (maxR <= 0) {
+      return '<div class="chart-empty">' + escapeHtml(t('health.trafficEmpty')) + '</div>';
+    }
+    var x = function (i) { return pad + (i * plotW) / (buckets.length - 1); };
+    var yR = function (v) { return baseline - (v / maxR) * plotH; };
+    // B42 lesson: the area path must START with the M command.
+    var pts = buckets.map(function (b, i) { return x(i) + ',' + yR(Number(b.req) || 0).toFixed(1); }).join(' L ');
+    var area = 'M ' + x(0) + ',' + baseline + ' L ' + pts + ' L ' + x(buckets.length - 1) + ',' + baseline + ' Z';
+    var errs = '';
+    if (maxE > 0) {
+      var yE = function (v) { return baseline - (v / maxE) * plotH; };
+      var ePts = buckets.map(function (b, i) { return x(i) + ',' + yE(Number(b.err) || 0).toFixed(1); }).join(' ');
+      errs = '<polyline points="' + ePts + '" fill="none" stroke="var(--danger)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>';
+    }
+    var t0 = logTsWib(buckets[0].t), t1 = logTsWib(buckets[buckets.length - 1].t);
+    return '<svg viewBox="0 0 ' + w + ' ' + h + '" class="chart-svg spark-svg" preserveAspectRatio="none">' +
+      '<path d="' + area + '" fill="var(--tint-primary-bg)" stroke="none"/>' +
+      '<polyline points="' + buckets.map(function (b, i) { return x(i) + ',' + yR(Number(b.req) || 0).toFixed(1); }).join(' ') + '" fill="none" stroke="var(--primary)" stroke-width="2" vector-effect="non-scaling-stroke"/>' +
+      errs +
+      '<line x1="' + pad + '" y1="' + baseline + '" x2="' + (w - pad) + '" y2="' + baseline + '" stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>' +
+      '<text x="' + pad + '" y="' + (baseline + 18) + '" fill="var(--muted)" font-size="10">' + escapeHtml(t0) + '</text>' +
+      '<text x="' + (w - pad) + '" y="' + (baseline + 18) + '" text-anchor="end" fill="var(--muted)" font-size="10">' + escapeHtml(t1) + '</text>' +
+      '</svg>';
+  }
+
+  // nfStatusCard renders the Northflank service status (deployment,
+  // build, running git sha, branch, region, instances) as a compact
+  // key-value card. Built with el() → textContent.
+  function nfStatusCard(s) {
+    var wrap = el('div', 'svc-grid');
+    if (!s || typeof s !== 'object') {
+      wrap.appendChild(el('p', 'empty', t('health.serviceEmpty')));
+      return wrap;
+    }
+    function kv(label, valueText, valueCls) {
+      wrap.appendChild(el('span', 'muted', label));
+      var v = el('span', valueCls || null, valueText);
+      v.style.textAlign = 'right';
+      wrap.appendChild(v);
+    }
+    var dStatus = String(s.deploymentStatus || '—');
+    var dCls = dStatus === 'COMPLETED' ? 'status-ok' : (dStatus === 'ERROR' ? 'status-bad' : 'status-warn');
+    kv(t('health.status'), dStatus, 'status-chip ' + dCls);
+    kv(t('health.svcRegion'), String(s.region || '—'));
+    kv(t('health.svcBranch'), String(s.branch || '—'));
+    if (s.deployedSha) {
+      wrap.appendChild(el('span', 'muted', t('health.svcRunningSha')));
+      var fullSha = String(s.deployedSha);
+      var shaCell = el('span', 'mono-cell');
+      var shaEl = el('span', 'deploy-sha', fullSha.slice(0, 8));
+      shaEl.title = fullSha;
+      shaCell.appendChild(shaEl);
+      if (s.deploymentAt) shaCell.appendChild(el('span', 'muted', ' · ' + relTime(s.deploymentAt)));
+      shaCell.style.textAlign = 'right';
+      wrap.appendChild(shaCell);
+    }
+    kv(t('health.svcInstances'), String(s.instances != null ? s.instances : '—'));
+    if (s.buildStatus) kv(t('health.svcBuild'), String(s.buildStatus), 'status-chip ' + (s.buildStatus === 'SUCCESS' ? 'status-ok' : 'status-warn'));
+    return wrap;
+  }
+
+  // uptimeRows renders the public-surface uptime checks: name, up dot,
+  // latency in ms, and the failure reason when down. el() → textContent.
+  function uptimeRows(checks) {
+    var wrap = el('div', 'up-list');
+    if (!Array.isArray(checks) || checks.length === 0) {
+      wrap.appendChild(el('p', 'empty', t('health.serviceEmpty')));
+      return wrap;
+    }
+    checks.forEach(function (c) {
+      var row = el('div', 'up-row');
+      row.appendChild(el('span', 'up-dot ' + (c && c.up ? 'up-dot--ok' : 'up-dot--bad')));
+      row.appendChild(el('span', 'up-name', String((c && c.name) || '?')));
+      if (c && c.up) {
+        row.appendChild(el('span', 'up-ms', (Number(c.ms) || 0) + ' ms'));
+      } else {
+        var err = el('span', 'up-err', String((c && c.error) || t('health.uptimeFailed')));
+        err.title = err.textContent;
+        row.appendChild(err);
+      }
       wrap.appendChild(row);
     });
     return wrap;
@@ -964,6 +1079,31 @@
     'health.deploysCaption': 'times in UTC+7 · source: Cloudflare',
     'health.deploysEmpty': 'No deployments found.',
     'health.deploysFailed': 'Could not load deployments.',
+    'health.serviceTitle': 'Cloud Service — cloud @ oz-pos',
+    'health.serviceRefresh': '↻ Refresh',
+    'health.serviceEmpty': 'Service status unavailable.',
+    'health.serviceFailed': 'Could not load service status.',
+    'health.svcRegion': 'Region',
+    'health.svcBranch': 'Branch',
+    'health.svcRunningSha': 'Running build',
+    'health.svcInstances': 'Instances',
+    'health.svcBuild': 'Last build',
+    'health.uptimeTitle': 'Uptime — public surfaces',
+    'health.uptimeRefresh': '↻ Refresh',
+    'health.uptimeFailed': 'unreachable',
+    'health.workerLogsTitle': 'Worker Logs — oz-pos (last hour)',
+    'health.workerLogsRefresh': '↻ Refresh',
+    'health.workerLogsEmpty': 'No worker log events in the last hour.',
+    'health.workerLogsFailed': 'Could not load worker logs.',
+    'health.trafficTitle': 'Traffic — requests/minute (24h)',
+    'health.trafficRefresh': '↻ Refresh',
+    'health.trafficEmpty': 'No traffic in the last 24 hours.',
+    'health.trafficFailed': 'Could not load traffic.',
+    'health.justNow': 'just now',
+    'health.agoSuffix': ' ago',
+    'health.autoOn': 'Auto-refresh: on',
+    'health.autoOff': 'Auto-refresh: off',
+    'health.updated': 'updated',
     'common.loading': 'Loading…',
     'common.loadingTenants': 'Loading tenants…',
     'common.failedToLoadTenants': 'Failed to load tenants.',
@@ -1092,6 +1232,10 @@
     logTsWib: logTsWib,
     logView: logView,
     cfDeployRows: cfDeployRows,
+    relTime: relTime,
+    sparkline: sparkline,
+    nfStatusCard: nfStatusCard,
+    uptimeRows: uptimeRows,
     mountModal: mountModal,
     flashMessage: flashMessage,
     fetchWithTimeout: fetchWithTimeout,

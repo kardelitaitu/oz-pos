@@ -57,6 +57,15 @@ const NF_SERVICE = 'cloud';
 const CF_DEPLOYS_PATH = '/__oz/cf-deploys';
 /** This Worker's own script name on Cloudflare. */
 const CF_SCRIPT_NAME = 'oz-pos';
+/** Health: Northflank service metadata (deployment state, running sha). */
+const NF_STATUS_PATH = '/__oz/nf-status';
+/** Health: public-surface uptime self-check (probed from the edge). */
+const UPTIME_PATH = '/__oz/uptime';
+/** Health: this Worker's own runtime logs (Cloudflare observability query). */
+const WORKER_LOGS_PATH = '/__oz/worker-logs';
+/** Health: request/error counts per minute (Cloudflare GraphQL analytics). */
+const TRAFFIC_PATH = '/__oz/traffic';
+const JSON_HEADERS = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } as const;
 const COOKIE_NAME = 'oz_session';
 
 /** Subdomains that require authentication (admin-only). */
@@ -394,6 +403,173 @@ export default {
             status: 502,
             headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
           });
+        }
+      }
+
+      // Step 1b-4: NF_STATUS_PATH — service metadata for the Health tab.
+      // Returns only status fields the panel needs (deployment state,
+      // running git sha, branch, region, instances) — the full service
+      // payload is deliberately NOT relayed.
+      if (url.pathname === NF_STATUS_PATH) {
+        if (!sessionCookie) return new Response(JSON.stringify({ error: 'not signed in' }), { status: 401, headers: JSON_HEADERS });
+        if (!env.NF_API_KEY) return new Response(JSON.stringify({ error: 'status proxy not configured (missing NF_API_KEY)' }), { status: 503, headers: JSON_HEADERS });
+        try {
+          const res = await fetch(`https://api.northflank.com/v1/projects/${NF_PROJECT}/services/${NF_SERVICE}`, {
+            headers: { Authorization: `Bearer ${env.NF_API_KEY}` },
+            signal: AbortSignal.timeout(8000),
+          });
+          if (!res.ok) {
+            return new Response(JSON.stringify({ ok: false, error: `Northflank responded ${res.status}` }), { status: 502, headers: JSON_HEADERS });
+          }
+          const b = await res.json() as {
+            data?: {
+              serviceType?: string;
+              deployment?: { instances?: number; internal?: { deployedSHA?: string; branch?: string; updatedAt?: string }; lastTransitionTime?: string };
+              status?: { build?: { status?: string; lastTransitionTime?: string }; deployment?: { status?: string; reason?: string; lastTransitionTime?: string } };
+              cluster?: { id?: string };
+            };
+          };
+          const s = b.data ?? {};
+          return new Response(JSON.stringify({
+            ok: true,
+            status: {
+              serviceType: String(s.serviceType ?? ''),
+              deploymentStatus: String(s.status?.deployment?.status ?? ''),
+              deploymentReason: String(s.status?.deployment?.reason ?? ''),
+              deploymentAt: String(s.status?.deployment?.lastTransitionTime ?? ''),
+              buildStatus: String(s.status?.build?.status ?? ''),
+              buildAt: String(s.status?.build?.lastTransitionTime ?? ''),
+              deployedSha: String(s.deployment?.internal?.deployedSHA ?? ''),
+              branch: String(s.deployment?.internal?.branch ?? ''),
+              updatedAt: String(s.deployment?.internal?.updatedAt ?? ''),
+              region: String(s.cluster?.id ?? ''),
+              instances: Number(s.deployment?.instances ?? 0),
+            },
+          }), { headers: JSON_HEADERS });
+        } catch {
+          return new Response(JSON.stringify({ ok: false, error: 'could not reach Northflank' }), { status: 502, headers: JSON_HEADERS });
+        }
+      }
+
+      // Step 1b-5: UPTIME_PATH — probe the four public surfaces from the
+      // edge and report reachability + latency. Needs no API key at all:
+      // an HTTP response of any kind (even a 302 to the login page) means
+      // the surface answered; only network failure or 5xx marks it down.
+      if (url.pathname === UPTIME_PATH) {
+        if (!sessionCookie) return new Response(JSON.stringify({ error: 'not signed in' }), { status: 401, headers: JSON_HEADERS });
+        const targets: Array<[string, string]> = [
+          ['website (ozpos.my.id)', 'https://ozpos.my.id/'],
+          ['license api', 'https://license.ozpos.my.id/api/health'],
+          ['dashboard', 'https://dashboard.ozpos.my.id/'],
+          ['admin', 'https://admin.ozpos.my.id/'],
+        ];
+        const checks = await Promise.all(targets.map(async ([name, target]) => {
+          const t0 = Date.now();
+          try {
+            const res = await fetch(target, { method: 'GET', redirect: 'follow', signal: AbortSignal.timeout(6000) });
+            const ms = Date.now() - t0;
+            return { name, up: res.status < 500, ms, status: res.status, error: res.status >= 500 ? `HTTP ${res.status}` : '' };
+          } catch (e) {
+            return { name, up: false, ms: Date.now() - t0, status: 0, error: e instanceof Error ? e.message : 'network error' };
+          }
+        }));
+        return new Response(JSON.stringify({ ok: true, checks }), { headers: JSON_HEADERS });
+      }
+
+      // Step 1b-6: WORKER_LOGS_PATH — this Worker's own runtime logs via
+      // the Cloudflare observability query API (wrangler.toml has
+      // [observability.logs] enabled). Returns the last hour of events,
+      // newest first, trimmed to the fields the panel renders.
+      if (url.pathname === WORKER_LOGS_PATH) {
+        if (!sessionCookie) return new Response(JSON.stringify({ error: 'not signed in' }), { status: 401, headers: JSON_HEADERS });
+        if (!env.CF_API_KEY) return new Response(JSON.stringify({ error: 'worker logs proxy not configured (missing CF_API_KEY)' }), { status: 503, headers: JSON_HEADERS });
+        try {
+          const to = Date.now();
+          const from = to - 3600000;
+          const qBody = JSON.stringify({
+            queryId: 'oz-admin-health-' + to,
+            view: 'events',
+            limit: 100,
+            timeframe: { from, to },
+            parameters: { datasets: ['cloudflare-workers'], limit: 100 },
+          });
+          const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/workers/observability/telemetry/query`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${env.CF_API_KEY}`, 'Content-Type': 'application/json' },
+            body: qBody,
+            signal: AbortSignal.timeout(10000),
+          });
+          if (!res.ok) {
+            return new Response(JSON.stringify({ ok: false, error: `Cloudflare responded ${res.status}` }), { status: 502, headers: JSON_HEADERS });
+          }
+          const b = await res.json() as {
+            success?: boolean;
+            result?: { events?: { events?: Array<{
+              timestamp?: number;
+              source?: { level?: string; message?: string };
+              $workers?: { event?: { outcome?: string; request?: { url?: string; method?: string }; response?: { status?: number } } };
+            }> } };
+          };
+          if (!b.success) {
+            return new Response(JSON.stringify({ ok: false, error: 'Cloudflare telemetry query failed' }), { status: 502, headers: JSON_HEADERS });
+          }
+          const evs = b.result?.events?.events ?? [];
+          const events = evs
+            .map(e => ({
+              ts: new Date(Number(e.timestamp) || 0).toISOString(),
+              level: String(e.source?.level ?? 'info'),
+              message: String(e.source?.message ?? ''),
+              outcome: String(e.$workers?.event?.outcome ?? ''),
+              status: Number(e.$workers?.event?.response?.status ?? 0) || 0,
+            }))
+            .filter(e => e.ts !== '1970-01-01T00:00:00.000Z')
+            .sort((a, c) => c.ts.localeCompare(a.ts))
+            .slice(0, 100);
+          return new Response(JSON.stringify({ ok: true, events }), { headers: JSON_HEADERS });
+        } catch {
+          return new Response(JSON.stringify({ ok: false, error: 'could not reach Cloudflare' }), { status: 502, headers: JSON_HEADERS });
+        }
+      }
+
+      // Step 1b-7: TRAFFIC_PATH — requests + errors per minute for the
+      // last 24h from the Workers GraphQL analytics dataset. The worker
+      // aggregates into the buckets the sparkline needs.
+      if (url.pathname === TRAFFIC_PATH) {
+        if (!sessionCookie) return new Response(JSON.stringify({ error: 'not signed in' }), { status: 401, headers: JSON_HEADERS });
+        if (!env.CF_API_KEY) return new Response(JSON.stringify({ error: 'traffic proxy not configured (missing CF_API_KEY)' }), { status: 503, headers: JSON_HEADERS });
+        try {
+          const nowIso = new Date().toISOString().slice(0, 19) + 'Z';
+          const fromIso = new Date(Date.now() - 86400000).toISOString().slice(0, 19) + 'Z';
+          const gql = {
+            query: 'query($acct:String!,$script:String!,$from:Time!,$to:Time!){viewer{accounts(filter:{accountTag:$acct}){workersInvocationsAdaptive(limit:10000,filter:{scriptName:$script,datetime_geq:$from,datetime_leq:$to},orderBy:[datetimeMinute_ASC]){sum{requests errors}dimensions{datetimeMinute}}}}}',
+            variables: { acct: env.CLOUDFLARE_ACCOUNT_ID ?? '', script: CF_SCRIPT_NAME, from: fromIso, to: nowIso },
+          };
+          const res = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${env.CF_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(gql),
+            signal: AbortSignal.timeout(10000),
+          });
+          if (!res.ok) {
+            return new Response(JSON.stringify({ ok: false, error: `Cloudflare responded ${res.status}` }), { status: 502, headers: JSON_HEADERS });
+          }
+          const g = await res.json() as {
+            errors?: Array<{ message?: string }>;
+            data?: { viewer?: { accounts?: Array<{ workersInvocationsAdaptive?: Array<{ sum?: { requests?: number; errors?: number }; dimensions?: { datetimeMinute?: string } }> }> } };
+          };
+          if (g.errors && g.errors.length > 0) {
+            const msg = g.errors[0].message ? `: ${g.errors[0].message}` : '';
+            return new Response(JSON.stringify({ ok: false, error: `Cloudflare analytics error${msg}` }), { status: 502, headers: JSON_HEADERS });
+          }
+          const rows = g.data?.viewer?.accounts?.[0]?.workersInvocationsAdaptive ?? [];
+          const buckets = rows.map(r => ({
+            t: String(r.dimensions?.datetimeMinute ?? ''),
+            req: Number(r.sum?.requests ?? 0),
+            err: Number(r.sum?.errors ?? 0),
+          })).filter(b => b.t);
+          return new Response(JSON.stringify({ ok: true, buckets }), { headers: JSON_HEADERS });
+        } catch {
+          return new Response(JSON.stringify({ ok: false, error: 'could not reach Cloudflare' }), { status: 502, headers: JSON_HEADERS });
         }
       }
 

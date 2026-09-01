@@ -1,5 +1,8 @@
     const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'https://license.ozpos.my.id';
     let currentTab = 'dashboard';
+    // Health-tab auto-refresh interval handles; cleared on every
+    // renderHealth so tab switches never leave orphan timers firing.
+    let healthTimers = [];
 
     // ── FX rate (live from open.er-api.com, fallback to 16000) ───
     let fxRate = 16000;
@@ -382,6 +385,7 @@
 
     // ── Health tab ──────────────────────────────────────────────────
     async function renderHealth() {
+      healthTimers.forEach(clearInterval); healthTimers = [];
       const c = document.getElementById('content'); c.innerHTML = '<div class="card"><p class="empty">' + t('common.loading') + '</p></div>';
       try { const h = await api('/api/v1/admin/health');
         c.innerHTML = ''; const card = el('div', 'card'); card.appendChild(el('h2', null, t('health.title')));
@@ -394,6 +398,41 @@
           '<span class="muted">'+t('health.time')+'</span><span style="text-align:right">'+escapeHtml(h.time||'—')+'</span>';
         card.appendChild(kv); c.appendChild(card);
 
+        // ── Health toolbar (auto-refresh + updated-ago label) ───────────
+        const healthBar = el('div', 'health-bar');
+        const autoBtn = el('button', 'btn btn-ghost btn-sm', t('health.autoOn'));
+        autoBtn.type = 'button';
+        const updatedAgo = el('span', 'muted log-meta', '');
+        healthBar.appendChild(autoBtn); healthBar.appendChild(updatedAgo);
+        c.appendChild(healthBar);
+        let autoOn = true; let lastRefresh = 0;
+
+        // ── Cloud Service card (Northflank metadata via worker proxy) ───
+        const svcCard = el('div', 'card table-card');
+        const svcHead = el('div', 'logs-head');
+        svcHead.appendChild(el('h2', null, t('health.serviceTitle')));
+        const svcRefresh = el('button', 'btn btn-ghost btn-sm', t('health.serviceRefresh'));
+        svcRefresh.type = 'button';
+        svcHead.appendChild(svcRefresh);
+        svcCard.appendChild(svcHead);
+        const svcWrap = el('div');
+        svcWrap.appendChild(el('p', 'empty', t('common.loading')));
+        svcCard.appendChild(svcWrap);
+        c.appendChild(svcCard);
+
+        // ── Uptime card (edge self-check via worker proxy, no API key) ──
+        const upCard = el('div', 'card table-card');
+        const upHead = el('div', 'logs-head');
+        upHead.appendChild(el('h2', null, t('health.uptimeTitle')));
+        const upRefresh = el('button', 'btn btn-ghost btn-sm', t('health.uptimeRefresh'));
+        upRefresh.type = 'button';
+        upHead.appendChild(upRefresh);
+        upCard.appendChild(upHead);
+        const upWrap = el('div');
+        upWrap.appendChild(el('p', 'empty', t('common.loading')));
+        upCard.appendChild(upWrap);
+        c.appendChild(upCard);
+
         // ── Platform logs (Northflank cloud pod, via the worker proxy) ──
         // The NF key lives in a Worker secret; the browser only talks to
         // same-origin /__oz/nf-logs, which requires the admin session.
@@ -402,6 +441,14 @@
         logsHead.appendChild(el('h2', null, t('health.logsTitle')));
         const logMeta = el('span', 'muted log-meta');
         logsHead.appendChild(logMeta);
+        const linesSel = el('select', 'lines-sel');
+        ['100', '300', '500'].forEach(n => {
+          const o = el('option', null, n + ' lines');
+          o.value = n;
+          if (n === '100') o.selected = true;
+          linesSel.appendChild(o);
+        });
+        logsHead.appendChild(linesSel);
         const refreshBtn = el('button', 'btn btn-ghost btn-sm', t('health.logsRefresh'));
         refreshBtn.type = 'button';
         logsHead.appendChild(refreshBtn);
@@ -421,7 +468,7 @@
           logWrap.appendChild(el('p', 'empty', t('common.loading')));
           let body = null;
           try {
-            const res = await fetchWithTimeout(undefined, '/__oz/nf-logs?lines=100');
+            const res = await fetchWithTimeout(undefined, '/__oz/nf-logs?lines=' + linesSel.value);
             body = await res.json();
           } catch (e) { body = null; }
           if (!logsGuard.isCurrent(seq)) { return; }
@@ -479,6 +526,156 @@
         }
         cfRefresh.addEventListener('click', loadDeploys);
         loadDeploys();
+
+        // ── Worker runtime logs (Cloudflare observability, via proxy) ───
+        const wlCard = el('div', 'card table-card');
+        const wlHead = el('div', 'logs-head');
+        wlHead.appendChild(el('h2', null, t('health.workerLogsTitle')));
+        const wlMeta = el('span', 'muted log-meta');
+        wlHead.appendChild(wlMeta);
+        const wlRefresh = el('button', 'btn btn-ghost btn-sm', t('health.workerLogsRefresh'));
+        wlRefresh.type = 'button';
+        wlHead.appendChild(wlRefresh);
+        wlCard.appendChild(wlHead);
+        const wlWrap = el('div');
+        wlWrap.appendChild(el('p', 'empty', t('common.loading')));
+        wlCard.appendChild(wlWrap);
+        c.appendChild(wlCard);
+        const wlGuard = createSeqGuard();
+        async function loadWorkerLogs() {
+          const seq = wlGuard.next();
+          wlRefresh.disabled = true;
+          wlWrap.innerHTML = '';
+          wlWrap.appendChild(el('p', 'empty', t('common.loading')));
+          let body = null;
+          try {
+            const res = await fetchWithTimeout(undefined, '/__oz/worker-logs');
+            body = await res.json();
+          } catch (e) { body = null; }
+          if (!wlGuard.isCurrent(seq)) { return; }
+          wlRefresh.disabled = false;
+          wlWrap.innerHTML = '';
+          if (!body || !body.ok) {
+            const detail = body && body.error ? ' ' + body.error : '';
+            wlWrap.appendChild(el('p', 'empty', t('health.workerLogsFailed') + detail));
+            return;
+          }
+          wlMeta.textContent = t('health.logsCaption');
+          const rows = (body.events || []).map(e => ({
+            ts: e.ts,
+            log: (e.outcome && e.outcome !== 'ok' ? '[' + e.outcome + '] ' : '') + (e.message || ('HTTP ' + e.status)),
+          }));
+          wlWrap.appendChild(logView(rows));
+        }
+
+        // ── Traffic card (GraphQL analytics via worker proxy) ───────────
+        const trCard = el('div', 'card table-card');
+        const trHead = el('div', 'logs-head');
+        trHead.appendChild(el('h2', null, t('health.trafficTitle')));
+        const trMeta = el('span', 'muted log-meta');
+        trHead.appendChild(trMeta);
+        const trRefresh = el('button', 'btn btn-ghost btn-sm', t('health.trafficRefresh'));
+        trRefresh.type = 'button';
+        trHead.appendChild(trRefresh);
+        trCard.appendChild(trHead);
+        const trWrap = el('div');
+        trWrap.appendChild(el('p', 'empty', t('common.loading')));
+        trCard.appendChild(trWrap);
+        c.appendChild(trCard);
+        const trGuard = createSeqGuard();
+        async function loadTraffic() {
+          const seq = trGuard.next();
+          trRefresh.disabled = true;
+          trWrap.innerHTML = '';
+          trWrap.appendChild(el('p', 'empty', t('common.loading')));
+          let body = null;
+          try {
+            const res = await fetchWithTimeout(undefined, '/__oz/traffic');
+            body = await res.json();
+          } catch (e) { body = null; }
+          if (!trGuard.isCurrent(seq)) { return; }
+          trRefresh.disabled = false;
+          trWrap.innerHTML = '';
+          if (!body || !body.ok) {
+            const detail = body && body.error ? ' ' + body.error : '';
+            trWrap.appendChild(el('p', 'empty', t('health.trafficFailed') + detail));
+            return;
+          }
+          const buckets = body.buckets || [];
+          const total = buckets.reduce((a, b) => a + (b.req || 0), 0);
+          const errs = buckets.reduce((a, b) => a + (b.err || 0), 0);
+          trMeta.textContent = total + ' requests · ' + errs + ' errors / 24h';
+          // sparkline() returns an SVG string with only generated labels —
+          // labels are escaped inside the helper before injection.
+          trWrap.innerHTML = sparkline(buckets);
+        }
+
+        // ── Loaders for the two cards created above the logs panel ──────
+        const svcGuard = createSeqGuard();
+        async function loadService() {
+          const seq = svcGuard.next();
+          svcRefresh.disabled = true;
+          try {
+            const res = await fetchWithTimeout(undefined, '/__oz/nf-status');
+            const body = await res.json();
+            if (!svcGuard.isCurrent(seq)) { return; }
+            svcWrap.innerHTML = '';
+            if (!body || !body.ok) {
+              const detail = body && body.error ? ' ' + body.error : '';
+              svcWrap.appendChild(el('p', 'empty', t('health.serviceFailed') + detail));
+            } else {
+              svcWrap.appendChild(nfStatusCard(body.status));
+            }
+          } catch (e) {
+            if (!svcGuard.isCurrent(seq)) { return; }
+            svcWrap.innerHTML = '';
+            svcWrap.appendChild(el('p', 'empty', t('health.serviceFailed')));
+          }
+          svcRefresh.disabled = false;
+        }
+
+        const upGuard = createSeqGuard();
+        async function loadUptime() {
+          const seq = upGuard.next();
+          upRefresh.disabled = true;
+          try {
+            const res = await fetchWithTimeout(undefined, '/__oz/uptime');
+            const body = await res.json();
+            if (!upGuard.isCurrent(seq)) { return; }
+            upWrap.innerHTML = '';
+            if (!body || !body.ok) {
+              const detail = body && body.error ? ' ' + body.error : '';
+              upWrap.appendChild(el('p', 'empty', t('health.uptimeFailed') + detail));
+            } else {
+              upWrap.appendChild(uptimeRows(body.checks));
+            }
+          } catch (e) {
+            if (!upGuard.isCurrent(seq)) { return; }
+            upWrap.innerHTML = '';
+            upWrap.appendChild(el('p', 'empty', t('health.uptimeFailed')));
+          }
+          upRefresh.disabled = false;
+        }
+
+        // ── Wire refresh buttons + auto-refresh (60s, health tab only) ──
+        svcRefresh.addEventListener('click', loadService);
+        upRefresh.addEventListener('click', loadUptime);
+        wlRefresh.addEventListener('click', loadWorkerLogs);
+        trRefresh.addEventListener('click', loadTraffic);
+        function refreshAll() {
+          loadService(); loadUptime(); loadWorkerLogs(); loadTraffic();
+          lastRefresh = Date.now();
+        }
+        autoBtn.addEventListener('click', () => {
+          autoOn = !autoOn;
+          autoBtn.textContent = autoOn ? t('health.autoOn') : t('health.autoOff');
+        });
+        healthTimers.push(setInterval(() => { if (autoOn && document.visibilityState !== 'hidden') refreshAll(); }, 60000));
+        healthTimers.push(setInterval(() => {
+          updatedAgo.textContent = lastRefresh ? (t('health.updated') + ' ' + relTime(new Date(lastRefresh).toISOString())) : '';
+        }, 5000));
+        loadService(); loadUptime(); loadWorkerLogs(); loadTraffic();
+        lastRefresh = Date.now();
       } catch (err) { if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">' + t('common.failedToLoadHealth') + '</p></div>'; }
     }
 
