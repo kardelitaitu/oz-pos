@@ -297,42 +297,40 @@ fn html_escape_handles_special_chars() {
 // NEW TESTS: COR-36 bug, format_amount, edge cases, sections
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ── COR-36: byte-slice truncation panic ──────────────────────────────────────
+// ── COR-36: char-boundary truncation (fixed) ──────────────────────────────────
 //
-// render_text truncates product names at byte 21: `&row.name[..21]`.
-// For multi-byte UTF-8 characters, byte 21 may fall mid-character,
-// causing a panic. This test reproduces the bug.
+// render_text previously truncated product names at byte 21: `&row.name[..21]`,
+// which panicked on multi-byte UTF-8. Now uses char_indices for char-boundary
+// slicing — multi-byte names are truncated safely with `…` appended.
 
 #[test]
-fn render_text_multibyte_name_panics_on_byte_slice() {
+fn render_text_multibyte_name_truncates_safely() {
     // "Café Latte 拿鐵 濃縮" is 28 bytes in UTF-8.
     // Byte 21 falls inside the 3-byte character 拿 (bytes 20-22).
-    // This should panic with "byte index 21 is not a char boundary".
+    // The old code panicked — the new code truncates at char boundary.
     let name = "Café Latte 拿鐵 濃縮";
-    let result = std::panic::catch_unwind(|| {
-        let mut bundle = minimal_bundle();
-        bundle.top_products = vec![TopProductRow {
-            currency: "USD".into(),
-            product_id: "p1".into(),
-            sku: "COFFEE".into(),
-            name: name.to_string(),
-            total_qty: 10,
-            total_minor: 3500,
-            cogs_minor: 2000,
-            gross_profit_minor: 1500,
-            gross_margin_percent: 42.9,
-        }];
-        ReportEmailBuilder::build(&bundle, "Store", "today").text_body
-    });
-
-    // The test documents that this PANICS — the byte-slice truncation
-    // is unsafe for multi-byte names. If this stops panicking, the bug
-    // is fixed (the test should be updated to assert the name is
-    // properly truncated instead).
+    let mut bundle = minimal_bundle();
+    bundle.top_products = vec![TopProductRow {
+        currency: "USD".into(),
+        product_id: "p1".into(),
+        sku: "COFFEE".into(),
+        name: name.to_string(),
+        total_qty: 10,
+        total_minor: 3500,
+        cogs_minor: 2000,
+        gross_profit_minor: 1500,
+        gross_margin_percent: 42.9,
+    }];
+    let email = ReportEmailBuilder::build(&bundle, "Store", "today").text_body;
+    // COR-36: must not panic — the truncated name ends with `…`.
     assert!(
-        result.is_err(),
-        "COR-36: render_text should panic on multi-byte UTF-8 name \
-         but it didn't — the truncation code may have been fixed"
+        email.contains("…"),
+        "multi-byte name should be truncated with …"
+    );
+    // The full name should NOT appear (it's longer than 22 chars).
+    assert!(
+        !email.contains("濃縮"),
+        "full multi-byte name must not appear"
     );
 }
 
