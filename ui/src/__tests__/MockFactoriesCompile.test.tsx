@@ -24,7 +24,7 @@ import * as kdsApi from '@/api/kds';
 
 describe('createKdsApiMock', () => {
   it('returns a KdsOrder array from listKdsOrders', async () => {
-    const orders = await kdsApi.listKdsOrders('user-1');
+    const orders = await kdsApi.listKdsOrders('tok-1');
     expect(Array.isArray(orders)).toBe(true);
     expect(orders[0]?.id).toBe('kds-1');
     expect(orders[0]?.status).toBe('pending');
@@ -32,13 +32,13 @@ describe('createKdsApiMock', () => {
   });
 
   it('returns a KdsOrder from updateKdsStatus', async () => {
-    const order = await kdsApi.updateKdsStatus('user-1', 'kds-1', 'preparing');
+    const order = await kdsApi.updateKdsStatus('tok-1', 'kds-1', 'preparing');
     expect(order.status).toBe('preparing');
     expect(order.display_number).toBe(101);
   });
 
   it('returns a KdsOrder from getKdsOrder', async () => {
-    const order = await kdsApi.getKdsOrder('user-1', 'kds-1');
+    const order = await kdsApi.getKdsOrder('tok-1', 'kds-1');
     expect(order).not.toBeNull();
     expect(order!.id).toBe('kds-1');
   });

@@ -33,18 +33,18 @@ import {
 describe('kds.ts IPC contract', () => {
   beforeEach(() => mockInvoke.mockReset());
 
-  // ── List Orders ───────────────────────────────────────────
+  // ── List Orders (session-scoped — ADR #7) ───────────────────
 
-  it('listKdsOrders → list_kds_orders with userId', async () => {
+  it('listKdsOrders → list_kds_orders_scoped with sessionToken', async () => {
     mockInvoke.mockResolvedValue([]);
-    await listKdsOrders('u1');
-    expect(mockInvoke).toHaveBeenCalledWith('list_kds_orders', { userId: 'u1', status: null });
+    await listKdsOrders('tok');
+    expect(mockInvoke).toHaveBeenCalledWith('list_kds_orders_scoped', { sessionToken: 'tok', status: null });
   });
 
-  it('listKdsOrders with status → list_kds_orders with status', async () => {
+  it('listKdsOrders with status → list_kds_orders_scoped with status', async () => {
     mockInvoke.mockResolvedValue([]);
-    await listKdsOrders('u1', 'pending');
-    expect(mockInvoke).toHaveBeenCalledWith('list_kds_orders', { userId: 'u1', status: 'pending' });
+    await listKdsOrders('tok', 'pending');
+    expect(mockInvoke).toHaveBeenCalledWith('list_kds_orders_scoped', { sessionToken: 'tok', status: 'pending' });
   });
 
   it('listKdsOrdersScoped → list_kds_orders_scoped with sessionToken', async () => {
@@ -59,18 +59,18 @@ describe('kds.ts IPC contract', () => {
     expect(mockInvoke).toHaveBeenCalledWith('list_kds_orders_scoped', { sessionToken: 'tok', status: 'ready' });
   });
 
-  // ── Queue ─────────────────────────────────────────────────
+  // ── Queue (session-scoped — ADR #7) ─────────────────────────
 
-  it('getKdsQueue → get_kds_queue with userId', async () => {
+  it('getKdsQueue → get_kds_queue_scoped with sessionToken', async () => {
     mockInvoke.mockResolvedValue([]);
-    await getKdsQueue('u1');
-    expect(mockInvoke).toHaveBeenCalledWith('get_kds_queue', { userId: 'u1', kdsZone: null });
+    await getKdsQueue('tok');
+    expect(mockInvoke).toHaveBeenCalledWith('get_kds_queue_scoped', { sessionToken: 'tok', kdsZone: null });
   });
 
-  it('getKdsQueue with zone → get_kds_queue with kdsZone', async () => {
+  it('getKdsQueue with zone → get_kds_queue_scoped with kdsZone', async () => {
     mockInvoke.mockResolvedValue([]);
-    await getKdsQueue('u1', 'front');
-    expect(mockInvoke).toHaveBeenCalledWith('get_kds_queue', { userId: 'u1', kdsZone: 'front' });
+    await getKdsQueue('tok', 'front');
+    expect(mockInvoke).toHaveBeenCalledWith('get_kds_queue_scoped', { sessionToken: 'tok', kdsZone: 'front' });
   });
 
   it('getKdsQueueScoped → get_kds_queue_scoped with sessionToken', async () => {
@@ -79,12 +79,12 @@ describe('kds.ts IPC contract', () => {
     expect(mockInvoke).toHaveBeenCalledWith('get_kds_queue_scoped', { sessionToken: 'tok', kdsZone: null });
   });
 
-  // ── Update Status ─────────────────────────────────────────
+  // ── Update Status (session-scoped — ADR #7) ─────────────────
 
-  it('updateKdsStatus → update_kds_status with userId + id + status', async () => {
+  it('updateKdsStatus → update_kds_status_scoped with sessionToken + id + status', async () => {
     mockInvoke.mockResolvedValue({ id: 'o1', status: 'preparing' });
-    await updateKdsStatus('u1', 'o1', 'preparing');
-    expect(mockInvoke).toHaveBeenCalledWith('update_kds_status', { userId: 'u1', id: 'o1', status: 'preparing' });
+    await updateKdsStatus('tok', 'o1', 'preparing');
+    expect(mockInvoke).toHaveBeenCalledWith('update_kds_status_scoped', { sessionToken: 'tok', id: 'o1', status: 'preparing' });
   });
 
   it('updateKdsStatusScoped → update_kds_status_scoped with sessionToken', async () => {
@@ -93,12 +93,12 @@ describe('kds.ts IPC contract', () => {
     expect(mockInvoke).toHaveBeenCalledWith('update_kds_status_scoped', { sessionToken: 'tok', id: 'o1', status: 'ready' });
   });
 
-  // ── Create from Sale ──────────────────────────────────────
+  // ── Create from Sale (session-scoped — ADR #7) ──────────────
 
-  it('createKdsOrderFromSale → create_kds_order_from_sale', async () => {
+  it('createKdsOrderFromSale → create_kds_order_from_sale_scoped', async () => {
     mockInvoke.mockResolvedValue([]);
-    await createKdsOrderFromSale('u1', 's1');
-    expect(mockInvoke).toHaveBeenCalledWith('create_kds_order_from_sale', { userId: 'u1', saleId: 's1' });
+    await createKdsOrderFromSale('tok', 's1');
+    expect(mockInvoke).toHaveBeenCalledWith('create_kds_order_from_sale_scoped', { sessionToken: 'tok', saleId: 's1' });
   });
 
   it('createKdsOrderFromSaleScoped → create_kds_order_from_sale_scoped', async () => {
@@ -107,12 +107,12 @@ describe('kds.ts IPC contract', () => {
     expect(mockInvoke).toHaveBeenCalledWith('create_kds_order_from_sale_scoped', { sessionToken: 'tok', saleId: 's1' });
   });
 
-  // ── Get Order ─────────────────────────────────────────────
+  // ── Get Order (session-scoped — ADR #7) ─────────────────────
 
-  it('getKdsOrder → get_kds_order with userId + id', async () => {
+  it('getKdsOrder → get_kds_order_scoped with sessionToken + id', async () => {
     mockInvoke.mockResolvedValue(null);
-    await getKdsOrder('u1', 'o1');
-    expect(mockInvoke).toHaveBeenCalledWith('get_kds_order', { userId: 'u1', id: 'o1' });
+    await getKdsOrder('tok', 'o1');
+    expect(mockInvoke).toHaveBeenCalledWith('get_kds_order_scoped', { sessionToken: 'tok', id: 'o1' });
   });
 
   it('getKdsOrderScoped → get_kds_order_scoped with sessionToken', async () => {
@@ -153,6 +153,6 @@ describe('kds.ts IPC contract', () => {
 
   it('propagates backend errors', async () => {
     mockInvoke.mockRejectedValueOnce(new Error('order not found'));
-    await expect(listKdsOrders('u1')).rejects.toThrow('order not found');
+    await expect(listKdsOrders('tok')).rejects.toThrow('order not found');
   });
 });
