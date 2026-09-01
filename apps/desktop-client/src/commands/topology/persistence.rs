@@ -99,6 +99,126 @@ pub(crate) fn topology_setting_key(branch_id: Option<&str>) -> Result<String, Ap
     Ok(format!("{TOPOLOGY_SETTING_KEY}/{branch_id}"))
 }
 
+/// Validate a merchant-supplied template name and return its stored form.
+///
+/// The name becomes a segment of the settings key, so it is checked the way
+/// [`topology_setting_key`] checks a branch id rather than the way a display
+/// label is checked: trimmed, non-empty, bounded in length, and free of
+/// separators that would let one template forge a key outside the template
+/// namespace. Whitespace inside a name is kept — "Weekend Setup" is a fine
+/// template name.
+pub(crate) fn normalize_template_name(raw: &str) -> Result<String, AppError> {
+    let name = raw.trim();
+    if name.is_empty() {
+        return Err(AppError::Invalid("template name is empty".into()));
+    }
+    if name.chars().count() > MAX_TEMPLATE_NAME_CHARS {
+        return Err(AppError::Invalid(format!(
+            "template name exceeds {MAX_TEMPLATE_NAME_CHARS} characters"
+        )));
+    }
+    if name
+        .chars()
+        .any(|ch| ch.is_control() || ch == '/' || ch == '\\')
+    {
+        return Err(AppError::Invalid(
+            "template name contains invalid characters".into(),
+        ));
+    }
+    Ok(name.to_owned())
+}
+
+/// Settings key for one template under one branch's topology key.
+pub(crate) fn template_setting_key(topology_key: &str, name: &str) -> String {
+    format!("{topology_key}/{TOPOLOGY_TEMPLATE_SEGMENT}/{name}")
+}
+
+/// Shared prefix of every template under one branch's topology key.
+pub(crate) fn template_key_prefix(topology_key: &str) -> String {
+    format!("{topology_key}/{TOPOLOGY_TEMPLATE_SEGMENT}/")
+}
+
+/// Save a diagram template. `payload` is the serialized canvas, opaque to the
+/// backend: a template is a starting point a merchant edits before Apply, so it
+/// deliberately does NOT run the diagram gates that `apply_topology_diff` runs.
+pub(crate) fn template_save(
+    conn: &Connection,
+    topology_key: &str,
+    raw_name: &str,
+    payload: &Value,
+) -> Result<(), AppError> {
+    let name = normalize_template_name(raw_name)?;
+    let key = template_setting_key(topology_key, &name);
+    let json = serde_json::to_string(payload)
+        .map_err(|e| AppError::Internal(format!("serialize topology template: {e}")))?;
+    oz_core::Settings::set(conn, &key, &json)?;
+    Ok(())
+}
+
+/// Load one diagram template, or `None` when it was never saved or has become
+/// unreadable. A corrupt template is reported as absent rather than as an error:
+/// the list is built from keys, so one bad row must not brick the whole panel.
+pub(crate) fn template_load(
+    conn: &Connection,
+    topology_key: &str,
+    raw_name: &str,
+) -> Result<Option<Value>, AppError> {
+    let name = normalize_template_name(raw_name)?;
+    let key = template_setting_key(topology_key, &name);
+    let Some(raw) = oz_core::Settings::get(conn, &key)? else {
+        return Ok(None);
+    };
+    Ok(serde_json::from_str(&raw).ok())
+}
+
+/// Names of a branch's templates, sorted for a stable list.
+///
+/// Scoped to a key prefix in SQL instead of `Settings::load_all`, which would
+/// deserialize every stored setting — including every branch's diagram envelope
+/// and runtime plan — merely to list a handful of names. The `LIKE` is only an
+/// index-friendly prefilter: `%` and `_` are legal in a branch id and would
+/// over-match, so each candidate is still checked with `starts_with`.
+pub(crate) fn template_list(
+    conn: &Connection,
+    topology_key: &str,
+) -> Result<Vec<String>, AppError> {
+    let prefix = template_key_prefix(topology_key);
+    let mut stmt = conn.prepare("SELECT key FROM settings WHERE key LIKE ?1 || '%'")?;
+    let names = stmt
+        .query_map(rusqlite::params![prefix], |row| row.get::<_, String>(0))?
+        .filter_map(|r| r.ok())
+        .filter_map(|key| {
+            key.strip_prefix(&prefix)
+                .filter(|name| !name.is_empty() && !name.contains('/'))
+                .map(str::to_owned)
+        })
+        .collect();
+    Ok(sort_template_names(names))
+}
+
+/// Delete one template. Returns `false` when it did not exist.
+pub(crate) fn template_delete(
+    conn: &Connection,
+    topology_key: &str,
+    raw_name: &str,
+) -> Result<bool, AppError> {
+    let name = normalize_template_name(raw_name)?;
+    let key = template_setting_key(topology_key, &name);
+    Ok(oz_core::Settings::remove(conn, &key)?)
+}
+
+/// Sort template names for the list. Case-insensitive with a case-sensitive
+/// tiebreak so "café", "Café" and "apple" land in the order a merchant reads
+/// them, deterministically, on every platform.
+pub(crate) fn sort_template_names(mut names: Vec<String>) -> Vec<String> {
+    names.sort_by(|a, b| {
+        a.to_lowercase()
+            .cmp(&b.to_lowercase())
+            .then_with(|| a.cmp(b))
+    });
+    names
+}
+
 /// Test convenience wrapper: save a topology envelope under an explicit key.
 #[cfg(test)]
 pub(crate) fn save_topology_json_at_key(

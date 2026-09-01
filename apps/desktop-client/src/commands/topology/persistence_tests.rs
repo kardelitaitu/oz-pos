@@ -259,3 +259,111 @@ fn validate_diagram_payloads_invalid_json_rejected() {
     let err = validate_diagram_payloads(&nodes, &[]).unwrap_err();
     assert!(format!("{err}").contains("invalid topology nodes"));
 }
+
+// ── ADR #45 §4.2: template names and keys ───────────────────────────
+
+#[test]
+fn normalize_template_name_trims_and_keeps_inner_whitespace() {
+    // A template name is a label the merchant reads, so "Weekend Setup" is
+    // legitimate; only the surrounding padding is storage noise.
+    assert_eq!(
+        normalize_template_name("  Weekend Setup \n").unwrap(),
+        "Weekend Setup"
+    );
+}
+
+#[test]
+fn normalize_template_name_keeps_unicode_labels() {
+    assert_eq!(normalize_template_name("café").unwrap(), "café");
+    assert_eq!(normalize_template_name("開店セット").unwrap(), "開店セット");
+}
+
+#[test]
+fn normalize_template_name_rejects_empty_and_whitespace_only() {
+    assert!(normalize_template_name("").is_err());
+    assert!(normalize_template_name("   ").is_err());
+    assert!(normalize_template_name("\t\n ").is_err());
+}
+
+#[test]
+fn normalize_template_name_rejects_separators() {
+    // The name is a key SEGMENT. A separator would let one template forge a key
+    // outside the template namespace, or make listing ambiguous.
+    assert!(normalize_template_name("a/b").is_err());
+    assert!(normalize_template_name("a\\b").is_err());
+    assert!(normalize_template_name("../apply-recovery").is_err());
+}
+
+#[test]
+fn normalize_template_name_rejects_control_characters() {
+    assert!(normalize_template_name("a\u{0}b").is_err());
+    assert!(normalize_template_name("a\u{7}b").is_err());
+}
+
+#[test]
+fn normalize_template_name_bounds_length_in_characters_not_bytes() {
+    let at_limit = "a".repeat(MAX_TEMPLATE_NAME_CHARS);
+    assert_eq!(
+        normalize_template_name(&at_limit).unwrap().chars().count(),
+        MAX_TEMPLATE_NAME_CHARS
+    );
+    assert!(normalize_template_name(&"a".repeat(MAX_TEMPLATE_NAME_CHARS + 1)).is_err());
+
+    // Multibyte: 64 characters of Japanese is ~192 bytes. Counting bytes would
+    // reject a perfectly short name for a Japanese-language store.
+    let wide = "開".repeat(MAX_TEMPLATE_NAME_CHARS);
+    assert!(wide.len() > MAX_TEMPLATE_NAME_CHARS * 2);
+    assert_eq!(
+        normalize_template_name(&wide).unwrap().chars().count(),
+        MAX_TEMPLATE_NAME_CHARS
+    );
+}
+
+#[test]
+fn template_key_is_nested_under_the_branch_topology_key() {
+    let topo = topology_setting_key(Some("main")).unwrap();
+    let key = template_setting_key(&topo, "Weekend Setup");
+    assert_eq!(
+        key,
+        format!("{TOPOLOGY_SETTING_KEY}/main/template/Weekend Setup")
+    );
+}
+
+#[test]
+fn template_prefix_is_a_strict_prefix_of_every_template_key() {
+    // Listing filters by this prefix, so a key that did not start with it would
+    // be invisible while still existing.
+    let topo = topology_setting_key(Some("main")).unwrap();
+    let prefix = template_key_prefix(&topo);
+    assert!(template_setting_key(&topo, "a").starts_with(&prefix));
+    assert!(template_setting_key(&topo, "café").starts_with(&prefix));
+}
+
+#[test]
+fn unscoped_and_branch_templates_do_not_share_a_namespace() {
+    // The legacy unscoped diagram must not see a branch's templates, or a
+    // single-branch install would leak its templates into every branch view.
+    let unscoped = template_key_prefix(&topology_setting_key(None).unwrap());
+    let branch = template_key_prefix(&topology_setting_key(Some("main")).unwrap());
+    assert!(!branch.starts_with(&unscoped[..unscoped.len() - 1]));
+    assert_ne!(unscoped, branch);
+}
+
+#[test]
+fn sort_template_names_is_case_insensitive_with_a_stable_tiebreak() {
+    let sorted = sort_template_names(vec![
+        "Zebra".into(),
+        "apple".into(),
+        "Banana".into(),
+        "banana".into(),
+    ]);
+    assert_eq!(sorted, vec!["apple", "Banana", "banana", "Zebra"]);
+}
+
+#[test]
+fn sort_template_names_is_a_total_order() {
+    // The list is rendered from this order, so equal names must not shuffle.
+    let a = sort_template_names(vec!["x".into(), "x".into(), "A".into()]);
+    let b = sort_template_names(vec!["A".into(), "x".into(), "x".into()]);
+    assert_eq!(a, b);
+}

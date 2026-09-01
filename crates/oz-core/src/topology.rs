@@ -34,6 +34,15 @@ use crate::error::CoreError;
 /// `scripts/verify-topology-parity.py` keep the two byte-identical.
 const SHARED_TOPOLOGY_SEMANTICS_JSON: &str = include_str!("topologySemantics.json");
 
+/// Schema version the evaluator in this module understands.
+///
+/// Distinct from the saved-diagram envelope's `schema_version`, which describes
+/// the shape of a persisted graph and is enforced on read by the desktop client.
+/// A contract bump changes how pairings are *interpreted*; it does not change
+/// what is stored, so the two versions move independently (ADR #45 §1 moved this
+/// one to 2 by giving every pairing row explicit `endpoints`).
+pub const TOPOLOGY_CONTRACT_SCHEMA_VERSION: u64 = 2;
+
 /// Load the shared topology semantics contract JSON as a parsed value.
 ///
 /// The contract is checked-in compile-time JSON; malformed JSON is a
@@ -41,14 +50,24 @@ const SHARED_TOPOLOGY_SEMANTICS_JSON: &str = include_str!("topologySemantics.jso
 pub fn shared_topology_semantics() -> &'static Value {
     static CONTRACT: OnceLock<Value> = OnceLock::new();
     CONTRACT.get_or_init(|| {
-        serde_json::from_str(SHARED_TOPOLOGY_SEMANTICS_JSON)
+        let parsed: Value = serde_json::from_str(SHARED_TOPOLOGY_SEMANTICS_JSON)
             // INVARIANT: the vendored topologySemantics.json is a checked-in
             // compile-time contract; malformed JSON is a developer/build
             // error, not runtime user data, so initialization must fail
             // closed. Its parity with the UI copy is enforced by the
             // `vendored_contract_matches_ui_canonical` test — see the
             // INVARIANT rationale directly above.
-            .expect("shared topology semantics JSON must be valid")
+            .expect("shared topology semantics JSON must be valid");
+        // INVARIANT: refuse to evaluate a contract whose shape this module does
+        // not understand. Without this, a future contract bump read by older
+        // code would silently reinterpret the pairing table — the exact class of
+        // drift ADR #45 exists to remove. Fail closed at first use instead.
+        assert_eq!(
+            parsed.get("schemaVersion").and_then(Value::as_u64),
+            Some(TOPOLOGY_CONTRACT_SCHEMA_VERSION),
+            "vendored topologySemantics.json must declare schemaVersion {TOPOLOGY_CONTRACT_SCHEMA_VERSION}"
+        );
+        parsed
     })
 }
 

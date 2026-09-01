@@ -39,6 +39,94 @@ pub async fn can_save_topology(
     Ok(true)
 }
 
+// ── Diagram templates (ADR #45 §4.2) ─────────────────────────────
+//
+// Templates used to live in `localStorage`, which is per-browser and silently
+// loses them on a device change, a profile switch, or a reinstall. They are
+// business configuration — they seed a graph a merchant then edits and Applies —
+// so they belong in the same settings namespace as that graph, scoped to the
+// same branch.
+//
+// They deliberately do NOT run the diagram validation gates that
+// `apply_topology_diff` runs. A template is a starting point, not a claim about
+// live configuration: it may legitimately be a partial layout, and rejecting it
+// would make the feature useless. Authorization is still enforced, because a
+// template a branch loads becomes the diagram that branch Applies.
+
+/// Author a topology write and resolve the branch's topology key.
+async fn authorize_topology_write(
+    session_token: &str,
+    state: &State<'_, AppState>,
+    branch_id: Option<&str>,
+) -> Result<String, AppError> {
+    let session = state.resolve_session(session_token)?;
+    // Topology is a global admin tool — scope-free permission check, matching
+    // `can_save_topology`.
+    {
+        let global_db = state.db.lock().await;
+        let global_store = Store::new(&global_db);
+        require_permission_for_user(&global_store, &session.user_id, permissions::STAFF_UPDATE)?;
+    }
+    topology_setting_key(branch_id)
+}
+
+/// Save a diagram template under a branch, replacing any template of that name.
+#[tauri::command]
+pub async fn save_topology_template(
+    session_token: String,
+    name: String,
+    payload: Value,
+    branch_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let topo_key = authorize_topology_write(&session_token, &state, branch_id.as_deref()).await?;
+    let conn = state.db.lock().await;
+    template_save(&conn, &topo_key, &name, &payload)
+}
+
+/// Load one diagram template. `None` when it never existed or is unreadable.
+#[tauri::command]
+pub async fn load_topology_template(
+    session_token: String,
+    name: String,
+    branch_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Option<Value>, AppError> {
+    let topo_key = topology_setting_key(branch_id.as_deref())?;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state.db.lock().await;
+    // Reading a template reveals a branch's configuration, so it needs a
+    // session — but not the write capability.
+    let _ = &session.user_id;
+    template_load(&conn, &topo_key, &name)
+}
+
+/// Names of a branch's saved templates, sorted for display.
+#[tauri::command]
+pub async fn list_topology_templates(
+    session_token: String,
+    branch_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, AppError> {
+    let topo_key = topology_setting_key(branch_id.as_deref())?;
+    state.resolve_session(&session_token)?;
+    let conn = state.db.lock().await;
+    template_list(&conn, &topo_key)
+}
+
+/// Delete one template. Returns `false` when there was nothing to delete.
+#[tauri::command]
+pub async fn delete_topology_template(
+    session_token: String,
+    name: String,
+    branch_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let topo_key = authorize_topology_write(&session_token, &state, branch_id.as_deref()).await?;
+    let conn = state.db.lock().await;
+    template_delete(&conn, &topo_key, &name)
+}
+
 /// Test-only compatibility harness for the retired direct topology writer.
 ///
 /// Production topology persistence is exclusively `apply_topology_diff`, which
