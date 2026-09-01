@@ -27,11 +27,6 @@ topology-builder-title = Visual Store & Workspace Topology Builder
 
 topology-sim-start = Test Order Simulation
 topology-sim-stop = Stop Simulation
-topology-preset-retail = Retail Preset
-topology-preset-retail-desc = Store, warehouse, and POS terminals
-topology-preset-restaurant = Restaurant & KDS Preset
-topology-preset-restaurant-desc = Restaurant POS, kitchen display, and warehouse
-topology-presets-label = Presets
 topology-apply-changes = Apply Topology
 # Confirmation popup
 topology-apply-confirm-title = Confirm Topology Changes
@@ -185,9 +180,6 @@ topology-confirm-delete-wire-msg = Delete this wire connection? This action cann
 topology-confirm-delete-many-title = Delete { $count } Nodes
 topology-confirm-delete-many-msg = Delete these { $count } nodes and all of their wires? This action cannot be undone.
 topology-confirm-delete-label = Delete
-topology-confirm-preset-title = Load Preset
-topology-confirm-preset-msg = Loading a preset will replace your current topology. Any unsaved changes will be lost. You can undo this action after loading.
-topology-confirm-preset-label = Load Preset
 topology-inspector-title = Node Properties
 topology-inspector-node-name = Name
 topology-inspector-subtitle = Subtitle / Location

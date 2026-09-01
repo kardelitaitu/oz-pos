@@ -1,20 +1,18 @@
 import type { ReactNode } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { Button } from '@/components/Button';
-import { CheckIcon, ChevronDownIcon } from './NodeTopologyIcons';
+import { CheckIcon } from './NodeTopologyIcons';
 
 /**
  * Topology editor header — extracted from `NodeTopologyEditor.tsx`
  * (Phase 2 split). Presentational: every action is a prop so the parent
  * keeps all canvas state and save logic. The header renders the sr-only
  * builder heading, the parent's branch toolbar slot, the view-only note,
- * the tier badge, the presets popover, and the Apply button.
+ * the tier badge, and the Apply button.
  */
 
-export type TopologyPreset = 'retail' | 'restaurant';
-
 export interface TopologyHeaderProps {
-  /** Localizer for permission tooltip + diff chip strings. */
+  /** Localizer for permission tooltip. */
   l10n: ReturnType<typeof useLocalization>['l10n'];
   /** Optional toolbar content rendered inside the header (branch selector). */
   branchToolbar?: ReactNode;
@@ -26,10 +24,6 @@ export interface TopologyHeaderProps {
   saving: boolean;
   /** Runs the full Apply gate: validate → diff preview → PIN confirm. */
   onApply: () => void;
-  presetsOpen: boolean;
-  onTogglePresets: () => void;
-  /** Parent decides dirty-check vs direct load for the chosen preset. */
-  onLoadPreset: (preset: TopologyPreset) => void;
 }
 
 export function TopologyHeader({
@@ -40,9 +34,6 @@ export function TopologyHeader({
   currentTier,
   saving,
   onApply,
-  presetsOpen,
-  onTogglePresets,
-  onLoadPreset,
 }: TopologyHeaderProps) {
   return (
     <div className="node-topology-header">
@@ -67,30 +58,6 @@ export function TopologyHeader({
       </span>
 
       <div className="node-topology-header-actions">
-
-        <div className="topology-presets-popover">
-          <Button
-            variant="secondary"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={onTogglePresets}
-            icon={<ChevronDownIcon size={16} />}
-          >
-            <Localized id="topology-presets-label">Presets</Localized>
-          </Button>
-          {presetsOpen && (
-            <div className="topology-presets-menu" role="menu" tabIndex={0} onMouseDown={(e) => e.stopPropagation()}>
-              <button type="button" role="menuitem" onClick={() => onLoadPreset('retail')}>
-                <Localized id="topology-preset-retail">Retail Preset</Localized>
-                <span className="topology-presets-menu-desc"><Localized id="topology-preset-retail-desc">Store, warehouse, and POS terminals</Localized></span>
-              </button>
-              <button type="button" role="menuitem" onClick={() => onLoadPreset('restaurant')}>
-                <Localized id="topology-preset-restaurant">Restaurant & KDS Preset</Localized>
-                <span className="topology-presets-menu-desc"><Localized id="topology-preset-restaurant-desc">Restaurant POS, kitchen display, and warehouse</Localized></span>
-              </button>
-            </div>
-          )}
-        </div>
-
         <Button
           variant="primary"
           disabled={!canSave || saving || !onSaveAvailable}

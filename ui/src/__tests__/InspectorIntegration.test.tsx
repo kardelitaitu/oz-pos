@@ -3,12 +3,43 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import NodeTopologyEditor from '../features/stores/NodeTopologyEditor';
 import { loadTopology } from '@/api/topology';
+import type * as nodeTopologyEditorState from '../features/stores/nodeTopologyEditorState';
 import multiStoreFtl from '@/locales/multi-store.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
 vi.mock('@/api/topology', () => ({
   loadTopology: vi.fn(),
 }));
+
+// The production editor starts with an EMPTY canvas (presets removed), so
+// these inspector tests seed the initial graph with the same local retail
+// diagram the main suite uses. The passthrough hook mock only fills the
+// initial graph when the caller passes an empty one.
+const RETAIL_SEED = {
+  nodes: [
+    { id: 'store-1', type: 'store', name: 'Downtown Branch', subtitle: 'Primary Store', x: 80, y: 140, telemetryBadge: 'Online (2 POS)', telemetryStatus: 'online' },
+    { id: 'ws-1', type: 'workspace', name: 'Retail POS #1', subtitle: 'Main Checkout', x: 380, y: 80, metadata: { typeKey: 'store-pos' }, telemetryBadge: 'Active', telemetryStatus: 'online' },
+    { id: 'wh-1', type: 'warehouse', name: 'Main Warehouse', subtitle: 'Primary Storage', x: 680, y: 140, telemetryBadge: '1,250 items', telemetryStatus: 'online' },
+  ],
+  wires: [
+    { id: 'w-1', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-1', toPort: 'left', fromPortId: 'location-out', toPortId: 'location-in', relationshipType: 'location', direction: 'one-way', label: 'Binds Store' },
+    { id: 'w-2', fromNodeId: 'ws-1', fromPort: 'right', toNodeId: 'wh-1', toPort: 'left', fromPortId: 'operation-out', toPortId: 'operation-in', relationshipType: 'generic', direction: 'one-way', label: 'Operation Feed' },
+  ],
+};
+
+vi.mock('../features/stores/nodeTopologyEditorState', async () => {
+  const actual = await vi.importActual<typeof nodeTopologyEditorState>(
+    '../features/stores/nodeTopologyEditorState',
+  );
+  return {
+    ...actual,
+    useTopologyEditorGraph: (initialNodes: unknown[], initialWires: unknown[]) =>
+      actual.useTopologyEditorGraph(
+        initialNodes.length > 0 ? initialNodes : RETAIL_SEED.nodes,
+        initialWires.length > 0 ? initialWires : RETAIL_SEED.wires,
+      ),
+  };
+});
 
 const TOPOLOGY_EN: Record<string, string> = {
   'topology-new-store': 'New Store',

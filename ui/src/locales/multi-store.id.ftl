@@ -25,11 +25,6 @@ topology-builder-title = Builder Topologi Visual Toko & Workspace
 
 topology-sim-start = Uji Simulasi Pesanan
 topology-sim-stop = Hentikan Simulasi
-topology-preset-retail = Preset Ritel
-topology-preset-retail-desc = Toko, gudang, dan terminal POS
-topology-preset-restaurant = Preset Restoran & KDS
-topology-preset-restaurant-desc = POS restoran, display dapur, dan gudang
-topology-presets-label = Preset
 topology-apply-changes = Terapkan Topologi
 # Konfirmasi popup
 topology-apply-confirm-title = Konfirmasi Perubahan Topologi
@@ -183,9 +178,6 @@ topology-confirm-delete-wire-msg = Hapus koneksi ini? Tindakan ini tidak dapat d
 topology-confirm-delete-many-title = Hapus { $count } Node
 topology-confirm-delete-many-msg = Hapus { $count } node dan semua koneksinya? Tindakan ini tidak dapat dibatalkan.
 topology-confirm-delete-label = Hapus
-topology-confirm-preset-title = Muat Preset
-topology-confirm-preset-msg = Memuat preset akan mengganti topologi saat ini. Perubahan yang belum disimpan akan hilang. Anda dapat membatalkan setelah memuat.
-topology-confirm-preset-label = Muat Preset
 topology-inspector-title = Properti Node
 topology-inspector-node-name = Nama
 topology-inspector-subtitle = Subtitle / Lokasi
