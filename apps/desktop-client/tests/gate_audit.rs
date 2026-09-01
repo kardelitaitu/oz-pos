@@ -259,7 +259,7 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
     ("health", 0, &[]),
     ("history", 0, &[]),
     ("inventory_counts", 1, &["INVENTORY_COUNT"]),
-    ("kds", 0, &[]),
+    ("kds", 5, &["KDS_UPDATE", "KDS_VIEW"]),
     (
         "loyalty",
         1,
@@ -270,14 +270,23 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
             "LOYALTY_VIEW",
         ],
     ),
-    ("offline", 0, &[]),
+    ("offline", 4, &["SYNC_MANAGE"]),
     ("picker_ticket", 0, &[]),
     (
         "pos",
         19,
         &["SALES_DISCOUNT", "SALES_OVERRIDE_PRICE", "SALES_PROCESS"],
     ),
-    ("product_variants", 0, &[]),
+    (
+        "product_variants",
+        5,
+        &[
+            "PRODUCTS_CREATE",
+            "PRODUCTS_DELETE",
+            "PRODUCTS_READ",
+            "PRODUCTS_UPDATE",
+        ],
+    ),
     (
         "products",
         10,
@@ -316,7 +325,7 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
     ),
     ("stock_transfers", 1, &["INVENTORY_TRANSFER"]),
     ("subscription", 0, &[]),
-    ("sync", 0, &[]),
+    ("sync", 7, &["SYNC_MANAGE"]),
     (
         "tables",
         12,

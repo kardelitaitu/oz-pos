@@ -7,7 +7,9 @@ use tauri::{State, command};
 
 use oz_core::KdsOrder;
 use oz_core::db::Store;
+use oz_core::permissions;
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -86,7 +88,8 @@ pub async fn list_kds_orders_scoped(
     status: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<KdsOrder>, AppError> {
-    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::KDS_VIEW).await?;
     let db_guard = conn_arc
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -105,7 +108,8 @@ pub async fn get_kds_queue_scoped(
     kds_zone: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<KdsOrder>, AppError> {
-    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::KDS_VIEW).await?;
     let db_guard = conn_arc
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -125,7 +129,8 @@ pub async fn update_kds_status_scoped(
     status: String,
     state: State<'_, AppState>,
 ) -> Result<KdsOrder, AppError> {
-    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::KDS_UPDATE).await?;
     let db_guard = conn_arc
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -144,7 +149,8 @@ pub async fn create_kds_order_from_sale_scoped(
     sale_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<KdsOrder>, AppError> {
-    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::KDS_UPDATE).await?;
     let db_guard = conn_arc
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -163,7 +169,8 @@ pub async fn get_kds_order_scoped(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<KdsOrder>, AppError> {
-    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::KDS_VIEW).await?;
     let db_guard = conn_arc
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;

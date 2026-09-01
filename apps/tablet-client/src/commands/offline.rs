@@ -6,11 +6,13 @@
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
+use oz_core::permissions;
 use oz_core::sync_client::{self, SyncAttemptResult, SyncConfig};
 use oz_core::{OfflineQueueItem, RemoteSyncFailure, Store, SyncPriority};
 
 use foundation::validate_not_empty;
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -421,7 +423,8 @@ pub async fn list_all_offline_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<OfflineQueueItemDto>, AppError> {
-    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     let db_guard = conn_arc
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -459,7 +462,8 @@ pub async fn retry_offline_sync_scoped(
 ) -> Result<SyncResult, AppError> {
     // Phase 1: Read pending items and config from DB (brief lock).
     let (pending_items, config_opt) = {
-        let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+        let (session, conn_arc) = state.resolve_scope(&session_token)?;
+        require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
         let db_guard = conn_arc
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -537,7 +541,8 @@ pub async fn delete_offline_item_scoped(
 ) -> Result<(), AppError> {
     validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     let db_guard = conn_arc
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -560,7 +565,8 @@ pub async fn requeue_remote_failure_scoped(
 ) -> Result<(), AppError> {
     validate_not_empty("itemId", &args.item_id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     let db_guard = conn_arc
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
