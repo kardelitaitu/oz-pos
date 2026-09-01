@@ -412,11 +412,6 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
         .filter(|node| semantic_node_type(node) == Some("warehouse"))
         .filter_map(|node| value_string(node, "id"))
         .collect();
-    let restaurant_pos_ids: std::collections::HashSet<&str> = nodes
-        .iter()
-        .filter(|node| semantic_type_key(node) == "restaurant-pos")
-        .filter_map(|node| value_string(node, "id"))
-        .collect();
     let retail_pos_ids: std::collections::HashSet<&str> = nodes
         .iter()
         .filter(|node| {
@@ -693,10 +688,29 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
         }
         if is_kds {
             let operation_wire = operation_inputs[0];
+            // ADR #45 follow-up #2: ask the contract which kinds may feed
+            // `operation-in` instead of testing a type key on its own.
+            // `restaurant_pos_ids` filtered on `semantic_type_key` only, so a
+            // warehouse or hardware node that happened to carry a
+            // "restaurant-pos" type key satisfied it — the same hole the
+            // adjacent `retail_pos_ids` set already closed by checking node
+            // type as well. The two sets disagreed in one file.
+            let feed_admitted = nodes
+                .iter()
+                .find(|node| {
+                    value_string(node, "id") == value_string(operation_wire, "from_node_id")
+                })
+                .is_some_and(|node| {
+                    pairing_admits_kinds(
+                        "operation-out",
+                        "operation-in",
+                        &node_kind_token(node),
+                        &format!("workspace:{type_key}"),
+                    )
+                });
             let source_is_restaurant_pos =
                 operation_wire.get("from_port_id").and_then(Value::as_str) == Some("operation-out")
-                    && restaurant_pos_ids
-                        .contains(value_string(operation_wire, "from_node_id").unwrap_or_default());
+                    && feed_admitted;
             if !source_is_restaurant_pos {
                 return Err(topology_validation(
                     "invalid-operation-source",

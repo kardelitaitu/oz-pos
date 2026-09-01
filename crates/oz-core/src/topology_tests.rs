@@ -432,6 +432,39 @@ fn wire_between(
 }
 
 #[test]
+fn a_non_workspace_node_wearing_the_restaurant_pos_key_is_refused_upstream_of_the_kds_check() {
+    // ADR #45 follow-up #2. The KDS feed check used to test the source node's
+    // type_key ALONE, so in principle a warehouse carrying "restaurant-pos"
+    // could satisfy it. Building that graph to prove it turned up something
+    // better: the wire-level contract gate added in section 1 rejects the
+    // warehouse→KDS operation feed FIRST, so the weak predicate was never
+    // reachable for this input. It was defence in depth that could not fire,
+    // not a live hole — and this slice's change makes it consistent with the
+    // adjacent retail_pos_ids set rather than fixing a shippable bug.
+    //
+    // Pinned here because the ORDER is the guarantee: if the wire gate is ever
+    // loosened, this test tells us what the KDS check now has to catch.
+    let mut root = typed_node("root", "branch-location", None);
+    root["store_profile_id"] = json!("branch-1");
+    let fake = typed_node("fake-wh", "warehouse", Some("restaurant-pos"));
+    let kds = typed_node("kds-1", "workspace", Some("kds"));
+    let wire = wire_between(&fake, &kds, "operation-out", "operation-in", "generic");
+
+    let err = validate_semantic_json(&[root, fake, kds], &[wire])
+        .expect_err("a warehouse is not a Restaurant POS, whatever type key it carries");
+    let message = err.to_string();
+    assert!(
+        message.contains("incompatible semantic connection"),
+        "the wire-level contract gate must be the one that refuses this feed, got {message}"
+    );
+    assert!(
+        !message.contains("invalid-operation-source"),
+        "if the KDS check is now reporting this, the wire gate has stopped catching it — \
+         re-examine both rather than accepting this message"
+    );
+}
+
+#[test]
 fn node_kind_token_canonicalizes_the_branch_alias_and_workspace_family() {
     assert_eq!(
         node_kind_token(&typed_node("b", "store", None)),
