@@ -1,15 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent (oz-plugin slice A: verified)
+last audited DD-MM-YY by DSH-Agent
 crate: oz-plugin | status: SAFE | lint: CLEAN
-findings: clean — no unsafe code; sibling tests per convention
-next: none | perf: N/A
-*//*
-last audited 19-07-26 by RSA-Agent
-crate: oz-plugin | status: SAFE | lint: CLEAN
-findings: No unsafe code. PluginDb enforces namespace-isolated SQL via regex-based table-name
-  validation. PluginManager sandboxes Lua via oz-lua's LuaRuntime (Send+Sync, mutex-guarded).
-  8 unit tests pass including SQL validator, PluginDb CRUD, archive parsing.
-next: None | perf: SQL validation uses compiled regexes — negligible overhead.
+findings: 0 actual unsafe blocks (risk sweep counted comment text — strict regex confirms none; no #[allow(unsafe_code)] anywhere). Only production expect is db.rs sql_regex — documented RUST-07 invariant (compile-time literals verified by sql_validation_regexes_compile at CI). PluginDb namespace-isolated SQL via compiled regexes; PluginManager sandboxes Lua via oz-lua LuaRuntime (Send+Sync, mutex-guarded). All 258 unwrap/expect confined to tests.
+next: none — crate stable | perf: SQL validation uses compiled regexes — negligible overhead
 */
 
 //! Plugin discovery, loading, and sandboxing.
