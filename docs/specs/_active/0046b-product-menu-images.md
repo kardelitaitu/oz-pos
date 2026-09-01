@@ -1,6 +1,6 @@
 # Spec 0046-bis — Product & Menu-Item Images (Optimized for Low-End Android)
 
-**Status:** draft for review · **Created:** 2026-08-31 · **Scope:** desktop-client, tablet-client, ui/, oz-core, oz-api
+**Status:** implemented (2026-09-01) · **Created:** 2026-08-31 · **Scope:** desktop-client, tablet-client, ui/, oz-core, oz-api
 **Related:** 0048 (workspace model), sync-conflict-dead-letter-recovery (0045), subscription tiers (staff/licensing untouched)
 
 ---
