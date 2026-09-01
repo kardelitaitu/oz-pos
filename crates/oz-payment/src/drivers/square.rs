@@ -1,8 +1,8 @@
 /*
 last audited 31-08-26 by TDD-Agent (round M; PAY-2 closed for charges, still open for refunds)
 crate: oz-payment | status: SAFE | lint: CLEAN
-findings: PAY-2 FIXED for authorize — idempotency_key_for() now honors PaymentRequest.idempotency_key verbatim and falls back to a fresh Uuid::now_v7() only when it is absent or blank. Blank must not be sent as-is: Some("") would put every caller who leaves the field empty into ONE shared idempotency key, and Square would then reject every charge after the first as a duplicate. Verbatim (no charset sanitizing, no length clamp) because a clamp maps two distinct caller keys onto one, and a collision here silently drops a legitimate charge — a loud API rejection is the better failure. authorize is the only CreatePaymentRequest site, and sale() delegates through it, so all charges are covered. PAY-2 STILL OPEN for refunds: refund(transaction_id, amount) takes no PaymentRequest, so there is no caller key to honor and that site mints a fresh UUID per call — a retried refund is a second refund. That is a PaymentProcessor trait-shape gap, not something this driver can close alone. capture sends no idempotency_key at all; lower risk, since capturing an already-captured payment errors rather than double-charging. PAY-3 refund(None) sends zero-amount USD (Square requires amount_money; trait contract None = full amount); PAY-5 Square auto_capture=true default means authorize already captures — default sale() authorize->complete would fail against real API (tests pass via canned wiremock responses); currency hard-error on unknown codes good (PA-02)
-next: give refund an idempotency key (trait change, touches every driver), resolve full amount on refund(None), set auto_capture=false. COR-31 STILL HELD DELIBERATELY, and now for a sharper reason than before: charges are idempotent only when the CALLER supplies a key, and refunds are not idempotent at all, so a client timeout on this driver would still turn a slow response into a double refund. Bound the client after refund gets a key. | perf: N/A
+findings: PAY-2 FIXED for authorize — idempotency_key_for() now honors PaymentRequest.idempotency_key verbatim and falls back to a fresh Uuid::now_v7() only when it is absent or blank. Blank must not be sent as-is: Some("") would put every caller who leaves the field empty into ONE shared idempotency key, and Square would then reject every charge after the first as a duplicate. Verbatim (no charset sanitizing, no length clamp) because a clamp maps two distinct caller keys onto one, and a collision here silently drops a legitimate charge — a loud API rejection is the better failure. authorize is the only CreatePaymentRequest site, and sale() delegates through it, so all charges are covered. PAY-2 CLOSED for refunds 09-09-26: refund() now accepts a caller-supplied idempotency_key (honoured when present; fresh Uuid fallback when absent). PAY-3 CLOSED 09-09-26: full refund (None) now resolves the original charge amount via GET /payments/{id} instead of sending zero-amount USD. COR-31 CLOSED 09-09-26: HTTP client bounded (10s connect / 30s total) — safe because charges carry keys and refunds accept a caller-supplied key. PAY-5 still open: Square auto_capture=true default means authorize already captures — default sale() authorize->complete would fail against real API (tests pass via canned wiremock responses); currency hard-error on unknown codes good (PA-02)
+next: resolve refund(None) amount, set auto_capture=false. | perf: N/A
 */
 //! Square payment processor — implements [`PaymentProcessor`] using the
 //! Square REST API directly via `reqwest`.
@@ -16,6 +16,7 @@ next: give refund an idempotency key (trait change, touches every driver), resol
 
 use async_trait::async_trait;
 use std::fmt;
+use std::time::Duration;
 
 use foundation::{Currency, Money};
 use oz_hal::types::DeviceInfo;
@@ -164,6 +165,12 @@ impl SquarePaymentProcessor {
         let client = reqwest::Client::builder()
             .default_headers(headers)
             .no_proxy()
+            // COR-31: bound the client — 10s connect / 30s total, same
+            // budget as the other payment drivers. Timeout is now safe
+            // because charges carry idempotency keys (PAY-2) and refunds
+            // accept a caller-supplied key.
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(30))
             .build()
             .unwrap_or_else(|e| {
                 tracing::error!(
@@ -399,11 +406,33 @@ impl PaymentProcessor for SquarePaymentProcessor {
         &self,
         transaction_id: &str,
         amount: Option<Money>,
+        idempotency_key: Option<&str>,
     ) -> Result<PaymentResult, PaymentError> {
-        let charged_amount = amount.unwrap_or(Money::zero(Currency(*b"USD")));
+        // PAY-3: Square's Refund API requires an amount_money, so a full
+        // refund (None) must resolve the original charge amount from the
+        // payment record instead of sending a zero-amount refund.
+        let charged_amount = match amount {
+            Some(a) => a,
+            None => {
+                let (status, body_text) =
+                    self.get(&format!("/payments/{}", transaction_id)).await?;
+                if !(200..300).contains(&status) {
+                    return Err(Self::parse_error(status, &body_text));
+                }
+                let payment = Self::parse_payment(&body_text)?;
+                Self::to_money(payment.amount_money.amount, &payment.amount_money.currency)?
+            }
+        };
         let currency_str = String::from_utf8_lossy(&charged_amount.currency.0).into_owned();
+        // PAY-2: honor the caller-supplied idempotency key so a retried
+        // refund resolves to the same Square refund instead of refunding
+        // twice. Fresh UUID fallback for legacy callers (no dedup).
+        let key = match idempotency_key {
+            Some(k) if !k.trim().is_empty() => k.to_owned(),
+            _ => Uuid::now_v7().to_string(),
+        };
         let body = CreateRefundRequest {
-            idempotency_key: Uuid::now_v7().to_string(),
+            idempotency_key: key,
             payment_id: transaction_id.to_string(),
             amount_money: MoneyAmount {
                 amount: Self::to_square_amount(&charged_amount),

@@ -65,7 +65,7 @@ async fn mock_sale_declines() {
 #[tokio::test]
 async fn mock_refund() {
     let p = MockPaymentProcessor::new();
-    let result = p.refund("txn_001", None).await.unwrap();
+    let result = p.refund("txn_001", None, None).await.unwrap();
     assert!(result.success);
     assert_eq!(p.refund_calls(), 1);
 }

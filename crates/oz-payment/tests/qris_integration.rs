@@ -277,7 +277,7 @@ async fn refund_happy_path() {
 
     let proc = QrisPaymentProcessor::new_with_endpoint(MOCK_SERVER_KEY, &mock_server.uri(), false);
 
-    let result = proc.refund("order-refund", None).await.unwrap();
+    let result = proc.refund("order-refund", None, None).await.unwrap();
     assert!(result.success);
     assert_eq!(result.amount_charged.minor_units, 25000);
 }
@@ -314,6 +314,7 @@ async fn refund_partial_amount_is_sent() {
                 minor_units: 7500,
                 currency: idr(),
             }),
+            None,
         )
         .await
         .unwrap();
@@ -338,6 +339,7 @@ async fn refund_rejects_non_idr_amount() {
                 minor_units: 100,
                 currency: Currency(*b"USD"),
             }),
+            None,
         )
         .await
         .unwrap_err();
@@ -359,7 +361,10 @@ async fn refund_declined() {
 
     let proc = QrisPaymentProcessor::new_with_endpoint(MOCK_SERVER_KEY, &mock_server.uri(), false);
 
-    let err = proc.refund("order-not-settled", None).await.unwrap_err();
+    let err = proc
+        .refund("order-not-settled", None, None)
+        .await
+        .unwrap_err();
     let msg = err.to_string();
     assert!(
         msg.contains("not yet settled"),
@@ -564,7 +569,7 @@ async fn refund_sends_correct_json_body() {
 
     let proc = QrisPaymentProcessor::new_with_endpoint(MOCK_SERVER_KEY, &mock_server.uri(), false);
 
-    let _ = proc.refund("order-refund-body", None).await.unwrap();
+    let _ = proc.refund("order-refund-body", None, None).await.unwrap();
 
     let received = mock_server.received_requests().await.unwrap_or_default();
     assert_eq!(received.len(), 1);

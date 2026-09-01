@@ -248,6 +248,21 @@ async fn capture_not_found() {
 async fn refund_happy_path() {
     let mock_server = MockServer::start().await;
 
+    // PAY-3: a full refund (None) resolves the original charge amount by
+    // fetching the payment first — mock that GET, then the refund POST.
+    Mock::given(method("GET"))
+        .and(path("/payments/sq_payment_001"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "payment": {
+                "id": "sq_payment_001",
+                "status": "COMPLETED",
+                "amount_money": {"amount": 5000, "currency": "USD"},
+                "created_at": "2026-06-30T12:00:00Z"
+            }
+        })))
+        .mount(&mock_server)
+        .await;
+
     Mock::given(method("POST"))
         .and(path("/refunds"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -266,7 +281,7 @@ async fn refund_happy_path() {
         &mock_server.uri(),
     );
 
-    let result = proc.refund("sq_payment_001", None).await.unwrap();
+    let result = proc.refund("sq_payment_001", None, None).await.unwrap();
     assert!(result.success);
     assert_eq!(result.transaction_id.unwrap(), "sq_refund_001");
     assert_eq!(result.amount_charged.minor_units, 5000);
@@ -275,6 +290,21 @@ async fn refund_happy_path() {
 #[tokio::test]
 async fn refund_declined() {
     let mock_server = MockServer::start().await;
+
+    // PAY-3: a full refund fetches the payment first to resolve the original
+    // amount — mock the GET so the test reaches the refund POST below.
+    Mock::given(method("GET"))
+        .and(path("/payments/sq_not_completed"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "payment": {
+                "id": "sq_not_completed",
+                "status": "APPROVED",
+                "amount_money": {"amount": 9000, "currency": "USD"},
+                "created_at": "2026-06-30T12:00:00Z"
+            }
+        })))
+        .mount(&mock_server)
+        .await;
 
     Mock::given(method("POST"))
         .and(path("/refunds"))
@@ -292,7 +322,10 @@ async fn refund_declined() {
         &mock_server.uri(),
     );
 
-    let err = proc.refund("sq_not_completed", None).await.unwrap_err();
+    let err = proc
+        .refund("sq_not_completed", None, None)
+        .await
+        .unwrap_err();
     let msg = err.to_string();
     assert!(
         msg.contains("not been completed"),
@@ -492,6 +525,21 @@ async fn authorize_sends_correct_json_body() {
 async fn refund_sends_correct_json_body() {
     let mock_server = MockServer::start().await;
 
+    // PAY-3: a full refund (None) fetches the payment first to resolve the
+    // original charge amount — mock the GET.
+    Mock::given(method("GET"))
+        .and(path("/payments/sq_to_refund"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "payment": {
+                "id": "sq_to_refund",
+                "status": "COMPLETED",
+                "amount_money": {"amount": 3000, "currency": "USD"},
+                "created_at": "2026-06-30T12:00:00Z"
+            }
+        })))
+        .mount(&mock_server)
+        .await;
+
     Mock::given(method("POST"))
         .and(path("/refunds"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -510,20 +558,23 @@ async fn refund_sends_correct_json_body() {
         &mock_server.uri(),
     );
 
-    let _ = proc.refund("sq_to_refund", None).await.unwrap();
+    let _ = proc.refund("sq_to_refund", None, None).await.unwrap();
 
     let received = mock_server.received_requests().await.unwrap_or_default();
-    assert_eq!(received.len(), 1);
+    // Two requests: GET /payments/{id} then POST /refunds
+    assert_eq!(received.len(), 2);
 
     let body: serde_json::Value =
-        serde_json::from_slice(&received[0].body).expect("request should be valid JSON");
+        serde_json::from_slice(&received[1].body).expect("request should be valid JSON");
 
     assert_eq!(body["payment_id"], "sq_to_refund", "body: {body}");
     assert!(
         body["idempotency_key"].as_str().unwrap_or("").len() >= 36,
         "body: {body}"
     );
-    assert_eq!(body["amount_money"]["amount"], 0, "body: {body}");
+    // PAY-3: the full refund now carries the resolved charge amount (3000),
+    // not a zero-amount USD placeholder.
+    assert_eq!(body["amount_money"]["amount"], 3000, "body: {body}");
     assert_eq!(body["amount_money"]["currency"], "USD", "body: {body}");
 }
 

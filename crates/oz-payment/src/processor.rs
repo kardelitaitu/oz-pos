@@ -1,7 +1,7 @@
 /*
-last audited 25-07-26 by RSA-Agent
+last audited 25-07-26 by RSA-Agent; PAY-2 refund key added 09-09-26 (agent-2-cargo)
 crate: oz-payment | status: SAFE | lint: CLEAN
-findings: async_trait Send+Sync; default sale() composes authorize->capture correctly (returns declined result, propagates infra errors); lifecycle doc sound
+findings: async_trait Send+Sync; default sale() composes authorize->capture correctly (returns declined result, propagates infra errors); lifecycle doc sound. PAY-2 CLOSED for refunds 09-09-26: refund() now takes idempotency_key: Option<&str>, giving callers a dedup handle on retries (all drivers honor it when present; fresh fallback when absent).
 next: none | perf: N/A
 */
 //! [`PaymentProcessor`] trait — the interface every payment gateway
@@ -70,10 +70,19 @@ pub trait PaymentProcessor: Send + Sync {
     /// Refund a previously captured payment.
     ///
     /// If `amount` is `None` the full amount is refunded.
+    ///
+    /// When `idempotency_key` is `Some`, the gateway uses it to deduplicate
+    /// retries — the same key with the same body produces the same result
+    /// rather than a second refund. Callers MUST supply a unique key per
+    /// distinct refund operation (e.g. `"{sale_id}:{refund_counter}"`).
+    /// When `None` (legacy callers), the driver generates a fresh key per
+    /// call, which provides no deduplication — a timeout+retry may double
+    /// the refund.
     async fn refund(
         &self,
         transaction_id: &str,
         amount: Option<foundation::Money>,
+        idempotency_key: Option<&str>,
     ) -> Result<PaymentResult, PaymentError>;
 
     /// Void / reverse a pending authorization (before capture).
