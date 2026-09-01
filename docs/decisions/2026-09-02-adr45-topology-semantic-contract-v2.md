@@ -853,6 +853,34 @@ Obligations 2 and 3 are each a full slice on their own and neither is mechanical
    Making them conditional on `visiblePorts` is a type change with consumers to
    audit, and it was left as its own piece of work rather than folded in.
 
+### Whole-suite verification (2026-09-02, after 19 rounds of scoped runs)
+   Every gate in this slice had been run against topology-scoped suites only,
+   which is a real blind spot: a change to a shared registry can break a test
+   that never mentions topology. The full UI suite was run for the first time.
+
+   `7726 passed / 18 skipped / 4 failed` across 409 files. All four failures were
+   checked rather than assumed to be unrelated:
+
+   - `themeTokenCompliance` and `popoverSurfaceCompliance` — both already red at
+     HEAD before this slice, recorded in the deferred list above (the `18px`
+     port-label paddings from another agent's commit, and the
+     `.topology-shortcuts-popover` deletion).
+   - `SettingsPage > keeps unconfigured sync unconfigured` — outside topology
+     entirely.
+   - `NodeTopologyEditorDevMock > reloads the authoritative diagram...` — the one
+     worth recording, because it is topology-adjacent and had never been run in
+     this slice. It fails on `Unable to find an element with the text: New Retail
+     POS`, and that string exists **only in the test file**, in no production
+     module and no bundle. `git log -S` over the whole history returns two
+     commits, neither of them a registry change from this slice. So the test
+     asserts a label the app does not produce; it is not a regression introduced
+     here, and it is left to its owner rather than being edited blind from an
+     unrelated thread.
+
+   Conclusion: no evidence that any change in this slice broke anything outside
+   the topology suites that were run for it. The blind spot itself is the finding
+   — scoped green is not green.
+
    ---
 
    ~~The data-compatibility blocker on this is resolved, and it pointed the
