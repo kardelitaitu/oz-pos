@@ -97,12 +97,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rusqlite = { version = "0.31", features = ["bundled", "backup"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "fs", "net", "io-util", "signal"] }
 async-trait = "0.1"
-async-channel = "2"
 clap = { version = "4", features = ["derive"] }
-embedded-hal = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "v7", "serde"] }
-walkdir = "2"
 axum = { version = "0.8", features = ["macros"] }
 jsonwebtoken = "9"
 tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
