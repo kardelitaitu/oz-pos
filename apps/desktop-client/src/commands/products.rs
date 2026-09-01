@@ -111,6 +111,8 @@ pub async fn adjust_stock_scoped(
 /// A product DTO for the front-end, mapped from `ProductWithDetails`.
 #[derive(Debug, Serialize)]
 pub struct ProductDto {
+    /// Internal product ID (UUID) — used by image commands (spec 0046b).
+    pub id: String,
     /// Stock-keeping unit — the human-readable product code.
     pub sku: String,
     /// Display name shown on receipts and the POS UI.
@@ -238,6 +240,7 @@ fn map_products_to_dtos(
             let sku = pwd.product.sku.to_string();
             let tax_rate_ids = tax_rates_by_sku.get(&sku).cloned().unwrap_or_default();
             ProductDto {
+                id: pwd.product.id.clone(),
                 sku,
                 name: pwd.product.name,
                 category: pwd.category_name,
@@ -337,6 +340,7 @@ fn map_pwd_to_dto(
             .unwrap_or("USD")
             .to_owned();
         ProductDto {
+            id: pwd.product.id.clone(),
             sku: pwd.product.sku.to_string(),
             name: pwd.product.name,
             category: pwd.category_name,
