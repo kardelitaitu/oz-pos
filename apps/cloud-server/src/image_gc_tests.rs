@@ -1,6 +1,5 @@
 //! Tests for the image GC daemon (spec 0046b §3.4/§3.7).
 
-use super::*;
 use std::io::Write;
 
 /// Helper: seed an image_refs row with a given refcount and age.

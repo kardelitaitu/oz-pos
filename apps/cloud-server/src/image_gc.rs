@@ -81,14 +81,15 @@ async fn run_image_gc_cycle(db: &Arc<Mutex<Connection>>, image_dir: &PathBuf) {
                         let mut freed_bytes: i64 = 0;
                         for hash in &hashes {
                             let path = image_dir.join(format!("{hash}.webp"));
+                            // Read the size BEFORE deletion — the row is
+                            // gone from image_refs afterwards, so the file
+                            // size is the only bytes signal we have.
+                            let size = std::fs::metadata(&path)
+                                .map(|m| m.len() as i64)
+                                .unwrap_or(0);
                             match std::fs::remove_file(&path) {
                                 Ok(()) => {
-                                    // File size is not stored in image_refs
-                                    // after deletion (the row is gone), so
-                                    // we approximate by reading the file size
-                                    // before deletion.  The file was already
-                                    // deleted above; log the count.
-                                    freed_bytes += 1;
+                                    freed_bytes += size;
                                 }
                                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                                     // File already gone — not an error.
@@ -99,6 +100,7 @@ async fn run_image_gc_cycle(db: &Arc<Mutex<Connection>>, image_dir: &PathBuf) {
                             }
                         }
                         total_count += count;
+                        total_freed_bytes += freed_bytes;
                         // Observability (spec 0046b §3.7): a rising GC counter
                         // confirms the sweep is reclaiming space; the bytes
                         // gauge feeds the 4 GB soft-alert per tenant.
