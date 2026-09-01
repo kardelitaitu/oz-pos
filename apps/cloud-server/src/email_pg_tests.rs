@@ -97,12 +97,20 @@ async fn throwaway_pg_db(
 /// a completed sale with lines, stock, and the settings the loop reads,
 /// then exercises the whole analytics bundle + settings helpers on the
 /// real database. Skips when Postgres is unreachable.
+///
+/// Uses a throwaway database so the 20-connection pool does not exhaust
+/// the shared dev DB's `max_connections` when run concurrently with other
+/// PG tests (the pre-existing "PG connection pool contention" flake).
 #[tokio::test]
 async fn pg_integration_email_loop_reads_postgres() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
 
-    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+    let Some((db_url, db_name, admin_pool)) = throwaway_pg_db(&url, "oz_email_loop").await else {
+        return;
+    };
+
+    let pool = match crate::db::DbPool::connect_postgres(&db_url, false, 20, true).await {
         Ok(crate::db::DbPool::Postgres(pool)) => pool,
         Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
         Err(e) => {
@@ -502,35 +510,16 @@ async fn pg_integration_email_loop_reads_postgres() {
         .await
         .expect("tenant without config must be skipped cleanly");
 
-    // ── Cleanup (keys are namespaced; delete the seeded rows) ─────
-    let client = pool.get().await.unwrap();
-    for (sql, id) in [
-        ("DELETE FROM sale_lines WHERE id = $1", &sale_line_id),
-        ("DELETE FROM sales WHERE id = $1", &sale_id),
-        ("DELETE FROM products WHERE id = $1", &product_id),
-        ("DELETE FROM sale_lines WHERE id = $1", &sale_b_line_id),
-        ("DELETE FROM sales WHERE id = $1", &sale_b_id),
-        ("DELETE FROM products WHERE id = $1", &product_b_id),
-        ("DELETE FROM categories WHERE id = $1", &category_id),
-    ] {
-        client.execute(sql, &[&id]).await.unwrap();
-    }
-    client
-        .execute(
-            "DELETE FROM settings WHERE key IN ('store.name', 'smtp_config', 'report_schedule', \
-             'last_report_sent_at', 'store.name:tenant-b', 'smtp_config:tenant-b', \
-             'report_schedule:tenant-b', 'last_report_sent_at:tenant-b')",
-            &[],
-        )
+    // ── Cleanup ────────────────────────────────────────────────────
+    // The throwaway database is dropped wholesale; row-level deletes are
+    // unnecessary (the DB is process-unique). DROP DATABASE cannot run
+    // inside a transaction — separate statements.
+    drop(pool);
+    let admin = admin_pool.get().await.expect("admin client for cleanup");
+    admin
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
         .await
-        .unwrap();
-    client
-        .execute(
-            "DELETE FROM offline_queue WHERE id = $1",
-            &[&format!("{ns}-queue")],
-        )
-        .await
-        .unwrap();
+        .expect("drop throwaway email-loop DB should succeed");
 }
 
 // ── sent_reports dedup (at-most-once send) ─────────────────────
