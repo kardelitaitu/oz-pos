@@ -101,6 +101,21 @@ describe('StatusBar (activation screen unified status area)', () => {
     });
   });
 
+  it('right-aligns the version tooltip (download icon is rightmost)', async () => {
+    // The download/version icon sits at the right edge of the status row, so
+    // its tooltip must anchor to the icon's right edge (bubble extends left).
+    renderBar();
+    await waitFor(() => {
+      expect(screen.getByText('Version up to date')).toBeInTheDocument();
+    });
+
+    const tooltip = document.querySelector<HTMLElement>('.tooltip-content--align-right');
+    expect(tooltip).not.toBeNull();
+    // The right-aligned class must not appear on auth/sync tooltips.
+    const allAligned = document.querySelectorAll('.tooltip-content--align-right');
+    expect(allAligned.length).toBe(1);
+  });
+
   it('clicks auth icon to show toast with latency info', () => {
     renderBar();
     fireEvent.click(screen.getByLabelText('Auth'));

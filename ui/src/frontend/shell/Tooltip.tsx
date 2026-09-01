@@ -14,6 +14,10 @@ export interface TooltipProps {
   hideDelay?: number;
   /** Maximum width of the tooltip bubble (CSS value). Default '280px'. */
   maxWidth?: string;
+  /** Horizontal alignment of the bubble relative to the trigger.
+   *  Applies to `position="top"` / `"bottom"`; default 'center'.
+   *  Use 'right' when the trigger sits near the right viewport edge. */
+  align?: 'center' | 'left' | 'right';
   /** Render the tooltip to document.body via a portal so it escapes
    *  overflow:hidden/scroll clipping. Use when the trigger is inside
    *  a scrollable or clipped container. */
@@ -44,6 +48,7 @@ export default function Tooltip({
   maxWidth = '280px',
   portal = false,
   nowrap = false,
+  align = 'center',
   children,
 }: TooltipProps) {
   const [visible, setVisible] = useState(false);
@@ -120,12 +125,24 @@ export default function Tooltip({
       left = clampX(triggerRect.left - tip.width - 10);
       top = clampY(triggerRect.top + triggerRect.height / 2 - tip.height / 2);
     } else if (position === 'bottom') {
-      // Bubble below the trigger, horizontally centered
-      left = clampX(triggerRect.left + triggerRect.width / 2 - tip.width / 2);
+      // Bubble below the trigger, horizontally aligned per `align`
+      if (align === 'right') {
+        left = clampX(triggerRect.right - tip.width);
+      } else if (align === 'left') {
+        left = clampX(triggerRect.left);
+      } else {
+        left = clampX(triggerRect.left + triggerRect.width / 2 - tip.width / 2);
+      }
       top = clampY(triggerRect.bottom + 10);
     } else {
-      // top: bubble above the trigger, horizontally centered
-      left = clampX(triggerRect.left + triggerRect.width / 2 - tip.width / 2);
+      // top: bubble above the trigger, horizontally aligned per `align`
+      if (align === 'right') {
+        left = clampX(triggerRect.right - tip.width);
+      } else if (align === 'left') {
+        left = clampX(triggerRect.left);
+      } else {
+        left = clampX(triggerRect.left + triggerRect.width / 2 - tip.width / 2);
+      }
       top = clampY(triggerRect.top - tip.height - 10);
     }
 
@@ -136,7 +153,7 @@ export default function Tooltip({
     <div
       ref={tooltipRef}
       id={tooltipId}
-      className={`tooltip-content tooltip-content--${position}${visible ? ' tooltip-content--visible' : ''}${portal ? ' tooltip-content--portal' : ''}${nowrap ? ' tooltip-content--nowrap' : ''}`}
+      className={`tooltip-content tooltip-content--${position}${visible ? ' tooltip-content--visible' : ''}${portal ? ' tooltip-content--portal' : ''}${nowrap ? ' tooltip-content--nowrap' : ''}${align !== 'center' ? ` tooltip-content--align-${align}` : ''}`}
       style={
         portal
           ? clamped

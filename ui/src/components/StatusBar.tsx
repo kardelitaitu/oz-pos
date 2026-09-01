@@ -67,13 +67,14 @@ interface StatusItemProps {
   label: string;
   tooltip: string;
   onClick?: () => void;
+  align?: 'center' | 'left' | 'right';
 }
 
 /** One colored icon button with a hover tooltip + click toast. */
-function StatusItem({ kind, tone, label, tooltip, onClick }: StatusItemProps) {
+function StatusItem({ kind, tone, label, tooltip, onClick, align = 'center' }: StatusItemProps) {
   const Icon = ICONS[kind];
   return (
-    <Tooltip content={tooltip} position="top" showDelay={300} portal nowrap>
+    <Tooltip content={tooltip} position="top" showDelay={300} portal nowrap align={align}>
       <button
         type="button"
         className={`statusbar-item statusbar-tone--${tone}`}
@@ -140,7 +141,7 @@ export default function StatusBar({ bare = false }: { bare?: boolean }) {
     <div className={`statusbar${bare ? ' statusbar--bare' : ''}`} role="group" aria-label={requiredLocalized(l10n, 'statusbar-group-aria')}>
       <StatusItem kind="key" tone={authTone} label={authLabel} tooltip={authTooltip} onClick={() => notify(authTooltip)} />
       <StatusItem kind="sync" tone={syncTone} label={syncLabel} tooltip={syncTooltip} onClick={() => notify(syncTooltip)} />
-      <StatusItem kind="download" tone={versionTone} label={versionLabel} tooltip={versionTooltip} onClick={() => notify(versionTooltip)} />
+      <StatusItem kind="download" tone={versionTone} label={versionLabel} tooltip={versionTooltip} onClick={() => notify(versionTooltip)} align="right" />
     </div>
   );
 }

@@ -146,6 +146,22 @@
   white-space: nowrap;
 }
 
+/* ── Right-aligned tooltip (trigger near right edge) ─
+   When align="right" the bubble hugs the trigger's right
+   edge, so the arrow should sit on the right, pointing at
+   the trigger. Applies to top/bottom positions. */
+.tooltip-content--top.tooltip-content--align-right::before {
+  left: auto;
+  right: 12px;
+  transform: none;
+}
+
+.tooltip-content--bottom.tooltip-content--align-right::before {
+  left: auto;
+  right: 12px;
+  transform: none;
+}
+
 /* ── Portal mode: position: fixed via CSS custom properties ────
    Used when the trigger is inside an overflow:hidden/scroll
    container. The Tooltip component passes --trigger-* vars
