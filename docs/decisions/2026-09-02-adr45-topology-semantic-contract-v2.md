@@ -751,6 +751,31 @@ Obligations 2 and 3 are each a full slice on their own and neither is mechanical
    edited out: a traced code path is only a hypothesis, and a passing test is not
    evidence until you check that its fixture exercises the thing its name claims.
 
+   **The edit is still not safe, for a different reason found while attempting
+   it (2026-09-02).** Persistence is no longer the blocker; the row itself is.
+   `workspace:*` serves two populations with opposite requirements, because the
+   two token functions deliberately disagree about a type-less node:
+
+   - `nodeKindToken('workspace', undefined)` → `workspace:store-pos`, so a legacy
+     node with no type key keeps POS endpoints at the contract.
+   - `cardKindToken({ type: 'workspace' })` with no type key → `workspace:*`, so
+     that same node renders from the fallback row.
+   - `workspace:admin` has no row of its own, so it ALSO resolves to
+     `workspace:*`.
+
+   Deleting the row's `rightSemantics` would therefore strip visible stock-out
+   and transfer-out ports from legacy store nodes that the contract says may
+   legitimately source them — a real regression traded for a cosmetic ledger. The
+   debt is not the sockets; it is that one rendering row stands in for both "no
+   type key, means store-pos" and "unknown type key, means nothing".
+
+   The small fix is to make the fallback honest by separating those cases in
+   `cardKindToken`: a type-less workspace should resolve to `workspace:store-pos`,
+   matching what the contract already says about it, leaving `workspace:*` for
+   genuinely unknown keys. Then the row can advertise no output socket without
+   touching a legacy node. That is a rendering change for legacy stores, so it
+   needs its own characterization pass first — not a two-line deletion.
+
    ---
 
    ~~The data-compatibility blocker on this is resolved, and it pointed the
