@@ -129,6 +129,33 @@ fn directed_cycle_is_detected() {
 }
 
 #[test]
+fn a_stock_wire_from_a_registered_workspace_type_is_accepted() {
+    // Positive control for the test above. Without it, the refusal could be
+    // evidence of a malformed graph rather than of the contract gate doing its
+    // job, and the claim about persistence would be unproven.
+    let nodes = vec![
+        semantic_node("branch", "branch-location", Some("default")),
+        semantic_node("pos", "workspace", Some("store-pos")),
+        semantic_node("wh", "warehouse", None),
+    ];
+    let wires = vec![
+        semantic_location_wire("loc-1", "pos"),
+        semantic_location_wire("loc-2", "wh"),
+        json!({
+            "id": "s-1",
+            "from_node_id": "pos",
+            "to_node_id": "wh",
+            "direction": "one-way",
+            "from_port_id": "stock-out",
+            "to_port_id": "stock-in",
+            "relationship_type": "stock-routing",
+        }),
+    ];
+    validate_semantic_json(&nodes, &wires)
+        .expect("store-pos -> warehouse is a declared stock endpoint");
+}
+
+#[test]
 fn shared_semantics_contract_parses() {
     let contract = shared_topology_semantics();
     assert!(

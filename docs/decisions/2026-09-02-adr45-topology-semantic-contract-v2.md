@@ -713,8 +713,23 @@ Obligations 2 and 3 are each a full slice on their own and neither is mechanical
    socket at all. Either edit shrinks the ledger to empty and the test forces
    its deletion.
 
-   **The data-compatibility blocker on this is resolved (2026-09-02), and it
-   pointed the opposite way from what was assumed.** The worry was that removing
+   **RETRACTION (2026-09-02, same day, one round later): the paragraph below this
+   line is FALSE and must not be relied on. It was written from a traced code path
+   without a test, and the test written the next round refuted it.** A
+   `workspace:admin → warehouse` stock wire — an endpoint the contract does not
+   declare — passes `validate_semantic_json` cleanly, while the identical graph
+   with `store-pos` as the source also passes. So the contract gate is **not**
+   refusing unregistered-workspace stock wires on the backend, and the argument
+   that removing the `workspace:*` sockets cannot orphan saved data is
+   unproven. The socket-debt edit stays blocked, now on a sharper question: why
+   the gate admits this wire at all, and whether the vendored `endpoints` lists
+   are enforced for stock/transfer on the Rust side or only offered by the
+   frontend. Do not shrink the ledger until that is answered with a test.
+
+   ---
+
+   ~~The data-compatibility blocker on this is resolved, and it pointed the
+   opposite way from what was assumed.~~ The worry was that removing
    the sockets could orphan wires already saved in a merchant diagram. It cannot:
    every write goes `save_topology_json_at_key_with_revision` →
    `validate_semantic_ownership` → `validate_semantic_json`, which refuses any
