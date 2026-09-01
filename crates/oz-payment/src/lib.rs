@@ -1,8 +1,8 @@
 /*
-last audited 31-08-26 by DSH-Agent (EDC moved out to oz-hal; wiring claims corrected again)
+last audited DD-MM-YY by DSH-Agent (re-review)
 crate: oz-payment | status: SAFE | lint: CLEAN
-findings: PAY-2 FIXED for charges — square.rs honors PaymentRequest.idempotency_key in the body (85b97f1d), stripe.rs forwards it as the Idempotency-Key header (788407e5). Still open for refunds in both: the trait gives refund() no PaymentRequest, so there is no caller key to forward. PAY-1 (qris parse_amount) fixed 25-07-26. drivers::edc no longer exists — ad908e96 moved it to oz-hal, so the previous stamp's "the clients use drivers::edc only, and that is a documented mock" is now false in two ways: the module is gone, and the armed mock was removed with it. This crate is now purely the processor layer; nothing here has a production caller at all, which lowers severity of every finding in it rather than raising it. Stubs fail closed.
-next: give refund an idempotency key (trait change, touches every driver), qris PAY-2 is conditional on callers supplying keys, partial refund (PAY-3), Stripe decline classification (PAY-4) | perf: HTTP async/tokio; mock in-memory atomics
+findings: 0 unsafe blocks (#![deny(unsafe_code)] at crate root). mock.rs lock().unwrap() calls are documented test-double pattern (same as oz-hal). Re-review confirms the 31-08-26 stamp's findings: PAY-2 refund idempotency open, PAY-3 partial refund, PAY-4 stripe decline classification — all pre-existing, unchanged. No new findings.
+next: give refund an idempotency key (PAY-2), partial refund (PAY-3), Stripe decline classification (PAY-4) | perf: HTTP async/tokio; mock in-memory atomics
 */
 #![deny(unsafe_code)]
 
