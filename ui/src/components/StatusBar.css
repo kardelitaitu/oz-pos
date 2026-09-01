@@ -6,6 +6,10 @@
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-lg);
+  /* Parents like the StaffLogin/SessionLock footers set
+   * `pointer-events: none` so decorative text doesn't block the form;
+   * re-enable interaction on the status row itself. */
+  pointer-events: auto;
 }
 
 /* Inline variant: no pill/box chrome — for embedding in a larger bar. */
