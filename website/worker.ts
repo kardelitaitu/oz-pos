@@ -57,8 +57,6 @@ const NF_SERVICE = 'cloud';
 const CF_DEPLOYS_PATH = '/__oz/cf-deploys';
 /** This Worker's own script name on Cloudflare. */
 const CF_SCRIPT_NAME = 'oz-pos';
-/** This Worker's workers.dev hostname (edge self-check target). */
-const CF_WORKERS_DEV = 'oz-pos.adikaradwiatmaja.workers.dev';
 /** Health: Northflank service metadata (deployment state, running sha). */
 const NF_STATUS_PATH = '/__oz/nf-status';
 /** Health: public-surface uptime self-check (probed from the edge). */
@@ -133,7 +131,7 @@ function withStrictCSP(resp: Response): Response {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "img-src 'self' data:",
     "font-src 'self' https://fonts.gstatic.com",
-    "connect-src 'self' https://*.code.run https://*.ozpos.my.id https://open.er-api.com",
+    "connect-src 'self' https://ozpos.my.id https://*.code.run https://*.ozpos.my.id https://open.er-api.com",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -453,24 +451,18 @@ export default {
         }
       }
 
-      // Step 1b-5: UPTIME_PATH — probe our surfaces that are REACHABLE
-      // from inside the Worker (edge vantage): the Northflank license API
-      // (different zone) and this Worker's own workers.dev URL (re-enters
-      // the Worker through Cloudflare's edge). Same-zone hosts on the
-      // ozpos.my.id zone (apex, dashboard, admin) are deliberately NOT
-      // probed here: a Worker subrequest to its own zone cannot re-enter
-      // Workers routes and falls through to an origin that does not
-      // exist (dashboard/admin) or is itself proxied by Cloudflare
-      // (apex) — both produce a bogus 522. Those three are probed from
-      // the BROWSER instead (admin.js, no-cors fetch), which is a real
-      // user vantage.
+      // Step 1b-5: UPTIME_PATH — the ONLY surface probeable from inside
+      // the Worker (edge vantage): the Northflank license API, which lives
+      // on a different zone. Everything on the ozpos.my.id zone is
+      // unprobeable from here: same-zone subrequests bypass Workers
+      // routes and fall through to a nonexistent origin (dashboard/admin
+      // are Worker routes) or an orange-to-orange apex — both bogus 522s
+      // (a workers.dev self-fetch loops the same way). Those three are
+      // probed from the BROWSER instead (admin.js no-cors fetch, allowed
+      // by the CSP's first-party connect-src entries).
       if (url.pathname === UPTIME_PATH) {
         if (!sessionCookie) return new Response(JSON.stringify({ error: 'not signed in' }), { status: 401, headers: JSON_HEADERS });
-        const targets: Array<[string, string]> = [
-          ['license api', 'https://license.ozpos.my.id/api/health'],
-          ['worker (cloud)', `https://${CF_WORKERS_DEV}/`],
-        ];
-        const checks = await Promise.all(targets.map(async ([name, target]) => {
+        const checks = await Promise.all([['license api', 'https://license.ozpos.my.id/api/health']].map(async ([name, target]) => {
           const t0 = Date.now();
           try {
             const res = await fetch(target, { method: 'GET', redirect: 'follow', signal: AbortSignal.timeout(6000) });
