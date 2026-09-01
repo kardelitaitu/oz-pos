@@ -35,7 +35,7 @@ import (
 // health card lied about what was deployed. Keep in sync with the repo
 // version lock (AGENTS.md); the B31 test pins it so a future bump
 // without an update goes red instead of silently misreporting.
-const adminDashboardVersion = "0.0.33"
+const adminDashboardVersion = "0.0.34"
 
 // adminKeyOK validates the Authorization: Bearer <admin_key> header.
 // Reads the key from OZ_ADMIN_KEY env; a missing env or wrong key is 401.
@@ -187,8 +187,8 @@ func handleAdminGetTenant(app core.App) func(e *core.RequestEvent) error {
 			devices = append(devices, map[string]any{
 				"id":           m.Id,
 				"machine_id":   m.GetString("machine_id"),
-				"last_seen_at": m.GetString("last_seen_at"),
-				"revoked_at":   m.GetString("revoked_at"),
+				"last_seen_at": formatDateField(m, "last_seen_at"),
+				"revoked_at":   formatDateField(m, "revoked_at"),
 			})
 		}
 
@@ -235,9 +235,16 @@ func handleAdminActivate(app core.App) func(e *core.RequestEvent) error {
 type renewRequest struct {
 	// Days to extend the subscription expiry by (default 365).
 	Days int `json:"days"`
+	// Optional exact expiry "YYYY-MM-DD" (inclusive — stored as the end
+	// of that UTC day). Mutually exclusive with Days.
+	ExpiresAt string `json:"expires_at"`
 }
 
-// handleAdminRenew extends the tenant's latest subscription expiry.
+// handleAdminRenew extends the tenant's latest subscription expiry — by
+// days (default 365) or to an exact date. Any change RE-SIGNS the
+// subscription: the row and the signed payload must agree or the POS's
+// offline trust checks diverge (the tenant-facing renew endpoint always
+// re-signed; the admin path previously left a stale signature behind).
 func handleAdminRenew(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		if !adminAuth(app, e) {
@@ -252,8 +259,8 @@ func handleAdminRenew(app core.App) func(e *core.RequestEvent) error {
 		if e.Request.Body != nil {
 			_ = json.NewDecoder(e.Request.Body).Decode(&req)
 		}
-		if req.Days <= 0 {
-			req.Days = 365
+		if req.ExpiresAt != "" && req.Days > 0 {
+			return e.JSON(http.StatusBadRequest, map[string]any{"error": "use days or expires_at, not both"})
 		}
 
 		// Find the latest subscription.
@@ -265,27 +272,65 @@ func handleAdminRenew(app core.App) func(e *core.RequestEvent) error {
 		}
 		sub := subs[0]
 
-		// Extend expiry. B29: the old code anchored at time.Now(), so
-		// renewing a subscription that still had months of paid time left
-		// silently TRUNCATED it (2027-01-01 +30d became ~now+30d). Live
-		// subs extend from their current expiry; expired ones renew from
-		// now — max(now, expires_at) semantics.
-		base := time.Now().UTC()
-		if cur := sub.GetDateTime("expires_at").Time(); cur.After(base) {
-			base = cur
+		var newExpiry time.Time
+		if req.ExpiresAt != "" {
+			t, err := parseInclusiveDate(req.ExpiresAt)
+			if err != nil {
+				return e.JSON(http.StatusBadRequest, map[string]any{"error": "expires_at must be YYYY-MM-DD"})
+			}
+			if !t.After(time.Now().UTC()) {
+				return e.JSON(http.StatusBadRequest, map[string]any{"error": "expires_at must be in the future"})
+			}
+			newExpiry = t
+		} else {
+			if req.Days <= 0 {
+				req.Days = 365
+			}
+			// B29: the old code anchored at time.Now(), so
+			// renewing a subscription that still had months of paid time left
+			// silently TRUNCATED it (2027-01-01 +30d became ~now+30d). Live
+			// subs extend from their current expiry; expired ones renew from
+			// now — max(now, expires_at) semantics.
+			base := time.Now().UTC()
+			if cur := sub.GetDateTime("expires_at").Time(); cur.After(base) {
+				base = cur
+			}
+			newExpiry = base.Add(time.Duration(req.Days) * 24 * time.Hour)
 		}
-		newExpiry := base.Add(time.Duration(req.Days) * 24 * time.Hour)
-		sub.Set("expires_at", newExpiry.Format(time.RFC3339))
+		newExpiryStr := newExpiry.Format(time.RFC3339)
+		sub.Set("expires_at", newExpiryStr)
 		sub.Set("status", "active")
+		// Grace must move with the expiry so row and payload agree.
+		grace := calculateGraceUntil(newExpiry).Format(time.RFC3339)
+		sub.Set("grace_until", grace)
+		// Re-sign with the current tier/quotas and the new expiry.
+		payload := SubscriptionPayload{
+			TenantID:        tenant.Id,
+			TierKey:         sub.GetString("tier_key"),
+			Status:          "active",
+			MaxStores:       sub.GetInt("max_stores"),
+			MaxPOSInstances: sub.GetInt("max_pos_instances"),
+			AllowedTypes:    parseAllowedTypesJSON(sub.GetString("allowed_types")),
+			StartsAt:        formatDateField(sub, "starts_at"),
+			ExpiresAt:       newExpiryStr,
+			GraceUntil:      grace,
+			IssuedAt:        time.Now().UTC().Format(time.RFC3339),
+		}
+		payloadStr, signature, signErr := signSubscription(payload)
+		if signErr != nil {
+			return e.JSON(http.StatusInternalServerError, map[string]any{"error": "renew failed"})
+		}
+		sub.Set("signed_payload", payloadStr)
+		sub.Set("signature", signature)
 		if err := app.Save(sub); err != nil {
 			return e.JSON(http.StatusInternalServerError, map[string]any{"error": "renew failed"})
 		}
 
-		log.Printf("/admin/tenants/%s/renew: tenant %q renewed +%dd to %s",
-			tenant.Id, tenant.GetString("email"), req.Days, newExpiry.Format(time.RFC3339))
+		log.Printf("/admin/tenants/%s/renew: tenant %q renewed to %s",
+			tenant.Id, tenant.GetString("email"), newExpiryStr)
 		return e.JSON(http.StatusOK, map[string]any{
 			"status":     "active",
-			"expires_at": newExpiry.Format(time.RFC3339),
+			"expires_at": newExpiryStr,
 		})
 	}
 }

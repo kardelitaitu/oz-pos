@@ -247,6 +247,11 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		if err := ensurePaymentProviderField(app); err != nil {
 			return err
 		}
+		// Mirror production boot: manual grants widen payment_provider
+		// (ADR #42 Phase 4).
+		if err := ensureManualPaymentProvider(app); err != nil {
+			return err
+		}
 		// Mirror production boot: add the bundle_id field (vertical-bundle
 		// checkout, C3.2) via the same idempotent migration path the
 		// deployed server uses.
@@ -298,10 +303,14 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		se.Router.POST("/api/v1/web/devices/{id}/revoke", handleWebRevokeDevice(app))
 		se.Router.GET("/api/v1/admin/tenants", handleAdminListTenants(app))
 		se.Router.GET("/api/v1/admin/tenants/{id}", handleAdminGetTenant(app))
+		se.Router.PATCH("/api/v1/admin/tenants/{id}", handleAdminUpdateTenant(app))
 		se.Router.POST("/api/v1/admin/tenants/{id}/activate", handleAdminActivate(app))
 		se.Router.POST("/api/v1/admin/tenants/{id}/renew", handleAdminRenew(app))
 		se.Router.POST("/api/v1/admin/tenants/{id}/revoke", handleAdminRevoke(app))
 		se.Router.POST("/api/v1/admin/tenants/{id}/tier-override", handleAdminTierOverride(app))
+		se.Router.POST("/api/v1/admin/tenants/{id}/grant-subscription", handleAdminGrantSubscription(app))
+		se.Router.POST("/api/v1/admin/tenants/{id}/devices/{deviceId}/revoke", handleAdminRevokeDevice(app))
+		se.Router.DELETE("/api/v1/admin/tenants/{id}", handleAdminDeleteTenant(app))
 		se.Router.GET("/api/v1/admin/health", handleAdminHealth(app))
 		se.Router.GET("/api/v1/admin/stats", handleAdminStats(app))
 		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))

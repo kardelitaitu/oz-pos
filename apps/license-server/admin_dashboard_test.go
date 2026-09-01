@@ -122,11 +122,11 @@ func TestAdminHealthB31_ReportsCurrentVersion(t *testing.T) {
 	}
 	var body map[string]any
 	_ = json.Unmarshal(rec.Body.Bytes(), &body)
-	// The repo is version-locked at 0.0.33 (AGENTS.md). The endpoint
-	// hardcoded 0.0.31 — the admin health card lied about what was
+	// The repo is version-locked at 0.0.34 (AGENTS.md). The endpoint
+	// hardcoded 0.0.31 once — the admin health card lied about what was
 	// deployed. This assertion is the bump reminder: update the const
 	// (and the lock) together.
-	if body["version"] != "0.0.33" {
-		t.Fatalf("B31: health version=%v, want 0.0.33 (version lock — update with the bump)", body["version"])
+	if body["version"] != "0.0.34" {
+		t.Fatalf("B31: health version=%v, want 0.0.34 (version lock — update with the bump)", body["version"])
 	}
 }
