@@ -660,6 +660,39 @@ mode.
   mechanical token swap either — no spacing token equals 18px, so "fixing" it
   would move the port labels a concurrent agent just laid out.
 
+### §4 — cold start (open; obligation 1 found already implemented)
+
+Reading the load path before changing it overturned this section's premise too.
+The first obligation — "a mandatory root is not a decision, so do not make the
+merchant place it" — **is already implemented** on the seeded path:
+`NodeTopologyEditor.tsx:1622-1634` walks `branchLocations ?? []` and pushes a
+`type: 'store'` node per location that no existing node already claims, keyed by
+`id = location.id` with `storeProfileId = location.id`, the location's name, and
+a default slot position. That is the `@branch-root` the contract requires,
+authored without a merchant decision, and it is why `multiple-branch-locations`
+can treat a second root as an error at all.
+
+What is **not** resolved is the two paths that commit a genuinely empty canvas
+(`:1693`, `:1709`). One is the `unassigned` pseudo-branch, which is correct —
+there is no branch to root on. The other is "no saved diagram, parent supplied
+empty seeds", and whether a brand-new store with a real branch location reaches
+it or is caught by the seed loop depends on control flow that branches on
+`workspaceInstances !== undefined` around `:1559`. That question needs an
+empirical answer from a mount test, not a reading of 6,100 lines, and the answer
+determines whether §4.1 is a two-line fix or already done.
+
+Obligations 2 and 3 are each a full slice on their own and neither is mechanical:
+
+- **Templates out of `localStorage`** (`ozpos.topology.templates.v1`,
+  `topologyExport.ts:16/161/171/182`) needs a table, a migration, a Rust command,
+  an API client, and UI — and `init.pg.sql` is generated, so the PG drift gate
+  and `generate-pg-migration.py` are in the loop.
+- **The validation panel as checklist** is a redesign of
+  `topologyValidationWidget.tsx`, which today presents a flat, dismissible issue
+  list with jump actions. "Next step" framing needs new Fluent copy (and the
+  bundle-parity gate), an ordering rule over `TopologyValidationError` codes, and
+  a decision about whether a checklist replaces the error list or sits above it.
+
 ### Follow-ups this slice surfaced
 
 1. ~~`socketSemanticIds` still hands an unregistered workspace type the generic
