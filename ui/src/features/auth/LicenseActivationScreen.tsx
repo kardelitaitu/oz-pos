@@ -338,7 +338,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
         />
         <ConnectionStatus 
           label={requiredLocalized(l10n, 'staff-login-connection-sync')} 
-          url="" 
+          url={AUTH_SERVICE_URL} 
         />
         <MachineIdStatus />
       </div>

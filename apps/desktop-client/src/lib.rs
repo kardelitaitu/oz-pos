@@ -215,27 +215,22 @@ pub fn run() {
                 let _ = main_window.show();
             }
 
-            // ── Auto-provision local sync (debug builds only) ────────
+            // ── Auto-provision cloud sync (debug builds only) ────────
             // A fresh dev DB ships with an empty `sync_server_url` and sync
             // disabled, so the background daemon silently no-ops until the
-            // user manually configures Settings → Sync. If the local dev
-            // server (`start-local-sync.bat` → :3099) is up, request a JWT
-            // and persist the connection. Spawned BEFORE the sync daemon
-            // so the daemon's first tick (60–120s out) sees the fresh
-            // config. Never runs in release builds — an existing
-            // configuration is never touched.
-            //
-            // TEMPORARILY DISABLED (2026-08-16): while testing against the
-            // deployed cloud server the app must NOT auto-connect to the
-            // local Docker dev server. Re-enable by uncommenting the block
-            // below (the sync_bootstrap module + tests are kept intact).
-            // #[cfg(debug_assertions)]
-            // {
-            //     let bootstrap_db = app.state::<AppState>().db.clone();
-            //     platform_startup::spawn_daemon("sync auto-provision", async move {
-            //         crate::sync_bootstrap::auto_provision_local_sync(bootstrap_db).await;
-            //     });
-            // }
+            // user manually configures Settings → Sync. If the cloud server
+            // (`https://license.ozpos.my.id`) is up, request a JWT and
+            // persist the connection. Spawned BEFORE the sync daemon so the
+            // daemon's first tick (60–120s out) sees the fresh config. Never
+            // runs in release builds — an existing configuration is never
+            // touched.
+            #[cfg(debug_assertions)]
+            {
+                let bootstrap_db = app.state::<AppState>().db.clone();
+                platform_startup::spawn_daemon("sync auto-provision", async move {
+                    crate::sync_bootstrap::auto_provision_local_sync(bootstrap_db).await;
+                });
+            }
 
             // ── Background sync daemon ────────────────────────────────
             let db = app.state::<AppState>().db.clone();

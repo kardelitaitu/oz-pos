@@ -635,10 +635,10 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       expect(authConn).toHaveTextContent('Auth: https://license.ozpos.my.id');
     });
 
-    it('47. Renders the ConnectionStatus for the Sync server', () => {
+    it('47. Renders the ConnectionStatus for the Sync server with the correct URL', () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       const syncConn = screen.getByTestId('conn-status-Sync');
-      expect(syncConn).toHaveTextContent('Sync:');
+      expect(syncConn).toHaveTextContent('Sync: https://license.ozpos.my.id');
     });
 
     it('48. Renders the MachineIdStatus component', () => {
