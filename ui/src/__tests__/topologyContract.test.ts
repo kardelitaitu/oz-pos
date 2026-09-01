@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { TopologyNodeData, TopologyWireData } from '@/features/stores/NodeTopologyEditor';
 import {
   TOPOLOGY_SCHEMA_VERSION,
@@ -1366,5 +1368,59 @@ describe('firstTopologyValidationError', () => {
 
   it('is undefined for a valid graph', () => {
     expect(firstTopologyValidationError([])).toBeUndefined();
+  });
+});
+
+// ── ADR #45 §4.3 — the priority table must stay complete ───────────
+//
+// `orderTopologyValidationErrors` sorts an unlisted code last, stably. That is
+// the right behaviour for a code mid-addition, and it is also how a table goes
+// quietly stale: a 25th code could ship, land in the last tier, and nothing would
+// fail. So the completeness check reads the source rather than trusting a
+// hand-maintained list — the same technique topologyThemeParity.test.ts uses for
+// CSS tokens, and for the same reason: the thing being checked is a type, and a
+// type is not enumerable at runtime.
+
+describe('validation error priority table', () => {
+  const source = readFileSync(join(process.cwd(), 'src/features/stores/topologyContract.ts'), 'utf8');
+
+  const unionBlock = /export type TopologyValidationCode\s*=\s*([\s\S]*?);/.exec(source)?.[1]
+    ?? /code:\s*([\s\S]*?)\n\s*\}/.exec(source)?.[1]
+    ?? '';
+  const declaredCodes = [...unionBlock.matchAll(/'([a-z][a-z0-9-]*)'/g)]
+    .map((m) => m[1] ?? '')
+    .filter((c) => c.startsWith('invalid-') || c.startsWith('missing-') || c.startsWith('multiple-')
+      || c.startsWith('duplicate-') || c.startsWith('unknown-') || c.startsWith('cycle-')
+      || c.startsWith('warehouse-') || c.startsWith('branch-') || c.startsWith('ambiguous-')
+      || c.startsWith('unsupported-'));
+
+  const tierBlock = /const TOPOLOGY_ERROR_TIER[^=]*=\s*\{([\s\S]*?)\n\};/.exec(source)?.[1] ?? '';
+  const rankedCodes = [...tierBlock.matchAll(/^\s*'([a-z][a-z0-9-]*)':\s*\d+/gm)].map((m) => m[1] ?? '');
+
+  it('finds both lists, so the checks below cannot pass vacuously', () => {
+    // Without this, a regex that stops matching would make every assertion
+    // trivially true — the failure mode source-parsing tests are prone to.
+    expect(declaredCodes.length).toBeGreaterThan(20);
+    expect(rankedCodes.length).toBeGreaterThan(20);
+  });
+
+  it('ranks every declared validation code', () => {
+    const unranked = declaredCodes.filter((c) => !rankedCodes.includes(c));
+    expect(unranked, `codes with no tier: ${unranked.join(', ')}`).toEqual([]);
+  });
+
+  it('ranks no code that the validator cannot produce', () => {
+    // A typo in a tier key is worse than a missing one: it looks handled, sorts
+    // the real code last, and no test about that code's position would notice.
+    const phantom = rankedCodes.filter((c) => !declaredCodes.includes(c));
+    expect(phantom, `tier keys not in the code union: ${phantom.join(', ')}`).toEqual([]);
+  });
+
+  it('assigns each tier a contiguous number starting at 1', () => {
+    const tiers = [...new Set(rankedCodes.map((c) => {
+      const re = new RegExp(`'${c}':\\s*(\\d+)`);
+      return Number(re.exec(tierBlock)?.[1]);
+    }))].sort((a, b) => a - b);
+    expect(tiers).toEqual(tiers.map((_, i) => i + 1));
   });
 });
