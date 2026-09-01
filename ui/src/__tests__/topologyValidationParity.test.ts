@@ -66,13 +66,24 @@ describe('topology validation code parity (TS ↔ Rust)', () => {
     [...tsSource.matchAll(/code:\s*'([a-z][a-z0-9-]*)'/g)].map((m) => m[1] ?? '').filter(Boolean),
   )];
 
-  // Deliberately loose: it captures a code emitted as a literal AND one emitted
+  // Narrower than "any quoted string in the file", which is what this first used.
+  // The looser form was checked by hand and happened to be correct — all 19 codes
+  // it counted really are emitted — but "happened to be correct" is not a
+  // property. A code appearing only as a comparison value, or in a comment, would
+  // have been counted as enforced. So the extraction now mirrors what was
+  // verified: strings inside a `topology_validation(...)` call.
+  //
+  // The window is generous rather than exact because a code can be emitted
   // through a conditional expression (`if is_kds { "missing-operation-input" }
-  // else { ... }`), which is precisely the form a narrower pattern missed in the
-  // original hand audit. Over-matching is safe here because the set is
-  // intersected with the TS codes below.
+  // else { ... }`) — the form the original hand audit's narrower pattern missed
+  // entirely.
   const coreStrings = new Set(
-    [...coreSource.matchAll(/"([a-z][a-z0-9-]*)"/g)].map((m) => m[1] ?? '').filter(Boolean),
+    [...coreSource.matchAll(/topology_validation\(/g)]
+      .flatMap((call) => {
+        const window = coreSource.slice(call.index ?? 0, (call.index ?? 0) + 500);
+        return [...window.matchAll(/"([a-z][a-z0-9-]*)"/g)].map((m) => m[1] ?? '');
+      })
+      .filter(Boolean),
   );
 
   it('extracts a meaningful set from both sides, so nothing below passes vacuously', () => {
