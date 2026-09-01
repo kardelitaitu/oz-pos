@@ -21,8 +21,8 @@ vi.mock('@/api/promotions', () => ({
   deletePromotion: (...args: unknown[]) => mockDeletePromotion(...args),
 }));
 
-vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({ session: { user_id: 'user-1' } }),
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({ sessionToken: 'tok-1', activeWorkspace: null, logout: vi.fn() }),
 }));
 
 // ── Helpers ───────────────────────────────────────────────────────────

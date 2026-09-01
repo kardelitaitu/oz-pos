@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { requiredLocalized } from '@/frontend/shared';
 import { animDuration } from '@/utils/animation';
-import { listPromotions, listPromotionsScoped, type Promotion } from '@/api/promotions';
+import { listPromotionsScoped, type Promotion } from '@/api/promotions';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { l10nErrorMessage } from '@/utils/app-error';
 import { evaluatePromotionEligibility } from './promotionEligibility';
@@ -71,9 +71,7 @@ export default function PromotionsModal({
     setPromos(null);
     setLoadError(null);
     setSelectedIds(new Set(initiallySelectedIds));
-    const load = sessionToken
-      ? listPromotionsScoped(sessionToken)
-      : listPromotions();
+    const load = listPromotionsScoped(sessionToken);
     load
       .then((list) => {
         if (cancelled) return;
