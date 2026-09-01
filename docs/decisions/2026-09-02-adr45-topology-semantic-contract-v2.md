@@ -810,6 +810,32 @@ Obligations 2 and 3 are each a full slice on their own and neither is mechanical
    which is the only thing likely to hold an assertion that an admin card has
    stock sockets.
 
+   **Attempted, and the suite said the plan was wrong in two ways (2026-09-02).**
+   Reverted; nothing above this line was shipped.
+
+   1. `workspace:warehouse` **already has its own registry row** — a duplicate
+      key was a compile error. So the premise that it reaches the fallback
+      through `??` is false, and its two ledger entries come from that existing
+      row's own `rightSemantics`. The fix there is a one-line edit in place, not
+      a new row. Only `workspace:admin` actually falls back.
+   2. `rightLabelId` and `rightAriaLabelId` are **required** on `NodeKindEntry`,
+      not optional, so a row cannot simply omit the right side. A row with
+      `visiblePorts: ['left']` still has to carry right-socket labels, which
+      means either widening the type or leaving dead fields on the row — a real
+      design question this thread has not asked before.
+
+   Useful result from the same run: `NodeTopologyEditor.test.tsx` passed all 510
+   tests against the broken registry, so the merchant-facing editor flow is not
+   what this change threatens. What it threatens is the registry's own tests and
+   the behavior golden — which is the expected blast radius, and the golden needs
+   `TOPOLOGY_BEHAVIOR_UPDATE=1` regeneration rather than hand-editing.
+
+   The corrected edit, in order: empty `rightSemantics` on the existing
+   `workspace:warehouse` row; add a `workspace:admin` row that carries the two
+   required right-label fields; decide whether `NodeKindEntry` should make those
+   fields optional when `visiblePorts` excludes `'right'`; regenerate the golden;
+   then empty the ledger last, so each step's failure is attributable.
+
    ---
 
    ~~The data-compatibility blocker on this is resolved, and it pointed the
