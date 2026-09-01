@@ -11,7 +11,9 @@ Let a merchant attach images to retail products and resto menu items —
 **a menu item always has exactly 1 image; a product has 1 primary plus at
 most 4 alternatives** — rendered flawlessly on cheap Indonesian tablets and
 synced through the existing cloud topology, without bloating the SQLite/PG
-rows, the IPC bridge, or the WebView heap.
+rows, the IPC bridge, or the WebView heap. On the retail POS the merchant
+chooses how to list products: **text-only table** (default, zero images) or
+**grid with the primary image** (virtualized).
 
 Upload happens **at assignment time**: the merchant picks/edits an image in
 the product or menu editor, and that action uploads + ingests the bytes.
@@ -28,7 +30,7 @@ author; tablets render).
 | Menu items **are products** (resto filters the same table; `kitchen_zone`, `product_type`) | `RestaurantMenu.tsx:921` over `restaurantProducts` |
 | CSP in **both** apps already allows `img-src … asset: https://asset.localhost` — pre-armed but the **protocol itself is not enabled** (no `assetProtocol` key anywhere) | `apps/desktop-client/tauri.conf.json:29`, `apps/tablet-client/tauri.conf.json:15` |
 | `react-window` v2.2.7 is already a dependency | `ui/package.json:50` |
-| `RetailProductGrid` paginates (`pagedProducts`); `RestaurantMenu` renders `filtered.map` unvirtualized | `RetailProductGrid.tsx:611`, `RestaurantMenu.tsx:921` |
+| `RetailProductGrid` is a **text table** today (`retail-product-table`, paginated via `pagedProducts`) — the text-only mode already exists as the baseline, not a new build; `RestaurantMenu` renders `filtered.map` unvirtualized | `RetailProductGrid.tsx:594-635`, `RetailProductGrid.tsx:611`, `RestaurantMenu.tsx:921` |
 | Cloud product routes exist for sync (`list_products`, `create_product`, …) | `crates/oz-api/src/routes/products.rs` |
 | Cloud byte store = Northflank volume (`VOLUME ["/data"]`, `OZ_DB_PATH=/data/oz-pos.db`) | `Dockerfile.server`, `docs/plans/northflank-p1-p7-plan.md` |
 | Products do **not** ride the offline queue (only sales/receipts do) — the catalog reaches tablets via **REST snapshots** (`list_products`); authoring is REST writes | `crates/oz-core/src/db/offline.rs` (queue carries `sale.*` actions; `product.update` appears in tests only), `crates/oz-api/src/routes/products.rs` |
@@ -194,30 +196,36 @@ mandates against it):
   existing colored-initial tile. POS tiles only ever need slot 1; the
   manager downloads primary images first, alternatives opportunistically.
 
-### 3.5 UI: virtualize or the pixel RAM wins anyway
+### 3.5 UI: view-mode toggle — text-only table or grid with primary image
 
-- The math that makes virtualization non-optional: the chosen 512 px variant
-  decodes to ~1 MB of ARGB per tile (the guideline's 1.05 MB). A
-  non-virtualized 300-item grid would pin ~300 MB of decoded bitmaps on a
-  2 GB tablet even with 15 KB files on disk — the disk size is irrelevant;
-  the decoded bitmap is what eats RAM.
-- **POS grids** (`RetailProductGrid`, resto ordering screen) switch the
-  product tiles to the **react-window v2 `Grid`** component (`cellComponent`
-  API — audit fix: v2 removed the v1 `FixedSizeGrid` name; verified against
-  the installed 2.2.7 type surface, which also warns Grid cell sizes must
-  be known ahead of time — true for our fixed tiles) — already in the
-  dependency tree — so off-screen tiles **unmount entirely** and Android
-  reclaims their decoded bitmaps. Tiles render **slot 1 only**.
+The retail POS offers a **view-mode toggle** so the merchant chooses how to
+list products. The two modes decode to different RAM profiles:
+
+| Mode | Description | Virtualization | Image cost |
+|---|---|---|---|
+| **Text-only** (default) | Existing `retail-product-table` — rows of text columns (sku, name, stock, price, …). Zero images, zero decode cost. | Pagination already caps page size (~20 rows); no virtualization needed. | None |
+| **Grid with images** | New tile grid, each tile showing slot-1 primary image + name + price. | **react-window v2 `Grid`** — off-screen tiles unmount, Android reclaims their decoded bitmaps. The 512 px variant decodes to ~1 MB of ARGB per tile; a non-virtualized 300-tile grid would pin ~300 MB on a 2 GB tablet. | 10–25 KB per tile on disk, ~1 MB per tile in decoded RAM (virtualized). |
+
+- **Toggle persistence:** per-user preference (`retail_view_mode`), stored
+  in localStorage + server `user_preferences`, same pattern as
+  `useRetailColumnPrefs` (`ui/src/features/retail/hooks/useRetailColumnPrefs.ts`).
+  The toggle is a button in the retail header bar (beside the column-toggle
+  menu). Default: `'text'` — zero-image, zero-risk for new merchants.
+  Merchants who upload images opt in to the grid.
+- **Grid tiles** render **slot 1 only** (primary image). The tile is a fixed
+  aspect-ratio box: `convertFileSrc(cachePath)` → `<img>` with the Tauri
+  asset protocol URL. Placeholder: keep the existing colored-initial tile as
+  the skeleton/miss state; no layout shift.
 - **Alternatives appear on interaction, not on the grid:** the product-detail
   strip / menu editor shows the 4 alternatives as small lazy thumbnails
   (`loading="lazy"` + `decoding="async"`), mounted only while open — never
   in the hot grid.
 - Admin screens (`RestaurantMenu` catalog editor, `ProductLookupScreen`) get
   primary thumbnails lazily — full grid virtualization there is P3, not
-  blocking.
-- Placeholder: keep the existing colored-initial tile as the skeleton/miss
-  state; no layout shift (fixed tile aspect-ratio). Menu editor enforces the
-  always-1-image rule in its save flow.
+  blocking. The resto ordering screen is always image-grid (menu items always
+  have exactly 1 image per §3.2 invariant), so it switches to the `Grid`
+  component unconditionally.
+- Menu editor enforces the always-1-image rule in its save flow.
 
 
 ### 3.6 Push & pull scheduling — batching + jitter (server efficiency)
@@ -335,7 +343,7 @@ the `/data` volume. Every mechanism below is chosen against that reality.
 | Phase | Deliverable | Touches |
 |---|---|---|
 | **P1 — storage spine** | `products.image_hash` + `product_images` table (sqlite+pg migrations, models, repository), `products_set_image` / `products_clear_image` commands with sniff/limits/transcode/hash/atomic-write/txn + promotion + menu-invariant logic, unit tests (malformed magic, oversized, slot bounds, promotion, menu-clear refusal, dedupe) | `oz-core` (migrations, db/products), `desktop-client/src/commands`, tauri.conf `assetProtocol` |
-| **P2 — UI** | react-window v2 `Grid` on POS rendering slot 1 via `convertFileSrc` (+ `useHttpsScheme: true` desktop config), miss→initial-tile fallback; editor flows: assign-at-apply for menu (1 required) and product (primary + ≤4 alternatives with reorder); alternatives strip lazy-mounted; a11y (alt from product name, aria-busy) | `ui/src/features/retail`, `restaurant`, shared `ProductThumb` |
+| **P2 — UI** | retail POS **view-mode toggle** (text table stays default — existing `retail-product-table`; new grid mode = react-window v2 `Grid` rendering slot 1 via `convertFileSrc`; per-user `retail_view_mode` pref, same pattern as `useRetailColumnPrefs`) + `useHttpsScheme: true` desktop config + miss→initial-tile fallback; editor flows: assign-at-apply for menu (1 required) and product (primary + ≤4 alternatives with reorder); alternatives strip lazy-mounted; a11y (alt from product name, aria-busy) | `ui/src/features/retail`, `restaurant`, shared `ProductThumb` |
 | **P3 — cloud sync** | `PUT/GET /api/v1/images` on the Northflank volume (`OZ_IMAGE_DIR`, admin-key gate, hash re-verification), `images` array in the catalog snapshot payload (list_products), image_refs content spine + missing_hashes nudge, migration files for both engines (sqlite incremental + PG regenerate via scripts/generate-pg-migration.py), push/pull scheduler lanes with batching + jitter (§3.6), pack endpoint for cold start, cloud GC via image_refs refcount=0 + grace sweep, tablet download manager (primary-first, LRU), sync tests | `oz-api`, `Dockerfile.unified` volume note, tablet-client Rust |
 | **P4 — hygiene** | startup GC sweep (reverse-index + grace), metrics (bytes dir, hit/miss latency, 4 GB soft alert), e2e, docs (`docs/guides`), i18n strings for the editor UI (en+id FTL) | `desktop-client`, `ui`, docs |
 
@@ -359,11 +367,27 @@ slice. P3 unlocks tablets. P4 is polish.
 4. **RESOLVED: batched, jittered byte transfer** — decided 2026-08-31; push
    batches ≤ 16 images / 512 KB per request, pull cycles cap ≤ 40 images,
    both lanes wake on full random jitter in the 1–5 min window (§3.6).
+5. **RESOLVED: retail POS view-mode toggle (text-only default, grid with
+   primary image opt-in)** — decided 2026-09-01; the existing text table is
+   the zero-image, zero-decode baseline; merchants who upload images choose
+   the virtualized image grid. Per-user pref `retail_view_mode`, same
+   persistence as `useRetailColumnPrefs`. Grid tiles render slot 1 only.
+6. **RESOLVED: ingest lives in desktop-client, not oz-media** — decided
+   2026-09-01; the `products_set_image` pipeline (sniff → limits → transcode
+   → hash → atomic-write) is a standalone module in
+   `desktop-client/src/commands/` with `image` + `webp` as direct deps —
+   spec §3.3 verbatim. `oz-media` (declared in all three app manifests but
+   imported nowhere, storage stubs, variants without bytes) stays untouched
+   for v1; its `media_assets`/object-storage roadmap is a separate future
+   system and content-addressed hashes do not need it. Cloud/tablet never
+   link `image`/`webp` (cloud re-verifies magic + sha-256 only; tablet only
+   renders + downloads).
 
 ## 6. Risks
 
 - **`image` crate weight** on the Android binary (~1–2 MB) — acceptable;
-  feature-gate to the desktop + tablet apps only (CLI/cloud never link it).
+  feature-gate to the desktop app only (ingest = desktop; tablet renders +
+  downloads; CLI/cloud never link it — see decision 6).
 - **Cache wipe by OS** (app cache is clearable) — self-healing by design:
   hashes still in DB, download manager refetches. Never store the only copy
   in `$APPCACHE`.
