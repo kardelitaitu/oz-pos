@@ -897,15 +897,17 @@ describe('admin-utils relTime / sparkline / nfStatusCard / uptimeRows (health v2
 
   it('uptimeRows renders dots, latency and error text', () => {
     const v = utils.uptimeRows([
-      { name: 'license api', up: true, ms: 42 },
+      { name: 'license api', up: true, ms: 42, vantage: 'edge' },
       { name: 'admin', up: false, ms: 5000, error: 'HTTP 502' },
     ]);
     const rows = v.querySelectorAll('.up-row');
     expect(rows.length).toBe(2);
     expect(rows[0].querySelector('.up-dot--ok')).not.toBeNull();
     expect(rows[0].querySelector('.up-ms').textContent).toBe('42 ms');
+    expect(rows[0].querySelector('.up-vantage').textContent).toBe('edge');
     expect(rows[1].querySelector('.up-dot--bad')).not.toBeNull();
     expect(rows[1].querySelector('.up-err').textContent).toBe('HTTP 502');
+    expect(rows[1].querySelector('.up-vantage')).toBeNull();
   });
 
   it('logView highlights error lines', () => {

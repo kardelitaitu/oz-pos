@@ -57,6 +57,8 @@ const NF_SERVICE = 'cloud';
 const CF_DEPLOYS_PATH = '/__oz/cf-deploys';
 /** This Worker's own script name on Cloudflare. */
 const CF_SCRIPT_NAME = 'oz-pos';
+/** This Worker's workers.dev hostname (edge self-check target). */
+const CF_WORKERS_DEV = 'oz-pos.adikaradwiatmaja.workers.dev';
 /** Health: Northflank service metadata (deployment state, running sha). */
 const NF_STATUS_PATH = '/__oz/nf-status';
 /** Health: public-surface uptime self-check (probed from the edge). */
@@ -451,26 +453,31 @@ export default {
         }
       }
 
-      // Step 1b-5: UPTIME_PATH — probe the four public surfaces from the
-      // edge and report reachability + latency. Needs no API key at all:
-      // an HTTP response of any kind (even a 302 to the login page) means
-      // the surface answered; only network failure or 5xx marks it down.
+      // Step 1b-5: UPTIME_PATH — probe our surfaces that are REACHABLE
+      // from inside the Worker (edge vantage): the Northflank license API
+      // (different zone) and this Worker's own workers.dev URL (re-enters
+      // the Worker through Cloudflare's edge). Same-zone hosts on the
+      // ozpos.my.id zone (apex, dashboard, admin) are deliberately NOT
+      // probed here: a Worker subrequest to its own zone cannot re-enter
+      // Workers routes and falls through to an origin that does not
+      // exist (dashboard/admin) or is itself proxied by Cloudflare
+      // (apex) — both produce a bogus 522. Those three are probed from
+      // the BROWSER instead (admin.js, no-cors fetch), which is a real
+      // user vantage.
       if (url.pathname === UPTIME_PATH) {
         if (!sessionCookie) return new Response(JSON.stringify({ error: 'not signed in' }), { status: 401, headers: JSON_HEADERS });
         const targets: Array<[string, string]> = [
-          ['website (ozpos.my.id)', 'https://ozpos.my.id/'],
           ['license api', 'https://license.ozpos.my.id/api/health'],
-          ['dashboard', 'https://dashboard.ozpos.my.id/'],
-          ['admin', 'https://admin.ozpos.my.id/'],
+          ['worker (cloud)', `https://${CF_WORKERS_DEV}/`],
         ];
         const checks = await Promise.all(targets.map(async ([name, target]) => {
           const t0 = Date.now();
           try {
             const res = await fetch(target, { method: 'GET', redirect: 'follow', signal: AbortSignal.timeout(6000) });
             const ms = Date.now() - t0;
-            return { name, up: res.status < 500, ms, status: res.status, error: res.status >= 500 ? `HTTP ${res.status}` : '' };
+            return { name, up: res.status < 500, ms, status: res.status, error: res.status >= 500 ? `HTTP ${res.status}` : '', vantage: 'edge' };
           } catch (e) {
-            return { name, up: false, ms: Date.now() - t0, status: 0, error: e instanceof Error ? e.message : 'network error' };
+            return { name, up: false, ms: Date.now() - t0, status: 0, error: e instanceof Error ? e.message : 'network error', vantage: 'edge' as const };
           }
         }));
         return new Response(JSON.stringify({ ok: true, checks }), { headers: JSON_HEADERS });

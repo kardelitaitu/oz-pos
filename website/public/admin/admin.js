@@ -635,19 +635,41 @@
         }
 
         const upGuard = createSeqGuard();
+        // The three ozpos.my.id-zone hosts cannot be probed from inside
+        // the Worker (same-zone subrequests bypass Workers routes and 522
+        // against a nonexistent origin), so they are probed from the
+        // browser instead — no-cors fetch, opaque but honest reachability
+        // from the user's real vantage.
+        async function probeBrowser(name, url, sameOrigin) {
+          const t0 = performance.now();
+          try {
+            const opts = sameOrigin ? { cache: 'no-store' } : { mode: 'no-cors', cache: 'no-store' };
+            await fetchWithTimeout(undefined, url, opts, 6000);
+            return { name, up: true, ms: Math.round(performance.now() - t0), error: '', vantage: 'browser' };
+          } catch (e) {
+            return { name, up: false, ms: Math.round(performance.now() - t0), error: 'unreachable', vantage: 'browser' };
+          }
+        }
         async function loadUptime() {
           const seq = upGuard.next();
           upRefresh.disabled = true;
           try {
             const res = await fetchWithTimeout(undefined, '/__oz/uptime');
             const body = await res.json();
+            const browserChecks = await Promise.all([
+              probeBrowser('website (ozpos.my.id)', 'https://ozpos.my.id/'),
+              probeBrowser('dashboard', 'https://dashboard.ozpos.my.id/'),
+              probeBrowser('admin', '/', true),
+            ]);
             if (!upGuard.isCurrent(seq)) { return; }
             upWrap.innerHTML = '';
-            if (!body || !body.ok) {
-              const detail = body && body.error ? ' ' + body.error : '';
-              upWrap.appendChild(el('p', 'empty', t('health.uptimeFailed') + detail));
+            const edgeOk = body && body.ok;
+            const checks = (edgeOk ? body.checks : []).concat(browserChecks);
+            if (checks.length === 0) {
+              upWrap.appendChild(el('p', 'empty', (body && body.error ? t('health.uptimeFailed') + ' ' + body.error : t('health.uptimeFailed'))));
             } else {
-              upWrap.appendChild(uptimeRows(body.checks));
+              if (!edgeOk) checks.unshift({ name: 'license api', up: false, ms: 0, error: body && body.error ? body.error : 'edge probe failed', vantage: 'edge' });
+              upWrap.appendChild(uptimeRows(checks));
             }
           } catch (e) {
             if (!upGuard.isCurrent(seq)) { return; }

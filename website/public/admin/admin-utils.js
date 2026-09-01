@@ -582,6 +582,9 @@
       var row = el('div', 'up-row');
       row.appendChild(el('span', 'up-dot ' + (c && c.up ? 'up-dot--ok' : 'up-dot--bad')));
       row.appendChild(el('span', 'up-name', String((c && c.name) || '?')));
+      if (c && c.vantage) {
+        row.appendChild(el('span', 'up-vantage', c.vantage === 'browser' ? t('health.vantageBrowser') : t('health.vantageEdge')));
+      }
       if (c && c.up) {
         row.appendChild(el('span', 'up-ms', (Number(c.ms) || 0) + ' ms'));
       } else {
@@ -1091,6 +1094,8 @@
     'health.uptimeTitle': 'Uptime — public surfaces',
     'health.uptimeRefresh': '↻ Refresh',
     'health.uptimeFailed': 'unreachable',
+    'health.vantageEdge': 'edge',
+    'health.vantageBrowser': 'browser',
     'health.workerLogsTitle': 'Worker Logs — oz-pos (last hour)',
     'health.workerLogsRefresh': '↻ Refresh',
     'health.workerLogsEmpty': 'No worker log events in the last hour.',
