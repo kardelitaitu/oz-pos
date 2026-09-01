@@ -422,6 +422,42 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
             }
         }
     }
+    // ADR #45 §4.3 follow-up, and the last item of the validation-code coverage
+    // audit: the TypeScript validator has reported `multiple-ticket-inputs`
+    // since before this file had a pairing table, and the backend never checked
+    // it. A device wired to two ticket sources has no defined routing, so which
+    // queue a ticket lands in depends on wire order.
+    //
+    // Placed here because it needs no wire index, which keeps it independent of
+    // the index built above. That costs O(H × W) over hardware nodes rather than
+    // O(W); with a handful of devices per diagram it is not worth a second pass
+    // over every wire on every validation run.
+    for node in nodes {
+        if semantic_node_type(node) != Some("hardware") {
+            continue;
+        }
+        let Some(device_id) = value_string(node, "id") else {
+            continue;
+        };
+        let ticket_feeds = wires
+            .iter()
+            .filter(|wire| {
+                value_string(wire, "to_node_id") == Some(device_id)
+                    && value_string(wire, "relationship_type") == Some("ticket-routing")
+                    && value_string(wire, "to_port_id") == Some("ticket-in")
+            })
+            .count();
+        if ticket_feeds > 1 {
+            return Err(topology_validation(
+                "multiple-ticket-inputs",
+                Some(device_id),
+                None,
+                Some("ticket-in"),
+                format!("{ticket_feeds} ticket sources feed the device `{device_id}`"),
+            ));
+        }
+    }
+
     let warehouse_ids: std::collections::HashSet<&str> = nodes
         .iter()
         .filter(|node| semantic_node_type(node) == Some("warehouse"))

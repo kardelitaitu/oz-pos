@@ -908,3 +908,58 @@ fn distinct_ids_still_validate_after_the_duplicate_guard_lands() {
     let wire = wire_between(&root, &warehouse, "location-out", "location-in", "location");
     assert!(validate_semantic_json(&[root, warehouse], &[wire]).is_ok());
 }
+
+#[test]
+fn a_device_wired_to_two_ticket_sources_is_refused() {
+    // ADR #45 §4.3 follow-up, and the last item of the validation-code coverage
+    // audit. This rule lived only in the TypeScript validator: two ticket feeds
+    // into one device leave routing undefined, so which queue a ticket reaches
+    // depends on wire order. The backend cannot accept that graph.
+    let mut root = typed_node("root", "branch-location", None);
+    root["store_profile_id"] = json!("branch-1");
+    let printer = typed_node("printer", "hardware", None);
+    let feed_a = wire_between(
+        &root,
+        &printer,
+        "location-out",
+        "ticket-in",
+        "ticket-routing",
+    );
+    let mut feed_b = feed_a.clone();
+    feed_b["id"] = json!("w2");
+
+    let err = validate_semantic_json(&[root, printer], &[feed_a, feed_b])
+        .expect_err("one device must not take two ticket sources");
+    assert_eq!(validation_code(&err), "multiple-ticket-inputs");
+}
+
+#[test]
+fn a_single_ticket_source_does_not_trip_the_cardinality_rule() {
+    // The other direction. A check written as `>= 1` instead of `> 1` would
+    // reject every legal diagram, and the test above would still pass.
+    //
+    // Asserted as "not THIS code" rather than `is_ok()`, because a bare hardware
+    // node with one feed is rejected by an unrelated rule further down (it has no
+    // location input). Requiring `is_ok()` here would have made the guard depend
+    // on rules it is not testing, and the first honest version of this test duly
+    // failed for exactly that reason.
+    let mut root = typed_node("root", "branch-location", None);
+    root["store_profile_id"] = json!("branch-1");
+    let printer = typed_node("printer", "hardware", None);
+    let feed = wire_between(
+        &root,
+        &printer,
+        "location-out",
+        "ticket-in",
+        "ticket-routing",
+    );
+
+    let outcome = validate_semantic_json(&[root, printer], &[feed]);
+    if let Err(err) = &outcome {
+        assert_ne!(
+            validation_code(err),
+            "multiple-ticket-inputs",
+            "one ticket source must not be read as two"
+        );
+    }
+}
