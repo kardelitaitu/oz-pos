@@ -100,15 +100,16 @@ const { invokeMock, defaultImpl, failCommands, lastCallArgs } = vi.hoisted(() =>
       cmd === 'set_receipt_settings' || cmd === 'set_store_settings' ||
       cmd === 'set_default_currency' || cmd === 'set_user_preferences' ||
       cmd === 'set_user_preferences_scoped' ||
-      cmd === 'update_sync_settings' || cmd === 'set_brand_primary_colour' ||
+      cmd === 'update_sync_settings' || cmd === 'update_sync_settings_scoped' ||
+      cmd === 'set_brand_primary_colour' ||
       cmd === 'set_brand_store_name'
     ) {
       return Promise.resolve(undefined);
     }
-    if (cmd === 'sync_run') {
+    if (cmd === 'sync_run' || cmd === 'sync_run_scoped') {
       return Promise.resolve({ synced: 3, failed: 0, error: null });
     }
-    if (cmd === 'request_sync_token') {
+    if (cmd === 'request_sync_token' || cmd === 'request_sync_token_scoped') {
       return Promise.resolve({
         ok: true,
         token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test-token',
@@ -116,7 +117,7 @@ const { invokeMock, defaultImpl, failCommands, lastCallArgs } = vi.hoisted(() =>
         expiresAt: new Date(Date.now() + 2 * 3_600_000).toISOString(),
       });
     }
-    if (cmd === 'test_sync_connection') {
+    if (cmd === 'test_sync_connection' || cmd === 'test_sync_connection_scoped') {
       return Promise.resolve({ ok: true, status: 'Connected (12ms)', latencyMs: 12 });
     }
     if (cmd === 'check_license_status') {
@@ -132,7 +133,7 @@ const { invokeMock, defaultImpl, failCommands, lastCallArgs } = vi.hoisted(() =>
         oldestPendingAt: null,
       });
     }
-    if (cmd === 'get_sync_plan') {
+    if (cmd === 'get_sync_plan' || cmd === 'get_sync_plan_scoped') {
       return Promise.resolve({ ok: true, plan: 'pro', status: 'ok' });
     }
     return Promise.resolve(undefined);
@@ -292,7 +293,7 @@ describe('CloudSyncSettings', () => {
       expect(screen.getByRole('button', { name: /saved!/i })).toBeInTheDocument();
     });
 
-    const syncArgs = lastCallArgs.get('update_sync_settings') as Record<string, unknown> | undefined;
+    const syncArgs = lastCallArgs.get('update_sync_settings_scoped') as Record<string, unknown> | undefined;
     expect(syncArgs).toBeDefined();
     const args = syncArgs?.['args'] as { serverUrl?: string | null; enabled?: boolean };
     expect(args?.serverUrl).toBe('https://sync.example.com');
@@ -370,7 +371,7 @@ describe('CloudSyncSettings', () => {
       expect(screen.getByRole('button', { name: /saved!/i })).toBeInTheDocument();
     });
 
-    const syncArgs = lastCallArgs.get('update_sync_settings') as Record<string, unknown> | undefined;
+    const syncArgs = lastCallArgs.get('update_sync_settings_scoped') as Record<string, unknown> | undefined;
     const args = syncArgs?.['args'] as { apiKey?: string };
     expect(args?.apiKey).toBe('sk-abc-123');
   });
@@ -393,7 +394,7 @@ describe('CloudSyncSettings', () => {
     fireEvent.change(getApiKeyInput(), { target: { value: 'sk-keep-me' } });
     expect(getApiKeyInput()).toHaveValue('sk-keep-me');
 
-    failCommands.add('update_sync_settings');
+    failCommands.add('update_sync_settings_scoped');
     fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
 
     await waitFor(() => {
@@ -413,7 +414,7 @@ describe('CloudSyncSettings', () => {
       expect(screen.getByRole('button', { name: /saved!/i })).toBeInTheDocument();
     });
 
-    const syncArgs = lastCallArgs.get('update_sync_settings') as Record<string, unknown> | undefined;
+    const syncArgs = lastCallArgs.get('update_sync_settings_scoped') as Record<string, unknown> | undefined;
     const args = syncArgs?.['args'] as Record<string, unknown>;
     // apiKey must be absent (not included in the object)
     expect(args).not.toHaveProperty('apiKey');
@@ -462,7 +463,7 @@ describe('CloudSyncSettings', () => {
       expect(screen.getByRole('button', { name: /saved!/i })).toBeInTheDocument();
     });
 
-    const syncArgs = lastCallArgs.get('update_sync_settings') as Record<string, unknown> | undefined;
+    const syncArgs = lastCallArgs.get('update_sync_settings_scoped') as Record<string, unknown> | undefined;
     const args = syncArgs?.['args'] as { enabled?: boolean };
     expect(args?.enabled).toBe(true);
   });
@@ -528,7 +529,7 @@ describe('CloudSyncSettings', () => {
     await waitFor(() => {
       // syncRun() calls invoke('sync_run') with no args object, so the
       // mock receives ('sync_run', undefined)
-      expect(invokeMock).toHaveBeenCalledWith('sync_run', undefined);
+      expect(invokeMock).toHaveBeenCalledWith('sync_run_scoped', { sessionToken: 'test-token' });
     });
 
     await waitFor(() => {
@@ -545,7 +546,7 @@ describe('CloudSyncSettings', () => {
       if (cmd === 'get_sync_settings_scoped') {
         return Promise.resolve({ serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true });
       }
-      if (cmd === 'sync_run') {
+      if (cmd === 'sync_run_scoped') {
         return Promise.resolve({
           synced: 0,
           failed: 0,
@@ -575,7 +576,7 @@ describe('CloudSyncSettings', () => {
       if (cmd === 'get_sync_settings_scoped') {
         return Promise.resolve({ serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true });
       }
-      if (cmd === 'sync_run') {
+      if (cmd === 'sync_run_scoped') {
         return Promise.resolve({
           synced: 0,
           failed: 0,
@@ -736,7 +737,7 @@ describe('CloudSyncSettings', () => {
     await user.click(requestBtn);
 
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('request_sync_token', undefined);
+      expect(invokeMock).toHaveBeenCalledWith('request_sync_token_scoped', { sessionToken: 'test-token' });
     });
   });
 
@@ -870,7 +871,7 @@ describe('CloudSyncSettings', () => {
     const user = userEvent.setup();
 
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'request_sync_token') {
+      if (cmd === 'request_sync_token_scoped') {
         return Promise.resolve({ ok: false, token: null, status: 'Server returned 500: Internal error', expiresAt: null });
       }
       return defaultImpl(cmd);
@@ -899,7 +900,7 @@ describe('CloudSyncSettings', () => {
     const user = userEvent.setup();
 
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'request_sync_token') {
+      if (cmd === 'request_sync_token_scoped') {
         return Promise.reject(new Error('Connection refused'));
       }
       return defaultImpl(cmd);

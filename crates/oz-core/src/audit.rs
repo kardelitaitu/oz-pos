@@ -1,7 +1,7 @@
 /*
 last audited 25-07-26 by RSA-Agent (oz-core slice A)
 crate: oz-core | status: SAFE | lint: CLEAN
-findings: append-only audit entry type sound; COR-1: id field doc says "UUID v4" but new() correctly generates v7 per ADR #6 — stale doc only
+findings: append-only audit entry type sound; COR-1 FIXED DD-MM-YY (DSH-Agent) — id field doc updated to UUID v7, matching the constructor's ADR #6 generation
 next: fix field doc | perf: N/A
 */
 //! Audit log — immutable, append-only record of sensitive actions.
@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 /// A single immutable audit entry.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuditEntry {
-    /// UUID v4 identifier.
+    /// UUID v7 identifier.
     pub id: String,
     /// FK to `users.id`. Empty string for system-initiated actions.
     pub user_id: String,

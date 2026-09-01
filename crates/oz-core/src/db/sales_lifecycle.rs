@@ -563,7 +563,7 @@ impl Store<'_> {
             }
         }
 
-        tx.execute(
+        let rows = tx.execute(
             "UPDATE sales SET status = 'voided', updated_at = ?1, version = version + 1 \
              WHERE id = ?2 AND status = 'pending'",
             rusqlite::params![
@@ -571,6 +571,11 @@ impl Store<'_> {
                 sale_id
             ],
         )?;
+        // COR-8: if the sale was already voided, skip the audit and commit silently.
+        if rows == 0 {
+            tx.rollback()?;
+            return Ok(());
+        }
 
         tx.commit()?;
         Ok(())

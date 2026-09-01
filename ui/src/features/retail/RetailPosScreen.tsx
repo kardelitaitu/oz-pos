@@ -839,7 +839,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     addToast({ message: requiredLocalized(l10n, 'pos-no-barcode-match'), type: 'warning' });
   }, [handleAdd, addToast, l10n, playBeep, playError, sessionToken, recordSearchIfActive]);
 
-  useBarcodeScanner({ onProductFound: handleBarcode });
+  useBarcodeScanner({ sessionToken, onProductFound: handleBarcode });
 
   // ── Store settings ──────────────────────────────────────────
 

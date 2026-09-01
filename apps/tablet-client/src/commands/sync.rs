@@ -8,10 +8,12 @@ use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
 use oz_core::db::Store;
+use oz_core::permissions;
 use oz_core::settings::Settings;
 use oz_core::sync_client::{self, PullResult, SyncAttemptResult, SyncConfig};
 use rusqlite::Connection;
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -357,7 +359,8 @@ pub async fn update_sync_settings_scoped(
     args: UpdateSyncSettingsArgs,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     let db_guard = conn_arc
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -376,7 +379,8 @@ pub async fn sync_run_scoped(
 ) -> Result<SyncAttemptResult, AppError> {
     // Phase 1: Read pending items and config from DB (brief lock).
     let (pending_items, config_opt) = {
-        let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+        let (session, conn_arc) = state.resolve_scope(&session_token)?;
+        require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
         let db_guard = conn_arc
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -444,7 +448,8 @@ pub async fn pending_sync_count_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<i64, AppError> {
-    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     let db_guard = conn_arc
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -463,10 +468,15 @@ pub async fn request_sync_token_scoped(
     url: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<sync_client::TokenResult, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     let resolved = match url.filter(|u| !u.is_empty()) {
         Some(u) => Some(u),
         None => {
-            let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+            let conn_arc = state
+                .db_manager
+                .open_store(&session.store_id)
+                .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
             let db_guard = conn_arc
                 .lock()
                 .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -497,7 +507,8 @@ pub async fn get_sync_plan_scoped(
     // Resolve URL + API key first (brief DB lock), then drop the lock
     // before the async HTTP call.
     let (url, api_key) = {
-        let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+        let (session, conn_arc) = state.resolve_scope(&session_token)?;
+        require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
         let db_guard = conn_arc
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -527,10 +538,15 @@ pub async fn test_sync_connection_scoped(
     url: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<sync_client::PingResult, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
     let resolved = match url.filter(|u| !u.is_empty()) {
         Some(u) => Some(u),
         None => {
-            let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+            let conn_arc = state
+                .db_manager
+                .open_store(&session.store_id)
+                .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
             let db_guard = conn_arc
                 .lock()
                 .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -559,7 +575,8 @@ pub async fn sync_pull_scoped(
     validate_pull_consent(&args)?;
     // Phase 1: Read config from DB (brief lock).
     let config_opt = {
-        let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+        let (session, conn_arc) = state.resolve_scope(&session_token)?;
+        require_permission_for_session(&state, &session, permissions::SYNC_MANAGE).await?;
         let db_guard = conn_arc
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;

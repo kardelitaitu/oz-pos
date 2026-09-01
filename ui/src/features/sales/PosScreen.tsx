@@ -708,6 +708,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
 
   // ── Barcode scanner integration ─────────────────────────────
   useBarcodeScanner({
+    sessionToken,
     onProductFound: useCallback(async (payload: BarcodeScannedPayload) => {
       if (!activeShiftRef.current) {
         addToast({ message: 'Open a shift first', type: 'warning' });
@@ -733,7 +734,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
         }
 
         // 2. Fall back to bundle SKU expansion with proportional pricing.
-        const bundle = await lookupBundleBySku(code);
+        const bundle = await lookupBundleBySku(sessionToken, code);
         if (bundle && bundle.bundle.active) {
           const expanded = await expandBundleItems(
             bundle.items,

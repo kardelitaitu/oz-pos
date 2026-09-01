@@ -146,13 +146,11 @@ impl Store<'_> {
 
         let tx = self.conn.unchecked_transaction()?;
 
-        let exists: bool = tx
-            .query_row(
-                "SELECT COUNT(*) > 0 FROM workspace_instances WHERE id = ?1",
-                params![id],
-                |row| row.get(0),
-            )
-            .unwrap_or(false);
+        let exists: bool = tx.query_row(
+            "SELECT COUNT(*) > 0 FROM workspace_instances WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
 
         if exists {
             return Err(CoreError::Conflict {

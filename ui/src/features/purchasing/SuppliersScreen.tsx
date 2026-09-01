@@ -13,6 +13,7 @@ import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup, requiredLocalized, EmptyState } from '@/frontend/shared';
 import { NoSuppliersIcon, NotFoundIcon } from '@/components/EmptyStateIllustrations';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { l10nErrorMessage } from '@/utils/app-error';
 import './SuppliersScreen.css';
 
@@ -43,6 +44,8 @@ const EMPTY_FORM: FormData = {
 /** Supplier management screen — list, search, create, and edit supplier profiles with contact and payment term details. */
 export default function SuppliersScreen() {
   const { l10n } = useLocalization();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,14 +58,14 @@ export default function SuppliersScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await listSuppliers();
+      const data = await listSuppliers(sessionToken);
       setSuppliers(data);
     } catch {
       setSuppliers([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -131,7 +134,7 @@ export default function SuppliersScreen() {
         if (form.tax_id.trim()) args.tax_id = form.tax_id.trim();
         if (form.payment_terms.trim()) args.payment_terms = form.payment_terms.trim();
         if (form.notes.trim()) args.notes = form.notes.trim();
-        await updateSupplier(args);
+        await updateSupplier(sessionToken, args);
       } else {
         const args: CreateSupplierArgs = {
           code: form.code.trim(),
@@ -144,7 +147,7 @@ export default function SuppliersScreen() {
         if (form.tax_id.trim()) args.tax_id = form.tax_id.trim();
         if (form.payment_terms.trim()) args.payment_terms = form.payment_terms.trim();
         if (form.notes.trim()) args.notes = form.notes.trim();
-        await createSupplier(args);
+        await createSupplier(sessionToken, args);
       }
       closeModal();
       await load();
@@ -153,7 +156,7 @@ export default function SuppliersScreen() {
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, closeModal, load, l10n]);
+  }, [form, editingId, closeModal, load, l10n, sessionToken]);
 
   return (
     <div className="suppliers-screen">

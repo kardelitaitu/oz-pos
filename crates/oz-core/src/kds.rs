@@ -55,7 +55,7 @@ impl KdsStatus {
 /// A KDS order ticket displayed in the kitchen.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KdsOrder {
-    /// Primary key (UUID v4).
+    /// Primary key (UUID v7).
     pub id: String,
     /// FK to the originating sale.
     pub sale_id: String,

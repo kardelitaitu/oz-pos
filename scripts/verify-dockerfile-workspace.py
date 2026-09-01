@@ -19,7 +19,10 @@ prime stage always failed, so every unified build paid the full compile.
 This script parses the workspace `members` list from the root Cargo.toml and
 asserts each member's manifest (or the inline dummy fallback for
 apps/desktop-client and apps/tablet-client) is present in EVERY Dockerfile's
-cache stage. A per-file exclusion set allows an image to intentionally omit
+cache stage. For the inline dummies it also checks the `printf`-generated
+Cargo.toml carries the CURRENT `[workspace.package]` version and edition, so
+a version bump cannot silently leave a stale `0.0.34`/`2021` in the cache
+stage. A per-file exclusion set allows an image to intentionally omit
 members it can still resolve — but the default requires the full list.
 Exit code 0 = consistent, 1 = drift.
 
@@ -83,6 +86,23 @@ def workspace_members() -> list[str]:
     return sorted(set(expanded))
 
 
+def workspace_package_value(key: str) -> str:
+    """Read a scalar string value from `[workspace.package]` in the root Cargo.toml."""
+    text = CARGO_TOML.read_text(encoding="utf-8")
+    m = re.search(r"\[workspace\.package\]\s*(.*?)(?:\n\[|\Z)", text, re.S)
+    if not m:
+        sys.exit("error: could not locate [workspace.package] section in Cargo.toml")
+    body = m.group(1)
+    km = re.search(rf"^\s*{key}\s*=\s*\"([^\"]+)\"", body, re.M)
+    if not km:
+        sys.exit(f"error: could not locate workspace.package.{key} in Cargo.toml")
+    return km.group(1)
+
+
+WS_VERSION = workspace_package_value("version")
+WS_EDITION = workspace_package_value("edition")
+
+
 def dockerfile_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
@@ -107,6 +127,22 @@ def check_dockerfile(name: str, members: list[str]) -> list[str]:
                 errors.append(
                     f"{name}: {member}: expected inline dummy src in cache stage"
                 )
+                continue
+            # The dummy printf must carry the current workspace version and
+            # edition so a bump cannot silently leave a stale cache stage.
+            dummy_line = next(
+                (l for l in dockerfile.splitlines() if f"> {member}/Cargo.toml" in l),
+                None,
+            )
+            if dummy_line is None:
+                errors.append(f"{name}: {member}: expected inline dummy Cargo.toml printf in cache stage")
+                continue
+            for key, val in (("version", WS_VERSION), ("edition", WS_EDITION)):
+                if f"\\n{key} = \"{val}\"" not in dummy_line:
+                    errors.append(
+                        f"{name}: {member}: inline dummy {key} must be '{val}' "
+                        f"(workspace.package) — update the printf line"
+                    )
             continue
         if f"COPY {member}/Cargo.toml" not in dockerfile:
             errors.append(f"{name}: missing 'COPY {member}/Cargo.toml' in cache stage")

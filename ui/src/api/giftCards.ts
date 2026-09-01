@@ -66,34 +66,34 @@ export interface RedeemGiftCardResult {
   transaction: GiftCardTransaction;
 }
 
-/** Issue a new gift card with an initial balance. */
-export const issueGiftCard = (input: IssueGiftCardInput): Promise<GiftCardWithTransactions> =>
-  loggedInvoke<GiftCardWithTransactions>('issue_gift_card', { input });
+/** Issue a new gift card with an initial balance (session-scoped). */
+export const issueGiftCard = (sessionToken: string, input: IssueGiftCardInput): Promise<GiftCardWithTransactions> =>
+  loggedInvoke<GiftCardWithTransactions>('issue_gift_card_scoped', { sessionToken, input });
 
-/** Get a gift card by card number or ID, including transactions. */
-export const getGiftCard = (cardNumberOrId: string): Promise<GiftCardWithTransactions | null> =>
-  loggedInvoke<GiftCardWithTransactions | null>('get_gift_card', { cardNumberOrId });
+/** Get a gift card by card number or ID, including transactions (session-scoped). */
+export const getGiftCard = (sessionToken: string, cardNumberOrId: string): Promise<GiftCardWithTransactions | null> =>
+  loggedInvoke<GiftCardWithTransactions | null>('get_gift_card_scoped', { sessionToken, cardNumberOrId });
 
-/** List gift cards with optional filtering. */
-export const listGiftCards = (filter: GiftCardFilter): Promise<GiftCardWithTransactions[]> =>
-  loggedInvoke<GiftCardWithTransactions[]>('list_gift_cards', { filter });
+/** List gift cards with optional filtering (session-scoped). */
+export const listGiftCards = (sessionToken: string, filter: GiftCardFilter): Promise<GiftCardWithTransactions[]> =>
+  loggedInvoke<GiftCardWithTransactions[]>('list_gift_cards_scoped', { sessionToken, filter });
 
-/** Check a gift card's current balance and status. */
-export const getGiftCardBalance = (cardNumberOrId: string): Promise<BalanceResult | null> =>
-  loggedInvoke<BalanceResult | null>('get_gift_card_balance', { cardNumberOrId });
+/** Check a gift card's current balance and status (session-scoped). */
+export const getGiftCardBalance = (sessionToken: string, cardNumberOrId: string): Promise<BalanceResult | null> =>
+  loggedInvoke<BalanceResult | null>('get_gift_card_balance_scoped', { sessionToken, cardNumberOrId });
 
-/** Redeem a gift card for a given amount against a sale. */
-export const redeemGiftCard = (cardNumberOrId: string, amountMinor: number, saleId: string): Promise<RedeemGiftCardResult> =>
-  loggedInvoke<RedeemGiftCardResult>('redeem_gift_card', { cardNumberOrId, amountMinor, saleId });
+/** Redeem a gift card for a given amount against a sale (session-scoped). */
+export const redeemGiftCard = (sessionToken: string, cardNumberOrId: string, amountMinor: number, saleId: string): Promise<RedeemGiftCardResult> =>
+  loggedInvoke<RedeemGiftCardResult>('redeem_gift_card_scoped', { sessionToken, cardNumberOrId, amountMinor, saleId });
 
-/** Add funds to an existing gift card. */
-export const topUpGiftCard = (cardNumberOrId: string, amountMinor: number): Promise<GiftCardWithTransactions> =>
-  loggedInvoke<GiftCardWithTransactions>('top_up_gift_card', { cardNumberOrId, amountMinor });
+/** Add funds to an existing gift card (session-scoped). */
+export const topUpGiftCard = (sessionToken: string, cardNumberOrId: string, amountMinor: number): Promise<GiftCardWithTransactions> =>
+  loggedInvoke<GiftCardWithTransactions>('top_up_gift_card_scoped', { sessionToken, cardNumberOrId, amountMinor });
 
-/** Freeze a gift card to prevent further use. */
-export const freezeGiftCard = (cardNumberOrId: string): Promise<GiftCard> =>
-  loggedInvoke<GiftCard>('freeze_gift_card', { cardNumberOrId });
+/** Freeze a gift card to prevent further use (session-scoped). */
+export const freezeGiftCard = (sessionToken: string, cardNumberOrId: string): Promise<GiftCard> =>
+  loggedInvoke<GiftCard>('freeze_gift_card_scoped', { sessionToken, cardNumberOrId });
 
-/** Unfreeze a previously frozen gift card. */
-export const unfreezeGiftCard = (cardNumberOrId: string): Promise<GiftCard> =>
-  loggedInvoke<GiftCard>('unfreeze_gift_card', { cardNumberOrId });
+/** Unfreeze a previously frozen gift card (session-scoped). */
+export const unfreezeGiftCard = (sessionToken: string, cardNumberOrId: string): Promise<GiftCard> =>
+  loggedInvoke<GiftCard>('unfreeze_gift_card_scoped', { sessionToken, cardNumberOrId });

@@ -1,9 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent (slice A: lib/error/session/audit/events/rate_limiter/config_validator/payment/cash_payout/crypto)
+last audited DD-MM-YY by DSH-Agent (verify + delta)
 crate: oz-core | status: SAFE | lint: CLEAN
-findings: zero unsafe verified by source sweep (#![deny(unsafe_code)] holds); baseline 2,536 tests pass (2,026 unit + 510 integration, 0 warnings); COR-1 stale UUID-v4 docs on v7-generating constructors; COR-3 config validator may log credential-bearing DATABASE_URL/REDIS_URL; domain shims are honest re-exports (canonical Money in foundation — CRY-3 machine_id follow-up resolves there)
-next: none — slices B/C/D are complete; the crate-audit campaign closed 2026-08-31 (§4 oz-core stamped COMPLETE) — see docs/archived/2026-08-31-glm-5.3f-crates-audit.md
-perf: N/A for shims; db layer audited under slice B
+findings: zero unsafe verified (#![deny(unsafe_code)] holds); baseline claims re-verified. COR-1 FIXED DD-MM-YY — UUID-v7 field docs updated across 13 production files (swept audit/ cash_payout/ kds/ offline/ payment/ product_bundle/ product_variant/ promotion/ purchase_order/ shift/ supplier/ sync_pull/ table). COR-3 FIXED DD-MM-YY — config_validator redacts userinfo from DATABASE_URL and REDIS_URL before logging (redact_url helper, tested). COR-6 FIXED DD-MM-YY — mislabeled SAFETY comments reworded to plain comments in db/profile.rs (the COR-6 pattern). Delta files (edc_terminals, loyalty, profile, staff, migrations) reviewed: no new unsafe or production unwrap/expect concerns.
+next: none — all open COR findings from the closed campaign resolved | perf: N/A
 */
 
 //! Domain types for OZ-POS.

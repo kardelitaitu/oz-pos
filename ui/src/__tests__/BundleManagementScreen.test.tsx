@@ -16,10 +16,15 @@ const { mockListBundles, mockCreateBundle, mockUpdateBundle, mockDeleteBundle } 
   }));
 
 vi.mock('@/api/bundles', () => ({
-  listBundles: () => mockListBundles(),
-  createBundle: (args: unknown) => mockCreateBundle(args),
-  updateBundle: (bundle: unknown) => mockUpdateBundle(bundle),
-  deleteBundle: (id: string) => mockDeleteBundle(id),
+  listBundles: (_sessionToken: string) => mockListBundles(),
+  createBundle: (_sessionToken: string, args: unknown) => mockCreateBundle(args),
+  updateBundle: (_sessionToken: string, bundle: unknown) => mockUpdateBundle(bundle),
+  deleteBundle: (_sessionToken: string, id: string) => mockDeleteBundle(id),
+}));
+
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({ sessionToken: 'tok-test', activeWorkspace: null, logout: vi.fn() }),
+  WorkspaceProvider: ({ children }: { children: import('react').ReactNode }) => <>{children}</>,
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({

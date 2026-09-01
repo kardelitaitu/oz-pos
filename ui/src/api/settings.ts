@@ -20,17 +20,9 @@ export interface ReceiptSettingsDto {
   taxRoundingMode?: string;
 }
 
-/** Get the current receipt settings. */
-export const getReceiptSettings = (): Promise<ReceiptSettingsDto> =>
-  loggedInvoke<ReceiptSettingsDto>('get_receipt_settings');
-
 /** Get receipt settings resolved from a session token. ADR #7. */
 export const getReceiptSettingsScoped = (sessionToken: string): Promise<ReceiptSettingsDto> =>
   loggedInvoke<ReceiptSettingsDto>('get_receipt_settings_scoped', { sessionToken });
-
-/** Update the receipt settings. */
-export const setReceiptSettings = (args: ReceiptSettingsDto, userId: string): Promise<void> =>
-  loggedInvoke<void>('set_receipt_settings', { args, userId });
 
 /** Set receipt settings (scoped — ADR #7). */
 export const setReceiptSettingsScoped = (sessionToken: string, args: ReceiptSettingsDto): Promise<void> =>
@@ -48,17 +40,9 @@ export interface StoreSettingsDto {
   logo?: string;
 }
 
-/** Get the store settings. */
-export const getStoreSettings = (): Promise<StoreSettingsDto> =>
-  loggedInvoke<StoreSettingsDto>('get_store_settings');
-
 /** Get store settings resolved from a session token. ADR #7. */
 export const getStoreSettingsScoped = (sessionToken: string): Promise<StoreSettingsDto> =>
   loggedInvoke<StoreSettingsDto>('get_store_settings_scoped', { sessionToken });
-
-/** Update the store settings. */
-export const setStoreSettings = (args: StoreSettingsDto, userId: string): Promise<void> =>
-  loggedInvoke<void>('set_store_settings', { args, userId });
 
 /** Set store settings (scoped — ADR #7). */
 export const setStoreSettingsScoped = (sessionToken: string, args: StoreSettingsDto): Promise<void> =>
@@ -84,33 +68,17 @@ export interface CreditSaleDto {
   cashierName: string;
 }
 
-/** Get the credit / tab sale settings. */
-export const getCreditSettings = (): Promise<CreditSettingsDto> =>
-  loggedInvoke<CreditSettingsDto>('get_credit_settings');
-
 /** Get credit settings (scoped — ADR #7). */
 export const getCreditSettingsScoped = (sessionToken: string): Promise<CreditSettingsDto> =>
   loggedInvoke<CreditSettingsDto>('get_credit_settings_scoped', { sessionToken });
-
-/** Update the credit / tab sale settings. */
-export const setCreditSettings = (args: CreditSettingsDto, userId: string): Promise<void> =>
-  loggedInvoke<void>('set_credit_settings', { args, userId });
 
 /** Set credit settings (scoped — ADR #7). */
 export const setCreditSettingsScoped = (sessionToken: string, args: CreditSettingsDto): Promise<void> =>
   loggedInvoke<void>('set_credit_settings_scoped', { sessionToken, args });
 
-/** List all credit (tab) sales awaiting settlement. */
-export const listCreditSales = (): Promise<CreditSaleDto[]> =>
-  loggedInvoke<CreditSaleDto[]>('list_credit_sales');
-
 /** List all credit sales for the store resolved from a session token. ADR #7. */
 export const listCreditSalesScoped = (sessionToken: string): Promise<CreditSaleDto[]> =>
   loggedInvoke<CreditSaleDto[]>('list_credit_sales_scoped', { sessionToken });
-
-/** Settle (mark as paid) a credit sale. */
-export const settleCredit = (saleId: string, userId: string): Promise<void> =>
-  loggedInvoke<void>('settle_credit', { saleId, userId });
 
 /** Settle a credit sale (scoped — ADR #7). */
 export const settleCreditScoped = (sessionToken: string, saleId: string): Promise<void> =>
@@ -200,17 +168,8 @@ export interface UserPrefEntry {
 }
 
 /**
- * Get all preferences for a given user.
- *
- * @deprecated Use `getUserPreferencesScoped(sessionToken)` instead (ADR #7).
- * The unscoped variant reads from the single-store database and will
- * be removed in a future release. All callers should migrate to the
- * scoped variant which resolves the store from the session token.
+ * Get user preferences (scoped — ADR #7). Uses session.user_id for lookup.
  */
-export const getUserPreferences = (userId: string): Promise<Record<string, string>> =>
-  loggedInvoke<Record<string, string>>('get_user_preferences', { userId });
-
-/** Get user preferences (scoped — ADR #7). Uses session.user_id for lookup. */
 export const getUserPreferencesScoped = (sessionToken: string): Promise<Record<string, string>> =>
   loggedInvoke<Record<string, string>>('get_user_preferences_scoped', { sessionToken });
 
@@ -238,16 +197,6 @@ export const getSetting = (key: string): Promise<string | null> =>
  */
 export const setSetting = (key: string, value: string, userId: string): Promise<void> =>
   loggedInvoke<void>('set_setting', { key, value, userId });
-
-/**
- * Write multiple settings atomically in a single IPC call + DB
- * transaction. All entries succeed or fail together.
- *
- * Prefer this over multiple `setSetting` calls when persisting
- * more than one key (e.g. the KDS or Inventory workspace cards).
- */
-export const setSettings = (entries: Record<string, string>, userId: string): Promise<void> =>
-  loggedInvoke<void>('set_settings', { entries, userId });
 
 /**
  * Write (or overwrite) a single raw setting value using the scoped variant (ADR #7).

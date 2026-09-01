@@ -1,7 +1,7 @@
 /*
 last audited 25-07-26 by RSA-Agent (oz-core slice A)
 crate: oz-core | status: SAFE | lint: CLEAN
-findings: safe-drop type sound; new() generates v7 correctly; COR-1: id field doc says "UUID v4" — stale doc only
+findings: safe-drop type sound; new() generates v7 correctly; COR-1 FIXED DD-MM-YY (DSH-Agent) — id field doc updated to UUID v7
 next: fix field doc | perf: N/A
 */
 //! Cash Payout (Safe Drop) domain type.
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 /// A mid-shift cash removal from the drawer (safe drop).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CashPayout {
-    /// Internal row id (UUID v4).
+    /// Internal row id (UUID v7).
     pub id: String,
     /// FK to `shifts.id`.
     pub shift_id: String,

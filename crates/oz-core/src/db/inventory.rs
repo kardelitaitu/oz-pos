@@ -1,9 +1,9 @@
 //! Inventory management DB methods — locations CRUD, shifts, transaction logs, thresholds.
 /*
-last audited 25-07-26 by RSA-Agent (oz-core slice B2: inventory deep read)
-crate: oz-core | status: SAFE | lint: CLEAN
-findings: COR-11 LOW: deactivate_inventory_location guard queries use .unwrap_or(0) — a DB read error satisfies the zero-stock/zero-transfer constraints and deactivation proceeds (fail-open on a data-integrity guard; shift-start unwrap_or(0) is fail-safe by contrast, dup blocked by migration-086 partial unique index); COR-13 INFO: read mappers coerce unknown stored enum values via from_stored_str().unwrap_or(ManualAdjustment) at 3 sites — misclassification risk for reports; positives: create_inventory_transaction writes header+lines+adjustments in ONE tx via the canonical adjust_stock_at_location_with_reason; set_stock_threshold distinguishes NoRows from real DB errors
-next: propagate guard query errors instead of unwrap_or(0) (COR-11) | perf: N/A
+last audited DD-MM-YY by DSH-Agent
+crate: oz-core (inventory) | status: SAFE | lint: CLEAN
+findings: COR-11 FIXED DD-MM-YY — deactivate_inventory_location + shift-start guard queries now propagate DB errors (?) instead of unwrap_or(0), so a read error fails closed instead of satisfying the zero-stock/zero-transfer constraint. COR-13 INFO: read mappers coerce unknown stored enum values via from_stored_str().unwrap_or(ManualAdjustment) at 3 sites — misclassification risk for reports; positives: create_inventory_transaction writes header+lines+adjustments in ONE tx via the canonical adjust_stock_at_location_with_reason; set_stock_threshold distinguishes NoRows from real DB errors
+next: none | perf: N/A
 */
 
 use crate::error::CoreError;
@@ -212,13 +212,11 @@ impl Store<'_> {
         // Constraint 1: Block deactivation when ANY balance is non-zero. A
         // negative balance would otherwise be hidden from active-location
         // workflows while its ledger still needs reconciliation.
-        let stock_count: i64 = tx
-            .query_row(
-                "SELECT COUNT(*) FROM stock_summary WHERE location_id = ?1 AND qty <> 0",
-                params![id],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
+        let stock_count: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM stock_summary WHERE location_id = ?1 AND qty <> 0",
+            params![id],
+            |row| row.get(0),
+        )?;
 
         if stock_count > 0 {
             return Err(CoreError::Validation {
@@ -228,15 +226,13 @@ impl Store<'_> {
         }
 
         // Constraint 2: Check that there are no in-flight (draft / pending / in_transit / received_partial) transfers involving this location
-        let transfer_count: i64 = tx
-            .query_row(
-                "SELECT COUNT(*) FROM stock_transfers \
+        let transfer_count: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM stock_transfers \
              WHERE (source_location_id = ?1 OR destination_location_id = ?1) \
              AND status IN ('draft', 'pending', 'in_transit', 'received_partial')",
-                params![id],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
+            params![id],
+            |row| row.get(0),
+        )?;
 
         if transfer_count > 0 {
             return Err(CoreError::Validation {
@@ -340,14 +336,12 @@ impl Store<'_> {
         // Migration 086 permits one active shift per user/location pair.
         // Keep the application check aligned with that partial unique index;
         // a worker may legitimately work at two locations concurrently.
-        let active_count: i64 = tx
-            .query_row(
-                "SELECT COUNT(*) FROM inventory_shifts
+        let active_count: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM inventory_shifts
                  WHERE user_id = ?1 AND location_id = ?2 AND status = 'active'",
-                params![user_id, location_id],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
+            params![user_id, location_id],
+            |row| row.get(0),
+        )?;
 
         if active_count > 0 {
             return Err(CoreError::Validation {

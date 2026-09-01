@@ -119,7 +119,7 @@ vi.mock('@/api/reports', () => ({
 }));
 
 vi.mock('@/api/sales', () => ({
-  printSalesReceipt: (...args: unknown[]) => mockPrintSalesReceipt(...args),
+  printSalesReceipt: (_sessionToken: string, ...args: unknown[]) => mockPrintSalesReceipt(...args),
 }));
 
 vi.mock('@/components/Card', () => ({

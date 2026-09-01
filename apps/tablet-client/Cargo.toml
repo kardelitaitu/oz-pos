@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+publish.workspace = true
 description = "OZ-POS tablet-optimised shell (Tauri v2 mobile). Touch-optimised UI for Android/iOS."
 
 [lib]
@@ -23,7 +24,7 @@ tauri-build = { workspace = true }
 
 [dev-dependencies]
 tauri = { workspace = true, features = ["test"] }
-tempfile = "3"
+tempfile = { workspace = true }
 
 [dependencies]
 foundation = { workspace = true }
@@ -32,8 +33,6 @@ reqwest = { workspace = true }
 rand = { workspace = true }
 oz-hal = { workspace = true }
 oz-logging = { workspace = true }
-oz-media = { workspace = true }
-oz-payment = { workspace = true }
 oz-security = { workspace = true }
 modules-crm = { workspace = true }
 modules-inventory = { workspace = true }
@@ -49,7 +48,9 @@ platform-core = { workspace = true }
 platform-kernel = { workspace = true }
 platform-startup = { workspace = true }
 tauri = { workspace = true, features = ["protocol-asset"] }
-tauri-plugin-updater = { workspace = true }
+# NOTE: tauri-plugin-window-state is KEPT — apps/tablet-client/capabilities/default.json
+# references the `window-state:default` permission, which requires the plugin crate at
+# build time even though no Rust code calls `.plugin(...)` (udeps cannot see capability refs).
 tauri-plugin-clipboard-manager = { workspace = true }
 tauri-plugin-window-state = { workspace = true }
 tauri-plugin-opener = { workspace = true }

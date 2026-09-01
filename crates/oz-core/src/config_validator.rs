@@ -118,7 +118,7 @@ fn validate_config_inner(vars: &HashMap<String, String>) -> Result<(), Vec<Confi
                 key: "DATABASE_URL",
                 message: format!(
                     "DATABASE_URL must start with 'postgresql://' or 'postgres://', got '{}'",
-                    truncate_prefix(db_url, 40)
+                    redact_url(db_url)
                 ),
                 fix: Some("set DATABASE_URL to a valid PostgreSQL connection string".into()),
             });
@@ -205,7 +205,10 @@ fn validate_config_inner(vars: &HashMap<String, String>) -> Result<(), Vec<Confi
     {
         errors.push(ConfigValidationError {
             key: "REDIS_URL",
-            message: format!("should start with 'redis://' or 'rediss://', got '{redis_url}'"),
+            message: format!(
+                "should start with 'redis://' or 'rediss://', got '{}'",
+                redact_url(redis_url)
+            ),
             fix: Some("set REDIS_URL to a valid Redis connection string".into()),
         });
     }
@@ -224,6 +227,25 @@ fn truncate_prefix(s: &str, max_len: usize) -> String {
     } else {
         format!("{}...", &s[..max_len])
     }
+}
+
+/// Redact userinfo from a connection URL for safe logging.
+///
+/// Returns `"<scheme>://[redacted]@<host>[:port]"` when userinfo is present,
+/// or the original URL truncated to 80 chars if the scheme is unrecognised.
+fn redact_url(url: &str) -> String {
+    let scheme_end = url.find("://");
+    let Some(scheme_end) = scheme_end else {
+        return truncate_prefix(url, 80);
+    };
+    let after_scheme = &url[scheme_end + 3..];
+    let Some(at_pos) = after_scheme.find('@') else {
+        // No userinfo — the URL already has no credentials to redact.
+        return truncate_prefix(url, 80);
+    };
+    let host_part = &after_scheme[at_pos + 1..];
+    let scheme = &url[..scheme_end];
+    format!("{scheme}://[redacted]@{host_part}")
 }
 
 #[cfg(test)]

@@ -112,6 +112,7 @@ impl PaymentProcessor for PaddlePaymentProcessor {
         &self,
         _transaction_id: &str,
         _amount: Option<Money>,
+        _idempotency_key: Option<&str>,
     ) -> Result<PaymentResult, PaymentError> {
         Err(PaymentError::Unsupported(
             "Paddle refund — PLANNED, not implemented yet".into(),

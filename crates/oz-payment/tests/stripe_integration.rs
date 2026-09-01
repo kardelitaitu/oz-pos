@@ -229,7 +229,7 @@ async fn refund_happy_path() {
 
     let proc = stripe_processor(&mock_server.uri(), false);
 
-    let result = proc.refund("pi_to_refund", None).await.unwrap();
+    let result = proc.refund("pi_to_refund", None, None).await.unwrap();
     assert!(result.success);
     assert_eq!(result.transaction_id.unwrap(), "re_mock_refund_001");
     assert_eq!(result.amount_charged.minor_units, 5000);
@@ -253,7 +253,7 @@ async fn refund_declined() {
 
     let proc = stripe_processor(&mock_server.uri(), false);
 
-    let err = proc.refund("pi_uncaptured", None).await.unwrap_err();
+    let err = proc.refund("pi_uncaptured", None, None).await.unwrap_err();
     let msg = err.to_string();
     assert!(
         msg.contains("uncaptured") || msg.contains("not been captured"),
@@ -383,7 +383,7 @@ async fn refund_sends_correct_form_body() {
 
     let proc = stripe_processor(&mock_server.uri(), false);
 
-    let _ = proc.refund("pi_to_refund", None).await.unwrap();
+    let _ = proc.refund("pi_to_refund", None, None).await.unwrap();
 
     let received = mock_server.received_requests().await.unwrap_or_default();
     assert_eq!(received.len(), 1);
@@ -412,7 +412,10 @@ async fn refund_partial_amount() {
     let proc = stripe_processor(&mock_server.uri(), false);
 
     let partial_amount = Some(Money::from_major(10, usd()).unwrap());
-    let result = proc.refund("pi_partial", partial_amount).await.unwrap();
+    let result = proc
+        .refund("pi_partial", partial_amount, None)
+        .await
+        .unwrap();
     assert!(result.success);
     assert_eq!(result.amount_charged.minor_units, 1000);
 }

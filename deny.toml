@@ -70,6 +70,11 @@ version = "*"
 expression = "LicenseRef-OZ-POS-Proprietary"
 license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
 [[licenses.clarify]]
+name = "oz-crypto"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
 name = "oz-hal"
 version = "*"
 expression = "LicenseRef-OZ-POS-Proprietary"
@@ -81,6 +86,11 @@ expression = "LicenseRef-OZ-POS-Proprietary"
 license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
 [[licenses.clarify]]
 name = "oz-lua"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "oz-media"
 version = "*"
 expression = "LicenseRef-OZ-POS-Proprietary"
 license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
@@ -150,12 +160,32 @@ version = "*"
 expression = "LicenseRef-OZ-POS-Proprietary"
 license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
 [[licenses.clarify]]
+name = "modules-giftcards"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
 name = "modules-inventory"
 version = "*"
 expression = "LicenseRef-OZ-POS-Proprietary"
 license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
 [[licenses.clarify]]
+name = "modules-kitchen"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
 name = "modules-loyalty"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "modules-promotions"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "modules-purchasing"
 version = "*"
 expression = "LicenseRef-OZ-POS-Proprietary"
 license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]

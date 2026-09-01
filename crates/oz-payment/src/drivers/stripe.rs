@@ -1,8 +1,8 @@
 /*
 last audited 31-08-26 by TDD-Agent (round M; PAY-2 closed for charges when the caller supplies a key)
 crate: oz-payment | status: SAFE | lint: CLEAN
-findings: capture_method manual correctly maps authorize/capture model; PAY-2 FIXED for authorize — idempotency_key_for() forwards PaymentRequest.idempotency_key as the Idempotency-Key header, verbatim, or omits the header when absent or blank (blank must not be sent: Some("") would put every caller who leaves the field empty into one shared key and Stripe would reject each later charge as a conflict). The tell that this was an oversight rather than a decision: parse_error already mapped Stripe's idempotency_error code to PaymentError::Duplicate, so the driver handled a duplicate-key rejection it could never receive. PAY-2 STILL OPEN for refund — refund(transaction_id, amount) takes no PaymentRequest, so there is no caller key; minting a fresh one dedups nothing and deriving one from transaction_id alone would collide two genuinely different partial refunds of the same payment into one. Needs a PaymentProcessor trait change. capture/void send no key and do not need one: re-capturing or re-cancelling is a Stripe error response, not a second state change. PAY-3 refund(_amount) ignores partial amount (always full refund); PAY-4 classifier sends most card_error declines to InvalidCard (message.contains("card") heuristic; "card_error => Declined" arm nearly unreachable); no confirm step — card-not-present intents stay requires_payment_method unless confirmed elsewhere
-next: Idempotency-Key on refunds (trait change), partial refund, fix decline classification. COR-31 STILL HELD, and round L's release condition was written unsatisfiably: it said to bound the client "once every request carries a caller-supplied key", but idempotency_key is Option on PaymentRequest, so no driver-side change can ever guarantee that. Releasing the hold needs a CALLER policy (desktop/tablet always populate it) or a decision that a hang is worse than a possible double charge — not another edit in this file. | perf: N/A
+findings: capture_method manual correctly maps authorize/capture model; PAY-2 FIXED for authorize — idempotency_key_for() forwards PaymentRequest.idempotency_key as the Idempotency-Key header, verbatim, or omits the header when absent or blank (blank must not be sent: Some("") would put every caller who leaves the field empty into one shared key and Stripe would reject each later charge as a conflict). The tell that this was an oversight rather than a decision: parse_error already mapped Stripe's idempotency_error code to PaymentError::Duplicate, so the driver handled a duplicate-key rejection it could never receive. PAY-2 CLOSED for refunds 09-09-26: refund() now accepts a caller-supplied idempotency_key forwarded as the Idempotency-Key header. PAY-3 CLOSED 09-09-26: refund() honors Some(amount) — partial refunds send the amount, None keeps Stripe's full-refund default. COR-31 CLOSED 09-09-26: HTTP client bounded (10s connect / 30s total) — safe because charges carry keys and refunds accept a caller-supplied key. PAY-4 CLOSED 09-09-26: classifier rewritten — card_data codes (expired_card/incorrect_number/incorrect_cvc/incorrect_zip) map to InvalidCard, everything else on card_error (including card_declined, processing_error, and code-less declines) maps to Declined; the message.contains("card") heuristic is gone. no confirm step — card-not-present intents stay requires_payment_method unless confirmed elsewhere
+next: none | perf: N/A
 */
 //! Stripe payment processor — implements [`PaymentProcessor`] using the
 //! Stripe REST API directly via `reqwest`.
@@ -22,6 +22,7 @@ next: Idempotency-Key on refunds (trait change), partial refund, fix decline cla
 use async_trait::async_trait;
 use std::fmt;
 use std::sync::Arc;
+use std::time::Duration;
 
 use foundation::{Currency, Money};
 use oz_hal::types::DeviceInfo;
@@ -147,6 +148,13 @@ impl StripePaymentProcessor {
         let client = reqwest::Client::builder()
             .default_headers(headers)
             .no_proxy()
+            // COR-31: bound the client — 10s connect / 30s total, the same
+            // budget whatsapp.rs uses for a small JSON POST. Payments are
+            // idempotent at the API layer (charges via Idempotency-Key,
+            // refunds now via the caller-supplied key), so a timeout +
+            // retry cannot double-charge or double-refund.
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(30))
             .build()
             .unwrap_or_else(|e| {
                 tracing::error!(
@@ -287,6 +295,17 @@ impl StripePaymentProcessor {
     }
 
     /// Classify a Stripe error type into a specific PaymentError variant.
+    ///
+    /// PAY-4: the previous version used `message.contains("card")` as a
+    /// heuristic, which sent most card_error declines (including the generic
+    /// "Your card was declined.") to [`PaymentError::InvalidCard`] instead of
+    /// [`PaymentError::Declined`]. The `card_error => Declined` arm was
+    /// nearly unreachable. Now:
+    ///
+    /// | Code | Maps to |
+    /// |------|---------|
+    /// | `expired_card`, `incorrect_number`, `incorrect_cvc`, `incorrect_zip` | `InvalidCard` — card data problem |
+    /// | `card_declined`, `processing_error`, other codes, or no code | `Declined` — bank/processor refused |
     fn classify_stripe_error(
         error_type: &str,
         message: Option<&str>,
@@ -294,18 +313,16 @@ impl StripePaymentProcessor {
     ) -> PaymentError {
         let msg = message.unwrap_or(error_type).to_string();
         match error_type {
-            "card_error" | "invalid_request_error"
-                if code == Some("card_declined")
-                    || code == Some("processing_error")
-                    || code == Some("incorrect_number")
-                    || code == Some("expired_card")
-                    || code == Some("incorrect_cvc")
-                    || code == Some("incorrect_zip")
-                    || message.is_some_and(|m| m.contains("card")) =>
-            {
-                PaymentError::InvalidCard(msg)
-            }
-            "card_error" => PaymentError::Declined(msg),
+            "card_error" => match code {
+                // Card-data problems: the instrument itself is bad.
+                Some("expired_card")
+                | Some("incorrect_number")
+                | Some("incorrect_cvc")
+                | Some("incorrect_zip") => PaymentError::InvalidCard(msg),
+                // Everything else — including card_declined, processing_error,
+                // and any future code — is a decline.
+                _ => PaymentError::Declined(msg),
+            },
             "idempotency_error" => PaymentError::Duplicate(msg),
             "invalid_request_error"
             | "api_error"
@@ -421,17 +438,22 @@ impl PaymentProcessor for StripePaymentProcessor {
     async fn refund(
         &self,
         transaction_id: &str,
-        _amount: Option<Money>,
+        amount: Option<Money>,
+        idempotency_key: Option<&str>,
     ) -> Result<PaymentResult, PaymentError> {
-        let form = vec![("payment_intent", transaction_id)];
-        // No idempotency key: refund(transaction_id, amount) takes no
-        // PaymentRequest, so there is no caller key to forward. Minting one
-        // here would be worse than nothing — a fresh key per call dedups
-        // nothing, and a stable one derived from transaction_id alone would
-        // make two genuinely different partial refunds of the same payment
-        // collide into one. Needs a PaymentProcessor trait change; recorded
-        // in the module stamp rather than half-solved.
-        let (status, body) = self.post("/refunds", form, None).await?;
+        let mut form: Vec<(&str, String)> = vec![("payment_intent", transaction_id.to_string())];
+        if let Some(ref a) = amount {
+            // PAY-3: honor a partial refund amount. Stripe accepts an
+            // optional `amount` on the refund — omitting it refunds the
+            // full charge.
+            form.push(("amount", Self::to_stripe_amount(a).to_string()));
+        }
+        // PAY-2: forward the caller-supplied idempotency key when present so
+        // a retried refund dedups instead of double-refunding. Absent keys
+        // keep the legacy behavior (no key), which Stripe treats as distinct
+        // operations — callers that care must supply one.
+        let form_refs: Vec<(&str, &str)> = form.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let (status, body) = self.post("/refunds", form_refs, idempotency_key).await?;
         if !(200..300).contains(&status) {
             return Err(Self::parse_error(status, &body));
         }

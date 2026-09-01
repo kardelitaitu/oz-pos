@@ -7,6 +7,8 @@ import { formatMoney } from '@/types/domain';
 
 
 export interface GiftCardPaymentProps {
+  /** Session token for authentication. */
+  sessionToken: string;
   /** Total amount to pay in minor units. */
   totalMinor: number;
   /** Currency code. */
@@ -25,6 +27,7 @@ export interface GiftCardPaymentProps {
 
 /** Gift card payment flow — look up gift card number, check balance, and apply gift card amount toward the current sale. */
 export default function GiftCardPayment({
+  sessionToken,
   totalMinor,
   currency,
   saleId,
@@ -48,7 +51,7 @@ export default function GiftCardPayment({
     setLoading(true);
     setError('');
     try {
-      const result = await getGiftCardBalance(code);
+      const result = await getGiftCardBalance(sessionToken, code);
       if (!result) {
         setError(l10n.getString('gift-cards-payment-not-found'));
         setCardBalance(null);
@@ -79,7 +82,7 @@ export default function GiftCardPayment({
 
     setLoading(true);
     try {
-      await redeemGiftCard(code, amountToRedeem, saleId);
+      await redeemGiftCard(sessionToken, code, amountToRedeem, saleId);
       onApplied(amountToRedeem, code);
       onComplete();
     } catch (err) {

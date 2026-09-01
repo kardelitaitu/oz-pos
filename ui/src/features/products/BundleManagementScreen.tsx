@@ -12,6 +12,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup } from '@/frontend/shared';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { formatMoney } from '@/types/domain';
 import './BundleManagementScreen.css';
 
@@ -41,6 +42,8 @@ const EMPTY_ITEM: BundleItemForm = { sku: '', qty: '1', unitPriceMinor: '' };
 
 /** Bundle management screen — create and manage product bundles with multiple items, custom pricing, and SKU assignment. */
 export default function BundleManagementScreen() {
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
   const [bundles, setBundles] = useState<BundleWithItems[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -58,14 +61,14 @@ export default function BundleManagementScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await listBundles();
+      const result = await listBundles(sessionToken);
       setBundles(result);
     } catch {
       // IPC unavailable.
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -144,7 +147,7 @@ export default function BundleManagementScreen() {
       if (editingId) {
         const existing = bundles.find((b) => b.bundle.id === editingId);
         if (!existing) return;
-        await updateBundle({
+        await updateBundle(sessionToken, {
           bundle: {
             ...existing.bundle,
             bundle_sku: form.bundle_sku,
@@ -161,7 +164,7 @@ export default function BundleManagementScreen() {
           })),
         });
       } else {
-        await createBundle({
+        await createBundle(sessionToken, {
           bundle_sku: form.bundle_sku,
           name: form.name,
           description: form.description || undefined,
@@ -180,28 +183,28 @@ export default function BundleManagementScreen() {
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, bundles, load, l10n]);
+  }, [form, editingId, bundles, load, l10n, sessionToken]);
 
   const confirmDelete = useCallback(async (id: string) => {
     setDeleting(id);
     setDeleteError(null);
     try {
-      await deleteBundle(id);
+      await deleteBundle(sessionToken, id);
       setDeleting(null);
       await load();
     } catch {
       setDeleting(null);
       setDeleteError(l10n.getString('bundles-error-delete'));
     }
-  }, [load, l10n]);
+  }, [load, l10n, sessionToken]);
 
   const toggleActive = useCallback(async (b: BundleWithItems) => {
-    await updateBundle({
+    await updateBundle(sessionToken, {
       bundle: { ...b.bundle, active: !b.bundle.active },
       items: b.items,
     });
     await load();
-  }, [load]);
+  }, [load, sessionToken]);
 
   return (
     <div className="bundle-mgmt">

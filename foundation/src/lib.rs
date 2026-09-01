@@ -1,8 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent (foundation slice D: lib+errors+constants verified)
+last audited DD-MM-YY by DSH-Agent (Money audit)
 crate: foundation | status: SAFE | lint: CLEAN
-findings: zero unsafe, no FFI/IO, minimal deps, missing_docs enforced; errors.rs thiserror types clean; constants.rs documented magic numbers (basis points, length limits); slices A-D covered money/percentage/cart/validation/sku/barcode/events — dto/contracts/contact/enums remain for slice E
-next: slice E | perf: Copy types in hot paths
+findings: zero unsafe, no FFI/IO, minimal deps, missing_docs enforced. Money audit COMPLETE: money.rs and percentage.rs arithmetic verified exemplary (overflow-free decomposition, i64::MIN-safe format_minor, checked_* everywhere, currency-mismatch -> None, no floats); MONEY-AUDIT-2/3 fixes verified intact; no float misuse in money paths (popularity.rs floats are non-money analytics). COR-33 FIXED DD-MM-YY — inline tests extracted to sibling files for percentage, cart, barcode, sku (4 crates of the COR-33 sweep).
+next: slice E (dto/contracts/contact/enums) still open | perf: Copy types in hot paths
 */
 
 //! Foundation crate for OZ-POS.

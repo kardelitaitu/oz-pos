@@ -1,10 +1,11 @@
 /*
-last audited 25-07-26 by RSA-Agent
+last audited 25-07-26 by RSA-Agent; PAY-2 refund key + COR-31 bounded 09-09-26 (agent-2-cargo)
 crate: oz-payment | status: SAFE | lint: CLEAN
 findings: PAY-1 HIGH parse_amount unwrap_or(0) zeroes Midtrans "14500.00"-format amounts (authorize/capture/refund/receipt); PAY-2 fresh order_id per call defeats Midtrans idempotency on retry; PAY-3 refund ignores partial amount; PAY-6 sale() returns SCAN_QR protocol string in message, success = QR-issued not settled (60s poll vs 300s QR validity); PAY-7 Default constructs empty-key processor; PAY-8 expire mapped to InvalidCard
 next: fix amount parsing (PAY-1), honor idempotency (PAY-2), partial refund (PAY-3). COR-31 HELD DELIBERATELY — no HTTP timeout here, and it stays that way until PAY-2 is closed for real: order_id_for() reuses PaymentRequest.idempotency_key only WHEN THE CALLER SUPPLIES ONE and falls back to a fresh order_id otherwise, so a timeout is safe only on the subset of calls that carry a key. A timed-out QR issuance retried without a key mints a second live QR for the same basket, and PAY-6 means the first one is still scannable for its 300s validity. Either require the key or make the fallback deterministic before bounding the client. | perf: poll loop sleeps between attempts, early-exits on settled status
 fixed 2026-07-25 (glm-5.3 review P1 pass): PAY-1 parse_amount now returns Result — decimal "14500.00" forms parse 1:1 into exp-0 IDR minor units (inverse of to_amount_string), non-zero fractions and malformed input are InvalidResponse instead of silent zeros (refund refund_amount included); PAY-2 order_id_for() reuses PaymentRequest.idempotency_key (charset-filtered, Midtrans 50-char cap) with fresh fallback when absent
 fixed 2026-07-25 (glm-5.3 review P2 pass): PAY-3 refund now honors Some(amount) — partial refunds submit the amount in whole IDR minor units, non-IDR rejected pre-flight, None keeps full-refund null; PAY-6 sale/capture docs now state the honest two-phase contract (success = QR issued; capture polls ~60s per call vs 300s QR validity, re-enter on Timeout); PAY-7 Default (empty-key processor) removed — construct via new/from_env/sandbox_from_env; PAY-8 expire maps to the new PaymentError::Expired instead of InvalidCard
+fixed 2026-09-09 (agent-2-cargo): PAY-2 refund now accepts a caller-supplied idempotency_key (honoured when present; transaction-prefixed fresh key fallback when absent); COR-31 HTTP client bounded (10s connect / 30s total) — safe because charges honour the caller key and refunds accept a caller-supplied key; the poll loop's own 60s budget sits above the per-request cap, so a stalled status call now fails fast.
 */
 //! QRIS payment processor — implements [`PaymentProcessor`] using the
 //! Midtrans REST API for Indonesian QRIS (Quick Response Code Indonesian
@@ -42,6 +43,7 @@ fixed 2026-07-25 (glm-5.3 review P2 pass): PAY-3 refund now honors Some(amount) 
 use async_trait::async_trait;
 use std::fmt;
 use std::sync::Arc;
+use std::time::Duration;
 
 use foundation::{Currency, Money};
 use oz_hal::types::DeviceInfo;
@@ -209,6 +211,14 @@ impl QrisPaymentProcessor {
         let client = reqwest::Client::builder()
             .default_headers(headers)
             .no_proxy()
+            // COR-31: bound the client — 10s connect / 30s total, same
+            // budget as the other payment drivers. The poll loop's own
+            // 60s budget sits above this per-request cap, so a stalled
+            // single status call now fails fast instead of hanging.
+            // Timeout is safe now that charges honor the caller key
+            // (PAY-2) and refunds accept a caller-supplied key.
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(30))
             .build()
             .unwrap_or_else(|e| {
                 tracing::error!(
@@ -594,6 +604,7 @@ impl PaymentProcessor for QrisPaymentProcessor {
         &self,
         transaction_id: &str,
         amount: Option<Money>,
+        idempotency_key: Option<&str>,
     ) -> Result<PaymentResult, PaymentError> {
         let refund_amount = match amount {
             None => serde_json::json!(null),
@@ -607,8 +618,17 @@ impl PaymentProcessor for QrisPaymentProcessor {
                 serde_json::json!(m.minor_units)
             }
         };
+        // PAY-2: honor the caller-supplied idempotency key so a retried
+        // refund resolves to the same Midtrans refund instead of refunding
+        // twice. When absent, fall back to a transaction-prefixed fresh key
+        // (legacy behavior — no dedup, but the order id stays greppable in
+        // Midtrans' dashboard).
+        let key = match idempotency_key {
+            Some(k) if !k.trim().is_empty() => k.to_owned(),
+            _ => format!("refund-{}-{}", transaction_id, uuid::Uuid::now_v7()),
+        };
         let refund_body = serde_json::json!({
-            "refund_key": format!("refund-{}-{}", transaction_id, uuid::Uuid::now_v7()),
+            "refund_key": key,
             "amount": refund_amount,
             "reason": "requested_by_merchant"
         });

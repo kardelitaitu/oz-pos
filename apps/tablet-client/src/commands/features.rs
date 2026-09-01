@@ -13,6 +13,7 @@ use tauri::{State, command};
 
 use oz_core::{Feature, Store, Terminal};
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -105,9 +106,12 @@ pub struct SetFeatureResult {
 /// (dependents are NOT cascaded — the UI must handle that).
 #[command]
 pub async fn set_feature(
+    session_token: String,
     args: SetFeatureArgs,
     state: State<'_, AppState>,
 ) -> Result<SetFeatureResult, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SETTINGS_EDIT).await?;
     let feature = oz_core::features::feature_from_key(&args.key)
         .ok_or_else(|| AppError::Invalid(format!("unknown feature key: {}", args.key)))?;
 
@@ -236,9 +240,12 @@ pub struct SetFeaturesBulkArgs {
 /// (e.g. "Enable all Hardware", "Disable all Advanced").
 #[command]
 pub async fn set_features_bulk(
+    session_token: String,
     args: SetFeaturesBulkArgs,
     state: State<'_, AppState>,
 ) -> Result<ListAllFeaturesResult, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SETTINGS_EDIT).await?;
     let mut db = state.db.lock().await;
 
     // Start a SQLite transaction for atomicity.

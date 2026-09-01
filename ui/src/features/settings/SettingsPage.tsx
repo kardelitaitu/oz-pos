@@ -20,13 +20,13 @@ import {
   type CurrencyDto,
 } from '@/api/currency';
 import {
-  updateSyncSettings,
-  syncRun,
-  syncPull,
+  updateSyncSettingsScoped,
+  syncRunScoped,
+  syncPullScoped,
   getOfflineQueueStatusSummaryScoped,
   getSyncPlanScoped,
-  testSyncConnection,
-  requestSyncToken,
+  testSyncConnectionScoped,
+  requestSyncTokenScoped,
   type SyncSettingsDto,
   type SyncAttemptResult,
   type PullResult,
@@ -488,7 +488,7 @@ function SettingsPageContent() {
             { key: 'font-smoothing', value: displayFontSmoothing },
           ])
         : Promise.resolve(),
-      updateSyncSettings({
+      updateSyncSettingsScoped(sessionToken ?? '', {
         serverUrl: syncServerUrl || null,
         ...(syncApiKey ? { apiKey: syncApiKey } : {}),
         enabled: sync.enabled,
@@ -770,10 +770,10 @@ function SettingsPageContent() {
             cmInput={cmInput}
             markDirty={markDirty}
             refreshQueueSummary={refreshQueueSummary}
-            testSyncConnection={testSyncConnection}
-            syncRun={syncRun}
-            syncPull={syncPull}
-            requestSyncToken={requestSyncToken}
+            testSyncConnection={() => testSyncConnectionScoped(sessionToken ?? '')}
+            syncRun={() => syncRunScoped(sessionToken ?? '')}
+            syncPull={(args: { confirmDestructive: boolean }) => syncPullScoped(sessionToken ?? '', args)}
+            requestSyncToken={() => requestSyncTokenScoped(sessionToken ?? '')}
             l10n={l10n}
             addToast={addToast}
           />

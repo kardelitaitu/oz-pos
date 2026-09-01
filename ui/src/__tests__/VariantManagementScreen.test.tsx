@@ -12,10 +12,14 @@ const mockUpdateVariant = vi.fn();
 const mockDeleteVariant = vi.fn();
 
 vi.mock('@/api/products', () => ({
-  listProductVariants: () => mockListVariants(),
-  createProductVariant: (args: unknown) => mockCreateVariant(args),
-  updateProductVariant: (args: unknown) => mockUpdateVariant(args),
-  deleteProductVariant: (sku: string) => mockDeleteVariant(sku),
+  listProductVariants: (_sessionToken: string) => mockListVariants(),
+  createProductVariant: (_sessionToken: string, args: unknown) => mockCreateVariant(args),
+  updateProductVariant: (_sessionToken: string, args: unknown) => mockUpdateVariant(args),
+  deleteProductVariant: (_sessionToken: string, sku: string) => mockDeleteVariant(sku),
+}));
+
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({ sessionToken: 'tok-1', activeWorkspace: null, logout: vi.fn() }),
 }));
 
 vi.mock('@fluent/react', () => ({

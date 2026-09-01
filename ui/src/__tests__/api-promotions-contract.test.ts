@@ -18,7 +18,6 @@ import {
 
 describe('promotions.ts API contract', () => {
   const TOKEN = 'tok_promo';
-  const USER_ID = 'u1';
 
   const promo = {
     id: 'promo1', name: 'Summer Sale', description: 'Big sale', promo_type: 'percentage',
@@ -31,11 +30,11 @@ describe('promotions.ts API contract', () => {
     vi.clearAllMocks();
   });
 
-  it('createPromotion calls correct command', async () => {
+  it('createPromotion calls correct command (session-scoped)', async () => {
     const args = { name: 'Summer Sale', promo_type: 'percentage', value_minor: 1000 };
     mockInvoke.mockResolvedValue(promo);
-    const result = await createPromotion(USER_ID, args);
-    expect(mockInvoke).toHaveBeenCalledWith('create_promotion', { userId: USER_ID, args });
+    const result = await createPromotion(TOKEN, args);
+    expect(mockInvoke).toHaveBeenCalledWith('create_promotion_scoped', { sessionToken: TOKEN, args });
     expect(result.id).toBe('promo1');
   });
 
@@ -49,10 +48,10 @@ describe('promotions.ts API contract', () => {
     });
   });
 
-  it('listPromotions calls correct command (no args)', async () => {
+  it('listPromotions calls correct command (session-scoped)', async () => {
     mockInvoke.mockResolvedValue([]);
-    await listPromotions();
-    expect(mockInvoke).toHaveBeenCalledWith('list_promotions');
+    await listPromotions(TOKEN);
+    expect(mockInvoke).toHaveBeenCalledWith('list_promotions_scoped', { sessionToken: TOKEN });
   });
 
   it('listPromotionsScoped calls correct command', async () => {
@@ -63,23 +62,23 @@ describe('promotions.ts API contract', () => {
     });
   });
 
-  it('updatePromotion calls correct command', async () => {
+  it('updatePromotion calls correct command (session-scoped)', async () => {
     mockInvoke.mockResolvedValue(promo);
-    await updatePromotion(USER_ID, promo);
-    expect(mockInvoke).toHaveBeenCalledWith('update_promotion', { userId: USER_ID, promotion: promo });
+    await updatePromotion(TOKEN, promo);
+    expect(mockInvoke).toHaveBeenCalledWith('update_promotion_scoped', { sessionToken: TOKEN, promotion: promo });
   });
 
-  it('deletePromotion calls correct command', async () => {
+  it('deletePromotion calls correct command (session-scoped)', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await deletePromotion(USER_ID, 'promo1');
-    expect(mockInvoke).toHaveBeenCalledWith('delete_promotion', { userId: USER_ID, id: 'promo1' });
+    await deletePromotion(TOKEN, 'promo1');
+    expect(mockInvoke).toHaveBeenCalledWith('delete_promotion_scoped', { sessionToken: TOKEN, id: 'promo1' });
   });
 
-  it('applyPromotion calls correct command', async () => {
+  it('applyPromotion calls correct command (session-scoped)', async () => {
     mockInvoke.mockResolvedValue({ discount: 5000 });
-    await applyPromotion(USER_ID, 'sale-1', 'promo1');
-    expect(mockInvoke).toHaveBeenCalledWith('apply_promotion', {
-      userId: USER_ID,
+    await applyPromotion(TOKEN, 'sale-1', 'promo1');
+    expect(mockInvoke).toHaveBeenCalledWith('apply_promotion_scoped', {
+      sessionToken: TOKEN,
       saleId: 'sale-1',
       promotionId: 'promo1',
     });
@@ -97,6 +96,6 @@ describe('promotions.ts API contract', () => {
 
   it('propagates errors', async () => {
     mockInvoke.mockRejectedValue(new Error('promotion expired'));
-    await expect(listPromotions()).rejects.toThrow('promotion expired');
+    await expect(listPromotions(TOKEN)).rejects.toThrow('promotion expired');
   });
 });

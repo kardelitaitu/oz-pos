@@ -1,9 +1,9 @@
 //! Shared application-level event handlers.
 /*
-last audited 25-07-26 by RSA-Agent (platform-startup slice A: event_handlers deep read)
-crate: platform-startup | status: SAFE | lint: CLEAN
-findings: COR-33 pattern note (inline tests at 471+ in a 1,219-line file; sibling *_tests.rs convention) — six handlers share a uniform lock/Store/enqueue-or-audit pattern with poison-safe mapping and structured error logs; sale completions enqueued at SyncPriority::Critical (P-2, documented); audit entries system-initiated; no unsafe/no SQL interpolation
-next: extract sibling tests file (COR-33) | perf: handlers hold the shared DB mutex briefly
+last audited DD-MM-YY by DSH-Agent
+crate: platform-startup (event_handlers) | status: SAFE | lint: CLEAN
+findings: six handlers share a uniform lock/Store/enqueue-or-audit pattern with poison-safe mapping and structured error logs; sale completions enqueued at SyncPriority::Critical (P-2, documented); audit entries system-initiated; no unsafe/no SQL interpolation. COR-33 already resolved: inline tests were extracted to sibling event_handlers_tests.rs (file is now 479 lines, not 1,219).
+next: none | perf: handlers hold the shared DB mutex briefly
 */
 //!
 //! These handlers are cross-cutting concerns that don't belong to a

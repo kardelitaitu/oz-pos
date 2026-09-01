@@ -1,8 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent
-crate: oz-security | status: UNSAFE (6 unsafe blocks reviewed) | lint: CLEAN
-findings: all unsafe blocks re-verified sound (CredReadW, CredWriteW, CredDeleteW, GetLastError, from_raw_parts+CredFree, zeroed FILETIME); SAFETY comments accurate; SEC-3: zero-size CredentialBlob would violate from_raw_parts non-null precondition
-next: guard CredentialBlobSize == 0 before slicing (SEC-3) | perf: FFI overhead negligible
+last audited DD-MM-YY by DSH-Agent
+crate: oz-security (windows) | status: SAFE | lint: CLEAN
+findings: 8 unsafe blocks (not 6 — prior stamp miscount) — all with SAFETY comments (CredReadW, GetLastError×3, from_raw_parts+CredFree, zeroed FILETIME, CredWriteW, CredDeleteW). SEC-3 FIXED — zero-size CredentialBlob no longer passes a potentially-null pointer to from_raw_parts (uses &[] instead). CredFree called on every path. Module-level #[allow(unsafe_code)] is necessary for Win32 FFI; crate root #[deny(unsafe_code)] holds for all other files.
+next: none — SEC-3 closed | perf: FFI overhead negligible
 */
 
 //! Windows Credential Manager implementation of [`Keyring`].
@@ -68,13 +68,21 @@ impl Keyring for WindowsCredentialManager {
         // describe a valid byte buffer allocated by the Win32 API. from_raw_parts
         // creates a temporary slice for the lifetime of the unsafe block only.
         // CredFree releases the memory allocated by CredReadW — called exactly
-        // once here, matching the Win32 convention that the caller frees.
+        // once here on every path (including the SEC-3 zero-size guard below),
+        // matching the Win32 convention that the caller frees.
         let secret = unsafe {
             let cred = &*p_cred;
-            let blob = std::slice::from_raw_parts(
-                cred.CredentialBlob as *const u8,
-                cred.CredentialBlobSize as usize,
-            );
+            // SEC-3: a zero-size CredentialBlob means the pointer is dangling
+            // or null — from_raw_parts(ptr, 0) with a null/dangling pointer is
+            // UB. Treat it as an empty secret rather than slicing.
+            let blob = if cred.CredentialBlobSize == 0 {
+                &[]
+            } else {
+                std::slice::from_raw_parts(
+                    cred.CredentialBlob as *const u8,
+                    cred.CredentialBlobSize as usize,
+                )
+            };
             let s = String::from_utf8_lossy(blob).into_owned();
             CredFree(p_cred as *const core::ffi::c_void);
             s

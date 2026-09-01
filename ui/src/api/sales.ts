@@ -735,9 +735,9 @@ export interface PrintSalesReceiptResult {
   printed: boolean;
 }
 
-/** Print a formatted sales receipt. */
-export const printSalesReceipt = (args: PrintSalesReceiptArgs): Promise<PrintSalesReceiptResult> =>
-  loggedInvoke<PrintSalesReceiptResult>('print_sales_receipt', { args });
+/** Print a formatted sales receipt (session-scoped — ADR #7). */
+export const printSalesReceipt = (sessionToken: string, args: PrintSalesReceiptArgs): Promise<PrintSalesReceiptResult> =>
+  loggedInvoke<PrintSalesReceiptResult>('print_sales_receipt_scoped', { sessionToken, args });
 
 /** Subscribe to receipt-printed events from the backend. Returns an unsubscribe function. */
 export const onReceiptPrinted = (handler: (lines: number) => void): Promise<UnlistenFn> =>

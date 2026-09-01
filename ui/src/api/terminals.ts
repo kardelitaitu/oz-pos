@@ -31,49 +31,49 @@ export interface UpdateTerminalArgs {
   metadata?: string | null;
 }
 
-/** List all registered terminals. */
-export const listTerminals = (): Promise<TerminalDto[]> =>
-  loggedInvoke<TerminalDto[]>('list_terminals');
+/** List all registered terminals (session-scoped — ADR #7). */
+export const listTerminals = (sessionToken: string): Promise<TerminalDto[]> =>
+  loggedInvoke<TerminalDto[]>('list_terminals_scoped', { sessionToken });
 
 /** List terminals (scoped — ADR #7). */
 export const listTerminalsScoped = (sessionToken: string): Promise<TerminalDto[]> =>
   loggedInvoke<TerminalDto[]>('list_terminals_scoped', { sessionToken });
 
-/** Get a single terminal by its identifier. */
-export const getTerminal = (id: string): Promise<TerminalDto | null> =>
-  loggedInvoke<TerminalDto | null>('get_terminal', { id });
+/** Get a single terminal by its identifier (session-scoped — ADR #7). */
+export const getTerminal = (sessionToken: string, id: string): Promise<TerminalDto | null> =>
+  loggedInvoke<TerminalDto | null>('get_terminal_scoped', { sessionToken, id });
 
 /** Get a terminal (scoped — ADR #7). */
 export const getTerminalScoped = (sessionToken: string, id: string): Promise<TerminalDto | null> =>
   loggedInvoke<TerminalDto | null>('get_terminal_scoped', { sessionToken, id });
 
-/** Register a new POS terminal. */
-export const registerTerminal = (userId: string, args: RegisterTerminalArgs): Promise<{ id: string }> =>
-  loggedInvoke<{ id: string }>('register_terminal', { userId, args });
+/** Register a new POS terminal (session-scoped — ADR #7). */
+export const registerTerminal = (sessionToken: string, args: RegisterTerminalArgs): Promise<{ id: string }> =>
+  loggedInvoke<{ id: string }>('register_terminal_scoped', { sessionToken, args });
 
 /** Register a terminal (scoped — ADR #7). */
 export const registerTerminalScoped = (sessionToken: string, args: RegisterTerminalArgs): Promise<{ id: string }> =>
   loggedInvoke<{ id: string }>('register_terminal_scoped', { sessionToken, args });
 
-/** Update an existing terminal's details. */
-export const updateTerminal = (userId: string, args: UpdateTerminalArgs): Promise<{ id: string }> =>
-  loggedInvoke<{ id: string }>('update_terminal', { userId, args });
+/** Update an existing terminal's details (session-scoped — ADR #7). */
+export const updateTerminal = (sessionToken: string, args: UpdateTerminalArgs): Promise<{ id: string }> =>
+  loggedInvoke<{ id: string }>('update_terminal_scoped', { sessionToken, args });
 
 /** Update a terminal (scoped — ADR #7). */
 export const updateTerminalScoped = (sessionToken: string, args: UpdateTerminalArgs): Promise<{ id: string }> =>
   loggedInvoke<{ id: string }>('update_terminal_scoped', { sessionToken, args });
 
-/** Ping a terminal to check it is reachable. */
-export const pingTerminal = (id: string): Promise<void> =>
-  loggedInvoke<void>('ping_terminal', { id });
+/** Ping a terminal to check it is reachable (session-scoped — ADR #7). */
+export const pingTerminal = (sessionToken: string, id: string): Promise<void> =>
+  loggedInvoke<void>('ping_terminal_scoped', { sessionToken, id });
 
 /** Ping a terminal (scoped — ADR #7). */
 export const pingTerminalScoped = (sessionToken: string, id: string): Promise<void> =>
   loggedInvoke<void>('ping_terminal_scoped', { sessionToken, id });
 
-/** Delete a terminal registration. */
-export const deleteTerminal = (userId: string, id: string): Promise<void> =>
-  loggedInvoke('delete_terminal', { userId, id });
+/** Delete a terminal registration (session-scoped — ADR #7). */
+export const deleteTerminal = (sessionToken: string, id: string): Promise<void> =>
+  loggedInvoke<void>('delete_terminal_scoped', { sessionToken, id });
 
 /** Delete a terminal (scoped — ADR #7). */
 export const deleteTerminalScoped = (sessionToken: string, id: string): Promise<void> =>

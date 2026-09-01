@@ -1,8 +1,8 @@
 //! Replication — orchestrates push and pull sync cycles.
 /*
-last audited 25-07-26 by RSA-Agent (platform-sync slice C: replication verified)
-crate: platform-sync | status: SAFE | lint: CLEAN
-findings: clean — ReplicationResult counts struct only; orchestration lives in the engine and daemon
+last audited DD-MM-YY by DSH-Agent
+crate: platform-sync (replication) | status: SAFE | lint: CLEAN
+findings: clean — ReplicationResult counts struct only; orchestration lives in the engine and daemon. COR-33 FIXED DD-MM-YY — inline tests moved to sibling replication_tests.rs.
 next: none | perf: N/A
 */
 //!
@@ -24,58 +24,5 @@ pub struct ReplicationResult {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn replication_result_default() {
-        let result = ReplicationResult::default();
-        assert_eq!(result.pushed, 0);
-        assert_eq!(result.pulled, 0);
-    }
-
-    #[test]
-    fn replication_result_serde_roundtrip() {
-        let result = ReplicationResult {
-            pushed: 10,
-            pulled: 3,
-        };
-        let json = serde_json::to_string(&result).unwrap();
-        let back: ReplicationResult = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.pushed, 10);
-        assert_eq!(back.pulled, 3);
-    }
-
-    #[test]
-    fn replication_result_serde_json_field_names() {
-        let result = ReplicationResult {
-            pushed: 5,
-            pulled: 2,
-        };
-        let json = serde_json::to_value(&result).unwrap();
-        assert_eq!(json["pushed"], 5);
-        assert_eq!(json["pulled"], 2);
-    }
-
-    #[test]
-    fn replication_result_debug() {
-        let result = ReplicationResult {
-            pushed: 1,
-            pulled: 2,
-        };
-        let debug = format!("{:?}", result);
-        assert!(debug.contains("pushed: 1"));
-        assert!(debug.contains("pulled: 2"));
-    }
-
-    #[test]
-    fn replication_result_clone() {
-        let a = ReplicationResult {
-            pushed: 7,
-            pulled: 4,
-        };
-        let b = a.clone();
-        assert_eq!(a.pushed, b.pushed);
-        assert_eq!(a.pulled, b.pulled);
-    }
-}
+#[path = "replication_tests.rs"]
+mod tests;

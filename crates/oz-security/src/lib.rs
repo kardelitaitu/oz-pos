@@ -1,8 +1,7 @@
 /*
-last audited 25-07-26 by RSA-Agent
+last audited DD-MM-YY by DSH-Agent
 crate: oz-security | status: SAFE | lint: CLEAN
-findings: Keyring trait + InMemoryKeyring + platform dispatch re-verified; default rotate_key is non-atomic get->archive->write (SEC-4); secrets returned as String without zeroize (SEC-6); 82 unit + 6 doc tests pass
-fixed 2026-07-25 (glm-5.3 review P2 pass): SEC-4 default rotate_key restaged to park-the-new-key -> archive-current -> promote (only destructive op is the final swap; failed promote preserves current + archives pre-rotation current, leftover -staging slots are overwritten next rotation); SEC-6 partially addressed — raw entropy buffer zeroized after encode and hex key held in Zeroizing (full SecretString keyring surface deferred: OS credential stores copy secrets internally, so the residual exposure is out of process control); 83 unit + 6 doc tests pass
+findings: 0 unsafe blocks, 0 production unwrap/expect. Keyring trait + InMemoryKeyring + platform dispatch verified; SEC-4 rotate_key atomic (park -> archive -> promote); SEC-6 partially addressed (raw entropy zeroized, hex key in Zeroizing; SecretString for get/set deferred — OS credential stores copy internally). SSL/TLS helpers, mask, error taxonomy verified. 88 tests pass.
 next: SEC-6 residual — SecretString for the Keyring get/set surface | perf: N/A
 */
 
