@@ -18,6 +18,8 @@ export interface TooltipProps {
    *  overflow:hidden/scroll clipping. Use when the trigger is inside
    *  a scrollable or clipped container. */
   portal?: boolean;
+  /** Prevent the tooltip text from wrapping onto multiple lines. */
+  nowrap?: boolean;
   /** The element that triggers the tooltip on hover/focus. */
   children: ReactElement;
 }
@@ -41,6 +43,7 @@ export default function Tooltip({
   hideDelay = 100,
   maxWidth = '280px',
   portal = false,
+  nowrap = false,
   children,
 }: TooltipProps) {
   const [visible, setVisible] = useState(false);
@@ -94,7 +97,7 @@ export default function Tooltip({
     <div
       ref={tooltipRef}
       id={tooltipId}
-      className={`tooltip-content tooltip-content--${position}${visible ? ' tooltip-content--visible' : ''}${portal ? ' tooltip-content--portal' : ''}`}
+      className={`tooltip-content tooltip-content--${position}${visible ? ' tooltip-content--visible' : ''}${portal ? ' tooltip-content--portal' : ''}${nowrap ? ' tooltip-content--nowrap' : ''}`}
       style={portal ? portalStyle : (maxWidth ? { maxWidth } : undefined)}
       role="tooltip"
       onMouseEnter={() => {

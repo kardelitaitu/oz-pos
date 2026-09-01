@@ -64,8 +64,8 @@ statusbar-version-label = Versi
 statusbar-checking-msg = { $name } · Memeriksa…
 statusbar-offline-msg = { $name } · Luring
 statusbar-latency-msg = { $name } · { $ms }ms
-statusbar-version-latest-msg = Versi { $current } · terbaru
-statusbar-version-update-msg = Versi { $current } → { $available } tersedia
+statusbar-version-latest-msg = Versi terbaru
+statusbar-version-update-msg = Pembaruan tersedia
 
 # POS Cart Line Items
 shared-loading = Memuat…

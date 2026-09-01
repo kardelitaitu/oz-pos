@@ -308,8 +308,8 @@ statusbar-version-label = Version
 statusbar-checking-msg = { $name } · Checking…
 statusbar-offline-msg = { $name } · Offline
 statusbar-latency-msg = { $name } · { $ms }ms
-statusbar-version-latest-msg = Version { $current } · up to date
-statusbar-version-update-msg = Version { $current } → { $available } available
+statusbar-version-latest-msg = Version up to date
+statusbar-version-update-msg = Update available
 
 # Audit Action Labels
 audit-action-sale-void = Void Sale

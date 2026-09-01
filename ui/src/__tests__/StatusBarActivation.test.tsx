@@ -88,7 +88,7 @@ describe('StatusBar (activation screen unified status area)', () => {
   it('shows up-to-date tooltip for version (green)', async () => {
     renderBar();
     await waitFor(() => {
-      expect(screen.getByText('Version 0.0.34 · up to date')).toBeInTheDocument();
+      expect(screen.getByText('Version up to date')).toBeInTheDocument();
     });
   });
 
@@ -97,7 +97,7 @@ describe('StatusBar (activation screen unified status area)', () => {
 
     renderBar();
     await waitFor(() => {
-      expect(screen.getByText('Version 0.0.34 → 0.0.35 available')).toBeInTheDocument();
+      expect(screen.getByText('Update available')).toBeInTheDocument();
     });
   });
 

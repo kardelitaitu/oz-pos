@@ -73,7 +73,7 @@ interface StatusItemProps {
 function StatusItem({ kind, tone, label, tooltip, onClick }: StatusItemProps) {
   const Icon = ICONS[kind];
   return (
-    <Tooltip content={tooltip} position="top" showDelay={300} portal>
+    <Tooltip content={tooltip} position="top" showDelay={300} portal nowrap>
       <button
         type="button"
         className={`statusbar-item statusbar-tone--${tone}`}
@@ -130,12 +130,9 @@ export default function StatusBar({ bare = false }: { bare?: boolean }) {
   const versionTooltip =
     version.state === 'checking'
       ? requiredLocalized(l10n, 'statusbar-checking-msg', { name: versionLabel })
-      : version.state === 'update' && version.availableVersion
-        ? requiredLocalized(l10n, 'statusbar-version-update-msg', {
-            current: version.currentVersion,
-            available: version.availableVersion,
-          })
-        : requiredLocalized(l10n, 'statusbar-version-latest-msg', { current: version.currentVersion });
+      : version.state === 'update'
+        ? requiredLocalized(l10n, 'statusbar-version-update-msg')
+        : requiredLocalized(l10n, 'statusbar-version-latest-msg');
 
   const notify = (msg: string) => addToast({ type: 'info', message: msg });
 

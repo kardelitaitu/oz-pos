@@ -141,6 +141,11 @@
   }
 }
 
+/* ── Single-line tooltip ─────────────────────────── */
+.tooltip-content--nowrap {
+  white-space: nowrap;
+}
+
 /* ── Portal mode: position: fixed via CSS custom properties ────
    Used when the trigger is inside an overflow:hidden/scroll
    container. The Tooltip component passes --trigger-* vars
