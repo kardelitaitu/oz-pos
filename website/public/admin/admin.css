@@ -664,6 +664,25 @@ select.input {
 .fx-chip-live { color: var(--success); }
 .fx-chip-stale { color: var(--warning); }
 
+/* ── Health — platform log view (Northflank via worker proxy) ──────── */
+.logs-head { display: flex; align-items: center; gap: 1rem; margin-bottom: .75rem; }
+.logs-head h2 { margin: 0; flex: 1; }
+.log-meta { font-size: 11px; }
+.log-view {
+  background: var(--ghost-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: .75rem 1rem;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  max-height: 420px;
+  overflow: auto;
+}
+.log-line { display: flex; gap: .75rem; padding: 1px 0; }
+.log-ts { color: var(--text-muted); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.log-msg { color: var(--text); white-space: pre-wrap; word-break: break-word; min-width: 0; }
+
 /* ── Responsive: tablet + mobile portrait ──────────────────────────── */
 @media (max-width: 800px) {
   .chart-grid { grid-template-columns: 1fr; gap: 1rem; }

@@ -393,6 +393,50 @@
           '<span class="muted">'+t('health.version')+'</span><span style="text-align:right">'+escapeHtml(h.version||'—')+'</span>' +
           '<span class="muted">'+t('health.time')+'</span><span style="text-align:right">'+escapeHtml(h.time||'—')+'</span>';
         card.appendChild(kv); c.appendChild(card);
+
+        // ── Platform logs (Northflank cloud pod, via the worker proxy) ──
+        // The NF key lives in a Worker secret; the browser only talks to
+        // same-origin /__oz/nf-logs, which requires the admin session.
+        const logsCard = el('div', 'card table-card');
+        const logsHead = el('div', 'logs-head');
+        logsHead.appendChild(el('h2', null, t('health.logsTitle')));
+        const logMeta = el('span', 'muted log-meta');
+        logsHead.appendChild(logMeta);
+        const refreshBtn = el('button', 'btn btn-ghost btn-sm', t('health.logsRefresh'));
+        refreshBtn.type = 'button';
+        logsHead.appendChild(refreshBtn);
+        logsCard.appendChild(logsHead);
+        const logWrap = el('div');
+        logWrap.appendChild(el('p', 'empty', t('common.loading')));
+        logsCard.appendChild(logWrap);
+        c.appendChild(logsCard);
+
+        // Sequence guard: a stale log response must not overwrite a
+        // fresher one (same last-click-wins pattern as the other tabs).
+        const logsGuard = createSeqGuard();
+        async function loadLogs() {
+          const seq = logsGuard.next();
+          refreshBtn.disabled = true;
+          logWrap.innerHTML = '';
+          logWrap.appendChild(el('p', 'empty', t('common.loading')));
+          let body = null;
+          try {
+            const res = await fetchWithTimeout(undefined, '/__oz/nf-logs?lines=100');
+            body = await res.json();
+          } catch (e) { body = null; }
+          if (!logsGuard.isCurrent(seq)) { return; }
+          refreshBtn.disabled = false;
+          logWrap.innerHTML = '';
+          if (!body || !body.ok) {
+            const detail = body && body.error ? ' ' + body.error : '';
+            logWrap.appendChild(el('p', 'empty', t('health.logsFailed') + detail));
+            return;
+          }
+          logMeta.textContent = t('health.logsCaption');
+          logWrap.appendChild(logView(body.lines));
+        }
+        refreshBtn.addEventListener('click', loadLogs);
+        loadLogs();
       } catch (err) { if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">' + t('common.failedToLoadHealth') + '</p></div>'; }
     }
 

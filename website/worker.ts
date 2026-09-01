@@ -37,11 +37,18 @@ interface Env {
   LICENSE_API_URL?: string;
   /** Discord webhook URL for the support contact form (secret — never exposed to the browser). */
   CONTACT_WEBHOOK_URL?: string;
+  /** Northflank read-only API key for the Health-tab log proxy (secret — never exposed to the browser). */
+  NF_API_KEY?: string;
 }
 
 const RUNTIME_CONFIG_PATH = '/__oz/runtime-config.js';
 const SESSION_PATH = '/__oz/session';
 const LOGOUT_PATH = '/__oz/logout';
+/** Health-tab platform logs — proxied to Northflank with the NF_API_KEY secret. */
+const NF_LOGS_PATH = '/__oz/nf-logs';
+/** The license server's Northflank coordinates (fixed deployment). */
+const NF_PROJECT = 'oz-pos';
+const NF_SERVICE = 'cloud';
 const COOKIE_NAME = 'oz_session';
 
 /** Subdomains that require authentication (admin-only). */
@@ -260,6 +267,61 @@ export default {
         return new Response(JSON.stringify({ token: sessionCookie }), {
           headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
         });
+      }
+
+      // Step 1b-2: NF_LOGS_PATH — platform logs for the Health tab. The
+      // Northflank key lives in a Worker secret (NF_API_KEY); the browser
+      // only ever talks to this same-origin endpoint, which requires the
+      // admin session cookie like every other /__oz route on this host.
+      // queryType=range + direction=backward + lineLimit returns the most
+      // recent lines from the running pod(s); the worker sorts ascending
+      // so the panel reads chronologically (oldest at top).
+      if (url.pathname === NF_LOGS_PATH) {
+        if (!sessionCookie) {
+          return new Response(JSON.stringify({ error: 'not signed in' }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+          });
+        }
+        if (!env.NF_API_KEY) {
+          return new Response(JSON.stringify({ error: 'log proxy not configured (missing NF_API_KEY)' }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+          });
+        }
+        const requested = parseInt(url.searchParams.get('lines') ?? '100', 10);
+        const lineLimit = Math.min(Math.max(Number.isFinite(requested) ? requested : 100, 1), 500);
+        const target = `https://api.northflank.com/v1/projects/${NF_PROJECT}/services/${NF_SERVICE}/logs` +
+          `?queryType=range&duration=86400&lineLimit=${lineLimit}&direction=backward`;
+        try {
+          const nfRes = await fetch(target, {
+            headers: { Authorization: `Bearer ${env.NF_API_KEY}` },
+            signal: AbortSignal.timeout(8000),
+          });
+          if (!nfRes.ok) {
+            const detail = nfRes.status === 401
+              ? 'Northflank denied the log read — the logging API role needs Project > Services > Deployment > View Observability'
+              : `Northflank responded ${nfRes.status}`;
+            return new Response(JSON.stringify({ ok: false, error: detail }), {
+              status: 502,
+              headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+            });
+          }
+          const nfBody = await nfRes.json() as { data?: Array<{ ts?: string; log?: string; containerId?: string }> };
+          const raw = Array.isArray(nfBody.data) ? nfBody.data : [];
+          const out = raw
+            .map(l => ({ ts: String(l.ts ?? ''), log: String(l.log ?? ''), containerId: String(l.containerId ?? '') }))
+            .sort((a, b) => a.ts.localeCompare(b.ts))
+            .slice(-lineLimit);
+          return new Response(JSON.stringify({ ok: true, lines: out }), {
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+          });
+        } catch {
+          return new Response(JSON.stringify({ ok: false, error: 'could not reach Northflank' }), {
+            status: 502,
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+          });
+        }
       }
 
       // Step 1c: Logout — clear the httpOnly cookie and redirect to the

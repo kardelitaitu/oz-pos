@@ -402,6 +402,49 @@
     return hh + ':' + mm + ' UTC+7';
   }
 
+  // stripAnsi removes ANSI terminal escape sequences (colors, cursor
+  // moves, OSC titles) that container logs carry, so the log panel shows
+  // clean text.
+  function stripAnsi(s) {
+    return String(s == null ? '' : s)
+      .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+      .replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
+      .replace(/\x1b[@-_]/g, '');
+  }
+
+  // logTsWib formats a log timestamp as HH:MM:SS in WIB (UTC+7) — the
+  // same operating-timezone convention as the FX chip. Returns '' for
+  // unparseable input; the row then simply omits the stamp.
+  function logTsWib(iso) {
+    if (!iso || typeof iso !== 'string') return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    var shifted = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+    if (isNaN(shifted.getTime())) return '';
+    return ('0' + shifted.getUTCHours()).slice(-2) + ':' +
+      ('0' + shifted.getUTCMinutes()).slice(-2) + ':' +
+      ('0' + shifted.getUTCSeconds()).slice(-2);
+  }
+
+  // logView renders the platform log lines (Northflank via the worker
+  // proxy) as a terminal-style panel. Rows are built with el() →
+  // textContent, so hostile log content can never inject markup.
+  function logView(lines) {
+    var wrap = el('div', 'log-view');
+    if (!Array.isArray(lines) || lines.length === 0) {
+      wrap.appendChild(el('p', 'empty', t('health.logsEmpty')));
+      return wrap;
+    }
+    lines.forEach(function (l) {
+      var row = el('div', 'log-line');
+      var ts = l && l.ts ? logTsWib(l.ts) : '';
+      if (ts) row.appendChild(el('span', 'log-ts', ts));
+      row.appendChild(el('span', 'log-msg', stripAnsi(l && l.log)));
+      wrap.appendChild(row);
+    });
+    return wrap;
+  }
+
   // exchangeUrlFrom validates the /exchange-issue response and builds the
   // redirect URL. B13 fix: login.js concatenated body.code unguarded — a
   // 200 response without a code sent the browser to /?code=undefined, the
@@ -877,6 +920,11 @@
     'health.notConfigured': '— Not configured',
     'health.version': 'Version',
     'health.time': 'Time',
+    'health.logsTitle': 'Service Logs — cloud (last 100 lines)',
+    'health.logsRefresh': '↻ Refresh',
+    'health.logsCaption': 'times in UTC+7 · source: Northflank',
+    'health.logsEmpty': 'No log lines in the last 24 hours.',
+    'health.logsFailed': 'Could not load logs.',
     'common.loading': 'Loading…',
     'common.loadingTenants': 'Loading tenants…',
     'common.failedToLoadTenants': 'Failed to load tenants.',
@@ -1001,6 +1049,9 @@
     busyWrap: busyWrap,
     fetchFxRate: fetchFxRate,
     fxTimeLabel: fxTimeLabel,
+    stripAnsi: stripAnsi,
+    logTsWib: logTsWib,
+    logView: logView,
     mountModal: mountModal,
     flashMessage: flashMessage,
     fetchWithTimeout: fetchWithTimeout,

@@ -791,6 +791,33 @@ describe('admin-utils fxTimeLabel (FX chip shows WIB, not raw UTC)', () => {
   });
 });
 
+describe('admin-utils logView / stripAnsi / logTsWib (health platform logs)', () => {
+  it('stripAnsi removes color, cursor and OSC escapes', () => {
+    expect(utils.stripAnsi('\x1b[32mok\x1b[0m')).toBe('ok');
+    expect(utils.stripAnsi('\x1b[2Jclear')).toBe('clear');
+    expect(utils.stripAnsi('\x1b]0;title\x07tail')).toBe('tail');
+    expect(utils.stripAnsi(null)).toBe('');
+  });
+
+  it('logTsWib shifts UTC to WIB with seconds', () => {
+    expect(utils.logTsWib('2026-09-01T12:51:17.310Z')).toBe('19:51:17');
+    expect(utils.logTsWib('garbage')).toBe('');
+  });
+
+  it('logView renders rows via textContent (no markup injection)', () => {
+    const v = utils.logView([{ ts: '2026-09-01T12:51:17.310Z', log: '<img src=x onerror=alert(1)>' }]);
+    expect(v.querySelectorAll('.log-line').length).toBe(1);
+    expect(v.querySelector('.log-msg').textContent).toBe('<img src=x onerror=alert(1)>');
+    expect(v.querySelector('.log-msg').querySelector('img')).toBeNull();
+    expect(v.querySelector('.log-ts').textContent).toBe('19:51:17');
+  });
+
+  it('logView shows the empty state for no lines', () => {
+    expect(utils.logView([]).querySelector('.empty')).not.toBeNull();
+    expect(utils.logView(null).querySelector('.empty')).not.toBeNull();
+  });
+});
+
 describe('admin-utils busyWrap (B19: double-click submitted the action twice)', () => {
   // The tenant detail modal's Revoke/Activate/Renew/Upgrade-save buttons
   // fired doAction on every click with no in-flight guard. Renew is
