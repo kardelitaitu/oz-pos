@@ -915,20 +915,21 @@ fn a_device_wired_to_two_ticket_sources_is_refused() {
     // audit. This rule lived only in the TypeScript validator: two ticket feeds
     // into one device leave routing undefined, so which queue a ticket reaches
     // depends on wire order. The backend cannot accept that graph.
+    // The contract admits ticket-routing only as
+    // `workspace:kds --ticket-out--> hardware`, so the feed must come from a KDS
+    // workspace. The first version of this test wired it from a branch-location on
+    // `location-out` — a pairing the contract itself rejects — so it proved the
+    // rule fires on a graph the wire gate would have refused regardless. That is a
+    // weaker claim than the test appeared to make.
     let mut root = typed_node("root", "branch-location", None);
     root["store_profile_id"] = json!("branch-1");
+    let kds = typed_node("kds-1", "workspace", Some("kds"));
     let printer = typed_node("printer", "hardware", None);
-    let feed_a = wire_between(
-        &root,
-        &printer,
-        "location-out",
-        "ticket-in",
-        "ticket-routing",
-    );
+    let feed_a = wire_between(&kds, &printer, "ticket-out", "ticket-in", "ticket-routing");
     let mut feed_b = feed_a.clone();
     feed_b["id"] = json!("w2");
 
-    let err = validate_semantic_json(&[root, printer], &[feed_a, feed_b])
+    let err = validate_semantic_json(&[root, kds, printer], &[feed_a, feed_b])
         .expect_err("one device must not take two ticket sources");
     assert_eq!(validation_code(&err), "multiple-ticket-inputs");
 }
@@ -945,16 +946,11 @@ fn a_single_ticket_source_does_not_trip_the_cardinality_rule() {
     // failed for exactly that reason.
     let mut root = typed_node("root", "branch-location", None);
     root["store_profile_id"] = json!("branch-1");
+    let kds = typed_node("kds-1", "workspace", Some("kds"));
     let printer = typed_node("printer", "hardware", None);
-    let feed = wire_between(
-        &root,
-        &printer,
-        "location-out",
-        "ticket-in",
-        "ticket-routing",
-    );
+    let feed = wire_between(&kds, &printer, "ticket-out", "ticket-in", "ticket-routing");
 
-    let outcome = validate_semantic_json(&[root, printer], &[feed]);
+    let outcome = validate_semantic_json(&[root, kds, printer], &[feed]);
     if let Err(err) = &outcome {
         assert_ne!(
             validation_code(err),
