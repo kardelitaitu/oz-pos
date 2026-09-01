@@ -726,6 +726,31 @@ Obligations 2 and 3 are each a full slice on their own and neither is mechanical
    are enforced for stock/transfer on the Rust side or only offered by the
    frontend. Do not shrink the ledger until that is answered with a test.
 
+   **CORRECTION OF THE CORRECTION (2026-09-02, one round later) — the retraction
+   above is itself wrong; the ORIGINAL claim stands, now actually tested.** The
+   probe that appeared to refute it was built with `semantic_node`, whose third
+   parameter is `store_profile_id`, not `type_key`. Both of its workspace nodes
+   therefore carried no type key at all, and a type-less workspace canonicalizes
+   to `workspace:store-pos` by design — a type the contract DOES declare a stock
+   endpoint for. Both graphs were the same legal wire; neither ever tested
+   `admin`. The test passed for a reason unrelated to what it appeared to test,
+   and the retraction drew a conclusion about the backend gate from a fixture
+   that never exercised it.
+
+   Rebuilt with `typed_node`, which does take a type key, and pinned as
+   `an_unregistered_workspace_type_has_no_stock_endpoint_in_the_contract`:
+   `node_kind_token` yields `workspace:admin`, `pairing_admits_kinds` returns
+   false for it, and `validate_semantic_json` refuses the wire with
+   `invalid-semantic-connection`. A positive control asserts the declared
+   `workspace:store-pos -> warehouse` endpoint is admitted, built the same way so
+   it cannot repeat the mistake.
+
+   The original finding therefore holds: a wire the contract refuses cannot reach
+   storage, so removing the `workspace:*` sockets orphans no saved data, and the
+   socket-debt edit is unblocked. Two lessons kept on the record rather than
+   edited out: a traced code path is only a hypothesis, and a passing test is not
+   evidence until you check that its fixture exercises the thing its name claims.
+
    ---
 
    ~~The data-compatibility blocker on this is resolved, and it pointed the

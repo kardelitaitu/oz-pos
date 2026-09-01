@@ -129,15 +129,71 @@ fn directed_cycle_is_detected() {
 }
 
 #[test]
-fn a_stock_wire_from_a_registered_workspace_type_is_accepted() {
-    // Positive control for the test above. Without it, the refusal could be
-    // evidence of a malformed graph rather than of the contract gate doing its
-    // job, and the claim about persistence would be unproven.
-    let nodes = vec![
-        semantic_node("branch", "branch-location", Some("default")),
-        semantic_node("pos", "workspace", Some("store-pos")),
-        semantic_node("wh", "warehouse", None),
+fn an_unregistered_workspace_type_has_no_stock_endpoint_in_the_contract() {
+    // Round 11 drew the wrong conclusion from the wrong fixture. Its third
+    // argument came from `semantic_node`, whose third parameter is
+    // `store_profile_id`, not `type_key` — so both of its workspace nodes were
+    // built with NO type key at all. A type-less workspace canonicalizes to
+    // `workspace:store-pos` by design (see node_kind_token), which the contract
+    // does declare a stock endpoint for. Both graphs were therefore the same
+    // legal wire, and neither ever tested `admin`. The retraction that followed
+    // was itself unsupported.
+    //
+    // Rebuilt with `typed_node`, which does take a type key.
+    let mut root = semantic_node("branch", "branch-location", Some("default"));
+    root["name"] = json!("branch");
+    let adm = typed_node("adm", "workspace", Some("admin"));
+    let wh = typed_node("wh", "warehouse", None);
+    let wires = vec![
+        semantic_location_wire("loc-1", "adm"),
+        semantic_location_wire("loc-2", "wh"),
+        json!({
+            "id": "s-1",
+            "from_node_id": "adm",
+            "to_node_id": "wh",
+            "direction": "one-way",
+            "from_port_id": "stock-out",
+            "to_port_id": "stock-in",
+            "relationship_type": "stock-routing",
+        }),
     ];
+    let nodes = vec![root, adm.clone(), wh.clone()];
+
+    // First prove the fixture says what it looks like it says: this is the
+    // unregistered case, not a store-pos wire wearing a different name.
+    assert_eq!(node_kind_token(&adm), "workspace:admin");
+    assert_eq!(node_kind_token(&wh), "warehouse");
+    assert!(
+        !pairing_admits_kinds("stock-out", "stock-in", "workspace:admin", "warehouse"),
+        "the contract must not declare a stock endpoint for an unregistered type, \
+         or this test is proving nothing about persistence"
+    );
+
+    let err = validate_semantic_json(&nodes, &wires)
+        .expect_err("a wire the contract declares no endpoint for must not be persistable");
+    assert_eq!(
+        validation_code(&err),
+        "invalid-semantic-connection",
+        "the contract gate must be what refuses this wire"
+    );
+}
+
+#[test]
+fn a_stock_wire_from_a_registered_workspace_type_is_accepted() {
+    // Positive control for the test above, and a guard against the same fixture
+    // trap: built with `typed_node` so the source really is `workspace:store-pos`
+    // rather than a type-less workspace that merely canonicalizes to it.
+    let root = semantic_node("branch", "branch-location", Some("default"));
+    let pos = typed_node("pos", "workspace", Some("store-pos"));
+    let wh = typed_node("wh", "warehouse", None);
+    assert_eq!(node_kind_token(&pos), "workspace:store-pos");
+    assert!(pairing_admits_kinds(
+        "stock-out",
+        "stock-in",
+        "workspace:store-pos",
+        "warehouse"
+    ));
+    let nodes = vec![root, pos, wh];
     let wires = vec![
         semantic_location_wire("loc-1", "pos"),
         semantic_location_wire("loc-2", "wh"),
