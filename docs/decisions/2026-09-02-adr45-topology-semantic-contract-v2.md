@@ -1038,14 +1038,38 @@ Breakdown of the ten, each verified individually:
   What differs is the label, so the live checklist and Apply can name the same
   defect with two different codes.
 
-**Two remain genuinely unconfirmed**, and are recorded as open rather than as
-findings, because I did not verify them the way I verified the other eight:
+**Two remained** after that, and one of them turned out to be the same mistake
+again — see below.
 
-1. `warehouse-tier-limit` — the editor enforces a per-subscription-tier warehouse
-   cap; no topology-level tier check was found in the Rust tree. The nearest
-   matches are staff/user tier gates, which are a different rule. If the cap is
-   only client-side, it is an entitlement the backend does not defend.
-2. `multiple-ticket-inputs` — no Rust reference found at all.
+**`warehouse-tier-limit` — CLOSED, not a gap.** The next round looked for the
+*rule* rather than the code string and found it: `apply_topology_diff`
+(`commands.rs:248`) calls `validate_warehouse_quota(&diagram_nodes,
+&effective_tier)` at L473, after loading the tenant subscription, running
+`validate_clock_rollback`, and `verify_signature`. It has its own test suite in
+`persistence_tests.rs` covering no-warehouses-always-ok, free-tier-one-ok,
+free-tier-two-rejected, and uncapped tiers. So the entitlement is enforced
+server-side and well covered; the only thing missing was the TS code string,
+because the backend names the rule `validate_warehouse_quota` rather than echoing
+the UI's `warehouse-tier-limit`.
+
+This is the second of the ten to dissolve into a naming mismatch, and it is the one
+that looked most like a security hole. Worth stating plainly: **grepping for a
+client-side error code and finding nothing is evidence about the code string, not
+about the rule.** The first round's "ten validation rules exist only in the UI"
+would have been a serious-sounding, entirely false claim about entitlement
+enforcement.
+
+**`multiple-ticket-inputs` — the one item still open.** Searched under
+`ticket_in`, `ticket-input`, `multiple_ticket`, `ticket_count` across `crates/`
+and `apps/`: no reference. Unlike the other nine, there is no plausible alternate
+name or layer to check — the rule appears to exist only in the TypeScript
+validator, which enforces a cardinality limit on a node's ticket inputs that the
+backend does not.
+
+Left unfixed deliberately: adding a backend cardinality rule means knowing which
+node kinds accept ticket inputs and what their legal range is, and rejecting a
+legal graph from a position of ignorance is worse than the gap. It needs the same
+kind of probe-and-grep pass the other nine got, in a window that can hold it.
 
 Method note, since it is the second round running: every one of these was settled
 by a probe or a whole-tree grep, not by reading one file. The tempting headline was
