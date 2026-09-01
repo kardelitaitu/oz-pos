@@ -83,6 +83,14 @@ describe('admin-utils svgChart', () => {
     expect(svg).toContain('<svg');
     expect(svg).toContain('01');
   });
+
+  it('wide variant stretches the canvas so text is not upscaled', () => {
+    const data = Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, '0')}`, idr: (i + 1) * 100 }));
+    const svg = utils.svgChart('rev', data, ['idr'], { area: true, wide: true });
+    expect(svg).toContain('viewBox="0 0 1280 220"');
+    // A label under every point on the wide canvas (12 months → 12 x-labels).
+    expect(svg.match(/text-anchor="middle"/g)?.length).toBe(12);
+  });
 });
 
 describe('admin-utils svgDonut', () => {
@@ -325,6 +333,17 @@ describe('admin-utils svgBarChart (B3: churn chart read the wrong field)', () =>
     const svg = utils.svgBarChart('x', [{ count: 1 }, { count: 1, month: '2026-<b>' }], { valueKey: 'count' });
     expect(svg).not.toContain('<b>');
     expect(svg).toContain('&lt;b&gt;');
+  });
+
+  it('wide variant stretches the canvas so text is not upscaled', () => {
+    const data = Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, '0')}`, churn: i + 1 }));
+    const narrow = utils.svgBarChart('c', data, { valueKey: 'churn' });
+    const wide = utils.svgBarChart('c', data, { valueKey: 'churn', wide: true });
+    expect(narrow).toContain('viewBox="0 0 620 180"');
+    expect(wide).toContain('viewBox="0 0 1280 220"');
+    expect(wide).not.toContain('max-height');
+    // Max bar still reaches the same plot height (160) in both canvases.
+    expect(wide).toContain('height="160"');
   });
 });
 

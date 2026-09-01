@@ -145,7 +145,7 @@
       // Revenue trend (spans the full row — the hero chart)
       const revCard = el('div', 'chart-card chart-card--wide');
       revCard.appendChild(el('h3', null, t('chart.revenueTrendIdr')));
-      revCard.innerHTML += svgChart('rev', m.revenueTrend, ['idr'], { area: true, fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt' });
+      revCard.innerHTML += svgChart('rev', m.revenueTrend, ['idr'], { area: true, wide: true, fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt' });
       chartGrid.appendChild(revCard);
 
       // Tier distribution (donut)
@@ -196,7 +196,7 @@
       // bars read better with room.
       const churnCard = el('div', 'chart-card chart-card--wide');
       churnCard.appendChild(el('h3', null, t('chart.churnCanceled')));
-      churnCard.innerHTML += svgBarChart('churn', m.churnPerMonth, { valueKey: 'churn', color: 'var(--bad)' });
+      churnCard.innerHTML += svgBarChart('churn', m.churnPerMonth, { valueKey: 'churn', color: 'var(--bad)', wide: true });
       chartGrid2.appendChild(churnCard);
 
       c.appendChild(chartGrid2);

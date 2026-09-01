@@ -84,7 +84,17 @@
     if (vals.length === 0) {
       return '<div class="chart-empty">No data</div>';
     }
-    var w = 600, h = 180, px = 40, py = 20, pw = w - px, ph = h - py - 20;
+    // Canvas: narrow (default) keeps the historical 600×180 geometry.
+    // opts.wide selects a 1280-wide canvas for full-row cards — a 600-unit
+    // viewBox stretched across a ~1300px card upscaled every glyph ~2.2×
+    // (10px labels rendered ~22px, "too zoomed in"). At 1280 the rendered
+    // scale is ~1.0, so viewBox font sizes are the rendered sizes.
+    var wide = !!(opts && opts.wide);
+    var w = wide ? 1280 : 600, h = wide ? 220 : 180, px = wide ? 56 : 40, py = wide ? 24 : 20;
+    // Wide adds right padding so the last point's centered label stays
+    // inside the viewBox; narrow keeps its exact legacy geometry.
+    var pw = wide ? w - px - 24 : w - px;
+    var ph = wide ? h - py - 36 : h - py - 20;
     var max = Math.max.apply(null, vals);
     var min = 0;
     var rng = max - min || 1;
@@ -93,15 +103,16 @@
     // Design-language semantic tokens — the chart re-themes with the page.
     var colors = { usd: 'var(--primary)', idr: 'var(--success)', count: 'var(--primary)', mrr: 'var(--primary)' };
     // Horizontal gridlines at each y-label (hairline borders, not fills).
+    // non-scaling-stroke keeps the hairline 1 CSS px at any canvas scale.
     var grid = '';
     for (var gi = 0; gi <= 4; gi++) {
       var gv = min + (rng / 4) * gi;
-      grid += '<line x1="' + px + '" y1="' + y(gv) + '" x2="' + w + '" y2="' + y(gv) + '" stroke="var(--border)" stroke-width="1"/>';
+      grid += '<line x1="' + px + '" y1="' + y(gv) + '" x2="' + w + '" y2="' + y(gv) + '" stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
     }
     var paths = '', fills = '';
     series.forEach(function (s) {
       var pts = data.map(function (d, i) { return x(i) + ',' + y(Number(d[s]) || 0); }).join(' L ');
-      paths += '<path d="M ' + pts + '" stroke="' + (colors[s] || 'var(--primary)') + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" class="chart-line"/>';
+      paths += '<path d="M ' + pts + '" stroke="' + (colors[s] || 'var(--primary)') + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" class="chart-line" vector-effect="non-scaling-stroke"/>';
       if (opts && opts.area) {
         // B42: the area path was missing its leading "M" — an invalid
         // d= meant the browser dropped the whole element, so the 10%
@@ -116,8 +127,11 @@
       yLabels += '<text x="' + (px - 5) + '" y="' + (y(v) + 3) + '" text-anchor="end" fill="var(--muted)" font-size="10">' + (opts && opts.fmt ? opts.fmt(v) : Math.round(v)) + '</text>';
     }
     var xLabels = '';
+    // Wide canvas fits a label under every point; narrow keeps the
+    // every-other-point legacy density.
+    var step = wide ? 1 : 2;
     data.forEach(function (d, i) {
-      if (i % 2 === 0 || i === data.length - 1) {
+      if (i % step === 0 || i === data.length - 1) {
         // B5 fix: the M1 guard protected values but not labels — a row
         // without month threw on .slice and killed the whole dashboard.
         xLabels += '<text x="' + x(i) + '" y="' + (py + ph + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="9">' + escapeHtml(d.month ? String(d.month).slice(5) : '') + '</text>';
@@ -302,18 +316,31 @@
     // (an all-filtered set falls to the existing maxS>0 empty guard).
     data = data.filter(function (d) { return d && typeof d === 'object'; });
     var valueKey = (opts && opts.valueKey) || 'count';
+    // Canvas: narrow uses a 620-unit canvas (matches the half-column card
+    // width at desktop widths → ~1:1 scale); opts.wide selects a 1280-wide
+    // canvas for full-row cards so text isn't upscaled ~2.2× when the
+    // SVG stretches across the row (same "too zoomed in" defect as the
+    // line chart).
+    var wide = !!(opts && opts.wide);
+    var w = wide ? 1280 : 620, h = wide ? 220 : 180;
+    var baseline = wide ? 190 : 150, topPad = wide ? 30 : 10;
+    var plotH = baseline - topPad;
     var maxS = Math.max.apply(null, data.map(function (d) { return Number(d[valueKey]) || 0; }));
-    var barW = 420 / data.length;
-    var bars = '<line x1="10" y1="150" x2="430" y2="150" stroke="var(--border)" stroke-width="1"/>';
+    var barW = (w - 20) / data.length;
+    var bars = '<line x1="10" y1="' + baseline + '" x2="' + (w - 10) + '" y2="' + baseline + '" stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
     data.forEach(function (d, i) {
       var v = Number(d[valueKey]) || 0;
-      var bh = maxS > 0 ? (v / maxS) * 140 : 0;
-      var bx = 10 + i * (barW + 2);
-      bars += '<rect x="' + bx + '" y="' + (150 - bh) + '" width="' + (barW * 0.7) + '" height="' + bh + '" rx="4" fill="' + (opts && opts.color || 'var(--primary)') + '"/>' +
-        '<text x="' + (bx + barW * 0.35) + '" y="' + (150 - bh - 4) + '" text-anchor="middle" fill="var(--text)" font-size="10" font-weight="600">' + v + '</text>' +
-        '<text x="' + (bx + barW * 0.35) + '" y="165" text-anchor="middle" fill="var(--muted)" font-size="9">' + escapeHtml(d.month ? d.month.slice(5) : '') + '</text>';
+      var bh = maxS > 0 ? (v / maxS) * plotH : 0;
+      var bx = 10 + i * barW;
+      // Wide slots would make each bar ~74 units thick at 1:1 — cap the
+      // drawn width and center it in the slot so bars stay elegant.
+      var bw = Math.min(barW * 0.7, 48);
+      var cx = bx + barW / 2;
+      bars += '<rect x="' + (cx - bw / 2) + '" y="' + (baseline - bh) + '" width="' + bw + '" height="' + bh + '" rx="4" fill="' + (opts && opts.color || 'var(--primary)') + '"/>' +
+        '<text x="' + cx + '" y="' + (baseline - bh - 6) + '" text-anchor="middle" fill="var(--text)" font-size="10" font-weight="600">' + v + '</text>' +
+        '<text x="' + cx + '" y="' + (baseline + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="9">' + escapeHtml(d.month ? d.month.slice(5) : '') + '</text>';
     });
-    return '<svg viewBox="0 0 440 180" style="max-height:180px">' + bars + '</svg>';
+    return '<svg viewBox="0 0 ' + w + ' ' + h + '"' + (wide ? '' : ' style="max-height:180px"') + ' class="chart-svg">' + bars + '</svg>';
   }
 
   // timeoutSignal builds an AbortSignal for a request, degrading to NO
