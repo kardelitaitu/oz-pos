@@ -338,8 +338,17 @@ export default function TopologyScreen() {
     const name = newBranchName.trim();
     if (!name) return;
     if (atStoreLimit) return; // the inline banner explains why
+    if (!sessionToken) {
+      // Session not minted yet (admin-shell fallback race) — fail honestly
+      // instead of sending a null token that yields the generic toast.
+      addToast({
+        message: `${l10n.getString('topology-branch-add-error')}: ${l10n.getString('topology-branch-session-pending')}`,
+        type: 'error',
+      });
+      return;
+    }
     try {
-      const created = await createStoreProfileScoped(sessionToken!, { id: `store-${crypto.randomUUID()}`, name });
+      const created = await createStoreProfileScoped(sessionToken, { id: `store-${crypto.randomUUID()}`, name });
       setStores((prev) => [...prev, created]);
       setSelectedBranchId(created.id);
       setAddingBranch(false);
@@ -362,10 +371,17 @@ export default function TopologyScreen() {
   const handleDeleteBranch = async () => {
     if (!deleteTargetId) return;
     const id = deleteTargetId;
+    if (!sessionToken) {
+      addToast({
+        message: `${l10n.getString('topology-branch-delete-error')}: ${l10n.getString('topology-branch-session-pending')}`,
+        type: 'error',
+      });
+      return;
+    }
     const remaining = stores.filter((s) => s.id !== id);
     setDeleteBranchSaving(true);
     try {
-      await deleteStoreProfileScoped(sessionToken!, id);
+      await deleteStoreProfileScoped(sessionToken, id);
       setStores(remaining);
       setSelectedBranchId(remaining[0]?.id ?? null);
       // No branches left: nothing owns the graph — clear the instances so
@@ -397,8 +413,15 @@ export default function TopologyScreen() {
     if (!store) return false;
     const trimmed = name.trim();
     if (!trimmed || trimmed === store.name) return false;
+    if (!sessionToken) {
+      addToast({
+        message: `${l10n.getString('topology-branch-rename-error')}: ${l10n.getString('topology-branch-session-pending')}`,
+        type: 'error',
+      });
+      return false;
+    }
     try {
-      const updated = await updateStoreProfileScoped(sessionToken!, {
+      const updated = await updateStoreProfileScoped(sessionToken, {
         id: store.id,
         name: trimmed,
         address: store.address,
@@ -415,7 +438,7 @@ export default function TopologyScreen() {
       });
       return false;
     }
-  }, [stores, canSaveTopology, addToast, l10n]);
+  }, [stores, canSaveTopology, sessionToken, addToast, l10n]);
 
   /** Persist a workspace instance rename (the live row, not just the canvas
    *  label) from the editor's card. Same contract as handleRenameBranch. */

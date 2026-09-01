@@ -355,6 +355,7 @@ topology-branch-add-name-placeholder = Nama cabang baru
 topology-branch-add-confirm = Buat
 topology-branch-add-cancel = Batal
 topology-branch-add-error = Gagal membuat cabang
+topology-branch-session-pending = Masih menyambungkan ke toko Anda. Silakan coba lagi sebentar lagi.
 topology-branch-delete = Hapus Cabang
 topology-branch-delete-confirm = Hapus { $name }?
 topology-branch-delete-confirm-btn = Hapus

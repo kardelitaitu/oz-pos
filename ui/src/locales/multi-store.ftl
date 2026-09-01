@@ -357,6 +357,7 @@ topology-branch-add-name-placeholder = New branch name
 topology-branch-add-confirm = Create
 topology-branch-add-cancel = Cancel
 topology-branch-add-error = Could not create branch
+topology-branch-session-pending = Still connecting to your store. Please try again in a moment.
 topology-branch-delete = Delete Branch
 topology-branch-delete-confirm = Delete { $name }?
 topology-branch-delete-confirm-btn = Delete

@@ -373,11 +373,27 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // This effect fires after activeInstance changes (set by handleSetActiveInstance
   // or the useEffect that syncs from activeWorkspace).
   //
+  // Settings/admin shell fallback: the topology editor, stores dashboard,
+  // and offline-queue header make scoped commands without an active POS
+  // workspace instance. When an authenticated user has no activeInstance,
+  // mint a session scoped to the resolved store's admin instance so those
+  // screens work. Activating a POS workspace afterwards re-runs this
+  // effect and replaces the token (the refresh branch below).
+  //
   // ADR #6: Skips token creation when isHotSwappingRef is set, because
   // swapSessionToken handles token lifecycle during a hot-swap.
   useEffect(() => {
-    if (!activeInstance || !session?.user_id) return;
+    if (!session?.user_id) return;
     if (isHotSwappingRef.current) return; // ADR #6: swapSessionToken handles this
+
+    // Active POS workspace first; otherwise the admin instance of the
+    // resolved store (list_workspaces is picker-ticket verified, so the
+    // instance id is trustworthy).
+    const tokenInstance =
+      activeInstance ??
+      availableWorkspaces.find((i) => i.type_key === 'admin') ??
+      null;
+    if (!tokenInstance) return;
 
     let cancelled = false;
 
@@ -417,9 +433,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       createSession({
         user_id: session.user_id,
         role_id: session.role_id,
-        store_id: activeInstance.store_id,
-        instance_id: activeInstance.instance_id,
-        type_key: activeInstance.type_key,
+        store_id: tokenInstance.store_id,
+        instance_id: tokenInstance.instance_id,
+        type_key: tokenInstance.type_key,
         terminal_id: deviceId,
         picker_ticket: ticket,
       })
@@ -438,7 +454,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [activeInstance, session]);
+  }, [activeInstance, session, availableWorkspaces, pickerTicket]);
 
 
   // Backward-compat: sets the type_key string directly.
