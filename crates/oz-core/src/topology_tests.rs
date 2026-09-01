@@ -835,3 +835,59 @@ fn topology_matrix_covers_every_contract_row_and_declared_kind() {
         );
     }
 }
+
+#[test]
+fn the_backend_reports_a_structural_error_ahead_of_a_duplicate_node_id() {
+    // ADR #45 section 4.3 follow-up. Characterization test, NOT an endorsement.
+    //
+    // The TypeScript validator now sorts errors by tier, where an unreadable
+    // graph (duplicate-node, tier 1) outranks a structurally impossible one
+    // (missing-branch-location, tier 2). The backend cannot express that: it
+    // returns `Result<(), CoreError>`, so it reports the first check that fires
+    // in traversal order and discards the rest.
+    //
+    // For this graph the two disagree. The merchant's live checklist says "two
+    // nodes share an id"; Apply says "add a branch location". Following Apply's
+    // advice leaves the id collision in place, and every check downstream of it
+    // is then evaluated against a graph that has already lost a node.
+    //
+    // Pinned so the divergence is a known, dated fact rather than a surprise
+    // during the checklist work. Fixing it means collecting errors in
+    // `validate_semantic_json` and returning the highest-tier one, which is a
+    // change to the validator's shape across fourteen return sites - deliberately
+    // not folded into a UI change. See the ADR section "the ordering rule is half
+    // a prerequisite".
+    let warehouse_a = typed_node("wh", "warehouse", None);
+    let warehouse_b = typed_node("wh", "warehouse", None);
+    let admin = typed_node("adm", "workspace", Some("admin"));
+    let wire = wire_between(&warehouse_a, &admin, "stock-out", "stock-in", "stock");
+
+    let err = validate_semantic_json(&[warehouse_a, warehouse_b, admin], &[wire])
+        .expect_err("a graph with no branch location must not validate");
+
+    assert_eq!(
+        validation_code(&err),
+        "missing-branch-location",
+        "the backend short-circuits on the structural check; if it ever collects \
+         and sorts, this test should be rewritten to assert the tier order instead"
+    );
+}
+
+#[test]
+fn the_backend_and_the_tier_order_agree_on_an_illegal_wire_before_a_missing_input() {
+    // The other half of the record: for at least one two-defect graph the two
+    // implementations do agree, so the divergence above is a specific gap rather
+    // than a blanket incompatibility. Recording agreement matters as much -
+    // otherwise the follow-up reads as though nothing lines up.
+    //
+    // Here a warehouse feeds an unregistered workspace type (invalid-semantic-
+    // connection, tier 3) and the graph also has no branch location (tier 2).
+    // Both surfaces name the tier-2 problem first.
+    let warehouse = typed_node("wh", "warehouse", None);
+    let admin = typed_node("adm", "workspace", Some("admin"));
+    let wire = wire_between(&warehouse, &admin, "stock-out", "stock-in", "stock");
+
+    let err = validate_semantic_json(&[warehouse, admin], &[wire])
+        .expect_err("an unregistered workspace type must not validate");
+    assert_eq!(validation_code(&err), "missing-branch-location");
+}
