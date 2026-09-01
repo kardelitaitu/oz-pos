@@ -2,11 +2,11 @@
 num: 45
 area: topology
 title: ADR #45: Topology Semantic Contract v2 — Endpoint Predicates, Kind Registry, Deliberate Cold Start, and Theme Parity
-status: Accepted — §1–§3, §4.1, §5, §4.2 storage + migration implemented (2026-09-02); §4.2 UI swap and §4.3 proposed
+status: Accepted — §1–§3, §4.1, §5, §4.2 storage + migration, §4.3 ordering rule + backend parity implemented (2026-09-02); §4.2 UI swap and §4.3 checklist UI proposed
 ---
 # ADR #45: Topology Semantic Contract v2
 
-**Status:** Accepted — §1–§3, §4.1, §5, §4.2 storage + migration implemented (2026-09-02); §4.2 UI swap and §4.3 proposed
+**Status:** Accepted — §1–§3, §4.1, §5, §4.2 storage + migration, §4.3 ordering rule + backend parity implemented (2026-09-02); §4.2 UI swap and §4.3 checklist UI proposed
 **Date:** 2026-09-02
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** topology, semantic-contract, cross-language-parity, node-kind-registry, cold-start, theming
@@ -1059,17 +1059,24 @@ about the rule.** The first round's "ten validation rules exist only in the UI"
 would have been a serious-sounding, entirely false claim about entitlement
 enforcement.
 
-**`multiple-ticket-inputs` — the one item still open.** Searched under
+**`multiple-ticket-inputs` — CLOSED by `c4cfbef8`.** Searched under
 `ticket_in`, `ticket-input`, `multiple_ticket`, `ticket_count` across `crates/`
 and `apps/`: no reference. Unlike the other nine, there is no plausible alternate
 name or layer to check — the rule appears to exist only in the TypeScript
 validator, which enforces a cardinality limit on a node's ticket inputs that the
 backend does not.
 
-Left unfixed deliberately: adding a backend cardinality rule means knowing which
-node kinds accept ticket inputs and what their legal range is, and rejecting a
-legal graph from a position of ignorance is worse than the gap. It needs the same
-kind of probe-and-grep pass the other nine got, in a window that can hold it.
+Read the TypeScript rule first, which is what made it portable: it constrains
+`hardware` nodes to at most one `ticket-routing` wire arriving on `ticket-in`. Two
+feeds leave routing undefined — which queue a ticket reaches depends on wire order
+— so the backend must not accept the graph. Ported as a standalone pass before the
+per-node gates, with two tests.
+
+The audit therefore closes at **zero unenforced rules**: of the ten apparent gaps,
+four were a too-narrow regex, three were enforced at another layer by design, two
+were naming mismatches whose rule did exist, and this one was real and is now
+fixed. The headline that would have survived review — "ten validation rules exist
+only in the UI" — was wrong nine times out of ten.
 
 Method note, since it is the second round running: every one of these was settled
 by a probe or a whole-tree grep, not by reading one file. The tempting headline was
