@@ -278,6 +278,72 @@ describe('TopologyMinimap', () => {
       expect(width).toBeGreaterThanOrEqual(8);
       expect(height).toBeGreaterThanOrEqual(8);
     });
+
+    it('covers the whole content when a zoomed-out view contains the diagram (no clip)', async () => {
+      // Regression: at 40% zoom a 1920×1080 canvas shows a 4800×2700 canvas
+      // area — the raw viewport rect used to be many times the map size and
+      // the SVG clipped it mid-edge. The box is now the viewport rect ∩
+      // content bounds, so a view that contains the whole diagram renders
+      // the box exactly over the projected content rect.
+      await renderWithFluent(
+        <TopologyMinimap {...defaultProps({ zoom: 0.4, canvasWidth: 1920, canvasHeight: 1080 })} />,
+      );
+
+      const btn = screen.getByRole('button');
+      const nodeRects = [...btn.querySelectorAll('rect.topology-minimap-node')];
+      const contentLeft = Math.min(...nodeRects.map((r) => Number(r.getAttribute('x'))));
+      const contentTop = Math.min(...nodeRects.map((r) => Number(r.getAttribute('y'))));
+      const contentRight = Math.max(...nodeRects.map((r) => Number(r.getAttribute('x')) + Number(r.getAttribute('width'))));
+      const contentBottom = Math.max(...nodeRects.map((r) => Number(r.getAttribute('y')) + Number(r.getAttribute('height'))));
+
+      const viewport = btn.querySelector('rect.topology-minimap-viewport')!;
+      const x = Number(viewport.getAttribute('x'));
+      const y = Number(viewport.getAttribute('y'));
+      const w = Number(viewport.getAttribute('width'));
+      const h = Number(viewport.getAttribute('height'));
+      // The box exactly covers the projected content — and never clips.
+      expect(x).toBeCloseTo(contentLeft);
+      expect(y).toBeCloseTo(contentTop);
+      expect(x + w).toBeCloseTo(contentRight);
+      expect(y + h).toBeCloseTo(contentBottom);
+    });
+
+    it('never spills past the padded map at any zoom level', async () => {
+      for (const zoom of [2, 1, 0.8, 0.64, 0.4]) {
+        const { unmount } = await renderWithFluent(
+          <TopologyMinimap {...defaultProps({ zoom, canvasWidth: 1920, canvasHeight: 1080 })} />,
+        );
+        const viewport = screen.getByRole('button').querySelector('rect.topology-minimap-viewport')!;
+        const x = Number(viewport.getAttribute('x'));
+        const y = Number(viewport.getAttribute('y'));
+        const w = Number(viewport.getAttribute('width'));
+        const h = Number(viewport.getAttribute('height'));
+        expect(x).toBeGreaterThanOrEqual(8 - 1e-6);
+        expect(y).toBeGreaterThanOrEqual(8 - 1e-6);
+        expect(x + w).toBeLessThanOrEqual(176 - 8 + 1e-6);
+        expect(y + h).toBeLessThanOrEqual(120 - 8 + 1e-6);
+        unmount();
+      }
+    });
+
+    it('pins a minimum chip toward the nearest edge when the view is off-content', async () => {
+      // Pan the view far to the right of the diagram: the intersection is
+      // empty, so the box collapses to an 8px chip at the right edge — the
+      // side cue that the content lies to the left.
+      await renderWithFluent(
+        <TopologyMinimap
+          {...defaultProps({ pan: { x: -10000, y: 0 }, zoom: 1, canvasWidth: 1920, canvasHeight: 1080 })}
+        />,
+      );
+
+      const viewport = screen.getByRole('button').querySelector('rect.topology-minimap-viewport')!;
+      const x = Number(viewport.getAttribute('x'));
+      const y = Number(viewport.getAttribute('y'));
+      const w = Number(viewport.getAttribute('width'));
+      expect(x).toBeCloseTo(176 - 8 - 8);
+      expect(w).toBe(8);
+      expect(y).toBeGreaterThanOrEqual(8);
+    });
   });
 
   describe('Interaction — click to recenter', () => {

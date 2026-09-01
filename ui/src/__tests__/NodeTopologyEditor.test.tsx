@@ -5073,25 +5073,40 @@ describe('NodeTopologyEditor — canvas pan', () => {
     const scale = (nodeRects[2]! - nodeRects[0]!) / 600;
     const PAD = 8;
     const MIN_X = 80; // leftmost content edge of the retail preset
-    // Screen(0) is the viewport's left edge, so the visible canvas range is
-    // [−pan/zoom, (canvasW − pan)/zoom] — the box origin is −pan/zoom.
-    const expectedX = (panX: number, zoom: number) => PAD + (-panX / zoom - MIN_X) * scale;
+    // The box is the viewport rect ∩ content bounds. jsdom reports a 0px
+    // canvas, so the view is a degenerate point at −pan/zoom and the box
+    // renders as the minimum chip pinned toward that point's edge.
+    const expectedX = (panX: number, zoom: number) => {
+      const viewLeft = -panX / zoom;
+      const ix0 = Math.max(viewLeft, MIN_X);
+      const raw = PAD + (ix0 - MIN_X) * scale;
+      return Math.min(Math.max(raw, PAD), PAD + 160 - 8);
+    };
 
-    // pan=0, zoom=1: the box starts just left of the content box.
+    // pan=0, zoom=1: the view origin sits left of the content box — the chip
+    // pins to the left pad instead of the SVG clipping it mid-edge.
     expect(parseFloat(viewport.getAttribute('x')!)).toBeCloseTo(expectedX(0, 1));
 
-    // Middle-drag pan by (+50, +30): the box must move LEFT in canvas
-    // terms (−pan.x), not right (the pan.x bug renders it 100px off).
+    // Drag the view right (pan −200): the view origin enters the content
+    // range and the box tracks −pan/zoom exactly.
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
-    fireEvent.mouseDown(canvas, { button: 1, clientX: 100, clientY: 100 });
-    fireEvent.mouseMove(document, { clientX: 150, clientY: 130 });
+    fireEvent.mouseDown(canvas, { button: 1, clientX: 300, clientY: 100 });
+    fireEvent.mouseMove(document, { clientX: 100, clientY: 100 });
     fireEvent.mouseUp(document, { button: 1 });
-    expect(parseFloat(viewport.getAttribute('x')!)).toBeCloseTo(expectedX(50, 1));
+    expect(parseFloat(viewport.getAttribute('x')!)).toBeCloseTo(expectedX(-200, 1));
 
     // Zoom out to 0.8 (pan untouched): the origin math must divide the
-    // pan by the new zoom — the visible canvas left edge is −50/0.8.
+    // pan by the new zoom — the visible canvas left edge is −200/0.8.
     fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
-    expect(parseFloat(viewport.getAttribute('x')!)).toBeCloseTo(expectedX(50, 0.8));
+    expect(parseFloat(viewport.getAttribute('x')!)).toBeCloseTo(expectedX(-200, 0.8));
+
+    // Pan the view far left (pan +300, origin far left of the content):
+    // the intersection pins the chip at the content's left pad — the box
+    // never spills past the map edge however far the view outgrows it.
+    fireEvent.mouseDown(canvas, { button: 1, clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(document, { clientX: 400, clientY: 100 });
+    fireEvent.mouseUp(document, { button: 1 });
+    expect(parseFloat(viewport.getAttribute('x')!)).toBeCloseTo(expectedX(300, 0.8));
   });
 
   it('does not open the context menu after a right-button pan drag', () => {
@@ -8285,8 +8300,12 @@ describe('NodeTopologyEditor — minimap overview', () => {
     const before = mapRect.getAttribute('x');
 
     // Middle-button drag pans the main canvas (see the canvas-pan describe).
-    fireEvent.mouseDown(canvas, { button: 1, clientX: 100, clientY: 100 });
-    fireEvent.mouseMove(document, { clientX: 150, clientY: 130 });
+    // The drag goes LEFT by 200: pan becomes −200, so the view origin
+    // (−pan/zoom = 200) enters the content range and the intersection box
+    // moves with it — a rightward pan would pin the chip at the map edge
+    // (the view origin never reaches the content), so x would not move.
+    fireEvent.mouseDown(canvas, { button: 1, clientX: 300, clientY: 100 });
+    fireEvent.mouseMove(document, { clientX: 100, clientY: 100 });
     fireEvent.mouseUp(document, { button: 1 });
 
     expect(mapRect.getAttribute('x')).not.toBe(before);
