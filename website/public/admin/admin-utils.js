@@ -518,10 +518,14 @@
     if (!Array.isArray(buckets) || buckets.length < 2) {
       return '<div class="chart-empty">' + escapeHtml(t('health.trafficEmpty')) + '</div>';
     }
-    // opts.phone: ~340-unit canvas matches a phone card width, keeping
-    // the edge labels near their true size instead of ~0.55×.
-    var phone = !!(opts && opts.phone);
-    var w = phone ? 340 : 620, h = 150, baseline = 118, top = 18, pad = 10;
+    // Readability fix: the plot was a bare line — no gridlines, no y
+    // values. Gridlines every 25% of peak + a y-label column. Labels are
+    // HTML (not SVG <text>) because preserveAspectRatio="none" stretches
+    // SVG text horizontally when the card width ≠ viewBox width; HTML
+    // stays crisp at any card width. The opts arg is kept for signature
+    // compatibility (the old phone variant is obsolete — HTML labels made
+    // it unnecessary).
+    var w = 620, h = 150, baseline = 118, top = 18, pad = 10;
     var plotW = w - pad * 2, plotH = baseline - top;
     var maxR = Math.max.apply(null, buckets.map(function (b) { return Number(b && b.req) || 0; }));
     var maxE = Math.max.apply(null, buckets.map(function (b) { return Number(b && b.err) || 0; }));
@@ -530,6 +534,16 @@
     }
     var x = function (i) { return pad + (i * plotW) / (buckets.length - 1); };
     var yR = function (v) { return baseline - (v / maxR) * plotH; };
+    // Gridlines at 0/25/50/75/100% of peak. The svg is rendered at a CSS
+    // height of 150px with a 150-unit viewBox, so viewBox y maps 1:1 to
+    // pixels and the HTML label column can align with top:18/43/68/93/118.
+    var grid = '', yLabels = '';
+    var fmt = function (v) { v = Math.round(v); return v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(v); };
+    for (var gi = 0; gi <= 4; gi++) {
+      var gy = top + (plotH / 4) * gi;
+      grid += '<line x1="' + pad + '" y1="' + gy + '" x2="' + (w - pad) + '" y2="' + gy + '" stroke="var(--border)" stroke-width="1"' + (gi === 4 ? '' : ' stroke-dasharray="4 4"') + ' vector-effect="non-scaling-stroke"/>';
+      yLabels += '<span style="top:' + Math.round(gy) + 'px">' + fmt(maxR * (4 - gi) / 4) + '</span>';
+    }
     // B42 lesson: the area path must START with the M command.
     var pts = buckets.map(function (b, i) { return x(i) + ',' + yR(Number(b.req) || 0).toFixed(1); }).join(' L ');
     var area = 'M ' + x(0) + ',' + baseline + ' L ' + pts + ' L ' + x(buckets.length - 1) + ',' + baseline + ' Z';
@@ -540,15 +554,18 @@
       errs = '<polyline points="' + ePts + '" fill="none" stroke="var(--danger)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>';
     }
     var t0 = logTsWib(buckets[0].t), t1 = logTsWib(buckets[buckets.length - 1].t);
-    var lfs = phone ? 11 : 10;
-    return '<svg viewBox="0 0 ' + w + ' ' + h + '" class="chart-svg spark-svg" preserveAspectRatio="none">' +
-      '<path d="' + area + '" fill="var(--tint-primary-bg)" stroke="none"/>' +
-      '<polyline points="' + buckets.map(function (b, i) { return x(i) + ',' + yR(Number(b.req) || 0).toFixed(1); }).join(' ') + '" fill="none" stroke="var(--primary)" stroke-width="2" vector-effect="non-scaling-stroke"/>' +
-      errs +
-      '<line x1="' + pad + '" y1="' + baseline + '" x2="' + (w - pad) + '" y2="' + baseline + '" stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>' +
-      '<text x="' + pad + '" y="' + (baseline + 18) + '" fill="var(--muted)" font-size="' + lfs + '">' + escapeHtml(t0) + '</text>' +
-      '<text x="' + (w - pad) + '" y="' + (baseline + 18) + '" text-anchor="end" fill="var(--muted)" font-size="' + lfs + '">' + escapeHtml(t1) + '</text>' +
-      '</svg>';
+    return '<div class="spark-wrap">' +
+      '<div class="spark-y" aria-hidden="true">' + yLabels + '</div>' +
+      '<div class="spark-plot">' +
+        '<svg viewBox="0 0 ' + w + ' ' + h + '" class="chart-svg spark-svg" preserveAspectRatio="none">' +
+          grid +
+          '<path d="' + area + '" fill="var(--tint-primary-bg)" stroke="none"/>' +
+          '<polyline points="' + buckets.map(function (b, i) { return x(i) + ',' + yR(Number(b.req) || 0).toFixed(1); }).join(' ') + '" fill="none" stroke="var(--primary)" stroke-width="2" vector-effect="non-scaling-stroke"/>' +
+          errs +
+        '</svg>' +
+        '<div class="spark-x" aria-hidden="true"><span>' + escapeHtml(t0) + '</span><span>' + escapeHtml(t1) + '</span></div>' +
+      '</div>' +
+      '</div>';
   }
 
   // nfStatusCard renders the Northflank service status (deployment,

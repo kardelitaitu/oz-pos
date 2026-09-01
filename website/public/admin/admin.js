@@ -617,10 +617,11 @@
           const total = buckets.reduce((a, b) => a + (b.req || 0), 0);
           const errs = buckets.reduce((a, b) => a + (b.err || 0), 0);
           trMeta.textContent = total + ' requests · ' + errs + ' errors / 24h';
-          // sparkline() returns an SVG string with only generated labels —
-          // labels are escaped inside the helper before injection. The
-          // phone canvas keeps labels near true size on small screens.
-          trWrap.innerHTML = sparkline(buckets, window.matchMedia && window.matchMedia('(max-width: 640px)').matches ? { phone: true } : null);
+          // sparkline() returns HTML (label column + svg plot) with only
+          // generated labels — all labels are escaped inside the helper.
+          // The y-axis labels are HTML so they never stretch with the
+          // preserveAspectRatio="none" plot.
+          trWrap.innerHTML = sparkline(buckets);
         }
 
         // ── Loaders for the two cards created above the logs panel ──────

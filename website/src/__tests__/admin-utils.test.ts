@@ -946,13 +946,24 @@ describe('admin-utils phone chart variants (mobile 1:1 canvases)', () => {
     expect(svg).not.toContain('max-height');
   });
 
-  it('sparkline phone canvas is ~340 wide', () => {
+  it('sparkline renders gridlines + HTML y-labels (readable values)', () => {
     const svg = utils.sparkline([
       { t: '2026-09-01T13:00:00Z', req: 4, err: 0 },
-      { t: '2026-09-01T13:01:00Z', req: 9, err: 1 },
-    ], { phone: true });
-    expect(svg).toContain('viewBox="0 0 340 150"');
-    expect(svg).toContain('font-size="11"');
+      { t: '2026-09-01T13:01:00Z', req: 900, err: 1 },
+    ]);
+    // 5 gridlines: dashed above, solid baseline
+    expect(svg.match(/<line /g)!.length).toBe(5);
+    expect(svg.match(/stroke-dasharray="4 4"/g)!.length).toBe(4);
+    // y-label column is HTML (5 labels), values compact (900 stays, top = max)
+    expect(svg).toContain('class="spark-y"');
+    expect(svg.match(/<span style="top:/g)!.length).toBe(5);
+    expect(svg).toContain('>900</span>');
+    expect(svg).toContain('>0</span>');
+    // no SVG <text> — labels must not stretch with preserveAspectRatio=none
+    expect(svg).not.toContain('<text');
+    // time labels moved to the HTML bottom row (WIB)
+    expect(svg).toContain('class="spark-x"');
+    expect(svg).toContain('20:00');
   });
 });
 
