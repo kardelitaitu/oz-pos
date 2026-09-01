@@ -75,20 +75,20 @@ describe('StatusBar (activation screen unified status area)', () => {
     expect(screen.getByLabelText('Version')).toBeInTheDocument();
   });
 
-  it('shows native tooltip with latency for auth (green)', () => {
+  it('shows hover tooltip with latency for auth (green)', () => {
     renderBar();
-    expect(screen.getByLabelText('Auth')).toHaveAttribute('title', 'Auth · 42ms');
+    expect(screen.getByText('Auth · 42ms')).toBeInTheDocument();
   });
 
-  it('shows native tooltip with latency for sync (green)', () => {
+  it('shows hover tooltip with latency for sync (green)', () => {
     renderBar();
-    expect(screen.getByLabelText('Sync')).toHaveAttribute('title', 'Sync · 42ms');
+    expect(screen.getByText('Sync · 42ms')).toBeInTheDocument();
   });
 
   it('shows up-to-date tooltip for version (green)', async () => {
     renderBar();
     await waitFor(() => {
-      expect(screen.getByLabelText('Version')).toHaveAttribute('title', 'Version 0.0.34 · up to date');
+      expect(screen.getByText('Version 0.0.34 · up to date')).toBeInTheDocument();
     });
   });
 
@@ -97,10 +97,7 @@ describe('StatusBar (activation screen unified status area)', () => {
 
     renderBar();
     await waitFor(() => {
-      expect(screen.getByLabelText('Version')).toHaveAttribute(
-        'title',
-        'Version 0.0.34 → 0.0.35 available',
-      );
+      expect(screen.getByText('Version 0.0.34 → 0.0.35 available')).toBeInTheDocument();
     });
   });
 

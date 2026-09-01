@@ -1,6 +1,7 @@
 import { useLocalization } from '@fluent/react';
 import { requiredLocalized } from '@/frontend/shared';
 import { useToast } from '@/frontend/shared/Toast';
+import Tooltip from '@/frontend/shell/Tooltip';
 import { AUTH_SERVICE_URL } from '@/utils/service-url';
 import { useHealthLatency } from '@/hooks/useHealthLatency';
 import { useSyncConnection } from '@/hooks/useSyncConnection';
@@ -68,19 +69,21 @@ interface StatusItemProps {
   onClick?: () => void;
 }
 
-/** One colored icon button with a native tooltip. */
+/** One colored icon button with a hover tooltip + click toast. */
 function StatusItem({ kind, tone, label, tooltip, onClick }: StatusItemProps) {
   const Icon = ICONS[kind];
   return (
-    <button
-      type="button"
-      className={`statusbar-item statusbar-tone--${tone}`}
-      title={tooltip}
-      aria-label={label}
-      onClick={onClick}
-    >
-      <Icon />
-    </button>
+    <Tooltip content={tooltip} position="top" showDelay={300} portal>
+      <button
+        type="button"
+        className={`statusbar-item statusbar-tone--${tone}`}
+        aria-label={label}
+        aria-describedby={undefined}
+        onClick={onClick}
+      >
+        <Icon />
+      </button>
+    </Tooltip>
   );
 }
 
