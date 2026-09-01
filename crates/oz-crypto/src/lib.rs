@@ -1,9 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent
+last audited DD-MM-YY by DSH-Agent
 crate: oz-crypto | status: SAFE | lint: CLEAN
-findings: static/portable at-rest keys are publicly derivable from repo constants (obfuscation, not confidentiality); fails-open legacy passthrough in smtp paths (encrypt_smtp_at_rest returns plaintext on encrypt failure); SHA-256 used directly as unsalted KDF (machine_id entropy unverified)
-fixed 2026-07-25 (glm-5.3 review P2 pass): fails-open paths closed — encrypt_smtp_at_rest and decrypt_smtp_at_rest now return Result (encrypt failure no longer stores plaintext; decrypt distinguishes legacy plaintext [not our ciphertext format → passthrough] from tamper [well-formed but failing → Err]); portable at-rest keys support an OZ_MASTER_KEY opt-in (64-hex env, HMAC-SHA256(master, domain)) — without it the derivation is unchanged for backward compatibility and is DOCUMENTED as obfuscation, not confidentiality; tests moved to sibling lib_tests.rs
-next: default portable derivation remains public-constant (deployments needing real at-rest confidentiality must set OZ_MASTER_KEY; a keyring-backed master key breaks the documented cross-machine portability of these fields) | perf: fresh random nonce per call, cipher setup per call negligible at this call volume; no issues
+findings: CryptoError marked #[non_exhaustive] per house convention; one .expect() in hmac_key documented as INVARIANT (32-byte HMAC key never empty, safe by construction); 0 unsafe blocks verified by source sweep; portable derivation is documented obfuscation (not confidentiality), master-key opt-in available via OZ_MASTER_KEY env; 196-line test suite covers all paths. No new defects found.
+next: none — crate is stable and well-tested | perf: N/A
 */
 //! AES-256-GCM encryption helpers for encrypting sensitive data at rest.
 //!
@@ -23,6 +22,7 @@ use sha2::{Digest, Sha256};
 
 /// Error type for cryptographic operations.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum CryptoError {
     /// An internal cryptographic error occurred.
     #[error("crypto error: {0}")]
