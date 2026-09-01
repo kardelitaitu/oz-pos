@@ -132,6 +132,7 @@ fn process_image_rejects_empty_body() {
         iat: 1000000000,
         tenant_id: Some("tenant-a".into()),
         terminal_id: None,
+        permissions: None,
     };
     let rt = tokio::runtime::Runtime::new().unwrap();
     let outcome = rt.block_on(process_image(&state, &claims, b""));

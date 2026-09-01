@@ -27,6 +27,7 @@ fn claims(tenant_id: Option<&str>) -> ApiTokenClaims {
         iat: 1000000000,
         tenant_id: tenant_id.map(|s| s.to_owned()),
         terminal_id: None,
+        permissions: None,
     }
 }
 

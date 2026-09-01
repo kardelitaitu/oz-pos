@@ -501,6 +501,12 @@ pub const REGISTRY: &[PermissionEntry] = &[
         sensitive: false,
         description: "Legacy seed key — category create/update/delete. Kept byte-identical.",
     },
+    PermissionEntry {
+        key: "categories:read",
+        family: "categories",
+        sensitive: false,
+        description: "Read product categories (spec 0047 read-tier map).",
+    },
     // ── plugins ──────────────────────────────────────────────────
     PermissionEntry {
         key: "plugins:manage",

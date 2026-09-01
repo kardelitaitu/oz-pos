@@ -39,6 +39,8 @@ next: none | perf: N/A
 pub mod auth;
 /// Postgres data layer for the REST handlers (Phase 1.2).
 pub mod pg;
+/// Read-tier presets, READ_KEY_MAP, and read-gate middleware (0047 F2–F3).
+pub mod read_tiers;
 /// Axum route handlers (health, tokens, products, categories, sales).
 pub mod routes;
 
@@ -311,6 +313,9 @@ pub fn router(state: AppState) -> Router {
             get(routes::images::get_image_missing),
         )
         .route("/api/v1/images/{hash16}", get(routes::images::get_image))
+        // Read-tier gate runs INSIDE auth (auth inserts claims first, then
+        // this gates GETs against them) — spec 0047 F3.
+        .layer(middleware::from_fn(read_tiers::read_gate_middleware))
         .layer(middleware::from_fn(auth::auth_middleware));
 
     Router::new()

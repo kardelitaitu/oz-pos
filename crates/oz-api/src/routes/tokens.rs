@@ -23,7 +23,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
-use crate::auth::{TokenResponse, create_token};
+use crate::auth::TokenResponse;
 
 /// Request body for creating a new API token.
 #[derive(Deserialize)]
@@ -43,6 +43,16 @@ pub struct CreateTokenRequest {
     /// Device secret paired with `client_id` (ADR sync-auth-hardening P3).
     #[serde(default)]
     pub client_secret: Option<String>,
+    /// Read-tier preset name (terminal/dashboard/audit) — admin-key path
+    /// only. Terminal client-credentials always bind the `terminal` preset
+    /// server-side and cannot self-elevate via this field.
+    #[serde(default)]
+    pub read_preset: Option<String>,
+    /// Custom read permission list — admin-key path only. Overrides
+    /// `read_preset` when both are present (fine-grained control).
+    /// Terminal client-credentials cannot set this field.
+    #[serde(default)]
+    pub read_permissions: Option<Vec<String>>,
 }
 
 /// Response body containing the newly created token.
@@ -133,11 +143,27 @@ pub async fn create_token_handler(
         };
         return match verified {
             Ok(Some(terminal)) => {
-                match crate::auth::create_token_scoped(
+                // Terminal client-credentials bind the `terminal` preset
+                // unconditionally (spec 0047 F2).  The escape hatch
+                // OZ_TERMINAL_READ_TIER=full preserves legacy full-read.
+                let permissions: Option<Vec<String>> =
+                    if std::env::var("OZ_TERMINAL_READ_TIER").as_deref() == Ok("full") {
+                        warn_terminal_read_tier_escape_once();
+                        None
+                    } else {
+                        Some(
+                            crate::read_tiers::TERMINAL_PRESET
+                                .iter()
+                                .map(|k| k.to_string())
+                                .collect(),
+                        )
+                    };
+                match crate::auth::create_token_full(
                     &body.label,
                     body.expiry_hours,
                     terminal.tenant_id.as_deref(),
                     Some(&terminal.terminal_id),
+                    permissions.as_deref(),
                     Some(&state.api_secret),
                 ) {
                     Ok(resp) => Json(CreateTokenResponse { token: resp }).into_response(),
@@ -175,10 +201,21 @@ pub async fn create_token_handler(
         )
             .into_response();
     }
-    match create_token(
+
+    // Resolve read-tier permissions (spec 0047 F2).
+    let permissions = match resolve_read_permissions(&body) {
+        Ok(perms) => perms,
+        Err((code, error)) => {
+            return (code, Json(serde_json::json!({"error": error}))).into_response();
+        }
+    };
+
+    match crate::auth::create_token_full(
         &body.label,
         body.expiry_hours,
         body.tenant_id.as_deref(),
+        None,
+        permissions.as_deref(),
         Some(&state.api_secret),
     ) {
         Ok(resp) => Json(CreateTokenResponse { token: resp }).into_response(),
@@ -191,6 +228,55 @@ pub async fn create_token_handler(
                 .into_response()
         }
     }
+}
+
+/// Resolve the read-tier permissions for an admin-key mint (spec 0047 F2).
+///
+/// Rules:
+/// - Neither field → `None` (legacy full-read).
+/// - `read_permissions` set → validates each key against the registry;
+///   unknown keys → 422 `unknown_permission`.
+/// - Only `read_preset` set → resolves the preset; unknown preset → 422
+///   `unknown_preset`.
+/// - Both set → `read_permissions` wins (fine-grained overrides the named
+///   preset), after validating the list.
+///
+/// Returns `Ok(None)` when the caller should mint a full-read token, or
+/// `Err((StatusCode, error_code))` to short-circuit the response.
+fn resolve_read_permissions(
+    body: &CreateTokenRequest,
+) -> Result<Option<Vec<String>>, (StatusCode, &'static str)> {
+    match (&body.read_permissions, &body.read_preset) {
+        (Some(keys), _) => {
+            let owned: Vec<String> = keys.clone();
+            if let Err(unknown) = crate::read_tiers::validate_keys(&owned) {
+                tracing::warn!(?unknown, "token mint rejected unknown read permission(s)");
+                return Err((StatusCode::UNPROCESSABLE_ENTITY, "unknown_permission"));
+            }
+            Ok(Some(owned))
+        }
+        (None, Some(preset)) => match crate::read_tiers::resolve_preset(preset) {
+            Some(keys) => Ok(Some(keys.iter().map(|k| k.to_string()).collect())),
+            None => {
+                tracing::warn!(preset, "token mint rejected unknown read preset");
+                Err((StatusCode::UNPROCESSABLE_ENTITY, "unknown_preset"))
+            }
+        },
+        (None, None) => Ok(None),
+    }
+}
+
+/// Warn once if the `OZ_TERMINAL_READ_TIER=full` escape hatch is set
+/// (spec 0047 decision 1: window + flag, slated for removal).
+fn warn_terminal_read_tier_escape_once() {
+    static WARNED: std::sync::Once = std::sync::Once::new();
+    WARNED.call_once(|| {
+        eprintln!(
+            "[oz-api] WARNING: OZ_TERMINAL_READ_TIER=full — terminal tokens keep \
+             legacy full read access. This escape hatch is slated for removal after \
+             one release cycle; see spec 0047 decision 1."
+        );
+    });
 }
 
 #[cfg(test)]

@@ -26,6 +26,8 @@ fn request_body() -> CreateTokenRequest {
         tenant_id: None,
         client_id: None,
         client_secret: None,
+        read_preset: None,
+        read_permissions: None,
     }
 }
 
@@ -46,6 +48,8 @@ fn body_with_credentials(label: &str, client_id: &str, client_secret: &str) -> C
         tenant_id: None,
         client_id: Some(client_id.into()),
         client_secret: Some(client_secret.into()),
+        read_preset: None,
+        read_permissions: None,
     }
 }
 
@@ -200,6 +204,8 @@ async fn create_token_defaults_expiry() {
         tenant_id: None,
         client_id: None,
         client_secret: None,
+        read_preset: None,
+        read_permissions: None,
     };
     let response = create_token_handler(
         State(state_with_admin_key(None)),
@@ -272,4 +278,112 @@ fn admin_key_compare_dev_mode_still_open_without_configured_key() {
 fn admin_key_compare_rejects_missing_header_when_configured() {
     let headers = request_with_header(None);
     assert!(!admin_key_authorised(&headers, Some("sekret")));
+}
+
+// ── Read-tier mint authz (spec 0047 F2) ─────────────────────────────
+
+#[tokio::test]
+async fn admin_mint_with_read_preset_carries_permissions() {
+    let state = state_with_admin_key(None);
+    let body = CreateTokenRequest {
+        label: "dashboard-client".into(),
+        expiry_hours: Some(1),
+        tenant_id: Some("tenant-a".into()),
+        client_id: None,
+        client_secret: None,
+        read_preset: Some("dashboard".into()),
+        read_permissions: None,
+    };
+    let response = create_token_handler(State(state), HeaderMap::new(), Json(body))
+        .await
+        .into_response();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let token_str = json["token"]["token"].as_str().unwrap();
+    let claims = crate::auth::validate_token(token_str).await.unwrap();
+    let perms = claims.permissions.unwrap();
+    assert!(perms.contains(&"products:read".to_string()));
+    assert!(perms.contains(&"reports:view".to_string()));
+    assert!(perms.contains(&"analytics:view".to_string()));
+    assert!(!perms.contains(&"sales:view".to_string())); // PII-excluded
+}
+
+#[tokio::test]
+async fn admin_mint_with_unknown_preset_returns_422() {
+    let state = state_with_admin_key(None);
+    let body = CreateTokenRequest {
+        label: "bad-client".into(),
+        expiry_hours: Some(1),
+        tenant_id: None,
+        client_id: None,
+        client_secret: None,
+        read_preset: Some("superuser".into()),
+        read_permissions: None,
+    };
+    let response = create_token_handler(State(state), HeaderMap::new(), Json(body))
+        .await
+        .into_response();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["error"], "unknown_preset");
+}
+
+#[tokio::test]
+async fn admin_mint_with_unknown_permission_returns_422() {
+    let state = state_with_admin_key(None);
+    let body = CreateTokenRequest {
+        label: "bad-client".into(),
+        expiry_hours: Some(1),
+        tenant_id: None,
+        client_id: None,
+        client_secret: None,
+        read_preset: None,
+        read_permissions: Some(vec!["products:read".into(), "not:a_key".into()]),
+    };
+    let response = create_token_handler(State(state), HeaderMap::new(), Json(body))
+        .await
+        .into_response();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["error"], "unknown_permission");
+}
+
+#[tokio::test]
+async fn terminal_mint_binds_terminal_preset() {
+    let state = state_with_admin_key(Some("sekret"));
+    {
+        let conn = state.db.lock().await;
+        register_terminal(&conn, "term-1", "device-secret-abc");
+    }
+
+    let response = create_token_handler(
+        State(state),
+        HeaderMap::new(), // no admin key — terminal path
+        Json(body_with_credentials(
+            "pos-terminal",
+            "term-1",
+            "device-secret-abc",
+        )),
+    )
+    .await
+    .into_response();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let token_str = json["token"]["token"].as_str().unwrap();
+    let claims = crate::auth::validate_token(token_str).await.unwrap();
+    let perms = claims
+        .permissions
+        .expect("terminal token must carry permissions");
+    assert!(perms.contains(&"products:read".to_string()));
+    assert!(perms.contains(&"categories:read".to_string()));
+    assert!(perms.contains(&"reference:read".to_string()));
+    assert!(perms.contains(&"plan:read".to_string()));
+    // Terminal preset must never carry PII-scoped keys.
+    assert!(!perms.contains(&"sales:view".to_string()));
 }
