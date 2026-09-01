@@ -522,10 +522,11 @@ async fn snapshot_cache_evicts_expired_entries_on_insert() {
         for i in 0..5 {
             cache.insert(
                 format!("stale-tenant-{i}"),
-                (
-                    std::time::Instant::now() - std::time::Duration::from_secs(1800),
-                    b"{}".to_vec(),
-                ),
+                Arc::new(tokio::sync::RwLock::new(Some(super::SnapshotData {
+                    generated_at: std::time::Instant::now() - std::time::Duration::from_secs(1800),
+                    version: String::new(),
+                    bytes: b"{}".to_vec(),
+                }))),
             );
         }
         assert_eq!(cache.len(), 5, "precondition: 5 stale entries");
@@ -616,11 +617,14 @@ async fn snapshot_cache_refetches_after_expiry() {
         .unwrap();
     }
     {
-        let mut cache = state.snapshot_cache.lock().await;
+        let cache = state.snapshot_cache.lock().await;
         let entry = cache
-            .get_mut("tenant-a")
+            .get("tenant-a")
             .expect("cache must be warm after the first request");
-        entry.0 = std::time::Instant::now() - std::time::Duration::from_secs(1800);
+        let mut guard = entry.write().await;
+        if let Some(data) = guard.as_mut() {
+            data.generated_at = std::time::Instant::now() - std::time::Duration::from_secs(1800);
+        }
     }
 
     // The expired cache must be replaced by a fresh DB read.
@@ -638,6 +642,221 @@ async fn snapshot_cache_refetches_after_expiry() {
         1,
         "expired cache must re-query and see the fresh product"
     );
+}
+
+/// Version revalidation: a TTL-expired entry whose reference-data version
+/// stamp is unchanged must serve the cached bytes WITHOUT a full 3-table
+/// recompute.
+///
+/// Proof: warm the cache with a valid product, corrupt that product's
+/// `price_minor` to a non-integer (SQLite TEXT affinity — exactly the
+/// SYNC-10 class of row-decode failure), then backdate the entry past the
+/// TTL. A revalidation path calls only the cheap `snapshot_version`
+/// stamp (COUNT + MAX(updated_at) — both unaffected by the corruption),
+/// sees the stamp is unchanged, and serves the cached bytes → 200 with
+/// the product. A full recompute would instead hit `snapshot_all`, fail
+/// to decode the corrupt row, and return 500.
+#[tokio::test]
+async fn snapshot_cache_version_revalidation_skips_recompute_when_unchanged() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+    let app = test_router_with_state(state.clone());
+
+    // Seed one valid product so the warm snapshot has content.
+    {
+        let conn = state.db.lock().await;
+        conn.execute(
+            "INSERT INTO roles (id, name, permissions) VALUES ('r-reval', 'Owner', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+             VALUES ('prod-reval', 'SKU-REVAL', 'Revalidated', 100, 'USD', 'tenant-a')",
+            [],
+        )
+        .unwrap();
+    }
+
+    // Warm the cache (snapshot has 1 product).
+    let req1 = authed(
+        axum::http::Method::GET,
+        "/api/sync/snapshot",
+        Some("tenant-a"),
+    );
+    let resp1 = app.clone().oneshot(req1).await.unwrap();
+    assert_eq!(resp1.status(), StatusCode::OK);
+
+    // Corrupt the product row (price_minor → non-numeric TEXT) WITHOUT
+    // touching updated_at or the row count, so the version stamp is
+    // unchanged but a full snapshot_all would fail to decode.
+    {
+        let conn = state.db.lock().await;
+        conn.execute(
+            "UPDATE products SET price_minor = 'not-an-int' WHERE id = 'prod-reval'",
+            [],
+        )
+        .unwrap();
+    }
+
+    // Backdate the cached entry beyond the 900s TTL.
+    {
+        let cache = state.snapshot_cache.lock().await;
+        let entry = cache
+            .get("tenant-a")
+            .expect("cache must be warm after the first request");
+        let mut guard = entry.write().await;
+        if let Some(data) = guard.as_mut() {
+            data.generated_at = std::time::Instant::now() - std::time::Duration::from_secs(1800);
+        }
+    }
+
+    // The revalidation path must serve the cached bytes (200, product
+    // present) rather than recomputing and failing to decode (500).
+    let req2 = authed(
+        axum::http::Method::GET,
+        "/api/sync/snapshot",
+        Some("tenant-a"),
+    );
+    let resp2 = app.clone().oneshot(req2).await.unwrap();
+    assert_eq!(
+        resp2.status(),
+        StatusCode::OK,
+        "unchanged version must serve cached bytes, not fail on the corrupt row"
+    );
+    let body2 = resp2.into_body().collect().await.unwrap().to_bytes();
+    let json2: serde_json::Value = serde_json::from_slice(&body2).unwrap();
+    assert_eq!(
+        json2["products"].as_array().unwrap().len(),
+        1,
+        "cached bytes must still include the product"
+    );
+
+    // A version change (row count bump) MUST invalidate: add a second
+    // product, backdate again, and the next request must recompute and
+    // see BOTH products (the corruption is cleaned by a fresh decode of
+    // the whole snapshot — the new product is valid).
+    {
+        let conn = state.db.lock().await;
+        conn.execute(
+            "UPDATE products SET price_minor = 100, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+             WHERE id = 'prod-reval'",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+             VALUES ('prod-reval-2', 'SKU-REVAL2', 'Second', 200, 'USD', 'tenant-a')",
+            [],
+        )
+        .unwrap();
+    }
+    {
+        let cache = state.snapshot_cache.lock().await;
+        let entry = cache
+            .get("tenant-a")
+            .expect("cache must still have the entry");
+        let mut guard = entry.write().await;
+        if let Some(data) = guard.as_mut() {
+            data.generated_at = std::time::Instant::now() - std::time::Duration::from_secs(1800);
+        }
+    }
+    let req3 = authed(
+        axum::http::Method::GET,
+        "/api/sync/snapshot",
+        Some("tenant-a"),
+    );
+    let resp3 = app.clone().oneshot(req3).await.unwrap();
+    assert_eq!(resp3.status(), StatusCode::OK);
+    let body3 = resp3.into_body().collect().await.unwrap().to_bytes();
+    let json3: serde_json::Value = serde_json::from_slice(&body3).unwrap();
+    assert_eq!(
+        json3["products"].as_array().unwrap().len(),
+        2,
+        "a version change must force a full recompute that sees both products"
+    );
+}
+
+/// Single-flight: a burst of concurrent cold-miss requests for the same
+/// tenant must all succeed with identical bodies and converge on ONE
+/// cache entry (the write-lock serialisation collapses N stampeding
+/// recomputes into one). A regression guard for the per-tenant
+/// `Arc<RwLock<Option<SnapshotData>>>` design.
+///
+/// Fires 16 concurrent requests for the same tenant. All must return 200
+/// with identical bodies, and the cache must end up with exactly one
+/// entry for that tenant.
+#[tokio::test]
+async fn snapshot_cache_single_flight_under_concurrency() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+    let app = std::sync::Arc::new(test_router_with_state(state.clone()));
+
+    // Seed one product so the snapshot has deterministic content.
+    {
+        let conn = state.db.lock().await;
+        conn.execute(
+            "INSERT INTO roles (id, name, permissions) VALUES ('r-sf', 'Owner', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+             VALUES ('prod-sf', 'SKU-SF', 'SingleFlight', 100, 'USD', 'tenant-a')",
+            [],
+        )
+        .unwrap();
+    }
+
+    // Fire N concurrent cold-miss requests for the same tenant.
+    let mut handles = Vec::with_capacity(16);
+    for _ in 0..16 {
+        let app = app.clone();
+        handles.push(tokio::spawn(async move {
+            let req = authed(
+                axum::http::Method::GET,
+                "/api/sync/snapshot",
+                Some("tenant-a"),
+            );
+            let resp = app.as_ref().clone().oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            resp.into_body().collect().await.unwrap().to_bytes()
+        }));
+    }
+
+    let mut bodies: Vec<bytes::Bytes> = Vec::new();
+    for h in handles {
+        let b = h.await.unwrap();
+        bodies.push(b);
+    }
+
+    // All bodies identical, and exactly one cache entry for the tenant.
+    for b in &bodies[1..] {
+        assert_eq!(
+            bodies[0], *b,
+            "all single-flight responses must be identical"
+        );
+    }
+    let cache = state.snapshot_cache.lock().await;
+    assert_eq!(
+        cache.len(),
+        1,
+        "single-flight must converge on one cache entry, got {}",
+        cache.len()
+    );
+    assert!(cache.contains_key("tenant-a"));
 }
 
 /// Snapshot caching must be per-tenant: after tenant A warms its cache,

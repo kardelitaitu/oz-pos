@@ -489,6 +489,53 @@ impl SyncStore {
             }
         }
     }
+
+    /// Compute a cheap version stamp for a tenant's snapshot reference data.
+    ///
+    /// The stamp is the per-table (row count, MAX(updated_at)) triple joined
+    /// into one string. It changes when any product / tax rate / user is
+    /// inserted, updated, OR deleted, so the snapshot handler can revalidate
+    /// "nothing changed" without serialising the full 3-table snapshot.
+    pub async fn snapshot_version(&self, tenant_id: &str) -> Result<String, String> {
+        match self {
+            Self::Sqlite(conn) => {
+                let conn = conn.lock().await;
+                conn.query_row(
+                    "SELECT \
+                     (SELECT COUNT(*) FROM products WHERE tenant_id = ?1) || ':' || \
+                     COALESCE((SELECT MAX(updated_at) FROM products WHERE tenant_id = ?1), '') || '|' || \
+                     (SELECT COUNT(*) FROM tax_rates WHERE tenant_id = ?1) || ':' || \
+                     COALESCE((SELECT MAX(updated_at) FROM tax_rates WHERE tenant_id = ?1), '') || '|' || \
+                     (SELECT COUNT(*) FROM users WHERE tenant_id = ?1) || ':' || \
+                     COALESCE((SELECT MAX(updated_at) FROM users WHERE tenant_id = ?1), '')",
+                    rusqlite::params![tenant_id],
+                    |row| row.get::<_, String>(0),
+                )
+                .map_err(|e| e.to_string())
+            }
+            Self::Postgres(pool) => {
+                let mut client = pool.get().await.map_err(|e| e.to_string())?;
+                let tx = client.transaction().await.map_err(|e| e.to_string())?;
+                tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
+                    .await
+                    .map_err(|e| e.to_string())?;
+                tx.query_opt(
+                    "SELECT \
+                     (SELECT COUNT(*)::text || ':' || COALESCE(MAX(updated_at)::text, '') \
+                      FROM products WHERE tenant_id = $1) || '|' || \
+                     (SELECT COUNT(*)::text || ':' || COALESCE(MAX(updated_at)::text, '') \
+                      FROM tax_rates WHERE tenant_id = $1) || '|' || \
+                     (SELECT COUNT(*)::text || ':' || COALESCE(MAX(updated_at)::text, '') \
+                      FROM users WHERE tenant_id = $1)",
+                    &[&tenant_id],
+                )
+                .await
+                .map_err(|e| e.to_string())?
+                .map(|r| r.try_get::<_, String>(0).map_err(|e| e.to_string()))
+                .unwrap_or_else(|| Ok(String::new()))
+            }
+        }
+    }
 }
 
 // ── Multi-row push fast path ────────────────────────────────────────────
@@ -511,7 +558,7 @@ fn sqlite_push_batch_multirow(
     status: &str,
     tenant_id: &str,
 ) -> Result<Vec<PushOutcome>, String> {
-    let mut tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
     let mut results = Vec::with_capacity(items.len());
 
     for chunk in items.chunks(MULTIROW_CHUNK) {

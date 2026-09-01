@@ -31,10 +31,33 @@ use platform_sync::transport::{PullRequest, PullResponse, PushOutcome, PushRespo
 use crate::metrics;
 use crate::rate_limit::{RateLimiterState, rate_limit_middleware};
 
-/// Snapshot cache entry: (generation timestamp, serialised JSON bytes).
-type CacheEntry = (std::time::Instant, Vec<u8>);
+/// Snapshot cache entry: generation timestamp, reference-data version
+/// stamp, and the serialised JSON bytes.
+///
+/// `version` lets the handler revalidate a TTL-expired entry cheaply:
+/// when `SyncStore::snapshot_version` still matches, the cached bytes are
+/// served and the timestamp refreshed instead of re-serialising the full
+/// 3-table snapshot (products + tax_rates + users) on every cache miss.
+#[derive(Clone)]
+pub struct SnapshotData {
+    /// When the entry was generated (or last version-revalidated).
+    pub generated_at: std::time::Instant,
+    /// Reference-data version stamp (counts + MAX(updated_at) per table).
+    pub version: String,
+    /// Serialised JSON snapshot bytes, served verbatim.
+    pub bytes: Vec<u8>,
+}
+
 /// Per-tenant snapshot cache map.
-type SnapshotCache = Arc<Mutex<std::collections::HashMap<String, CacheEntry>>>;
+///
+/// Each tenant's entry is an `Arc<RwLock<Option<SnapshotData>>>` so a cold
+/// cache miss is **single-flight**: the first request to miss acquires the
+/// write lock and recomputes; every concurrent request for the same tenant
+/// blocks on that lock, re-checks, and serves the freshly-written bytes
+/// instead of stampeding the database (one 3-table snapshot per burst,
+/// not N).
+type SnapshotCache =
+    Arc<Mutex<std::collections::HashMap<String, Arc<tokio::sync::RwLock<Option<SnapshotData>>>>>>;
 
 /// Cached global tenant count (status endpoint).
 ///
@@ -464,28 +487,74 @@ async fn snapshot_handler(
         )
     };
 
-    // P-3 Step 4: check in-memory cache (15-min TTL).
+    // P-3 Step 4: in-memory per-tenant cache (15-min TTL) with
+    // single-flight dedup and version revalidation.
+    //
     // Reference data (products, tax rates, users) changes infrequently
-    // during a shift. 15 min reduces cache misses by 3× vs 5 min.
+    // during a shift, so a long TTL keeps cache hits high. Two SOTA
+    // refinements keep that cache cheap without staleness or stampedes:
+    //
+    // 1. SINGLE-FLIGHT: each tenant's entry is an `Arc<RwLock<Option<…>>>`.
+    //    A cold miss acquires the WRITE lock, so concurrent requests for
+    //    the same tenant block on that lock and then serve the
+    //    freshly-written bytes — one 3-table snapshot per burst, not N.
+    // 2. VERSION REVALIDATION: on a TTL-expired entry, instead of blindly
+    //    re-serialising the whole snapshot, we run a cheap version stamp
+    //    query (COUNT + MAX(updated_at) per table). If nothing changed,
+    //    the cached bytes are served and the timestamp refreshed; the
+    //    expensive full snapshot runs only when reference data actually
+    //    changed.
     const SNAPSHOT_CACHE_TTL_SECS: u64 = 900;
+
+    // Fast path: fresh cache hit under the READ lock — zero DB access
+    // (SOTA finding C: serve the stored bytes, no re-serialise).
+    let entry = {
+        let mut cache = state.snapshot_cache.lock().await;
+        cache
+            .entry(tenant_id.to_owned())
+            .or_insert_with(|| Arc::new(tokio::sync::RwLock::new(None)))
+            .clone()
+    };
+
     {
-        let cache = state.snapshot_cache.lock().await;
-        if let Some((cached_at, cached_bytes)) = cache.get(tenant_id)
-            && cached_at.elapsed().as_secs() < SNAPSHOT_CACHE_TTL_SECS
+        let guard = entry.read().await;
+        if let Some(data) = guard.as_ref()
+            && data.generated_at.elapsed().as_secs() < SNAPSHOT_CACHE_TTL_SECS
         {
-            // Cache hit: serve the stored bytes directly. No JSON
-            // deserialize → re-serialize (SOTA finding C).
-            return Ok(json_snapshot_response(cached_bytes.clone(), if_none_match));
+            return Ok(json_snapshot_response(data.bytes.clone(), if_none_match));
         }
     }
 
-    // Phase 1.2: reference-data queries go through the sync store.
-    // snapshot_all fetches products + tax_rates + users in a single
-    // transaction (saves 3 round-trips vs separate calls).
-    let store = state.store();
-    let db_start = std::time::Instant::now();
+    // Slow path: acquire the WRITE lock — this serialises recomputation
+    // per tenant (single-flight). Re-check freshness because another
+    // request may have just refreshed the entry while we waited.
+    let mut guard = entry.write().await;
+    if let Some(data) = guard.as_ref()
+        && data.generated_at.elapsed().as_secs() < SNAPSHOT_CACHE_TTL_SECS
+    {
+        return Ok(json_snapshot_response(data.bytes.clone(), if_none_match));
+    }
 
-    // SYNC-10: row decode failures fail the whole snapshot (5xx).
+    let store = state.store();
+
+    // Version revalidation: cheap stamp first. If reference data is
+    // unchanged since the cached entry, serve the cached bytes and
+    // refresh the timestamp — no full 3-table re-serialise.
+    let version = match store.snapshot_version(tenant_id).await {
+        Ok(v) => v,
+        Err(e) => return Err(error_json(&e)),
+    };
+    if let Some(data) = guard.as_mut()
+        && data.version == version
+    {
+        let bytes = data.bytes.clone();
+        data.generated_at = std::time::Instant::now();
+        drop(guard);
+        return Ok(json_snapshot_response(bytes, if_none_match));
+    }
+
+    // Full recompute: query + serialise once, cache + serve the bytes.
+    let db_start = std::time::Instant::now();
     let (products, tax_rates, users) = match store.snapshot_all(tenant_id).await {
         Ok(v) => v,
         Err(e) => return Err(error_json(&e)),
@@ -508,16 +577,29 @@ async fn snapshot_handler(
         Err(e) => return Err(error_json(&e.to_string())),
     };
 
-    // Cache the result, opportunistically pruning expired entries so a
-    // tenant that stops polling cannot leave its bytes in memory forever
-    // (unbounded growth under tenant churn). The TTL read-check above
-    // only skips STALE reads; this eviction is what bounds the map size.
+    *guard = Some(SnapshotData {
+        generated_at: std::time::Instant::now(),
+        version,
+        bytes: bytes.clone(),
+    });
+    drop(guard);
+
+    // Opportunistically prune expired entries so a tenant that stops
+    // polling cannot leave its entry in memory forever (unbounded growth
+    // under tenant churn). The TTL read-check above only skips STALE
+    // reads; this eviction is what bounds the map size.
     let mut cache = state.snapshot_cache.lock().await;
-    cache.retain(|_, (cached_at, _)| cached_at.elapsed().as_secs() < SNAPSHOT_CACHE_TTL_SECS);
-    cache.insert(
-        tenant_id.to_owned(),
-        (std::time::Instant::now(), bytes.clone()),
-    );
+    cache.retain(|_, entry| {
+        let stale = entry
+            .try_read()
+            .map(|g| {
+                g.as_ref()
+                    .map(|d| d.generated_at.elapsed().as_secs() >= SNAPSHOT_CACHE_TTL_SECS)
+                    .unwrap_or(true)
+            })
+            .unwrap_or(false);
+        !stale
+    });
 
     metrics::SYNC_PULL_DURATION_MS.observe(start.elapsed().as_secs_f64() * 1000.0);
     Ok(json_snapshot_response(bytes, if_none_match))
