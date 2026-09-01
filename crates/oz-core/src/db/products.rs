@@ -63,6 +63,10 @@ pub struct ProductWithDetails {
     /// Materialized popularity score (ADR #37) — sort key for the retail grid.
     #[serde(default)]
     pub popularity_score: f64,
+    /// Content-addressed image assignments (slots 1..5) from
+    /// `product_images` (spec 0046b §3.4 — rides the catalog snapshot).
+    #[serde(default)]
+    pub images: Vec<ProductImage>,
 }
 
 fn row_to_product_with_details(row: &rusqlite::Row) -> rusqlite::Result<ProductWithDetails> {
@@ -72,6 +76,7 @@ fn row_to_product_with_details(row: &rusqlite::Row) -> rusqlite::Result<ProductW
         category_name: row.get("category_name")?,
         stock_qty: row.get("stock_qty")?,
         popularity_score: row.get("popularity_score").unwrap_or(0.0),
+        images: Vec::new(), // populated by the list/get loaders
     })
 }
 

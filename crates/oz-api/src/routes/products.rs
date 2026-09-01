@@ -211,6 +211,7 @@ pub async fn create_product(
                     None
                 },
                 popularity_score: 0.0,
+                images: Vec::new(),
             };
             (StatusCode::CREATED, Json(detail)).into_response()
         }

@@ -41,6 +41,8 @@ export interface ProductDto {
   popularity_score?: number;
   /** Slot-1 primary image content hash (spec 0046b); absent = no image. */
   image_hash?: string;
+  /** Content-addressed image assignments (slots 1..5) from the snapshot. */
+  images?: ProductImageDto[];
 }
 
 /** Arguments for creating a new product. */

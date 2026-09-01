@@ -31,7 +31,9 @@ impl Store<'_> {
              ORDER BY p.name",
         )?;
         let rows = stmt.query_map([], row_to_product_with_details)?;
-        rows.map(|r| Ok(r?)).collect()
+        let mut products: Vec<ProductWithDetails> = rows.collect::<Result<Vec<_>, _>>()?;
+        self.attach_images(&mut products)?;
+        Ok(products)
     }
 
     /// List products visible to one store (soft-scoping layer, migration
@@ -64,7 +66,9 @@ impl Store<'_> {
              ORDER BY p.name",
         )?;
         let rows = stmt.query_map(params![store_id], row_to_product_with_details)?;
-        rows.map(|r| Ok(r?)).collect()
+        let mut products: Vec<ProductWithDetails> = rows.collect::<Result<Vec<_>, _>>()?;
+        self.attach_images(&mut products)?;
+        Ok(products)
     }
 
     /// List inventory-tracked products only, ordered by name, with category
@@ -87,7 +91,9 @@ impl Store<'_> {
              ORDER BY p.name",
         )?;
         let rows = stmt.query_map([], row_to_product_with_details)?;
-        rows.map(|r| Ok(r?)).collect()
+        let mut products: Vec<ProductWithDetails> = rows.collect::<Result<Vec<_>, _>>()?;
+        self.attach_images(&mut products)?;
+        Ok(products)
     }
 
     /// List inventory-tracked products with stock at a specific location.
@@ -143,11 +149,16 @@ impl Store<'_> {
              WHERE p.sku = ?1",
         )?;
         let result = stmt.query_row(params![sku], row_to_product_with_details);
-        let product = match result {
+        let mut product = match result {
             Ok(p) => Some(p),
             Err(rusqlite::Error::QueryReturnedNoRows) => None,
             Err(e) => return Err(e.into()),
         };
+
+        // Attach the product's image assignments (spec 0046b §3.4).
+        if let Some(p) = &mut product {
+            self.attach_images(std::slice::from_mut(p))?;
+        }
 
         if let (Some(cache), Some(p)) = (&self.cache, &product) {
             cache.set_product(sku, p);
@@ -613,6 +624,59 @@ impl Store<'_> {
             cache.invalidate_product(sku);
         }
 
+        Ok(())
+    }
+
+    /// Load all product images for the given product IDs and attach them
+    /// to the respective `ProductWithDetails` (in place).
+    pub(crate) fn attach_images(
+        &self,
+        products: &mut [ProductWithDetails],
+    ) -> Result<(), CoreError> {
+        let ids: Vec<&str> = products.iter().map(|p| p.product.id.as_str()).collect();
+        if ids.is_empty() {
+            return Ok(());
+        }
+        // Build a parameterised query with placeholders
+        let placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("?{i}")).collect();
+        let sql = format!(
+            "SELECT product_id, slot, hash, position FROM product_images \
+             WHERE product_id IN ({}) ORDER BY slot ASC",
+            placeholders.join(", ")
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut param_refs: Vec<&dyn rusqlite::types::ToSql> = Vec::new();
+        for id in &ids {
+            param_refs.push(id);
+        }
+        let rows = stmt.query_map(param_refs.as_slice(), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i32>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i32>(3)?,
+            ))
+        })?;
+        let mut by_product: std::collections::HashMap<
+            String,
+            Vec<crate::db::products::ProductImage>,
+        > = std::collections::HashMap::new();
+        for row in rows {
+            let (product_id, slot, hash, position) = row?;
+            by_product
+                .entry(product_id)
+                .or_default()
+                .push(crate::db::products::ProductImage {
+                    slot,
+                    hash,
+                    position,
+                });
+        }
+        for p in products.iter_mut() {
+            if let Some(imgs) = by_product.remove(&p.product.id) {
+                p.images = imgs;
+            }
+        }
         Ok(())
     }
 }

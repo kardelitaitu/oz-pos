@@ -650,7 +650,73 @@ fn pg_row_to_product_with_details(
         popularity_score: row
             .try_get("popularity_score")
             .map_err(|e| PgError::Db(e.to_string()))?,
+        images: Vec::new(), // populated by the list/get loaders
     })
+}
+
+/// Load product image assignments for the given product IDs and attach
+/// them to the respective `ProductWithDetails` (spec 0046b §3.4).
+async fn attach_product_images(
+    tx: &tokio_postgres::Transaction<'_>,
+    tenant_id: &str,
+    products: &mut [ProductWithDetails],
+) -> Result<(), PgError> {
+    if products.is_empty() {
+        return Ok(());
+    }
+    let ids: Vec<&str> = products.iter().map(|p| p.product.id.as_str()).collect();
+    // Build a parameterised query with placeholders
+    let placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("${i}")).collect();
+    let sql = format!(
+        "SELECT product_id, slot, hash, position FROM product_images \
+         WHERE product_id IN ({}) ORDER BY slot ASC",
+        placeholders.join(", ")
+    );
+    let stmt = tx
+        .prepare(&sql)
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = ids
+        .iter()
+        .map(|s| s as &(dyn tokio_postgres::types::ToSql + Sync))
+        .collect();
+    let rows = tx
+        .query(&stmt, &params)
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    let mut by_product: std::collections::HashMap<
+        String,
+        Vec<oz_core::db::products::ProductImage>,
+    > = std::collections::HashMap::new();
+    for row in rows {
+        let product_id: String = row
+            .try_get("product_id")
+            .map_err(|e| PgError::Db(e.to_string()))?;
+        let slot: i32 = row
+            .try_get("slot")
+            .map_err(|e| PgError::Db(e.to_string()))?;
+        let hash: String = row
+            .try_get("hash")
+            .map_err(|e| PgError::Db(e.to_string()))?;
+        let position: i32 = row
+            .try_get("position")
+            .map_err(|e| PgError::Db(e.to_string()))?;
+        by_product
+            .entry(product_id)
+            .or_default()
+            .push(oz_core::db::products::ProductImage {
+                slot,
+                hash,
+                position,
+            });
+    }
+    for p in products.iter_mut() {
+        if let Some(imgs) = by_product.remove(&p.product.id) {
+            p.images = imgs;
+        }
+    }
+    let _ = tenant_id; // RLS scoping already applied on the transaction
+    Ok(())
 }
 
 /// List a tenant's products, ordered by name, with category name and stock.
@@ -674,9 +740,13 @@ pub async fn list_products(
         )
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
-    let result = rows.iter().map(pg_row_to_product_with_details).collect();
+    let mut result: Vec<ProductWithDetails> = rows
+        .iter()
+        .map(pg_row_to_product_with_details)
+        .collect::<Result<_, _>>()?;
+    attach_product_images(&tx, tenant_id, &mut result).await?;
     tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
-    result
+    Ok(result)
 }
 
 /// Get a single product by SKU (tenant-scoped), including category name and
@@ -702,7 +772,12 @@ pub async fn get_product(
         )
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
-    let result = row.map(|r| pg_row_to_product_with_details(&r)).transpose();
+    let mut result = row.map(|r| pg_row_to_product_with_details(&r)).transpose();
+    // Attach images for the single product.
+    if let Ok(Some(ref mut p)) = result {
+        let mut slice = std::slice::from_mut(p);
+        attach_product_images(&tx, tenant_id, &mut slice).await?;
+    }
     tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
     result
 }
@@ -836,6 +911,7 @@ pub async fn create_product(
             None
         },
         popularity_score: 0.0,
+        images: Vec::new(),
     })
 }
 

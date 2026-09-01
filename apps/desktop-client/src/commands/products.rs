@@ -18,6 +18,7 @@ use foundation::validate_not_empty;
 use oz_core::permissions;
 
 use crate::commands::authz::require_permission_for_session;
+use crate::commands::products_images::ProductImageDto;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -153,6 +154,9 @@ pub struct ProductDto {
     pub popularity_score: f64,
     /// Slot-1 primary image content hash (spec 0046b); `None` = no image.
     pub image_hash: Option<String>,
+    /// Content-addressed image assignments (slots 1..5) from the snapshot.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub images: Option<Vec<ProductImageDto>>,
 }
 
 /// Money DTO matching the front-end `Money` type (snake_case keys).
@@ -264,6 +268,16 @@ fn map_products_to_dtos(
                 default_supplier_id: pwd.product.default_supplier_id.clone(),
                 popularity_score: pwd.popularity_score,
                 image_hash: pwd.product.image_hash.clone(),
+                images: Some(
+                    pwd.images
+                        .iter()
+                        .map(|img| ProductImageDto {
+                            slot: img.slot,
+                            hash: img.hash.clone(),
+                            position: img.position,
+                        })
+                        .collect(),
+                ),
             }
         })
         .collect();
@@ -364,6 +378,16 @@ fn map_pwd_to_dto(
             default_supplier_id: pwd.product.default_supplier_id.clone(),
             popularity_score: pwd.popularity_score,
             image_hash: pwd.product.image_hash.clone(),
+            images: Some(
+                pwd.images
+                    .iter()
+                    .map(|img| ProductImageDto {
+                        slot: img.slot,
+                        hash: img.hash.clone(),
+                        position: img.position,
+                    })
+                    .collect(),
+            ),
         }
     }))
 }
