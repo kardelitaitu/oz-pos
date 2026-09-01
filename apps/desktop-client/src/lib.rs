@@ -726,6 +726,8 @@ pub fn run() {
             commands::tables::assign_table_order_scoped,
             commands::tables::release_table_scoped,
             commands::tables::list_sections_scoped,
+            commands::workspaces::list_workspaces,
+            commands::workspaces::list_workspace_screens,
             commands::workspaces::list_workspaces_scoped,
             commands::workspaces::list_workspaces_for_store_scoped,
             commands::workspaces::get_workspace_instance_scoped,
