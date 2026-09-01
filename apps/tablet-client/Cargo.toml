@@ -28,6 +28,8 @@ tempfile = "3"
 [dependencies]
 foundation = { workspace = true }
 oz-core = { workspace = true }
+reqwest = { workspace = true }
+rand = { workspace = true }
 oz-hal = { workspace = true }
 oz-logging = { workspace = true }
 oz-media = { workspace = true }

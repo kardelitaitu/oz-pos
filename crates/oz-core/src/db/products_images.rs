@@ -237,6 +237,20 @@ impl Store<'_> {
         })?;
         rows.map(|r| r.map_err(CoreError::from)).collect()
     }
+
+    /// List every image assignment across all products, as `(hash, slot)`.
+    ///
+    /// Used by the tablet download manager (spec 0046b §3.7) to compute the
+    /// missing-hash set at each cycle: referenced hashes minus files present
+    /// on disk. Returns hashes in slot order so callers can download
+    /// primaries (slot 1) before alternatives.
+    pub fn list_all_product_images(&self) -> Result<Vec<(String, i32)>, CoreError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT hash, slot FROM product_images ORDER BY slot ASC, position ASC")?;
+        let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        rows.map(|r| r.map_err(CoreError::from)).collect()
+    }
 }
 
 /// A single product image assignment (spec 0046b §3.2).

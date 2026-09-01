@@ -18,6 +18,9 @@ next: none | perf: N/A
 pub mod commands;
 /// Single error type for every Tauri command.
 pub mod error;
+/// Tablet image download manager daemon (spec 0046b §3.7) — keeps the
+/// local image cache (`$APPCACHE/images/`) in sync with the catalog.
+mod image_download;
 /// Global application state (DB, kernel, sync daemon).
 pub mod state;
 
@@ -193,11 +196,12 @@ pub fn run() {
                 // Uses the same 3-phase split as the Tauri commands:
                 // read DB → async HTTP → write DB, so the DB lock is never
                 // held during the network round-trip.
+                let sync_app_handle = app_handle.clone();
                 platform_startup::spawn_daemon("tablet sync daemon", async move {
                     let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
                     loop {
                         interval.tick().await;
-                        match app_handle.try_state::<AppState>() {
+                        match sync_app_handle.try_state::<AppState>() {
                             Some(state) => {
                                 // Phase 1: Read config + pending items (brief lock).
                                 let (config_opt, pending_items) = {
@@ -285,6 +289,38 @@ pub fn run() {
                                 tracing::warn!(
                                     "tablet sync daemon: AppState not available — \
                                      skipping sync cycle (shutting down?)"
+                                );
+                            }
+                        }
+                    }
+                });
+
+                // ── Background image download daemon (spec 0046b §3.7) ──
+                // Computes the missing-hash set at each cycle (referenced
+                // minus present on disk) and downloads primaries first,
+                // up to 40 images per cycle with 2 GETs in flight; LRU
+                // eviction keeps the cache within the 256 MB budget.
+                platform_startup::spawn_daemon("tablet image download", async move {
+                    let mut manager = crate::image_download::ImageDownloadManager::new();
+                    let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+                    loop {
+                        interval.tick().await;
+                        match app_handle.try_state::<AppState>() {
+                            Some(state) => {
+                                let cache_dir = state
+                                    .app
+                                    .as_ref()
+                                    .map(|h| {
+                                        h.path()
+                                            .app_cache_dir()
+                                            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+                                    })
+                                    .unwrap_or_else(|| std::path::PathBuf::from("."));
+                                manager.run_cycle(&state.db, &cache_dir).await;
+                            }
+                            None => {
+                                tracing::warn!(
+                                    "tablet image download: AppState not available — skipping"
                                 );
                             }
                         }
