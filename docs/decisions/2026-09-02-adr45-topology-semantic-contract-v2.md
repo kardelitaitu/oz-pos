@@ -2,11 +2,11 @@
 num: 45
 area: topology
 title: ADR #45: Topology Semantic Contract v2 — Endpoint Predicates, Kind Registry, Deliberate Cold Start, and Theme Parity
-status: Accepted — §1–§3 implemented (2026-09-02); §4–§5 proposed
+status: Accepted — §1–§3, §5 implemented (2026-09-02); §4 proposed
 ---
 # ADR #45: Topology Semantic Contract v2
 
-**Status:** Accepted — §1–§3 implemented (2026-09-02); §4–§5 proposed
+**Status:** Accepted — §1–§3, §5 implemented (2026-09-02); §4 proposed
 **Date:** 2026-09-02
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** topology, semantic-contract, cross-language-parity, node-kind-registry, cold-start, theming
@@ -299,19 +299,27 @@ The editor is already token-driven (see the correction in Context). The decision
 is to make that guarantee explicit and testable:
 
 - Replace the two true literals — `stroke: #fff` (`:1574`) and `fill: #fff`
-  (`:1579`), used on arrow and checkmark glyphs — with a token that flips.
-- Audit the 29 `var()` fallbacks. They currently bake in *dark* values
-  (`--color-bg-base, #0a0e1a` at `:3051`, `--color-border, #2a3050` at `:3066`),
-  so a missing token silently re-introduces a dark surface in a light theme.
-  Fallbacks become neutral or are dropped where the token is guaranteed.
+  (`:1579`), used on the wire validation badge's ring and its glyph — with
+  tokens. Implementation found these need *different* tokens, and that the
+  glyph was a contrast defect in both themes, not only a theme defect.
+- Audit the `var()` fallbacks — 30 hex and 39 in total, not the 29 first
+  counted. The audit's premise was that a missing token *would* silently
+  reintroduce a dark surface. It already does: five tokens used by this
+  stylesheet exist nowhere in the codebase, so their fallbacks are the rendered
+  values permanently, and two declarations with no fallback are invalid at
+  computed-value time today. Fallbacks are dropped where the token is
+  guaranteed; runtime-set tokens keep theirs.
 - Gate the one ungated infinite animation, `port-glow` (`:1931-1933`), using the
   house pattern already present at `:1098-1102` (`prefers-reduced-motion:
   no-preference`).
 - Delete `.topology-shortcuts-popover` from `ui/src/frontend/themes/components.css`;
-  its component no longer exists. It is the only dead selector of the 11
-  topology surfaces that file references.
+  its component no longer exists. Deferred — two compliance tests still list it
+  and the removal belongs to the in-flight component deletion. See the
+  implementation record.
 - Verify the canvas, wires, and node cards in light theme as a gate, not by
-  inspection.
+  inspection. The gate must cover `fill`/`stroke`, token *existence*, and
+  fallback *correctness* — the three things the existing repo-wide token test
+  does not check, and the reason none of this was caught.
 
 ---
 
@@ -586,6 +594,71 @@ One lint rule had to be satisfied honestly rather than bypassed:
 returns an existing module-level component, so the code now says
 `createElement(iconForNode(node), { size: 16 })`, which states that intent
 directly instead of looking like a violation.
+
+### §5 — theme parity (shipped 2026-09-02)
+
+Implementing this section disproved most of what it asserted. The numbers were
+wrong in one direction and the problem was worse in another.
+
+**Five tokens used by the topology stylesheet do not exist.** `--color-surface`,
+`--color-bg-base`, `--color-fg-on-primary`, `--font-family-mono`,
+`--font-weight-regular` — zero definitions in any CSS file, zero references in
+any TS file. §5 predicted "a missing token *silently re-introduces* a dark
+surface", as if it were conditional. It is not: **the fallback is the rendered
+value, permanently.** And two of the five carried no fallback at all, so those
+declarations were invalid at computed-value time *today* —
+`.wire-bend-handle { stroke: var(--color-surface) }` was stroking the wire bend
+handles with the CSS initial value, black, in both themes.
+
+**Not one of the 28 hex fallbacks matched the token it fell back from.**
+`--color-success` carried three different wrong greens (`#10b981`, `#22c55e`,
+`#4caf50`) against a real `#2E9E3E`/`#6FE884`; `--color-accent` said `#5a9fd4`
+against a real `#1155CC`/`#147EFB`; `--font-weight-bold` fell back to `600`
+against a real `700`; `--text-xs` to `0.75rem` against a real `0.625rem`. These
+are a second, unmaintained palette from an older design system — dead while the
+token resolves, which is always, and actively wrong the instant it does not.
+All 37 literal fallbacks are dropped; the two runtime-set cursor tokens
+(`--mouse-x`, `--mouse-y`) keep their `50%` default because before the first
+pointer event there genuinely is no value.
+
+**The two `#fff` literals needed different tokens, and one was not a theme bug
+at all.** The badge ring separates the marker from the wire behind it, so it must
+*be* the canvas colour (`--color-bg`); a literal white reads as a clean
+punch-out on the dark canvas and vanishes on the light one. The "!" glyph sits
+on a saturated danger fill, so it needs `--color-text-on-color` — navy on the
+lighter dark-theme red, white on the deeper light-theme red. Plain `#fff`
+contrasted in **neither** theme. That is an accessibility defect the theme
+framing had been hiding.
+
+**The count was 30, not 29** (39 counting non-hex fallbacks). The ADR's number
+was close and its direction was right; its diagnosis was too gentle.
+
+**`themeTokenCompliance.test.ts` has three structural holes**, all of which the
+topology canvas fell through: its `COLOR_PROPERTIES` set omits `fill`, `stroke`,
+`stop-color` and `flood-color`, so an SVG surface can hardcode forever and stay
+green; it never asks whether a token *exists*; and it never asks whether a
+fallback is *correct*. `ui/src/__tests__/topologyThemeParity.test.ts` closes all
+three plus reduced motion, and was **negative-controlled**: reintroducing a
+phantom token, a stale fallback, a bare `stroke: #fff`, and an ungated infinite
+animation fails 5 of its 7 tests with messages naming each offender. The repair
+tool is `scripts/strip-topology-token-fallbacks.py`, which runs in `--check`
+mode.
+
+**Deferred, deliberately:**
+
+- `.topology-shortcuts-popover` in `themes/components.css` (3 grouped rules).
+  The component is gone from production code, but two compliance tests still
+  list it as a surface — `popoverSurfaceCompliance.test.ts:54` and
+  `noiseDitherCompliance.test.ts:146` — and that test is **red at HEAD** because
+  the topology CSS no longer defines the rule. Deleting the selector means
+  editing both test lists, which is the same in-flight component removal a
+  concurrent agent is finishing. Touching it now risks a collision for no gain.
+- The 4 `themeTokenCompliance` violations at HEAD: two `18px` port-label
+  paddings in this stylesheet (commit `013c04cd`) and two in
+  `frontend/shell/Tooltip.css`. Proven pre-existing by stashing this slice's CSS
+  and re-running: 4 violations before, 4 after. The `18px` pair is not a
+  mechanical token swap either — no spacing token equals 18px, so "fixing" it
+  would move the port labels a concurrent agent just laid out.
 
 ### Follow-ups this slice surfaced
 
