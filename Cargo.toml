@@ -130,6 +130,7 @@ deadpool-postgres = { version = "0.14", features = ["serde"] }
 tokio-postgres-rustls = "0.13"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 rustls-native-certs = "0.8"
+prometheus = { version = "0.14", features = ["process"] }
 mlua = { version = "0.9", features = ["lua54", "vendored", "send"] }
 notify = { version = "7", features = [] }
 
