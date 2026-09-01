@@ -18,11 +18,12 @@ use axum::{
     Json,
     extract::State,
     http::{HeaderMap, StatusCode, header},
-    response::IntoResponse,
+    response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
+use crate::auth::ApiTokenClaims;
 use crate::auth::TokenResponse;
 
 /// Request body for creating a new API token.
@@ -111,6 +112,48 @@ pub fn admin_key_authorised(headers: &HeaderMap, configured: Option<&str>) -> bo
     // `verify_slice` is the constant-time comparison; a digest `==` is not
     // guaranteed data-independent.
     mac.verify_slice(provided.as_slice()).is_ok()
+}
+
+/// Gate a write handler on the operator admin-key tier (D1 residual,
+/// API-4 class).
+///
+/// Master-data writes (products, stock, tax rates, exchange rates)
+/// must not be reachable with a bare tenant JWT or a device credential.
+/// This helper enforces both defenses, mirroring the `users.rs` gate:
+///
+/// 1. **Admin key** (when configured): 401 `invalid_admin_key` unless
+///    the `X-Admin-Key` header matches — same second factor as token
+///    minting, plan changes, settings, and user creation.
+/// 2. **Terminal-scope denial** (defense in depth): 403
+///    `insufficient_scope` when the token is scoped to a registered
+///    terminal — a device credential must never mutate money-relevant
+///    master data even if it somehow carries a valid admin key.
+///
+/// Returns `Ok(())` to proceed, or the error response to short-circuit.
+pub fn require_admin_write(
+    headers: &HeaderMap,
+    claims: &ApiTokenClaims,
+    configured: Option<&str>,
+) -> Result<(), Response> {
+    if !admin_key_authorised(headers, configured) {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "invalid_admin_key"})),
+        )
+            .into_response());
+    }
+    if claims.terminal_id.is_some() {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": "insufficient_scope",
+                "message": "master-data writes require an admin-minted token; \
+                            this token is scoped to a registered terminal",
+            })),
+        )
+            .into_response());
+    }
+    Ok(())
 }
 
 /// `POST /api/v1/tokens` — create a new API token.

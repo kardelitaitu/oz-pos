@@ -1,7 +1,7 @@
 use super::*;
 use crate::DEFAULT_CORS_ORIGINS;
 use axum::body::to_bytes;
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -82,9 +82,14 @@ fn store_error_response_maps_unknown_to_500() {
 
 #[tokio::test]
 async fn create_tax_rate_returns_201_with_default_tenant() {
-    let response = create_tax_rate(State(state()), Extension(claims(None)), Json(body()))
-        .await
-        .into_response();
+    let response = create_tax_rate(
+        State(state()),
+        HeaderMap::new(),
+        Extension(claims(None)),
+        Json(body()),
+    )
+    .await
+    .into_response();
     assert_eq!(response.status(), StatusCode::CREATED);
 
     let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
@@ -99,6 +104,7 @@ async fn create_tax_rate_stamps_tenant_from_claims() {
     let app_state = state();
     let response = create_tax_rate(
         State(app_state.clone()),
+        HeaderMap::new(),
         Extension(claims(Some("tenant-42"))),
         Json(body()),
     )
@@ -128,9 +134,14 @@ async fn create_tax_rate_returns_400_on_validation_error() {
         is_default: false,
         is_inclusive: false,
     };
-    let response = create_tax_rate(State(state()), Extension(claims(None)), Json(bad))
-        .await
-        .into_response();
+    let response = create_tax_rate(
+        State(state()),
+        HeaderMap::new(),
+        Extension(claims(None)),
+        Json(bad),
+    )
+    .await
+    .into_response();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
@@ -151,6 +162,7 @@ async fn create_tax_rate_allows_duplicate_name() {
     }
     let response = create_tax_rate(
         State(app_state.clone()),
+        HeaderMap::new(),
         Extension(claims(None)),
         Json(body()),
     )

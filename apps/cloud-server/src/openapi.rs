@@ -666,7 +666,7 @@ fn build_paths() -> Value {
             "post": {
                 "tags": ["Products"],
                 "summary": "Create a new product",
-                "description": "Creates a product with optional category, barcode, and initial stock. SKU must be unique. Tenant ID is stamped from JWT claims.",
+                "description": "Creates a product with optional category, barcode, and initial stock. SKU must be unique. Tenant ID is stamped from JWT claims. **Operator-tier (D1):** requires the `X-Admin-Key` header when `OZ_ADMIN_KEY` is configured, and rejects terminal-scoped tokens.",
                 "operationId": "createProduct",
                 "security": [{ "bearerAuth": [] }],
                 "requestBody": {
@@ -676,7 +676,8 @@ fn build_paths() -> Value {
                 "responses": {
                     "201": { "description": "Product created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ProductDetail" } } } },
                     "400": { "description": "Validation error (empty SKU, empty name, negative price)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT, or missing/invalid `X-Admin-Key` when configured", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Terminal-scoped token cannot write master data", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } },
                     "409": { "description": "SKU already exists", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "500": { "description": "Internal server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
@@ -703,7 +704,7 @@ fn build_paths() -> Value {
             "patch": {
                 "tags": ["Products"],
                 "summary": "Adjust stock quantity",
-                "description": "Positive delta restocks, negative delta sells. The Store enforces non-negative stock with an atomic checked operation.",
+                "description": "Positive delta restocks, negative delta sells. The Store enforces non-negative stock with an atomic checked operation. **Operator-tier (D1):** requires the `X-Admin-Key` header when `OZ_ADMIN_KEY` is configured, and rejects terminal-scoped tokens.",
                 "operationId": "patchStock",
                 "security": [{ "bearerAuth": [] }],
                 "parameters": [
@@ -715,7 +716,8 @@ fn build_paths() -> Value {
                 },
                 "responses": {
                     "200": { "description": "Stock adjusted successfully", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PatchStockResponse" } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT, or missing/invalid `X-Admin-Key` when configured", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Terminal-scoped token cannot write master data", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } },
                     "404": { "description": "Product not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "422": { "description": "Adjustment would cause negative stock", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
@@ -876,7 +878,7 @@ fn build_paths() -> Value {
             "post": {
                 "tags": ["Tax Rates"],
                 "summary": "Create a new tax rate",
-                "description": "Creates a tax rate with basis-point precision (e.g., 1000 = 10%). Can be set as default and/or tax-inclusive.",
+                "description": "Creates a tax rate with basis-point precision (e.g., 1000 = 10%). Can be set as default and/or tax-inclusive. **Operator-tier (D1):** requires the `X-Admin-Key` header when `OZ_ADMIN_KEY` is configured, and rejects terminal-scoped tokens.",
                 "operationId": "createTaxRate",
                 "security": [{ "bearerAuth": [] }],
                 "requestBody": {
@@ -885,7 +887,8 @@ fn build_paths() -> Value {
                 },
                 "responses": {
                     "201": { "description": "Tax rate created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TaxRateResponse" } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT, or missing/invalid `X-Admin-Key` when configured", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Terminal-scoped token cannot write master data", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
             }
         },
@@ -907,7 +910,7 @@ fn build_paths() -> Value {
             "post": {
                 "tags": ["Exchange Rates"],
                 "summary": "Create an exchange rate",
-                "description": "Creates a rate with 6-decimal fixed-point precision. Rejects non-positive rates, identical pairs, non-ISO codes, and malformed effective dates (CUR-05). Duplicate (pair, date) returns 409.",
+                "description": "Creates a rate with 6-decimal fixed-point precision. Rejects non-positive rates, identical pairs, non-ISO codes, and malformed effective dates (CUR-05). Duplicate (pair, date) returns 409. **Operator-tier (D1):** requires the `X-Admin-Key` header when `OZ_ADMIN_KEY` is configured, and rejects terminal-scoped tokens.",
                 "operationId": "createExchangeRate",
                 "security": [{ "bearerAuth": [] }],
                 "requestBody": {
@@ -917,7 +920,8 @@ fn build_paths() -> Value {
                 "responses": {
                     "201": { "description": "Rate created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ExchangeRateResponse" } } } },
                     "400": { "description": "Validation error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT, or missing/invalid `X-Admin-Key` when configured", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Terminal-scoped token cannot write master data", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } },
                     "409": { "description": "Rate already exists for this pair and effective date", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
@@ -960,7 +964,7 @@ fn build_paths() -> Value {
             "delete": {
                 "tags": ["Exchange Rates"],
                 "summary": "Delete an exchange rate",
-                "description": "Removes a rate row by id.",
+                "description": "Removes a rate row by id. **Operator-tier (D1):** requires the `X-Admin-Key` header when `OZ_ADMIN_KEY` is configured, and rejects terminal-scoped tokens.",
                 "operationId": "deleteExchangeRate",
                 "security": [{ "bearerAuth": [] }],
                 "parameters": [
@@ -968,7 +972,8 @@ fn build_paths() -> Value {
                 ],
                 "responses": {
                     "204": { "description": "Rate deleted" },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT, or missing/invalid `X-Admin-Key` when configured", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Terminal-scoped token cannot write master data", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } },
                     "404": { "description": "Rate not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }

@@ -5,7 +5,7 @@
 use axum::{
     Extension, Json,
     extract::State,
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
@@ -16,6 +16,7 @@ use oz_core::CoreError;
 
 use crate::AppState;
 use crate::auth::ApiTokenClaims;
+use crate::routes::tokens::require_admin_write;
 
 /// Request body for creating a tax rate.
 #[derive(Deserialize)]
@@ -68,9 +69,16 @@ fn store_error_response(e: CoreError) -> Response {
 /// row so the cloud server's snapshot endpoint can scope rates per tenant.
 pub async fn create_tax_rate(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Extension(claims): Extension<ApiTokenClaims>,
     Json(body): Json<CreateTaxRateRequest>,
 ) -> Response {
+    // D1 residual (API-4): tax-rate creation mutates money-relevant master
+    // data — gate on the operator admin key + reject terminal credentials.
+    if let Err(resp) = require_admin_write(&headers, &claims, state.admin_key.as_deref()) {
+        return resp;
+    }
+
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
 
     if let Some(pool) = &state.pg {

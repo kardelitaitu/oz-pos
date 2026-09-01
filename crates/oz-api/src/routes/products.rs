@@ -14,7 +14,7 @@ next: none | perf: N/A
 use axum::{
     Extension, Json,
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
@@ -24,6 +24,7 @@ use oz_core::{CoreError, ProductWithDetails};
 
 use crate::AppState;
 use crate::auth::ApiTokenClaims;
+use crate::routes::tokens::require_admin_write;
 
 // ── Error mapping ─────────────────────────────────────────────────────
 
@@ -207,9 +208,16 @@ pub async fn get_product(
 /// so the cloud server's snapshot endpoint can scope products per tenant.
 pub async fn create_product(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Extension(claims): Extension<ApiTokenClaims>,
     Json(body): Json<CreateProductRequest>,
 ) -> Response {
+    // D1 residual (API-4): product creation mutates money-relevant master
+    // data — gate on the operator admin key + reject terminal credentials.
+    if let Err(resp) = require_admin_write(&headers, &claims, state.admin_key.as_deref()) {
+        return resp;
+    }
+
     let initial_stock = body.initial_stock.unwrap_or(0);
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
 
@@ -286,10 +294,17 @@ pub async fn create_product(
 #[allow(deprecated)]
 pub async fn patch_stock(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Extension(claims): Extension<ApiTokenClaims>,
     Path(sku): Path<String>,
     Json(body): Json<PatchStockRequest>,
 ) -> Response {
+    // D1 residual (API-4): stock adjustment mutates money-relevant master
+    // data — gate on the operator admin key + reject terminal credentials.
+    if let Err(resp) = require_admin_write(&headers, &claims, state.admin_key.as_deref()) {
+        return resp;
+    }
+
     if let Some(pool) = &state.pg {
         let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
         return match crate::pg::adjust_stock(pool, tenant_id, &sku, body.delta).await {
