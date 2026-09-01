@@ -396,3 +396,179 @@ fn semantic_node_type_non_string() {
     let node = serde_json::json!({"type": 42});
     assert_eq!(semantic_node_type(&node), None);
 }
+
+// ── ADR #45: endpoint predicates come from the contract ───────────
+//
+// Before ADR #45 the pairing table was shared but the endpoint rules — which
+// node kinds may sit on each end of a row — were re-written by hand in four
+// places: a Rust `match`, a Rust target-only pre-filter, and two TypeScript
+// copies. These tests pin the evaluator that replaced them, which is now the
+// only home for those rules.
+
+fn typed_node(id: &str, node_type: &str, type_key: Option<&str>) -> Value {
+    let mut node = json!({ "id": id, "type": node_type, "name": id });
+    if let Some(type_key) = type_key {
+        node["metadata"] = json!({ "typeKey": type_key });
+    }
+    node
+}
+
+fn wire_between(
+    from: &Value,
+    to: &Value,
+    from_port: &str,
+    to_port: &str,
+    relationship: &str,
+) -> Value {
+    json!({
+        "id": "w1",
+        "from_node_id": from["id"],
+        "to_node_id": to["id"],
+        "from_port_id": from_port,
+        "to_port_id": to_port,
+        "relationship_type": relationship,
+        "direction": "one-way",
+    })
+}
+
+#[test]
+fn node_kind_token_canonicalizes_the_branch_alias_and_workspace_family() {
+    assert_eq!(
+        node_kind_token(&typed_node("b", "store", None)),
+        "branch-location",
+        "`store` is the serialized alias; the contract speaks the canonical name"
+    );
+    assert_eq!(
+        node_kind_token(&typed_node("w", "warehouse", None)),
+        "warehouse"
+    );
+    assert_eq!(
+        node_kind_token(&typed_node("h", "hardware", None)),
+        "hardware"
+    );
+    assert_eq!(
+        node_kind_token(&typed_node("k", "workspace", Some("kds"))),
+        "workspace:kds"
+    );
+    // A workspace with no recorded type key is the Store POS baseline — the
+    // same default `semantic_type_key` applies, so the two can never disagree.
+    assert_eq!(
+        node_kind_token(&typed_node("p", "workspace", None)),
+        "workspace:store-pos"
+    );
+}
+
+#[test]
+fn endpoints_admit_declared_pairs_and_the_family_form() {
+    // An exact declared pair.
+    assert!(pairing_admits_kinds(
+        "operation-out",
+        "operation-in",
+        "workspace:restaurant-pos",
+        "workspace:kds"
+    ));
+    // A token written without a `:` suffix covers the family: the Location row
+    // means "any workspace", not an enumeration of every type key.
+    assert!(pairing_admits_kinds(
+        "location-out",
+        "location-in",
+        "@branch-root",
+        "workspace:store-pos"
+    ));
+    assert!(pairing_admits_kinds(
+        "location-out",
+        "location-in",
+        "@branch-root",
+        "warehouse"
+    ));
+    // The future-facing generic row carries the wildcard.
+    assert!(pairing_admits_kinds(
+        "generic-out",
+        "generic-in",
+        "hardware",
+        "warehouse"
+    ));
+}
+
+#[test]
+fn endpoints_refuse_undeclared_pairs_and_unknown_kinds() {
+    // The operation row's two admitted pairs are deliberately NOT the cross
+    // product of its endpoints: a Store POS operational feed into a KDS is
+    // undeclared, and this is why the contract lists pairs instead of sets.
+    assert!(!pairing_admits_kinds(
+        "operation-out",
+        "operation-in",
+        "workspace:store-pos",
+        "workspace:kds"
+    ));
+    // A workspace may not originate a ticket feed; only a KDS may.
+    assert!(!pairing_admits_kinds(
+        "ticket-out",
+        "ticket-in",
+        "workspace:store-pos",
+        "hardware"
+    ));
+    // Only the Branch Location owns location-out.
+    assert!(!pairing_admits_kinds(
+        "location-out",
+        "location-in",
+        "workspace:store-pos",
+        "warehouse"
+    ));
+    // An unregistered workspace type is not authorable until the contract
+    // declares it. That is the discipline ADR #45 buys: adding a POS type is a
+    // contract edit, and both gates pick it up at once.
+    assert!(!pairing_admits_kinds(
+        "stock-out",
+        "stock-in",
+        "workspace:pharmacy-pos",
+        "warehouse"
+    ));
+    // Unknown semantics fail closed, exactly as unknown port ids always have.
+    assert!(!pairing_admits_kinds(
+        "made-up-out",
+        "stock-in",
+        "warehouse",
+        "warehouse"
+    ));
+}
+
+#[test]
+fn contract_gate_refuses_an_operation_feed_from_a_non_workspace_source() {
+    // Regression for ADR #45 §1. The wire loop used to skip the contract check
+    // for any operation-in wire whose TARGET was a KDS or a warehouse, without
+    // ever inspecting the source — so this wire bypassed semantic validation
+    // completely, while the frontend gate refused to offer it. The pre-filter
+    // now requires a workspace source, so the gate runs.
+    let hardware = typed_node("hw-1", "hardware", None);
+    let kds = typed_node("kds-1", "workspace", Some("kds"));
+    let wire = wire_between(&hardware, &kds, "operation-out", "operation-in", "generic");
+    assert!(
+        !semantic_wire_matches_contract(&wire, &hardware, &kds),
+        "a hardware-sourced operational feed must not pass the contract gate"
+    );
+}
+
+#[test]
+fn contract_gate_still_admits_both_declared_operation_feeds() {
+    let resto = typed_node("resto", "workspace", Some("restaurant-pos"));
+    let kds = typed_node("kds", "workspace", Some("kds"));
+    let store = typed_node("pos", "workspace", Some("store-pos"));
+    let warehouse = typed_node("wh", "warehouse", None);
+    assert!(semantic_wire_matches_contract(
+        &wire_between(&resto, &kds, "operation-out", "operation-in", "generic"),
+        &resto,
+        &kds
+    ));
+    assert!(semantic_wire_matches_contract(
+        &wire_between(
+            &store,
+            &warehouse,
+            "operation-out",
+            "operation-in",
+            "generic"
+        ),
+        &store,
+        &warehouse
+    ));
+}
