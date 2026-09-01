@@ -216,6 +216,38 @@ impl Store<'_> {
             .map_err(|e| CoreError::Internal(format!("commit: {e}")))?;
         Ok(())
     }
+
+    /// List the image assignments for a product, ordered by slot.
+    ///
+    /// Returns `[(slot, hash, position)]` for slots 1..=5 present in
+    /// `product_images`. Slot 1 is the primary; slots 2..5 are the
+    /// alternatives (ordered by `position` by the UI).
+    pub fn list_product_images(&self, product_id: &str) -> Result<Vec<ProductImage>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT slot, hash, position FROM product_images
+             WHERE product_id = ?1
+             ORDER BY slot ASC",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![product_id], |row| {
+            Ok(ProductImage {
+                slot: row.get(0)?,
+                hash: row.get(1)?,
+                position: row.get(2)?,
+            })
+        })?;
+        rows.map(|r| r.map_err(CoreError::from)).collect()
+    }
+}
+
+/// A single product image assignment (spec 0046b §3.2).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ProductImage {
+    /// Slot 1 = primary; slots 2..5 = alternatives.
+    pub slot: i32,
+    /// Content-addressed hash (first 16 hex chars of sha-256).
+    pub hash: String,
+    /// Display order of alternatives (0-based); primary slot 1 always 0.
+    pub position: i32,
 }
 
 #[cfg(test)]

@@ -44,6 +44,8 @@ mod products_stock_adjust;
 #[path = "products_images.rs"]
 mod products_images;
 
+pub use products_images::ProductImage;
+
 // ── Enriched product type ────────────────────────────────────────────
 
 /// A [`Product`] enriched with category name and stock quantity from

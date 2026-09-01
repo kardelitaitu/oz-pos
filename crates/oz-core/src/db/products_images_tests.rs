@@ -249,3 +249,46 @@ fn set_image_dedupe_hash_stored_once_per_product_slot() {
     assert_eq!(image_hash(&conn, &pid2), Some("same-hash".into()));
     // Only one physical file would exist; DB holds two references.
 }
+
+#[test]
+fn list_product_images_returns_slots_in_order() {
+    let conn = fresh_db();
+    let store = Store::new(&conn);
+    let pid = seed_product(&conn, "A", "retail");
+
+    // Empty list for a product with no images.
+    assert!(store.list_product_images(&pid).unwrap().is_empty());
+
+    store.set_product_image(&pid, 1, "primary").unwrap();
+    store.set_product_image(&pid, 2, "alt1").unwrap();
+    store.set_product_image(&pid, 5, "alt4").unwrap();
+
+    let images = store.list_product_images(&pid).unwrap();
+    assert_eq!(
+        images,
+        vec![
+            ProductImage {
+                slot: 1,
+                hash: "primary".into(),
+                position: 0
+            },
+            ProductImage {
+                slot: 2,
+                hash: "alt1".into(),
+                position: 0
+            },
+            ProductImage {
+                slot: 5,
+                hash: "alt4".into(),
+                position: 0
+            },
+        ]
+    );
+}
+
+#[test]
+fn list_product_images_missing_product_returns_empty() {
+    let conn = fresh_db();
+    let store = Store::new(&conn);
+    assert!(store.list_product_images("missing").unwrap().is_empty());
+}
