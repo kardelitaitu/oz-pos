@@ -1,8 +1,8 @@
 /*
 last audited 25-07-26 by RSA-Agent (cloud-server slice B: sync_store verified)
 crate: cloud-server | status: SAFE | lint: CLEAN
-findings: all queue reads tenant-scoped in SQL (WHERE tenant_id = ?1); push per-item outcomes with duplicate detection; CS-3 FIXED — the SQLite push_batch arm now runs in one transaction
-next: CS-3 | perf: N/A
+findings: all queue reads tenant-scoped in SQL (WHERE tenant_id = ?1); push per-item outcomes with duplicate detection; CS-3 FIXED — the SQLite push_batch arm now runs in one transaction. PERF 2026-09: push_batch multi-row fast path — INSERT … ON CONFLICT (id) DO NOTHING RETURNING id in MULTIROW_CHUNK-sized statements (PG + SQLite), falling back to the per-item SAVEPOINT loop only when a non-unique data error aborts the statement; per-item outcomes preserved via returned-id multiset consumed in input order
+next: none | perf: multi-row fast path collapses N round trips into ~ceil(N/500)
 */
 //! Sync data-store abstraction for the cloud server's sync function.
 //!
@@ -40,6 +40,13 @@ use tokio::sync::Mutex;
 use oz_core::TenantPlan;
 use oz_core::offline::{OfflineQueueItem, OfflineQueueStatus, SyncPriority};
 use platform_sync::transport::PushOutcome;
+
+/// Maximum rows per multi-row INSERT statement.
+///
+/// PostgreSQL caps parameters at 65535 (`Int4`/`Int8` protocol limit) and
+/// SQLite at 32766; 9 columns per row × this batch keeps us far below both
+/// while still collapsing a whole push page into a handful of statements.
+const MULTIROW_CHUNK: usize = 500;
 
 /// Open a Postgres connection scoped to `tenant_id` for RLS enforcement.
 ///
@@ -144,19 +151,25 @@ impl SyncStore {
     /// This hoists the transaction out of the loop: one pool acquisition,
     /// one `oz.tenant_id` GUC, N INSERTs, one COMMIT.
     ///
+    /// SOTA perf (2026-09): a multi-row fast path collapses a whole push
+    /// page into a handful of INSERT statements (`MULTIROW_CHUNK` rows per
+    /// statement) using `ON CONFLICT (id) DO NOTHING RETURNING id`. Only
+    /// when a non-unique data error (trigger / CHECK / NOT NULL) aborts the
+    /// multi-row statement does it fall back to the per-item loop below,
+    /// preserving per-item outcomes exactly.
+    ///
     /// Per-item outcomes are preserved so a single bad item cannot roll
     /// back its siblings:
     ///
-    /// - PostgreSQL runs each INSERT inside a **SAVEPOINT** — a duplicate
-    ///   id returns zero rows via `ON CONFLICT (id) DO NOTHING RETURNING
-    ///   id` (reported `Rejected`, savepoint released); a non-unique data
-    ///   error (trigger, CHECK, NOT NULL) is caught, the savepoint rolled
-    ///   back, and the item reported `Rejected` while the rest of the
-    ///   batch continues. Without the SAVEPOINT, ANY statement failure
-    ///   would abort the whole transaction ("current transaction is
-    ///   aborted") and the COMMIT would fail — silently losing the valid
-    ///   items.
-    /// - SQLite keeps the `UNIQUE` substring check per item.
+    /// - PostgreSQL runs each per-item fallback INSERT inside a **SAVEPOINT**
+    ///   — a duplicate id returns zero rows via `ON CONFLICT (id) DO NOTHING
+    ///   RETURNING id` (reported `Rejected`, savepoint released); a non-unique
+    ///   data error (trigger, CHECK, NOT NULL) is caught, the savepoint rolled
+    ///   back, and the item reported `Rejected` while the rest of the batch
+    ///   continues. Without the SAVEPOINT, ANY statement failure would abort
+    ///   the whole transaction ("current transaction is aborted") and the
+    ///   COMMIT would fail — silently losing the valid items.
+    /// - SQLite keeps the `UNIQUE` substring check per item in the fallback.
     ///
     /// Only backend-connection failures (pool exhaustion, COMMIT failure)
     /// surface as `Err`, which the handler maps to a 500.
@@ -166,15 +179,21 @@ impl SyncStore {
         tenant_id: &str,
     ) -> Result<Vec<PushOutcome>, String> {
         let status = OfflineQueueStatus::Pending.as_stored_str();
+        if items.is_empty() {
+            return Ok(Vec::new());
+        }
         match self {
             Self::Sqlite(conn) => {
                 let conn = conn.lock().await;
-                // CS-3 fix: wrap the batch in ONE transaction — the
-                // previous per-item autocommit loop persisted a partial
-                // batch on a mid-batch failure (crash, disk error), and
-                // the push_handler doc already claims single-transaction
-                // semantics. UNIQUE failures roll back only their own
-                // statement in SQLite, so per-item outcomes are unchanged.
+                // Fast path: multi-row INSERT … ON CONFLICT DO NOTHING
+                // RETURNING id, chunked to stay under the parameter cap.
+                if let Ok(outcomes) = sqlite_push_batch_multirow(&conn, items, status, tenant_id) {
+                    return Ok(outcomes);
+                }
+                // Fallback: CS-3 single-transaction per-item loop — a
+                // multi-row statement aborted (trigger/CHECK/NOT NULL);
+                // UNIQUE failures roll back only their own statement in
+                // SQLite, so per-item outcomes are unchanged.
                 let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
                 let mut results = Vec::with_capacity(items.len());
                 for item in items {
@@ -209,6 +228,13 @@ impl SyncStore {
                 Ok(results)
             }
             Self::Postgres(pool) => {
+                // Fast path: multi-row INSERT … ON CONFLICT DO NOTHING
+                // RETURNING id, chunked. One round trip per chunk instead of
+                // N per-item round trips.
+                if let Ok(outcomes) = pg_push_batch_multirow(pool, items, status, tenant_id).await {
+                    return Ok(outcomes);
+                }
+                // Fallback: SAVEPOINT-per-item loop (see doc comment above).
                 let mut client = pool.get().await.map_err(|e| e.to_string())?;
                 let tx = client.transaction().await.map_err(|e| e.to_string())?;
                 tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
@@ -463,6 +489,175 @@ impl SyncStore {
             }
         }
     }
+}
+
+// ── Multi-row push fast path ────────────────────────────────────────────
+
+/// SQLite multi-row fast path for [`SyncStore::push_batch`].
+///
+/// Builds one `INSERT … VALUES (…),(…),… ON CONFLICT (id) DO NOTHING
+/// RETURNING id` statement per [`MULTIROW_CHUNK`] rows, so a whole push page
+/// costs a handful of statements instead of N. Duplicate ids within the
+/// batch are skipped by `DO NOTHING` (the first occurrence wins) and
+/// reported as `Rejected` via a returned-id multiset consumed in input
+/// order — preserving the exact per-item semantics of the old loop.
+///
+/// Opens and commits its own transaction; on any statement error the
+/// transaction is rolled back (drop) and `Err` is returned so the caller
+/// can fall back to the per-item loop.
+fn sqlite_push_batch_multirow(
+    conn: &Connection,
+    items: &[OfflineQueueItem],
+    status: &str,
+    tenant_id: &str,
+) -> Result<Vec<PushOutcome>, String> {
+    let mut tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    let mut results = Vec::with_capacity(items.len());
+
+    for chunk in items.chunks(MULTIROW_CHUNK) {
+        let n = chunk.len();
+        let values = vec!["(?,?,?,?,?,?,?,?,?)"; n].join(",");
+        let sql = format!(
+            "INSERT INTO offline_queue (id, action, payload, status, retry_count, \
+             last_error, created_at, synced_at, tenant_id) VALUES {values} \
+             ON CONFLICT (id) DO NOTHING RETURNING id"
+        );
+
+        let mut params: Vec<rusqlite::types::Value> = Vec::with_capacity(n * 9);
+        for item in chunk {
+            params.push(rusqlite::types::Value::Text(item.id.clone()));
+            params.push(rusqlite::types::Value::Text(item.action.clone()));
+            params.push(rusqlite::types::Value::Text(item.payload.clone()));
+            params.push(rusqlite::types::Value::Text(status.to_string()));
+            params.push(rusqlite::types::Value::Integer(item.retry_count));
+            params.push(match &item.last_error {
+                Some(e) => rusqlite::types::Value::Text(e.clone()),
+                None => rusqlite::types::Value::Null,
+            });
+            params.push(rusqlite::types::Value::Text(item.created_at.clone()));
+            params.push(match &item.synced_at {
+                Some(s) => rusqlite::types::Value::Text(s.clone()),
+                None => rusqlite::types::Value::Null,
+            });
+            params.push(rusqlite::types::Value::Text(tenant_id.to_string()));
+        }
+
+        let mut stmt = tx.prepare(&sql).map_err(|e| e.to_string())?;
+        let mut inserted: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::with_capacity(n);
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(params.iter()), |row| {
+                row.get::<_, String>(0)
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let id = row.map_err(|e| e.to_string())?;
+            *inserted.entry(id).or_insert(0) += 1;
+        }
+
+        // Consume returned-id counts in input order: the first occurrence
+        // of a duplicate was the one inserted, later ones are Rejected.
+        let mut remaining = inserted;
+        for item in chunk {
+            match remaining.get_mut(&item.id) {
+                Some(count) if *count > 0 => {
+                    *count -= 1;
+                    results.push(PushOutcome::Accepted);
+                }
+                _ => results.push(PushOutcome::Rejected {
+                    reason: format!("duplicate id: {}", item.id),
+                }),
+            }
+        }
+    }
+
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(results)
+}
+
+/// PostgreSQL multi-row fast path for [`SyncStore::push_batch`].
+///
+/// Same shape as the SQLite fast path but with `$n` numbered placeholders
+/// (Postgres has no `?`). Opens and commits its own transaction; a
+/// statement failure rolls back (drop) and returns `Err` for the caller's
+/// per-item SAVEPOINT fallback.
+async fn pg_push_batch_multirow(
+    pool: &Pool,
+    items: &[OfflineQueueItem],
+    status: &str,
+    tenant_id: &str,
+) -> Result<Vec<PushOutcome>, String> {
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut results = Vec::with_capacity(items.len());
+
+    for chunk in items.chunks(MULTIROW_CHUNK) {
+        let n = chunk.len();
+        // Build "($1,...,$9),($10,...,$18),…" numbered placeholders.
+        let mut sql = String::from(
+            "INSERT INTO offline_queue (id, action, payload, status, retry_count, \
+             last_error, created_at, synced_at, tenant_id) VALUES ",
+        );
+        let mut params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = Vec::with_capacity(n * 9);
+        for (r, item) in chunk.iter().enumerate() {
+            if r > 0 {
+                sql.push(',');
+            }
+            let base = r * 9;
+            sql.push_str(&format!(
+                "(${},${},${},${},${},${},${},${},${})",
+                base + 1,
+                base + 2,
+                base + 3,
+                base + 4,
+                base + 5,
+                base + 6,
+                base + 7,
+                base + 8,
+                base + 9
+            ));
+            params.extend_from_slice(&[
+                &item.id,
+                &item.action,
+                &item.payload,
+                &status,
+                &item.retry_count,
+                &item.last_error,
+                &item.created_at,
+                &item.synced_at,
+                &tenant_id,
+            ]);
+        }
+        sql.push_str(" ON CONFLICT (id) DO NOTHING RETURNING id");
+
+        let rows = tx.query(&sql, &params).await.map_err(|e| e.to_string())?;
+        let mut inserted: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::with_capacity(n);
+        for row in rows {
+            let id: String = row.try_get::<_, String>(0).map_err(|e| e.to_string())?;
+            *inserted.entry(id).or_insert(0) += 1;
+        }
+
+        let mut remaining = inserted;
+        for item in chunk {
+            match remaining.get_mut(&item.id) {
+                Some(count) if *count > 0 => {
+                    *count -= 1;
+                    results.push(PushOutcome::Accepted);
+                }
+                _ => results.push(PushOutcome::Rejected {
+                    reason: format!("duplicate id: {}", item.id),
+                }),
+            }
+        }
+    }
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+    Ok(results)
 }
 
 // ── SQLite implementations ────────────────────────────────────────────────
