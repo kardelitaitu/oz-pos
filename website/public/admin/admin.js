@@ -167,7 +167,7 @@
       // Provider split (donut)
       const provCard = el('div', 'chart-card');
       provCard.appendChild(el('h3', null, t('chart.paymentProvider')));
-      const donut2 = svgDonut('prov', m.providerSplit, 'provider', 'count', ['#147efb','#22c55e']);
+      const donut2 = svgDonut('prov', m.providerSplit, 'provider', 'count', ['var(--primary)', 'var(--success)']);
       const provRow = el('div', 'donut-row');
       const donutDiv2 = el('div', 'donut-chart'); donutDiv2.innerHTML = donut2.svg;
       provRow.appendChild(donutDiv2);
@@ -319,7 +319,7 @@
           kv.appendChild(el('span', 'muted', label));
           const vs = el('span', null, val === undefined || val === null ? '—' : String(val));
           vs.style.textAlign = 'right';
-          if (label === t('th.licenseKey')) { vs.style.cssText += ';font-family:monospace;font-size:.75rem'; }
+          if (label === t('th.licenseKey')) { vs.style.cssText += ';font-family:var(--font-mono);font-size:.72rem'; }
           kv.appendChild(vs);
         }
         tenantDetailRows(data).forEach(pair => addRow(pair[0], pair[1]));

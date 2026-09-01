@@ -90,14 +90,21 @@
     var rng = max - min || 1;
     var x = function (i) { return px + (i / (data.length - 1 || 1)) * pw; };
     var y = function (v) { return py + ph - ((v - min) / rng) * ph; };
-    var colors = { usd: '#147efb', idr: '#22c55e', count: '#147efb', mrr: '#147efb' };
+    // Design-language semantic tokens — the chart re-themes with the page.
+    var colors = { usd: 'var(--primary)', idr: 'var(--success)', count: 'var(--primary)', mrr: 'var(--primary)' };
+    // Horizontal gridlines at each y-label (hairline borders, not fills).
+    var grid = '';
+    for (var gi = 0; gi <= 4; gi++) {
+      var gv = min + (rng / 4) * gi;
+      grid += '<line x1="' + px + '" y1="' + y(gv) + '" x2="' + w + '" y2="' + y(gv) + '" stroke="var(--border)" stroke-width="1"/>';
+    }
     var paths = '', fills = '';
     series.forEach(function (s) {
       var pts = data.map(function (d, i) { return x(i) + ',' + y(Number(d[s]) || 0); }).join(' L ');
-      paths += '<path d="M ' + pts + '" stroke="' + (colors[s] || '#147efb') + '" stroke-width="2" fill="none" class="chart-line"/>';
+      paths += '<path d="M ' + pts + '" stroke="' + (colors[s] || 'var(--primary)') + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" class="chart-line"/>';
       if (opts && opts.area) {
         var base = x(0) + ',' + (py + ph) + ' L ' + pts + ' L ' + x(data.length - 1) + ',' + (py + ph) + ' Z';
-        fills += '<path d="' + base + '" fill="' + (colors[s] || '#147efb') + '" opacity=".08"/>';
+        fills += '<path d="' + base + '" fill="' + (colors[s] || 'var(--primary)') + '" opacity=".1"/>';
       }
     });
     var yLabels = '';
@@ -113,7 +120,7 @@
         xLabels += '<text x="' + x(i) + '" y="' + (py + ph + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="9">' + escapeHtml(d.month ? String(d.month).slice(5) : '') + '</text>';
       }
     });
-    return '<svg viewBox="0 0 ' + w + ' ' + h + '" class="chart-svg">' + fills + paths + yLabels + xLabels + '</svg>';
+    return '<svg viewBox="0 0 ' + w + ' ' + h + '" class="chart-svg">' + grid + fills + paths + yLabels + xLabels + '</svg>';
   }
 
   // svgDonut renders a donut chart + legend. Pure; guards empty/zero data.
@@ -134,7 +141,9 @@
     var acc = 0;
     var slices = '';
     var cx = 80, cy = 80, r = 60;
-    var colorList = ['#147efb', '#22c55e', '#e879f9', '#fb923c', '#22d3ee', '#f59e0b'];
+    // Brand palette in the design-language order (blue → green → orange →
+    // sky → pink → yellow); tokens so dark mode keeps the same hues.
+    var colorList = ['var(--primary)', 'var(--success)', 'var(--warning)', 'var(--info)', 'var(--pink)', 'var(--yellow)'];
     data.forEach(function (d, i) {
       var pct = (Number(d[valueKey]) || 0) / total;
       var ang = pct * 360;
@@ -151,9 +160,9 @@
         // 100%. A full circle needs two arcs; split at the halfway angle.
         var mid = start + Math.PI;
         var xm = cx + r * Math.cos(mid), ym = cy + r * Math.sin(mid);
-        slices += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + r + ' ' + r + ' 0 0 1 ' + xm + ' ' + ym + ' A ' + r + ' ' + r + ' 0 0 1 ' + x1 + ' ' + y1 + ' Z" fill="' + c + '" stroke="var(--bg)" stroke-width="2"/>';
+        slices += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + r + ' ' + r + ' 0 0 1 ' + xm + ' ' + ym + ' A ' + r + ' ' + r + ' 0 0 1 ' + x1 + ' ' + y1 + ' Z" fill="' + c + '" stroke="var(--bg-surface)" stroke-width="2"/>';
       } else {
-        slices += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + r + ' ' + r + ' 0 ' + large + ' 1 ' + x2 + ' ' + y2 + ' Z" fill="' + c + '" stroke="var(--bg)" stroke-width="2"/>';
+        slices += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + r + ' ' + r + ' 0 ' + large + ' 1 ' + x2 + ' ' + y2 + ' Z" fill="' + c + '" stroke="var(--bg-surface)" stroke-width="2"/>';
       }
       acc += ang;
     });
@@ -163,7 +172,9 @@
       var c = colors && colors[i] ? colors[i] : colorList[i % colorList.length];
       legend += '<div class="donut-legend-item"><span class="donut-swatch" style="background:' + c + '"></span><span class="donut-label">' + escapeHtml(d[labelKey]) + '</span> <span class="donut-pct">' + Math.round(pct * 100) + '%</span></div>';
     });
-    return { svg: '<svg viewBox="0 0 160 160">' + slices + '</svg>', legend: legend };
+    // Pie geometry + a surface-colored center disc = donut ring. The disc
+    // is a <circle>, not an arc, so the per-slice arc contract holds.
+    return { svg: '<svg viewBox="0 0 160 160">' + slices + '<circle cx="' + cx + '" cy="' + cy + '" r="34" fill="var(--bg-surface)"/></svg>', legend: legend };
   }
 
   // kpiC builds a KPI stat card (label + value + optional sub + icon).
@@ -275,14 +286,14 @@
     var valueKey = (opts && opts.valueKey) || 'count';
     var maxS = Math.max.apply(null, data.map(function (d) { return Number(d[valueKey]) || 0; }));
     var barW = 420 / data.length;
-    var bars = '';
+    var bars = '<line x1="10" y1="150" x2="430" y2="150" stroke="var(--border)" stroke-width="1"/>';
     data.forEach(function (d, i) {
       var v = Number(d[valueKey]) || 0;
       var bh = maxS > 0 ? (v / maxS) * 140 : 0;
       var bx = 10 + i * (barW + 2);
-      bars += '<rect x="' + bx + '" y="' + (150 - bh) + '" width="' + (barW * 0.7) + '" height="' + bh + '" rx="2" fill="' + (opts && opts.color || 'var(--accent)') + '" opacity=".8"/>' +
-        '<text x="' + (bx + barW * 0.35) + '" y="' + (150 - bh - 4) + '" text-anchor="middle" fill="var(--text)" font-size="9">' + v + '</text>' +
-        '<text x="' + (bx + barW * 0.35) + '" y="165" text-anchor="middle" fill="var(--muted)" font-size="8">' + escapeHtml(d.month ? d.month.slice(5) : '') + '</text>';
+      bars += '<rect x="' + bx + '" y="' + (150 - bh) + '" width="' + (barW * 0.7) + '" height="' + bh + '" rx="4" fill="' + (opts && opts.color || 'var(--primary)') + '"/>' +
+        '<text x="' + (bx + barW * 0.35) + '" y="' + (150 - bh - 4) + '" text-anchor="middle" fill="var(--text)" font-size="10" font-weight="600">' + v + '</text>' +
+        '<text x="' + (bx + barW * 0.35) + '" y="165" text-anchor="middle" fill="var(--muted)" font-size="9">' + escapeHtml(d.month ? d.month.slice(5) : '') + '</text>';
     });
     return '<svg viewBox="0 0 440 180" style="max-height:180px">' + bars + '</svg>';
   }
