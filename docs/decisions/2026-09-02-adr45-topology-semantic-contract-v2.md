@@ -2,11 +2,11 @@
 num: 45
 area: topology
 title: ADR #45: Topology Semantic Contract v2 — Endpoint Predicates, Kind Registry, Deliberate Cold Start, and Theme Parity
-status: Accepted — §1–§3, §4.1, §5 implemented (2026-09-02); §4.2–§4.3 proposed
+status: Accepted — §1–§3, §4.1, §5, §4.2 storage + migration implemented (2026-09-02); §4.2 UI swap and §4.3 proposed
 ---
 # ADR #45: Topology Semantic Contract v2
 
-**Status:** Accepted — §1–§3, §4.1, §5 implemented (2026-09-02); §4.2–§4.3 proposed
+**Status:** Accepted — §1–§3, §4.1, §5, §4.2 storage + migration implemented (2026-09-02); §4.2 UI swap and §4.3 proposed
 **Date:** 2026-09-02
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** topology, semantic-contract, cross-language-parity, node-kind-registry, cold-start, theming
@@ -890,6 +890,28 @@ Obligations 2 and 3 are each a full slice on their own and neither is mechanical
    Conclusion: no evidence that any change in this slice broke anything outside
    the topology suites that were run for it. The blind spot itself is the finding
    — scoped green is not green.
+
+### Consolidated gate record (2026-09-02, current HEAD)
+
+Every gate run together for the first time, after all implementation commits:
+
+| Gate | Result |
+|---|---|
+| Full UI suite (`--maxWorkers=2`) | 7732 passed / 18 skipped / **4 failed** |
+| `cargo test -p oz-core --lib topology` | 52 / 52 |
+| `cargo test -p oz-pos-app --lib topology` | 329 / 329 |
+| `scripts/verify-topology-parity.py` | exit 0, both phases |
+
+The four UI failures are the same four as the first full run, one commit earlier,
+and the totals differ by exactly the six migration tests added in between — so
+nothing in this slice broke them and nothing else regressed. They are:
+`themeTokenCompliance` and `popoverSurfaceCompliance` (both red at HEAD before
+this slice, in the deferred list), `SettingsPage > keeps unconfigured sync
+unconfigured` (outside topology), and `NodeTopologyEditorDevMock` (asserts a label
+the app does not produce; see above).
+
+`--maxWorkers=2` is required: the full run crashes the worker pool at the default
+count on this machine, which is an environment limit and not a test failure.
 
    ---
 
