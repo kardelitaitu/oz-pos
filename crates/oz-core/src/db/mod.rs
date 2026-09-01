@@ -79,6 +79,8 @@ pub mod stripe;
 pub use offline::RemoteSyncFailure;
 /// EDC terminal configuration CRUD — PLANNED (stubs).
 pub mod edc_terminals;
+/// Cloud image content spine — refcount + push queue (spec 0046b §3.7).
+pub mod image_refs;
 /// Media asset (image) CRUD — PLANNED (stubs).
 pub mod media;
 /// Payment gateway configuration CRUD — PLANNED (stubs).
