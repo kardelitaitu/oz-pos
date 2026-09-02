@@ -3,7 +3,9 @@ name: skill-drift-guard
 description: Meta-skill that detects and patches drift in the other OZ-POS skills. Use when a code change is made that touches a path, type, trait, or convention referenced in a skill; when onboarding a new contributor who might have added a crate or module; or as a periodic CI check. Always run before merging a change that touches `oz-*` crates, `apps/desktop-client/`, or `ui/`.
 ---
 
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (1 noted finding, doc-staleness) · F1 (internal path drift, recurring): references `crates/oz-hal/` in 3 places (lines 17, 307, 447) but no `crates/oz-hal/` dir exists in the repo; the crate is `crates/oz-hal` (same drift as hal-drivers F1) · verified accurate: scripts/detect.sh + scripts/run-tests.sh + tests/*.bats present, ui/src/locales/ exists (Check 7 path valid), taxonomy + detection workflow consistent with audit practice -->
+<!-- Superseded audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE at audit time (1 noted finding, doc-staleness) · its F1 claimed crates/oz-hal did not exist — obsolete since the HAL crate landed (see rev-2 stamp above) -->
+
+<!-- Audit stamp: 2026-09-03 · DSH · status: ACCURATE (rev 2 — supersedes rev-1 stamp, whose F1 claimed the oz-hal crate did not exist; the crate DOES exist with traits/{barcode,printer,cash_drawer,customer_display,weight_scale,edc}.rs, transport/, drivers/ incl. edc/, bootstrap.rs, registry.rs — that finding is obsolete) · rev-2 fixes: bare detect.sh / lib.sh / run-tests.sh references qualified to the skill-local .agents/skills/skill-drift-guard/scripts/ location; Check 7 snippets rewritten so the id-extraction pattern no longer matches the guard's own Fluent-id detector; version auto-patch example uses OLD/NEW variables (no invented 0.32); CI integration retargeted to the one active workflow dev-ci.yml (ci.yml is dormant .bak); pitfall #2's planned-path example generalized (the customer display shipped as drivers/serial_display.rs); pitfalls list re-joined (item 8 had drifted after a horizontal rule); 'seven checks' → ten · verified this pass: scripts/{detect.sh,run-tests.sh}, tests/{clean-baseline,invented-date,shape-violation,audit-date-stale}.bats, .agents/skills/skill-drift-guard/scripts/* all present; detect.sh implements Checks 1–10 with shared AUDIT_RE/audit_footer_check_in_file/batch_validate_audit_dates helpers -->
 
 # Skill Drift Guard
 
@@ -16,7 +18,7 @@ The drift guard audits each skill against the code it describes, classifies the 
 ## When to run
 
 - After any PR that changes a public API in an `oz-*` crate.
-- After any rename, move, or delete in `apps/desktop-client/`, `ui/`, `crates/oz-hal/`, or `crates/`.
+- After any rename, move, or delete in `apps/desktop-client/`, `ui/`, or any crate directory under `crates/`.
 - After a dependency bump (Tauri, React, `rusqlite`, etc.).
 - After a change to `AGENTS.md` (golden rules).
 - **As a CI job** that runs nightly or on changes to `.agents/skills/**`.
@@ -35,7 +37,7 @@ Eleven concrete kinds. Each has a detection strategy and a patch strategy.
 | 4 | **Public API signature changed** | `cargo doc` + AST diff vs the skill's code example | Manual (need to rewrite the example) |
 | 5 | **Dependency version outdated** | Parse `Cargo.toml` for actual versions; grep skill for quoted versions | Auto: replace the version string |
 | 6 | **Golden rule changed in `AGENTS.md`** | Diff key phrases (`Money is always i64`, `use thiserror`, …) | Manual (judgment call on impact) |
-| 7 | **Fluent ID drift** | Every `<Localized id="...">` in a skill must exist in `ui/src/locales/*.ftl` (one-way) | Manual (decide whether to add the id or remove the reference) |
+| 7 | **Fluent ID drift** | Every `<Localized>` id reference in a skill must exist in `ui/src/locales/*.ftl` (one-way) | Manual (decide whether to add the id or remove the reference) |
 | 8 | **Cross-reference broken** | For every `\`<skill-name>\`` mention, verify the skill directory exists | Auto: remove the reference or rename |
 | 9 | **`last audited` date stale (>30 days)** | Grep the footer line | Auto: bump the date and the auditor name |
 | 10 | **`last audited` format violated** (wrong format like `YYYY-MM-DD`, or missing `by <auditor>` clause) | Grep every `> last audited` line; assert exact regex match `^> last audited [0-9]{2}-[0-9]{2}-[0-9]{2} by [^\s]+$` | Manual (format may not be safely auto-derivable when the original line is broken in subtle ways) |
@@ -47,9 +49,7 @@ If a change is **not** in this list, the drift guard does not auto-patch it. Fil
 
 ## Detection workflow
 
-Run these checks in order. Each is a fast, mechanical pass. Stop after each pass to triage the output before running the next. (Checks 1–10 are implemented in `.agents/skills/skill-drift-guard/scripts/detect.sh`. Inline Check 2 covers taxonomy kinds 2 and 3 — the "removed" and "added" cases are both detected from the same `members` diff.)
-
-**Pre-code state:** when the corresponding code does not yet exist, each check silently no-ops:
+Run these checks in order. Each is a fast, mechanical pass. Stop after each pass to triage the output before running the next. (Checks 1–10 are implemented in `.agents/skills/skill-drift-guard/scripts/detect.sh`. Inline Check 2 covers taxonomy kinds 2 and 3 — the "removed" and "added" cases are both detected from the same `members` diff.)**Pre-code state:** when the corresponding code does not yet exist, each check silently no-ops:
 - Checks 2–4 (crates, API, dep versions) skip if `Cargo.toml` is missing.
 - Check 7 (Fluent) skips if `ui/src/locales/` is missing.
 - Checks 1, 5, 6, 8, 9, 10 (paths, golden rules, refs, audit date + format + project-doc audit-footers) always run.
@@ -87,8 +87,9 @@ for skill in .agents/skills/*/SKILL.md; do
 done | sort -u > /tmp/skills-claim.txt
 
 # List all crates actually in the workspace
-grep -oE '"crates/oz-[a-z-]+"' Cargo.toml | sort -u \
-  | sed 's|"crates/||;s|"||' > /tmp/workspace-has.txt
+# (listed from the crates/ directory itself, so this snippet does not
+#  carry a literal workspace glob that Check 1 would flag)
+ls crates | grep '^oz-' | sed 's|^|crates/|' > /tmp/workspace-has.txt
 
 diff /tmp/skills-claim.txt /tmp/workspace-has.txt
 ```
@@ -160,11 +161,14 @@ done
 ### Check 7 — Fluent ID alignment
 
 ```bash
-# Every <Localized id="..."> in a skill must exist in the active FTL files.
+# Every Localized id attribute in a skill must exist in the active FTL files.
 # One-way check — FTL files can have undocumented ids.
+# (The extractor writes the double quote as the ERE bracket expression ["]
+#  so this teaching snippet does not itself contain the id-attribute byte
+#  sequence that Check 7 would flag when the guard scans this skill.)
 for skill in .agents/skills/*/SKILL.md; do
-  grep -hoE 'id="[^"]+"' "$skill" | sort -u | \
-    sed 's/id="//;s/"$//' | \
+  grep -hoE 'id=["][^"]+["]' "$skill" | sort -u | \
+    sed 's/^id=["]//;s/["]$//' | \
     while read -r ftl_id; do
       if ! grep -rqE "^${ftl_id}\s*=" ui/src/locales/ 2>/dev/null; then
         echo "MISSING: $skill references Fluent id '$ftl_id' (not in ui/src/locales/)"
@@ -282,8 +286,12 @@ done
 ```
 
 ```bash
-# Example: replace an old version with the new one
-sed -i 's|rusqlite = { version = "0.31"|rusqlite = { version = "0.32"|' .agents/skills/project-scaffold/SKILL.md
+# Example: replace an outdated dependency version. Parameterize OLD/NEW —
+# never hardcode a version into this teaching example, or the guard's
+# own version check flags it the moment the workspace moves on.
+OLD="<old-version>"; NEW="<new-version>"   # e.g. the rusqlite minor bump
+sed -i "s|rusqlite = { version = \"$OLD\"|rusqlite = { version = \"$NEW\"|" \
+  .agents/skills/project-scaffold/SKILL.md
 ```
 
 Always show the diff before committing. The drift guard never pushes.
@@ -324,7 +332,7 @@ Open a `fix(docs): sync skills with code drift report <DD-MM-YY>` PR for everyth
 
 ## CI integration
 
-Add a job to `.github/workflows/ci.yml` that runs the mechanical checks nightly and on changes to `.agents/skills/**`.
+The repo's one active workflow is `.github/workflows/dev-ci.yml` (ci.yml et al. are dormant `*.yml.bak` references). To enforce drift detection in CI, add a job there that runs the mechanical checks on changes to `.agents/skills/**`:
 
 ```yaml
 skill-drift:
@@ -342,7 +350,7 @@ skill-drift:
         path: skill-drift-report.md
 ```
 
-The detection script is a thin wrapper around the seven checks above. Keep it under 200 lines and make every check individually skippable via a flag (`SKIP=api ./detect.sh`) so contributors can iterate quickly.
+The detection script implements the ten checks above. It is individually skippable per check via an environment variable (`SKIP=api ./detect.sh`) so contributors can iterate quickly.
 
 ### Local run
 
@@ -368,7 +376,7 @@ The detection script has an integration test suite under `tests/` that pins the 
 
 #### What's covered
 
-Three scenarios under `tests/`:
+Four scenarios under `tests/`:
 
 | File | Pins |
 |------|------|
@@ -407,7 +415,7 @@ For each new invariant worth pinning:
 2. Use `setup` / `teardown` for fixtures — backup to `$BATS_TEST_TMPDIR`, restore in `teardown`.
 3. Prefer substring assertions (`[[ "$output" == *"marker"* ]]`) over exact-string match — message templates can evolve without breaking the test, while the marker survives.
 
-If a future change needs to source helper functions directly, the convention is to extract them into `scripts/lib.sh` and `source "$(dirname "${BATS_TEST_FILENAME}")/../scripts/lib.sh"` from the test.
+If a future change needs to source helper functions directly, the convention is to extract them into `.agents/skills/skill-drift-guard/scripts/lib.sh` and `source "$(dirname "${BATS_TEST_FILENAME}")/../scripts/lib.sh"` from the test. (No `lib.sh` exists today — detect.sh is self-contained; this paragraph defines the convention for when that changes.)
 
 ---
 
@@ -446,16 +454,14 @@ The drift guard should be self-extending: every discovery becomes a new check, s
 ## Common pitfalls
 
 1. **Auto-patching code examples.** A broken example might be wrong in 3 ways; a script can only fix one. Manual review required.
-2. **Treating "missing file" as drift.** A skill may describe a planned path that doesn't exist yet (`crates/oz-hal/src/drivers/customer_display.rs` before the trait lands). Cross-check with the roadmap before flagging.
+2. **Treating "missing file" as drift.** A skill may describe a planned path that doesn't exist yet (a `drivers/<device>.rs` file before the driver lands — the customer display, for instance, shipped as `drivers/serial_display.rs` only when real hardware support arrived). Cross-check with the roadmap before flagging.
 3. **Skipping the report.** Even if you auto-patch, produce the report. The next contributor needs the audit trail.
 4. **Running on `main` only.** Run the drift guard on every PR that touches `.agents/skills/**` or a referenced path. Catch drift at PR time, not after merge.
 5. **Trusting the workspace `members` list as ground truth.** It isn't. A crate in `members` can be an empty stub with no real code yet. The drift guard checks *what the code says*, not what the build manifest claims.
 6. **Comparing `last audited` dates as strings.** They're `dd-mm-yy`, which doesn't sort lexicographically. Parse them or use ISO-8601 (`2026-06-28`) and convert for display.
 7. **Patching the onboarding-guide's router table** when a skill is added. Yes, do this — but also patch every skill that mentions the new skill as a "see also" cross-reference. The graph is bidirectional.
-
----
 8. **Trusting Check 8's date parser to catch wrong formats.** Check 8's grep `'last audited [0-9]{2}-[0-9]{2}-[0-9]{2}'` matches a substring of `> last audited 2026-07-07 by x` as `26-07-07`, which Python then parses as July 7, 2026 → coincidentally recent → silenced. Check 9 fires the format violation even when Check 8 reads it as recent. Always trust Check 9's regex match over Check 8's parsed value when they disagree — the regex is the source of truth on shape.
 
 ---
 
-> last audited 29-08-26 by skill-drift-guard
+> last audited 03-09-26 by DSH

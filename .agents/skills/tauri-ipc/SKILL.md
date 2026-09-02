@@ -5,6 +5,8 @@ description: Tauri v2 command and front-end API conventions for OZ-POS — where
 
 <!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (F1 repaired + scoped-IPC documented) · F1 FIXED: Layout/registration examples no longer reference the fictional payments.rs (payment commands are split, e.g. void.rs/gift_cards.rs); noted ~47 command modules, not 5 · NEW: golden rule 6 documents the *_scoped convention (ADR #7 Data Scope Guard) — the dominant pattern at HEAD (101 files) previously undocumented; registration example now shows pos::start_sale_scoped/complete_sale_scoped (verified at HEAD) · FIXED: 'pos.ts is the only entry point' corrected to per-domain ui/src/api/<feature>.ts (matches rule 3; real files currency.ts/edc.ts/hardware.ts/…); sales::→pos:: · verified accurate: commands/ dir, pos.rs/inventory.rs/hardware.rs/reports.rs present, AppError in error.rs, invoke_handler(generate_handler![…]) in lib.rs, State<AppState> + async Result<T,AppError> convention -->
 
+<!-- Audit stamp: 2026-09-03 · DSH · status: ACCURATE (rev 2 — command example rewritten to the real add_line_scoped(session_token, args, state) pattern with resolve_session + permission check; registration example now uses the module-qualified commands::<mod>:: names and real reports commands (get_daily_revenue_scoped etc. — daily_summary/export_csv do not exist); api wrapper example corrected to the real sales.ts pattern: loggedInvoke from utils/logged-invoke (bare @tauri-apps imports inside api/ are allowed but unused there); TS error guidance corrected — AppError is serde-tagged with a camelCase kind discriminator, there is no AppError class to instanceof on the TS side; hook example shadowing bug fixed; test checklist item aligned with the sibling *_tests.rs convention (51 such files under commands/)) · prior: 2026-08-31 docs-auditor rev (F1 fictional payments.rs removed, ~47 modules, *_scoped ADR #7 documented, per-domain api files) -->
+
 # Tauri IPC & Front-end API
 
 OZ-POS uses Tauri v2 to bridge Rust and a React/TypeScript front-end. The IPC boundary is the single most important architectural seam in the app: every command is a contract, and every contract must be in the right place.
@@ -36,17 +38,16 @@ OZ-POS uses Tauri v2 to bridge Rust and a React/TypeScript front-end. The IPC bo
 
 ## Layout
 
-```
-apps/desktop-client/
+├── apps/desktop-client/
 └── src/
-    ├── main.rs                      # registers commands, builds the runtime
-    ├── lib.rs                       # the run() function, app setup
+    ├── main.rs                      # thin entry point — calls oz_pos_lib::run()
+    ├── lib.rs                       # the run() function: app setup + command registration
     └── commands/
         ├── mod.rs                   # pub use for each command module
         ├── pos.rs                   # start_sale_scoped, add_line_scoped, complete_sale_scoped
         ├── inventory.rs             # lookup_sku_scoped, adjust_stock_scoped
-        ├── hardware.rs              # open_cash_drawer, print_receipt
-        ├── reports.rs               # daily_summary, export_csv
+        ├── hardware.rs              # open_cash_drawer(_scoped), print_receipt(_scoped)
+        ├── reports.rs               # get_daily_revenue_scoped, get_menu_engineering_scoped, …
         └── …                        # ~47 modules total (currencies, exchange_rates,
                                      #   gift_cards, kds, license, audit, …). There is
                                      #   NO payments.rs — payment commands are split
@@ -76,7 +77,7 @@ ui/
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
-use oz_core::{Cart, Money, Sku};
+use oz_core::{Money, Sku};
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -94,11 +95,16 @@ pub struct AddLineResult {
 }
 
 #[tauri::command]
-pub async fn add_line(
+pub async fn add_line_scoped(
+    session_token: String,
     args: AddLineArgs,
     state: State<'_, AppState>,
 ) -> Result<AddLineResult, AppError> {
-    let cart = state.carts.get(&args.cart_id)?;
+    // Scoped commands resolve the store from the session first (ADR #7),
+    // then verify the caller holds the required permission.
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
+    let cart = /* resolve cart through state.db_manager … */;
     let line = cart.add_line(args.sku, args.qty)?;
     Ok(AddLineResult { line_id: line.id, line_total: line.total() })
 }
@@ -107,6 +113,7 @@ pub async fn add_line(
 **Rules:**
 - Argument struct is `*Args`, return type is `*Result`. Keeps the call site readable.
 - `State<'_, AppState>` is the only way to reach the database, services, or hardware. No module-level `static`s.
+- Scoped commands take `session_token: String` **first**, call `state.resolve_session(&session_token)?`, and check the required permission before touching data.
 - Errors are `AppError`, defined once in `apps/desktop-client/src/error.rs` and re-exported. Don't return `String` errors.
 - Commands are pure: they take inputs, return outputs, and use `State` for the world. No hidden state.
 
@@ -137,13 +144,14 @@ pub fn run() {
     Builder::default()
         .manage(AppState::new()?)
         .invoke_handler(tauri::generate_handler![
-            pos::start_sale_scoped,
-            pos::complete_sale_scoped,
-            inventory::lookup_sku_scoped,
-            hardware::open_cash_drawer,
-            hardware::print_receipt,
-            reports::daily_summary,
-            reports::export_csv,
+            commands::pos::start_sale_scoped,
+            commands::pos::add_line_scoped,
+            commands::pos::complete_sale_scoped,
+            commands::inventory::lookup_sku_scoped,
+            commands::hardware::open_cash_drawer_scoped,
+            commands::hardware::print_receipt_scoped,
+            commands::reports::get_daily_revenue_scoped,
+            commands::reports::get_menu_engineering_scoped,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -151,7 +159,7 @@ pub fn run() {
 ```
 
 **Rules:**
-- Commands are grouped by feature module in the `invoke_handler!` list. Keep the order matching the module list.
+- Commands are registered **module-qualified** (`commands::<feature>::<name>`) and grouped by feature module in the `generate_handler!` list.
 - Mobile entry point is gated with `#[cfg_attr(mobile, ...)]` so the same code runs on desktop and mobile.
 - `AppState::new()` must be fallible (DB open, migrations, etc.) — surface errors with `?` before `.manage(...)`.
 
@@ -162,7 +170,7 @@ pub fn run() {
 ```ts
 // ui/src/api/sales.ts
 
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 import type { CartId, LineId, Money, Sku } from '@/types/domain';
 
 export interface AddLineArgs {
@@ -176,15 +184,16 @@ export interface AddLineResult {
   lineTotal: Money;
 }
 
-export async function addLine(args: AddLineArgs): Promise<AddLineResult> {
-  return invoke<AddLineResult>('add_line', { args });
+export async function addLine(sessionToken: string, args: AddLineArgs): Promise<AddLineResult> {
+  return loggedInvoke<AddLineResult>('add_line_scoped', { sessionToken, args });
 }
 ```
 
 **Rules:**
 - One TypeScript function per Rust command. Names are camelCase; Rust is snake_case — `invoke()` does the conversion automatically.
+- Route calls through `loggedInvoke` (`ui/src/utils/logged-invoke.ts`) so every IPC call gets timing/telemetry logging. Components and hooks never import `@tauri-apps/api/*` — that's the enforceable line; `ui/src/api/tauri.ts` is the sanctioned re-export surface.
 - Every TypeScript wrapper has explicit `*Args` and `*Result` interfaces. Don't use `any` or `unknown` to skip the type.
-- All errors are `Result<T, AppError>`; on the TS side, wrap with `try { ... } catch (e) { ... }` and check `e instanceof AppError`.
+- All errors are `Result<T, AppError>`; Tauri serializes `AppError` with a camelCase `kind` discriminator (and a typed `subKind` on core/hardware failures) — branch on those fields, never on message strings.
 - Domain types (`CartId`, `Sku`, `Money`, …) live in `ui/src/types/domain.ts` and are imported everywhere.
 
 ---
@@ -195,16 +204,16 @@ export async function addLine(args: AddLineArgs): Promise<AddLineResult> {
 // ui/src/features/sales/usePosState.ts
 
 import { useState, useCallback } from 'react';
-import { startSale, addLine } from '@/api/sales';
+import { addLine as addLineApi } from '@/api/sales';
 import type { Cart, CartId, Sku } from '@/types/domain';
 
 export function usePosState(cartId: CartId) {
   const [cart, setCart] = useState<Cart | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const addLine = useCallback(async (sku: Sku, qty: number) => {
+  const addLine = useCallback(async (sessionToken: string, sku: Sku, qty: number) => {
     try {
-      await addLine({ cartId, sku, qty });
+      await addLineApi(sessionToken, { cartId, sku, qty });
       // refetch cart, or trust the lineTotal and optimistically update
     } catch (e) {
       setError(e instanceof Error ? e.message : 'unknown');
@@ -273,7 +282,7 @@ export async function onBarcodeScan(
 - [ ] TS: define `*Args` and `*Result` interfaces in `ui/src/api/<feature>.ts`.
 - [ ] TS: write the `invoke<>('cmd_name', { args })` wrapper.
 - [ ] TS: create a hook in `ui/src/features/<feature>/` that calls the wrapper.
-- [ ] Tests: add a `#[cfg(test)]` block in the Rust command (using a mock `AppState`).
+- [ ] Tests: add unit tests in the sibling `commands/<feature>_tests.rs` (wired via `#[cfg(test)] #[path = ...] mod tests;` — see `rust-backend`), using a mock `AppState`.
 - [ ] Tests: add a component test in `ui/src/__tests__/` for the hook.
 - [ ] A11y: any UI changes pass `eslint-plugin-jsx-a11y`.
 - [ ] I18n: any user-visible strings go through `@fluent/react`.
@@ -288,7 +297,7 @@ export async function onBarcodeScan(
 4. **Forgetting `tauri::generate_handler!`** — the command compiles but is not callable at runtime. Easy to miss; lint with a startup smoke test.
 5. **Reusing a domain type from `oz-core` directly in a command's `*Result`** without wrapping. Tauri serializes via JSON, and internal fields may include `i64` IDs that the JS side can't represent. Wrap with a serializable `Id(String)` or similar.
 6. **`State<'_, T>` borrowing across an `await`** — fine on the outer `async fn`, but if you call helper functions, pass `&T` from the state, not the `State` guard.
-7. **Returning `Money` with `i64` directly** in the front-end API without a renderer. The number is correct but `123456` cents looks like "123,456" in the UI. Provide a `formatMoney(money, locale)` helper.
+7. **Returning raw `Money.minor_units` into the UI without a renderer.** The number is correct but `123456` cents reads as "123,456" in the UI. Render through the front-end's `formatMoney` helper (`ui/src/types/domain.ts`).
 
 ---
 
@@ -301,4 +310,4 @@ export async function onBarcodeScan(
 
 ---
 
-> last audited 31-08-26 by docs-auditor
+> last audited 03-09-26 by DSH

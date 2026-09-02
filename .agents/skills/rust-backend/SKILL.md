@@ -5,6 +5,8 @@ description: Rust & database standards for the OZ-POS framework — Money struct
 
 <!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (F1-F3 repaired) · FIXED 31-08: F1 migrations path root migrations/ -> crates/oz-core/migrations/; F2 mocks are a plain pub mod always compiled (no #[cfg(test)]/mock-feature gate — matches hal-drivers); F3 removed the r2d2_sqlite/deadpool-sqlite pooling directive (neither is in the workspace; the runtime shares a single Arc<Mutex<Connection>>) · verified accurate: Money/Currency struct shape matches foundation/src/money.rs (minor_units:i64, currency:Currency, Currency(pub [u8;3])), i64-minor-units + thiserror conventions hold -->
 
+<!-- Audit stamp: 2026-09-03 · DSH · status: ACCURATE (rev 2 — test convention corrected: tests live in sibling *_tests.rs files wired via #[cfg(test)] #[path = ...] mod tests, never inline #[cfg(test)] mod tests { ... }; front-end formatter corrected format_minor_units → formatMoney in ui/src/types/domain.ts (the former exists nowhere); pooling mention removed from pitfall #5 to match the single Arc<Mutex<Connection>> runtime) · verified this pass: foundation/src/money.rs signatures (Money{minor_units:i64, currency:Currency}, Currency(pub [u8;3]), from_major→Option, checked_add→Option, zero) all match the skill's sample; 90 sibling *_tests.rs files under crates/oz-core/src alone; formatMoney present in ui/src/types/domain.ts · prior: 2026-08-31 docs-auditor rev (F1 migrations path, F2 always-compiled mocks, F3 no pooling) -->
+
 # Rust Backend & Database Standards
 
 The OZ-POS framework is built on Rust. This skill enforces the project's coding standards, especially around **money safety**, **database integrity**, and **error handling**.
@@ -103,7 +105,7 @@ impl Money {
 - Currency conversion is a separate function that returns `Option<Money>` (lossy conversions fail).
 - **`#[must_use]` on every `Money` constructor (`zero`, `from_major`, `checked_add`, …).** Silently dropping a freshly built `Money` is a common bug — `Money::zero(usd);` should be a compile error, not a no-op.
 - Construct `Currency` from a string via `"USD".parse::<Currency>()` (the `FromStr` impl) rather than from raw bytes. The `FromStr` impl validates shape; `Currency(*b"USD")` does not.
-- When displaying in the UI, the front-end calls `format_minor_units(money)` to render `"$1,234.56"`.
+- When displaying in the UI, the front-end's `formatMoney` (`ui/src/types/domain.ts`) renders from `minor_units` (note: its default number formatting locale is `id-ID`).
 
 ---
 
@@ -238,7 +240,13 @@ cargo test --workspace --all-features
 
 - One public type per file when it's a major domain entity (`money.rs`, `currency.rs`, `cart.rs`).
 - Re-export from `mod.rs` so external code can do `use oz_core::Money;`.
-- Use `#[cfg(test)] mod tests { ... }` at the bottom of every file with testable logic.
+- **Unit tests never live inside production `.rs` files** (AGENTS.md rule). Place them in a sibling `*_tests.rs` (e.g. `sales.rs` → `sales_tests.rs`) and wire at the bottom of the production file:
+  ```rust
+  #[cfg(test)]
+  #[path = "sales_tests.rs"]
+  mod tests;
+  ```
+  Start the test file with `use super::*;`. Integration tests belong in the top-level `tests/` directory.
 - Mock implementations of traits live in `crates/oz-hal/src/drivers/mock.rs` — a plain `pub mod`, always compiled (not gated by `#[cfg(test)]` or a `mock` feature).
 
 ---
@@ -249,7 +257,7 @@ cargo test --workspace --all-features
 2. **Constructing `Money` from a `String` user input** without parsing it explicitly as minor units. Always require callers to specify the unit.
 3. **Using `Vec<Money>` to "batch" amounts** — sums can overflow `i64` at ~9.2 × 10¹⁸. For totals use `Option<Money>` and check `checked_add`.
 4. **Forgetting to drop a `Transaction`** — if you return `Err(_)` before `commit()`, the `Drop` rolls back. Good. But if you `commit()` and then later return `Err(_)`, you've committed. Reorder so `commit()` is the last line.
-5. **Reading and writing in the same connection from different threads** — `Connection` is `!Sync`. Use a pool, or move the connection into a `spawn_blocking` task.
+5. **Reading and writing in the same connection from different threads** — `Connection` is `!Sync`. The runtime shares one `Arc<Mutex<Connection>>`; grab the mutex guard, or move the work into a `spawn_blocking` task. Never introduce a pool (none exists in the workspace).
 6. **`String` for currency codes** — wrap in a `Currency` newtype so the type system enforces ISO-4217 shape.
 
 ---
@@ -262,4 +270,4 @@ cargo test --workspace --all-features
 
 ---
 
-> last audited 31-08-26 by docs-auditor
+> last audited 03-09-26 by DSH
