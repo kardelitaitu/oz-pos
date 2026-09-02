@@ -186,7 +186,10 @@
       // Revenue trend (spans the full row — the hero chart)
       const revCard = el('div', 'chart-card chart-card--wide');
       revCard.appendChild(el('h3', null, t('chart.revenueTrendIdr')));
-      revCard.innerHTML += svgChart('rev', m.revenueTrend, ['idr'], Object.assign({ area: true, fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt' }, fullCv));
+      // Subtitle: how many months have provider-verified data vs estimate.
+      const verifiedCount = m.revenueTrend.filter(function (d) { return d.source !== 'estimate'; }).length;
+      if (verifiedCount > 0) revCard.appendChild(el('p', 'chart-sub', verifiedCount + ' of ' + m.revenueTrend.length + ' ' + t('chart.monthsVerified')));
+      revCard.innerHTML += svgChart('rev', m.revenueTrend, ['idr'], Object.assign({ area: true, sourceKey: 'source', fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt' }, fullCv));
       chartGrid.appendChild(revCard);
 
       // Tier distribution (donut)

@@ -118,15 +118,50 @@
       grid += '<line x1="' + px + '" y1="' + y(gv) + '" x2="' + w + '" y2="' + y(gv) + '" stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
     }
     var paths = '', fills = '';
+    // sourceKey in opts splits the path into segments by consecutive
+    // source values — estimate months use a dashed line and no area fill,
+    // so the operator can see which months are real vs projected.
+    var sourceKey = opts && opts.sourceKey;
     series.forEach(function (s) {
-      var pts = data.map(function (d, i) { return x(i) + ',' + y(Number(d[s]) || 0); }).join(' L ');
-      paths += '<path d="M ' + pts + '" stroke="' + (colors[s] || 'var(--primary)') + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" class="chart-line" vector-effect="non-scaling-stroke"/>';
-      if (opts && opts.area) {
-        // B42: the area path was missing its leading "M" — an invalid
-        // d= meant the browser dropped the whole element, so the 10%
-        // area shading under the line silently never rendered.
-        var base = 'M ' + x(0) + ',' + (py + ph) + ' L ' + pts + ' L ' + x(data.length - 1) + ',' + (py + ph) + ' Z';
-        fills += '<path d="' + base + '" fill="' + (colors[s] || 'var(--primary)') + '" opacity=".1"/>';
+      if (sourceKey) {
+        // Build segments of consecutive source values.
+        var segments = [];
+        var cur = null;
+        data.forEach(function (d, i) {
+          var src = String(d[sourceKey] || 'estimate');
+          var val = Number(d[s]) || 0;
+          var pt = x(i) + ',' + y(val);
+          if (cur && cur.source === src) {
+            cur.pts.push(pt);
+          } else {
+            if (cur) segments.push(cur);
+            cur = { source: src, pts: [pt] };
+          }
+        });
+        if (cur) segments.push(cur);
+        segments.forEach(function (seg) {
+          var isEst = seg.source === 'estimate';
+          var d = 'M ' + seg.pts.join(' L ');
+          paths += '<path d="' + d + '" stroke="' + (colors[s] || 'var(--primary)') + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" class="chart-line" vector-effect="non-scaling-stroke"' + (isEst ? ' stroke-dasharray="5 4"' : '') + '/>';
+          if (opts && opts.area && !isEst) {
+            // Points are "x,y" strings — parseFloat yields the x coordinate
+            // (avoids a literal split(',') which the i18n audit regex would
+            // misread as a t(',') call).
+            var firstX = parseFloat(seg.pts[0]);
+            var lastX = parseFloat(seg.pts[seg.pts.length - 1]);
+            fills += '<path d="M ' + firstX + ',' + (py + ph) + ' L ' + seg.pts.join(' L ') + ' L ' + lastX + ',' + (py + ph) + ' Z" fill="' + (colors[s] || 'var(--primary)') + '" opacity=".1"/>';
+          }
+        });
+      } else {
+        var pts = data.map(function (d, i) { return x(i) + ',' + y(Number(d[s]) || 0); }).join(' L ');
+        paths += '<path d="M ' + pts + '" stroke="' + (colors[s] || 'var(--primary)') + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" class="chart-line" vector-effect="non-scaling-stroke"/>';
+        if (opts && opts.area) {
+          // B42: the area path was missing its leading "M" — an invalid
+          // d= meant the browser dropped the whole element, so the 10%
+          // area shading under the line silently never rendered.
+          var base = 'M ' + x(0) + ',' + (py + ph) + ' L ' + pts + ' L ' + x(data.length - 1) + ',' + (py + ph) + ' Z';
+          fills += '<path d="' + base + '" fill="' + (colors[s] || 'var(--primary)') + '" opacity=".1"/>';
+        }
       }
     });
     var yLabels = '';
@@ -1115,6 +1150,7 @@
     'kpi.activeTerminals': 'Active Terminals',
     'kpi.trialToPaid': 'Trial → Paid',
     'chart.revenueTrendIdr': 'Revenue Trend (IDR)',
+    'chart.monthsVerified': 'months verified (rest estimated)',
     'chart.subscriberGrowth': 'Subscriber Growth',
     'chart.tierDistribution': 'Tier Distribution',
     'chart.paymentProvider': 'Payment Provider',

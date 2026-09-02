@@ -91,6 +91,40 @@ describe('admin-utils svgChart', () => {
     // A label under every point on the wide canvas (12 months → 12 x-labels).
     expect(svg.match(/text-anchor="middle"/g)?.length).toBe(12);
   });
+
+  it('sourceKey: renders a solid path when all months are verified', () => {
+    const data = [
+      { month: '2026-01', idr: 100, source: 'paddle_webhook' },
+      { month: '2026-02', idr: 200, source: 'midtrans_webhook' },
+    ];
+    const svg = utils.svgChart('id', data, ['idr'], { area: true, sourceKey: 'source' });
+    // No dasharray attribute on the solid segments.
+    expect(svg).not.toContain('stroke-dasharray');
+    // Area fill present (both segments are non-estimate).
+    expect(svg).toContain('opacity=".1"');
+  });
+
+  it('sourceKey: dashes estimate months and omits their area fill', () => {
+    const data = [
+      { month: '2026-01', idr: 100, source: 'paddle_webhook' },
+      { month: '2026-02', idr: 200, source: 'estimate' },
+      { month: '2026-03', idr: 300, source: 'paddle_webhook' },
+    ];
+    const svg = utils.svgChart('id', data, ['idr'], { area: true, sourceKey: 'source' });
+    // The estimate month segment should have a dashed stroke.
+    expect(svg).toContain('stroke-dasharray="5 4"');
+    // Area fill should still be present (the two solid segments).
+    expect(svg).toContain('opacity=".1"');
+  });
+
+  it('sourceKey: falls back to estimate when sourceKey is missing on a row', () => {
+    const data = [
+      { month: '2026-01', idr: 100, source: 'paddle_webhook' },
+      { month: '2026-02', idr: 200 }, // no source → treated as estimate
+    ];
+    const svg = utils.svgChart('id', data, ['idr'], { area: true, sourceKey: 'source' });
+    expect(svg).toContain('stroke-dasharray="5 4"');
+  });
 });
 
 describe('admin-utils svgDonut', () => {

@@ -611,6 +611,12 @@ select.input {
   margin: 0 0 1rem;
   flex-shrink: 0;
 }
+.chart-card .chart-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: -0.75rem 0 1rem;
+  flex-shrink: 0;
+}
 .chart-card .chart-svg, .chart-card svg { display: block; width: 100%; flex: 1; min-height: 180px; }
 .chart-card svg text { font-family: var(--font); }
 .chart-empty {
