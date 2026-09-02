@@ -38,6 +38,7 @@ pub type DeliverFuture = Pin<Box<dyn Future<Output = Result<(), String>> + Send>
 pub type SharedSqliteConn = Arc<Mutex<rusqlite::Connection>>;
 
 /// Maximum number of delivery attempts before dead-lettering.
+#[allow(dead_code)]
 const DEFAULT_MAX_ATTEMPTS: i64 = 5;
 
 /// Base backoff: 2^n minutes (first retry ≈ 2 min, then 4, 8, 16, 32…).
@@ -54,6 +55,7 @@ const DRAIN_BATCH_SIZE: i64 = 10;
 
 /// A single outbox entry.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct OutboxEntry {
     pub id: String,
     pub topic: String,
@@ -92,6 +94,7 @@ pub fn enqueue_sqlite(
 }
 
 /// Enqueue a delivery task (PostgreSQL backend).
+#[allow(dead_code)]
 pub async fn enqueue_pg(
     tx: &tokio_postgres::Transaction<'_>,
     topic: &str,
@@ -223,6 +226,7 @@ pub fn start_drainer_sqlite(
 /// delivers each via `deliver_fn(pool, topic, payload)` (async).
 ///
 /// Returns the number of entries processed.
+#[allow(dead_code)]
 pub async fn drain_pg(
     pool: &Pool,
     deliver_fn: &(dyn Fn(Pool, &str, &str) -> DeliverFuture + Send + Sync),
@@ -275,7 +279,7 @@ pub async fn drain_pg(
 
     for entry in &entries {
         let result = deliver_fn(pool.clone(), &entry.topic, &entry.payload).await;
-        let mut client = pool
+        let client = pool
             .get()
             .await
             .map_err(|e| format!("outbox update pool get: {e}"))?;
@@ -316,6 +320,7 @@ pub async fn drain_pg(
 }
 
 /// Start the background outbox drainer for PostgreSQL.
+#[allow(dead_code)]
 pub fn start_drainer_pg(
     pool: Pool,
     deliver_fn: &'static (dyn Fn(Pool, &str, &str) -> DeliverFuture + Send + Sync),

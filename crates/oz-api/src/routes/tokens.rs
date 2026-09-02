@@ -130,6 +130,7 @@ pub fn admin_key_authorised(headers: &HeaderMap, configured: Option<&str>) -> bo
 ///    master data even if it somehow carries a valid admin key.
 ///
 /// Returns `Ok(())` to proceed, or the error response to short-circuit.
+#[allow(clippy::result_large_err)]
 pub fn require_admin_write(
     headers: &HeaderMap,
     claims: &ApiTokenClaims,

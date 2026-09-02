@@ -75,7 +75,7 @@ pub async fn products_set_image_scoped(
     require_permission_for_session(&state, &session, permissions::PRODUCTS_UPDATE).await?;
 
     // Validate slot
-    if slot < 1 || slot > 5 {
+    if !(1..=5).contains(&slot) {
         return Err(AppError::Invalid(format!(
             "slot must be between 1 and 5, got {slot}"
         )));

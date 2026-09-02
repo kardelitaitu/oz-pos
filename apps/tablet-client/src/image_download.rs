@@ -30,10 +30,11 @@ use oz_core::sync_client::SyncConfig;
 /// | `cycle_cap()` | 40 | `OZ_IMG_PULL_CYCLE_CAP` | Max images per cycle |
 /// | `max_in_flight()` | 2 | `OZ_IMG_PULL_MAX_IN_FLIGHT` | Concurrent GETs |
 /// | `default_budget_bytes()` | 256 MB | `OZ_IMG_PULL_BUDGET_BYTES` | LRU eviction budget |
-
+#[allow(dead_code)]
 pub(crate) fn jitter_min() -> u64 {
     env_or("OZ_IMG_PULL_JITTER_MIN", 60)
 }
+#[allow(dead_code)]
 pub(crate) fn jitter_max() -> u64 {
     env_or("OZ_IMG_PULL_JITTER_MAX", 300)
 }
@@ -48,6 +49,7 @@ fn default_budget_bytes() -> u64 {
 }
 
 /// Generate a uniform random delay in [min, max] seconds.
+#[allow(dead_code)]
 pub(crate) fn rand_jitter(min: u64, max: u64) -> std::time::Duration {
     use rand::Rng;
     let secs = rand::thread_rng().gen_range(min..=max);
@@ -62,7 +64,7 @@ fn env_or<T: std::str::FromStr>(name: &str, default: T) -> T {
         .unwrap_or(default)
 }
 
-/// ── LRU tracker ────────────────────────────────────────────────────────
+// ── LRU tracker ────────────────────────────────────────────────────────
 
 /// Tracks the cached image files and their last-access order for LRU
 /// eviction.  A file counts toward the budget by its on-disk size.
@@ -76,6 +78,7 @@ pub struct LruTracker {
     budget_bytes: u64,
 }
 
+#[allow(dead_code)]
 impl LruTracker {
     /// Create an empty tracker with the given budget.
     pub fn new(budget_bytes: u64) -> Self {
@@ -158,7 +161,7 @@ impl LruTracker {
     }
 }
 
-/// ── Download manager ───────────────────────────────────────────────────
+// ── Download manager ───────────────────────────────────────────────────
 
 /// The tablet download manager.
 pub struct ImageDownloadManager {

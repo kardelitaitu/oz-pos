@@ -258,16 +258,19 @@ impl RedisBackend {
 // ── Pure helpers (testable without Redis) ────────────────────────────
 
 /// Return the Redis key used for a tenant's snapshot version.
+#[allow(dead_code)]
 pub fn snapshot_version_key(tenant_id: &str) -> String {
     format!("oz:snapshot:{tenant_id}:ver")
 }
 
 /// Return the Redis key used for a tenant's snapshot bytes.
+#[allow(dead_code)]
 pub fn snapshot_data_key(tenant_id: &str) -> String {
     format!("oz:snapshot:{tenant_id}:data")
 }
 
 /// Return the Lua script source for the token-bucket rate limiter.
+#[allow(dead_code)]
 pub fn token_bucket_lua_source() -> &'static str {
     TOKEN_BUCKET_LUA
 }

@@ -849,8 +849,8 @@ pub async fn get_product(
     let mut result = row.map(|r| pg_row_to_product_with_details(&r)).transpose();
     // Attach images for the single product.
     if let Ok(Some(ref mut p)) = result {
-        let mut slice = std::slice::from_mut(p);
-        attach_product_images(&tx, tenant_id, &mut slice).await?;
+        let slice = std::slice::from_mut(p);
+        attach_product_images(&tx, tenant_id, slice).await?;
     }
     tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
     result

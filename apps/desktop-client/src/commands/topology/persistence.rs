@@ -243,6 +243,7 @@ pub(crate) fn save_topology_json_at_key(
 /// profile may live in EITHER `conn` (global registry) or this connection
 /// (the session store's database, where the scoped profile family writes
 /// branch profiles). Pass `None` for single-registry callers and tests.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn save_topology_json_at_key_with_revision(
     conn: &Connection,
     nodes: Vec<Value>,

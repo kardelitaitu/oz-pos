@@ -73,7 +73,7 @@ fn transcode_png_to_webp_under_caps() {
         "webp too large: {}",
         webp.len()
     );
-    assert!(webp.len() > 0);
+    assert!(!webp.is_empty());
 }
 
 #[test]

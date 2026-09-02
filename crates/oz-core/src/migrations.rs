@@ -112,7 +112,7 @@ pub const ALL: &[Migration] = &[
         sql: include_str!("../migrations/20260831_per_tenant_unique_rebuild.sql"),
     },
     Migration {
-id: "20260901_gift_card_redeem_idempotency.sql",
+        id: "20260901_gift_card_redeem_idempotency.sql",
         sql: include_str!("../migrations/20260901_gift_card_redeem_idempotency.sql"),
     },
     Migration {

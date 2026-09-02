@@ -38,7 +38,7 @@ impl Store<'_> {
         hash: &str,
     ) -> Result<(), CoreError> {
         // Validate slot
-        if slot < 1 || slot > 5 {
+        if !(1..=5).contains(&slot) {
             return Err(CoreError::Validation {
                 field: "slot",
                 message: format!("slot must be between 1 and 5, got {slot}"),
@@ -121,7 +121,7 @@ impl Store<'_> {
     /// - [`CoreError::Validation`] if the product is a menu item and `slot == 1`
     ///   (menu items always have exactly 1 image).
     pub fn clear_product_image(&self, product_id: &str, slot: i32) -> Result<(), CoreError> {
-        if slot < 1 || slot > 5 {
+        if !(1..=5).contains(&slot) {
             return Err(CoreError::Validation {
                 field: "slot",
                 message: format!("slot must be between 1 and 5, got {slot}"),

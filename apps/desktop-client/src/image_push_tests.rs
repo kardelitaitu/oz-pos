@@ -165,5 +165,5 @@ fn batch_outcome_parse_marks_stored_as_success() {
         map.get("cccccccccccccccc").map(|s| s.as_str()),
         Some("rejected")
     );
-    assert!(map.get("dddddddddddddddd").is_none());
+    assert!(!map.contains_key("dddddddddddddddd"));
 }

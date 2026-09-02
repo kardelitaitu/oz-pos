@@ -607,13 +607,12 @@ async fn snapshot_handler(
     // ADR #43 D4: write the freshly-computed snapshot back to Redis so
     // other instances can serve it. A failure is non-fatal — the in-process
     // cache already holds the bytes for this instance.
-    if let Some(redis) = state.rate_limiter.redis() {
-        if let Err(e) = redis
+    if let Some(redis) = state.rate_limiter.redis()
+        && let Err(e) = redis
             .snapshot_set(tenant_id, &version, &bytes, SNAPSHOT_CACHE_TTL_SECS)
             .await
-        {
-            tracing::debug!(tenant_id, error = %e, "Redis snapshot write-back failed");
-        }
+    {
+        tracing::debug!(tenant_id, error = %e, "Redis snapshot write-back failed");
     }
 
     // Opportunistically prune expired entries so a tenant that stops

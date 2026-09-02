@@ -46,10 +46,10 @@ pub fn start_image_gc_loop(db: Arc<Mutex<Connection>>, image_dir: PathBuf) {
 }
 
 /// Execute a single GC cycle.
-async fn run_image_gc_cycle(db: &Arc<Mutex<Connection>>, image_dir: &PathBuf) {
+async fn run_image_gc_cycle(db: &Arc<Mutex<Connection>>, image_dir: &std::path::Path) {
     let result = tokio::task::spawn_blocking({
         let db = db.clone();
-        let image_dir = image_dir.clone();
+        let image_dir = image_dir.to_path_buf();
         move || {
             let conn = db.blocking_lock();
             let store = Store::new(&conn);

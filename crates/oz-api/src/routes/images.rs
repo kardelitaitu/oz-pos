@@ -90,10 +90,7 @@ fn store_image_atomic(image_dir: &FsPath, hash16: &str, bytes: &[u8]) -> std::io
             if final_path.exists() {
                 Ok(true)
             } else {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "atomic rename failed",
-                ))
+                Err(std::io::Error::other("atomic rename failed"))
             }
         }
     }
@@ -210,14 +207,14 @@ pub async fn put_image(
     match outcome {
         ImageOutcome::Stored(hash16) | ImageOutcome::Duplicate(hash16) => {
             // Verify the client-computed hash if supplied (409 on mismatch).
-            if let Some(expected) = query.hash.as_deref() {
-                if !is_valid_hash16(expected) || expected != hash16 {
-                    return (
-                        StatusCode::CONFLICT,
-                        Json(serde_json::json!({"error": "hash mismatch"})),
-                    )
-                        .into_response();
-                }
+            if let Some(expected) = query.hash.as_deref()
+                && (!is_valid_hash16(expected) || expected != hash16)
+            {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(serde_json::json!({"error": "hash mismatch"})),
+                )
+                    .into_response();
             }
             (StatusCode::CREATED, Json(PutImageResponse { hash16 })).into_response()
         }
@@ -383,10 +380,7 @@ pub async fn get_image_pack(
         let referenced = {
             let db = state.db.lock().await;
             let store = Store::new(&db);
-            match store.image_ref_exists(tenant_id, h) {
-                Ok(v) => v,
-                Err(_) => false,
-            }
+            store.image_ref_exists(tenant_id, h).unwrap_or_default()
         };
         if !referenced {
             continue;

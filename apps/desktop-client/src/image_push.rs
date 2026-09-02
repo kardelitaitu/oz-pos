@@ -29,7 +29,6 @@ use tokio::sync::Mutex;
 /// | `batch_max_bytes()` | 512 KB | — | Max payload per POST |
 /// | `jitter_min()` | 60 s | `OZ_IMG_PUSH_JITTER_MIN` | Min wake interval |
 /// | `jitter_max()` | 300 s | `OZ_IMG_PUSH_JITTER_MAX` | Max wake interval |
-
 fn batch_max_images() -> usize {
     env_or("OZ_IMG_PUSH_BATCH", 16)
 }
@@ -51,7 +50,7 @@ fn env_or<T: std::str::FromStr>(name: &str, default: T) -> T {
         .unwrap_or(default)
 }
 
-/// ── Types ──────────────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────
 
 /// The image push scheduler.
 ///
