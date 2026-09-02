@@ -176,6 +176,12 @@ pub struct AppState {
     /// spans the global and store databases, so concurrent Applies cannot
     /// safely compare revisions or recover partial work independently.
     pub topology_apply_lock: Mutex<()>,
+
+    /// Handle to the loopback local REST API server (`local_api` module)
+    /// when it is running. `None` = stopped (the default; enabled via
+    /// Settings → Local API). Stopped in [`Drop`] so the listener socket
+    /// dies with the process.
+    pub local_api: Mutex<Option<crate::local_api::LocalApiHandle>>,
 }
 
 impl AppState {
@@ -347,6 +353,7 @@ impl AppState {
             terminal_id,
             picker_ticket_secret: uuid::Uuid::new_v4().as_bytes().to_vec(),
             topology_apply_lock: Mutex::new(()),
+            local_api: Mutex::new(None),
         })
     }
 }
@@ -709,6 +716,13 @@ fn resolve_db_path(app: &AppHandle) -> Result<PathBuf, AppError> {
 
 impl Drop for AppState {
     fn drop(&mut self) {
+        // Stop the local API server first: its handlers share `db`, so
+        // closing the listener before the kernel drain avoids serving
+        // requests against a half-stopped backend.
+        if let Some(handle) = self.local_api.try_lock().ok().and_then(|mut g| g.take()) {
+            handle.stop();
+        }
+
         // Abort the plugin hot-reload background task (M-5).
         if let Some(handle) = self.plugin_hot_reload_task.take() {
             handle.abort();
@@ -782,6 +796,7 @@ impl AppState {
             terminal_id: Arc::new(Mutex::new(None)),
             picker_ticket_secret: b"test-picker-ticket-secret".to_vec(),
             topology_apply_lock: Mutex::new(()),
+            local_api: Mutex::new(None),
         }
     }
 

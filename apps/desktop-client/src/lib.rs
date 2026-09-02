@@ -33,6 +33,10 @@ mod image_push;
 /// to all connected terminals in the same store. Terminal identification
 /// happens at startup via device_id lookup (see state.rs).
 pub mod lan_server;
+/// Loopback local REST API server (embedded `oz-api` router) — lets
+/// merchants run their own scripts against this register. Off by
+/// default; enabled via Settings → Local API.
+pub mod local_api;
 /// Global application state (DB, kernel, sync daemon, registry).
 pub mod state;
 
@@ -444,6 +448,70 @@ pub fn run() {
                 }
             }
 
+            // ── Local REST API server (loopback, default off) ─────────
+            // Auto-start when the merchant enabled it in Settings
+            // (`local_api.enabled = "1"`). A bind failure (port taken)
+            // is logged and skipped — the Settings toggle retries on
+            // demand. Loopback-only: LAN exposure is out of scope for
+            // this surface (docs/guides/EXTENDING.md §10).
+            {
+                let (enabled, port, secret, db_arc, db_path, image_dir) = {
+                    let state = app.state::<AppState>();
+                    let db_guard = state.db.blocking_lock();
+                    let enabled = crate::local_api::is_enabled(&db_guard);
+                    let port = crate::local_api::resolve_port(&db_guard);
+                    let secret = if enabled {
+                        crate::local_api::load_or_create_secret(&db_guard)
+                            .map_err(
+                                |e| tracing::warn!(error = %e, "local API: secret unavailable"),
+                            )
+                            .ok()
+                    } else {
+                        None
+                    };
+                    let image_dir = app
+                        .path()
+                        .app_cache_dir()
+                        .ok()
+                        .map(|d| d.join("images"));
+                    (
+                        enabled,
+                        port,
+                        secret,
+                        state.db.clone(),
+                        state.db_path.clone(),
+                        image_dir,
+                    )
+                };
+                if enabled {
+                    if let (Some(secret), Some(image_dir)) = (secret, image_dir) {
+                        let app_handle = app.handle().clone();
+                        platform_startup::spawn_daemon("local API server", async move {
+                            match crate::local_api::start(
+                                db_arc,
+                                db_path,
+                                image_dir,
+                                secret,
+                                port,
+                            )
+                            .await
+                            {
+                                Ok(handle) => {
+                                    *app_handle.state::<AppState>().local_api.lock().await =
+                                        Some(handle);
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        error = %e,
+                                        "local API auto-start failed — enable it again in Settings"
+                                    );
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -477,6 +545,10 @@ pub fn run() {
             commands::loyalty::update_loyalty_tier_scoped,
             commands::loyalty::get_points_value_scoped,
             commands::loyalty::get_or_create_loyalty_account_scoped,
+            commands::local_api::local_api_status_scoped,
+            commands::local_api::local_api_set_enabled_scoped,
+            commands::local_api::local_api_set_port_scoped,
+            commands::local_api::local_api_mint_token_scoped,
             commands::data::get_backup_status,
             commands::data::get_backup_status_scoped,
             commands::data::create_backup,

@@ -787,6 +787,7 @@ const SECRET_KEY_DENY_LIST: &[&str] = &[
     "pg_sync.password",
     "rate_sync.api_key",
     "lan_server.psk",
+    "local_api.secret",
     "smtp_config",
     "license.api_key",
     "license.payload",

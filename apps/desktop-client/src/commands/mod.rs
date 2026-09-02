@@ -55,6 +55,8 @@ pub mod kds_device;
 pub mod kds_routing;
 /// License commands.
 pub mod license;
+/// Local REST API server commands (loopback `oz-api` embed).
+pub mod local_api;
 /// Loyalty / rewards commands.
 pub mod loyalty;
 /// Offline-mode commands.
