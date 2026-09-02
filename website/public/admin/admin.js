@@ -108,9 +108,13 @@
         if (fx.live) { fxRate = fx.rate; fxLive = true; fxUpdatedAt = fx.updatedAt; }
         else { fxLive = false; }
       }
-      // Convert all revenue data to IDR.
-      m.revenueTrend.forEach(d => d.idr = Math.round(d.usd * fxRate));
-      const mrrIdr = Math.round(m.kpis.mrrUsd * fxRate);
+      // Convert all revenue data to IDR — but keep the server's
+      // provider-verified per-month idr when present (revenue_events
+      // ledger writes BOTH currencies at webhook time; re-deriving idr
+      // from usd×fx would double-convert Midtrans IDR and drift with the
+      // live rate). Fall back to usd×fx only when the server sent no idr
+      // (older server build / estimate months).
+      m.revenueTrend.forEach(d => { if (!(d.idr > 0)) d.idr = Math.round((d.usd || 0) * fxRate); });
 
       c.innerHTML = '';
 
@@ -132,11 +136,29 @@
       c.appendChild(head);
 
       // --- Hero: the ONE brand-colored highlight card per view
-      //     (design-language → Cards → Highlight) — revenue is the hero. ---
+      //     (design-language → Cards → Highlight) — revenue is the hero.
+      //     Value = provider-verified monthly gross (revenue_events ledger
+      //     from Paddle/Midtrans webhooks); the source chip tells the
+      //     operator whether it is real money or a subscription estimate.
+      // Source chip: provider-verified webhook gross vs subscription
+      // estimate.  An older server build sends neither grossSource nor
+      // monthlyGrossUsd — that must read as "estimate", never as verified
+      // money.
+      const heroIsEstimate = m.kpis.grossSource === 'estimate' || !m.kpis.grossSource || !(m.kpis.monthlyGrossUsd > 0);
+      const heroSrc = heroIsEstimate ? t('common.estimate') : t('common.providerVerified');
+      // Hero value: provider-verified monthly gross when the server sent it
+      // (new build), else the MRR estimate so an old server never shows a
+      // blank Rp 0 hero.
+      const heroIdr = m.kpis.monthlyGrossIdr > 0 ? m.kpis.monthlyGrossIdr : Math.round(m.kpis.mrrUsd * fxRate);
       const hero = el('div', 'hero-card');
       hero.appendChild(el('div', 'hero-label', t('kpi.monthlyGrossIdr')));
-      hero.appendChild(el('div', 'hero-value', fmtIdr(mrrIdr)));
-      hero.appendChild(el('div', 'hero-sub', `≈ $${m.kpis.mrrUsd} × ${fxRate.toLocaleString()} · ${t('kpi.mrr')} ${fmtUsd(m.kpis.mrrUsd)} · ${t('kpi.arpu')} ${fmtUsd(m.kpis.arpuUsd)}`));
+      hero.appendChild(el('div', 'hero-value', fmtIdr(heroIdr)));
+      const heroChip = el('span', 'hero-chip', heroSrc);
+      heroChip.style.cssText = 'font-size:.72rem;opacity:.75;font-weight:600;letter-spacing:.03em;text-transform:uppercase';
+      const heroSub = el('div', 'hero-sub');
+      heroSub.appendChild(heroChip);
+      heroSub.appendChild(document.createTextNode(` · ${t('kpi.mrr')} ${fmtUsd(m.kpis.mrrUsd)} (${t('common.estimate')}) · ${t('kpi.arpu')} ${fmtUsd(m.kpis.arpuUsd)}`));
+      hero.appendChild(heroSub);
       c.appendChild(hero);
 
       // --- Stats row: tinted stat cards (spec: tinted bg + 20% border +

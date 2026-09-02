@@ -1061,7 +1061,7 @@
     // (boolean) intentionally pass through.
     ['totalUsers', 'activeUsers', 'totalSubscribers', 'activeDevices',
       'mrrUsd', 'mrrIdr', 'lifetimeUsd', 'lifetimeIdr', 'arpuUsd',
-      'trialToPaidRate', 'fxRate']
+      'trialToPaidRate', 'fxRate', 'monthlyGrossUsd', 'monthlyGrossIdr']
       .forEach(function (key) { kpis[key] = num(k[key]); });
     return {
       revenueTrend: arr(m.revenueTrend),
@@ -1101,6 +1101,8 @@
     'section.revenue': 'Revenue',
     'section.growth': 'Growth',
     'common.active': 'active',
+    'common.estimate': 'estimate',
+    'common.providerVerified': 'Paddle/Midtrans webhooks',
     'kpi.totalUsers': 'Total Users',
     'kpi.totalSubscribers': 'Total Subscribers',
     'kpi.mrr': 'MRR',

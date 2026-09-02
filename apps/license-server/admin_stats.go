@@ -8,9 +8,15 @@ package main
 //
 // Auth: adminAuth (OZ_ADMIN_KEY bearer or admin tenant session)
 //
-// MRR is computed from active subscriptions × tier price map (not from
-// transaction amounts — Paddle/Midtrans revenue data lands later). The FX
-// rate for USD→IDR is fetched from open.er-api.com with a 1-hour cache.
+// Income/gross figures (monthlyGross*, lifetimeUsd/Idr, revenueTrend) come
+// from the revenue_events ledger — written ONLY by signature-verified
+// Paddle/Midtrans webhooks (see provider_revenue.go) — so admin DB edits
+// (tier overrides, renews, grants) can never move the money numbers. MRR is
+// computed from active subscriptions × tier price map and is labeled a
+// subscription estimate, distinct from provider-verified gross. The price
+// map also survives only as a labeled fallback for months with no provider
+// events. The FX rate for USD→IDR is fetched from open.er-api.com with a
+// 1-hour cache (5-minute cache for the revenue snapshot).
 
 import (
 	"encoding/json"
@@ -151,35 +157,26 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 
 		fxRate, fxUpdatedAt, fxLive := getFxRate()
 
-		// ── Real revenue from revenue_events (Phase D) ───────────
-		// Sum recorded payments (Paddle USD + Midtrans IDR) into a
-		// per-month USD/IDR map, plus lifetime totals. Falls back to the
-		// price-map estimate below when no events exist yet.
-		realByMonth := make(map[string]struct{ usd, idr float64 })
-		lifetimeUsd, lifetimeIdr := 0.0, 0.0
-		revEvents, _ := app.FindRecordsByFilter("revenue_events",
-			"id != ''", "-created", 0, 0)
-		for _, re := range revEvents {
-			usd := re.GetFloat("amount_usd")
-			idr := float64(re.GetInt("amount_idr"))
-			created := re.GetDateTime("created").Time()
-			key := fmt.Sprintf("%d-%02d", created.Year(), created.Month())
-			b := realByMonth[key]
-			b.usd += usd
-			b.idr += idr
-			realByMonth[key] = b
-			lifetimeUsd += usd
-			lifetimeIdr += idr
-		}
+		// ── Provider-verified revenue (income/gross source of truth) ──
+		// Income/gross figures come from revenue_events — the append-only
+		// ledger written ONLY by signature-verified Paddle/Midtrans webhooks
+		// (see provider_revenue.go).  Admin DB edits (tier overrides, renew,
+		// grants, subscription rows) cannot move these numbers: they never
+		// touch revenue_events.  The price-map estimate below survives only
+		// as a clearly-labeled fallback for months with no provider events.
+		rev := getProviderRevenue(app)
+		realByMonth := rev.ByMonth
+		lifetimeUsd, lifetimeIdr := rev.LifetimeUsd, rev.LifetimeIdr
 
 		// ── Time series (12 months) ─────────────────────────────────
 		now := time.Now()
 		type monthBucket struct {
-			Month string  `json:"month"`
-			Usd   float64 `json:"usd"`
-			Idr   float64 `json:"idr"`
-			Count int     `json:"count"`
-			Churn int     `json:"churn"`
+			Month  string  `json:"month"`
+			Usd    float64 `json:"usd"`
+			Idr    float64 `json:"idr"`
+			Count  int     `json:"count"`
+			Churn  int     `json:"churn"`
+			Source string  `json:"source,omitempty"`
 		}
 		// Build 12-month window.
 		buckets := make([]monthBucket, 12)
@@ -229,24 +226,33 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		// Build revenue trend, subscriber growth, churn arrays.
-		// Revenue uses REAL revenue_events when present for a month,
-		// else the price-map estimate (fallback for months without
-		// recorded transactions, e.g. new installs).
+		// Revenue trend uses the provider-verified revenue_events ledger
+		// when a month has recorded payments; months without provider
+		// events fall back to the price-map estimate, clearly labeled.
 		revenueTrend := make([]monthBucket, 0, 12)
 		subGrowth := make([]monthBucket, 0, 12)
 		churnArr := make([]monthBucket, 0, 12)
 		cumulative := 0
 		for _, key := range bucketKeys {
-			rev := revenueByMonth[key]
-			// NOTE (bug hunt r6): amount_usd already contains FX-converted
-			// IDR-native events (revenue_events.go writes both currencies
-			// of every payment) — do NOT add idr/fx here, that double-counts.
-			if real, ok := realByMonth[key]; ok && (real.usd > 0 || real.idr > 0) {
-				rev = real.usd
+			est := revenueByMonth[key]
+			if m, ok := realByMonth[key]; ok && m.Count > 0 && (m.Usd > 0 || m.Idr > 0) {
+				// Provider-verified webhook revenue.
+				revenueTrend = append(revenueTrend, monthBucket{
+					Month:  key,
+					Usd:    math.Round(m.Usd*100) / 100,
+					Idr:    math.Round(m.Idr),
+					Count:  m.Count,
+					Source: providerRevenueSource(m),
+				})
+			} else {
+				// Price-map estimate (labeled fallback).
+				revenueTrend = append(revenueTrend, monthBucket{
+					Month:  key,
+					Usd:    math.Round(est*100) / 100,
+					Idr:    math.Round(est * fxRate),
+					Source: "estimate",
+				})
 			}
-			revenueTrend = append(revenueTrend, monthBucket{
-				Month: key, Usd: math.Round(rev*100) / 100, Idr: math.Round(rev*fxRate*100) / 100,
-			})
 			cumulative += subGrowthByMonth[key]
 			subGrowth = append(subGrowth, monthBucket{
 				Month: key, Count: cumulative,
@@ -396,6 +402,20 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
+		// ── Current month provider gross (income/gross source of truth) ─
+		curKey := fmt.Sprintf("%d-%02d", now.Year(), now.Month())
+		monthlyGrossUsd, monthlyGrossIdr := 0.0, 0.0
+		grossSource := "estimate"
+		if cm, ok := realByMonth[curKey]; ok && cm.Count > 0 && (cm.Usd > 0 || cm.Idr > 0) {
+			monthlyGrossUsd = math.Round(cm.Usd*100) / 100
+			monthlyGrossIdr = math.Round(cm.Idr)
+			grossSource = providerRevenueSource(cm)
+		} else {
+			// Fall back to subscription estimate when no provider events.
+			monthlyGrossUsd = math.Round(mrrUsd*100) / 100
+			monthlyGrossIdr = math.Round(mrrUsd * fxRate)
+		}
+
 		// ── Response ────────────────────────────────────────────────
 		return e.JSON(http.StatusOK, map[string]any{
 			"kpis": map[string]any{
@@ -404,6 +424,9 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 				"totalSubscribers": totalSubscribers,
 				"mrrUsd":           math.Round(mrrUsd*100) / 100,
 				"mrrIdr":           math.Round(mrrUsd * fxRate),
+				"monthlyGrossUsd":  monthlyGrossUsd,
+				"monthlyGrossIdr":  monthlyGrossIdr,
+				"grossSource":      grossSource,
 				"lifetimeUsd":      math.Round(lifetimeUsd*100) / 100,
 				"lifetimeIdr":      math.Round(lifetimeIdr),
 				"arpuUsd":          arpuUsd,

@@ -512,6 +512,34 @@ describe('admin-utils normalizeStats (B6: partial payload killed the dashboard)'
     expect(m.kpis.arpuUsd).toBe(12.5);
   });
 
+  it('coerces the provider monthly-gross kpis (provider-verified revenue)', () => {
+    // monthlyGrossUsd/Idr come from the revenue_events webhook ledger; a
+    // partial payload must never render "Rp NaN" in the hero card.
+    const m = utils.normalizeStats({
+      kpis: { monthlyGrossUsd: null, monthlyGrossIdr: undefined, grossSource: 'estimate' },
+    });
+    expect(m.kpis.monthlyGrossUsd).toBe(0);
+    expect(m.kpis.monthlyGrossIdr).toBe(0);
+    // grossSource is a string, passed through untouched.
+    expect(m.kpis.grossSource).toBe('estimate');
+  });
+
+  it('keeps provider-verified per-month trend values and source labels', () => {
+    const src = {
+      revenueTrend: [
+        { month: '2026-01', usd: 10, idr: 160000, source: 'paddle_webhook' },
+        { month: '2026-02', usd: 9.3, idr: 149000, source: 'midtrans_webhook' },
+        { month: '2026-03', usd: 5, source: 'estimate' },
+      ],
+    };
+    const m = utils.normalizeStats(src);
+    expect(m.revenueTrend).toEqual(src.revenueTrend);
+    expect(m.revenueTrend[0].idr).toBe(160000);
+    expect(m.revenueTrend[1].source).toBe('midtrans_webhook');
+    // Estimate months may have no idr from the server — renderer derives it.
+    expect(m.revenueTrend[2].idr).toBeUndefined();
+  });
+
   it('tolerates non-object input entirely', () => {
     expect(() => utils.normalizeStats(null)).not.toThrow();
     expect(() => utils.normalizeStats(undefined)).not.toThrow();
