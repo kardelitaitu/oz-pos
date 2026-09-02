@@ -324,6 +324,7 @@ pub const ALL_ENFORCED: &[&str] = &[
     permissions::TERMINALS_EDIT,
     permissions::TERMINALS_DELETE,
     permissions::CATEGORIES_MANAGE,
+    permissions::CATEGORIES_READ,
     permissions::PLUGINS_MANAGE,
     permissions::TERMINALS_READ,
     permissions::PURCHASING_VIEW,
@@ -333,5 +334,7 @@ pub const ALL_ENFORCED: &[&str] = &[
     permissions::GIFTCARDS_MANAGE,
     permissions::SYNC_MANAGE,
     permissions::SECURITY_MANAGE,
+    permissions::REFERENCE_READ,
+    permissions::PLAN_READ,
     permissions::DATA_EXPORT,
 ];

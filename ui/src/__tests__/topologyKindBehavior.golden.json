@@ -1,0 +1,1617 @@
+{
+  "generatedBy": "ui/src/__tests__/topologyKindBehavior.test.ts (ADR #45 §3 behavior freeze)",
+  "probes": [
+    {
+      "label": "branch-location",
+      "behavior": {
+        "kind": "branch-location",
+        "isKds": false,
+        "isRestaurantPos": false,
+        "visiblePorts": [
+          "right"
+        ],
+        "leftPortVariants": [],
+        "sockets": [
+          {
+            "side": "left",
+            "visible": false,
+            "rows": []
+          },
+          {
+            "side": "right",
+            "visible": true,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [
+                  "location-out"
+                ],
+                "gating": "location-out",
+                "recording": "location-out",
+                "labelId": "topology-port-location-out",
+                "ariaLabelId": "topology-port-location-out-aria"
+              }
+            ]
+          }
+        ],
+        "leftLabelsByConnected": [
+          {
+            "connected": "<none>",
+            "labelId": "topology-port-generic-in"
+          },
+          {
+            "connected": "operation-in",
+            "labelId": "topology-port-generic-in"
+          },
+          {
+            "connected": "stock-in",
+            "labelId": "topology-port-generic-in"
+          },
+          {
+            "connected": "transfer-in",
+            "labelId": "topology-port-generic-in"
+          },
+          {
+            "connected": "ticket-in",
+            "labelId": "topology-port-generic-in"
+          },
+          {
+            "connected": "location-in",
+            "labelId": "topology-port-generic-in"
+          }
+        ],
+        "semanticLabels": [
+          {
+            "semantic": "location-out",
+            "left": "topology-port-location-out",
+            "right": "topology-port-location-out"
+          },
+          {
+            "semantic": "location-in",
+            "left": "topology-port-location-in",
+            "right": "topology-port-location-in"
+          },
+          {
+            "semantic": "operation-out",
+            "left": "topology-port-operation-out",
+            "right": "topology-port-operation-out"
+          },
+          {
+            "semantic": "operation-in",
+            "left": "topology-port-operation-in",
+            "right": "topology-port-operation-in"
+          },
+          {
+            "semantic": "stock-out",
+            "left": "topology-port-stock-out",
+            "right": "topology-port-stock-out"
+          },
+          {
+            "semantic": "stock-in",
+            "left": "topology-port-stock-in",
+            "right": "topology-port-stock-in"
+          },
+          {
+            "semantic": "transfer-out",
+            "left": "topology-port-transfer-out",
+            "right": "topology-port-transfer-out"
+          },
+          {
+            "semantic": "transfer-in",
+            "left": "topology-port-transfer-in",
+            "right": "topology-port-transfer-in"
+          },
+          {
+            "semantic": "ticket-out",
+            "left": "topology-port-ticket-out",
+            "right": "topology-port-ticket-out"
+          },
+          {
+            "semantic": "ticket-in",
+            "left": "topology-port-ticket-in",
+            "right": "topology-port-ticket-in"
+          },
+          {
+            "semantic": "device-out",
+            "left": "topology-port-device-out",
+            "right": "topology-port-device-out"
+          },
+          {
+            "semantic": "generic-in",
+            "left": "topology-port-generic-in",
+            "right": "topology-port-generic-in"
+          },
+          {
+            "semantic": "generic-out",
+            "left": "topology-port-generic-out",
+            "right": "topology-port-generic-out"
+          }
+        ],
+        "icon": "StoreIcon",
+        "settingsCard": "<not-a-workspace>",
+        "copySanitization": {
+          "keepsStoreProfileId": false
+        }
+      }
+    },
+    {
+      "label": "branch-location-diagram-only",
+      "behavior": {
+        "kind": "branch-location",
+        "isKds": false,
+        "isRestaurantPos": false,
+        "visiblePorts": [
+          "right"
+        ],
+        "leftPortVariants": [],
+        "sockets": [
+          {
+            "side": "left",
+            "visible": false,
+            "rows": []
+          },
+          {
+            "side": "right",
+            "visible": true,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [
+                  "location-out"
+                ],
+                "gating": "location-out",
+                "recording": "location-out",
+                "labelId": "topology-port-location-out",
+                "ariaLabelId": "topology-port-location-out-aria"
+              }
+            ]
+          }
+        ],
+        "leftLabelsByConnected": [
+          {
+            "connected": "<none>",
+            "labelId": "topology-port-generic-in"
+          },
+          {
+            "connected": "operation-in",
+            "labelId": "topology-port-generic-in"
+          },
+          {
+            "connected": "stock-in",
+            "labelId": "topology-port-generic-in"
+          },
+          {
+            "connected": "transfer-in",
+            "labelId": "topology-port-generic-in"
+          },
+          {
+            "connected": "ticket-in",
+            "labelId": "topology-port-generic-in"
+          },
+          {
+            "connected": "location-in",
+            "labelId": "topology-port-generic-in"
+          }
+        ],
+        "semanticLabels": [
+          {
+            "semantic": "location-out",
+            "left": "topology-port-location-out",
+            "right": "topology-port-location-out"
+          },
+          {
+            "semantic": "location-in",
+            "left": "topology-port-location-in",
+            "right": "topology-port-location-in"
+          },
+          {
+            "semantic": "operation-out",
+            "left": "topology-port-operation-out",
+            "right": "topology-port-operation-out"
+          },
+          {
+            "semantic": "operation-in",
+            "left": "topology-port-operation-in",
+            "right": "topology-port-operation-in"
+          },
+          {
+            "semantic": "stock-out",
+            "left": "topology-port-stock-out",
+            "right": "topology-port-stock-out"
+          },
+          {
+            "semantic": "stock-in",
+            "left": "topology-port-stock-in",
+            "right": "topology-port-stock-in"
+          },
+          {
+            "semantic": "transfer-out",
+            "left": "topology-port-transfer-out",
+            "right": "topology-port-transfer-out"
+          },
+          {
+            "semantic": "transfer-in",
+            "left": "topology-port-transfer-in",
+            "right": "topology-port-transfer-in"
+          },
+          {
+            "semantic": "ticket-out",
+            "left": "topology-port-ticket-out",
+            "right": "topology-port-ticket-out"
+          },
+          {
+            "semantic": "ticket-in",
+            "left": "topology-port-ticket-in",
+            "right": "topology-port-ticket-in"
+          },
+          {
+            "semantic": "device-out",
+            "left": "topology-port-device-out",
+            "right": "topology-port-device-out"
+          },
+          {
+            "semantic": "generic-in",
+            "left": "topology-port-generic-in",
+            "right": "topology-port-generic-in"
+          },
+          {
+            "semantic": "generic-out",
+            "left": "topology-port-generic-out",
+            "right": "topology-port-generic-out"
+          }
+        ],
+        "icon": "StoreIcon",
+        "settingsCard": "<not-a-workspace>",
+        "copySanitization": {
+          "keepsStoreProfileId": false
+        }
+      }
+    },
+    {
+      "label": "workspace:store-pos",
+      "behavior": {
+        "kind": "workspace:store-pos",
+        "isKds": false,
+        "isRestaurantPos": false,
+        "visiblePorts": [
+          "left",
+          "right"
+        ],
+        "leftPortVariants": [
+          "location-in"
+        ],
+        "sockets": [
+          {
+            "side": "left",
+            "visible": true,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [
+                  "location-in"
+                ],
+                "gating": "location-in",
+                "recording": "location-in",
+                "labelId": "topology-port-location-in",
+                "ariaLabelId": "topology-port-location-in-aria",
+                "leftLabelId": "topology-port-location-in"
+              }
+            ]
+          },
+          {
+            "side": "right",
+            "visible": true,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [
+                  "stock-out",
+                  "transfer-out",
+                  "operation-out"
+                ],
+                "gating": "stock-out",
+                "labelId": "topology-port-workspace-out",
+                "ariaLabelId": "topology-port-aria"
+              }
+            ]
+          }
+        ],
+        "leftLabelsByConnected": [
+          {
+            "connected": "<none>",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "operation-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "stock-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "transfer-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "ticket-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "location-in",
+            "labelId": "topology-port-location-in"
+          }
+        ],
+        "semanticLabels": [
+          {
+            "semantic": "location-out",
+            "left": "topology-port-location-out",
+            "right": "topology-port-location-out"
+          },
+          {
+            "semantic": "location-in",
+            "left": "topology-port-location-in",
+            "right": "topology-port-location-in"
+          },
+          {
+            "semantic": "operation-out",
+            "left": "topology-port-operation-out",
+            "right": "topology-port-operation-out"
+          },
+          {
+            "semantic": "operation-in",
+            "left": "topology-port-operation-in",
+            "right": "topology-port-operation-in"
+          },
+          {
+            "semantic": "stock-out",
+            "left": "topology-port-stock-out",
+            "right": "topology-port-stock-out"
+          },
+          {
+            "semantic": "stock-in",
+            "left": "topology-port-stock-in",
+            "right": "topology-port-stock-in"
+          },
+          {
+            "semantic": "transfer-out",
+            "left": "topology-port-transfer-out",
+            "right": "topology-port-transfer-out"
+          },
+          {
+            "semantic": "transfer-in",
+            "left": "topology-port-transfer-in",
+            "right": "topology-port-transfer-in"
+          },
+          {
+            "semantic": "ticket-out",
+            "left": "topology-port-ticket-out",
+            "right": "topology-port-ticket-out"
+          },
+          {
+            "semantic": "ticket-in",
+            "left": "topology-port-ticket-in",
+            "right": "topology-port-ticket-in"
+          },
+          {
+            "semantic": "device-out",
+            "left": "topology-port-device-out",
+            "right": "topology-port-device-out"
+          },
+          {
+            "semantic": "generic-in",
+            "left": "topology-port-generic-in",
+            "right": "topology-port-generic-in"
+          },
+          {
+            "semantic": "generic-out",
+            "left": "topology-port-generic-out",
+            "right": "topology-port-generic-out"
+          }
+        ],
+        "icon": "CartIcon",
+        "settingsCard": "WorkspaceStorePosSettings",
+        "copySanitization": {
+          "keepsStoreProfileId": true
+        }
+      }
+    },
+    {
+      "label": "workspace:restaurant-pos",
+      "behavior": {
+        "kind": "workspace:restaurant-pos",
+        "isKds": false,
+        "isRestaurantPos": true,
+        "visiblePorts": [
+          "left",
+          "right"
+        ],
+        "leftPortVariants": [
+          "location-in"
+        ],
+        "sockets": [
+          {
+            "side": "left",
+            "visible": true,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [
+                  "location-in"
+                ],
+                "gating": "location-in",
+                "recording": "location-in",
+                "labelId": "topology-port-location-in",
+                "ariaLabelId": "topology-port-location-in-aria",
+                "leftLabelId": "topology-port-location-in"
+              }
+            ]
+          },
+          {
+            "side": "right",
+            "visible": true,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [
+                  "operation-out",
+                  "stock-out",
+                  "transfer-out"
+                ],
+                "gating": "operation-out",
+                "labelId": "topology-port-workspace-out",
+                "ariaLabelId": "topology-port-aria"
+              }
+            ]
+          }
+        ],
+        "leftLabelsByConnected": [
+          {
+            "connected": "<none>",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "operation-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "stock-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "transfer-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "ticket-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "location-in",
+            "labelId": "topology-port-location-in"
+          }
+        ],
+        "semanticLabels": [
+          {
+            "semantic": "location-out",
+            "left": "topology-port-location-out",
+            "right": "topology-port-location-out"
+          },
+          {
+            "semantic": "location-in",
+            "left": "topology-port-location-in",
+            "right": "topology-port-location-in"
+          },
+          {
+            "semantic": "operation-out",
+            "left": "topology-port-operation-out",
+            "right": "topology-port-operation-out"
+          },
+          {
+            "semantic": "operation-in",
+            "left": "topology-port-operation-in",
+            "right": "topology-port-operation-in"
+          },
+          {
+            "semantic": "stock-out",
+            "left": "topology-port-stock-out",
+            "right": "topology-port-stock-out"
+          },
+          {
+            "semantic": "stock-in",
+            "left": "topology-port-stock-in",
+            "right": "topology-port-stock-in"
+          },
+          {
+            "semantic": "transfer-out",
+            "left": "topology-port-transfer-out",
+            "right": "topology-port-transfer-out"
+          },
+          {
+            "semantic": "transfer-in",
+            "left": "topology-port-transfer-in",
+            "right": "topology-port-transfer-in"
+          },
+          {
+            "semantic": "ticket-out",
+            "left": "topology-port-ticket-out",
+            "right": "topology-port-ticket-out"
+          },
+          {
+            "semantic": "ticket-in",
+            "left": "topology-port-ticket-in",
+            "right": "topology-port-ticket-in"
+          },
+          {
+            "semantic": "device-out",
+            "left": "topology-port-device-out",
+            "right": "topology-port-device-out"
+          },
+          {
+            "semantic": "generic-in",
+            "left": "topology-port-generic-in",
+            "right": "topology-port-generic-in"
+          },
+          {
+            "semantic": "generic-out",
+            "left": "topology-port-generic-out",
+            "right": "topology-port-generic-out"
+          }
+        ],
+        "icon": "UtensilsIcon",
+        "settingsCard": "WorkspaceRestaurantPosSettings",
+        "copySanitization": {
+          "keepsStoreProfileId": true
+        }
+      }
+    },
+    {
+      "label": "workspace:kds",
+      "behavior": {
+        "kind": "workspace:kds",
+        "isKds": true,
+        "isRestaurantPos": false,
+        "visiblePorts": [
+          "left",
+          "right"
+        ],
+        "leftPortVariants": [
+          "operation-in"
+        ],
+        "sockets": [
+          {
+            "side": "left",
+            "visible": true,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [
+                  "operation-in"
+                ],
+                "gating": "operation-in",
+                "recording": "operation-in",
+                "labelId": "topology-port-operation-in",
+                "ariaLabelId": "topology-port-operation-in-aria",
+                "leftLabelId": "topology-port-operation-in"
+              }
+            ]
+          },
+          {
+            "side": "right",
+            "visible": true,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [
+                  "ticket-out"
+                ],
+                "gating": "ticket-out",
+                "labelId": "topology-port-ticket-out",
+                "ariaLabelId": "topology-port-ticket-out-aria"
+              }
+            ]
+          }
+        ],
+        "leftLabelsByConnected": [
+          {
+            "connected": "<none>",
+            "labelId": "topology-port-operation-in"
+          },
+          {
+            "connected": "operation-in",
+            "labelId": "topology-port-operation-in"
+          },
+          {
+            "connected": "stock-in",
+            "labelId": "topology-port-operation-in"
+          },
+          {
+            "connected": "transfer-in",
+            "labelId": "topology-port-operation-in"
+          },
+          {
+            "connected": "ticket-in",
+            "labelId": "topology-port-operation-in"
+          },
+          {
+            "connected": "location-in",
+            "labelId": "topology-port-operation-in"
+          }
+        ],
+        "semanticLabels": [
+          {
+            "semantic": "location-out",
+            "left": "topology-port-location-out",
+            "right": "topology-port-location-out"
+          },
+          {
+            "semantic": "location-in",
+            "left": "topology-port-location-in",
+            "right": "topology-port-location-in"
+          },
+          {
+            "semantic": "operation-out",
+            "left": "topology-port-operation-out",
+            "right": "topology-port-operation-out"
+          },
+          {
+            "semantic": "operation-in",
+            "left": "topology-port-operation-in",
+            "right": "topology-port-operation-in"
+          },
+          {
+            "semantic": "stock-out",
+            "left": "topology-port-stock-out",
+            "right": "topology-port-stock-out"
+          },
+          {
+            "semantic": "stock-in",
+            "left": "topology-port-stock-in",
+            "right": "topology-port-stock-in"
+          },
+          {
+            "semantic": "transfer-out",
+            "left": "topology-port-transfer-out",
+            "right": "topology-port-transfer-out"
+          },
+          {
+            "semantic": "transfer-in",
+            "left": "topology-port-transfer-in",
+            "right": "topology-port-transfer-in"
+          },
+          {
+            "semantic": "ticket-out",
+            "left": "topology-port-ticket-out",
+            "right": "topology-port-ticket-out"
+          },
+          {
+            "semantic": "ticket-in",
+            "left": "topology-port-ticket-in",
+            "right": "topology-port-ticket-in"
+          },
+          {
+            "semantic": "device-out",
+            "left": "topology-port-device-out",
+            "right": "topology-port-device-out"
+          },
+          {
+            "semantic": "generic-in",
+            "left": "topology-port-generic-in",
+            "right": "topology-port-generic-in"
+          },
+          {
+            "semantic": "generic-out",
+            "left": "topology-port-generic-out",
+            "right": "topology-port-generic-out"
+          }
+        ],
+        "icon": "NodesIcon",
+        "settingsCard": "WorkspaceKdsSettings",
+        "copySanitization": {
+          "keepsStoreProfileId": true
+        }
+      }
+    },
+    {
+      "label": "workspace:warehouse",
+      "behavior": {
+        "kind": "workspace:warehouse",
+        "isKds": false,
+        "isRestaurantPos": false,
+        "visiblePorts": [
+          "left"
+        ],
+        "leftPortVariants": [
+          "location-in"
+        ],
+        "sockets": [
+          {
+            "side": "left",
+            "visible": true,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [
+                  "location-in"
+                ],
+                "gating": "location-in",
+                "recording": "location-in",
+                "labelId": "topology-port-location-in",
+                "ariaLabelId": "topology-port-location-in-aria",
+                "leftLabelId": "topology-port-location-in"
+              }
+            ]
+          },
+          {
+            "side": "right",
+            "visible": false,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [],
+                "labelId": "topology-port-workspace-out",
+                "ariaLabelId": "topology-port-aria"
+              }
+            ]
+          }
+        ],
+        "leftLabelsByConnected": [
+          {
+            "connected": "<none>",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "operation-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "stock-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "transfer-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "ticket-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "location-in",
+            "labelId": "topology-port-location-in"
+          }
+        ],
+        "semanticLabels": [
+          {
+            "semantic": "location-out",
+            "left": "topology-port-location-out",
+            "right": "topology-port-location-out"
+          },
+          {
+            "semantic": "location-in",
+            "left": "topology-port-location-in",
+            "right": "topology-port-location-in"
+          },
+          {
+            "semantic": "operation-out",
+            "left": "topology-port-operation-out",
+            "right": "topology-port-operation-out"
+          },
+          {
+            "semantic": "operation-in",
+            "left": "topology-port-operation-in",
+            "right": "topology-port-operation-in"
+          },
+          {
+            "semantic": "stock-out",
+            "left": "topology-port-stock-out",
+            "right": "topology-port-stock-out"
+          },
+          {
+            "semantic": "stock-in",
+            "left": "topology-port-stock-in",
+            "right": "topology-port-stock-in"
+          },
+          {
+            "semantic": "transfer-out",
+            "left": "topology-port-transfer-out",
+            "right": "topology-port-transfer-out"
+          },
+          {
+            "semantic": "transfer-in",
+            "left": "topology-port-transfer-in",
+            "right": "topology-port-transfer-in"
+          },
+          {
+            "semantic": "ticket-out",
+            "left": "topology-port-ticket-out",
+            "right": "topology-port-ticket-out"
+          },
+          {
+            "semantic": "ticket-in",
+            "left": "topology-port-ticket-in",
+            "right": "topology-port-ticket-in"
+          },
+          {
+            "semantic": "device-out",
+            "left": "topology-port-device-out",
+            "right": "topology-port-device-out"
+          },
+          {
+            "semantic": "generic-in",
+            "left": "topology-port-generic-in",
+            "right": "topology-port-generic-in"
+          },
+          {
+            "semantic": "generic-out",
+            "left": "topology-port-generic-out",
+            "right": "topology-port-generic-out"
+          }
+        ],
+        "icon": "PosIcon",
+        "settingsCard": "WorkspaceStorePosSettings",
+        "copySanitization": {
+          "keepsStoreProfileId": true
+        }
+      }
+    },
+    {
+      "label": "workspace:admin",
+      "behavior": {
+        "kind": "workspace:admin",
+        "isKds": false,
+        "isRestaurantPos": false,
+        "visiblePorts": [
+          "left"
+        ],
+        "leftPortVariants": [
+          "location-in"
+        ],
+        "sockets": [
+          {
+            "side": "left",
+            "visible": true,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [
+                  "location-in"
+                ],
+                "gating": "location-in",
+                "recording": "location-in",
+                "labelId": "topology-port-location-in",
+                "ariaLabelId": "topology-port-location-in-aria",
+                "leftLabelId": "topology-port-location-in"
+              }
+            ]
+          },
+          {
+            "side": "right",
+            "visible": false,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [],
+                "labelId": "topology-port-workspace-out",
+                "ariaLabelId": "topology-port-aria"
+              }
+            ]
+          }
+        ],
+        "leftLabelsByConnected": [
+          {
+            "connected": "<none>",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "operation-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "stock-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "transfer-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "ticket-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "location-in",
+            "labelId": "topology-port-location-in"
+          }
+        ],
+        "semanticLabels": [
+          {
+            "semantic": "location-out",
+            "left": "topology-port-location-out",
+            "right": "topology-port-location-out"
+          },
+          {
+            "semantic": "location-in",
+            "left": "topology-port-location-in",
+            "right": "topology-port-location-in"
+          },
+          {
+            "semantic": "operation-out",
+            "left": "topology-port-operation-out",
+            "right": "topology-port-operation-out"
+          },
+          {
+            "semantic": "operation-in",
+            "left": "topology-port-operation-in",
+            "right": "topology-port-operation-in"
+          },
+          {
+            "semantic": "stock-out",
+            "left": "topology-port-stock-out",
+            "right": "topology-port-stock-out"
+          },
+          {
+            "semantic": "stock-in",
+            "left": "topology-port-stock-in",
+            "right": "topology-port-stock-in"
+          },
+          {
+            "semantic": "transfer-out",
+            "left": "topology-port-transfer-out",
+            "right": "topology-port-transfer-out"
+          },
+          {
+            "semantic": "transfer-in",
+            "left": "topology-port-transfer-in",
+            "right": "topology-port-transfer-in"
+          },
+          {
+            "semantic": "ticket-out",
+            "left": "topology-port-ticket-out",
+            "right": "topology-port-ticket-out"
+          },
+          {
+            "semantic": "ticket-in",
+            "left": "topology-port-ticket-in",
+            "right": "topology-port-ticket-in"
+          },
+          {
+            "semantic": "device-out",
+            "left": "topology-port-device-out",
+            "right": "topology-port-device-out"
+          },
+          {
+            "semantic": "generic-in",
+            "left": "topology-port-generic-in",
+            "right": "topology-port-generic-in"
+          },
+          {
+            "semantic": "generic-out",
+            "left": "topology-port-generic-out",
+            "right": "topology-port-generic-out"
+          }
+        ],
+        "icon": "PosIcon",
+        "settingsCard": "WorkspaceStorePosSettings",
+        "copySanitization": {
+          "keepsStoreProfileId": true
+        }
+      }
+    },
+    {
+      "label": "workspace:general",
+      "behavior": {
+        "kind": "workspace:general",
+        "isKds": false,
+        "isRestaurantPos": false,
+        "visiblePorts": [
+          "left",
+          "right"
+        ],
+        "leftPortVariants": [
+          "location-in"
+        ],
+        "sockets": [
+          {
+            "side": "left",
+            "visible": true,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [
+                  "location-in"
+                ],
+                "gating": "location-in",
+                "recording": "location-in",
+                "labelId": "topology-port-location-in",
+                "ariaLabelId": "topology-port-location-in-aria",
+                "leftLabelId": "topology-port-location-in"
+              }
+            ]
+          },
+          {
+            "side": "right",
+            "visible": true,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [
+                  "stock-out",
+                  "transfer-out"
+                ],
+                "gating": "stock-out",
+                "labelId": "topology-port-workspace-out",
+                "ariaLabelId": "topology-port-aria"
+              }
+            ]
+          }
+        ],
+        "leftLabelsByConnected": [
+          {
+            "connected": "<none>",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "operation-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "stock-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "transfer-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "ticket-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "location-in",
+            "labelId": "topology-port-location-in"
+          }
+        ],
+        "semanticLabels": [
+          {
+            "semantic": "location-out",
+            "left": "topology-port-location-out",
+            "right": "topology-port-location-out"
+          },
+          {
+            "semantic": "location-in",
+            "left": "topology-port-location-in",
+            "right": "topology-port-location-in"
+          },
+          {
+            "semantic": "operation-out",
+            "left": "topology-port-operation-out",
+            "right": "topology-port-operation-out"
+          },
+          {
+            "semantic": "operation-in",
+            "left": "topology-port-operation-in",
+            "right": "topology-port-operation-in"
+          },
+          {
+            "semantic": "stock-out",
+            "left": "topology-port-stock-out",
+            "right": "topology-port-stock-out"
+          },
+          {
+            "semantic": "stock-in",
+            "left": "topology-port-stock-in",
+            "right": "topology-port-stock-in"
+          },
+          {
+            "semantic": "transfer-out",
+            "left": "topology-port-transfer-out",
+            "right": "topology-port-transfer-out"
+          },
+          {
+            "semantic": "transfer-in",
+            "left": "topology-port-transfer-in",
+            "right": "topology-port-transfer-in"
+          },
+          {
+            "semantic": "ticket-out",
+            "left": "topology-port-ticket-out",
+            "right": "topology-port-ticket-out"
+          },
+          {
+            "semantic": "ticket-in",
+            "left": "topology-port-ticket-in",
+            "right": "topology-port-ticket-in"
+          },
+          {
+            "semantic": "device-out",
+            "left": "topology-port-device-out",
+            "right": "topology-port-device-out"
+          },
+          {
+            "semantic": "generic-in",
+            "left": "topology-port-generic-in",
+            "right": "topology-port-generic-in"
+          },
+          {
+            "semantic": "generic-out",
+            "left": "topology-port-generic-out",
+            "right": "topology-port-generic-out"
+          }
+        ],
+        "icon": "PosIcon",
+        "settingsCard": "WorkspaceStorePosSettings",
+        "copySanitization": {
+          "keepsStoreProfileId": true
+        }
+      }
+    },
+    {
+      "label": "workspace:<none>",
+      "behavior": {
+        "kind": "workspace:store-pos",
+        "isKds": false,
+        "isRestaurantPos": false,
+        "visiblePorts": [
+          "left",
+          "right"
+        ],
+        "leftPortVariants": [
+          "location-in"
+        ],
+        "sockets": [
+          {
+            "side": "left",
+            "visible": true,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [
+                  "location-in"
+                ],
+                "gating": "location-in",
+                "recording": "location-in",
+                "labelId": "topology-port-location-in",
+                "ariaLabelId": "topology-port-location-in-aria",
+                "leftLabelId": "topology-port-location-in"
+              }
+            ]
+          },
+          {
+            "side": "right",
+            "visible": true,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [
+                  "stock-out",
+                  "transfer-out"
+                ],
+                "gating": "stock-out",
+                "labelId": "topology-port-workspace-out",
+                "ariaLabelId": "topology-port-aria"
+              }
+            ]
+          }
+        ],
+        "leftLabelsByConnected": [
+          {
+            "connected": "<none>",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "operation-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "stock-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "transfer-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "ticket-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "location-in",
+            "labelId": "topology-port-location-in"
+          }
+        ],
+        "semanticLabels": [
+          {
+            "semantic": "location-out",
+            "left": "topology-port-location-out",
+            "right": "topology-port-location-out"
+          },
+          {
+            "semantic": "location-in",
+            "left": "topology-port-location-in",
+            "right": "topology-port-location-in"
+          },
+          {
+            "semantic": "operation-out",
+            "left": "topology-port-operation-out",
+            "right": "topology-port-operation-out"
+          },
+          {
+            "semantic": "operation-in",
+            "left": "topology-port-operation-in",
+            "right": "topology-port-operation-in"
+          },
+          {
+            "semantic": "stock-out",
+            "left": "topology-port-stock-out",
+            "right": "topology-port-stock-out"
+          },
+          {
+            "semantic": "stock-in",
+            "left": "topology-port-stock-in",
+            "right": "topology-port-stock-in"
+          },
+          {
+            "semantic": "transfer-out",
+            "left": "topology-port-transfer-out",
+            "right": "topology-port-transfer-out"
+          },
+          {
+            "semantic": "transfer-in",
+            "left": "topology-port-transfer-in",
+            "right": "topology-port-transfer-in"
+          },
+          {
+            "semantic": "ticket-out",
+            "left": "topology-port-ticket-out",
+            "right": "topology-port-ticket-out"
+          },
+          {
+            "semantic": "ticket-in",
+            "left": "topology-port-ticket-in",
+            "right": "topology-port-ticket-in"
+          },
+          {
+            "semantic": "device-out",
+            "left": "topology-port-device-out",
+            "right": "topology-port-device-out"
+          },
+          {
+            "semantic": "generic-in",
+            "left": "topology-port-generic-in",
+            "right": "topology-port-generic-in"
+          },
+          {
+            "semantic": "generic-out",
+            "left": "topology-port-generic-out",
+            "right": "topology-port-generic-out"
+          }
+        ],
+        "icon": "PosIcon",
+        "settingsCard": "WorkspaceStorePosSettings",
+        "copySanitization": {
+          "keepsStoreProfileId": true
+        }
+      }
+    },
+    {
+      "label": "warehouse",
+      "behavior": {
+        "kind": "warehouse",
+        "isKds": false,
+        "isRestaurantPos": false,
+        "visiblePorts": [
+          "left",
+          "right"
+        ],
+        "leftPortVariants": [
+          "location-in",
+          "operation-in"
+        ],
+        "sockets": [
+          {
+            "side": "left",
+            "visible": true,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [
+                  "location-in",
+                  "operation-in",
+                  "stock-in",
+                  "transfer-in"
+                ],
+                "gating": "location-in",
+                "labelId": "topology-port-location-in",
+                "ariaLabelId": "topology-port-location-in-aria",
+                "leftLabelId": "topology-port-location-in"
+              },
+              {
+                "index": 1,
+                "semantics": [
+                  "location-in",
+                  "operation-in",
+                  "stock-in",
+                  "transfer-in"
+                ],
+                "gating": "location-in",
+                "labelId": "topology-port-location-in",
+                "ariaLabelId": "topology-port-operation-in-aria",
+                "leftLabelId": "topology-port-location-in"
+              }
+            ]
+          },
+          {
+            "side": "right",
+            "visible": true,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [
+                  "stock-out"
+                ],
+                "gating": "stock-out",
+                "labelId": "topology-port-stock-out",
+                "ariaLabelId": "topology-port-aria"
+              },
+              {
+                "index": 1,
+                "semantics": [
+                  "stock-out"
+                ],
+                "gating": "stock-out",
+                "labelId": "topology-port-stock-out",
+                "ariaLabelId": "topology-port-aria"
+              }
+            ]
+          }
+        ],
+        "leftLabelsByConnected": [
+          {
+            "connected": "<none>",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "operation-in",
+            "labelId": "topology-port-operation-in"
+          },
+          {
+            "connected": "stock-in",
+            "labelId": "topology-port-stock-in"
+          },
+          {
+            "connected": "transfer-in",
+            "labelId": "topology-port-transfer-in"
+          },
+          {
+            "connected": "ticket-in",
+            "labelId": "topology-port-location-in"
+          },
+          {
+            "connected": "location-in",
+            "labelId": "topology-port-location-in"
+          }
+        ],
+        "semanticLabels": [
+          {
+            "semantic": "location-out",
+            "left": "topology-port-location-out",
+            "right": "topology-port-location-out"
+          },
+          {
+            "semantic": "location-in",
+            "left": "topology-port-location-in",
+            "right": "topology-port-location-in"
+          },
+          {
+            "semantic": "operation-out",
+            "left": "topology-port-operation-out",
+            "right": "topology-port-operation-out"
+          },
+          {
+            "semantic": "operation-in",
+            "left": "topology-port-operation-in",
+            "right": "topology-port-operation-in"
+          },
+          {
+            "semantic": "stock-out",
+            "left": "topology-port-stock-out",
+            "right": "topology-port-stock-out"
+          },
+          {
+            "semantic": "stock-in",
+            "left": "topology-port-stock-in",
+            "right": "topology-port-stock-in"
+          },
+          {
+            "semantic": "transfer-out",
+            "left": "topology-port-transfer-out",
+            "right": "topology-port-transfer-out"
+          },
+          {
+            "semantic": "transfer-in",
+            "left": "topology-port-transfer-in",
+            "right": "topology-port-transfer-in"
+          },
+          {
+            "semantic": "ticket-out",
+            "left": "topology-port-ticket-out",
+            "right": "topology-port-ticket-out"
+          },
+          {
+            "semantic": "ticket-in",
+            "left": "topology-port-ticket-in",
+            "right": "topology-port-ticket-in"
+          },
+          {
+            "semantic": "device-out",
+            "left": "topology-port-device-out",
+            "right": "topology-port-device-out"
+          },
+          {
+            "semantic": "generic-in",
+            "left": "topology-port-generic-in",
+            "right": "topology-port-generic-in"
+          },
+          {
+            "semantic": "generic-out",
+            "left": "topology-port-generic-out",
+            "right": "topology-port-generic-out"
+          }
+        ],
+        "icon": "WarehouseIcon",
+        "settingsCard": "<not-a-workspace>",
+        "copySanitization": {
+          "keepsStoreProfileId": true
+        }
+      }
+    },
+    {
+      "label": "hardware",
+      "behavior": {
+        "kind": "hardware",
+        "isKds": false,
+        "isRestaurantPos": false,
+        "visiblePorts": [
+          "left",
+          "right"
+        ],
+        "leftPortVariants": [
+          "generic-in"
+        ],
+        "sockets": [
+          {
+            "side": "left",
+            "visible": true,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [
+                  "generic-in",
+                  "ticket-in"
+                ],
+                "gating": "generic-in",
+                "labelId": "topology-port-generic-in",
+                "ariaLabelId": "topology-port-aria",
+                "leftLabelId": "topology-port-generic-in"
+              }
+            ]
+          },
+          {
+            "side": "right",
+            "visible": true,
+            "rows": [
+              {
+                "index": 0,
+                "semantics": [
+                  "device-out"
+                ],
+                "gating": "device-out",
+                "labelId": "topology-port-device-out",
+                "ariaLabelId": "topology-port-aria"
+              }
+            ]
+          }
+        ],
+        "leftLabelsByConnected": [
+          {
+            "connected": "<none>",
+            "labelId": "topology-port-generic-in"
+          },
+          {
+            "connected": "operation-in",
+            "labelId": "topology-port-generic-in"
+          },
+          {
+            "connected": "stock-in",
+            "labelId": "topology-port-generic-in"
+          },
+          {
+            "connected": "transfer-in",
+            "labelId": "topology-port-generic-in"
+          },
+          {
+            "connected": "ticket-in",
+            "labelId": "topology-port-ticket-in"
+          },
+          {
+            "connected": "location-in",
+            "labelId": "topology-port-generic-in"
+          }
+        ],
+        "semanticLabels": [
+          {
+            "semantic": "location-out",
+            "left": "topology-port-location-out",
+            "right": "topology-port-location-out"
+          },
+          {
+            "semantic": "location-in",
+            "left": "topology-port-location-in",
+            "right": "topology-port-location-in"
+          },
+          {
+            "semantic": "operation-out",
+            "left": "topology-port-operation-out",
+            "right": "topology-port-operation-out"
+          },
+          {
+            "semantic": "operation-in",
+            "left": "topology-port-operation-in",
+            "right": "topology-port-operation-in"
+          },
+          {
+            "semantic": "stock-out",
+            "left": "topology-port-stock-out",
+            "right": "topology-port-stock-out"
+          },
+          {
+            "semantic": "stock-in",
+            "left": "topology-port-stock-in",
+            "right": "topology-port-stock-in"
+          },
+          {
+            "semantic": "transfer-out",
+            "left": "topology-port-transfer-out",
+            "right": "topology-port-transfer-out"
+          },
+          {
+            "semantic": "transfer-in",
+            "left": "topology-port-transfer-in",
+            "right": "topology-port-transfer-in"
+          },
+          {
+            "semantic": "ticket-out",
+            "left": "topology-port-ticket-out",
+            "right": "topology-port-ticket-out"
+          },
+          {
+            "semantic": "ticket-in",
+            "left": "topology-port-ticket-in",
+            "right": "topology-port-ticket-in"
+          },
+          {
+            "semantic": "device-out",
+            "left": "topology-port-device-out",
+            "right": "topology-port-device-out"
+          },
+          {
+            "semantic": "generic-in",
+            "left": "topology-port-generic-in",
+            "right": "topology-port-generic-in"
+          },
+          {
+            "semantic": "generic-out",
+            "left": "topology-port-generic-out",
+            "right": "topology-port-generic-out"
+          }
+        ],
+        "icon": "PrinterIcon",
+        "settingsCard": "<not-a-workspace>",
+        "copySanitization": {
+          "keepsStoreProfileId": true
+        }
+      }
+    }
+  ]
+}

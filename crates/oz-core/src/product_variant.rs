@@ -11,7 +11,7 @@ use crate::Money;
 /// is `None` the parent product's price is used), barcode, and sort order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProductVariant {
-    /// Internal row id (UUID v4).
+    /// Internal row id (UUID v7).
     pub id: String,
     /// SKU of the parent product this variant belongs to.
     pub parent_sku: String,

@@ -13,7 +13,7 @@
 
 ---
 
-## 0. Current state (probed 2026-08-17 against `https://oz--cloud--76cyv4d6bn54.code.run`)
+## 0. Current state (probed 2026-08-17 against `https://license.ozpos.my.id`)
 
 | Endpoint | Result | Meaning |
 |---|---|---|
@@ -57,11 +57,11 @@ webhook delivery work the moment the new image is up.
    accepted for sandbox testing (docs: "If you don't have one, enter https://localhost/").
 2. **Webhook destination — DONE (verified 2026-08-17 via the Paddle API):**
    `ntfset_01m05htpgfq0qmcvb0er6byrsx` now posts to
-   `https://oz--cloud--76cyv4d6bn54.code.run/api/v1/paddle/webhook` (was the unowned
-   `license.ozpos.my.id`). If it ever regresses: Paddle (sandbox) → **Developer tools →
-   Notifications** → edit destination `ntfset_01m05htpgfq0qmcvb0er6byrsx` → **Endpoint
-   URL** → the `code.run` URL → Save. While in that same edit screen, copy the
-   **Endpoint secret** into §1 #3 — it is shown once and never returned by any API.
+   `https://license.ozpos.my.id/api/v1/paddle/webhook` (the production custom
+   domain for the unified auth+sync service). If it ever regresses: Paddle (sandbox) →
+   **Developer tools → Notifications** → edit destination `ntfset_01m05htpgfq0qmcvb0er6byrsx` →
+   **Endpoint URL** → the `license.ozpos.my.id` URL → Save. While in that same edit
+   screen, copy the **Endpoint secret** into §1 #3 — it is shown once and never returned by any API.
 
 ---
 
@@ -136,7 +136,7 @@ Notes:
 ## 4. Post-deploy verification
 
 ```bash
-B=https://oz--cloud--76cyv4d6bn54.code.run
+B=https://license.ozpos.my.id
 
 # 1. Gate statuses — expect all true (probe is cached ~60s after boot)
 curl -sS "$B/api/health"

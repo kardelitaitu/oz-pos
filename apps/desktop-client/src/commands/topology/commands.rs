@@ -39,6 +39,94 @@ pub async fn can_save_topology(
     Ok(true)
 }
 
+// ── Diagram templates (ADR #45 §4.2) ─────────────────────────────
+//
+// Templates used to live in `localStorage`, which is per-browser and silently
+// loses them on a device change, a profile switch, or a reinstall. They are
+// business configuration — they seed a graph a merchant then edits and Applies —
+// so they belong in the same settings namespace as that graph, scoped to the
+// same branch.
+//
+// They deliberately do NOT run the diagram validation gates that
+// `apply_topology_diff` runs. A template is a starting point, not a claim about
+// live configuration: it may legitimately be a partial layout, and rejecting it
+// would make the feature useless. Authorization is still enforced, because a
+// template a branch loads becomes the diagram that branch Applies.
+
+/// Author a topology write and resolve the branch's topology key.
+async fn authorize_topology_write(
+    session_token: &str,
+    state: &State<'_, AppState>,
+    branch_id: Option<&str>,
+) -> Result<String, AppError> {
+    let session = state.resolve_session(session_token)?;
+    // Topology is a global admin tool — scope-free permission check, matching
+    // `can_save_topology`.
+    {
+        let global_db = state.db.lock().await;
+        let global_store = Store::new(&global_db);
+        require_permission_for_user(&global_store, &session.user_id, permissions::STAFF_UPDATE)?;
+    }
+    topology_setting_key(branch_id)
+}
+
+/// Save a diagram template under a branch, replacing any template of that name.
+#[tauri::command]
+pub async fn save_topology_template(
+    session_token: String,
+    name: String,
+    payload: Value,
+    branch_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let topo_key = authorize_topology_write(&session_token, &state, branch_id.as_deref()).await?;
+    let conn = state.db.lock().await;
+    template_save(&conn, &topo_key, &name, &payload)
+}
+
+/// Load one diagram template. `None` when it never existed or is unreadable.
+#[tauri::command]
+pub async fn load_topology_template(
+    session_token: String,
+    name: String,
+    branch_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Option<Value>, AppError> {
+    let topo_key = topology_setting_key(branch_id.as_deref())?;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state.db.lock().await;
+    // Reading a template reveals a branch's configuration, so it needs a
+    // session — but not the write capability.
+    let _ = &session.user_id;
+    template_load(&conn, &topo_key, &name)
+}
+
+/// Names of a branch's saved templates, sorted for display.
+#[tauri::command]
+pub async fn list_topology_templates(
+    session_token: String,
+    branch_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, AppError> {
+    let topo_key = topology_setting_key(branch_id.as_deref())?;
+    state.resolve_session(&session_token)?;
+    let conn = state.db.lock().await;
+    template_list(&conn, &topo_key)
+}
+
+/// Delete one template. Returns `false` when there was nothing to delete.
+#[tauri::command]
+pub async fn delete_topology_template(
+    session_token: String,
+    name: String,
+    branch_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let topo_key = authorize_topology_write(&session_token, &state, branch_id.as_deref()).await?;
+    let conn = state.db.lock().await;
+    template_delete(&conn, &topo_key, &name)
+}
+
 /// Test-only compatibility harness for the retired direct topology writer.
 ///
 /// Production topology persistence is exclusively `apply_topology_diff`, which
@@ -301,11 +389,26 @@ pub async fn apply_topology_diff(
         }
     }
 
-    // Reject malformed graphs before any workspace mutation. Legacy
-    // geometric payloads remain accepted during the migration window.
+    // Reject malformed graphs before any workspace mutation. The gate
+    // requires canonical semantic node and wire fields, semantic ownership,
+    // and structural validity.
+    //
+    // Ownership registries: branch profiles created through the scoped
+    // commands land in the SESSION's store database (store-<id>.sqlite),
+    // while the global database only carries the seeded default profile.
+    // The gate therefore accepts a canonical branch profile from either
+    // registry — validating the global one alone rejected every freshly
+    // created branch with `unknown-branch-location` forever.
     {
         let global_db = state.db.lock().await;
-        validate_apply_gate(&global_db, &diagram_nodes, &diagram_wires)?;
+        let branch_conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db for topology gate: {e}")))?;
+        let branch_db = branch_conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        validate_apply_gate(&[&global_db, &branch_db], &diagram_nodes, &diagram_wires)?;
     }
 
     // Capture lengths before the workspace block consumes the vectors
@@ -658,15 +761,33 @@ pub async fn apply_topology_diff(
         "topology Apply: workspace CRUD committed, saving diagram"
     );
     let global_db = state.db.lock().await;
-    if let Err(save_error) = save_topology_json_at_key_with_revision(
-        &global_db,
-        diagram_nodes,
-        diagram_wires,
-        &topology_key,
-        &resolved_issue_keys,
-        Some(base_revision),
-        Some((&request_key, &request_fingerprint)),
-    ) {
+    // Same ownership registries as the pre-mutation gate: the session's
+    // store database may be the only one holding the branch profile row.
+    // The store guards live only inside this block — a MutexGuard over a
+    // rusqlite Connection is !Send, so it must not be held across the
+    // error-path awaits below (lexical scope, not explicit drop, is what
+    // the async generator liveness analysis respects here).
+    let save_result = {
+        let branch_conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db for topology save: {e}")))?;
+        let branch_db = branch_conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        save_topology_json_at_key_with_revision(
+            &global_db,
+            diagram_nodes,
+            diagram_wires,
+            &topology_key,
+            &resolved_issue_keys,
+            Some(base_revision),
+            Some((&request_key, &request_fingerprint)),
+            Some(&branch_db),
+        )
+        // branch_db and branch_conn drop here with the block.
+    };
+    if let Err(save_error) = save_result {
         drop(global_db);
         // The durable recovery journal was written before the workspace
         // transaction. Keep it until both databases have been compensated.

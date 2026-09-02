@@ -6,6 +6,9 @@ import { loggedInvoke } from '@/utils/logged-invoke';
 
 /** A product as returned by the backend. */
 export interface ProductDto {
+  /** Internal product ID (UUID) — used by image commands (spec 0046b).
+   *  Absent only in fixtures/unsaved products. */
+  id?: string;
   sku: string;
   name: string;
   category: string | null;
@@ -36,6 +39,10 @@ export interface ProductDto {
   default_supplier_id?: string | null;
   /** Materialized popularity score (ADR #37) — retail grid sort key. */
   popularity_score?: number;
+  /** Slot-1 primary image content hash (spec 0046b); absent = no image. */
+  image_hash?: string;
+  /** Content-addressed image assignments (slots 1..5) from the snapshot. */
+  images?: ProductImageDto[];
 }
 
 /** Arguments for creating a new product. */
@@ -296,25 +303,25 @@ export interface UpdateProductVariantArgs {
   isActive?: boolean;
 }
 
-/** List all variants for a given parent product SKU. */
-export const listProductVariants = (parentSku: string): Promise<ProductVariantDto[]> =>
-  loggedInvoke<ProductVariantDto[]>('list_product_variants', { parentSku });
+/** List all variants for a given parent product SKU (session-scoped — ADR #7). */
+export const listProductVariants = (sessionToken: string, parentSku: string): Promise<ProductVariantDto[]> =>
+  loggedInvoke<ProductVariantDto[]>('list_product_variants_scoped', { sessionToken, parentSku });
 
-/** Get a single product variant by its SKU. */
-export const getProductVariant = (sku: string): Promise<ProductVariantDto | null> =>
-  loggedInvoke<ProductVariantDto | null>('get_product_variant', { sku });
+/** Get a single product variant by its SKU (session-scoped — ADR #7). */
+export const getProductVariant = (sessionToken: string, sku: string): Promise<ProductVariantDto | null> =>
+  loggedInvoke<ProductVariantDto | null>('get_product_variant_scoped', { sessionToken, sku });
 
-/** Create a new product variant. */
-export const createProductVariant = (args: CreateProductVariantArgs): Promise<{ sku: string }> =>
-  loggedInvoke<{ sku: string }>('create_product_variant', { args });
+/** Create a new product variant (session-scoped — ADR #7). */
+export const createProductVariant = (sessionToken: string, args: CreateProductVariantArgs): Promise<{ sku: string }> =>
+  loggedInvoke<{ sku: string }>('create_product_variant_scoped', { sessionToken, args });
 
-/** Update an existing product variant. */
-export const updateProductVariant = (args: UpdateProductVariantArgs): Promise<{ sku: string }> =>
-  loggedInvoke<{ sku: string }>('update_product_variant', { args });
+/** Update an existing product variant (session-scoped — ADR #7). */
+export const updateProductVariant = (sessionToken: string, args: UpdateProductVariantArgs): Promise<{ sku: string }> =>
+  loggedInvoke<{ sku: string }>('update_product_variant_scoped', { sessionToken, args });
 
-/** Delete a product variant by SKU. */
-export const deleteProductVariant = (sku: string): Promise<void> =>
-  loggedInvoke('delete_product_variant', { sku });
+/** Delete a product variant by SKU (session-scoped — ADR #7). */
+export const deleteProductVariant = (sessionToken: string, sku: string): Promise<void> =>
+  loggedInvoke('delete_product_variant_scoped', { sessionToken, sku });
 
 /** Delete a product variant by SKU (scoped). */
 export const deleteProductVariantScoped = (sessionToken: string, sku: string): Promise<void> =>
@@ -367,3 +374,45 @@ export const updateCategoryScoped = (sessionToken: string, args: UpdateCategoryA
 /** Delete a product category in the store resolved from a session token (CAT-01). */
 export const deleteCategoryScoped = (sessionToken: string, id: string): Promise<{ affected_products: number }> =>
   loggedInvoke('delete_category_scoped', { sessionToken, args: { id } });
+
+// ── Product images (spec 0046b) ───────────────────────────────────────
+
+/** A product image assignment returned by the backend (spec 0046b §3.2). */
+export interface ProductImageDto {
+  /** Slot 1 = primary; slots 2..5 = alternatives. */
+  slot: number;
+  /** Content-addressed hash (first 16 hex chars of sha-256). */
+  hash: string;
+  /** Display order of alternatives (0-based). */
+  position: number;
+}
+
+/**
+ * Assign the image at `sourcePath` to `productId` at `slot` (1..=5).
+ *
+ * The ingest pipeline runs entirely in Rust (sniff → transcode → hash →
+ * atomic write → DB assignment); only the file path crosses IPC. Returns
+ * the 16-hex-char content hash of the transcoded image.
+ */
+export const productsSetImageScoped = (
+  sessionToken: string,
+  productId: string,
+  slot: number,
+  sourcePath: string,
+): Promise<string> =>
+  loggedInvoke<string>('products_set_image_scoped', { sessionToken, productId, slot, sourcePath });
+
+/** Remove the image assignment at `slot` (the file is left for GC). */
+export const productsClearImageScoped = (
+  sessionToken: string,
+  productId: string,
+  slot: number,
+): Promise<void> =>
+  loggedInvoke<void>('products_clear_image_scoped', { sessionToken, productId, slot });
+
+/** List the image assignments for a product, ordered by slot. */
+export const productsListImagesScoped = (
+  sessionToken: string,
+  productId: string,
+): Promise<ProductImageDto[]> =>
+  loggedInvoke<ProductImageDto[]>('products_list_images_scoped', { sessionToken, productId });

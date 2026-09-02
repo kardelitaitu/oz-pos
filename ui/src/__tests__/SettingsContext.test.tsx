@@ -223,7 +223,7 @@ describe('SettingsContext', () => {
     expect(result.current.settings.appVersion).toBe('0.0.19');
   });
 
-  it('keeps an unconfigured sync server unconfigured (no local fallback)', async () => {
+  it('pre-fills an unconfigured sync server with the cloud URL', async () => {
     Object.assign(mocks.syncSettings, {
       serverUrl: null,
       hasApiKey: true,
@@ -236,11 +236,10 @@ describe('SettingsContext', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    // TEMPORARILY DISABLED (2026-08-16): the local-Docker default is
-    // commented out while testing against the deployed cloud server, so an
-    // unconfigured sync stays unconfigured.
-    expect(result.current.settings.sync.serverUrl).toBeNull();
-    expect(result.current.settings.sync.enabled).toBe(false);
+    // An unconfigured sync gets the cloud-server draft (no localhost
+    // pre-fill) so the settings surface has a target to connect to.
+    expect(result.current.settings.sync.serverUrl).toBe('https://license.ozpos.my.id');
+    expect(result.current.settings.sync.enabled).toBe(true);
     expect(result.current.settings.sync.hasApiKey).toBe(true);
   });
 

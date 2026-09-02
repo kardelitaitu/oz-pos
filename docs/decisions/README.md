@@ -6,7 +6,7 @@ an ADR in this directory (`docs/decisions/`). Each ADR follows the
 its header. Some ADRs have a companion `*.status.md` file with a fuller
 implementation-status walkthrough.
 
-- Numbered ADRs (#1–#42) are the primary record.
+- Numbered ADRs (#1–#45) are the primary record.
 - Research notes and phased implementation docs (topology phases, sync
   phases) are recorded here too, keyed by date rather than number.
 
@@ -51,6 +51,8 @@ implementation-status walkthrough.
 | 40 | [Multi-Terminal Peer Model](./2026-08-20-adr40-multi-terminal-peer-model.md) | Implemented (2026-08-20) |
 | 41 | [App Lifecycle, Device Onboarding, Dynamic Topology Workspaces, and Two-Layer Gated Home (Tier & RBAC)](./2026-08-28-adr41-app-lifecycle-device-onboarding-topology-home-gating.md) | Accepted (2026-08-28) |
 | 42 | [Website Admin Dashboard & User Dashboard (Subdomain Architecture)](./2026-08-28-adr42-website-admin-and-user-dashboard.md) | Partially Implemented (2026-08-28) |
+| 43 | [Cloud Sync Performance & Scale-Out Roadmap](./2026-09-02-adr43-cloud-sync-performance-scaleout-roadmap.md) | Implemented (D1–D4, D7, D9-ready) |
+| 45 | [Topology Semantic Contract v2 — Endpoint Predicates, Kind Registry, Deliberate Cold Start, and Theme Parity](./2026-09-02-adr45-topology-semantic-contract-v2.md) | §1–§3, §4.1, §5, §4.2 backend + storage + migration fn (not yet invoked), §4.3 ordering rule Implemented (2026-09-02) · §4.2 UI swap, §4.3 checklist UI Proposed |
 
 ## Research notes
 

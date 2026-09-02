@@ -18,6 +18,9 @@ const MINIMAP_W = 176;
 const MINIMAP_H = 120;
 const MINIMAP_PAD = 8;
 const MINIMAP_VIEWPORT_MIN = 8;
+/** Drawable area inside the padding — the viewport box clamps to this. */
+const PADDED_W = MINIMAP_W - MINIMAP_PAD * 2;
+const PADDED_H = MINIMAP_H - MINIMAP_PAD * 2;
 
 /** Bounding box of the diagram in canvas coords — the minimap's frame. */
 interface ContentBounds {
@@ -92,6 +95,47 @@ export function TopologyMinimap({
       (MINIMAP_H - MINIMAP_PAD * 2) / ch,
     );
   }, [contentBounds]);
+
+  /** The visible-content box. The projection frame is the diagram bounds,
+   *  but the visible canvas area is canvasSize/zoom — as soon as that
+   *  outgrows the diagram (a wide canvas at 100%, massively at the 40%
+   *  floor) a raw viewport rect overflows the map and the SVG clips it
+   *  mid-edge. Instead the box is the viewport rect INTERSECTED with the
+   *  diagram bounds, mapped exactly: it always lands inside the padded map,
+   *  fills the map when the view contains the whole diagram ("you are
+   *  seeing everything"), tracks pan/zoom 1:1 while the view overlaps
+   *  content, and collapses to a MINIMAP_VIEWPORT_MIN chip pinned toward
+   *  the nearest edge when the view is entirely off-content (keeping the
+   *  side cue). Span ≤ 0 folds into the min chip via the Math.max below. */
+  const viewportBox = useMemo(() => {
+    const cb = contentBounds;
+    const availW = PADDED_W;
+    const availH = PADDED_H;
+    if (!cb) {
+      return { x: MINIMAP_PAD, y: MINIMAP_PAD, w: MINIMAP_VIEWPORT_MIN, h: MINIMAP_VIEWPORT_MIN };
+    }
+    // Visible canvas range: screen(0) is the viewport's left/top edge, so
+    // the origin is −pan/zoom (pan.x directly would put the box on the
+    // wrong side of the map and ignore the zoom).
+    const vx0 = -pan.x / zoom;
+    const vy0 = -pan.y / zoom;
+    const vx1 = (canvasWidth - pan.x) / zoom;
+    const vy1 = (canvasHeight - pan.y) / zoom;
+    const ix0 = Math.max(vx0, cb.minX);
+    const ix1 = Math.min(vx1, cb.maxX);
+    const iy0 = Math.max(vy0, cb.minY);
+    const iy1 = Math.min(vy1, cb.maxY);
+    const w = Math.max(MINIMAP_VIEWPORT_MIN, (ix1 - ix0) * minimapScale);
+    const h = Math.max(MINIMAP_VIEWPORT_MIN, (iy1 - iy0) * minimapScale);
+    const clampIntoMap = (raw: number, avail: number, size: number) =>
+      Math.min(Math.max(raw, MINIMAP_PAD), MINIMAP_PAD + avail - size);
+    return {
+      x: clampIntoMap(MINIMAP_PAD + (ix0 - cb.minX) * minimapScale, availW, w),
+      y: clampIntoMap(MINIMAP_PAD + (iy0 - cb.minY) * minimapScale, availH, h),
+      w,
+      h,
+    };
+  }, [pan.x, pan.y, zoom, canvasWidth, canvasHeight, contentBounds, minimapScale]);
 
   // Clean up any in-flight minimap drag when the widget unmounts (editor
   // teardown or the user hides the map mid-drag) — the drag arms document
@@ -189,13 +233,15 @@ export function TopologyMinimap({
         <rect
           className="topology-minimap-viewport"
           // Screen(0) is the viewport's left/top edge, so the visible canvas
-          // range is [−pan/zoom, (canvasW − pan)/zoom] — the box origin is
+          // range is [−pan/zoom, (canvasW − pan)/zoom] — the raw box origin is
           // −pan/zoom (pan.x directly would put the box on the wrong side of
-          // the map and ignore the zoom).
-          x={MINIMAP_PAD + (-pan.x / zoom - contentBounds.minX) * minimapScale}
-          y={MINIMAP_PAD + (-pan.y / zoom - contentBounds.minY) * minimapScale}
-          width={Math.max(MINIMAP_VIEWPORT_MIN, (canvasWidth / zoom) * minimapScale)}
-          height={Math.max(MINIMAP_VIEWPORT_MIN, (canvasHeight / zoom) * minimapScale)}
+          // the map and ignore the zoom). viewportBox clamps that raw rect to
+          // the padded map area, so the box can never spill past the map edge
+          // however far the view outgrows the diagram.
+          x={viewportBox.x}
+          y={viewportBox.y}
+          width={viewportBox.w}
+          height={viewportBox.h}
         />
       </svg>
     </div>

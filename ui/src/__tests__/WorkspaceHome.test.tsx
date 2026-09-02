@@ -142,7 +142,7 @@ describe('WorkspaceHome', () => {
   // ── Error state ────────────────────────────────────────────
 
   describe('error state', () => {
-    it('shows error with retry when error is set and no workspaces', async () => {
+    it('shows error with retry while keeping the home screen shell (no workspace cards)', async () => {
       const mockRetry = vi.fn();
       mockWorkspaceValue.mockReturnValue({
         availableWorkspaces: [],
@@ -162,6 +162,12 @@ describe('WorkspaceHome', () => {
       });
       expect(screen.getByText(/Could not load your workspaces/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
+      // The home screen shell stays visible (header + user profile + logout),
+      // so the picker is not replaced by a dead-end full-screen error.
+      expect(screen.getByRole('button', { name: /logout/i })).toBeInTheDocument();
+      expect(screen.getAllByText(/Test Owner/i).length).toBeGreaterThan(0);
+      // No workspace cards render while the list failed to load.
+      expect(screen.queryAllByTestId('workspace-card')).toHaveLength(0);
     });
 
     it('calls retry when retry button is clicked', async () => {

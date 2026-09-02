@@ -172,6 +172,82 @@ fn stripe_parse_error_formats() {
     assert!(msg.contains("declined"));
 }
 
+// ── PAY-4: decline classification ─────────────────────────────────────
+
+#[test]
+fn stripe_card_declined_maps_to_declined_not_invalid_card() {
+    // card_declined is a bank/processor refusal — the previous classifier's
+    // message.contains("card") heuristic sent this to InvalidCard, making
+    // the "card_error => Declined" arm nearly unreachable.
+    let err = StripePaymentProcessor::classify_stripe_error(
+        "card_error",
+        Some("Your card was declined."),
+        Some("card_declined"),
+    );
+    assert!(
+        matches!(err, PaymentError::Declined(_)),
+        "card_declined should be Declined, got: {err}"
+    );
+}
+
+#[test]
+fn stripe_generic_card_error_maps_to_declined() {
+    // No code — a plain card_error is a decline, not a card-data problem.
+    let err = StripePaymentProcessor::classify_stripe_error("card_error", Some("declined"), None);
+    assert!(
+        matches!(err, PaymentError::Declined(_)),
+        "plain card_error should be Declined, got: {err}"
+    );
+}
+
+#[test]
+fn stripe_card_data_problems_map_to_invalid_card() {
+    for code in [
+        "expired_card",
+        "incorrect_number",
+        "incorrect_cvc",
+        "incorrect_zip",
+    ] {
+        let err = StripePaymentProcessor::classify_stripe_error(
+            "card_error",
+            Some("card problem"),
+            Some(code),
+        );
+        assert!(
+            matches!(err, PaymentError::InvalidCard(_)),
+            "code {code} should be InvalidCard, got: {err}"
+        );
+    }
+}
+
+#[test]
+fn stripe_processing_error_maps_to_declined() {
+    let err = StripePaymentProcessor::classify_stripe_error(
+        "card_error",
+        Some("An error occurred while processing your card."),
+        Some("processing_error"),
+    );
+    assert!(
+        matches!(err, PaymentError::Declined(_)),
+        "processing_error should be Declined, got: {err}"
+    );
+}
+
+#[test]
+fn stripe_idempotency_error_maps_to_duplicate() {
+    let err = StripePaymentProcessor::classify_stripe_error(
+        "idempotency_error",
+        Some(
+            "Keys for idempotent requests can only be used with the same parameters they were first used with.",
+        ),
+        Some("idempotency_key_in_use"),
+    );
+    assert!(
+        matches!(err, PaymentError::Duplicate(_)),
+        "idempotency_error should be Duplicate, got: {err}"
+    );
+}
+
 #[test]
 fn stripe_parse_error_non_json() {
     let err = StripePaymentProcessor::parse_error(500, "Internal Server Error");

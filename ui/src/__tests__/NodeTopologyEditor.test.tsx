@@ -15,6 +15,7 @@ import {
 } from '../features/stores/nodeTopologyClamp';
 import { clearDevLog, getDevLog } from '@/utils/devLog';
 import { loadTopology, type TopologyData } from '@/api/topology';
+import type * as nodeTopologyEditorState from '../features/stores/nodeTopologyEditorState';
 import multiStoreFtl from '@/locales/multi-store.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -82,10 +83,6 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-confirm-delete-many-title': 'Delete {count} Nodes',
   'topology-confirm-delete-many-msg': 'Delete these {count} nodes and all of their wires? This action cannot be undone.',
   'topology-confirm-delete-label': 'Delete',
-  'topology-confirm-preset-title': 'Load Preset',
-  'topology-confirm-preset-msg':
-    'Loading a preset will replace your current topology. Any unsaved changes will be lost. You can undo this action after loading.',
-  'topology-confirm-preset-label': 'Load Preset',
   'topology-status-selection': '{count} selected',
   'topology-canvas-aria-label': 'Topology editor canvas. Use arrow keys to nudge selected nodes, Ctrl+Z to undo.',
   'topology-ws-type-store-pos': 'Retail POS',
@@ -286,6 +283,44 @@ vi.mock('@/api/staff', () => ({
 
 const mockLoadTopology = vi.mocked(loadTopology);
 
+// ── Retail seed (presets UI removed from production) ────────────────────────
+// The editor no longer ships preset constants, so interaction tests seed the
+// canvas with this local retail diagram — byte-identical to the old default
+// retail preset. The passthrough hook mock below only fills the initial graph
+// when the caller passes an empty one, so tests that seed via
+// props/loadTopology keep their own data.
+const RETAIL_SEED = {
+  nodes: [
+    // Cards are 240px tall: workspace rows sit at y 80/320 (240px apart on
+    // the 24px grid) so no cards overlap on first load. The store keeps its
+    // historical (80, 140) position — the geometry tests pin it.
+    { id: 'store-1', type: 'store', name: 'Downtown Branch', subtitle: 'Primary Store', x: 80, y: 140, telemetryBadge: 'Online (2 POS)', telemetryStatus: 'online' },
+    { id: 'ws-1', type: 'workspace', name: 'Retail POS #1', subtitle: 'Main Checkout', x: 380, y: 80, metadata: { typeKey: 'store-pos' }, telemetryBadge: 'Active', telemetryStatus: 'online' },
+    { id: 'wh-1', type: 'warehouse', name: 'Main Warehouse', subtitle: 'Primary Storage', x: 680, y: 140, telemetryBadge: '1,250 items', telemetryStatus: 'online' },
+  ],
+  wires: [
+    // Retail POS supplies the warehouse's one primary Operation scope.
+    // Runtime stock deduction consumes this typed route as the warehouse
+    // target, so the graph needs no second inbound stock wire.
+    { id: 'w-1', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-1', toPort: 'left', fromPortId: 'location-out', toPortId: 'location-in', relationshipType: 'location', direction: 'one-way', label: 'Binds Store' },
+    { id: 'w-2', fromNodeId: 'ws-1', fromPort: 'right', toNodeId: 'wh-1', toPort: 'left', fromPortId: 'operation-out', toPortId: 'operation-in', relationshipType: 'generic', direction: 'one-way', label: 'Operation Feed' },
+  ],
+};
+
+vi.mock('../features/stores/nodeTopologyEditorState', async () => {
+  const actual = await vi.importActual<typeof nodeTopologyEditorState>(
+    '../features/stores/nodeTopologyEditorState',
+  );
+  return {
+    ...actual,
+    useTopologyEditorGraph: (initialNodes: unknown[], initialWires: unknown[]) =>
+      actual.useTopologyEditorGraph(
+        initialNodes.length > 0 ? initialNodes : RETAIL_SEED.nodes,
+        initialWires.length > 0 ? initialWires : RETAIL_SEED.wires,
+      ),
+  };
+});
+
 type TopologyTier = Exclude<ComponentProps<typeof NodeTopologyEditor>['currentTier'], undefined>;
 
 const renderEditor = (props?: {
@@ -485,23 +520,13 @@ const openRackPanel = (panel: 'add' | 'edit' | 'view' | 'share') => {
 };
 
 /**
- * Open the presets popover and click a preset by its text.
- * The presets are behind a toggle button — they're not in the DOM by default.
- */
-const openPresetsAndClick = (presetText: string) => {
-  const presetsBtn = screen.getByText('Presets');
-  fireEvent.click(presetsBtn);
-  fireEvent.click(screen.getByText(presetText));
-};
-
-/**
  * Complete the Apply flow through the PIN confirmation popup (the redesign
- * gates Apply behind a 4+ digit PIN). Clicks Apply Topology Changes, types
+ * gates Apply behind a 4+ digit PIN). Clicks Apply Topology, types
  * the PIN, and confirms; returns after the verifyPin promise settles. The
  * verifyPin module mock accepts any PIN.
  */
 const applyWithPin = async (pin = '1234') => {
-  fireEvent.click(screen.getByText('Apply Topology Changes'));
+  fireEvent.click(screen.getByText('Apply Topology'));
   const input = document.getElementById('topology-apply-pin') as HTMLInputElement | null;
   if (!input) throw new Error('Apply PIN input not found');
   fireEvent.change(input, { target: { value: pin } });
@@ -827,15 +852,6 @@ describe('NodeTopologyEditor Component', () => {
     expect(ws.className).not.toContain('node-dimmed');
   });
 
-  it('renders tool rack sidebar and preset buttons', () => {
-    renderEditor();
-
-    expect(screen.getByText('+ Store Node')).toBeInTheDocument();
-    expect(screen.getByText('+ Retail POS')).toBeInTheDocument();
-    expect(screen.getByText('+ Warehouse')).toBeInTheDocument();
-    expect(screen.getByText('+ Hardware Node')).toBeInTheDocument();
-    expect(screen.getByText('Presets')).toBeInTheDocument();
-  });
 
   it('adds each of the four supported workspace types from the palette', () => {
     renderEditor({ currentTier: 'pro' });
@@ -1192,27 +1208,6 @@ describe('NodeTopologyEditor Component', () => {
     expect(within(nodeAt(2)).queryByText('Connect this KDS to a Restaurant POS using Operation In.')).toBeNull();
   });
 
-  it('rejects a second KDS→printer wire against the preset-loaded one as a duplicate', async () => {
-    // The Resto preset ships w-4 (kds→printer, ticket-out/ticket-in). The
-    // re-authorable pair must record the SAME toPortId the preset persists,
-    // so a second drop is caught by duplicate detection — not silently
-    // stacked as a second wire.
-    renderEditor();
-    openPresetsAndClick('Restaurant & KDS Preset');
-    await waitFor(() => expect(getWireCount()).toBe(4));
-
-    const nodes = [...document.querySelectorAll('.topology-node')];
-    const kds = nodes.find((n) => n.querySelector('.node-title')?.textContent === 'Kitchen KDS');
-    const printer = nodes.find((n) => n.querySelector('.node-title')?.textContent === 'Kitchen Thermal Printer');
-    expect(kds).not.toBeUndefined();
-    expect(printer).not.toBeUndefined();
-
-    // KDS right row 0 = ticket-out; hardware left row 1 = ticket-in.
-    fireEvent.click(portRowOf(kds as HTMLElement, 'right', 0));
-    fireEvent.click(portRowOf(printer as HTMLElement, 'left', 1));
-    expect(getWireCount()).toBe(4);
-    expect(screen.getByText('A wire already connects these ports.')).toBeInTheDocument();
-  });
 
   it('refuses a ticket wire into a printer that already has a ticket source', async () => {
     // ADR #34 ticket-routing cardinality: a ticket device accepts exactly
@@ -1318,35 +1313,6 @@ describe('NodeTopologyEditor Component', () => {
   it.skip('clicking the canvas cancels an in-flight connection without creating a wire', () => {});
   it.skip('re-arming from another output cancels the previous in-flight connection', () => {});
 
-  it('a preset load while a connection is in flight cancels it (no keyboard deadlock)', async () => {
-    mockLoadTopology.mockResolvedValueOnce({
-      nodes: [
-        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
-        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
-        { id: 'wh-1', type: 'warehouse', name: 'WH', x: 680, y: 140 },
-      ],
-      wires: [],
-    } as never);
-    renderEditor();
-    await waitFor(() => expect(getNodeCount()).toBe(3));
-
-    // Arm a connection, then load a preset — the gesture must cancel.
-    fireEvent.click(portRowOf(nodeAt(1), 'right', 0));
-    expect(previewLine()).not.toBeNull();
-
-    // Clean canvas → the preset loads directly (no confirm dialog) and must
-    // cancel the armed connection; the keyboard guard then releases.
-    openPresetsAndClick('Retail Preset');
-    await waitFor(() => expect(previewLine()).toBeNull());
-
-    // The canvas keyboard is responsive again: select a node and nudge it
-    // (the nudge lands on the 24px grid, so just assert it MOVED).
-    fireEvent.mouseDown(nodeAt(0), { button: 0 });
-    fireEvent.mouseUp(nodeAt(0));
-    const before = parseFloat(nodeAt(0).style.left);
-    fireEvent.keyDown(window, { key: 'ArrowRight' });
-    expect(parseFloat(nodeAt(0).style.left)).toBeGreaterThan(before);
-  });
 
   it('Escape cancels an in-flight connection without creating a wire', async () => {
     mockLoadTopology.mockResolvedValueOnce({
@@ -1625,34 +1591,7 @@ describe('NodeTopologyEditor Component', () => {
     expect(portOf(nodeAt(1), 'bottom')).toBeNull();
   });
 
-  it('switches to restaurant & KDS preset when clicked', () => {
-    renderEditor();
 
-    openPresetsAndClick('Restaurant & KDS Preset');
-
-    expect(screen.getByText('Grand Bistro')).toBeInTheDocument();
-    expect(screen.getByText('Kitchen KDS')).toBeInTheDocument();
-    expect(screen.getByText('Kitchen Thermal Printer')).toBeInTheDocument();
-  });
-
-  it('preset Kitchen KDS exposes the left Operation input and right Ticket Out output', () => {
-    // The Resto & KDS preset seeds the KDS node WITH metadata.typeKey so
-    // isKdsNode() resolves: left Operation input + right Ticket Out
-    // output. Pin the preset's own data so the port contract cannot
-    // regress when the preset is edited.
-    renderEditor();
-    openPresetsAndClick('Restaurant & KDS Preset');
-
-    const nodes = [...document.querySelectorAll('.topology-node')];
-    const kds = nodes.find((n) => n.querySelector('.node-title')?.textContent === 'Kitchen KDS');
-    expect(kds).not.toBeUndefined();
-    expect(kds!.querySelectorAll('.node-port-row--left')).toHaveLength(1);
-    expect(kds!.querySelectorAll('.node-port-row--right')).toHaveLength(1);
-    const leftRow = kds!.querySelector('.node-port-row--left');
-    const rightRow = kds!.querySelector('.node-port-row--right');
-    expect(leftRow?.textContent).toContain('Operation');
-    expect(rightRow?.textContent).toContain('Ticket Out');
-  });
 
   // ── Load persisted topology on mount ──────────────────────────
 
@@ -1703,7 +1642,7 @@ describe('NodeTopologyEditor Component', () => {
     const onSave = vi.fn();
     renderEditor({ onSave, canSave: false });
 
-    const applyBtn = screen.getByText('Apply Topology Changes');
+    const applyBtn = screen.getByText('Apply Topology');
     expect(applyBtn).toBeDisabled();
     expect(screen.getByText(/View-only/)).toBeInTheDocument();
 
@@ -1715,10 +1654,10 @@ describe('NodeTopologyEditor Component', () => {
 
   it('enables Apply by default (canSave=true)', async () => {
     renderEditor({ onSave: vi.fn() });
-    expect(screen.getByText('Apply Topology Changes')).not.toBeDisabled();
+    expect(screen.getByText('Apply Topology')).not.toBeDisabled();
   });
 
-  it('delegates the Apply payload when Apply Topology Changes is clicked', async () => {
+  it('delegates the Apply payload when Apply Topology is clicked', async () => {
     const onSave = vi.fn();
     renderEditor({ onSave });
 
@@ -2013,7 +1952,7 @@ describe('NodeTopologyEditor Component', () => {
       renderEditor({ onSave });
       await waitFor(() => expect(getNodeCount()).toBe(4));
 
-      fireEvent.click(screen.getByText('Apply Topology Changes'));
+      fireEvent.click(screen.getByText('Apply Topology'));
 
       // The Apply gate opens the issues panel (so the user sees EVERY
       // blocking issue at once) and toasts a block summary instead of a
@@ -2211,24 +2150,6 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.queryByText('Undo (Ctrl+Z)')).not.toBeInTheDocument();
   });
 
-  it('does not mark the canvas dirty when a node is clicked without editing', () => {
-    renderEditor();
-
-    const firstNode = document.querySelector('.topology-node');
-    expect(firstNode).not.toBeNull();
-
-    fireEvent.mouseDown(firstNode as Element, { button: 0, clientX: 0, clientY: 0 });
-    fireEvent.mouseUp(firstNode as Element, { button: 0, clientX: 0, clientY: 0 });
-
-    // A plain click is not an edit — the preset must load directly,
-    // without the "unsaved changes" confirm dialog.
-    openPresetsAndClick('Restaurant & KDS Preset');
-
-    expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
-    // The clicked node stays selected; the inspector header shows the same
-    // name as the card — both match.
-    expect(screen.getAllByText('Grand Bistro').length).toBeGreaterThanOrEqual(1);
-  });
 
   it('enables Undo only after an actual drag and restores the position on undo', () => {
     renderEditor();
@@ -3083,34 +3004,6 @@ function BranchDeleteHarness() {
     expect(screen.queryByText('Undo (Ctrl+Z)')).not.toBeInTheDocument();
   });
 
-  it('resets the inspector edit session when a preset loads over a selected node', () => {
-    renderEditor();
-
-    const firstNode = document.querySelector('.topology-node') as HTMLElement;
-    const nameInput = () => document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement;
-
-    // Select store-1 and edit its name — one session entry.
-    fireEvent.mouseDown(firstNode, { button: 0, clientX: 0, clientY: 0 });
-    fireEvent.change(nameInput(), { target: { value: 'Renamed Branch' } });
-    openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
-
-    // Dirty — the preset load asks for confirmation, then replaces the
-    // canvas. store-1 stays selected (both presets have store-1) — the card
-    // title AND the inspector header both show the preset name.
-    openPresetsAndClick('Restaurant & KDS Preset');
-    const confirmBtn = screen.getAllByText('Load Preset').find((el) => el.tagName === 'BUTTON');
-    fireEvent.click(confirmBtn as Element);
-    expect(screen.getAllByText('Grand Bistro').length).toBeGreaterThanOrEqual(1);
-    expect(nameInput().value).toBe('Grand Bistro');
-
-    // Editing the SAME node after the preset load must start a fresh
-    // session — one undo returns to the preset name, not the pre-preset
-    // renamed state (which would prove the entry was never pushed).
-    fireEvent.change(nameInput(), { target: { value: 'Grand Bistro Edited' } });
-    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
-
-    expect(nameInput().value).toBe('Grand Bistro');
-  });
 
   // ── Wire direction toggle ───────────────────────────────────────
 
@@ -3313,116 +3206,9 @@ function BranchDeleteHarness() {
     openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
   });
 
-  it('does not ask about unsaved changes when a preset loads after a successful Apply', async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined);
-    renderEditor({ onSave });
 
-    await waitFor(() => {
-      expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
-    });
 
-    // Make an edit so the canvas is dirty.
-    fireEvent.click(screen.getByText('+ Store Node'));
-    openRackPanel('edit');
-    openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
 
-    // Apply persists the canvas — after a successful save the canvas matches
-    // the backend, so a preset load must NOT ask about unsaved changes.
-    await applyWithPin();
-    await waitFor(() => {
-      expect(onSave).toHaveBeenCalledTimes(1);
-    });
-
-    openPresetsAndClick('Retail Preset');
-
-    // No "Load Preset" confirm dialog — the preset loads directly.
-    expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
-    expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
-  });
-
-  it('re-arms the unsaved-changes dialog for a new edit made after Apply', async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined);
-    renderEditor({ onSave });
-
-    await waitFor(() => {
-      expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
-    });
-
-    // Edit → save (canvas clean) → new edit re-dirties the canvas.
-    fireEvent.click(screen.getByText('+ Store Node'));
-    await applyWithPin();
-    await waitFor(() => {
-      expect(onSave).toHaveBeenCalledTimes(1);
-    });
-    fireEvent.click(screen.getByText('+ Hardware Node'));
-
-    // The new unsaved edit must bring the confirm dialog back.
-    openPresetsAndClick('Retail Preset');
-    expect(screen.getAllByText('Load Preset').length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('confirms on preset when Undo diverges from the last Apply, but not when Redo restores it exactly', async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined);
-    renderEditor({ onSave });
-
-    await waitFor(() => {
-      expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
-    });
-
-    // Build a 5-node canvas (preset 3 + A + B), saving after each add so
-    // both additions are persisted and the canvas is clean afterwards.
-    fireEvent.click(screen.getByText('+ Store Node')); // node A → 4
-    await applyWithPin();
-    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByText('+ Store Node')); // node B → 5
-    await applyWithPin();
-    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2));
-
-    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
-
-    // Undo drops node B — the canvas now DIVERGES from the saved 5-node
-    // state, so a preset load must re-confirm instead of silently
-    // discarding the undone-to canvas.
-    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
-    expect(getNodeCount()).toBe(4);
-
-    openPresetsAndClick('Retail Preset');
-    expect(screen.getAllByText('Load Preset').length).toBeGreaterThanOrEqual(1);
-
-    // Cancel the dialog — the undone-to canvas must survive.
-    fireEvent.keyDown(canvas, { key: 'Escape' });
-    expect(getNodeCount()).toBe(4);
-
-    // Redo re-applies node B — the canvas is now EXACTLY the last applied
-    // 5-node state, so exact tracking must load the preset directly with
-    // NO confirm (the conservative boolean over-approximation would have
-    // shown a spurious dialog here).
-    fireEvent.keyDown(canvas, { key: 'y', ctrlKey: true });
-    expect(getNodeCount()).toBe(5);
-    openPresetsAndClick('Restaurant & KDS Preset');
-    expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
-    expect(screen.getByText('Grand Bistro')).toBeInTheDocument();
-  });
-
-  it('does not confirm when Undo returns the canvas to the last loaded preset', () => {
-    renderEditor();
-
-    // Loading the same preset is not an edit — it loads directly.
-    openPresetsAndClick('Retail Preset');
-    expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
-
-    // Undo restores the IDENTICAL retail canvas — it still matches the last
-    // preset load, so it is NOT dirty. Exact tracking must not confirm here
-    // (the conservative isDirtyRef over-approximation did, spuriously).
-    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
-    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
-    expect(getNodeCount()).toBe(3);
-
-    // Clicking the preset again must load directly — no "Load Preset" dialog.
-    openPresetsAndClick('Retail Preset');
-    expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
-    expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
-  });
 
   it('handles empty idMap gracefully (no remapping)', async () => {
     const onSave = vi.fn().mockResolvedValue({});
@@ -3506,28 +3292,6 @@ function BranchDeleteHarness() {
     expect(getWireCount()).toBe(1);
   });
 
-  it('loads a preset directly after an Apply with idMap remapping (snapshot holds remapped ids)', async () => {
-    const onSave = vi.fn().mockResolvedValue({ 'ws-1': 'ws-remapped-id' });
-    renderEditor({ onSave });
-
-    await waitFor(() => {
-      expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
-    });
-
-    // Apply with a non-empty idMap — every workspace node id changes on
-    // screen via the client-side remap.
-    await applyWithPin();
-    await waitFor(() => {
-      expect(onSave).toHaveBeenCalledTimes(1);
-    });
-
-    // The applied snapshot must contain the REMAPPED ids (the exact arrays
-    // set on the canvas) — so a preset click right after the save loads
-    // directly with no spurious confirm, even though ids changed on screen.
-    openPresetsAndClick('Retail Preset');
-    expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
-    expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
-  });
 
   // ── Delete via keyboard shortcut also uses input guard (#3) ─────
 
@@ -3754,23 +3518,6 @@ function BranchDeleteHarness() {
     ).toBe('Downtown Branch');
   });
 
-  it('marks the canvas dirty when the inspector renames a node', () => {
-    renderEditor();
-
-    const firstNode = document.querySelector('.topology-node') as HTMLElement;
-    fireEvent.mouseDown(firstNode, { button: 0, clientX: 0, clientY: 0 });
-
-    const nameInput = document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement;
-    fireEvent.change(nameInput, { target: { value: 'Renamed' } });
-
-    // A rename is a real edit — the preset load must ask first.
-    openPresetsAndClick('Restaurant & KDS Preset');
-
-    // "Load Preset" appears as both the modal title and the confirm
-    // button — either is proof the confirm dialog opened.
-    expect(screen.getAllByText('Load Preset').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-  });
 
   it('reports dirty transitions through onDirtyChange', async () => {
     const onDirtyChange = vi.fn();
@@ -3873,27 +3620,6 @@ function BranchDeleteHarness() {
     openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
   });
 
-  it('clears a wire selection when a preset load removes the selected wire', () => {
-    renderEditor();
-
-    // Restaurant preset has 4 wires (w-1..w-4); retail has only 2 (w-1, w-2).
-    // Select w-3 — it exists only in the restaurant preset. (Clicking a
-    // wire also cycles its direction, which dirties the canvas — the next
-    // preset click therefore asks for confirmation, which the test accepts.)
-    openPresetsAndClick('Restaurant & KDS Preset');
-    const hitboxes = document.querySelectorAll('.wire-hitbox');
-    expect(hitboxes.length).toBe(4);
-    fireEvent.click(hitboxes[2]!);
-    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
-
-    // Clicking Retail Preset confirms replacing the (now-dirty) canvas.
-    openPresetsAndClick('Retail Preset');
-    const confirm = screen.getAllByText('Load Preset').find((el) => el.tagName === 'BUTTON');
-    fireEvent.click(confirm!);
-
-    // w-3 no longer exists, so its selection must not dangle at a removed wire.
-    expect(screen.queryByText('Delete Selected Element')).not.toBeInTheDocument();
-  });
 
   // ── Undo-of-delete re-selects the restored node (#17) ─────────────
 
@@ -3960,43 +3686,7 @@ function BranchDeleteHarness() {
 
   // ── Toast when a preset load drops the selection (#18) ────────────
 
-  it('shows a toast when a preset load drops the selected node', () => {
-    renderEditor();
 
-    // wh-1 (Main Warehouse) exists only in the retail preset.
-    const warehouse = document.querySelector('.node-type-warehouse') as HTMLElement;
-    expect(warehouse).not.toBeNull();
-    fireEvent.mouseDown(warehouse, { button: 0 });
-    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
-
-    // The restaurant preset has no warehouse node — the selection is dropped.
-    openPresetsAndClick('Restaurant & KDS Preset');
-
-    expect(
-      screen.getByText('The selected element is not part of this preset and was deselected.'),
-    ).toBeInTheDocument();
-  });
-
-  it('shows a toast when a preset load drops the selected wire', () => {
-    renderEditor();
-
-    // Load the restaurant preset, then select w-3 — it exists only there.
-    openPresetsAndClick('Restaurant & KDS Preset');
-    const hitboxes = document.querySelectorAll('.wire-hitbox');
-    expect(hitboxes.length).toBe(4);
-    fireEvent.click(hitboxes[2]!);
-    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
-
-    // Retail preset has only w-1/w-2 — the wire selection is dropped. The
-    // click dirties the canvas (direction cycled), so confirm the load.
-    openPresetsAndClick('Retail Preset');
-    const confirm = screen.getAllByText('Load Preset').find((el) => el.tagName === 'BUTTON');
-    fireEvent.click(confirm!);
-
-    expect(
-      screen.getByText('The selected element is not part of this preset and was deselected.'),
-    ).toBeInTheDocument();
-  });
 
 // ── Wire creation via port connections ──────────────────────────
 
@@ -4158,43 +3848,6 @@ describe('NodeTopologyEditor — duplicate detection vs defaulted ports', () => 
   });
 });
 
-// ── F1 shortcuts help ───────────────────────────────────────────
-
-describe('NodeTopologyEditor — F1 shortcuts help', () => {
-  it('F1 opens the shortcuts popover and a second F1 closes it', () => {
-    renderEditor();
-    expect(document.querySelector('.topology-shortcuts-popover')).toBeNull();
-
-    fireEvent.keyDown(window, { key: 'F1' });
-    expect(document.querySelector('.topology-shortcuts-popover')).not.toBeNull();
-    // The help lists its own trigger.
-    expect(screen.getByText('Show keyboard shortcuts')).not.toBeNull();
-    expect(screen.getByText('F1')).not.toBeNull();
-
-    fireEvent.keyDown(window, { key: 'F1' });
-    expect(document.querySelector('.topology-shortcuts-popover')).toBeNull();
-  });
-
-  it('F1 works while focus is on a rack control (not swallowed by the rack guard)', () => {
-    renderEditor();
-    // Canvas shortcuts are normally inert when a rack control has focus.
-    (document.querySelector('.node-tool-rack button') as HTMLElement | null)?.focus();
-
-    fireEvent.keyDown(window, { key: 'F1' });
-    expect(document.querySelector('.topology-shortcuts-popover')).not.toBeNull();
-  });
-
-  it('F1 lists the flagship gestures: Space+drag pan and Alt+drag duplicate', () => {
-    renderEditor();
-    fireEvent.keyDown(window, { key: 'F1' });
-
-    expect(screen.getByText('Pan the canvas')).not.toBeNull();
-    expect(screen.getByText('Space + Drag')).not.toBeNull();
-    expect(screen.getByText('Duplicate by dragging')).not.toBeNull();
-    expect(screen.getByText('Alt + Drag')).not.toBeNull();
-  });
-});
-
 // ── Canvas shortcuts vs focused chrome controls ─────────────────
 
 describe('NodeTopologyEditor — canvas shortcuts vs focused chrome', () => {
@@ -4244,15 +3897,15 @@ describe('NodeTopologyEditor — canvas shortcuts vs focused chrome', () => {
     fireEvent.mouseUp(firstNode); // end the drag cleanly (no ghost drag)
     expect(document.querySelector('.node-selected')).not.toBeNull();
 
-    const presetsBtn = screen.getByText('Presets');
-    presetsBtn.focus();
+    const headerBtn = screen.getByText('Apply Topology');
+    headerBtn.focus();
 
     // Arrow keys must not nudge the canvas (no history entry → no Undo).
-    fireEvent.keyDown(presetsBtn, { key: 'ArrowDown' });
+    fireEvent.keyDown(headerBtn, { key: 'ArrowDown' });
     expect(screen.queryByText('Undo (Ctrl+Z)')).not.toBeInTheDocument();
 
     // Escape must not clear the selection under the focused control.
-    fireEvent.keyDown(presetsBtn, { key: 'Escape' });
+    fireEvent.keyDown(headerBtn, { key: 'Escape' });
     expect(document.querySelector('.node-selected')).not.toBeNull();
   });
 
@@ -4282,7 +3935,7 @@ describe('NodeTopologyEditor — canvas shortcuts vs focused chrome', () => {
     fireEvent.mouseUp(firstNode);
     expect(document.querySelector('.node-selected')).not.toBeNull();
 
-    const applyBtn = screen.getByText('Apply Topology Changes');
+    const applyBtn = screen.getByText('Apply Topology');
     applyBtn.focus();
     fireEvent.keyDown(applyBtn, { key: 'Delete' });
 
@@ -4396,25 +4049,6 @@ describe('NodeTopologyEditor — Delete/Backspace key flow', () => {
   });
 });
 
-it('does not toast when the selected node survives a preset load', () => {
-    renderEditor();
-
-    // store-1 exists in BOTH presets — its selection must survive.
-    const store = document.querySelector('.node-type-store') as HTMLElement;
-    expect(store).not.toBeNull();
-    fireEvent.mouseDown(store, { button: 0 });
-    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
-
-    openPresetsAndClick('Restaurant & KDS Preset');
-
-    expect(
-      screen.queryByText('The selected element is not part of this preset and was deselected.'),
-    ).not.toBeInTheDocument();
-    // The inspector stays open on the surviving store node (restaurant name).
-    expect(
-      (document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement).value,
-    ).toBe('Grand Bistro');
-  });
 });
 
 // ── Wire deletion vs an in-flight connection ───────────────────
@@ -5439,25 +5073,40 @@ describe('NodeTopologyEditor — canvas pan', () => {
     const scale = (nodeRects[2]! - nodeRects[0]!) / 600;
     const PAD = 8;
     const MIN_X = 80; // leftmost content edge of the retail preset
-    // Screen(0) is the viewport's left edge, so the visible canvas range is
-    // [−pan/zoom, (canvasW − pan)/zoom] — the box origin is −pan/zoom.
-    const expectedX = (panX: number, zoom: number) => PAD + (-panX / zoom - MIN_X) * scale;
+    // The box is the viewport rect ∩ content bounds. jsdom reports a 0px
+    // canvas, so the view is a degenerate point at −pan/zoom and the box
+    // renders as the minimum chip pinned toward that point's edge.
+    const expectedX = (panX: number, zoom: number) => {
+      const viewLeft = -panX / zoom;
+      const ix0 = Math.max(viewLeft, MIN_X);
+      const raw = PAD + (ix0 - MIN_X) * scale;
+      return Math.min(Math.max(raw, PAD), PAD + 160 - 8);
+    };
 
-    // pan=0, zoom=1: the box starts just left of the content box.
+    // pan=0, zoom=1: the view origin sits left of the content box — the chip
+    // pins to the left pad instead of the SVG clipping it mid-edge.
     expect(parseFloat(viewport.getAttribute('x')!)).toBeCloseTo(expectedX(0, 1));
 
-    // Middle-drag pan by (+50, +30): the box must move LEFT in canvas
-    // terms (−pan.x), not right (the pan.x bug renders it 100px off).
+    // Drag the view right (pan −200): the view origin enters the content
+    // range and the box tracks −pan/zoom exactly.
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
-    fireEvent.mouseDown(canvas, { button: 1, clientX: 100, clientY: 100 });
-    fireEvent.mouseMove(document, { clientX: 150, clientY: 130 });
+    fireEvent.mouseDown(canvas, { button: 1, clientX: 300, clientY: 100 });
+    fireEvent.mouseMove(document, { clientX: 100, clientY: 100 });
     fireEvent.mouseUp(document, { button: 1 });
-    expect(parseFloat(viewport.getAttribute('x')!)).toBeCloseTo(expectedX(50, 1));
+    expect(parseFloat(viewport.getAttribute('x')!)).toBeCloseTo(expectedX(-200, 1));
 
     // Zoom out to 0.8 (pan untouched): the origin math must divide the
-    // pan by the new zoom — the visible canvas left edge is −50/0.8.
+    // pan by the new zoom — the visible canvas left edge is −200/0.8.
     fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
-    expect(parseFloat(viewport.getAttribute('x')!)).toBeCloseTo(expectedX(50, 0.8));
+    expect(parseFloat(viewport.getAttribute('x')!)).toBeCloseTo(expectedX(-200, 0.8));
+
+    // Pan the view far left (pan +300, origin far left of the content):
+    // the intersection pins the chip at the content's left pad — the box
+    // never spills past the map edge however far the view outgrows it.
+    fireEvent.mouseDown(canvas, { button: 1, clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(document, { clientX: 400, clientY: 100 });
+    fireEvent.mouseUp(document, { button: 1 });
+    expect(parseFloat(viewport.getAttribute('x')!)).toBeCloseTo(expectedX(300, 0.8));
   });
 
   it('does not open the context menu after a right-button pan drag', () => {
@@ -5980,25 +5629,6 @@ describe('NodeTopologyEditor — multi-select & marquee', () => {
     expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(0);
   });
 
-  it('a preset load cancels an in-flight marquee (canvas-replacement rule)', () => {
-    renderEditor();
-    mockCanvasSize(1200, 800);
-    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
-
-    // Arm and render the marquee over the preset's store/workspace nodes.
-    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
-    fireEvent.mouseMove(canvas, { clientX: 650, clientY: 420 });
-    expect(document.querySelector('.topology-marquee')).not.toBeNull();
-
-    // The preset replaces the canvas — the box must go, and a release must
-    // not commit a phantom selection on the preset's nodes.
-    openPresetsAndClick('Restaurant & KDS Preset');
-    expect(screen.getByText('Grand Bistro')).toBeInTheDocument();
-    expect(document.querySelector('.topology-marquee')).toBeNull();
-
-    fireEvent.mouseUp(document, { button: 0 });
-    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(0);
-  });
 
   it('left→right marquee selects only fully-contained nodes (excludes partial overlaps)', () => {
     renderEditor();
@@ -6295,7 +5925,6 @@ describe('NodeTopologyEditor — Apply failure resilience', () => {
     // Make a dirty edit: add a node.
     fireEvent.click(screen.getByText('+ Store Node'));
     const countAfterEdit = getNodeCount();
-    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
 
     await applyWithPin();
 
@@ -6308,27 +5937,13 @@ describe('NodeTopologyEditor — Apply failure resilience', () => {
     // The in-memory edit survives the failed save.
     expect(getNodeCount()).toBe(countAfterEdit);
 
-    // Still dirty WHILE the edit is present: a preset click asks about
-    // unsaved changes (confirm dialog title + the unsaved-changes message
-    // body are both rendered).
-    openPresetsAndClick('Retail Preset');
-    expect(screen.getAllByText('Load Preset').length).toBeGreaterThan(0);
-    expect(
-      screen.getByText(/Loading a preset will replace your current topology/),
-    ).toBeInTheDocument();
-    fireEvent.keyDown(canvas, { key: 'Escape' });
-    expect(getNodeCount()).toBe(countAfterEdit);
+    // Still dirty WHILE the edit is present — the unsaved-changes chip stays.
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
 
     // Undo still works — the pre-save history entry was not cleared.
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
     fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
     expect(getNodeCount()).toBe(countAfterEdit - 1);
-
-    // The undone-to canvas equals the last applied state (the failed save
-    // never updated the applied snapshot), so exact tracking loads the
-    // preset directly — NO spurious confirm.
-    openPresetsAndClick('Retail Preset');
-    expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
-    expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
   });
 
   it('does not clear selection when Apply fails before the idMap branch', async () => {
@@ -7144,27 +6759,7 @@ describe('NodeTopologyEditor — wire relabel undo', () => {
 
 // ── Preset load cancels in-flight connection ────────────────────
 
-describe('NodeTopologyEditor — preset load cancels in-flight connection', () => {
-  it('cancels an in-flight connection when a preset is loaded', () => {
-    renderEditor();
-    const baseline = getWireCount();
-
-    // Start a connection from warehouse's output — ghost preview appears.
-    fireEvent.click(portOf(nodeAt(2), 'right'));
-    expect(previewLine()).not.toBeNull();
-
-    // Load the SAME preset mid-connection (no edits yet, so it loads
-    // directly without the unsaved-changes dialog).
-    openPresetsAndClick('Retail Preset');
-
-    // The canvas was replaced — the in-flight connection must be cancelled:
-    // no ghost preview may survive the replacement...
-    expect(previewLine()).toBeNull();
-    // ...and a subsequent target-port click must start a NEW connection
-    // instead of completing the stale one (no wire may be created).
-    fireEvent.click(portOf(nodeAt(1), 'left'));
-    expect(getWireCount()).toBe(baseline);
-  });
+describe('NodeTopologyEditor — canvas reload cancels in-flight connection', () => {
 
   it('cancels an in-flight connection when the canvas reloads from instances', async () => {
     // Saved diagram with a store + workspace; the harness then replaces the
@@ -7358,29 +6953,6 @@ describe('NodeTopologyEditor — dialog Escape isolation', () => {
     expect(document.querySelector('.topology-node.node-selected')).not.toBeNull();
   });
 
-  it('Escape cancelling the unsaved-changes preset dialog leaves the edit intact', () => {
-    renderEditor();
-
-    // Make a dirty edit so the preset click opens the confirm dialog. The
-    // add also selects the new node, so the guard's effect is observable:
-    // Escape must NOT steal the selection while the dialog is open.
-    fireEvent.click(screen.getByText('+ Store Node'));
-    const countAfterEdit = getNodeCount();
-    expect(document.querySelector('.topology-node.node-selected')).not.toBeNull();
-
-    openPresetsAndClick('Retail Preset');
-    expect(screen.getAllByText('Load Preset').length).toBeGreaterThan(0);
-
-    // Escape closes the dialog without loading the preset...
-    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
-    fireEvent.keyDown(canvas, { key: 'Escape' });
-    expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
-
-    // ...the edit survives untouched, and the selection was NOT cleared by
-    // the editor's window-level handler (the dialog owns the keyboard).
-    expect(getNodeCount()).toBe(countAfterEdit);
-    expect(document.querySelector('.topology-node.node-selected')).not.toBeNull();
-  });
 });
 
 // ── Tool-slot shortcuts + empty-state onboarding ────────────────
@@ -7470,6 +7042,41 @@ describe('NodeTopologyEditor — empty-state onboarding', () => {
     fireEvent.keyDown(document.querySelector('.node-canvas-container')!, { key: '1' });
     await waitFor(() => expect(getNodeCount()).toBe(1));
     expect(screen.queryByText('Build your store topology')).not.toBeInTheDocument();
+  });
+
+  // ADR #45 §4.1 — "a mandatory root is not a decision, so do not make the
+  // merchant place it." @branch-root exists exactly once per graph by contract,
+  // so a fresh store that HAS a branch location must open on that root rather
+  // than on an empty canvas asking for it. The two tests above cover the
+  // genuinely rootless cases (no locations at all); this is the one where a
+  // location exists and the diagram is empty.
+  it('authors the Branch Location root for a fresh store that has a location', async () => {
+    mockLoadTopology.mockResolvedValueOnce(null); // no saved diagram yet
+    renderEditor({
+      branchLocations: [{ id: 'store-1', name: 'Main Street' }],
+      workspaceInstances: [],
+    });
+
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    const root = document.querySelector('.topology-node[data-node-id="store-1"]') as HTMLElement;
+    expect(root).toBeInTheDocument();
+    // The onboarding hint must not compete with the root the contract required.
+    expect(screen.queryByText('Build your store topology')).not.toBeInTheDocument();
+  });
+
+  it('does not mark the canvas dirty for a root the merchant never placed', async () => {
+    // The auto-authored root lands in the same commitSnapshot as the loaded
+    // graph, so it is part of the applied baseline. If it were added as an
+    // edit instead, every fresh store would open showing "Unsaved changes" —
+    // asking the merchant to Apply a decision they were never asked to make.
+    mockLoadTopology.mockResolvedValueOnce(null);
+    renderEditor({
+      branchLocations: [{ id: 'store-1', name: 'Main Street' }],
+      workspaceInstances: [],
+    });
+
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
   });
 });
 
@@ -7630,45 +7237,6 @@ describe('NodeTopologyEditor — unsaved-changes indicator', () => {
     expect(summary()).toContain('0 created');
     expect(summary()).toContain('0 archived');
     expect(summary()).toContain('0 updated');
-  });
-});
-
-// ── Shortcuts help popover ───────────────────────────────────────
-
-describe('NodeTopologyEditor — shortcuts help popover', () => {
-  it('opens on the help button and lists the canvas shortcuts', () => {
-    renderEditor();
-    const helpBtn = screen.getByRole('button', { name: 'Keyboard shortcuts' });
-
-    fireEvent.click(helpBtn);
-    expect(helpBtn).toHaveAttribute('aria-expanded', 'true');
-    expect(document.querySelector('.topology-shortcuts-popover')).not.toBeNull();
-    expect(screen.getByText('Spawn a node from the palette slot')).toBeInTheDocument();
-  });
-
-  it('closes on Escape and on an outside click', () => {
-    renderEditor();
-    const helpBtn = screen.getByRole('button', { name: 'Keyboard shortcuts' });
-
-    fireEvent.click(helpBtn);
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(document.querySelector('.topology-shortcuts-popover')).toBeNull();
-
-    fireEvent.click(helpBtn);
-    fireEvent.mouseDown(document.body);
-    expect(document.querySelector('.topology-shortcuts-popover')).toBeNull();
-  });
-
-  it('documents Shift+drag as an additive marquee gesture', () => {
-    renderEditor();
-    const helpBtn = screen.getByRole('button', { name: 'Keyboard shortcuts' });
-
-    fireEvent.click(helpBtn);
-    // Every other canvas gesture (Space+drag pan, Alt+drag duplicate) has a
-    // help row; the additive Shift+drag marquee must be discoverable too —
-    // both the kbd glyph and its FTL description.
-    expect(screen.getByText('Shift + Drag')).toBeInTheDocument();
-    expect(screen.getByText('Add to the selection')).toBeInTheDocument();
   });
 });
 
@@ -8767,8 +8335,12 @@ describe('NodeTopologyEditor — minimap overview', () => {
     const before = mapRect.getAttribute('x');
 
     // Middle-button drag pans the main canvas (see the canvas-pan describe).
-    fireEvent.mouseDown(canvas, { button: 1, clientX: 100, clientY: 100 });
-    fireEvent.mouseMove(document, { clientX: 150, clientY: 130 });
+    // The drag goes LEFT by 200: pan becomes −200, so the view origin
+    // (−pan/zoom = 200) enters the content range and the intersection box
+    // moves with it — a rightward pan would pin the chip at the map edge
+    // (the view origin never reaches the content), so x would not move.
+    fireEvent.mouseDown(canvas, { button: 1, clientX: 300, clientY: 100 });
+    fireEvent.mouseMove(document, { clientX: 100, clientY: 100 });
     fireEvent.mouseUp(document, { button: 1 });
 
     expect(mapRect.getAttribute('x')).not.toBe(before);

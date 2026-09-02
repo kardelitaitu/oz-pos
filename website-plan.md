@@ -337,7 +337,7 @@ on the owned domain is the real inbox-not-spam fix — see
    prices (see §6). Live catalog is the same shape once approved.
 3. **Sandbox notification destination created via API** (2026-08-16):
    `ntfset_01m05htpgfq0qmcvb0er6byrsx` →
-   `https://oz--cloud--76cyv4d6bn54.code.run/api/v1/paddle/webhook`
+   `https://license.ozpos.my.id/api/v1/paddle/webhook`
    (events: subscription.created/updated/canceled, transaction.completed/
    payment_failed). The signing secret is **dashboard-only** — copy it from
    the sandbox dashboard (Settings → Notifications) into

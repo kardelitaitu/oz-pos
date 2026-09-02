@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 /// Maps 1:1 to the `shifts` table (migration `021_shifts.sql`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Shift {
-    /// Internal row id (UUID v4).
+    /// Internal row id (UUID v7).
     pub id: String,
     /// FK to `users.id` — the staff member who opened the shift.
     pub user_id: String,

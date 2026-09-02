@@ -18,6 +18,9 @@ next: none | perf: N/A
 pub mod commands;
 /// Single error type for every Tauri command.
 pub mod error;
+/// Tablet image download manager daemon (spec 0046b §3.7) — keeps the
+/// local image cache (`$APPCACHE/images/`) in sync with the catalog.
+mod image_download;
 /// Global application state (DB, kernel, sync daemon).
 pub mod state;
 
@@ -193,11 +196,12 @@ pub fn run() {
                 // Uses the same 3-phase split as the Tauri commands:
                 // read DB → async HTTP → write DB, so the DB lock is never
                 // held during the network round-trip.
+                let sync_app_handle = app_handle.clone();
                 platform_startup::spawn_daemon("tablet sync daemon", async move {
                     let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
                     loop {
                         interval.tick().await;
-                        match app_handle.try_state::<AppState>() {
+                        match sync_app_handle.try_state::<AppState>() {
                             Some(state) => {
                                 // Phase 1: Read config + pending items (brief lock).
                                 let (config_opt, pending_items) = {
@@ -291,6 +295,47 @@ pub fn run() {
                     }
                 });
 
+                // ── Background image download daemon (spec 0046b §3.7) ──
+                // Computes the missing-hash set at each cycle (referenced
+                // minus present on disk) and downloads primaries first,
+                // up to 40 images per cycle with 2 GETs in flight; LRU
+                // eviction keeps the cache within the 256 MB budget.
+                // Wakes on jittered cadence (configurable via OZ_IMG_PULL_*).
+                platform_startup::spawn_daemon("tablet image download", async move {
+                    let mut manager = crate::image_download::ImageDownloadManager::new();
+                    // Initial delay so the daemon doesn't hammer on boot.
+                    tokio::time::sleep(std::time::Duration::from_secs(
+                        crate::image_download::jitter_min(),
+                    ))
+                    .await;
+                    loop {
+                        match app_handle.try_state::<AppState>() {
+                            Some(state) => {
+                                let cache_dir = state
+                                    .app
+                                    .as_ref()
+                                    .map(|h| {
+                                        h.path()
+                                            .app_cache_dir()
+                                            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+                                    })
+                                    .unwrap_or_else(|| std::path::PathBuf::from("."));
+                                manager.run_cycle(&state.db, &cache_dir).await;
+                            }
+                            None => {
+                                tracing::warn!(
+                                    "tablet image download: AppState not available — skipping"
+                                );
+                            }
+                        }
+                        tokio::time::sleep(crate::image_download::rand_jitter(
+                            crate::image_download::jitter_min(),
+                            crate::image_download::jitter_max(),
+                        ))
+                        .await;
+                    }
+                });
+
                 Ok(())
             })
             .invoke_handler(tauri::generate_handler![
@@ -307,12 +352,6 @@ pub fn run() {
                 commands::branding::set_brand_primary_colour,
                 commands::branding::set_brand_logo_path,
                 commands::branding::set_brand_store_name,
-                commands::bundles::list_bundles,
-                commands::bundles::get_bundle,
-                commands::bundles::create_bundle,
-                commands::bundles::update_bundle,
-                commands::bundles::delete_bundle,
-                commands::bundles::lookup_bundle_by_sku,
                 commands::customers::list_customers_scoped,
                 commands::customers::search_customers_scoped,
                 commands::customers::get_customer_history_scoped,
@@ -356,14 +395,6 @@ pub fn run() {
                 commands::features::list_all_features,
                 commands::features::set_features_bulk,
                 commands::features::set_feature,
-                commands::gift_cards::issue_gift_card,
-                commands::gift_cards::get_gift_card,
-                commands::gift_cards::list_gift_cards,
-                commands::gift_cards::get_gift_card_balance,
-                commands::gift_cards::redeem_gift_card,
-                commands::gift_cards::top_up_gift_card,
-                commands::gift_cards::freeze_gift_card,
-                commands::gift_cards::unfreeze_gift_card,
                 commands::inventory_counts::create_stock_count_scoped,
                 commands::inventory_counts::get_stock_count_scoped,
                 commands::inventory_counts::list_stock_counts_scoped,
@@ -396,11 +427,6 @@ pub fn run() {
                 commands::pos::get_held_cart_scoped,
                 commands::pos::compute_cart_tax_scoped,
                 commands::pos::delete_held_cart_scoped,
-                commands::kds::list_kds_orders,
-                commands::kds::get_kds_queue,
-                commands::kds::update_kds_status,
-                commands::kds::create_kds_order_from_sale,
-                commands::kds::get_kds_order,
                 commands::stock_transfers::create_stock_transfer_scoped,
                 commands::stock_transfers::get_stock_transfer_scoped,
                 commands::stock_transfers::list_stock_transfers_scoped,
@@ -417,12 +443,6 @@ pub fn run() {
                 commands::history::export_sales_by_hour,
                 commands::history::export_eod_report,
                 commands::void::void_sale_scoped,
-                commands::hardware::open_cash_drawer,
-                commands::hardware::print_receipt,
-                commands::hardware::print_sales_receipt,
-                commands::hardware::list_scanners,
-                commands::hardware::start_scanner,
-                commands::hardware::stop_scanner,
                 commands::settings::get_receipt_settings,
                 commands::settings::set_receipt_settings,
                 commands::settings::get_store_settings,
@@ -441,39 +461,7 @@ pub fn run() {
                 commands::setup::get_enabled_features,
                 commands::setup::complete_setup,
                 commands::setup::dismiss_setup_wizard,
-                commands::products::list_products,
-                commands::products::list_warehouse_products,
-                commands::products::create_product,
-                commands::products::update_product,
-                commands::products::delete_product,
-                commands::products::lookup_by_barcode,
-                commands::products::lookup_product_by_sku,
-                commands::products::adjust_stock,
-                commands::products::get_product_track_serial,
-                commands::products::get_product_track_serial_batch,
-                commands::products::record_product_search,
                 commands::browser::open_product_images,
-                commands::promotions::list_promotions,
-                commands::promotions::get_promotion,
-                commands::promotions::create_promotion,
-                commands::promotions::update_promotion,
-                commands::promotions::delete_promotion,
-                commands::promotions::apply_promotion,
-                commands::promotions::get_sale_promotions,
-                commands::purchasing::list_suppliers,
-                commands::purchasing::get_supplier,
-                commands::purchasing::create_supplier,
-                commands::purchasing::update_supplier,
-                commands::purchasing::list_purchase_orders,
-                commands::purchasing::get_purchase_order,
-                commands::purchasing::create_purchase_order,
-                commands::purchasing::update_po_status,
-                commands::purchasing::receive_purchase_order,
-                commands::product_variants::list_product_variants,
-                commands::product_variants::get_product_variant,
-                commands::product_variants::create_product_variant,
-                commands::product_variants::update_product_variant,
-                commands::product_variants::delete_product_variant,
                 commands::setup::get_setup_status,
                 commands::tax::list_tax_rates_scoped,
                 commands::tax::create_tax_rate_scoped,
@@ -483,37 +471,11 @@ pub fn run() {
                 commands::tax::list_category_tax_rates_scoped,
                 commands::tax::set_category_tax_rates_scoped,
                 // TODO(L-1): these unscoped terminal commands are spoofable
-                // (client-supplied user_id). Add scoped variants with session
-                // tokens and unregister the unscoped band (parity with desktop).
-                commands::terminals::list_terminals,
-                commands::terminals::get_terminal,
-                commands::terminals::register_terminal,
-                commands::terminals::update_terminal,
-                commands::terminals::ping_terminal,
-                commands::terminals::delete_terminal,
-                commands::terminals::list_terminal_overrides,
-                commands::terminals::set_terminal_override,
-                commands::terminals::delete_terminal_override,
                 commands::terminals::set_device_binding_scoped,
                 commands::workspaces::list_workspaces,
                 commands::workspaces::list_workspace_screens,
                 commands::workspaces::resolve_boot_store,
-                commands::offline::enqueue_offline,
-                commands::offline::list_pending_offline,
-                commands::offline::list_all_offline,
-                commands::offline::pending_offline_count,
-                commands::offline::retry_offline_sync,
-                commands::offline::delete_offline_item,
-                commands::offline::requeue_remote_failure,
-                commands::offline::list_remote_failures,
-                commands::sync::get_sync_settings,
-                commands::sync::update_sync_settings,
-                commands::sync::sync_run,
-                commands::sync::sync_pull,
-                commands::sync::pending_sync_count,
                 commands::sync::test_sync_connection,
-                commands::sync::request_sync_token,
-                commands::sync::get_sync_plan,
                 commands::refunds::process_refund_scoped,
                 commands::refunds::list_refunds_scoped,
                 commands::refunds::lookup_sale_by_receipt_barcode_scoped,
@@ -544,15 +506,6 @@ pub fn run() {
                 commands::analytics::get_staff_analytics_scoped,
                 commands::analytics::get_staff_analytics_daily_scoped,
                 commands::scale::read_scale_weight,
-                commands::tables::list_tables,
-                commands::tables::get_table,
-                commands::tables::create_table,
-                commands::tables::update_table,
-                commands::tables::delete_table,
-                commands::tables::update_table_status,
-                commands::tables::assign_table_order,
-                commands::tables::release_table,
-                commands::tables::list_sections,
                 // ── H-1: Auto-generated scoped variants ────────────────────────
                 commands::branding::get_brand_settings_scoped,
                 commands::branding::set_brand_logo_path_scoped,

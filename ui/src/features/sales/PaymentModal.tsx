@@ -7,7 +7,7 @@ import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { Skeleton } from '@/components/Skeleton';
 import { startSaleScoped, addLineScoped, completeSaleScoped, printSalesReceipt, getSale, setCartDiscountScoped, holdCartScoped, finalizeSale, voidPendingSale, previewPromotedTotalFromLinesScoped, type SetCartDiscountScopedArgs, type CompleteSaleScopedArgs, type PaymentSplitArg, type SerialNumberArg, type PartialStockResult, type PreviewPromotedTotalResult } from '@/api/sales';
-import { createKdsOrderFromSale, createKdsOrderFromSaleScoped } from '@/api/kds';
+import { createKdsOrderFromSaleScoped } from '@/api/kds';
 import { Button } from '@/components/Button';
 import { formatMoney, minorUnitExponent, parseMinorUnits, type Money, type CartLine } from '@/types/domain';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
@@ -753,9 +753,7 @@ export default function PaymentModal({
       }
 
       try {
-        await (sessionToken
-          ? createKdsOrderFromSaleScoped(sessionToken, saleResult.saleId)
-          : createKdsOrderFromSale(userId, saleResult.saleId));
+        await createKdsOrderFromSaleScoped(sessionToken!, saleResult.saleId);
       } catch {
         // KDS may not be configured — non-blocking.
       }
@@ -1024,9 +1022,7 @@ export default function PaymentModal({
       }
 
       try {
-        await (sessionToken
-          ? createKdsOrderFromSaleScoped(sessionToken, saleResult.saleId)
-          : createKdsOrderFromSale(userId, saleResult.saleId));
+        await createKdsOrderFromSaleScoped(sessionToken!, saleResult.saleId);
       } catch {
         // KDS may not be configured — non-blocking.
       }
@@ -1263,7 +1259,7 @@ export default function PaymentModal({
             receipt={receiptArgs}
             onPrint={async () => {
               try {
-                await printSalesReceipt(receiptArgs);
+                await printSalesReceipt(sessionToken!, receiptArgs);
                 animateLeave(onComplete);
               } catch {
                 // Printer error — still dismiss

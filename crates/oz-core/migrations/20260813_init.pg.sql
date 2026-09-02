@@ -391,6 +391,43 @@ CREATE TABLE IF NOT EXISTS payment_settlements (
     updated_at   TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
 );
 
+CREATE TABLE IF NOT EXISTS image_refs (
+    tenant_id  TEXT NOT NULL,
+    hash       TEXT NOT NULL,
+    refcount   BIGINT NOT NULL DEFAULT 0,
+    bytes      BIGINT NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    PRIMARY KEY (tenant_id, hash)
+);
+
+CREATE TABLE IF NOT EXISTS image_push_queue (
+    hash            TEXT NOT NULL PRIMARY KEY,
+    size_bytes      BIGINT NOT NULL,
+    attempts        BIGINT NOT NULL DEFAULT 0,
+    next_attempt_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    enqueued_at     TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+);
+
+CREATE TABLE IF NOT EXISTS outbox (
+    id              TEXT PRIMARY KEY,
+    topic           TEXT NOT NULL,
+    payload         TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'delivering', 'delivered', 'failed', 'dead_letter')),
+    priority        BIGINT NOT NULL DEFAULT 0,
+    max_attempts    BIGINT NOT NULL DEFAULT 5,
+    attempts        BIGINT NOT NULL DEFAULT 0,
+    next_attempt_at TEXT NOT NULL,       -- RFC 3339 timestamp
+    created_at      TEXT NOT NULL,
+    last_error      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS snapshot_versions (
+    tenant_id  TEXT PRIMARY KEY,
+    version    BIGINT NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+);
+
 CREATE TABLE IF NOT EXISTS exchange_rates (
     id              TEXT PRIMARY KEY,
     from_currency   TEXT NOT NULL REFERENCES currencies(code),
@@ -543,7 +580,7 @@ CREATE TABLE IF NOT EXISTS "products" (
     is_active BIGINT NOT NULL DEFAULT 1,
     default_supplier_id TEXT REFERENCES suppliers(id),
     popularity_score DOUBLE PRECISION NOT NULL DEFAULT 0
-);
+, image_hash TEXT);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_products_tenant_sku ON products(tenant_id, sku);
 
@@ -907,6 +944,15 @@ CREATE TABLE IF NOT EXISTS "product_bundles" (
     FOREIGN KEY (tenant_id, bundle_sku) REFERENCES products(tenant_id, sku)
 );
 
+CREATE TABLE IF NOT EXISTS product_images (
+    product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    slot       BIGINT NOT NULL CHECK (slot BETWEEN 1 AND 5),
+    hash       TEXT NOT NULL,
+    position   BIGINT NOT NULL DEFAULT 0,   -- display order of alternatives
+    updated_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    PRIMARY KEY (product_id, slot)
+);
+
 CREATE TABLE IF NOT EXISTS "user_workspace_instances" (
     user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     instance_id  TEXT NOT NULL REFERENCES "workspace_instances"(id) ON DELETE CASCADE,
@@ -962,6 +1008,10 @@ CREATE TABLE IF NOT EXISTS gift_card_transactions (
     notes               TEXT NOT NULL DEFAULT '',
     created_at          TEXT NOT NULL
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_gift_card_redeem_sale
+    ON gift_card_transactions(gift_card_id, sale_id)
+    WHERE txn_type = 'redeem' AND sale_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS "kds_orders" (
     id              TEXT PRIMARY KEY,
@@ -1317,6 +1367,8 @@ CREATE INDEX IF NOT EXISTS idx_held_carts_bill_type ON held_carts(bill_type);
 
 CREATE INDEX IF NOT EXISTS idx_held_carts_created_at ON held_carts(created_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_image_refs_tenant ON image_refs(tenant_id);
+
 CREATE INDEX IF NOT EXISTS idx_inv_shifts_location
     ON inventory_shifts(location_id, started_at);
 
@@ -1402,6 +1454,9 @@ CREATE INDEX IF NOT EXISTS idx_offline_queue_tenant_created
 
 CREATE INDEX IF NOT EXISTS idx_offline_queue_tenant_status ON offline_queue(tenant_id, status);
 
+CREATE INDEX IF NOT EXISTS idx_outbox_due
+    ON outbox(status, next_attempt_at, priority DESC);
+
 CREATE INDEX IF NOT EXISTS idx_payment_gateways_tenant
     ON payment_gateways(tenant_id, is_active);
 
@@ -1416,6 +1471,10 @@ CREATE INDEX IF NOT EXISTS idx_payments_sale_id ON payments(sale_id);
 CREATE INDEX IF NOT EXISTS idx_po_lines_po_id ON purchase_order_lines(po_id);
 
 CREATE INDEX IF NOT EXISTS idx_product_activity_sku ON product_activity(sku);
+
+CREATE INDEX IF NOT EXISTS idx_product_images_hash ON product_images(hash);
+
+CREATE INDEX IF NOT EXISTS idx_product_images_product ON product_images(product_id);
 
 CREATE INDEX IF NOT EXISTS idx_product_modifier_groups_product ON product_modifier_groups(product_id);
 
@@ -1679,7 +1738,9 @@ ON CONFLICT DO NOTHING;
 
 -- tenant_id tables NOT yet under RLS (write path must populate
 -- tenant_id before each can be added to RLS_TABLES):
+--   image_refs
 --   sale_lines
+--   snapshot_versions
 --
 -- ── Row-Level Security: tenant isolation (PG-only) ─────────────────────
 -- Curated coverage list (RLS_TABLES in scripts/generate-pg-migration.py);

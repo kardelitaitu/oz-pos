@@ -22,6 +22,7 @@ impl Store<'_> {
                      p.track_serial, p.product_type, p.version,
                      p.cost_minor, p.brand, p.rack_location, p.notes, p.unit,
                      p.is_active, p.default_supplier_id, p.popularity_score,
+                     p.image_hash,
                      c.name AS category_name,
                      COALESCE((SELECT SUM(ss.qty) FROM stock_summary ss WHERE ss.item_id = p.id), i.qty) AS stock_qty
              FROM products p
@@ -30,7 +31,9 @@ impl Store<'_> {
              ORDER BY p.name",
         )?;
         let rows = stmt.query_map([], row_to_product_with_details)?;
-        rows.map(|r| Ok(r?)).collect()
+        let mut products: Vec<ProductWithDetails> = rows.collect::<Result<Vec<_>, _>>()?;
+        self.attach_images(&mut products)?;
+        Ok(products)
     }
 
     /// List products visible to one store (soft-scoping layer, migration
@@ -53,6 +56,7 @@ impl Store<'_> {
                      p.track_serial, p.product_type, p.version,
                      p.cost_minor, p.brand, p.rack_location, p.notes, p.unit,
                      p.is_active, p.default_supplier_id, p.popularity_score,
+                     p.image_hash,
                      c.name AS category_name,
                      COALESCE((SELECT SUM(ss.qty) FROM stock_summary ss WHERE ss.item_id = p.id), i.qty) AS stock_qty
              FROM products p
@@ -62,7 +66,9 @@ impl Store<'_> {
              ORDER BY p.name",
         )?;
         let rows = stmt.query_map(params![store_id], row_to_product_with_details)?;
-        rows.map(|r| Ok(r?)).collect()
+        let mut products: Vec<ProductWithDetails> = rows.collect::<Result<Vec<_>, _>>()?;
+        self.attach_images(&mut products)?;
+        Ok(products)
     }
 
     /// List inventory-tracked products only, ordered by name, with category
@@ -75,6 +81,7 @@ impl Store<'_> {
                      p.track_serial, p.product_type, p.version,
                      p.cost_minor, p.brand, p.rack_location, p.notes, p.unit,
                      p.is_active, p.default_supplier_id, p.popularity_score,
+                     p.image_hash,
                      c.name AS category_name,
                      COALESCE((SELECT SUM(ss.qty) FROM stock_summary ss WHERE ss.item_id = p.id), i.qty) AS stock_qty
              FROM products p
@@ -84,7 +91,9 @@ impl Store<'_> {
              ORDER BY p.name",
         )?;
         let rows = stmt.query_map([], row_to_product_with_details)?;
-        rows.map(|r| Ok(r?)).collect()
+        let mut products: Vec<ProductWithDetails> = rows.collect::<Result<Vec<_>, _>>()?;
+        self.attach_images(&mut products)?;
+        Ok(products)
     }
 
     /// List inventory-tracked products with stock at a specific location.
@@ -102,6 +111,7 @@ impl Store<'_> {
                      p.track_serial, p.product_type, p.version,
                      p.cost_minor, p.brand, p.rack_location, p.notes, p.unit,
                      p.is_active, p.default_supplier_id, p.popularity_score,
+                     p.image_hash,
                      c.name AS category_name,
                      COALESCE((SELECT ss.qty FROM stock_summary ss WHERE ss.item_id = p.id AND ss.location_id = ?1), 0) AS stock_qty
              FROM products p
@@ -130,6 +140,7 @@ impl Store<'_> {
                      p.track_serial, p.product_type, p.version,
                      p.cost_minor, p.brand, p.rack_location, p.notes, p.unit,
                      p.is_active, p.default_supplier_id, p.popularity_score,
+                     p.image_hash,
                      c.name AS category_name,
                      COALESCE((SELECT SUM(ss.qty) FROM stock_summary ss WHERE ss.item_id = p.id), i.qty) AS stock_qty
              FROM products p
@@ -138,11 +149,16 @@ impl Store<'_> {
              WHERE p.sku = ?1",
         )?;
         let result = stmt.query_row(params![sku], row_to_product_with_details);
-        let product = match result {
+        let mut product = match result {
             Ok(p) => Some(p),
             Err(rusqlite::Error::QueryReturnedNoRows) => None,
             Err(e) => return Err(e.into()),
         };
+
+        // Attach the product's image assignments (spec 0046b §3.4).
+        if let Some(p) = &mut product {
+            self.attach_images(std::slice::from_mut(p))?;
+        }
 
         if let (Some(cache), Some(p)) = (&self.cache, &product) {
             cache.set_product(sku, p);
@@ -165,6 +181,7 @@ impl Store<'_> {
                      p.track_serial, p.product_type, p.version,
                      p.cost_minor, p.brand, p.rack_location, p.notes, p.unit,
                      p.is_active, p.default_supplier_id, p.popularity_score,
+                     p.image_hash,
                      c.name AS category_name,
                      COALESCE((SELECT SUM(ss.qty) FROM stock_summary ss WHERE ss.item_id = p.id), i.qty) AS stock_qty
              FROM products p
@@ -359,6 +376,7 @@ impl Store<'_> {
             unit: attrs.unit.clone(),
             is_active: attrs.is_active,
             default_supplier_id: attrs.default_supplier_id.clone(),
+            image_hash: None,
         })
     }
 
@@ -548,7 +566,7 @@ impl Store<'_> {
         }
 
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version, cost_minor, brand, rack_location, notes, unit, is_active, default_supplier_id, popularity_score
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version, cost_minor, brand, rack_location, notes, unit, is_active, default_supplier_id, popularity_score, image_hash
              FROM products WHERE sku = ?1",
         )?;
         let product = stmt.query_row(params![sku], row_to_product)?;
@@ -561,7 +579,7 @@ impl Store<'_> {
             return Ok(None);
         }
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version, cost_minor, brand, rack_location, notes, unit, is_active, default_supplier_id, popularity_score
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version, cost_minor, brand, rack_location, notes, unit, is_active, default_supplier_id, popularity_score, image_hash
              FROM products WHERE barcode = ?1",
         )?;
         let result = stmt.query_row(params![barcode.trim()], row_to_product);
@@ -606,6 +624,59 @@ impl Store<'_> {
             cache.invalidate_product(sku);
         }
 
+        Ok(())
+    }
+
+    /// Load all product images for the given product IDs and attach them
+    /// to the respective `ProductWithDetails` (in place).
+    pub(crate) fn attach_images(
+        &self,
+        products: &mut [ProductWithDetails],
+    ) -> Result<(), CoreError> {
+        let ids: Vec<&str> = products.iter().map(|p| p.product.id.as_str()).collect();
+        if ids.is_empty() {
+            return Ok(());
+        }
+        // Build a parameterised query with placeholders
+        let placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("?{i}")).collect();
+        let sql = format!(
+            "SELECT product_id, slot, hash, position FROM product_images \
+             WHERE product_id IN ({}) ORDER BY slot ASC",
+            placeholders.join(", ")
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut param_refs: Vec<&dyn rusqlite::types::ToSql> = Vec::new();
+        for id in &ids {
+            param_refs.push(id);
+        }
+        let rows = stmt.query_map(param_refs.as_slice(), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i32>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i32>(3)?,
+            ))
+        })?;
+        let mut by_product: std::collections::HashMap<
+            String,
+            Vec<crate::db::products::ProductImage>,
+        > = std::collections::HashMap::new();
+        for row in rows {
+            let (product_id, slot, hash, position) = row?;
+            by_product
+                .entry(product_id)
+                .or_default()
+                .push(crate::db::products::ProductImage {
+                    slot,
+                    hash,
+                    position,
+                });
+        }
+        for p in products.iter_mut() {
+            if let Some(imgs) = by_product.remove(&p.product.id) {
+                p.images = imgs;
+            }
+        }
         Ok(())
     }
 }

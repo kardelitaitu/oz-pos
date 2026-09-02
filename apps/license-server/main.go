@@ -177,6 +177,13 @@ func main() {
 		if err := ensurePaymentProviderField(app); err != nil {
 			return err
 		}
+		// Manual grants (ADR #42 Phase 4): widen the payment_provider
+		// select with "manual" for existing deployments that already have
+		// the field with the old paddle|midtrans enum. Fresh boots get it
+		// from the embedded pb_schema.json. Idempotent value-append.
+		if err := ensureManualPaymentProvider(app); err != nil {
+			return err
+		}
 		// Idempotent in-place upgrade for deployments that predate the
 		// vertical-bundle checkout (C3.2 website leg): fresh boots get the
 		// license_keys.bundle_id field from the embedded pb_schema.json;
@@ -284,10 +291,14 @@ func main() {
 		// Admin dashboard (ADR #42 Phase 3) — OZ_ADMIN_KEY gated.
 		se.Router.GET("/api/v1/admin/tenants", handleAdminListTenants(app))
 		se.Router.GET("/api/v1/admin/tenants/{id}", handleAdminGetTenant(app))
+		se.Router.PATCH("/api/v1/admin/tenants/{id}", handleAdminUpdateTenant(app))
 		se.Router.POST("/api/v1/admin/tenants/{id}/activate", handleAdminActivate(app))
 		se.Router.POST("/api/v1/admin/tenants/{id}/renew", handleAdminRenew(app))
 		se.Router.POST("/api/v1/admin/tenants/{id}/revoke", handleAdminRevoke(app))
 		se.Router.POST("/api/v1/admin/tenants/{id}/tier-override", handleAdminTierOverride(app))
+		se.Router.POST("/api/v1/admin/tenants/{id}/grant-subscription", handleAdminGrantSubscription(app))
+		se.Router.POST("/api/v1/admin/tenants/{id}/devices/{deviceId}/revoke", handleAdminRevokeDevice(app))
+		se.Router.DELETE("/api/v1/admin/tenants/{id}", handleAdminDeleteTenant(app))
 		se.Router.GET("/api/v1/admin/health", handleAdminHealth(app))
 		// Admin dashboard stats (ADR #42 Phase 3+) — real aggregates.
 		se.Router.GET("/api/v1/admin/stats", handleAdminStats(app))
@@ -565,6 +576,40 @@ func ensureMidtransFields(app core.App) error {
 			return fmt.Errorf("failed to add midtrans fields to %s: %w", name, err)
 		}
 		log.Printf("migrated %s collection: added midtrans_sub_id / midtrans_order_id fields", name)
+	}
+	return nil
+}
+
+// ensureManualPaymentProvider appends "manual" to the payment_provider
+// select values on license_keys and subscriptions (admin dashboard grants
+// for transfer-paid customers, ADR #42 Phase 4). Deployments whose field
+// was created by ensurePaymentProviderField carry only paddle|midtrans;
+// fresh boots get all three from the embedded pb_schema.json. Idempotent.
+func ensureManualPaymentProvider(app core.App) error {
+	for _, name := range []string{"license_keys", "subscriptions"} {
+		collection, err := app.FindCollectionByNameOrId(name)
+		if err != nil {
+			return fmt.Errorf("%s collection not found: %w", name, err)
+		}
+		field, ok := collection.Fields.GetByName("payment_provider").(*core.SelectField)
+		if !ok {
+			continue // field absent — ensurePaymentProviderField adds it
+		}
+		known := false
+		for _, v := range field.Values {
+			if v == "manual" {
+				known = true
+				break
+			}
+		}
+		if known {
+			continue
+		}
+		field.Values = append(field.Values, "manual")
+		if err := app.Save(collection); err != nil {
+			return fmt.Errorf("failed to add manual to %s payment_provider: %w", name, err)
+		}
+		log.Printf("migrated %s collection: payment_provider now accepts manual grants", name)
 	}
 	return nil
 }

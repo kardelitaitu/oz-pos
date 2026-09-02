@@ -118,3 +118,41 @@ fn rate_limit_429_exposes_both_limiter_labels() {
         "token limiter series must render"
     );
 }
+
+// ── D3 (ADR #43): /metrics render cache ─────────────────────────────────
+
+#[test]
+fn render_cache_serves_stored_text_within_ttl() {
+    let cache = MetricsRenderCache::new();
+    assert_eq!(cache.get(METRICS_RENDER_TTL), None, "fresh cache is empty");
+
+    cache.store("fake exposition".to_owned());
+    let served = cache.get(METRICS_RENDER_TTL);
+    assert_eq!(
+        served.as_deref(),
+        Some("fake exposition"),
+        "stored text must be served while younger than the TTL"
+    );
+}
+
+#[test]
+fn render_cache_expires_after_ttl() {
+    let cache = MetricsRenderCache::new();
+    cache.store("stale text".to_owned());
+    // A zero-length TTL makes any stored entry older than the window.
+    assert_eq!(
+        cache.get(std::time::Duration::ZERO),
+        None,
+        "entry older than the TTL must be treated as expired"
+    );
+}
+
+#[test]
+fn render_metrics_cached_returns_identical_text_on_repeat_calls() {
+    // Within the TTL the cache must hand back the exact same bytes (no
+    // drift in ordering or formatting between scrapes).
+    let first = render_metrics_cached();
+    let second = render_metrics_cached();
+    assert_eq!(first, second, "cached /metrics body must be byte-identical");
+    assert!(!first.is_empty(), "cached /metrics body must not be empty");
+}

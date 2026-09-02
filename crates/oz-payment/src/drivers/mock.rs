@@ -188,6 +188,7 @@ impl PaymentProcessor for MockPaymentProcessor {
         &self,
         _transaction_id: &str,
         _amount: Option<foundation::Money>,
+        _idempotency_key: Option<&str>,
     ) -> Result<PaymentResult, PaymentError> {
         self.refund_calls.fetch_add(1, Ordering::Relaxed);
 

@@ -52,6 +52,7 @@ export default function SearchModal({ isOpen, onClose, locale }: Props) {
       { id: 'doc-payments', title: locale === 'id' ? 'Integrasi Pembayaran & QRIS' : 'Payments & QRIS Integration', category: 'docs', url: `/${locale}/docs/payments`, keywords: 'midtrans paddle qris card edc cash payments' },
       { id: 'doc-shifts', title: locale === 'id' ? 'Manajemen Shift & Kasir' : 'Shift Management & Cash Drawer', category: 'docs', url: `/${locale}/docs/shifts`, keywords: 'cash in cash out shift end float reconciliation' },
       { id: 'doc-cloud-sync', title: locale === 'id' ? 'Sinkronisasi Cloud & Offline' : 'Cloud Sync & Offline Mode', category: 'docs', url: `/${locale}/docs/cloud-sync`, keywords: 'offline local first peer to peer sync cloud backup' },
+      { id: 'doc-api-read-tiers', title: locale === 'id' ? 'Tingkat Akses Baca API' : 'API Read Tiers', category: 'docs', url: `/${locale}/docs/api-read-tiers`, keywords: 'jwt permissions read tier terminal dashboard audit scoped token insufficient scope' },
     ],
     [locale]
   );

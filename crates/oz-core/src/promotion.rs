@@ -43,7 +43,7 @@ impl PromotionType {
 /// A promotion rule.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Promotion {
-    /// Unique identifier (UUID v4).
+    /// Unique identifier (UUID v7).
     pub id: String,
     /// Human-readable name for display on receipts and the POS UI.
     pub name: String,
@@ -80,7 +80,7 @@ pub struct Promotion {
 /// Record of a promotion being applied to a sale.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PromotionApplication {
-    /// Unique identifier (UUID v4).
+    /// Unique identifier (UUID v7).
     pub id: String,
     /// FK to `promotions.id`.
     pub promotion_id: String,

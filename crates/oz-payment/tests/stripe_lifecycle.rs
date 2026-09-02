@@ -136,7 +136,7 @@ async fn full_authorize_capture_refund_lifecycle() {
         .mount(&mock_server)
         .await;
 
-    let refund = proc.refund(&txn_id, None).await.unwrap();
+    let refund = proc.refund(&txn_id, None, None).await.unwrap();
     assert!(refund.success, "refund should succeed");
     assert_eq!(refund.transaction_id.as_deref(), Some("re_e2e_refund_001"));
     assert_eq!(refund.amount_charged.minor_units, 1500);
@@ -296,7 +296,7 @@ async fn partial_refund_after_capture() {
         .await;
 
     let partial = Money::from_major(10, usd()).unwrap();
-    let refund = proc.refund(&txn_id, Some(partial)).await.unwrap();
+    let refund = proc.refund(&txn_id, Some(partial), None).await.unwrap();
     assert!(refund.success);
     assert_eq!(
         refund.amount_charged.minor_units, 1000,
@@ -437,7 +437,10 @@ async fn refund_handles_already_refunded() {
         .mount(&mock_server)
         .await;
 
-    let err = proc.refund("pi_already_refunded", None).await.unwrap_err();
+    let err = proc
+        .refund("pi_already_refunded", None, None)
+        .await
+        .unwrap_err();
     let msg = err.to_string();
     assert!(
         msg.contains("already been refunded") || msg.contains("already_refunded"),

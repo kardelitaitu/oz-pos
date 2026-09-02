@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { requiredLocalized } from '@/frontend/shared';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSyncConnection } from '@/hooks/useSyncConnection';
-import { testAuthConnection } from '@/api/license';
+import StatusBar from '@/components/StatusBar';
 import { staffLogin } from '@/api/staff';
 import { useLocalization } from '@fluent/react';
 import './SessionLockScreen.css';
@@ -24,9 +23,10 @@ function AlertIcon() {
 
 /**
  * Session lock screen — shown after idle timeout.
- * Displays current time, a "Session Locked" message, and
- * a PIN pad for re-entry. On successful PIN match, calls
- * `onUnlock`. On failure, shows error.
+ * The current time and date sit in a header above the card, the lock
+ * state is a badge on the card corner, and the card itself is a clone of
+ * the StaffLoginScreen PIN step so the keypad does not move between the
+ * two. On successful PIN match, calls `onUnlock`. On failure, shows error.
  */
 export default function SessionLockScreen({
   onUnlock,
@@ -44,37 +44,6 @@ export default function SessionLockScreen({
   const pinWrapRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const lastErrorRef = useRef<string | null>(null);
-
-  const syncStatus = useSyncConnection();
-  const [authOnline, setAuthOnline] = useState<boolean | null>(null);
-  const [authLatency, setAuthLatency] = useState<number | null>(null);
-
-  // Check auth-server reachability once on mount (decorative status pill —
-  // no continuous polling needed). Reachability probe needs no stored
-  // license key, so the pill goes green when the server is up even before
-  // any license is activated.
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const start = performance.now();
-        const result = await testAuthConnection();
-        if (!mounted) return;
-        if (result.ok) {
-          setAuthLatency(Math.round(performance.now() - start));
-          setAuthOnline(true);
-        } else {
-          setAuthLatency(null);
-          setAuthOnline(false);
-        }
-      } catch {
-        if (!mounted) return;
-        setAuthLatency(null);
-        setAuthOnline(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
 
   // U1: Auto-unlock after lockout period with visible countdown.
   useEffect(() => {
@@ -227,128 +196,135 @@ export default function SessionLockScreen({
     <div className="session-lock-overlay" data-testid="session-lock-screen">
       <div className="session-lock-backdrop" aria-hidden="true" />
 
-      <div className="session-lock-card" ref={cardRef}>
-        {/* ── Top bar: lock icon + clock (mirrors the login PIN step) ── */}
-        <div className="session-lock-top-bar">
-          <div className="session-lock-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
+      {/* ── Viewport header: clock + date ────────────────────────────
+         Absolutely positioned so it never joins the flex flow that
+         centres the card. The keypad must land on exactly the same
+         box as the login PIN step, so nothing outside the card may
+         push it around. */}
+      <div className="session-lock-header">
+        <div className="session-lock-time">{timeStr}</div>
+        <div className="session-lock-date">{dateStr}</div>
+      </div>
+
+      {/* Shrink-wraps the card and anchors the notice slot below it. */}
+      <div className="session-lock-stage">
+        <div className="session-lock-card" ref={cardRef}>
+          {/* Lock badge — card-corner counterpart of login's top-right
+              close button. Decorative: the lock state is already exposed
+              by the PIN pad's accessible label. */}
+          <div className="session-lock-lock-badge" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
           </div>
-          <div className="session-lock-time">{timeStr}</div>
-          <div className="session-lock-date">{dateStr}</div>
-        </div>
 
-        {/* ── Main area: hint + PIN dots + keypad ── */}
-        <div className="session-lock-main-area">
-          <div className="session-lock-sub">{requiredLocalized(l10n, 'session-lock-enter-pin')}</div>
-
-        {/* PIN dots */}
-        <div className="session-lock-pin-dots" aria-label={requiredLocalized(l10n, 'session-lock-pin-aria', { length: String(pin.length), max: String(MAX_PIN_LENGTH) })}>
-          {Array.from({ length: MAX_PIN_LENGTH }, (_, i) => (
-            <span
-              key={i}
-              className={`session-lock-pin-dot ${i < pin.length ? 'session-lock-pin-dot--filled' : ''}`}
-            />
-          ))}
-        </div>
-
-        {/* PIN pad */}
-        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
-        <div
-          id="session-lock-pin-pad"
-          className="session-lock-pad"
-          ref={pinWrapRef}
-          tabIndex={-1}
-          onKeyDown={handleKeyDown}
-          role="application"
-          aria-label={requiredLocalized(l10n, 'session-lock-pad-aria')}
-        >
-          {[['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3']].map((row) => (
-            <div className="session-lock-pad-row" key={row[0]}>
-              {row.map((digit) => (
-                <button
-                  key={digit}
-                  type="button"
-                  className="session-lock-pad-key"
-                  onClick={() => handleDigit(digit)}
-                  aria-label={digit}
-                  disabled={isLocked}
-                >
-                  {digit}
-                </button>
+          {/* ── Top bar: PIN dots (same band, same role as the login PIN step) ── */}
+          <div className="session-lock-top-bar">
+            <div className="session-lock-pin-dots" aria-label={requiredLocalized(l10n, 'session-lock-pin-aria', { length: String(pin.length), max: String(MAX_PIN_LENGTH) })}>
+              {Array.from({ length: MAX_PIN_LENGTH }, (_, i) => (
+                <span
+                  key={i}
+                  className={`session-lock-pin-dot ${i < pin.length ? 'session-lock-pin-dot--filled' : ''}`}
+                />
               ))}
             </div>
-          ))}
-          <div className="session-lock-pad-row">
-            <button
-              type="button"
-              className="session-lock-pad-key session-lock-pad-key--action"
-              onClick={() => setPin([])}
-              disabled={pin.length === 0 || isLocked}
+          </div>
+
+          {/* ── Main area: keypad only ───────────────────────────────
+             Kept as the sole child so the keypad is centred in an
+             identically-sized band to login's — that is what makes the
+             lock → login transition feel like nothing moved. */}
+          <div className="session-lock-main-area">
+            {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
+            <div
+              id="session-lock-pin-pad"
+              className="session-lock-pad"
+              ref={pinWrapRef}
+              tabIndex={-1}
+              onKeyDown={handleKeyDown}
+              role="application"
+              aria-label={requiredLocalized(l10n, 'session-lock-pad-aria')}
             >
-              {requiredLocalized(l10n, 'staff-login-clear')}
-            </button>
-            <button
-              type="button"
-              className="session-lock-pad-key"
-              onClick={() => handleDigit('0')}
-              aria-label="0"
-              disabled={isLocked}
-            >
-              0
-            </button>
-            <button
-              type="button"
-              className="session-lock-pad-key session-lock-pad-key--action"
-              onClick={handleBackspace}
-              disabled={pin.length === 0 || isLocked}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-                <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" />
-                <line x1="18" y1="9" x2="12" y2="15" />
-                <line x1="12" y1="9" x2="18" y2="15" />
-              </svg>
-            </button>          </div>
+              {[['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3']].map((row) => (
+                <div className="session-lock-pad-row" key={row[0]}>
+                  {row.map((digit) => (
+                    <button
+                      key={digit}
+                      type="button"
+                      className="session-lock-pad-key"
+                      onClick={() => handleDigit(digit)}
+                      aria-label={digit}
+                      disabled={isLocked}
+                    >
+                      {digit}
+                    </button>
+                  ))}
+                </div>
+              ))}
+              <div className="session-lock-pad-row">
+                <button
+                  type="button"
+                  className="session-lock-pad-key session-lock-pad-key--action"
+                  onClick={() => setPin([])}
+                  disabled={pin.length === 0 || isLocked}
+                >
+                  {requiredLocalized(l10n, 'staff-login-clear')}
+                </button>
+                <button
+                  type="button"
+                  className="session-lock-pad-key"
+                  onClick={() => handleDigit('0')}
+                  aria-label="0"
+                  disabled={isLocked}
+                >
+                  0
+                </button>
+                <button
+                  type="button"
+                  className="session-lock-pad-key session-lock-pad-key--action"
+                  onClick={handleBackspace}
+                  disabled={pin.length === 0 || isLocked}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                    <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" />
+                    <line x1="18" y1="9" x2="12" y2="15" />
+                    <line x1="12" y1="9" x2="18" y2="15" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Bottom bar: spacer band (mirrors the login step-dots band) ── */}
+          <div className="session-lock-bottom-bar" aria-hidden="true" />
         </div>
 
-        {/* U1: Error + visible countdown timer — below the keypad */}
-        {error && (
-          <div className="session-lock-error" role="alert" aria-live="polite">
-            <AlertIcon />
-            {error}
-          </div>
-        )}
-        {isLocked && lockoutRemaining > 0 && (
-          <div className="session-lock-countdown" role="status" aria-live="polite">
-            {requiredLocalized(l10n, 'session-lock-lockout', { seconds: String(lockoutRemaining) })}
-          </div>
-        )}
+        {/* ── Notices: error + lockout countdown ─────────────────────
+           Rendered outside the card so a growing error banner can never
+           reflow the keypad out of its login-matching position. */}
+        <div className="session-lock-notice">
+          {error && (
+            <div className="session-lock-error" role="alert" aria-live="polite">
+              <AlertIcon />
+              {error}
+            </div>
+          )}
+          {isLocked && lockoutRemaining > 0 && (
+            <div className="session-lock-countdown" role="status" aria-live="polite">
+              {requiredLocalized(l10n, 'session-lock-lockout', { seconds: String(lockoutRemaining) })}
+            </div>
+          )}
         </div>
-
-        {/* ── Bottom bar: spacer band (mirrors the login step-dots band) ── */}
-        <div className="session-lock-bottom-bar" aria-hidden="true" />
       </div>
 
       {/* ── Footer: version + connection status pills (login-style) ── */}
       <div className="session-lock-footer">
         <div className="session-lock-footer-left">
-          <span className="session-lock-footer-version">v0.0.33</span>
+          <span className="session-lock-footer-version">v0.0.34</span>
         </div>
         <div className="session-lock-footer-right">
-          <div className="session-lock-connection-group">
-          {/* Auth status — via checkLicenseStatus IPC */}            <div className="connection-status" title={authOnline === null ? requiredLocalized(l10n, 'staff-login-connection-checking') : authOnline ? requiredLocalized(l10n, 'staff-login-connection-connected') : requiredLocalized(l10n, 'staff-login-connection-disconnected')}>
-            <span className={`status-indicator ${authOnline === null ? 'checking' : authOnline ? 'online' : 'offline'}`} />
-            <span className="connection-label">{requiredLocalized(l10n, 'staff-login-connection-auth')}</span>
-            {authOnline && authLatency !== null && <span className="connection-latency">{authLatency}ms</span>}
-          </div>
-          {/* Sync status — via useSyncConnection IPC */}            <div className="connection-status" title={syncStatus.state === 'checking' ? requiredLocalized(l10n, 'staff-login-connection-checking') : syncStatus.state === 'connected' ? requiredLocalized(l10n, 'staff-login-connection-connected') : requiredLocalized(l10n, 'staff-login-connection-disconnected')}>
-            <span className={`status-indicator ${syncStatus.state === 'checking' ? 'checking' : syncStatus.state === 'connected' ? 'online' : 'offline'}`} />
-            <span className="connection-label">{requiredLocalized(l10n, 'staff-login-connection-sync')}</span>
-            {syncStatus.state === 'connected' && syncStatus.latencyMs !== null && <span className="connection-latency">{syncStatus.latencyMs}ms</span>}
-          </div>
-        </div>
+          <StatusBar />
         </div>
       </div>
     </div>

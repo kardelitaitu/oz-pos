@@ -78,6 +78,7 @@ function makeData(overrides: Partial<ProductGridData> = {}): ProductGridData {
     filterLowStock: overrides.filterLowStock ?? false,
     visibleColumns: overrides.visibleColumns ?? defaultColumns,
     hideInactive: overrides.hideInactive ?? false,
+    viewMode: overrides.viewMode ?? 'text',
   };
 }
 
@@ -100,6 +101,7 @@ function makeActions(): ProductGridActions {
     onToggleColumn: vi.fn(),
     onToggleHideInactive: vi.fn(),
     onRowContextMenu: vi.fn(),
+    onSetViewMode: vi.fn(),
   };
 }
 

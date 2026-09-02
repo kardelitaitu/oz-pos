@@ -173,7 +173,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
 
     // Fall back to bundle SKU expansion with proportional pricing.
     try {
-      const bundle = await lookupBundleBySku(code);
+      const bundle = await lookupBundleBySku(sessionToken, code);
       if (bundle && bundle.bundle.active) {
         const expanded = await expandBundleItems(
           bundle.items,

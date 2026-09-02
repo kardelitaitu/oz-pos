@@ -5,7 +5,9 @@ use oz_core::db::Store;
 use oz_core::gift_card::{
     GiftCard, GiftCardFilter, GiftCardWithTransactions, IssueGiftCardInput, RedeemGiftCardResult,
 };
+use oz_core::permissions;
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -141,7 +143,8 @@ pub async fn issue_gift_card_scoped(
     input: IssueGiftCardInput,
     state: State<'_, AppState>,
 ) -> Result<GiftCardWithTransactions, AppError> {
-    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::GIFTCARDS_ISSUE).await?;
     let db_guard = conn_arc
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -160,7 +163,8 @@ pub async fn get_gift_card_scoped(
     card_number_or_id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<GiftCardWithTransactions>, AppError> {
-    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::GIFTCARDS_MANAGE).await?;
     let db_guard = conn_arc
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -179,7 +183,8 @@ pub async fn list_gift_cards_scoped(
     filter: GiftCardFilter,
     state: State<'_, AppState>,
 ) -> Result<Vec<GiftCardWithTransactions>, AppError> {
-    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::GIFTCARDS_MANAGE).await?;
     let db_guard = conn_arc
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -198,7 +203,8 @@ pub async fn get_gift_card_balance_scoped(
     card_number_or_id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<BalanceResult>, AppError> {
-    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::GIFTCARDS_MANAGE).await?;
     let db_guard = conn_arc
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -225,7 +231,8 @@ pub async fn redeem_gift_card_scoped(
     sale_id: String,
     state: State<'_, AppState>,
 ) -> Result<RedeemGiftCardResult, AppError> {
-    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::GIFTCARDS_REDEEM).await?;
     let db_guard = conn_arc
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -245,7 +252,8 @@ pub async fn top_up_gift_card_scoped(
     amount_minor: i64,
     state: State<'_, AppState>,
 ) -> Result<GiftCardWithTransactions, AppError> {
-    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::GIFTCARDS_ISSUE).await?;
     let db_guard = conn_arc
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -264,7 +272,8 @@ pub async fn freeze_gift_card_scoped(
     card_number_or_id: String,
     state: State<'_, AppState>,
 ) -> Result<GiftCard, AppError> {
-    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::GIFTCARDS_MANAGE).await?;
     let db_guard = conn_arc
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -283,7 +292,8 @@ pub async fn unfreeze_gift_card_scoped(
     card_number_or_id: String,
     state: State<'_, AppState>,
 ) -> Result<GiftCard, AppError> {
-    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let (session, conn_arc) = state.resolve_scope(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::GIFTCARDS_MANAGE).await?;
     let db_guard = conn_arc
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;

@@ -24,7 +24,7 @@ import * as kdsApi from '@/api/kds';
 
 describe('createKdsApiMock', () => {
   it('returns a KdsOrder array from listKdsOrders', async () => {
-    const orders = await kdsApi.listKdsOrders('user-1');
+    const orders = await kdsApi.listKdsOrders('tok-1');
     expect(Array.isArray(orders)).toBe(true);
     expect(orders[0]?.id).toBe('kds-1');
     expect(orders[0]?.status).toBe('pending');
@@ -32,13 +32,13 @@ describe('createKdsApiMock', () => {
   });
 
   it('returns a KdsOrder from updateKdsStatus', async () => {
-    const order = await kdsApi.updateKdsStatus('user-1', 'kds-1', 'preparing');
+    const order = await kdsApi.updateKdsStatus('tok-1', 'kds-1', 'preparing');
     expect(order.status).toBe('preparing');
     expect(order.display_number).toBe(101);
   });
 
   it('returns a KdsOrder from getKdsOrder', async () => {
-    const order = await kdsApi.getKdsOrder('user-1', 'kds-1');
+    const order = await kdsApi.getKdsOrder('tok-1', 'kds-1');
     expect(order).not.toBeNull();
     expect(order!.id).toBe('kds-1');
   });
@@ -53,7 +53,7 @@ import * as gcApi from '@/api/giftCards';
 
 describe('createGiftCardsApiMock', () => {
   it('returns GiftCardWithTransactions from issueGiftCard', async () => {
-    const result = await gcApi.issueGiftCard({
+    const result = await gcApi.issueGiftCard('tok-1', {
       card_number: '1111-2222',
       initial_amount_minor: 50000,
       currency: 'IDR',
@@ -65,25 +65,25 @@ describe('createGiftCardsApiMock', () => {
   });
 
   it('returns GiftCardWithTransactions from getGiftCard', async () => {
-    const result = await gcApi.getGiftCard('1111-2222');
+    const result = await gcApi.getGiftCard('tok-1', '1111-2222');
     expect(result).not.toBeNull();
     expect(result!.card.card_number).toBe('1234-5678-9012-3456');
   });
 
   it('returns a GiftCard array from listGiftCards', async () => {
-    const cards = await gcApi.listGiftCards({});
+    const cards = await gcApi.listGiftCards('tok-1', {});
     expect(Array.isArray(cards)).toBe(true);
   });
 
   it('returns BalanceResult from getGiftCardBalance', async () => {
-    const balance = await gcApi.getGiftCardBalance('1111-2222');
+    const balance = await gcApi.getGiftCardBalance('tok-1', '1111-2222');
     expect(balance).not.toBeNull();
     expect(balance!.balance_minor).toBe(75000);
     expect(balance!.currency).toBe('IDR');
   });
 
   it('returns RedeemGiftCardResult from redeemGiftCard', async () => {
-    const result = await gcApi.redeemGiftCard('1111-2222', 25000, 'sale-1');
+    const result = await gcApi.redeemGiftCard('tok-1', '1111-2222', 25000, 'sale-1');
     expect(result.card.id).toBe('gc-1');
     expect(result.transaction.txn_type).toBe('redeem');
   });

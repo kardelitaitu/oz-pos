@@ -13,15 +13,20 @@ use serde_json::{Value, json};
 
 /// Returns the OpenAPI 3.1 specification as a JSON value.
 ///
-/// This documents all 20 endpoints across 7 tag groups: Health, Auth,
-/// Products, Categories, Tax Rates, Users, Sales, Sync, and Webhooks.
+/// This documents the full cloud-server API surface across 19 tag groups
+/// (Health, Auth, Products, Images, Categories, Tax Rates, Exchange Rates,
+/// Users, Sales, Sync, Plans, Terminals, Webhooks, plus reserved groups).
+/// The path set and per-operation `security` declarations are guarded by
+/// the drift-guard tests in `openapi_tests.rs` (spec 0047 §3): every path
+/// declared here must resolve to a live route in `build_router`, and every
+/// operation must carry `bearerAuth` unless on the public allowlist.
 pub fn openapi_spec() -> Value {
     json!({
         "openapi": "3.1.0",
         "info": {
             "title": "OZ-POS Cloud Server API",
             "version": env!("CARGO_PKG_VERSION"),
-            "description": "REST API for the OZ-POS point-of-sale cloud sync server.\n\n## Authentication\nMost endpoints require a JWT bearer token from `POST /api/v1/tokens`. Pass it as `Authorization: Bearer <token>`.\n\n## Versioning\nThe API is versioned by URL path prefix (`/api/v1/`). Breaking changes will ship under a new version prefix (`/api/v2/`) — the old version remains available for at least 6 months after the new one lands.\n\n## Pagination\nList endpoints accept `?limit` (default 50, max 200) and `?offset` (default 0) query parameters and return a `PaginatedResponse` envelope with `data`, `total`, `limit`, and `offset` fields.\n\n## Errors\nAll error responses share a common envelope: `{ \"error\": { \"code\": \"MACHINE_READABLE\", \"message\": \"Human description\", \"details\": [...] } }`. The `code` field is stable across versions — use it for programmatic error handling, not the message string.\n\n## Rate Limiting\nSync endpoints return `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Retry-After` headers when nearing the per-tenant limit.",
+            "description": "REST API for the OZ-POS point-of-sale cloud sync server.\n\n## Authentication\nMost endpoints require a JWT bearer token from `POST /api/v1/tokens`. Pass it as `Authorization: Bearer <token>`.\n\n## Versioning\nThe API is versioned by URL path prefix (`/api/v1/`). Breaking changes will ship under a new version prefix (`/api/v2/`) — the old version remains available for at least 6 months after the new one lands.\n\n## Pagination\nList endpoints accept `?limit` (default 50, max 200) and `?offset` (default 0) query parameters and return a `PaginatedResponse` envelope with `data`, `total`, `limit`, and `offset` fields.\n\n## Errors\nAll error responses share a common envelope: `{ \"error\": { \"code\": \"MACHINE_READABLE\", \"message\": \"Human description\", \"details\": [...] } }`. The `code` field is stable across versions — use it for programmatic error handling, not the message string.\n\n## Rate Limiting\nSync endpoints return `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Retry-After` headers when nearing the per-tenant limit.\n\n## Changelog\n- **Read tiers (0.0.34, spec 0047):** terminal client-credential tokens now bind the `terminal` preset — reads are gated by `permissions` claim keys (403 `insufficient_scope` when missing). Legacy tokens without the claim keep full read. The `OZ_TERMINAL_READ_TIER=full` escape hatch restores legacy terminal reads and is **deprecated** (removal after one release cycle).",
             "contact": { "name": "OZ-POS" }
         },
         "servers": [
@@ -34,8 +39,9 @@ pub fn openapi_spec() -> Value {
         },
         "tags": [
             { "name": "Health", "description": "Server health and monitoring endpoints" },
-            { "name": "Auth", "description": "Token generation and authentication" },
+            { "name": "Auth", "description": "Token generation and authentication. **Read tiers (spec 0047):** a token may carry an optional `permissions` claim (list of permission-registry keys). Reads are then gated per route: a missing key returns `403 insufficient_scope`. A token without the claim is grandfathered as full-read. Presets (`terminal`, `dashboard`, `audit`) are mint-time sugar — terminal client-credential tokens automatically bind the `terminal` preset; admin-key mints accept `read_preset`/`read_permissions`. The `OZ_TERMINAL_READ_TIER=full` escape hatch preserves legacy terminal reads (deprecated, one release window)." },
             { "name": "Products", "description": "Product CRUD and stock management" },
+            { "name": "Images", "description": "Content-addressed product/menu-item image store (spec 0046b)" },
             { "name": "Categories", "description": "Product category listing" },
             { "name": "Tax Rates", "description": "Tax rate configuration" },
             { "name": "Exchange Rates", "description": "Currency exchange rate management (global reference data)" },
@@ -287,7 +293,43 @@ fn build_schemas() -> Value {
                 "barcode": { "type": ["string", "null"] },
                 "stock_qty": { "type": ["integer", "null"], "format": "int64" },
                 "created_at": { "type": "string", "format": "date-time" },
-                "updated_at": { "type": "string", "format": "date-time" }
+                "updated_at": { "type": "string", "format": "date-time" },
+                "image_hash": { "type": ["string", "null"], "description": "Slot-1 primary image content hash (spec 0046b)" },
+                "images": { "type": "array", "items": { "$ref": "#/components/schemas/ProductImage" }, "description": "Content-addressed image assignments (slots 1..5)" }
+            }
+        },
+        "ProductImage": {
+            "type": "object",
+            "properties": {
+                "slot": { "type": "integer", "description": "1 = primary, 2..5 = alternatives" },
+                "hash": { "type": "string", "description": "16-hex content hash" },
+                "position": { "type": "integer", "description": "Display order of alternatives (0-based)" }
+            }
+        },
+        "PutImageResponse": {
+            "type": "object",
+            "required": ["hash16"],
+            "properties": {
+                "hash16": { "type": "string", "description": "16-hex content hash of the stored image" }
+            }
+        },
+        "BatchImageResult": {
+            "type": "object",
+            "properties": {
+                "hash": { "type": ["string", "null"], "description": "Content hash when accepted; null when rejected" },
+                "status": { "type": "string", "enum": ["stored", "duplicate", "rejected"], "description": "Per-hash outcome" }
+            }
+        },
+        "BatchPutResponse": {
+            "type": "object",
+            "properties": {
+                "results": { "type": "array", "items": { "$ref": "#/components/schemas/BatchImageResult" }, "description": "Per-hash outcomes, in the same order as the request frames" }
+            }
+        },
+        "MissingHashesResponse": {
+            "type": "object",
+            "properties": {
+                "missing_hashes": { "type": "array", "items": { "type": "string" }, "description": "Candidate hashes the tenant has no active image_refs row for" }
             }
         },
         "PatchStockRequest": {
@@ -586,7 +628,7 @@ fn build_paths() -> Value {
             "post": {
                 "tags": ["Terminals"],
                 "summary": "Register a new terminal",
-                "description": "Registers a terminal for client-credential token minting (ADR sync-auth-hardening P3). Returns a device secret that must be stored securely — it is only returned once.",
+                "description": "Registers a terminal for client-credential token minting (ADR sync-auth-hardening P3). Returns a device secret that must be stored securely — it is only returned once. Gated by the same OZ_ADMIN_KEY as token minting (X-Admin-Key header).",
                 "operationId": "registerTerminal",
                 "requestBody": {
                     "required": true,
@@ -617,13 +659,14 @@ fn build_paths() -> Value {
                 ],
                 "responses": {
                     "200": { "description": "List of products (may be empty)", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/ProductDetail" } } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `products:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
             },
             "post": {
                 "tags": ["Products"],
                 "summary": "Create a new product",
-                "description": "Creates a product with optional category, barcode, and initial stock. SKU must be unique. Tenant ID is stamped from JWT claims.",
+                "description": "Creates a product with optional category, barcode, and initial stock. SKU must be unique. Tenant ID is stamped from JWT claims. **Operator-tier (D1):** requires the `X-Admin-Key` header when `OZ_ADMIN_KEY` is configured, and rejects terminal-scoped tokens.",
                 "operationId": "createProduct",
                 "security": [{ "bearerAuth": [] }],
                 "requestBody": {
@@ -633,7 +676,8 @@ fn build_paths() -> Value {
                 "responses": {
                     "201": { "description": "Product created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ProductDetail" } } } },
                     "400": { "description": "Validation error (empty SKU, empty name, negative price)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT, or missing/invalid `X-Admin-Key` when configured", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Terminal-scoped token cannot write master data", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } },
                     "409": { "description": "SKU already exists", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "500": { "description": "Internal server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
@@ -651,7 +695,8 @@ fn build_paths() -> Value {
                 ],
                 "responses": {
                     "200": { "description": "Product detail, or null if not found", "content": { "application/json": { "schema": { "oneOf": [{ "$ref": "#/components/schemas/ProductDetail" }, { "type": "null" }] } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `products:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
             }
         },
@@ -659,7 +704,7 @@ fn build_paths() -> Value {
             "patch": {
                 "tags": ["Products"],
                 "summary": "Adjust stock quantity",
-                "description": "Positive delta restocks, negative delta sells. The Store enforces non-negative stock with an atomic checked operation.",
+                "description": "Positive delta restocks, negative delta sells. The Store enforces non-negative stock with an atomic checked operation. **Operator-tier (D1):** requires the `X-Admin-Key` header when `OZ_ADMIN_KEY` is configured, and rejects terminal-scoped tokens.",
                 "operationId": "patchStock",
                 "security": [{ "bearerAuth": [] }],
                 "parameters": [
@@ -671,16 +716,111 @@ fn build_paths() -> Value {
                 },
                 "responses": {
                     "200": { "description": "Stock adjusted successfully", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PatchStockResponse" } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT, or missing/invalid `X-Admin-Key` when configured", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Terminal-scoped token cannot write master data", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } },
                     "404": { "description": "Product not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "422": { "description": "Adjustment would cause negative stock", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
         },
 
-        // ── Plans (tenant sync plan — ADR sync-plan-gating) ────────
-        "/api/v1/tenants/me/plan": {
+        // ── Images (product/menu-item content store — spec 0046b) ──
+        "/api/v1/images": {
+            "put": {
+                "tags": ["Images"],
+                "summary": "Upload a single product image",
+                "description": "Body is the raw WebP bytes (max 32 KB). The server re-verifies magic bytes + size and recomputes sha-256 before storing atomically on the volume. Returns the 16-hex content hash — the filename, ETag, and cache key in one.",
+                "operationId": "putImage",
+                "security": [{ "bearerAuth": [] }],
+                "parameters": [
+                    { "name": "hash", "in": "query", "required": false, "schema": { "type": "string" }, "description": "Optional client-computed hash; if present it must match the server's (409 otherwise)." }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } }
+                },
+                "responses": {
+                    "201": { "description": "Image stored (or already present as a content-addressed duplicate)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PutImageResponse" } } } },
+                    "400": { "description": "Not a valid WebP or exceeds 32 KB", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "409": { "description": "Client-supplied hash does not match the computed hash", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            },
+            "post": {
+                "tags": ["Images"],
+                "summary": "Upload a batch of product images",
+                "description": "Body is length-prefixed binary frames (big-endian u32 length + bytes) for up to 16 images / 512 KB. The server re-verifies each file and answers per-hash `stored|duplicate|rejected` in the same order.",
+                "operationId": "putImageBatch",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } }
+                },
+                "responses": {
+                    "201": { "description": "Batch processed (per-hash outcomes)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BatchPutResponse" } } } },
+                    "400": { "description": "Malformed frames or all images rejected", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "413": { "description": "Batch exceeds limits (16 images / 512 KB)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+        "/api/v1/images:pack": {
             "get": {
+                "tags": ["Images"],
+                "summary": "Cold-start pack of images",
+                "description": "Returns up to 64 files / 2 MB as length-prefixed frames for the given comma-separated hashes. Missing or unreferenced hashes are silently skipped. Used by fresh tablet provisioning instead of thousands of per-hash GETs.",
+                "operationId": "getImagePack",
+                "security": [{ "bearerAuth": [] }],
+                "parameters": [
+                    { "name": "hashes", "in": "query", "required": true, "schema": { "type": "string" }, "description": "Comma-separated list of content hashes" }
+                ],
+                "responses": {
+                    "200": { "description": "Length-prefixed image frames (may be empty)", "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } } },
+                    "400": { "description": "No valid hashes or more than 64 requested", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `products:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
+                }
+            }
+        },
+        "/api/v1/images:missing": {
+            "get": {
+                "tags": ["Images"],
+                "summary": "Server-side missing-hash nudge",
+                "description": "Given comma-separated candidate hashes, returns the subset the tenant has no active `image_refs` row for. The desktop push scheduler calls this before a batch upload so it pushes exactly what the cloud lacks first (spec 0046b §3.6).",
+                "operationId": "getImageMissing",
+                "security": [{ "bearerAuth": [] }],
+                "parameters": [
+                    { "name": "hashes", "in": "query", "required": true, "schema": { "type": "string" }, "description": "Comma-separated list of candidate content hashes" }
+                ],
+                "responses": {
+                    "200": { "description": "The missing subset", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MissingHashesResponse" } } } },
+                    "400": { "description": "No valid hashes", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `products:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
+                }
+            }
+        },
+        "/api/v1/images/{hash16}": {
+            "get": {
+                "tags": ["Images"],
+                "summary": "Fetch an image by content hash",
+                "description": "Returns the immutable WebP bytes for a content-addressed hash the tenant references. `Cache-Control: max-age=31536000, immutable` and `ETag: \"<hash>\"` — every cache layer between the tablet and the volume can treat it as a static asset. Unknown or un-hashed files return 404.",
+                "operationId": "getImage",
+                "security": [{ "bearerAuth": [] }],
+                "parameters": [
+                    { "name": "hash16", "in": "path", "required": true, "schema": { "type": "string", "minLength": 16, "maxLength": 16 }, "description": "16-hex content hash" }
+                ],
+                "responses": {
+                    "200": { "description": "Immutable WebP bytes", "content": { "image/webp": { "schema": { "type": "string", "format": "binary" } } } },
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `products:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } },
+                    "404": { "description": "Invalid hash grammar, unknown hash, or tenant has no active reference", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+
+        // ── Plans (tenant sync plan — ADR sync-plan-gating) ────────
+        "/api/v1/tenants/me/plan": {            "get": {
                 "tags": ["Plans"],
                 "summary": "Get the caller's sync plan",
                 "description": "Returns the tenant's cloud sync plan (free or pro) resolved from the JWT claims — a missing plan row reports free (fail closed). Unlike the sync router this endpoint is not plan-gated, so a free tenant can read its own plan to render the upgrade prompt.",
@@ -688,7 +828,8 @@ fn build_paths() -> Value {
                 "security": [{ "bearerAuth": [] }],
                 "responses": {
                     "200": { "description": "Effective plan for the authenticated tenant", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PlanResponse" } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `plan:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
             }
         },
@@ -726,7 +867,8 @@ fn build_paths() -> Value {
                 ],
                 "responses": {
                     "200": { "description": "List of categories (may be empty)", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/CategoryDto" } } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `categories:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
             }
         },
@@ -736,7 +878,7 @@ fn build_paths() -> Value {
             "post": {
                 "tags": ["Tax Rates"],
                 "summary": "Create a new tax rate",
-                "description": "Creates a tax rate with basis-point precision (e.g., 1000 = 10%). Can be set as default and/or tax-inclusive.",
+                "description": "Creates a tax rate with basis-point precision (e.g., 1000 = 10%). Can be set as default and/or tax-inclusive. **Operator-tier (D1):** requires the `X-Admin-Key` header when `OZ_ADMIN_KEY` is configured, and rejects terminal-scoped tokens.",
                 "operationId": "createTaxRate",
                 "security": [{ "bearerAuth": [] }],
                 "requestBody": {
@@ -745,7 +887,8 @@ fn build_paths() -> Value {
                 },
                 "responses": {
                     "201": { "description": "Tax rate created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TaxRateResponse" } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT, or missing/invalid `X-Admin-Key` when configured", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Terminal-scoped token cannot write master data", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
             }
         },
@@ -760,13 +903,14 @@ fn build_paths() -> Value {
                 "security": [{ "bearerAuth": [] }],
                 "responses": {
                     "200": { "description": "Rate history (may be empty)", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/ExchangeRateResponse" } } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `reference:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
             },
             "post": {
                 "tags": ["Exchange Rates"],
                 "summary": "Create an exchange rate",
-                "description": "Creates a rate with 6-decimal fixed-point precision. Rejects non-positive rates, identical pairs, non-ISO codes, and malformed effective dates (CUR-05). Duplicate (pair, date) returns 409.",
+                "description": "Creates a rate with 6-decimal fixed-point precision. Rejects non-positive rates, identical pairs, non-ISO codes, and malformed effective dates (CUR-05). Duplicate (pair, date) returns 409. **Operator-tier (D1):** requires the `X-Admin-Key` header when `OZ_ADMIN_KEY` is configured, and rejects terminal-scoped tokens.",
                 "operationId": "createExchangeRate",
                 "security": [{ "bearerAuth": [] }],
                 "requestBody": {
@@ -776,7 +920,8 @@ fn build_paths() -> Value {
                 "responses": {
                     "201": { "description": "Rate created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ExchangeRateResponse" } } } },
                     "400": { "description": "Validation error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT, or missing/invalid `X-Admin-Key` when configured", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Terminal-scoped token cannot write master data", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } },
                     "409": { "description": "Rate already exists for this pair and effective date", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
@@ -790,7 +935,8 @@ fn build_paths() -> Value {
                 "security": [{ "bearerAuth": [] }],
                 "responses": {
                     "200": { "description": "Current rates (may be empty)", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/ExchangeRateResponse" } } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `reference:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
             }
         },
@@ -809,6 +955,7 @@ fn build_paths() -> Value {
                     "200": { "description": "Newest rate for the pair", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ExchangeRateResponse" } } } },
                     "400": { "description": "Invalid ISO-4217 code", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `reference:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } },
                     "404": { "description": "No rate for this pair", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
@@ -817,7 +964,7 @@ fn build_paths() -> Value {
             "delete": {
                 "tags": ["Exchange Rates"],
                 "summary": "Delete an exchange rate",
-                "description": "Removes a rate row by id.",
+                "description": "Removes a rate row by id. **Operator-tier (D1):** requires the `X-Admin-Key` header when `OZ_ADMIN_KEY` is configured, and rejects terminal-scoped tokens.",
                 "operationId": "deleteExchangeRate",
                 "security": [{ "bearerAuth": [] }],
                 "parameters": [
@@ -825,7 +972,8 @@ fn build_paths() -> Value {
                 ],
                 "responses": {
                     "204": { "description": "Rate deleted" },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT, or missing/invalid `X-Admin-Key` when configured", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Terminal-scoped token cannot write master data", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } },
                     "404": { "description": "Rate not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
@@ -882,7 +1030,8 @@ fn build_paths() -> Value {
                 ],
                 "responses": {
                     "200": { "description": "Sale detail, or null if not found", "content": { "application/json": { "schema": { "oneOf": [{ "$ref": "#/components/schemas/SaleDetail" }, { "type": "null" }] } } } },
-                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Token lacks the `sales:view` read-tier permission (PII-flagged route)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
             }
         },

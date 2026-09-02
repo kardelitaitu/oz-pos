@@ -19,6 +19,7 @@
 //! | `OZ_ENFORCE_PLANS` | — | When `1`/`true`/`on`, sync requests from tenants on the `free` plan (or with no plan row) are rejected with `403 plan_required` (ADR sync-plan-gating). When unset, plan gating is off — dev mode keeps working as before. |
 //! | `OZ_REDIRECT_ONLY` | — | Run in redirect-only mode (ADR #11). Requires `OZ_SYNC_REDIRECT_URL`. Skips DB, prune, metrics, API — only serves the migration redirect. |
 //! | `OZ_SYNC_REDIRECT_URL` | — | New server URL for migration redirect. When set, all `/api/sync/*` requests return `{"error":"server_migrated","new_url":"<url>"}` with HTTP 421. |
+//! | `OZ_WORKER_THREADS` | `2` | Tokio runtime worker threads (0 = logical CPU count). Tune higher for multi-tenant deployments under sustained sync load. |
 //! | `RUST_LOG` | `info` | Log level filter (e.g. `debug`, `oz_cloud_server=debug`) |
 
 // serde_json's `json!` recurses once per key/value pair, and the OpenAPI
@@ -30,11 +31,14 @@ mod config;
 mod db;
 mod email;
 mod email_pg;
+mod image_gc;
 mod metrics;
 mod openapi;
+mod outbox;
 mod prune;
 mod rate_limit;
 mod redirect;
+mod redis_backend;
 mod shutdown;
 mod sync_api;
 mod sync_store;
@@ -53,6 +57,34 @@ use tracing::info;
 use crate::rate_limit::{RateLimiterState, start_rate_limit_cleanup};
 use crate::sync_api::{SyncState, sync_router};
 
+/// Short-TTL cache for the health endpoint's `sync_queue_depth` field.
+///
+/// The Docker healthcheck probes `/health` every 5 s, and each probe runs
+/// `SELECT COUNT(*) FROM offline_queue WHERE status = 'pending'` — an
+/// indexed scan that grows with the total queue size.  A 10 s cache means
+/// consecutive probes within a burst reuse the same depth without hitting
+/// the DB, while the `db_connected` ping stays live (the healthcheck's
+/// primary purpose).
+#[derive(Clone, Default)]
+pub struct HealthDepthCache(Arc<Mutex<Option<(Instant, i64)>>>);
+
+impl HealthDepthCache {
+    const TTL: std::time::Duration = std::time::Duration::from_secs(10);
+
+    async fn cached(&self) -> Option<i64> {
+        let guard = self.0.lock().await;
+        guard
+            .as_ref()
+            .filter(|(at, _)| at.elapsed() < Self::TTL)
+            .map(|(_, count)| *count)
+    }
+
+    async fn store(&self, depth: i64) {
+        let mut guard = self.0.lock().await;
+        *guard = Some((Instant::now(), depth));
+    }
+}
+
 /// Shared application state for the cloud server.
 ///
 /// Provides the database connection and any additional server-wide state.
@@ -66,6 +98,9 @@ pub struct CloudServerState {
     pub pg: Option<deadpool_postgres::Pool>,
     /// Instant captured at startup for uptime calculation.
     pub started_at: Instant,
+    /// Short-TTL cache for the health endpoint's sync queue depth, so the
+    /// Docker healthcheck's 5s probes don't each run a `COUNT(*)` scan.
+    pub health_depth_cache: HealthDepthCache,
     /// P5-3: Stripe webhook signing secret (loaded from `STRIPE_WEBHOOK_SECRET` env var).
     pub stripe_webhook_secret: Option<String>,
     /// P5-3: Square webhook signature key (loaded from `SQUARE_WEBHOOK_SIGNATURE_KEY` env var).
@@ -74,8 +109,68 @@ pub struct CloudServerState {
     pub square_webhook_url: Option<String>,
 }
 
-#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+/// Read the Tokio worker-thread count from `OZ_WORKER_THREADS`.
+///
+/// Defaults to 2 (the historical value, conservative for a cheap single
+/// instance). `0` maps to the machine's logical CPU count
+/// (`available_parallelism`). Unparseable values fall back to 2 with a
+/// warning so a bad env var can never crash startup.
+fn worker_threads_from_env() -> usize {
+    parse_worker_threads(std::env::var("OZ_WORKER_THREADS"))
+}
+
+/// Pure parsing half of [`worker_threads_from_env`], split out so tests can
+/// exercise the env semantics without mutating process env vars.
+fn parse_worker_threads(raw: Result<String, std::env::VarError>) -> usize {
+    match raw {
+        Ok(v) => match v.trim().parse::<usize>() {
+            Ok(0) => std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(2),
+            Ok(n) => n,
+            Err(_) => {
+                tracing::warn!(
+                    value = %v,
+                    "OZ_WORKER_THREADS is not a valid usize — falling back to 2"
+                );
+                2
+            }
+        },
+        Err(_) => 2,
+    }
+}
+
+/// Connect the optional Redis backend (ADR #43 D4).
+///
+/// Returns `Some(backend)` when `OZ_REDIS_URL` is set and reachable, and
+/// `None` when the URL is unset, the connection was refused, or the URL is
+/// malformed — in every `None` case the server keeps working with the
+/// in-process snapshot cache and rate limiter (single-instance shape).
+async fn connect_redis(url: Option<&str>) -> Option<crate::redis_backend::RedisBackend> {
+    match url {
+        Some(url) => match crate::redis_backend::RedisBackend::connect(url).await {
+            Ok(Some(backend)) => Some(backend),
+            Ok(None) => None, // unreachable — fallback logged by connect()
+            Err(e) => {
+                tracing::warn!(error = %e, "Redis disabled — falling back to in-process");
+                None
+            }
+        },
+        None => None,
+    }
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let worker_threads = worker_threads_from_env();
+    tracing::info!(worker_threads, "starting tokio multi-thread runtime");
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(worker_threads)
+        .enable_all()
+        .build()?;
+    runtime.block_on(async_main())
+}
+
+async fn async_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // ── tokio-console (RUSTFLAGS="--cfg tokio_unstable" + feature "console") ─
     // console-subscriber panics if tokio was not built with `tokio_unstable`,
     // so the init is gated on BOTH the feature and the cfg — `--all-features`
@@ -180,6 +275,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 db: conn.clone(),
                 pg: None,
                 started_at: Instant::now(),
+                health_depth_cache: HealthDepthCache::default(),
                 stripe_webhook_secret: config.stripe_webhook_secret.clone(),
                 square_webhook_signature_key: config.square_webhook_signature_key.clone(),
                 square_webhook_url: config.square_webhook_url.clone(),
@@ -187,11 +283,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             // Start the background prune loop (ADR #6 Q4 / P-1 Ledger Retention).
             prune::start_prune_loop(conn.clone());
 
+            // Start the background image GC loop (spec 0046b §3.4/§3.7) —
+            // sweeps orphaned `image_refs` (refcount = 0, 24h grace) and
+            // deletes the corresponding files from the image volume.
+            image_gc::start_image_gc_loop(conn.clone(), oz_api::image_dir_from_env());
+
             // P55-3: Start the scheduled report sender loop.
             email::start_report_sender_loop(conn.clone());
 
+            // ADR #43 D7: outbox drainer for async email/webhook delivery.
+            // The report sender now enqueues into the outbox; this task
+            // drains pending entries and sends with retry/backoff.
+            outbox::start_drainer_sqlite(conn.clone(), &crate::email::deliver_outbox_entry);
+
             // P8-1: Per-tenant rate limiter state + background cleanup.
-            let rate_limiter = RateLimiterState::new();
+            // ADR #43 D4: prefer the shared Redis token bucket when a
+            // backend is configured; the in-process shards remain the
+            // fallback.
+            let rate_limiter = match connect_redis(config.redis_url.as_deref()).await {
+                Some(redis) => RateLimiterState::with_redis(redis),
+                None => RateLimiterState::new(),
+            };
             start_rate_limit_cleanup(rate_limiter.clone());
 
             let app = build_router(state, rate_limiter, &config, None);
@@ -211,13 +323,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 db: conn.sqlite_conn(),
                 pg: Some(pg_pool.clone()),
                 started_at: Instant::now(),
+                health_depth_cache: HealthDepthCache::default(),
                 stripe_webhook_secret: config.stripe_webhook_secret.clone(),
                 square_webhook_signature_key: config.square_webhook_signature_key.clone(),
                 square_webhook_url: config.square_webhook_url.clone(),
             };
 
             // P8-1: Per-tenant rate limiter state + background cleanup.
-            let rate_limiter = RateLimiterState::new();
+            let rate_limiter = match connect_redis(config.redis_url.as_deref()).await {
+                Some(redis) => RateLimiterState::with_redis(redis),
+                None => RateLimiterState::new(),
+            };
             start_rate_limit_cleanup(rate_limiter.clone());
 
             // Phase 1.5: P-1 offline-queue retention on Postgres (the SQLite
@@ -295,7 +411,7 @@ struct HealthResponse {
 /// `GET /metrics` — Prometheus metrics endpoint.
 /// Public, no auth required (same as /health).
 async fn metrics_handler() -> String {
-    crate::metrics::render_metrics()
+    crate::metrics::render_metrics_cached()
 }
 
 /// `GET /health` — public health check, no auth required.
@@ -314,69 +430,100 @@ async fn health_handler(
     // P8-3: all DB queries in a single lock acquisition. On the Postgres
     // branch the queue depth / last-sync are read from the real database
     // (the in-memory SQLite fallback is empty by design).
-    let (db_connected, db_latency_us, sync_queue_depth, last_sync_at, db_kind) =
-        if let Some(pool) = &state.pg {
-            let db_start = std::time::Instant::now();
-            // The health endpoint must fail fast under pool saturation:
-            // the Docker healthcheck has its own --timeout=5s, so waiting
-            // the full 5s builder wait_timeout here would let the
-            // container be marked unhealthy during a burst. Bound the
-            // health-path wait to 2s — a degraded "db_connected: false"
-            // response is better than a container restart.
-            let (connected, depth, last) =
-                match tokio::time::timeout(std::time::Duration::from_secs(2), pool.get()).await {
-                    Ok(Ok(client)) => {
-                        let depth = client
+    let (db_connected, db_latency_us, sync_queue_depth, last_sync_at, db_kind) = if let Some(pool) =
+        &state.pg
+    {
+        let db_start = std::time::Instant::now();
+        // The health endpoint must fail fast under pool saturation:
+        // the Docker healthcheck has its own --timeout=5s, so waiting
+        // the full 5s builder wait_timeout here would let the
+        // container be marked unhealthy during a burst. Bound the
+        // health-path wait to 2s — a degraded "db_connected: false"
+        // response is better than a container restart.
+        let (connected, last) =
+            match tokio::time::timeout(std::time::Duration::from_secs(2), pool.get()).await {
+                Ok(Ok(client)) => {
+                    let last = client
+                        .query_one(
+                            "SELECT MAX(synced_at) FROM offline_queue \
+                             WHERE synced_at IS NOT NULL",
+                            &[],
+                        )
+                        .await
+                        .map(|r| r.get::<_, Option<String>>(0))
+                        .unwrap_or(None);
+                    (true, last)
+                }
+                // Timeout (2s guard) OR deadpool error → degraded health.
+                Ok(Err(_)) => (false, None),
+                Err(_) => (false, None),
+            };
+        let latency = db_start.elapsed().as_micros() as u64;
+
+        // The queue-depth COUNT (indexed scan) is served from a 10s
+        // cache — the healthcheck probes every 5s, so consecutive
+        // probes reuse the same depth instead of re-scanning the
+        // queue. The live DB ping above is what the healthcheck
+        // actually needs; depth is informational.
+        let depth = match state.health_depth_cache.cached().await {
+            Some(d) => d,
+            None => {
+                let fresh = if connected {
+                    match tokio::time::timeout(std::time::Duration::from_secs(2), pool.get()).await
+                    {
+                        Ok(Ok(client)) => client
                             .query_one(
                                 "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending'",
                                 &[],
                             )
                             .await
                             .map(|r| r.get::<_, i64>(0))
-                            .unwrap_or(0);
-                        let last = client
-                            .query_one(
-                                "SELECT MAX(synced_at) FROM offline_queue \
-                             WHERE synced_at IS NOT NULL",
-                                &[],
-                            )
-                            .await
-                            .map(|r| r.get::<_, Option<String>>(0))
-                            .unwrap_or(None);
-                        (true, depth, last)
+                            .unwrap_or(0),
+                        _ => 0,
                     }
-                    // Timeout (2s guard) OR deadpool error → degraded health.
-                    Ok(Err(_)) => (false, 0, None),
-                    Err(_) => (false, 0, None),
+                } else {
+                    0
                 };
-            let latency = db_start.elapsed().as_micros() as u64;
-            (connected, latency, depth, last, "postgres")
-        } else {
-            let db_start = std::time::Instant::now();
-            let conn = state.db.lock().await;
-
-            let ping_result = conn.query_row("SELECT 1", [], |_| Ok(()));
-            let latency = db_start.elapsed().as_micros() as u64;
-            let connected = ping_result.is_ok();
-
-            let depth = conn
-                .query_row(
-                    "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending'",
-                    [],
-                    |row| row.get::<_, i64>(0),
-                )
-                .unwrap_or(0);
-
-            let last = conn
-                .query_row(
-                    "SELECT MAX(synced_at) FROM offline_queue WHERE synced_at IS NOT NULL",
-                    [],
-                    |row| row.get::<_, Option<String>>(0),
-                )
-                .unwrap_or(None);
-
-            (connected, latency, depth, last, "sqlite")
+                state.health_depth_cache.store(fresh).await;
+                fresh
+            }
         };
+
+        (connected, latency, depth, last, "postgres")
+    } else {
+        let db_start = std::time::Instant::now();
+        let conn = state.db.lock().await;
+
+        let ping_result = conn.query_row("SELECT 1", [], |_| Ok(()));
+        let latency = db_start.elapsed().as_micros() as u64;
+        let connected = ping_result.is_ok();
+
+        // Same 10s depth cache on the SQLite branch.
+        let depth = match state.health_depth_cache.cached().await {
+            Some(d) => d,
+            None => {
+                let fresh = conn
+                    .query_row(
+                        "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending'",
+                        [],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .unwrap_or(0);
+                state.health_depth_cache.store(fresh).await;
+                fresh
+            }
+        };
+
+        let last = conn
+            .query_row(
+                "SELECT MAX(synced_at) FROM offline_queue WHERE synced_at IS NOT NULL",
+                [],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .unwrap_or(None);
+
+        (connected, latency, depth, last, "sqlite")
+    };
 
     // P8-3: record health check Prometheus metrics.
     crate::metrics::HEALTH_CHECKS_TOTAL.inc();
@@ -459,6 +606,9 @@ pub fn build_router(
         db_path: config.db_path.clone(),
         port: config.port,
         cors_origins: cors_origins.clone(),
+        // Spec 0046b §3.4: content-addressed image store on the Northflank
+        // volume (default `/data/images` in prod, `./data/images` in dev).
+        image_dir: oz_api::image_dir_from_env(),
     };
     let api_router = oz_api::router(api_state);
 

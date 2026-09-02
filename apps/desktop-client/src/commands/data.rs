@@ -365,8 +365,7 @@ pub async fn import_data(
     let mut products_imported = 0;
     for val in &payload.products {
         if let Ok(product) = serde_json::from_value::<oz_core::Product>(val.clone()) {
-            let exists = store
-                .conn()
+            let exists = tx
                 .query_row(
                     "SELECT 1 FROM products WHERE sku = ?1",
                     rusqlite::params![product.sku.to_string()],
@@ -374,24 +373,21 @@ pub async fn import_data(
                 )
                 .is_ok();
             if exists {
-                store.update_product(
-                    &product.sku.to_string(),
-                    &product.name,
-                    product.price,
-                    product.category_id.as_deref(),
-                    product.barcode.as_ref().map(|b| b.as_str()),
-                    Some(product.product_type.as_str()),
-                    None,
+                let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+                let cur_str = std::str::from_utf8(&product.price.currency.0)
+                    .map_err(|e| AppError::Internal(format!("invalid currency: {e}")))?;
+                tx.execute(
+                    "UPDATE products SET name = ?1, price_minor = ?2, currency = ?3, category_id = ?4, barcode = ?5, updated_at = ?6 WHERE sku = ?7",
+                    rusqlite::params![product.name, product.price.minor_units, cur_str, product.category_id, product.barcode.as_ref().map(|b| b.as_str()), now, product.sku.to_string()],
                 )?;
             } else {
-                store.create_product(
-                    &product.sku.to_string(),
-                    &product.name,
-                    product.price,
-                    product.category_id.as_deref(),
-                    product.barcode.as_ref().map(|b| b.as_str()),
-                    0,
-                    Some(product.product_type.as_str()),
+                let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+                let cur_str = std::str::from_utf8(&product.price.currency.0)
+                    .map_err(|e| AppError::Internal(format!("invalid currency: {e}")))?;
+                tx.execute(
+                    "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    rusqlite::params![product.id, product.sku.to_string(), product.name, product.price.minor_units, cur_str, product.category_id, product.barcode.as_ref().map(|b| b.as_str()), now, now],
                 )?;
             }
             products_imported += 1;
@@ -442,7 +438,11 @@ pub async fn import_data(
                     )
                     .is_ok();
                 if !exists {
-                    let _ = store.create_sale(&sale);
+                    // RUST-08: use the tx-aware variant — `store.create_sale`
+                    // would open a nested transaction on the same connection
+                    // ("cannot start a transaction within a transaction") and
+                    // roll the whole import back (same fix as CLI-1).
+                    store.create_sale_in_tx(&tx, &sale)?;
                 }
                 sales_imported += 1;
             }

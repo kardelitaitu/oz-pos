@@ -1,0 +1,217 @@
+name: Dev CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  SCCACHE_GHA_ENABLED: "true"
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  # ── 1. Website: check + test + build ─────────────────────────────────
+  website:
+    name: Website Check + Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'website/package-lock.json'
+      - name: Install dependencies
+        run: cd website && npm ci --no-audit --no-fund
+      - name: Install Playwright (for Mermaid render)
+        run: cd website && npx playwright install --with-deps chromium
+      - name: Typecheck & Lint
+        run: cd website && npm run check
+      - name: Unit tests
+        run: cd website && npm test
+      - name: Build
+        run: cd website && npm run build
+
+  # ── 2. Cargo Check: Fast compilation check ────────────────────────────
+  cargo-check:
+    name: Cargo Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install system dependencies (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libdbus-1-dev libudev-dev pkg-config
+      - uses: mozilla/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696 # v0.0.10
+      - name: Prepare frontend dist stubs for Tauri macro
+        run: |
+          mkdir -p ui/dist ui/dist-tablet ui/dist-desktop
+          touch ui/dist/index.html ui/dist-tablet/index.html ui/dist-desktop/index.html
+      - name: Cargo check workspace
+        run: cargo check --workspace --all-targets --all-features
+
+  # ── 3. Cargo Nextest: Fast test execution ────────────────────────────
+  cargo-nextest:
+    name: Cargo Nextest
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: oz_test
+          POSTGRES_PASSWORD: oz_test_password
+          POSTGRES_DB: oz_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    env:
+      OZ_TEST_PG_URL: postgres://oz_test:oz_test_password@localhost:5432/oz_test_db
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install system dependencies (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libdbus-1-dev libudev-dev pkg-config
+      - uses: mozilla/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696 # v0.0.10
+      - name: Prepare frontend dist stubs for Tauri macro
+        run: |
+          mkdir -p ui/dist ui/dist-tablet ui/dist-desktop
+          touch ui/dist/index.html ui/dist-tablet/index.html ui/dist-desktop/index.html
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2
+        with:
+          tool: cargo-nextest
+      - name: Run Nextest
+        run: cargo nextest run --workspace --all-features
+
+  # ── 4. UI Test: Frontend Vitest suite ─────────────────────────────────
+  ui-test:
+    name: UI Tests (Vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
+      - name: Install UI dependencies
+        run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
+      - name: Run Vitest
+        run: cd ui && npm test
+
+  # ── 5. Deploy: Northflank (push to main/release or manual dispatch) ──
+  northflank-deploy:
+    name: Deploy Backend (Northflank)
+    runs-on: ubuntu-latest
+    needs: [website, cargo-check, cargo-nextest, ui-test]
+    if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/0.0.'))) || github.event_name == 'workflow_dispatch'
+    env:
+      NF_API: https://api.northflank.com/v1
+      NF_PROJECT_ID: ${{ vars.NORTHFLANK_PROJECT_ID || 'oz-pos' }}
+      NF_SERVICE_ID: ${{ vars.NORTHFLANK_SERVICE_ID || 'oz-pos-cloud' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check Northflank credentials
+        id: check_creds
+        env:
+          NF_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+        run: |
+          if [ -z "$NF_TOKEN" ]; then
+            echo "::warning::NORTHFLANK_API_TOKEN is not set; skipping deploy step."
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Trigger Northflank build
+        if: steps.check_creds.outputs.has_token == 'true'
+        id: trigger
+        env:
+          NF_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          resp=$(curl -sS -w '\n%{http_code}' \
+            -X POST "$NF_API/projects/$NF_PROJECT_ID/services/$NF_SERVICE_ID/build" \
+            -H "Authorization: Bearer $NF_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"sha\":\"$GITHUB_SHA\"}")
+          code=$(echo "$resp" | tail -1)
+          body=$(echo "$resp" | sed '$d')
+          echo "Trigger response (HTTP $code): $body"
+          if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+            if [ "$code" = "409" ]; then
+              echo "Build already active (409) — checking in-flight build"
+              list=$(curl -sS --fail \
+                "$NF_API/projects/$NF_PROJECT_ID/services/$NF_SERVICE_ID/build" \
+                -H "Authorization: Bearer $NF_TOKEN")
+              build_id=$(echo "$list" | jq -r \
+                --arg sha "$GITHUB_SHA" \
+                '(.data.builds // .data.items // []) | map(select(.sha == $sha and .concluded == false)) | .[0].id // empty')
+              if [ -n "$build_id" ]; then
+                echo "Adopting in-flight build $build_id (sha $GITHUB_SHA)"
+                echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+            echo "::error::Northflank rejected build trigger (HTTP $code)"
+            exit 1
+          fi
+          build_id=$(echo "$body" | jq -r '.data.id // empty')
+          echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
+      - name: Wait for build to conclude
+        if: steps.check_creds.outputs.has_token == 'true' && steps.trigger.outputs.build_id != ''
+        env:
+          NF_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+          BUILD_ID: ${{ steps.trigger.outputs.build_id }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            resp=$(curl -sS -w '\n%{http_code}' \
+              "$NF_API/projects/$NF_PROJECT_ID/services/$NF_SERVICE_ID/build/$BUILD_ID" \
+              -H "Authorization: Bearer $NF_TOKEN" || true)
+            code=$(echo "$resp" | tail -1)
+            body=$(echo "$resp" | sed '$d')
+            if [ "$code" = "200" ] && [ -n "$body" ]; then
+              status=$(echo "$body" | jq -r '.data.status // empty')
+              concluded=$(echo "$body" | jq -r '.data.concluded // false')
+              echo "poll $i: status=$status concluded=$concluded"
+              if [ "$concluded" = "true" ]; then
+                if [ "$status" = "SUCCESS" ] || [ "$status" = "COMPLETED" ]; then
+                  echo "Northflank build succeeded!"
+                  exit 0
+                else
+                  echo "::error::Northflank build ended with status $status"
+                  exit 1
+                fi
+              fi
+            fi
+            sleep 10
+          done
+          echo "::error::Timed out waiting for Northflank build"
+          exit 1

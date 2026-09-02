@@ -18,6 +18,7 @@ fn make_product(sku: &str) -> ProductWithDetails {
         category_name: None,
         stock_qty: None,
         popularity_score: 0.0,
+        images: Vec::new(),
     }
 }
 

@@ -285,9 +285,11 @@ describe('AppShell — KDS workspace navigation', () => {
         idleCallback?.();
       });
 
-      // Screen should now be locked
+      // Screen should now be locked. Assert the screen itself, not a hint
+      // line: the "Enter PIN to unlock" copy was removed from the lock
+      // screen, and the PIN pad is now its only content.
       await waitFor(() => {
-        expect(screen.getByText(/enter pin to unlock/i)).toBeInTheDocument();
+        expect(screen.getByTestId('session-lock-screen')).toBeInTheDocument();
       });
     });
 

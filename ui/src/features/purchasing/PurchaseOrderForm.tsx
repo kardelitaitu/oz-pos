@@ -12,6 +12,7 @@ import { requiredLocalized } from '@/frontend/shared';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { l10nErrorMessage } from '@/utils/app-error';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { minorUnitExponent } from '@/types/domain';
 import './PurchaseOrderForm.css';
 
@@ -31,6 +32,8 @@ interface Props {
 /** Purchase order creation / editing form — supplier selection, line items with SKU, quantity, unit cost, and expected delivery date. */
 export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props) {
   const { l10n } = useLocalization();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
   const { currency } = useCurrency();
@@ -51,10 +54,10 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
   useFocusTrap(panelRef, !saving, onClose);
 
   useEffect(() => {
-    listSuppliers().then(setSuppliers)    .catch(() => {
+    listSuppliers(sessionToken).then(setSuppliers)    .catch(() => {
       addToast({ message: requiredLocalized(l10nRef.current, 'po-form-error-suppliers-failed'), type: 'error' });
     });
-  }, [addToast]); // l10n via ref — stable dep chain
+  }, [addToast, sessionToken]); // l10n via ref — stable dep chain
 
   const addLine = useCallback(() => {
     setLines((prev) => [...prev, { sku: '', product_name: '', qty: 1, unit_cost_minor: 0 }]);
@@ -93,14 +96,14 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
       };
       if (expectedDate) args.expected_date = expectedDate;
       if (notes) args.notes = notes;
-      await createPurchaseOrder(args);
+      await createPurchaseOrder(sessionToken, args);
       onSaved();
     } catch (err) {
       setError(l10nErrorMessage(err, l10nRef.current, 'po-form-error-generic'));
     } finally {
       setSaving(false);
     }
-  }, [poNumber, supplierId, expectedDate, notes, lines, onSaved]); // l10n via ref — stable dep chain
+  }, [poNumber, supplierId, expectedDate, notes, lines, onSaved, sessionToken]); // l10n via ref — stable dep chain
 
   return (
     <div className="po-form-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('po-form-aria-label')}>

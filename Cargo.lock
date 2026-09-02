@@ -523,6 +523,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "backon"
+version = "1.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cffb0e931875b666fc4fcb20fee52e9bbd1ef836fd9e9e04ec21555f9f85f7ef"
+dependencies = [
+ "fastrand",
+]
+
+[[package]]
 name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -848,9 +857,9 @@ dependencies = [
 
 [[package]]
 name = "chacha20"
-version = "0.10.1"
+version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d524456ba66e72eb8b115ff89e01e497f8e6d11d78b70b1aa13c0fbd97540a81"
+checksum = "65c35e4b699c7e15ccbe7ee35c005e4fc0a278d22238a2857e6ce2dadeda1b06"
 dependencies = [
  "cfg-if",
  "cpufeatures 0.3.0",
@@ -990,7 +999,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd"
 dependencies = [
  "bytes",
+ "futures-core",
  "memchr",
+ "pin-project-lite",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -1707,20 +1720,6 @@ checksum = "e079f19b08ca6239f47f8ba8509c11cf3ea30095831f7fed61441475edd8c449"
 
 [[package]]
 name = "embed-resource"
-version = "2.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d506610004cfc74a6f5ee7e8c632b355de5eca1f03ee5e5e0ec11b77d4eb3d61"
-dependencies = [
- "cc",
- "memchr",
- "rustc_version",
- "toml 0.8.2",
- "vswhom",
- "winreg 0.52.0",
-]
-
-[[package]]
-name = "embed-resource"
 version = "3.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c31a88c8d26de40ed18fe748c547845aa39de1db3afd958f8cb91579f3644bcb"
@@ -1730,7 +1729,7 @@ dependencies = [
  "rustc_version",
  "toml 1.1.2+spec-1.1.0",
  "vswhom",
- "winreg 0.55.0",
+ "winreg",
 ]
 
 [[package]]
@@ -1985,7 +1984,7 @@ dependencies = [
 
 [[package]]
 name = "foundation"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "proptest",
@@ -2588,6 +2587,12 @@ dependencies = [
  "http-body",
  "pin-project-lite",
 ]
+
+[[package]]
+name = "http-range"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21dec9db110f5f872ed9699c3ecf50cf16f423502706ba5c72462e28d3157573"
 
 [[package]]
 name = "httparse"
@@ -3355,6 +3360,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "libwebp-sys"
+version = "0.9.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54cd30df7c7165ce74a456e4ca9732c603e8dc5e60784558c1c6dc047f876733"
+dependencies = [
+ "cc",
+ "glob",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.4.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3580,7 +3595,7 @@ dependencies = [
 
 [[package]]
 name = "modules-crm"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3597,7 +3612,7 @@ dependencies = [
 
 [[package]]
 name = "modules-currency"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "foundation",
  "oz-core",
@@ -3613,7 +3628,7 @@ dependencies = [
 
 [[package]]
 name = "modules-giftcards"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "foundation",
@@ -3626,7 +3641,7 @@ dependencies = [
 
 [[package]]
 name = "modules-inventory"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3643,7 +3658,7 @@ dependencies = [
 
 [[package]]
 name = "modules-kitchen"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "foundation",
@@ -3656,7 +3671,7 @@ dependencies = [
 
 [[package]]
 name = "modules-loyalty"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3673,7 +3688,7 @@ dependencies = [
 
 [[package]]
 name = "modules-promotions"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "foundation",
@@ -3686,7 +3701,7 @@ dependencies = [
 
 [[package]]
 name = "modules-purchasing"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "foundation",
@@ -3699,7 +3714,7 @@ dependencies = [
 
 [[package]]
 name = "modules-reporting"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3716,7 +3731,7 @@ dependencies = [
 
 [[package]]
 name = "modules-sales"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3733,7 +3748,7 @@ dependencies = [
 
 [[package]]
 name = "modules-settings"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3750,7 +3765,7 @@ dependencies = [
 
 [[package]]
 name = "modules-staff"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3768,7 +3783,7 @@ dependencies = [
 
 [[package]]
 name = "modules-tax"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3785,7 +3800,7 @@ dependencies = [
 
 [[package]]
 name = "modules-terminal"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4322,7 +4337,7 @@ dependencies = [
 
 [[package]]
 name = "oz-api"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -4349,22 +4364,16 @@ dependencies = [
 
 [[package]]
 name = "oz-cli"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "argon2",
  "chrono",
  "clap",
  "csv",
- "embed-resource 2.5.2",
+ "embed-resource",
  "foundation",
  "oz-core",
- "oz-hal",
- "oz-logging",
- "oz-lua",
- "oz-payment",
- "oz-reporting",
- "oz-security",
  "rand 0.8.6",
  "rusqlite",
  "serde",
@@ -4377,14 +4386,14 @@ dependencies = [
 
 [[package]]
 name = "oz-cloud-server"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "axum 0.8.9",
  "bytes",
  "chrono",
  "console-subscriber",
  "deadpool-postgres",
- "embed-resource 2.5.2",
+ "embed-resource",
  "hex",
  "hmac 0.12.1",
  "http-body-util",
@@ -4392,9 +4401,9 @@ dependencies = [
  "oz-api",
  "oz-core",
  "oz-logging",
- "oz-media",
  "platform-sync",
  "prometheus",
+ "redis",
  "rusqlite",
  "rustls",
  "rustls-native-certs",
@@ -4415,7 +4424,7 @@ dependencies = [
 
 [[package]]
 name = "oz-core"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "aead",
  "aes-gcm",
@@ -4431,9 +4440,7 @@ dependencies = [
  "modules-currency",
  "modules-inventory",
  "modules-loyalty",
- "modules-reporting",
  "modules-sales",
- "modules-settings",
  "modules-staff",
  "modules-tax",
  "modules-terminal",
@@ -4458,7 +4465,7 @@ dependencies = [
 
 [[package]]
 name = "oz-crypto"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -4471,7 +4478,7 @@ dependencies = [
 
 [[package]]
 name = "oz-hal"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "async-trait",
  "oz-core",
@@ -4485,7 +4492,7 @@ dependencies = [
 
 [[package]]
 name = "oz-logging"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "chrono",
  "filetime",
@@ -4500,36 +4507,29 @@ dependencies = [
 
 [[package]]
 name = "oz-lua"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "mlua",
- "oz-core",
  "serde",
  "serde_json",
- "tempfile",
  "thiserror 1.0.69",
  "tracing",
 ]
 
 [[package]]
 name = "oz-media"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "async-trait",
- "chrono",
- "foundation",
  "image",
- "serde",
- "serde_json",
  "sha2 0.10.9",
  "thiserror 1.0.69",
  "tokio",
- "uuid",
 ]
 
 [[package]]
 name = "oz-notification"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "async-trait",
  "foundation",
@@ -4544,12 +4544,11 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
- "wiremock",
 ]
 
 [[package]]
 name = "oz-payment"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -4570,11 +4569,10 @@ dependencies = [
 
 [[package]]
 name = "oz-plugin"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "chrono",
  "mlua",
- "oz-core",
  "oz-lua",
  "regex",
  "rusqlite",
@@ -4585,19 +4583,19 @@ dependencies = [
  "thiserror 1.0.69",
  "toml 0.8.2",
  "tracing",
- "walkdir",
  "zip 2.4.2",
 ]
 
 [[package]]
 name = "oz-pos-app"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "chrono",
  "foundation",
  "hex",
  "hmac 0.12.1",
+ "image",
  "lettre",
  "modules-crm",
  "modules-currency",
@@ -4613,8 +4611,6 @@ dependencies = [
  "oz-hal",
  "oz-logging",
  "oz-lua",
- "oz-media",
- "oz-payment",
  "oz-plugin",
  "oz-reporting",
  "oz-security",
@@ -4623,6 +4619,7 @@ dependencies = [
  "platform-startup",
  "platform-sync",
  "rand 0.8.6",
+ "reqwest 0.12.28",
  "rusqlite",
  "serde",
  "serde_json",
@@ -4640,11 +4637,12 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "webp",
 ]
 
 [[package]]
 name = "oz-pos-tablet"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4663,13 +4661,13 @@ dependencies = [
  "oz-core",
  "oz-hal",
  "oz-logging",
- "oz-media",
- "oz-payment",
  "oz-reporting",
  "oz-security",
  "platform-core",
  "platform-kernel",
  "platform-startup",
+ "rand 0.8.6",
+ "reqwest 0.12.28",
  "rusqlite",
  "serde",
  "serde_json",
@@ -4678,7 +4676,6 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-opener",
- "tauri-plugin-updater",
  "tauri-plugin-window-state",
  "tempfile",
  "thiserror 1.0.69",
@@ -4689,7 +4686,7 @@ dependencies = [
 
 [[package]]
 name = "oz-reporting"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "chrono",
  "oz-core",
@@ -4702,11 +4699,10 @@ dependencies = [
 
 [[package]]
 name = "oz-security"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "chrono",
  "hex",
- "oz-core",
  "rand 0.8.6",
  "security-framework",
  "serde",
@@ -4948,7 +4944,7 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
 name = "platform-core"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "argon2",
  "chrono",
@@ -4965,7 +4961,7 @@ dependencies = [
 
 [[package]]
 name = "platform-kernel"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "foundation",
@@ -4978,7 +4974,7 @@ dependencies = [
 
 [[package]]
 name = "platform-startup"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5016,7 +5012,7 @@ dependencies = [
 
 [[package]]
 name = "platform-sync"
-version = "0.0.33"
+version = "0.0.34"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -5528,7 +5524,7 @@ version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2e8e8bcc7961af1fdac401278c6a831614941f6164ee3bf4ce61b7edb162207"
 dependencies = [
- "chacha20 0.10.1",
+ "chacha20 0.10.2",
  "getrandom 0.4.3",
  "rand_core 0.10.1",
 ]
@@ -5619,14 +5615,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09d8f99a4090c89cc489a94833c901ead69bfbf3877b4867d5482e321ee875bc"
 dependencies = [
  "arc-swap",
+ "async-trait",
+ "backon",
+ "bytes",
  "combine",
+ "futures",
+ "futures-util",
  "itertools 0.13.0",
  "itoa",
  "num-bigint",
  "percent-encoding",
+ "pin-project-lite",
  "ryu",
  "sha1_smol",
  "socket2 0.5.10",
+ "tokio",
+ "tokio-util",
  "url",
 ]
 
@@ -6792,6 +6796,7 @@ dependencies = [
  "gtk",
  "heck 0.5.0",
  "http",
+ "http-range",
  "jni 0.21.1",
  "libc",
  "log",
@@ -7127,7 +7132,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc65d45c68858bfe420dd29e834b5d15dbecf8a07a8a16cf4d532c7b1f69d4b6"
 dependencies = [
  "dunce",
- "embed-resource 3.0.9",
+ "embed-resource",
  "toml 1.1.2+spec-1.1.0",
 ]
 
@@ -8259,6 +8264,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "webp"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c071456adef4aca59bf6a583c46b90ff5eb0b4f758fc347cea81290288f37ce1"
+dependencies = [
+ "image",
+ "libwebp-sys",
+]
+
+[[package]]
 name = "webpki-root-certs"
 version = "1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8865,16 +8880,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0592e1c9d151f854e6fd382574c3a0855250e1d9b2f99d9281c6e6391af352f1"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "winreg"
-version = "0.52.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a277a57398d4bfa075df44f501a17cfdf8542d224f0d36095a2adc7aee4ef0a5"
-dependencies = [
- "cfg-if",
- "windows-sys 0.48.0",
 ]
 
 [[package]]

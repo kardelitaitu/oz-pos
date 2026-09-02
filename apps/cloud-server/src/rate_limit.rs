@@ -38,6 +38,8 @@ use axum::{
 use tokio::sync::RwLock;
 use tracing::warn;
 
+use crate::redis_backend::RedisBackend;
+
 // ── Rate limit configuration ──────────────────────────────────────
 
 /// Rate limit configuration for a single route.
@@ -166,12 +168,19 @@ type BucketShard = RwLock<HashMap<String, TokenBucket>>;
 /// `RwLock<HashMap>`s, indexed by a hash of the bucket key, so
 /// concurrent requests for different tenants/endpoints never contend
 /// on the same lock.
+///
+/// When [`RateLimiterState::redis`] is `Some` (ADR #43 D4), the limiter
+/// first tries the atomic Redis token-bucket script (shared across all
+/// instances); on a Redis error it falls back to the in-process shards.
 #[derive(Clone)]
 pub struct RateLimiterState {
     /// Per-endpoint key → per-tenant → TokenBucket.
     /// Key format: `"{tenant_id}|{endpoint_key}"`.
     /// One `RwLock` per shard; `shard_for(key)` picks the lock.
     shards: Arc<Vec<Arc<BucketShard>>>,
+    /// Optional Redis backend for cross-instance rate limiting.
+    /// `None` (the default) keeps everything in-process.
+    redis: Option<RedisBackend>,
 }
 
 impl RateLimiterState {
@@ -182,7 +191,33 @@ impl RateLimiterState {
             .collect::<Vec<_>>();
         Self {
             shards: Arc::new(shards),
+            redis: None,
         }
+    }
+
+    /// Create a rate limiter that prefers the given Redis backend for
+    /// cross-instance token buckets (ADR #43 D4), falling back to the
+    /// in-process shards on any Redis error.
+    pub fn with_redis(redis: RedisBackend) -> Self {
+        let mut limiter = Self::new();
+        limiter.redis = Some(redis);
+        limiter
+    }
+
+    /// The optional Redis backend, if configured.
+    pub fn redis(&self) -> Option<&RedisBackend> {
+        self.redis.as_ref()
+    }
+
+    /// Return the shared Redis backend, if any, consuming the reference.
+    pub fn redis_owned(&self) -> Option<RedisBackend> {
+        self.redis.clone()
+    }
+
+    /// Replace the Redis backend (used at startup when it becomes
+    /// available after the limiter is constructed).
+    pub fn set_redis(&mut self, redis: Option<RedisBackend>) {
+        self.redis = redis;
     }
 
     /// Pick the shard lock for a bucket key (stable across calls).
@@ -228,12 +263,30 @@ impl RateLimiterState {
     /// Consume one token from the bucket identified by `key`, creating it on
     /// demand with the given capacity and refill rate. Locks only the shard
     /// that owns `key` (SOTA finding E).
+    ///
+    /// When a Redis backend is configured (ADR #43 D4), the token bucket is
+    /// shared across instances via the atomic Lua script; on any Redis error
+    /// the request falls back to the in-process shard so a Redis outage
+    /// never blocks sync.
     async fn check_keyed(
         &self,
         key: String,
         capacity: u32,
         refill_per_sec: f64,
     ) -> Result<(), f64> {
+        if let Some(redis) = self.redis() {
+            match redis.check_rate_limit(&key, capacity, refill_per_sec).await {
+                Ok(None) => return Ok(()),                        // allowed
+                Ok(Some(retry_after)) => return Err(retry_after), // denied
+                Err(e) => {
+                    // Redis failure — fall through to the in-process bucket
+                    // so a single instance keeps working. Log at debug: a
+                    // full Redis outage would spam the log otherwise.
+                    tracing::debug!(key, error = %e, "Redis rate limiter failed — using in-process");
+                }
+            }
+        }
+
         let shard = self.shard_for(&key);
         let mut buckets = shard.write().await;
         let bucket = buckets

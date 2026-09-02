@@ -4,6 +4,11 @@ import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import purchasingFtl from '@/locales/purchasing.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({ sessionToken: 'tok-test', activeWorkspace: null, logout: vi.fn() }),
+  WorkspaceProvider: ({ children }: { children: import('react').ReactNode }) => <>{children}</>,
+}));
+
 vi.mock('@/api/purchasing', () => ({
   listSuppliers: vi.fn(),
   createSupplier: vi.fn(),
@@ -206,6 +211,7 @@ describe('SuppliersScreen', () => {
     await waitFor(() => {
       expect(mockCreateSupplier).toHaveBeenCalledTimes(1);
       expect(mockCreateSupplier).toHaveBeenCalledWith(
+        'tok-test',
         expect.objectContaining({ code: 'SUP-NEW', name: 'New Co' }),
       );
     });

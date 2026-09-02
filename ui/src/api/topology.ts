@@ -63,6 +63,59 @@ export const loadTopology = (branchId?: string): Promise<TopologyData | null> =>
     branchId !== undefined ? { branchId } : undefined,
   );
 
+// ── Diagram templates (ADR #45 §4.2) ─────────────────────────────
+
+/** Save a diagram template for a branch, replacing any template of that name.
+ *  The payload is the serialized canvas; the backend stores it without running
+ *  the Apply validation gates, because a template is a starting point rather
+ *  than a claim about live configuration. */
+export const saveTopologyTemplate = (
+  sessionToken: string,
+  name: string,
+  payload: unknown,
+  branchId?: string,
+): Promise<void> =>
+  loggedInvoke<void>('save_topology_template', {
+    sessionToken,
+    name,
+    payload,
+    ...(branchId !== undefined ? { branchId } : {}),
+  });
+
+/** Load one diagram template, or `null` when it never existed or is unreadable. */
+export const loadTopologyTemplate = (
+  sessionToken: string,
+  name: string,
+  branchId?: string,
+): Promise<unknown | null> =>
+  loggedInvoke<unknown | null>('load_topology_template', {
+    sessionToken,
+    name,
+    ...(branchId !== undefined ? { branchId } : {}),
+  });
+
+/** Names of a branch's saved templates, sorted for display. */
+export const listTopologyTemplates = (
+  sessionToken: string,
+  branchId?: string,
+): Promise<string[]> =>
+  loggedInvoke<string[]>('list_topology_templates', {
+    sessionToken,
+    ...(branchId !== undefined ? { branchId } : {}),
+  });
+
+/** Delete one template. Resolves `false` when there was nothing to delete. */
+export const deleteTopologyTemplate = (
+  sessionToken: string,
+  name: string,
+  branchId?: string,
+): Promise<boolean> =>
+  loggedInvoke<boolean>('delete_topology_template', {
+    sessionToken,
+    name,
+    ...(branchId !== undefined ? { branchId } : {}),
+  });
+
 // ── Atomic topology diff (Critical #4) ───────────────────────────
 
 /**

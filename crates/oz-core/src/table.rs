@@ -47,7 +47,7 @@ impl TableStatus {
 /// A restaurant table with position on the floor plan and current status.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Table {
-    /// Unique identifier (UUID v4).
+    /// Unique identifier (UUID v7).
     pub id: String,
     /// Human-readable name (e.g. "Table 1", "Patio A").
     pub name: String,

@@ -163,6 +163,8 @@ export interface RetailModalsProps {
   quickReturnSale: SaleDetail | null;
   quickReturnRefundDone: () => void;
   scanFlash: boolean;
+  /** Scoped session token — enables the product image editor (spec 0046b). */
+  sessionToken?: string;
 }
 
 // ── Component ──────────────────────────────────────────────────────
@@ -192,6 +194,7 @@ export default function RetailModals(props: RetailModalsProps) {
     quickReturnSale,
     quickReturnRefundDone,
     scanFlash,
+    sessionToken,
   } = props;
 
   // ── Panel refs for focus trapping ────────────────────────────
@@ -755,6 +758,7 @@ export default function RetailModals(props: RetailModalsProps) {
         onClose={editProduct.onClose}
         onSave={editProduct.onSave}
         canEditCost={canEditCost}
+        {...(sessionToken ? { sessionToken } : {})}
       />
 
       {/* ── Add Category modal ──────────────── */}

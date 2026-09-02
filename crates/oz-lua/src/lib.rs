@@ -1,8 +1,8 @@
 /*
-last audited 25-07-26 by RSA-Agent (oz-lua slice A: lib deep read)
+last audited DD-MM-YY by DSH-Agent
 crate: oz-lua | status: SAFE | lint: CLEAN
-findings: LUA-2 FIXED — parse_discount_result validates the 0-100 range at the parse site (out-of-range returns None = no discount), sharing the P0-5 contract with the oz-plugin manager path; the only 0-100 range check lives on the oz.apply_discount binding path (P0-5 in oz-plugin manager), so a legacy apply_discount hook returning percent 5000 would flow through apply_discount_in_env unchecked (defense-in-depth gap at the parse site). LUA-3 INFO — detect_overwrites never fires: its warn condition counts duplicate occurrences in the INPUT name list (always 1 for unique names), not actual VM overwrites; the overwrite check is a no-op as written. Sandbox hardening otherwise exemplary: io/loadfile/dofile/require/package/debug/rawget/rawset/rawequal/rawlen/collectgarbage/module/load removed, os reduced to date/time/clock, 10 MiB memory limit, 100K instruction hook, deny(unsafe_code) with documented Send/Sync rationale, MONEY-05 float hand-off documented with regression test
-next: validate percent at parse site; fix or remove detect_overwrites | perf: N/A
+findings: 2 actual unsafe blocks verified — both `unsafe impl Send/Sync for LuaRuntime` with item-scoped #[allow(unsafe_code)] + documented SAFETY rationale (mlua is Send+Sync; LuaRuntime holds an Arc<Mutex<...>>) — crate root #![deny(unsafe_code)] holds. LUA-3 RESOLVED — removed detect_overwrites(): dead code (never called anywhere) whose overwrite detection was a no-op (counted duplicates in the input list, not VM overwrites). LUA-2 already fixed (percent range at parse site). Sandbox hardening verified: io/loadfile/dofile/require/package/debug removed, os reduced, 10 MiB memory cap, 100K instruction hook, MONEY-05 float hand-off documented. Default::default() .expect() is documented-infallible (LuaRuntime::new cannot fail).
+next: none — crate stable | perf: N/A
 */
 
 //! Embedded Lua scripting runtime for OZ-POS.
@@ -250,28 +250,6 @@ impl LuaRuntime {
             self.load_file(&path)?;
         }
         Ok(())
-    }
-
-    /// Check for overwritten global functions and log warnings.
-    pub fn detect_overwrites(&self, known: &[String]) -> Vec<String> {
-        let globals = self.lua.globals();
-        let mut overwritten = Vec::new();
-        for name in known {
-            if let Ok(val) = globals.get::<_, mlua::Value>(name.as_str())
-                && !matches!(val, mlua::Value::Nil)
-            {
-                let count = known.iter().filter(|n| *n == name).count();
-                if count > 1 {
-                    tracing::warn!(
-                        target: "plugin",
-                        "global '{}' was overwritten by a later script",
-                        name
-                    );
-                    overwritten.push(name.clone());
-                }
-            }
-        }
-        overwritten
     }
 
     /// Legacy hook names that new plugins should avoid (use `oz.register_hook` instead).

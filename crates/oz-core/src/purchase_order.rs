@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 /// Monetary fields use integer minor units.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PurchaseOrder {
-    /// Internal row id (UUID v4).
+    /// Internal row id (UUID v7).
     pub id: String,
     /// Human-readable purchase order number (unique).
     pub po_number: String,
@@ -52,7 +52,7 @@ pub struct PurchaseOrder {
 /// Maps 1:1 to the `purchase_order_lines` table.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PurchaseOrderLine {
-    /// Internal row id (UUID v4).
+    /// Internal row id (UUID v7).
     pub id: String,
     /// Foreign key to the parent [`PurchaseOrder`].
     pub po_id: String,

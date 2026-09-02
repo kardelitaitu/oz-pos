@@ -1,10 +1,10 @@
 //! Shared email scheduling & sending logic — used by both desktop-client
 //! and cloud-server.
 /*
-last audited 25-07-26 by RSA-Agent (oz-core slice D1: email_sender deep read)
-crate: oz-core | status: SAFE | lint: CLEAN
-findings: COR-34 LOW: build_smtp_transport falls back to lettre builder_dangerous (plaintext SMTP) when use_tls=false and port!=465 — credentials would traverse the network unencrypted (config-driven admin choice; propose warn-on-save or refuse credentialed plaintext); timezone resolver is a ~20-zone fixed-offset table with NO DST (europe/london documented as UTC approximation — schedule drifts an hour seasonally; chrono-tz would fix); unknown tz falls back to UTC with a warn (COR-21 family); 2-minute send window + same-date dedup means an app closed at send time skips the day (INFO); several mislabeled // SAFETY: comments on constant unwraps (COR-15 pattern)
-next: enforce or warn on plaintext credentialed SMTP (COR-34) | perf: N/A
+last audited DD-MM-YY by DSH-Agent
+crate: oz-core (email_sender) | status: SAFE | lint: CLEAN
+findings: COR-34 FIXED DD-MM-YY — build_smtp_transport now refuses credentialed plaintext SMTP (fail-closed: use_tls=false + port!=465 + creds present → error instead of leaking credentials via builder_dangerous). Timezone resolver is a ~20-zone fixed-offset table with no DST (europe/london ≈ UTC, documented); unknown tz falls back to UTC with a warn (COR-21 family); 2-minute send window + same-date dedup means an app closed at send time skips the day (INFO).
+next: none | perf: N/A
 */
 //!
 //! ## Responsibilities
@@ -73,14 +73,22 @@ pub fn build_smtp_transport(
         };
         Ok(relay.port(config.port).build())
     } else {
+        // COR-34: refuse credentialed plaintext SMTP. A plaintext transport
+        // would carry the SMTP username/password across the network
+        // unencrypted — a real credential leak. If the admin configured
+        // credentials, they must enable TLS (use_tls) or use the implicit-TLS
+        // port 465. Only unauthenticated plaintext (a local unauthenticated
+        // relay) is permitted, matching lettre's `builder_dangerous` intent.
+        if creds.is_some() {
+            return Err(
+                "plaintext SMTP cannot be used with credentials — set use_tls=true or \
+                 use the implicit-TLS port 465 (COR-34)"
+                    .into(),
+            );
+        }
         let builder =
             lettre::AsyncSmtpTransport::<lettre::Tokio1Executor>::builder_dangerous(&config.host)
                 .port(config.port);
-        let builder = if let Some(c) = creds {
-            builder.credentials(c)
-        } else {
-            builder
-        };
         Ok(builder.build())
     }
 }

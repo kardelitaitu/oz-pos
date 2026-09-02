@@ -398,7 +398,7 @@ export default function SalesHistoryScreen() {
     if (!detail) return;
     setPrinting(true);
     try {
-      await printSalesReceipt({
+      await printSalesReceipt(sessionToken!, {
         date: detail.createdAt,
         receiptNumber: detail.id,
         items: detail.lines.map((l): LineItemDto => {

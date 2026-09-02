@@ -34,11 +34,12 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.0.33"
+version = "0.0.34"
 edition = "2024"
 rust-version = "1.88"   # axum/tower-http deps (time 0.3.47+) require ≥ 1.88
 license = "SEE LICENSE IN LICENSE"
 license-file = "LICENSE"
+publish = false
 authors = ["OZ-POS contributors"]
 repository = "https://github.com/kardelitaitu/oz-pos"
 readme = "README.md"
@@ -97,12 +98,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rusqlite = { version = "0.31", features = ["bundled", "backup"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "fs", "net", "io-util", "signal"] }
 async-trait = "0.1"
-async-channel = "2"
 clap = { version = "4", features = ["derive"] }
-embedded-hal = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "v7", "serde"] }
-walkdir = "2"
 axum = { version = "0.8", features = ["macros"] }
 jsonwebtoken = "9"
 tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
@@ -120,21 +118,52 @@ aead = "0.5"
 rand = "0.8"
 tracing-appender = "0.2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "blocking", "gzip", "rustls-tls"] }
+base64 = "0.22"
 hmac = "0.12"
 sha2 = "0.10"
 snow = "0.10"
 hex = "0.4"
+# Cloud HTTP middleware and test utilities
+tower = { version = "0.5", features = ["limit"] }
+http-body-util = "0.1"
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls"] }
+# Cloud sync Postgres transport — one canonical spec for oz-api,
+# platform-sync, and apps/cloud-server (feature-unified at build time).
+tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "with-serde_json-1"] }
+deadpool-postgres = { version = "0.14", features = ["serde"] }
+tokio-postgres-rustls = "0.13"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rustls-native-certs = "0.8"
+prometheus = { version = "0.14", features = ["process"] }
 mlua = { version = "0.9", features = ["lua54", "vendored", "send"] }
 notify = { version = "7", features = [] }
+# Platform-specific FFI — version-only; per-crate features added at the consumer
+windows-sys = { version = "0.59" }
 
 regex = "1"
 mdns-sd = "0.10"
 zip = "2"
 
+# ── Image ingest (spec 0046b) ─────────────────────────────────────────
+# Desktop-client only: the authoring device transcodes product/menu images
+# (decode via `image`, lossy WebP q40 encode via `webp`/libwebp). Tablet
+# renders + downloads only; cloud re-verifies magic + sha-256 only. Neither
+# links these. See docs/specs/_active/0046b-product-menu-images.md §3.3 + §5.6.
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+webp = "0.3"
+
 # Benchmarking
 criterion = { version = "0.5", features = ["html_reports"] }
 console-subscriber = "0.4"
+
+# Shared build-dependencies
+embed-resource = "3"
+
+# Shared dev-dependencies (hoisted for single source of truth)
+tempfile = "3"
+serial_test = "3"
+proptest = "1"
+wiremock = "0.6.5"
 
 # ── Workspace lint policy ─────────────────────────────────────────────
 #

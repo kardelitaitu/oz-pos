@@ -1,8 +1,8 @@
 /*
-last audited 19-07-26 by RSA-Agent; stamp corrected 31-08-26
+last audited DD-MM-YY by DSH-Agent
 crate: oz-hal | status: SAFE | lint: CLEAN
-findings: No actual unsafe blocks present. #![deny(unsafe_code)] (RUST-06): the crate is pure-safe BY CONSTRUCTION, not because drivers are stubbed — the previous stamp here claimed "all device drivers are mocked", which is false. usb_scanner/usb_printer drive real HID endpoints via rusb, serial_scanner/serial_display/bt_scanner/bt_printer bind real ports via serialport (Bluetooth SPP surfaces as a COM port on Windows), and tcp_printer uses tokio::net::TcpStream. What IS absent is the payment terminal: the EDC driver tree lives in crates/oz-payment/src/drivers/edc/ and bypasses this crate's registry, discovery, and mock convention entirely (unification in progress). When a real FFI driver lands, the unsafe block MUST be scoped to that module with a `// SAFETY:` comment and an item-level `#[allow(unsafe_code)]`, keeping the crate root deny in force everywhere else.
-next: SAFETY comments when real FFI drivers are implemented | perf: drivers do deadline-bounded I/O, not zero-alloc mocks
+findings: 0 actual unsafe blocks. #![deny(unsafe_code)] at crate root (RUST-06). Mock driver's .expect("poisoned") calls on Mutex locks are documented as test-double convention (mock always compiled per AGENTS.md). No other production unwrap/expect. Registry uses per-category RwLock with fail-open discovery; all 6 hardware traits have mock implementations. The EDC terminal slot was unified 31-08-26 (closing the bypass). WeightScale discovery gap documented in registry stamp.
+next: WeightScale discovery path still open; otherwise stable | perf: N/A
 */
 // RUST-06: no unsafe code exists today; deny at crate root so any future
 // unsafe addition requires an explicit, narrowly-scoped reviewable allow.

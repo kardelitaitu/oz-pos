@@ -99,6 +99,13 @@ export default function AppShell() {
     }
   });
 
+  // DevToolbar "Lock" button fires app:lock to test the lock screen
+  useEffect(() => {
+    const handler = () => { if (session) setIsLocked(true); };
+    window.addEventListener('app:lock', handler);
+    return () => window.removeEventListener('app:lock', handler);
+  }, [session]);
+
   const handleUnlock = useCallback(() => {
     setIsLocked(false);
   }, []);

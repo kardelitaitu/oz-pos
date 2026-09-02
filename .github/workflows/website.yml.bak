@@ -57,6 +57,10 @@ env:
   # against production; flip the secret to "production" when going live.
   PUBLIC_PADDLE_ENVIRONMENT: ${{ secrets.PUBLIC_PADDLE_ENVIRONMENT || 'sandbox' }}
 
+defaults:
+  run:
+    shell: bash
+
 # CICD-01: least-privilege default — deploys authenticate with the
 # Cloudflare API token, not the GitHub token.
 permissions:
@@ -99,6 +103,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: mozilla/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696 # v0.0.10
       - name: Install system dependencies (portal cargo doc)
+        if: runner.os == 'Linux'
         # platform-startup depends on tauri → gdk-sys (gtk3) and oz-hal
         # depends on serialport → libudev; both must exist even for
         # --no-deps because the workspace members compile to emit docs.
@@ -213,6 +218,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: mozilla/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696 # v0.0.10
       - name: Install system dependencies (portal cargo doc)
+        if: runner.os == 'Linux'
         # platform-startup depends on tauri → gdk-sys (gtk3) and oz-hal
         # depends on serialport → libudev; both must exist even for
         # --no-deps because the workspace members compile to emit docs.

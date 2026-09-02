@@ -8,11 +8,11 @@ import { useState, useCallback, useEffect } from "react";
 import { Localized, useLocalization } from "@fluent/react";
 import { requiredLocalized } from "@/frontend/shared";
 import { useGatewayStatus } from "@/hooks/useGatewayStatus";
-import { useSyncConnection } from "@/hooks/useSyncConnection";
 import { useWorkspaceNav } from "@/hooks/useWorkspaceNav";
 import { useAuth } from "@/contexts/AuthContext";
 import { getOfflineQueueStatusSummaryScoped } from "@/api/offline";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import StatusIcons from "@/components/StatusBar";
 import ThemeToggle from "./ThemeToggle";
 import Tooltip from "./Tooltip";
 import FastPINOverlay from "@/components/FastPINOverlay";
@@ -32,7 +32,6 @@ import "./StatusBar.css";
 export default function StatusBar() {
   const { l10n } = useLocalization();
   const stripeStatus = useGatewayStatus();
-  const syncStatus = useSyncConnection();
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { session } = useAuth();
   const { sessionToken } = useWorkspace();
@@ -56,13 +55,6 @@ export default function StatusBar() {
   const handleOpenFastPIN = useCallback(() => setShowFastPIN(true), []);
   const handleCloseFastPIN = useCallback(() => setShowFastPIN(false), []);
 
-  const connectionLabel = stripeStatus.online
-    ? l10n.getString("status-bar-connected")
-    : l10n.getString("status-bar-disconnected");
-  const connectionDotClass = stripeStatus.online
-    ? "statusbar-dot--online"
-    : "statusbar-dot--offline";
-
   return (
     <>
       {/* ADR #6: Fast user switching overlay */}
@@ -73,19 +65,9 @@ export default function StatusBar() {
         role="status"
         aria-label={requiredLocalized(l10n, "statusbar-app-status-aria")}
       >
-        {/* ── Left segment: connection + version ── */}
+        {/* ── Left segment: unified status icons + gateway + license ── */}
         <div className="statusbar-left">
-          <Tooltip content={connectionLabel} position="top">
-            <div className="statusbar-segment">
-              <span
-                className={`statusbar-dot ${connectionDotClass}`}
-                aria-hidden="true"
-              />
-              <span className="statusbar-version">
-                {requiredLocalized(l10n, "statusbar-version")}
-              </span>
-            </div>
-          </Tooltip>
+          <StatusIcons bare />
 
           {/* P1-3: Conflict count indicator */}
           {conflictCount > 0 && (
@@ -96,34 +78,6 @@ export default function StatusBar() {
               </div>
             </Tooltip>
           )}
-
-          {/* Sync connection dot */}
-          <Tooltip
-            content={l10n.getString(
-              syncStatus.state === 'connected'
-                ? 'status-bar-sync-connected'
-                : syncStatus.state === 'disconnected'
-                  ? 'status-bar-sync-disconnected'
-                  : 'status-bar-sync-checking',
-            )}
-            position="top"
-          >
-            <div className="statusbar-segment">
-              <span
-                className={`statusbar-dot ${
-                  syncStatus.state === 'connected'
-                    ? 'statusbar-dot--online'
-                    : syncStatus.state === 'disconnected'
-                      ? 'statusbar-dot--offline'
-                      : 'statusbar-dot--checking'
-                }`}
-                aria-hidden="true"
-              />
-              <span className="statusbar-gateway-name">
-                {requiredLocalized(l10n, "statusbar-sync-name")}
-              </span>
-            </div>
-          </Tooltip>
 
           {/* Gateway status pill */}
           {stripeStatus.configured && (

@@ -105,12 +105,12 @@ const { invokeMock, defaultImpl, failCommands } = vi.hoisted(() => {
       cmd === 'set_receipt_settings_scoped' || cmd === 'set_store_settings_scoped' ||
       cmd === 'set_default_currency' || cmd === 'set_user_preferences' ||
       cmd === 'set_user_preferences_scoped' ||
-      cmd === 'update_sync_settings' || cmd === 'set_brand_primary_colour' ||
+      cmd === 'update_sync_settings_scoped' || cmd === 'set_brand_primary_colour' ||
       cmd === 'set_brand_store_name'
     ) {
       return Promise.resolve(undefined);
     }
-    if (cmd === 'sync_run') {
+    if (cmd === 'sync_run_scoped') {
       return Promise.resolve({ synced: 0, failed: 0, error: null });
     }
     if (cmd === 'get_backup_status') {
@@ -356,7 +356,7 @@ describe('SettingsPage', () => {
     failCommands.add('set_store_settings_scoped');
     failCommands.add('set_default_currency');
     failCommands.add('set_user_preferences_scoped');
-    failCommands.add('update_sync_settings');
+    failCommands.add('update_sync_settings_scoped');
     failCommands.add('set_brand_primary_colour');
     failCommands.add('set_brand_store_name');
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
@@ -543,10 +543,11 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('treeitem', { name: /operations/i }));
     fireEvent.click(screen.getByRole('treeitem', { name: /cloud sync/i }));
 
-    // TEMPORARILY DISABLED (2026-08-16): no local-Docker pre-fill while
-    // testing against the deployed cloud server.
-    expect(screen.getByLabelText(/server url/i)).toHaveValue('');
-    expect(screen.getByRole('switch', { name: /toggle/i })).not.toBeChecked();
+    // Sync pre-fills the deployed cloud server URL so an unconfigured
+    // device has a usable target (cloud server draft default).
+    expect(screen.getByLabelText(/server url/i)).toHaveValue('https://license.ozpos.my.id');
+    expect(screen.getByRole('switch', { name: /toggle/i })).toBeChecked();
+    expect(screen.getByRole('switch', { name: /toggle/i })).toBeChecked();
   });
 
   // ── About section ────────────────────────────────────────────
@@ -808,7 +809,7 @@ describe('SettingsPage', () => {
   it('shows loading state on Save button while saving', async () => {
     // Make a save command hang to keep saving=true.
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd.startsWith('set_') || cmd === 'update_sync_settings') {
+      if (cmd.startsWith('set_') || cmd === 'update_sync_settings_scoped') {
         return new Promise(() => {});
       }
       return defaultImpl(cmd);
@@ -911,7 +912,7 @@ describe('SettingsPage', () => {
     expect(apiKeyInput).toHaveValue('sk-xyz789');
 
     // Make sync save fail while all other saves succeed.
-    failCommands.add('update_sync_settings');
+    failCommands.add('update_sync_settings_scoped');
 
     const saveBtn = screen.getByRole('button', { name: /save settings/i });
     fireEvent.click(saveBtn);
@@ -932,7 +933,7 @@ describe('SettingsPage', () => {
     });
     navigateToSync();
 
-    failCommands.add('update_sync_settings');
+    failCommands.add('update_sync_settings_scoped');
 
     const saveBtn = screen.getByRole('button', { name: /save settings/i });
     fireEvent.click(saveBtn);

@@ -298,10 +298,18 @@ staff-login-license-inactive = License inactive
 statusbar-conflict-count = { $count } sync conflict(s) resolved
 # SYNC-12: StatusBar visible labels + ARIA (localized at the render boundary)
 statusbar-app-status-aria = Application status
-statusbar-version = v0.0.33
+statusbar-version = v0.0.34
 statusbar-sync-name = Sync
 statusbar-gateway-name = Stripe
 statusbar-license = Proprietary License
+# Unified status area (activation screen): auth / sync / version icons
+statusbar-group-aria = Connection and version status
+statusbar-version-label = Version
+statusbar-checking-msg = { $name } · Checking…
+statusbar-offline-msg = { $name } · Offline
+statusbar-latency-msg = { $name } · { $ms }ms
+statusbar-version-latest-msg = Version up to date
+statusbar-version-update-msg = Update available
 
 # Audit Action Labels
 audit-action-sale-void = Void Sale

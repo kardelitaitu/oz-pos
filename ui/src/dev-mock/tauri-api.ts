@@ -1974,6 +1974,11 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'create_product_variant': () => ({ sku: 'VAR-NEW' }),
   'update_product_variant': () => ({ sku: 'VAR-UPD' }),
   'delete_product_variant': () => null,
+  'list_product_variants_scoped': () => [],
+  'get_product_variant_scoped': () => null,
+  'create_product_variant_scoped': () => ({ sku: 'VAR-NEW' }),
+  'update_product_variant_scoped': () => ({ sku: 'VAR-UPD' }),
+  'delete_product_variant_scoped': () => null,
 
   // ═══════════════════════════════════════════════════════════════
   // CATEGORIES
@@ -2613,6 +2618,9 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'get_supplier': () => null,
   'create_supplier': () => null,
   'update_supplier': () => null,
+  'get_supplier_scoped': () => null,
+  'create_supplier_scoped': () => null,
+  'update_supplier_scoped': () => null,
   'list_purchase_orders': () => [
     { id: 'po-1', po_number: 'PO-001', supplier_id: 'supplier-1', supplier_name: 'PT Teknologi Maju', status: 'pending', order_date: new Date().toISOString(), expected_date: new Date(Date.now() + 86400000).toISOString(), received_date: null, subtotal_minor: 5000000, tax_minor: 0, total_minor: 5000000, notes: '', created_by: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), lines: [{ id: 'po-line-1', po_id: 'po-1', sku: 'CPU-R7-7800X3D', product_name: 'AMD Ryzen 7 7800X3D 8-Core', qty: 2, unit_cost_minor: 2500000, line_total_minor: 5000000 }] },
   ],
@@ -2623,6 +2631,11 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'create_purchase_order': () => null,
   'update_po_status': () => null,
   'receive_purchase_order': () => null,
+  'get_purchase_order_scoped': () => null,
+  'create_purchase_order_scoped': () => null,
+  'update_po_status_scoped': () => null,
+  'receive_purchase_order_scoped': () => null,
+  'receive_purchase_order_with_lines_scoped': () => null,
 
   // ═══════════════════════════════════════════════════════════════
   // REPORTS
@@ -2990,6 +3003,14 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'top_up_gift_card': () => null,
   'freeze_gift_card': () => null,
   'unfreeze_gift_card': () => null,
+  'issue_gift_card_scoped': () => null,
+  'get_gift_card_scoped': () => null,
+  'list_gift_cards_scoped': () => [],
+  'get_gift_card_balance_scoped': () => null,
+  'redeem_gift_card_scoped': () => null,
+  'top_up_gift_card_scoped': () => null,
+  'freeze_gift_card_scoped': () => null,
+  'unfreeze_gift_card_scoped': () => null,
 
   // ═══════════════════════════════════════════════════════════════
   // BUNDLES
@@ -3008,11 +3029,29 @@ const handlers: Record<string, (args: unknown) => unknown> = {
       ],
     },
   ],
+  'list_bundles_scoped': () => [
+    {
+      bundle: {
+        id: 'bundle-1', bundle_sku: 'BNDL-PC-1', name: 'PC Starter Bundle',
+        description: 'CPU + RAM + SSD combo', bundle_price_minor: 11500000, currency: 'IDR',
+        active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      },
+      items: [
+        { id: 'bundle-item-1', bundle_id: 'bundle-1', sku: 'CPU-R5-7600', qty: 1, unit_price_minor: 3150000 },
+        { id: 'bundle-item-2', bundle_id: 'bundle-1', sku: 'RAM-D5-32GB-CR', qty: 1, unit_price_minor: 1850000 },
+      ],
+    },
+  ],
   'get_bundle': () => null,
+  'get_bundle_scoped': () => null,
   'create_bundle': () => null,
+  'create_bundle_scoped': () => null,
   'update_bundle': () => null,
+  'update_bundle_scoped': () => null,
   'delete_bundle': () => null,
+  'delete_bundle_scoped': () => null,
   'lookup_bundle_by_sku': () => null,
+  'lookup_bundle_by_sku_scoped': () => null,
 
   // ═══════════════════════════════════════════════════════════════
   // HARDWARE

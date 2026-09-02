@@ -46,57 +46,63 @@ export interface CreatePromotionArgs {
   category_id?: string | null;
 }
 
+// ── Promotion API (session-scoped — ADR #7) ───────────────────────────
+
 /** List all promotions. */
-export const listPromotions = (): Promise<Promotion[]> =>
-  loggedInvoke<Promotion[]>('list_promotions');
+export const listPromotions = (sessionToken: string): Promise<Promotion[]> =>
+  loggedInvoke<Promotion[]>('list_promotions_scoped', { sessionToken });
+
+/** Get a single promotion by its identifier. */
+export const getPromotion = (sessionToken: string, id: string): Promise<Promotion | null> =>
+  loggedInvoke<Promotion | null>('get_promotion_scoped', { sessionToken, id });
+
+/** Create a new promotion. */
+export const createPromotion = (sessionToken: string, args: CreatePromotionArgs): Promise<Promotion> =>
+  loggedInvoke<Promotion>('create_promotion_scoped', { sessionToken, args });
+
+/** Update an existing promotion. */
+export const updatePromotion = (sessionToken: string, promotion: Promotion): Promise<Promotion> =>
+  loggedInvoke<Promotion>('update_promotion_scoped', { sessionToken, promotion });
+
+/** Delete a promotion by its identifier. */
+export const deletePromotion = (sessionToken: string, id: string): Promise<void> =>
+  loggedInvoke<void>('delete_promotion_scoped', { sessionToken, id });
+
+/** Apply a promotion to a sale. */
+export const applyPromotion = (sessionToken: string, saleId: string, promotionId: string): Promise<PromotionApplication> =>
+  loggedInvoke<PromotionApplication>('apply_promotion_scoped', { sessionToken, saleId, promotionId });
+
+/** Get all promotions applied to a given sale. */
+export const getSalePromotions = (sessionToken: string, saleId: string): Promise<PromotionApplication[]> =>
+  loggedInvoke<PromotionApplication[]>('get_sale_promotions_scoped', { sessionToken, saleId });
+
+// ── Scoped aliases (ADR #7) ────────────────────────────────────────────
+// The commands are registered as *_scoped on both shells — production
+// screens must call the *_scoped variants.
 
 /** List promotions (scoped — ADR #7). */
 export const listPromotionsScoped = (sessionToken: string): Promise<Promotion[]> =>
   loggedInvoke<Promotion[]>('list_promotions_scoped', { sessionToken });
 
-/** Get a single promotion by its identifier. */
-export const getPromotion = (id: string): Promise<Promotion | null> =>
-  loggedInvoke<Promotion | null>('get_promotion', { id });
-
 /** Get a promotion (scoped — ADR #7). */
 export const getPromotionScoped = (sessionToken: string, id: string): Promise<Promotion | null> =>
   loggedInvoke<Promotion | null>('get_promotion_scoped', { sessionToken, id });
-
-/** Create a new promotion. */
-export const createPromotion = (userId: string, args: CreatePromotionArgs): Promise<Promotion> =>
-  loggedInvoke<Promotion>('create_promotion', { userId, args });
 
 /** Create a promotion (scoped — ADR #7). */
 export const createPromotionScoped = (sessionToken: string, args: CreatePromotionArgs): Promise<Promotion> =>
   loggedInvoke<Promotion>('create_promotion_scoped', { sessionToken, args });
 
-/** Update an existing promotion. */
-export const updatePromotion = (userId: string, promotion: Promotion): Promise<Promotion> =>
-  loggedInvoke<Promotion>('update_promotion', { userId, promotion });
-
 /** Update a promotion (scoped — ADR #7). */
 export const updatePromotionScoped = (sessionToken: string, promotion: Promotion): Promise<Promotion> =>
   loggedInvoke<Promotion>('update_promotion_scoped', { sessionToken, promotion });
-
-/** Delete a promotion by its identifier. */
-export const deletePromotion = (userId: string, id: string): Promise<void> =>
-  loggedInvoke<void>('delete_promotion', { userId, id });
 
 /** Delete a promotion (scoped — ADR #7). */
 export const deletePromotionScoped = (sessionToken: string, id: string): Promise<void> =>
   loggedInvoke<void>('delete_promotion_scoped', { sessionToken, id });
 
-/** Apply a promotion to a sale. */
-export const applyPromotion = (userId: string, saleId: string, promotionId: string): Promise<PromotionApplication> =>
-  loggedInvoke<PromotionApplication>('apply_promotion', { userId, saleId, promotionId });
-
 /** Apply a promotion to a sale (scoped — ADR #7). */
 export const applyPromotionScoped = (sessionToken: string, saleId: string, promotionId: string): Promise<PromotionApplication> =>
   loggedInvoke<PromotionApplication>('apply_promotion_scoped', { sessionToken, saleId, promotionId });
-
-/** Get all promotions applied to a given sale. */
-export const getSalePromotions = (saleId: string): Promise<PromotionApplication[]> =>
-  loggedInvoke<PromotionApplication[]>('get_sale_promotions', { saleId });
 
 /** Get sale promotions (scoped — ADR #7). */
 export const getSalePromotionsScoped = (sessionToken: string, saleId: string): Promise<PromotionApplication[]> =>

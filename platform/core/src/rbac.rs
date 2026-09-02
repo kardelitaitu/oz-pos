@@ -541,6 +541,8 @@ pub mod permissions {
     /// Legacy seed key (create/update/delete) kept byte-identical —
     /// registered in the permission registry (spec 0046).
     pub const CATEGORIES_MANAGE: &str = "categories:manage";
+    /// Read product categories (spec 0047 read-tier map).
+    pub const CATEGORIES_READ: &str = "categories:read";
 
     // ── Plugins ───────────────────────────────────────────────────
     /// Manage plugins (install, enable, disable, remove).
@@ -567,6 +569,14 @@ pub mod permissions {
     // ── Security ─────────────────────────────────────────────────
     /// Rotate at-rest encryption keys and inspect key state.
     pub const SECURITY_MANAGE: &str = "security:manage";
+
+    // ── Reference (global read-tier data, spec 0047) ─────────────
+    /// Read global reference data (tax rates, exchange rates, categories).
+    pub const REFERENCE_READ: &str = "reference:read";
+
+    // ── Plan ─────────────────────────────────────────────────────
+    /// Read tier plan information.
+    pub const PLAN_READ: &str = "plan:read";
 
     // ── Data ─────────────────────────────────────────────────────
     /// Create a full data backup (bulk export of all records).

@@ -1,7 +1,7 @@
 /*
-last audited 25-07-26 by RSA-Agent (oz-notification slice A: verified)
+last audited DD-MM-YY by DSH-Agent
 crate: oz-notification | status: SAFE | lint: CLEAN
-findings: clean — mock unwraps are test-support locks only
+findings: 0 production unsafe blocks — the only unsafe is test-only std::env::set_var/remove_var in whatsapp_tests.rs (serial_test-gated, SAFETY documented). Production lock().unwrap() confined to mock.rs (documented test-double pattern). Verified webhook HMAC verification (whatsapp.rs:328) and mock driver. No defects found.
 next: none | perf: N/A
 */
 //! WhatsApp Cloud API notification client for OZ-POS.

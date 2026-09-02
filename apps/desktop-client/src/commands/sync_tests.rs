@@ -27,17 +27,16 @@ fn sync_settings_no_url_disabled() {
 }
 #[cfg(debug_assertions)]
 #[test]
-fn sync_probe_never_uses_local_dev_server_while_cloud_testing() {
-    // TEMPORARILY DISABLED (2026-08-16): the local-Docker fallback is
-    // commented out while testing against the deployed cloud server, so
-    // an unconfigured sync stays unconfigured — the probe resolves None
-    // regardless of the allow_local_fallback flag.
+fn sync_probe_falls_back_to_cloud_url_when_unconfigured() {
+    // With the cloud fallback re-enabled, an unconfigured sync resolves
+    // to the cloud server URL so the login-screen indicator works.
     let resolved = resolve_sync_probe_url(None, None, true);
-    assert_eq!(resolved.as_deref(), None);
+    assert_eq!(resolved.as_deref(), Some("https://license.ozpos.my.id"));
     assert_eq!(
         resolve_sync_probe_url(None, Some(String::new()), true).as_deref(),
-        None
+        Some("https://license.ozpos.my.id")
     );
+    // Explicit allow_local_fallback = false still returns None (production).
     assert_eq!(resolve_sync_probe_url(None, None, false), None);
 }
 

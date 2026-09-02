@@ -24,6 +24,10 @@ env:
   RUSTFLAGS: -D warnings
   SCCACHE_GHA_ENABLED: "true"
 
+defaults:
+  run:
+    shell: bash
+
 # CICD-01: least-privilege default; jobs that read GHCR images grant
 # packages: read in their own blocks.
 permissions:
@@ -95,6 +99,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -180,6 +185,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'ui/package-lock.json'
       - name: Install system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -301,6 +307,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -326,7 +333,7 @@ jobs:
   # ── Release: Desktop (Windows MSI) ───────────────────────────────
   release-desktop-windows:
     name: Release Desktop (Windows)
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -481,6 +488,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \

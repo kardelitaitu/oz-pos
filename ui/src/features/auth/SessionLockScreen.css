@@ -7,6 +7,17 @@
  *   2. Same visual language as login: accent radial gradient, elevated
  *      3-section card, square keypad keys, dot-pop / shake / error-fade.
  *   3. Design tokens only — never hardcoded colours.
+ *
+ * KEYPAD PARITY — the contract this file exists to protect:
+ *   The lock card is a structural clone of the login PIN card, band for
+ *   band: dots in the top band, the keypad ALONE in the main band, and an
+ *   empty spacer in the bottom band. Because the card is the same size and
+ *   is centred the same way, the keypad lands on the same box as login's,
+ *   so an operator's muscle memory carries straight across the unlock.
+ *   Anything that could reflow the keypad — the clock, the error banner,
+ *   the lockout countdown — therefore lives OUTSIDE the card, absolutely
+ *   positioned, and contributes nothing to its layout.
+ *   Keep `.session-lock-pad*` in sync with `.staff-login-pad*`.
  * ═══════════════════════════════════════════════════════════════════ */
 
 /* ── Full-viewport overlay ───────────────────────────────────────── */
@@ -41,6 +52,16 @@
   pointer-events: none;
 }
 
+/* ── Stage: card box + absolutely-positioned notice slot ─────────── */
+
+/* The only in-flow child of the overlay, so it shrink-wraps the card and
+   the card stays centred exactly as login's is. The notice slot hangs off
+   its bottom edge without feeding back into the card's height. */
+.session-lock-stage {
+  position: relative;
+  display: flex;
+}
+
 /* ── Card ────────────────────────────────────────────────────────── */
 
 .session-lock-card {
@@ -61,7 +82,7 @@
   overflow: hidden;
 }
 
-/* ── Card: 3 vertical sections (login PIN-step proportions) ──────── */
+/* ── Card: 3 vertical sections (identical to the login PIN step) ─── */
 
 .session-lock-top-bar {
   flex: 1.5 0 0;
@@ -69,7 +90,6 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-1);
   padding: clamp(var(--space-4), 3vw, var(--space-6)) clamp(var(--space-5), 5vw, var(--space-8)) 0;
 }
 
@@ -79,44 +99,32 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-3);
   padding: 0 clamp(var(--space-5), 5vw, var(--space-8));
 }
 
 .session-lock-bottom-bar {
   flex: 1 0 0;
-  /* Empty spacer — reserve breathing room so the keypad never presses
-     against the card's bottom edge. Without a min-height this bar collapses
-     to 0px: flex min-height:auto lets the content-driven top-bar and
-     main-area (keypad) grab the full card height, leaving the last key row
-     flush with the card edge (was a 1px gap). The login screen's bottom bar
-     holds the step-dots so it never collapses; this one is aria-hidden. */
-  min-height: clamp(var(--space-4), 4vh, var(--space-6));
+  /* Deliberately empty and content-free. Login's bottom band holds ~8px of
+     step dots; anything we put here steals height from the main band and
+     slides the keypad off its login-matching box. Notices live in
+     `.session-lock-notice` instead. */
 }
 
-/* Short viewports (landscape tablet / small laptop): shrink the card so
-   the fixed footer never overlaps the keypad area. */
-@media (max-height: 640px) {
-  .session-lock-card {
-    min-height: 28rem;
-  }
+/* ── Viewport header: clock + date (outside the card) ────────────── */
 
-  .session-lock-top-bar {
-    padding-top: var(--space-2);
-  }
-}
+.session-lock-header {
+  position: absolute;
+  top: clamp(var(--space-5), 5vh, var(--space-8));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
 
-/* ── Top bar content: lock icon + clock ──────────────────────────── */
-
-.session-lock-icon {
-  color: var(--color-accent);
-  opacity: 0.85;
-  margin-bottom: var(--space-1);
-}
-
-.session-lock-icon svg {
-  width: clamp(36px, 8vw, 48px);
-  height: clamp(36px, 8vw, 48px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  text-align: center;
+  pointer-events: none;
 }
 
 .session-lock-time {
@@ -129,15 +137,87 @@
 }
 
 .session-lock-date {
-  font-size: var(--text-sm);
+  font-size: clamp(var(--text-sm), 1.6vw, var(--text-md));
   color: var(--color-fg-secondary);
 }
 
-/* ── Sub hint ────────────────────────────────────────────────────── */
+/* Short viewports (landscape tablet / small laptop): the card fills most of
+   the height, so the header tightens up — then collapses to a single compact
+   line — instead of competing with the keypad for room. */
+@media (max-height: 760px) {
+  .session-lock-header {
+    top: var(--space-3);
+    gap: 0;
+  }
 
-.session-lock-sub {
-  font-size: var(--text-sm);
-  color: var(--color-fg-secondary);
+  .session-lock-time {
+    font-size: var(--text-3xl);
+  }
+
+  .session-lock-date {
+    font-size: var(--text-xs);
+  }
+}
+
+@media (max-height: 640px) {
+  .session-lock-header {
+    flex-direction: row;
+    align-items: baseline;
+    gap: var(--space-3);
+    top: var(--space-2);
+  }
+
+  .session-lock-notice {
+    padding-top: var(--space-2);
+  }
+}
+
+/* ── Lock badge: card-corner counterpart of login's close button ─── */
+
+.session-lock-lock-badge {
+  position: absolute;
+  top: clamp(var(--space-2), 2vw, var(--space-3));
+  left: clamp(var(--space-2), 2vw, var(--space-3));
+  z-index: 1;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-md);
+
+  color: var(--color-accent);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.session-lock-lock-badge svg {
+  width: clamp(18px, 2.6vw, 22px);
+  height: clamp(18px, 2.6vw, 22px);
+}
+
+@media (pointer: coarse) {
+  .session-lock-lock-badge {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+}
+
+/* ── Notice slot: error + lockout countdown (outside the card) ───── */
+
+.session-lock-notice {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: clamp(var(--space-3), 2.5vh, var(--space-5));
+  pointer-events: none;
 }
 
 /* ── PIN dots ────────────────────────────────────────────────────── */
@@ -260,17 +340,20 @@
 
   font-size: clamp(var(--text-lg), 3.5vw, var(--text-2xl));
   font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
 
+  /* Same surface + radius as login's keys, so the panel that survives the
+     unlock is visually the panel the operator pressed to get here. */
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-surface);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
   color: var(--color-fg);
 
   cursor: pointer;
   transition:
-    background var(--duration-100) var(--ease-out),
-    border-color var(--duration-100) var(--ease-out),
-    transform var(--duration-100) var(--ease-out);
+    background var(--duration-120) var(--ease-out),
+    border-color var(--duration-120) var(--ease-out),
+    transform var(--duration-120) var(--ease-out);
 
   user-select: none;
   -webkit-tap-highlight-color: transparent;
@@ -278,14 +361,14 @@
 }
 
 .session-lock-pad-key:hover:not(:disabled) {
-  background: var(--color-bg-hover);
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 1px var(--color-accent-alpha);
+  background: var(--color-bg-surface);
+  border-color: var(--color-border-hover);
 }
 
 .session-lock-pad-key:active:not(:disabled) {
-  transform: scale(0.93);
+  transform: scale(0.95);
   background: var(--color-accent-subtle);
+  border-color: var(--color-accent);
 }
 
 .session-lock-pad-key:focus-visible {

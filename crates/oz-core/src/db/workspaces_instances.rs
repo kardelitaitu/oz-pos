@@ -87,14 +87,11 @@ impl Store<'_> {
         {
             // Phase 2: check user_store_access for multi-store enforcement.
             if let Some(uid) = user_id {
-                let has_store_access_rows: bool = self
-                    .conn
-                    .query_row(
-                        "SELECT COUNT(*) > 0 FROM user_store_access WHERE user_id = ?1",
-                        params![uid],
-                        |row| row.get(0),
-                    )
-                    .unwrap_or(false);
+                let has_store_access_rows: bool = self.conn.query_row(
+                    "SELECT COUNT(*) > 0 FROM user_store_access WHERE user_id = ?1",
+                    params![uid],
+                    |row| row.get(0),
+                )?;
 
                 if has_store_access_rows {
                     let store_accessible: bool = self
@@ -103,8 +100,7 @@ impl Store<'_> {
                             "SELECT COUNT(*) > 0 FROM user_store_access WHERE user_id = ?1 AND store_id = ?2",
                             params![uid, store_id],
                             |row| row.get(0),
-                        )
-                        .unwrap_or(false);
+                        )?;
 
                     if !store_accessible {
                         return Ok(vec![]); // User has no access to this store
@@ -427,14 +423,11 @@ impl Store<'_> {
             || role_id == "auditor"
         {
             // Check if user has explicit store access rows (multi-store mode, ADR #4 Phase 2).
-            let has_store_access: bool = self
-                .conn
-                .query_row(
-                    "SELECT COUNT(*) > 0 FROM user_store_access WHERE user_id = ?1",
-                    params![user_id],
-                    |row| row.get(0),
-                )
-                .unwrap_or(false);
+            let has_store_access: bool = self.conn.query_row(
+                "SELECT COUNT(*) > 0 FROM user_store_access WHERE user_id = ?1",
+                params![user_id],
+                |row| row.get(0),
+            )?;
 
             if has_store_access {
                 // Multi-store mode: user must have access to this specific store.
@@ -444,8 +437,7 @@ impl Store<'_> {
                         "SELECT COUNT(*) > 0 FROM user_store_access WHERE user_id = ?1 AND store_id = ?2",
                         params![user_id, store_id],
                         |row| row.get(0),
-                    )
-                    .unwrap_or(false);
+                    )?;
                 if !store_accessible {
                     return Ok(false);
                 }
@@ -458,8 +450,7 @@ impl Store<'_> {
                     "SELECT COUNT(*) > 0 FROM workspace_instances WHERE id = ?1 AND store_id = ?2 AND status = 'active'",
                     params![instance_id, store_id],
                     |row| row.get(0),
-                )
-                .unwrap_or(false);
+                )?;
             return Ok(exists);
         }
 
@@ -470,27 +461,23 @@ impl Store<'_> {
                 "SELECT COUNT(*) > 0 FROM user_workspace_instances WHERE user_id = ?1 AND instance_id = ?2",
                 params![user_id, instance_id],
                 |row| row.get(0),
-            )
-            .unwrap_or(false);
+            )?;
 
         if has_explicit {
             return Ok(true);
         }
 
         // 3. Fall back to role-based type access.
-        let has_role_access: bool = self
-            .conn
-            .query_row(
-                "SELECT COUNT(*) > 0 FROM workspace_instances wi
+        let has_role_access: bool = self.conn.query_row(
+            "SELECT COUNT(*) > 0 FROM workspace_instances wi
                  JOIN role_workspace_types rwt ON wi.type_key = rwt.type_key
                  WHERE wi.id = ?1
                    AND wi.store_id = ?2
                    AND wi.status = 'active'
                    AND rwt.role_id = ?3",
-                params![instance_id, store_id, role_id],
-                |row| row.get(0),
-            )
-            .unwrap_or(false);
+            params![instance_id, store_id, role_id],
+            |row| row.get(0),
+        )?;
 
         Ok(has_role_access)
     }

@@ -10,6 +10,8 @@ import { l10nErrorMessage } from '@/utils/app-error';
 
 /** Props for the IssueGiftCardModal component. */
 export interface IssueGiftCardModalProps {
+  /** Session token for authentication. */
+  sessionToken: string;
   /** Callback invoked when the modal is dismissed without issuing. */
   onClose: () => void;
   /** Callback invoked after a gift card has been successfully issued. */
@@ -17,7 +19,7 @@ export interface IssueGiftCardModalProps {
 }
 
 /** Issue gift card modal dialog — form for creating a new gift card with number, initial amount, PIN, and recipient details. */
-export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardModalProps) {
+export default function IssueGiftCardModal({ sessionToken, onClose, onIssued }: IssueGiftCardModalProps) {
   const { l10n } = useLocalization();
   const ANIM_MS = animDuration(200);
   const [exiting, setExiting] = useState(false);
@@ -75,7 +77,7 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
         created_by: 'staff',
         pin: pin.trim() || null,
       };
-      await issueGiftCard(input);
+      await issueGiftCard(sessionToken, input);
       onIssued();
     } catch (err) {
       setError(l10nErrorMessage(err, l10n, 'gift-cards-error-issue'));

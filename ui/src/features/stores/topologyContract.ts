@@ -1,6 +1,6 @@
 import type { TopologyNodeData, TopologyWireData } from './NodeTopologyEditor';
 import topologySemantics from './topologySemantics.json';
-import { isSemanticWireCompatible } from './topologyCard';
+import { isSemanticWireCompatible, nodeKindToken, pairingAdmitsKinds } from './topologyCard';
 import type { SemanticPortId } from './topologyCard';
 
 type TopologyNodeInput = TopologyNodeData & { storeProfileId?: string };
@@ -467,46 +467,22 @@ function locationWires(graph: SemanticTopologyGraph): SemanticTopologyWire[] {
   return graph.wires.filter((wire) => wire.relationshipType === 'location');
 }
 
-/** Match the node capabilities behind the semantic port matrix. Port ids
- *  alone are not enough at the Apply boundary: a forged ticket-out on a
- *  Store POS must not become a valid KDS ticket feed. */
+/** Match the node kinds behind the semantic port matrix. Port ids alone are
+ *  not enough at the Apply boundary: a forged ticket-out on a Store POS must
+ *  not become a valid KDS ticket feed. Since ADR #45 this delegates to the
+ *  contract's own `endpoints` lists instead of re-stating them here, so the
+ *  gate that offered a wire and the gate that accepts it read one rule. */
 function semanticNodesMatchWire(
   wire: SemanticTopologyWire,
   fromNode: SemanticTopologyNode,
   toNode: SemanticTopologyNode,
 ): boolean {
-  const fromTypeKey = fromNode.typeKey ?? 'store-pos';
-  const toTypeKey = toNode.typeKey ?? 'store-pos';
-  switch (`${wire.fromPortId}|${wire.toPortId}|${wire.relationshipType}`) {
-    case 'stock-out|stock-in|stock-routing':
-      return toNode.kind === 'warehouse'
-        && ((fromNode.kind === 'workspace'
-          && ['store-pos', 'restaurant-pos'].includes(fromTypeKey))
-          || fromNode.kind === 'warehouse');
-    case 'transfer-out|transfer-in|inventory-transfer':
-      // Round 82: a warehouse may feed another warehouse (hub-and-spoke).
-      // Workspace sources stay valid for the direct-transfer case.
-      return toNode.kind === 'warehouse'
-        && ((fromNode.kind === 'warehouse')
-          || (fromNode.kind === 'workspace'
-            && ['store-pos', 'restaurant-pos'].includes(fromTypeKey)));
-    case 'ticket-out|ticket-in|ticket-routing':
-      return fromNode.kind === 'workspace'
-        && fromTypeKey === 'kds'
-        && toNode.kind === 'hardware';
-    case 'operation-out|operation-in|generic':
-      return fromNode.kind === 'workspace'
-        && ((fromTypeKey === 'restaurant-pos'
-          && toNode.kind === 'workspace'
-          && toTypeKey === 'kds')
-          || (fromTypeKey === 'store-pos' && toNode.kind === 'warehouse'));
-    case 'device-out|generic-in|hardware-connection':
-      return fromNode.kind === 'hardware' && toNode.kind === 'hardware';
-    case 'generic-out|generic-in|generic':
-      return true;
-    default:
-      return false;
-  }
+  return pairingAdmitsKinds(
+    wire.fromPortId,
+    wire.toPortId,
+    nodeKindToken(fromNode.kind, fromNode.typeKey),
+    nodeKindToken(toNode.kind, toNode.typeKey),
+  );
 }
 
 /** Return one node in a directed cycle, if the graph contains one. */
@@ -652,13 +628,16 @@ export function validateTopologyGraph(
     const fromNode = graph.nodes.find((node) => node.id === wire.fromNodeId);
     const toNode = graph.nodes.find((node) => node.id === wire.toNodeId);
     // Let the dedicated KDS check report invalid-operation-source rather than
-    // replacing it with the broader semantic-connection error.
-    const isKdsOperation = wire.fromPortId === 'operation-out'
+    // replacing it with the broader semantic-connection error — but only for a
+    // feed whose SOURCE is a workspace. Skipping on the target alone meant any
+    // node type could drop an operation-in wire past this gate (ADR #45).
+    const isWorkspaceOperationFeed = wire.fromPortId === 'operation-out'
       && wire.toPortId === 'operation-in'
       && wire.relationshipType === 'generic'
+      && fromNode?.kind === 'workspace'
       && toNode?.kind === 'workspace'
       && toNode.typeKey === 'kds';
-    if (isKdsOperation || !fromNode || !toNode) continue;
+    if (isWorkspaceOperationFeed || !fromNode || !toNode) continue;
     if (!isSemanticWireCompatible(wire.fromPortId, wire.toPortId, wire.relationshipType)
       || !semanticNodesMatchWire(wire, fromNode, toNode)) {
       errors.push({
@@ -832,7 +811,21 @@ export function validateTopologyGraph(
       } else {
         const operationInput = operationInputs[0]!;
         const source = graph.nodes.find((node) => node.id === operationInput.fromNodeId);
-        if (operationInput.fromPortId !== 'operation-out' || source?.typeKey !== 'restaurant-pos') {
+        // ADR #45 follow-up #2: ask the contract which kinds may feed
+        // `operation-in` rather than re-stating "restaurant-pos" here. The port
+        // check stays, because this branch reports a wire-level problem with a
+        // specific message; only the kind test moves to the shared rule. The
+        // old predicate also looked at `source?.typeKey` alone, so a non-
+        // workspace node carrying a `restaurant-pos` typeKey would have passed.
+        const feedAdmitted = source !== undefined
+          && workspace !== undefined
+          && pairingAdmitsKinds(
+            'operation-out',
+            'operation-in',
+            nodeKindToken(source.kind, source.typeKey),
+            nodeKindToken(workspace.kind, workspace.typeKey),
+          );
+        if (operationInput.fromPortId !== 'operation-out' || !feedAdmitted) {
           errors.push({
             code: 'invalid-operation-source',
             messageId: 'topology-validation-invalid-operation-source',
@@ -900,7 +893,22 @@ export function validateTopologyGraph(
     }
     for (const input of operationInputs) {
       const source = graph.nodes.find((node) => node.id === input.fromNodeId);
-      if (source?.kind !== 'workspace' || source.typeKey !== 'store-pos') {
+      // ADR #45 §3 follow-up #2, second half: ask the contract which kinds may
+      // feed `operation-in` on a warehouse instead of re-stating "store-pos"
+      // here. Unlike the KDS variant, this predicate already tested kind
+      // alongside the type key, so it was never wrong — only duplicated, which
+      // is what would eventually let it drift. The port test stays explicit
+      // because `operationInputs` filters on the target port and relationship,
+      // not the source port.
+      const feedAdmitted = source !== undefined
+        && input.fromPortId === 'operation-out'
+        && pairingAdmitsKinds(
+          'operation-out',
+          'operation-in',
+          nodeKindToken(source.kind, source.typeKey),
+          nodeKindToken(warehouse.kind, warehouse.typeKey),
+        );
+      if (!feedAdmitted) {
         errors.push({
           code: 'invalid-warehouse-operation-source',
           messageId: 'topology-validation-invalid-warehouse-operation-source',
@@ -973,5 +981,72 @@ export function validateTopologyGraph(
 export function firstTopologyValidationError(
   errors: TopologyValidationError[],
 ): TopologyValidationError | undefined {
-  return errors[0];
+  return orderTopologyValidationErrors(errors)[0];
+}
+
+/**
+ * ADR #45 §4.3 — the ordering the validation checklist needs.
+ *
+ * `firstTopologyValidationError` used to be `errors[0]`, i.e. whatever the
+ * validator happened to push first. That is not a rule: the validator walks
+ * `Set`s of node ids and object key order, and a saved diagram's node order is
+ * whatever the merchant dragged last. Two merchants with the same problem could
+ * be told to fix different things, and the same merchant reloading the same
+ * graph could see the "next step" move.
+ *
+ * Priority is by what an error makes impossible, not by a guess at merchant
+ * preference — each tier blocks the ones below it:
+ *
+ *  1. the graph cannot be read at all
+ *  2. the graph's shape is structurally impossible
+ *  3. a node or wire is not a legal member of the contract
+ *  4. a node is missing or over-supplied an input
+ *  5. a legal graph exceeds an operational limit
+ *
+ * Codes absent from the table sort last, stably, so adding a code never
+ * silently reorders the ones that are listed.
+ */
+const TOPOLOGY_ERROR_TIER: Readonly<Record<string, number>> = {
+  // 1 — unreadable
+  'unsupported-schema-version': 1,
+  'duplicate-node': 1,
+  'duplicate-wire': 1,
+  'unknown-wire-endpoint': 1,
+  // 2 — structurally impossible
+  'missing-branch-location': 2,
+  'multiple-branch-locations': 2,
+  'branch-location-missing-identity': 2,
+  'cycle-detected': 2,
+  // 3 — not a legal member of the contract
+  'ambiguous-legacy-wire': 3,
+  'invalid-semantic-connection': 3,
+  'invalid-purpose': 3,
+  'invalid-location-connection': 3,
+  'invalid-operation-source': 3,
+  'invalid-warehouse-operation-source': 3,
+  // 4 — wrong number of inputs
+  'missing-operation-input': 4,
+  'multiple-operation-inputs': 4,
+  'missing-location-input': 4,
+  'multiple-location-inputs': 4,
+  'missing-warehouse-input': 4,
+  'multiple-warehouse-inputs': 4,
+  'multiple-ticket-inputs': 4,
+  'warehouse-missing-stock-routing': 4,
+  // 5 — legal but over a limit
+  'warehouse-at-capacity': 5,
+  'warehouse-tier-limit': 5,
+};
+
+const UNRANKED_TIER = Number.MAX_SAFE_INTEGER;
+
+/** Sort validation errors into the order a merchant should be told to fix them
+ *  in. Stable, and never mutates the input. */
+export function orderTopologyValidationErrors(
+  errors: readonly TopologyValidationError[],
+): TopologyValidationError[] {
+  return errors
+    .map((error, index) => ({ error, index, tier: TOPOLOGY_ERROR_TIER[error.code] ?? UNRANKED_TIER }))
+    .sort((a, b) => a.tier - b.tier || a.index - b.index)
+    .map((ranked) => ranked.error);
 }

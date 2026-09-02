@@ -800,17 +800,20 @@ export default function WorkspaceHome() {
     );
   }
 
-  // ── Error state ──────────────────────────────────────────────
+  // ── Main render ─────────────────────────────────────────────
 
-  if (error && availableWorkspaces.length === 0) {
-    return (
-      <div className="workspace-home">
-        <LayerBackground />
-        <div className="ws-layer-content">
-          <div className="ws-header">
-            <LayerFloatingButtons {...floatingProps} />
-          </div>
-          <div className="ws-main">
+  return (
+    <div className="workspace-home" data-testid="workspace-home">
+      <LayerBackground />
+
+      <div className="ws-layer-content">
+        <div className="ws-header">
+          <LayerFloatingButtons {...floatingProps} />
+        </div>
+        <div className="ws-main">
+          <header className="workspace-home-header" />
+
+          {error && sortedWorkspaces.length === 0 ? (
             <div className="workspace-error">
               <div className="workspace-error-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -833,37 +836,7 @@ export default function WorkspaceHome() {
                 <Localized id="workspace-home-retry"><span>Try Again</span></Localized>
               </button>
             </div>
-          </div>
-          <div className="ws-footer" />
-        </div>
-        <ConfirmDialog
-          open={showLogoutModal}
-          onCancel={handleLogoutCancel}
-          onConfirm={handleLogoutConfirm}
-          title={l10n.getString('workspace-home-logout-confirm-title')}
-          message={l10n.getString('workspace-home-logout-confirm-desc')}
-          variant="warning"
-          confirmLabel={l10n.getString('workspace-home-logout-confirm-confirm')}
-          cancelLabel={l10n.getString('workspace-home-logout-confirm-cancel')}
-        />
-      </div>
-    );
-  }
-
-  // ── Main render ─────────────────────────────────────────────
-
-  return (
-    <div className="workspace-home" data-testid="workspace-home">
-      <LayerBackground />
-
-      <div className="ws-layer-content">
-        <div className="ws-header">
-          <LayerFloatingButtons {...floatingProps} />
-        </div>
-        <div className="ws-main">
-          <header className="workspace-home-header" />
-
-          {sortedWorkspaces.length === 0 ? (
+          ) : sortedWorkspaces.length === 0 ? (
             isAdminOrOwner ? (
               <div className="workspace-home-content">
                 <div className="workspace-section">

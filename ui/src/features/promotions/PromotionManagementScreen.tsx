@@ -9,12 +9,12 @@ import {
   type Promotion,
   type CreatePromotionArgs,
 } from '@/api/promotions';
-import { useAuth } from '@/contexts/AuthContext';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized, EmptyState } from '@/frontend/shared';
 import { NoPromotionsIcon } from '@/components/EmptyStateIllustrations';
 import { l10nErrorMessage } from '@/utils/app-error';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -62,7 +62,8 @@ export default function PromotionManagementScreen() {
   const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const deleteModalRef = useRef<HTMLDivElement>(null);
   const promoModalRef = useRef<HTMLDivElement>(null);
-  const { session } = useAuth();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalMode, setModalMode] = useState<ModalMode>(null);
@@ -77,14 +78,14 @@ export default function PromotionManagementScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const items = await listPromotions();
+      const items = await listPromotions(sessionToken);
       setPromotions(items);
     } catch {
       addToast({ message: requiredLocalized(l10n, 'promotions-error-load'), type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [l10n, addToast]);
+  }, [l10n, addToast, sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -126,9 +127,9 @@ export default function PromotionManagementScreen() {
           min_order_minor: form.min_order_minor,
           category_id: form.category_id,
         };
-        await createPromotion(session?.user_id ?? '', args);
+        await createPromotion(sessionToken, args);
       } else {
-        await updatePromotion(session?.user_id ?? '', form);
+        await updatePromotion(sessionToken, form);
       }
       closeModal();
       await load();
@@ -137,30 +138,30 @@ export default function PromotionManagementScreen() {
     } finally {
       setSaving(false);
     }
-  }, [form, modalMode, load, closeModal, addToast, l10n, session?.user_id]);
+  }, [form, modalMode, load, closeModal, addToast, l10n, sessionToken]);
 
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
     setDeleting(deleteTarget.id);
     setDeleteTarget(null);
     try {
-      await deletePromotion(session?.user_id ?? '', deleteTarget.id);
+      await deletePromotion(sessionToken, deleteTarget.id);
       await load();
     } catch (err) {
       addToast({ message: l10nErrorMessage(err, l10n, 'promotions-error-delete'), type: 'error' });
     } finally {
       setDeleting(null);
     }
-  }, [deleteTarget, load, addToast, l10n, session?.user_id]);
+  }, [deleteTarget, load, addToast, l10n, sessionToken]);
 
   const toggleActive = useCallback(async (p: Promotion) => {
     try {
-      await updatePromotion(session?.user_id ?? '', { ...p, active: !p.active });
+      await updatePromotion(sessionToken, { ...p, active: !p.active });
       await load();
     } catch (err) {
       addToast({ message: l10nErrorMessage(err, l10n, 'promotions-error-toggle'), type: 'error' });
     }
-  }, [load, addToast, l10n, session?.user_id]);
+  }, [load, addToast, l10n, sessionToken]);
 
   return (
     <div className="promo-mgmt">

@@ -31,10 +31,10 @@ import {
 describe('terminals.ts IPC contract', () => {
   beforeEach(() => mockInvoke.mockReset());
 
-  it('listTerminals invokes "list_terminals" with no args', async () => {
+  it('listTerminals invokes "list_terminals_scoped" with sessionToken', async () => {
     mockInvoke.mockResolvedValue([]);
-    await listTerminals();
-    expect(mockInvoke).toHaveBeenCalledWith('list_terminals', undefined);
+    await listTerminals('tok');
+    expect(mockInvoke).toHaveBeenCalledWith('list_terminals_scoped', { sessionToken: 'tok' });
   });
 
   it('listTerminalsScoped invokes "list_terminals_scoped" with sessionToken', async () => {

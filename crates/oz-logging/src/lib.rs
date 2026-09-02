@@ -1,7 +1,7 @@
 /*
-last audited 25-07-26 by RSA-Agent (oz-logging slice A: lib deep read; L-1 FIXED 25-07-26)
+last audited DD-MM-YY by DSH-Agent
 crate: oz-logging | status: SAFE | lint: CLEAN
-findings: L-1 FIXED — both file-init functions now retain their tracing_appender WorkerGuard in a process-global FILE_LOG_GUARDS registry (OnceLock<Mutex<Vec<WorkerGuard>>>); the writer previously shut down when the local guard dropped at init exit, killing file logging for the rest of the process. Retained guards live for the process lifetime (OS reclaims at exit — the desired flush window); failed inits do not retain (early ?-return); retained_file_log_guards() exposes the count for tests/ops; 3 new tests incl. a behavioural write-after-init check (all 39+2 oz-logging tests pass). L-2 INFO unchanged — retention cleanup still runs once at startup (documented best-effort). Text/JSON init variants and RUST_LOG fallback clean; eventlog/syslog FFI carries documented SAFETY comments
+findings: 3 actual unsafe blocks verified (syslog: openlog + syslog; eventlog: OutputDebugStringW) — all with SAFETY comments and valid CString/wide-string guards. .expect() calls only in documented-panic wrapper functions (init/init_json/init_with_file/init_json_with_file — mirrored by try_* non-panicking variants). Error type #[non_exhaustive]. File logger guard retention fix (L-1) verified. No defects found.
 next: none | perf: N/A
 */
 //! Structured logging facade for OZ-POS.

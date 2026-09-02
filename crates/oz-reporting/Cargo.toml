@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+publish.workspace = true
 description = "Analytics and CSV export engine for OZ-POS — daily summaries, sales reports, inventory movement."
 
 # Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
@@ -17,7 +18,7 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
-prometheus = { version = "0.14", optional = true, features = ["process"] }
+prometheus = { workspace = true, optional = true }
 
 [features]
 default = []

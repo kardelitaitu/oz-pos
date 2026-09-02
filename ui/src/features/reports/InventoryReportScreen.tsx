@@ -62,7 +62,7 @@ export default function InventoryReportScreen() {
   };
 
   const printReport = async () => {
-    await printSalesReceipt({
+    await printSalesReceipt(sessionToken, {
       date: new Date().toISOString().slice(0, 10),
       receiptNumber: `INV-${Date.now()}`,
       items: items.map((i) => ({

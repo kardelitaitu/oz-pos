@@ -23,7 +23,10 @@ use oz_core::{
         email_sender,
     },
 };
+use serde::Deserialize;
 use tracing::{error, info};
+
+use crate::outbox::{DeliverFuture, SharedSqliteConn, enqueue_sqlite};
 
 // ── Send a single email ──────────────────────────────────────────────
 
@@ -115,17 +118,19 @@ async fn try_send_scheduled(
     db: Arc<tokio::sync::Mutex<rusqlite::Connection>>,
 ) -> Result<(), String> {
     // Scope 1: Read SMTP + schedule config, check schedule.
-    let (smtp_config, schedule, recipients, should_send) = {
+    let (schedule, recipients, should_send) = {
         let conn = db.lock().await;
         let store = Store::new(&conn);
 
-        let smtp_config = match store
+        // SMTP must be configured before anything can be delivered; without
+        // it the enqueued report would just dead-letter.
+        if store
             .get_smtp_config()
             .map_err(|e| format!("DB error: {e}"))?
+            .is_none()
         {
-            Some(c) => c,
-            None => return Ok(()),
-        };
+            return Ok(());
+        }
 
         let schedule = match store
             .get_report_schedule()
@@ -139,12 +144,7 @@ async fn try_send_scheduled(
         let should_send = email_sender::should_send_scheduled(&store, &schedule)
             .map_err(|e| format!("Schedule check failed: {e}"))?;
 
-        (
-            smtp_config,
-            schedule.clone(),
-            schedule.recipients.clone(),
-            should_send,
-        )
+        (schedule.clone(), schedule.recipients.clone(), should_send)
     };
 
     if !should_send {
@@ -165,9 +165,28 @@ async fn try_send_scheduled(
             .map_err(|e| format!("Failed to generate report: {e}"))?
     };
 
-    send_email(&smtp_config, &report, &recipients).await?;
+    // D7 (ADR #43): enqueue the report into the transactional outbox
+    // instead of sending synchronously. The drainer picks it up, reads SMTP
+    // config at delivery time, and sends with retry/backoff/dead-letter.
+    // Recording the sent timestamp here (at enqueue) keeps the scheduler
+    // from re-enqueueing the same period; actual delivery is the drainer's
+    // job.
+    {
+        let conn = db.lock().await;
+        let payload = serde_json::json!({
+            "recipients": recipients,
+            "report": {
+                "subject": report.subject,
+                "html_body": report.html_body,
+                "text_body": report.text_body,
+            },
+        })
+        .to_string();
+        enqueue_sqlite(&conn, "email_report", &payload, 5, 0)
+            .map_err(|e| format!("Failed to enqueue report: {e}"))?;
+    }
 
-    // Record successful send for dedup
+    // Record successful enqueue for dedup
     {
         let conn = db.lock().await;
         let store = Store::new(&conn);
@@ -176,13 +195,68 @@ async fn try_send_scheduled(
     }
 
     info!(
-        "Scheduled report sent to {} recipients (cadence: {}, types: {:?})",
+        "Scheduled report enqueued for delivery to {} recipients (cadence: {}, types: {:?})",
         recipients.len(),
         schedule.cadence,
         schedule.report_types,
     );
 
     Ok(())
+}
+
+/// Deliver an outbox `email_report` entry (ADR #43 D7).
+///
+/// Reads the SMTP config from the store at delivery time (never stored in
+/// the outbox payload), parses the report JSON, and sends. The payload
+/// shape matches what [`try_send_scheduled`] enqueues.
+async fn deliver_email_report(conn: SharedSqliteConn, payload: &str) -> Result<(), String> {
+    #[derive(Deserialize)]
+    struct EmailPayload {
+        recipients: Vec<String>,
+        report: EmailReportShape,
+    }
+    #[derive(Deserialize)]
+    struct EmailReportShape {
+        subject: String,
+        html_body: String,
+        text_body: String,
+    }
+
+    let parsed: EmailPayload =
+        serde_json::from_str(payload).map_err(|e| format!("invalid email payload: {e}"))?;
+
+    let smtp_config = {
+        let db = conn.lock().await;
+        let store = Store::new(&db);
+        store
+            .get_smtp_config()
+            .map_err(|e| format!("DB error: {e}"))?
+            .ok_or_else(|| "SMTP not configured".to_string())?
+    };
+
+    let report = ReportEmail {
+        subject: parsed.report.subject,
+        html_body: parsed.report.html_body,
+        text_body: parsed.report.text_body,
+    };
+
+    send_email(&smtp_config, &report, &parsed.recipients).await
+}
+
+/// Top-level outbox dispatch: route a delivery entry to the correct
+/// topic handler (ADR #43 D7).
+///
+/// The signature matches [`outbox::start_drainer_sqlite`]'s `deliver_fn`
+/// so it can be passed directly as a static function pointer.
+pub fn deliver_outbox_entry(conn: SharedSqliteConn, topic: &str, payload: &str) -> DeliverFuture {
+    let topic = topic.to_owned();
+    let payload = payload.to_owned();
+    Box::pin(async move {
+        match topic.as_str() {
+            "email_report" => deliver_email_report(conn, &payload).await,
+            other => Err(format!("unknown outbox topic: {other}")),
+        }
+    })
 }
 
 /// Send a test report immediately (used by the Tauri desktop client for

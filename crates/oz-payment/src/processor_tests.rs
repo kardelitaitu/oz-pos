@@ -68,7 +68,7 @@ async fn capture_happy_path() {
 #[tokio::test]
 async fn refund_happy_path() {
     let proc = MockPaymentProcessor::new();
-    let result = proc.refund("txn_test_001", None).await.unwrap();
+    let result = proc.refund("txn_test_001", None, None).await.unwrap();
     assert!(result.success);
 }
 

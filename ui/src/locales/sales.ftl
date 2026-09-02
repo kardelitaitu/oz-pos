@@ -903,6 +903,12 @@ retail-col-toggle-btn = Columns
 retail-col-toggle-title = Show / hide columns
 retail-col-toggle-aria = Choose visible columns
 
+# ── Retail view-mode toggle (spec 0046b §3.5) ──
+retail-view-grid-label = Grid
+retail-view-text-label = Text
+retail-view-grid-title = Show products as an image grid
+retail-view-text-title = Show products as a text table
+
 # ── Retail product attributes (ADR #36 D5) ──
 retail-edit-field-cost = Cost (IDR)
 retail-edit-field-unit = Unit
@@ -986,3 +992,20 @@ pos-promotions-selected-count = { $count } selected
 pos-promotions-apply-selected = Apply promotions
 pos-promotions-apply-aria = Apply promotion { $name }
 pos-promotions-unavailable-aria = Promotion { $name } is not applicable
+
+# ── Product image editor (spec 0046b §3.2–3.3) ──
+retail-edit-image-title = Product Images
+retail-edit-image-primary = Primary image
+retail-edit-image-alternatives = Additional images
+retail-edit-image-set = Set Image
+retail-edit-image-set-aria = Choose a new image for { $name }
+retail-edit-image-set-alt-aria = Choose additional image { $slot } for { $name }
+retail-edit-image-replace = Replace
+retail-edit-image-replace-aria = Replace the image for { $name }
+retail-edit-image-clear = Remove
+retail-edit-image-clear-aria = Remove the image for { $name }
+retail-edit-image-clear-alt-aria = Remove additional image { $slot } for { $name }
+retail-edit-image-uploading = Uploading image…
+retail-edit-image-error = Could not update the image. Try again.
+retail-edit-image-menu-note = Menu items always have exactly one image.
+retail-edit-image-alt = { $name } image { $slot }

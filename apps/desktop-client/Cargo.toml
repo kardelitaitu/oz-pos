@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+publish.workspace = true
 description = "OZ-POS desktop and mobile shell (Tauri v2). Bridges oz-core + oz-hal to the React/TypeScript front-end."
 default-run = "oz-pos-app"
 
@@ -24,20 +25,19 @@ tauri-build = { workspace = true }
 
 [dev-dependencies]
 tauri = { workspace = true, features = ["test"] }
-rand = "0.8"
+rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tempfile = "3"
+tempfile = { workspace = true }
 
 [dependencies]
 foundation = { workspace = true }
 lettre = { workspace = true }
 oz-core = { workspace = true }
+reqwest = { workspace = true }
 oz-hal = { workspace = true }
 oz-logging = { workspace = true }
 oz-lua = { workspace = true }
-oz-media = { workspace = true }
-oz-payment = { workspace = true }
 oz-plugin = { workspace = true }
 oz-security = { workspace = true }
 modules-crm = { workspace = true }
@@ -54,7 +54,7 @@ platform-core = { workspace = true }
 platform-kernel = { workspace = true }
 platform-startup = { workspace = true }
 platform-sync = { workspace = true }
-tauri = { workspace = true, features = [] }
+tauri = { workspace = true, features = ["protocol-asset"] }
 tauri-plugin-updater = { workspace = true }
 tauri-plugin-dialog = { workspace = true }
 tauri-plugin-clipboard-manager = { workspace = true }
@@ -74,6 +74,9 @@ hmac = { workspace = true }
 sha2 = { workspace = true }
 snow = { workspace = true }
 hex = { workspace = true }
+rand = { workspace = true }
+image = { workspace = true }
+webp = { workspace = true }
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem

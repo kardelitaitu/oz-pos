@@ -61,18 +61,18 @@ if errorlevel 1 (
     echo [WARNING] Could not cleanly free port 1420. Tauri may fail to start.
 )
 
-REM Sync backend pre-check: if the local Docker server (start-local-sync.bat
-REM -> :3099) is not reachable, surface a warning BEFORE launching. The
-REM debug build auto-provisions the connection at startup (see
-REM apps/desktop-client/src/sync_bootstrap.rs); this banner only tells you
-REM why sync would stay unconfigured if the backend is down.
-echo Checking local sync backend on http://localhost:3099...
-curl -s -m 3 -o nul http://localhost:3099/health >nul 2>&1
+REM Sync connectivity: the debug build auto-provisions a connection to the
+REM cloud server (https://license.ozpos.my.id). The health endpoint check
+REM below just confirms the cloud is reachable before launching — a warning
+REM here means the cloud server is unreachable but the app will still start
+REM and show a red sync indicator until connectivity is restored.
+echo Checking cloud sync backend on https://license.ozpos.my.id...
+curl -s -m 3 -o nul https://license.ozpos.my.id/api/health >nul 2>&1
 if errorlevel 1 (
-    echo [WARNING] Sync backend NOT reachable at http://localhost:3099.
-    echo           Run scripts\start-local-sync.bat to start the local Docker server.
+    echo [WARNING] Cloud sync backend NOT reachable at https://license.ozpos.my.id.
+    echo           The app will start, but sync will be unavailable.
 ) else (
-    echo [OK] Sync backend reachable at http://localhost:3099
+    echo [OK] Cloud sync backend reachable at https://license.ozpos.my.id
 )
 
 cargo tauri dev

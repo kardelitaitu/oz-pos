@@ -30,6 +30,10 @@ on:
       - scripts/verify-docker-persistence.sh
       - .github/workflows/docker-persistence.yml
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   verify:
     name: Persistence (cloud + license volumes)

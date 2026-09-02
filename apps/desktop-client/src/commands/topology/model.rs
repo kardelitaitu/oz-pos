@@ -260,7 +260,44 @@ pub(crate) const TOPOLOGY_APPLY_RECOVERY_KEY: &str = "oz-pos/topology/apply-reco
 /// Settings-key prefix for one Apply request's revision ledger.
 pub(crate) const TOPOLOGY_APPLY_REQUEST_PREFIX: &str = "oz-pos/topology/apply-request/";
 /// Schema version stamped into every saved topology envelope.
+///
+/// This is the shape of the **diagram blob** — `{schema_version, nodes, wires}`
+/// — and it is enforced on read: `validate_topology_envelope` rejects any stored
+/// envelope whose version is not exactly this value. Raising it therefore makes
+/// every diagram on disk unreadable, which is a data-availability event, not a
+/// version bump. It changes only when the envelope's own structure changes.
 pub(crate) const TOPOLOGY_SCHEMA_VERSION: u64 = 1;
+
+// Schema version of the vendored **semantics contract** (`topologySemantics.json`).
+//
+// A different axis from [`TOPOLOGY_SCHEMA_VERSION`], and the two must never be
+// conflated: this one describes the pairing table the editor and the backend
+// both read (ADR #45 §1 moved it to 2 by giving every row explicit `endpoints`),
+// while the envelope version describes the shape of a saved diagram. A
+// merchant's existing graph is unaffected by a contract change, so a contract
+// bump must not touch the envelope constant, and vice versa. The number itself
+// is owned by `oz_core` — re-exported in `topology.rs`, which exists so callers
+// assert against one declaration rather than a copy that can drift.
+//
+// A plain comment rather than `///`: the constant lives in `topology.rs`, so a
+// doc comment here attached to nothing. `cargo check` accepts that silently;
+// `clippy -D warnings` fails it as "empty line after doc comment", which is how
+// this was found.
+
+/// Path segment under a branch's topology key holding its saved diagram
+/// templates (ADR #45 §4.2).
+///
+/// Templates are business configuration: they seed a graph a merchant then
+/// edits and Applies. They used to live in `localStorage` under
+/// `ozpos.topology.templates.v1`, which loses them on a device change, a
+/// profile switch, or a reinstall — and silently, since the list simply comes
+/// back empty. They belong in the same settings namespace as the diagram they
+/// seed, scoped to the same branch.
+pub(crate) const TOPOLOGY_TEMPLATE_SEGMENT: &str = "template";
+
+/// Longest accepted template name, in characters. The name is stored inside
+/// the settings key, so it is bounded like a key rather than like a label.
+pub(crate) const MAX_TEMPLATE_NAME_CHARS: usize = 64;
 
 /// Request body for updating a workspace instance within a topology diff.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]

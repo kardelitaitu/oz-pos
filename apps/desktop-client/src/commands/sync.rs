@@ -218,12 +218,11 @@ pub fn settings_changed_sink(app: &tauri::AppHandle) -> SettingsChangedSink {
     })
 }
 
-// TEMPORARILY DISABLED (2026-08-16): see the commented fallback in
-// `resolve_sync_probe_url` — the local Docker dev URL must not be used
-// while testing against the deployed cloud server. Re-enable together
-// with the fallback block it feeds.
-// #[cfg(debug_assertions)]
-// const LOCAL_DEV_SYNC_URL: &str = "http://localhost:3099";
+// Debug-only fallback URL used by the status-bar health probe so the sync
+// indicator can recover while auto-provisioning is still writing the
+// persisted settings row. Points at the unified cloud server.
+#[cfg(debug_assertions)]
+const LOCAL_DEV_SYNC_URL: &str = "https://license.ozpos.my.id";
 
 /// Resolve the URL used by the status-bar health probe.
 ///
@@ -234,7 +233,7 @@ pub fn settings_changed_sink(app: &tauri::AppHandle) -> SettingsChangedSink {
 fn resolve_sync_probe_url(
     candidate: Option<String>,
     saved: Option<String>,
-    _allow_local_fallback: bool,
+    allow_local_fallback: bool,
 ) -> Option<String> {
     if let Some(url) = candidate.filter(|url| !url.trim().is_empty()) {
         return Some(url);
@@ -243,19 +242,15 @@ fn resolve_sync_probe_url(
         return Some(url);
     }
 
-    // The health indicator must be able to probe the local Docker server
-    // before the asynchronous bootstrap has persisted URL/key settings.
-    // Keep this fallback debug-only so production never probes localhost
-    // behind the operator's back. An empty URL is unconfigured; an explicit
-    // opt-out is represented by keeping a configured URL and disabling sync.
-    //
-    // TEMPORARILY DISABLED (2026-08-16): while testing against the deployed
-    // cloud server the status indicator must not fall back to the local
-    // Docker dev server. Re-enable by uncommenting the block below.
-    // #[cfg(debug_assertions)]
-    // if allow_local_fallback {
-    //     return Some(LOCAL_DEV_SYNC_URL.to_string());
-    // }
+    // The health indicator must be able to probe the cloud server before
+    // the asynchronous bootstrap has persisted URL/key settings. Keep this
+    // fallback debug-only so production never probes an unexpected URL.
+    // An empty URL is unconfigured; an explicit opt-out is represented by
+    // keeping a configured URL and disabling sync.
+    #[cfg(debug_assertions)]
+    if allow_local_fallback {
+        return Some(LOCAL_DEV_SYNC_URL.to_string());
+    }
 
     None
 }
@@ -469,6 +464,34 @@ pub async fn get_sync_plan_scoped(
             ok: false,
             plan: None,
             status: "Sync is not configured".into(),
+        }),
+    }
+}
+
+/// Test the cloud sync connection by pinging the configured server
+/// (pre-session, no authentication required). Falls back to the cloud
+/// probe URL when no URL is saved, so the login screen's sync indicator
+/// works out of the box.
+#[tauri::command]
+pub async fn test_sync_connection(
+    state: State<'_, AppState>,
+) -> Result<sync_client::PingResult, AppError> {
+    let (saved, allow_local_fallback) = {
+        let db = state.db.lock().await;
+        let saved = Settings::get_sync_server_url(&db)?;
+        let allow_local_fallback = saved
+            .as_deref()
+            .map(|value| value.trim().is_empty())
+            .unwrap_or(true);
+        (saved, allow_local_fallback)
+    }; // db lock dropped here
+    let resolved = resolve_sync_probe_url(None, saved, allow_local_fallback);
+    match resolved {
+        Some(u) => Ok(sync_client::ping_server(&u).await),
+        None => Ok(sync_client::PingResult {
+            ok: false,
+            status: "No server URL configured".into(),
+            latency_ms: None,
         }),
     }
 }

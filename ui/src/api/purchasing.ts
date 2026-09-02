@@ -112,49 +112,49 @@ export interface UpdatePoStatusArgs {
   status: string;
 }
 
-// ── Supplier API ────────────────────────────────────────────────────
+// ── Supplier API (session-scoped — ADR #7) ───────────────────────────
 
 /** List all suppliers. */
-export const listSuppliers = (): Promise<SupplierDto[]> =>
-  loggedInvoke<SupplierDto[]>('list_suppliers');
+export const listSuppliers = (sessionToken: string): Promise<SupplierDto[]> =>
+  loggedInvoke<SupplierDto[]>('list_suppliers_scoped', { sessionToken });
 
 /** Get a single supplier by its identifier. */
-export const getSupplier = (id: string): Promise<SupplierDto | null> =>
-  loggedInvoke<SupplierDto | null>('get_supplier', { id });
+export const getSupplier = (sessionToken: string, id: string): Promise<SupplierDto | null> =>
+  loggedInvoke<SupplierDto | null>('get_supplier_scoped', { sessionToken, id });
 
 /** Create a new supplier. */
-export const createSupplier = (args: CreateSupplierArgs): Promise<SupplierDto> =>
-  loggedInvoke<SupplierDto>('create_supplier', { args });
+export const createSupplier = (sessionToken: string, args: CreateSupplierArgs): Promise<SupplierDto> =>
+  loggedInvoke<SupplierDto>('create_supplier_scoped', { sessionToken, args });
 
 /** Update an existing supplier. */
-export const updateSupplier = (args: UpdateSupplierArgs): Promise<SupplierDto> =>
-  loggedInvoke<SupplierDto>('update_supplier', { args });
+export const updateSupplier = (sessionToken: string, args: UpdateSupplierArgs): Promise<SupplierDto> =>
+  loggedInvoke<SupplierDto>('update_supplier_scoped', { sessionToken, args });
 
-// ── Purchase Order API ──────────────────────────────────────────────
+// ── Purchase Order API (session-scoped — ADR #7) ─────────────────────
 
 /** List all purchase orders. */
-export const listPurchaseOrders = (): Promise<PurchaseOrderDto[]> =>
-  loggedInvoke<PurchaseOrderDto[]>('list_purchase_orders');
+export const listPurchaseOrders = (sessionToken: string): Promise<PurchaseOrderDto[]> =>
+  loggedInvoke<PurchaseOrderDto[]>('list_purchase_orders_scoped', { sessionToken });
 
 /** Get a single purchase order by its identifier. */
-export const getPurchaseOrder = (id: string): Promise<PurchaseOrderDto | null> =>
-  loggedInvoke<PurchaseOrderDto | null>('get_purchase_order', { id });
+export const getPurchaseOrder = (sessionToken: string, id: string): Promise<PurchaseOrderDto | null> =>
+  loggedInvoke<PurchaseOrderDto | null>('get_purchase_order_scoped', { sessionToken, id });
 
 /** Create a new purchase order. */
-export const createPurchaseOrder = (args: CreatePurchaseOrderArgs): Promise<PurchaseOrderDto> =>
-  loggedInvoke<PurchaseOrderDto>('create_purchase_order', { args });
+export const createPurchaseOrder = (sessionToken: string, args: CreatePurchaseOrderArgs): Promise<PurchaseOrderDto> =>
+  loggedInvoke<PurchaseOrderDto>('create_purchase_order_scoped', { sessionToken, args });
 
 /** Update a purchase order's status (e.g. approved, received, cancelled). */
-export const updatePoStatus = (args: UpdatePoStatusArgs): Promise<PurchaseOrderDto> =>
-  loggedInvoke<PurchaseOrderDto>('update_po_status', { args });
+export const updatePoStatus = (sessionToken: string, args: UpdatePoStatusArgs): Promise<PurchaseOrderDto> =>
+  loggedInvoke<PurchaseOrderDto>('update_po_status_scoped', { sessionToken, args });
 
 /** Mark a purchase order as received and update stock quantities. */
-export const receivePurchaseOrder = (id: string): Promise<PurchaseOrderDto> =>
-  loggedInvoke<PurchaseOrderDto>('receive_purchase_order', { id });
+export const receivePurchaseOrder = (sessionToken: string, id: string): Promise<PurchaseOrderDto> =>
+  loggedInvoke<PurchaseOrderDto>('receive_purchase_order_scoped', { sessionToken, id });
 
 // ── Scoped variants (ADR #7) ──────────────────────────────────────────
-// Review F-005: the unscoped purchasing commands above are not registered
-// on the desktop shell — production screens must call the *_scoped ones.
+// Review F-005: the purchasing commands are registered on the desktop
+// shell as *_scoped only — production screens must call the *_scoped ones.
 
 /** List purchase orders visible to the session's store. */
 export const listPurchaseOrdersScoped = (sessionToken: string): Promise<PurchaseOrderDto[]> =>

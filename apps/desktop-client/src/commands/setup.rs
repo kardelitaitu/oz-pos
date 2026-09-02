@@ -102,7 +102,14 @@ pub async fn complete_setup(
         store.seed_default_roles()?;
 
         // 2. Persist features.
-        store.save_features(&registry)?;
+        // RUST-08: write feature rows directly into the outer transaction.
+        // `store.save_features` -> Settings::set_batch opens its OWN
+        // unchecked_transaction, which would be a nested BEGIN inside the
+        // tx above ("cannot start a transaction within a transaction") —
+        // same class as the CLI-1 / import_data fixes.
+        for (key, value) in registry.to_settings_rows() {
+            Settings::set(&tx, &key, &value)?;
+        }
 
         // 3. Prune stale feature rows that are no longer enabled.
         Settings::prune_stale_features(&tx, &registry)?;

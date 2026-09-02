@@ -21,81 +21,7 @@ import { createSession, destroySession, refreshPickerTicket } from "@/api/staff"
 import { getDeviceId } from "@/api/system";
 import { useAuth } from "@/contexts/AuthContext";
 
-// ── Fallback workspaces for development (ADR #4 shape) ──────────────
 
- 
-const FALLBACK_WORKSPACES: WorkspaceDto[] = [
-  {
-    instance_id: "default-restaurant-pos",
-    type_key: "restaurant-pos",
-    store_id: "default",
-    store_name: "Main Store",
-    purpose_key: "general",
-    name: "Restaurant POS",
-    description:
-      "Cashier terminal for restaurant ordering with menu categories and table management",
-    icon: "restaurant",
-    layout_mode: "fullscreen",
-    colour: null,
-    is_default: false,
-  },
-  {
-    instance_id: "default-store-pos",
-    type_key: "store-pos",
-    store_id: "default",
-    store_name: "Main Store",
-    purpose_key: "general",
-    name: "Store POS",
-    description:
-      "Cashier terminal for retail with product lookup, customer management, and loyalty",
-    icon: "store",
-    layout_mode: "fullscreen",
-    colour: null,
-    is_default: false,
-  },
-  {
-    instance_id: "default-kds",
-    type_key: "kds",
-    store_id: "default",
-    store_name: "Main Store",
-    purpose_key: "general",
-    name: "Kitchen Display",
-    description:
-      "Order queue display for the kitchen — tap tickets to advance their status",
-    icon: "kds",
-    layout_mode: "fullscreen",
-    colour: null,
-    is_default: false,
-  },
-  {
-    instance_id: "default-warehouse",
-    type_key: "warehouse",
-    store_id: "default",
-    store_name: "Main Store",
-    purpose_key: "stock-control",
-    name: "Warehouse",
-    description:
-      "Manage products, stock levels, bundles, categories, and inventory reports",
-    icon: "inventory",
-    layout_mode: "sidebar",
-    colour: null,
-    is_default: false,
-  },
-  {
-    instance_id: "default-admin",
-    type_key: "admin",
-    store_id: "default",
-    store_name: "Main Store",
-    purpose_key: "general",
-    name: "Admin",
-    description:
-      "System settings, staff management, reports, audit logs, and configuration",
-    icon: "admin",
-    layout_mode: "sidebar",
-    colour: null,
-    is_default: false,
-  },
-];
 
 // ── Workspace scope context (ADR #4) ────────────────────────────────
 
@@ -263,25 +189,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       // sends a role/user claim that could be forged.
       if (!pickerTicket) return;
       try {
+        // Only registered workspace instances are shown on the home screen —
+        // an empty list from the server means there is nothing to show, so
+        // the picker renders its empty state instead of demo data.
         const workspaces = await listWorkspaces(pickerTicket, storeId);
         if (!cancelled()) {
-          if (workspaces.length > 0) {
-            setAvailableWorkspaces(workspaces);
-            setError(null);
-          } else {
-            setAvailableWorkspaces(FALLBACK_WORKSPACES);
-            setError(null);
-          }
+          setAvailableWorkspaces(workspaces);
+          setError(null);
         }
       } catch (err) {
         if (!cancelled()) {
           console.warn(
-            "WorkspaceContext: failed to list workspaces, using fallback",
+            "WorkspaceContext: failed to list workspaces",
             err,
           );
-          setAvailableWorkspaces(FALLBACK_WORKSPACES);
+          setAvailableWorkspaces([]);
           setError(
-            "Failed to load workspaces from server. Using demo workspaces.",
+            "Failed to load workspaces from server.",
           );
         }
       }
@@ -449,11 +373,27 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // This effect fires after activeInstance changes (set by handleSetActiveInstance
   // or the useEffect that syncs from activeWorkspace).
   //
+  // Settings/admin shell fallback: the topology editor, stores dashboard,
+  // and offline-queue header make scoped commands without an active POS
+  // workspace instance. When an authenticated user has no activeInstance,
+  // mint a session scoped to the resolved store's admin instance so those
+  // screens work. Activating a POS workspace afterwards re-runs this
+  // effect and replaces the token (the refresh branch below).
+  //
   // ADR #6: Skips token creation when isHotSwappingRef is set, because
   // swapSessionToken handles token lifecycle during a hot-swap.
   useEffect(() => {
-    if (!activeInstance || !session?.user_id) return;
+    if (!session?.user_id) return;
     if (isHotSwappingRef.current) return; // ADR #6: swapSessionToken handles this
+
+    // Active POS workspace first; otherwise the admin instance of the
+    // resolved store (list_workspaces is picker-ticket verified, so the
+    // instance id is trustworthy).
+    const tokenInstance =
+      activeInstance ??
+      availableWorkspaces.find((i) => i.type_key === 'admin') ??
+      null;
+    if (!tokenInstance) return;
 
     let cancelled = false;
 
@@ -493,9 +433,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       createSession({
         user_id: session.user_id,
         role_id: session.role_id,
-        store_id: activeInstance.store_id,
-        instance_id: activeInstance.instance_id,
-        type_key: activeInstance.type_key,
+        store_id: tokenInstance.store_id,
+        instance_id: tokenInstance.instance_id,
+        type_key: tokenInstance.type_key,
         terminal_id: deviceId,
         picker_ticket: ticket,
       })
@@ -514,7 +454,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [activeInstance, session]);
+  }, [activeInstance, session, availableWorkspaces, pickerTicket]);
 
 
   // Backward-compat: sets the type_key string directly.

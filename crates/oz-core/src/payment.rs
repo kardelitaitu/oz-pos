@@ -1,7 +1,7 @@
 /*
 last audited 25-07-26 by RSA-Agent (oz-core slice A)
 crate: oz-core | status: SAFE | lint: CLEAN
-findings: tender types sound; idempotency_key captured here confirms PAY-2 drop point is in oz-payment drivers, not oz-core; COR-1: id field doc says "UUID v4" (stale — db layer generates v7 per house rule)
+findings: tender types sound; idempotency_key captured here confirms PAY-2 drop point is in oz-payment drivers, not oz-core; COR-1 FIXED DD-MM-YY (DSH-Agent) — id field doc updated to UUID v7
 next: fix field doc | perf: N/A
 */
 //! Payment domain type — individual payment tenders within a sale.
@@ -24,7 +24,7 @@ use crate::money::Money;
 /// A single payment tender against a sale.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Payment {
-    /// Internal row id (UUID v4).
+    /// Internal row id (UUID v7).
     pub id: String,
 
     /// FK to `sales.id`.

@@ -11,6 +11,7 @@ use tauri::State;
 use tauri_plugin_dialog::DialogExt;
 
 use oz_core::Settings;
+use oz_core::db::Store;
 
 use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
@@ -41,6 +42,46 @@ pub async fn get_brand_settings_scoped(
     let conn = state
         .db_manager
         .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(BrandSettingsDto {
+        primary_colour: Settings::get_brand_primary_colour(&db)?,
+        logo_path: Settings::get_brand_logo_path(&db)?,
+        store_name: Settings::get_brand_store_name(&db)?,
+    })
+}
+
+/// Load brand settings from the primary store **without a session**.
+///
+/// Pre-auth IPC surface for the lock/login screen, which shows the store
+/// name, logo, and brand colour before any user is signed in. Branding is
+/// non-sensitive and store-wide, so the primary store is the correct
+/// source when no session scope exists yet.
+#[tauri::command]
+pub async fn get_brand_settings(state: State<'_, AppState>) -> Result<BrandSettingsDto, AppError> {
+    let primary_id = {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        // Prefer the primary store; fall back to the first profile so
+        // installs whose seeding never promoted a primary (is_primary=0)
+        // still get lock-screen branding instead of an error toast.
+        match store.get_primary_store()? {
+            Some(primary) => primary.id,
+            None => {
+                store
+                    .list_store_profiles()?
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| AppError::Internal("no store profile found".into()))?
+                    .id
+            }
+        }
+    };
+    let conn = state
+        .db_manager
+        .open_store(&primary_id)
         .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
     let db = conn
         .lock()

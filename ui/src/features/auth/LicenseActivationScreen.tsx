@@ -5,20 +5,12 @@ import { activateLicense, getHardwareFingerprint, getMachineId } from '@/api/lic
 import { detectTrialVertical } from '@/utils/trial-vertical';
 import { detectBundleId } from '@/utils/bundle';
 import { getVersion, getLocalIp } from '@/api/system';
-import ConnectionStatus from '@/components/ConnectionStatus';
-import MachineIdStatus from '@/components/MachineIdStatus';
+import StatusBar from '@/components/StatusBar';
 import { Localized, useLocalization } from '@fluent/react';
 import ThemeToggle from '@/frontend/shell/ThemeToggle';
 import { l10nErrorMessage } from '@/utils/app-error';
 import { plainErrorMessage } from '@/utils/app-error';
 import './LicenseActivationScreen.css';
-
-// ── Environment / service URLs (extracted for configurability) ─────
-// Unified deployment (auth + sync on one host, ADR #11) — the old
-// standalone license service URL was folded into this single host.
-const AUTH_SERVICE_URL =
-  (import.meta.env['VITE_AUTH_SERVICE_URL'] as string | undefined)
-  ?? 'https://oz--cloud--76cyv4d6bn54.code.run';
 
 /** Props for the LicenseActivationScreen component. */
 export interface LicenseActivationScreenProps {
@@ -36,7 +28,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(initialError ?? null);
-  const [appVersion, setAppVersion] = useState<string>('0.0.33');
+  const [appVersion, setAppVersion] = useState<string>('0.0.34');
   const [ipAddress, setIpAddress] = useState<string>(requiredLocalized(l10n, 'auth-ip-detecting'));
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; field: 'email' | 'phone' | 'licenseKey' } | null>(null);
   // Segmented-trial vertical (C2.1): detected once from the landing-page
@@ -332,15 +324,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
       </div>
 
       <div className="license-server-status-container">
-        <ConnectionStatus 
-          label={requiredLocalized(l10n, 'staff-login-connection-auth')} 
-          url={AUTH_SERVICE_URL} 
-        />
-        <ConnectionStatus 
-          label={requiredLocalized(l10n, 'staff-login-connection-sync')} 
-          url="" 
-        />
-        <MachineIdStatus />
+        <StatusBar />
       </div>
 
       <div className="activation-device-info">
