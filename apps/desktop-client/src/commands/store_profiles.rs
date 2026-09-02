@@ -283,6 +283,23 @@ pub async fn delete_store_profile_scoped(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = oz_core::Store::new(&conn);
     store.delete_store_profile(&id)?;
+    // Release the connection before touching the filesystem.
+    drop(conn);
+    // The row is gone, so nothing can reach this store's database again. Deleting
+    // a profile used to stop at the row and leave a multi-megabyte
+    // `store-<id>.sqlite` plus its WAL/SHM sidecars orphaned in the data directory
+    // with nothing pointing at it.
+    //
+    // A failed removal is logged rather than propagated: the profile *is* deleted,
+    // and returning an error would tell the user the delete did not happen when it
+    // did. A leftover file is a leak, not corruption.
+    if let Err(e) = state.db_manager.delete_store_db(&id) {
+        tracing::warn!(
+            store_id = %id,
+            error = %e,
+            "store profile deleted but its database file remains"
+        );
+    }
     Ok(())
 }
 

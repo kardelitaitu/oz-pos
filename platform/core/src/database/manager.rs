@@ -172,6 +172,56 @@ impl StoreDatabaseManager {
         self.store_db_path(store_id).exists()
     }
 
+    /// Delete a store's database file and its WAL/SHM sidecars.
+    ///
+    /// Closes the cached connection first — on Windows an open file cannot be
+    /// deleted, and this manager holds the only handle. A file that is already
+    /// absent is not an error: the caller asked for an absent state.
+    ///
+    /// Deleting a profile used to remove only its `store_profiles` row, so every
+    /// removed store left a multi-megabyte database behind in the data directory
+    /// with nothing pointing at it.
+    ///
+    /// `store_id` is validated here rather than trusted. This module's audit stamp
+    /// records PC-1: the id is interpolated straight into a filename. Creating a
+    /// file at a traversed path is bad; *deleting* one would be strictly worse, so
+    /// an unsafe id is refused before any filesystem call. Policy — which stores
+    /// may be deleted at all — stays with the caller.
+    pub fn delete_store_db(&self, store_id: &str) -> Result<(), PlatformError> {
+        let safe_id = !store_id.is_empty()
+            && store_id.len() <= 128
+            && !store_id.contains("..")
+            && store_id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
+        if !safe_id {
+            return Err(PlatformError::Internal(format!(
+                "refused to delete store database: unsafe store id {store_id:?}"
+            )));
+        }
+
+        self.close_store(store_id);
+
+        let base = self.store_db_path(store_id);
+        let mut failure = None;
+        for suffix in ["", "-wal", "-shm"] {
+            let path = PathBuf::from(format!("{}{}", base.display(), suffix));
+            match std::fs::remove_file(&path) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => failure = Some((path, e)),
+            }
+        }
+        if let Some((path, e)) = failure {
+            return Err(PlatformError::Internal(format!(
+                "failed to delete {store_id} database at {}: {e}",
+                path.display()
+            )));
+        }
+        tracing::info!(store_id, "store database deleted");
+        Ok(())
+    }
+
     /// List IDs of currently open store databases.
     pub fn open_store_ids(&self) -> Vec<String> {
         let store_dbs = match self.store_dbs.lock() {
@@ -374,3 +424,10 @@ mod tests {
         );
     }
 }
+
+// New tests live in a sibling file per AGENTS.md ("never put unit tests inside
+// production .rs files"). The inline `mod tests` above predates that rule and is
+// left alone rather than expanded.
+#[cfg(test)]
+#[path = "manager_tests.rs"]
+mod manager_tests;
