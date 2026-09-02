@@ -309,7 +309,7 @@ describe('admin-utils tenantDetailRows (B2: t() shadowing regression)', () => {
       subscription: { tierKey: 'pro', status: 'active', expiresAt: '2027-08-01' },
       devices: [],
     });
-    const labels = rows.map((r: [string, string]) => r[0]);
+    const labels = (rows as any[]).map((r) => r?.[0]);
     expect(labels).toContain('Phone');
     expect(labels).not.toContain('Grace until');
     // position: right after Email verified
@@ -321,16 +321,16 @@ describe('admin-utils tenantDetailRows (B2: t() shadowing regression)', () => {
       tenant: { status: 'active' },
       subscription: { tierKey: 'pro', graceUntil: '2026-09-10' },
     });
-    const labels = rows.map((r: [string, string]) => r[0]);
+    const labels = (rows as any[]).map((r) => r?.[0]);
     expect(labels).toContain('Grace until');
-    expect(rows.find((r: [string, string]) => r[0] === 'Grace until')![1]).toBe('2026-09-10');
+    expect((rows as any[]).find((r) => r?.[0] === 'Grace until')?.[1]).toBe('2026-09-10');
   });
 
   it('handles a fully empty payload with em-dash values', () => {
     const rows = utils.tenantDetailRows({});
     expect(rows.length).toBe(9);
-    expect(rows[0][1]).toBe('—');
-    expect(rows[8][1]).toBe(0);
+    expect(rows[0]?.[1]).toBe('—');
+    expect(rows[8]?.[1]).toBe(0);
   });
 });
 
@@ -774,7 +774,7 @@ describe('admin-utils statusPill labels (B16: raw enum text in the UI)', () => {
 
   it('detail modal rows use the same labels', () => {
     const rows = utils.tenantDetailRows({ tenant: { status: 'grace_period' } });
-    expect(rows[0][1]).toBe('Grace Period');
+    expect(rows[0]?.[1]).toBe('Grace Period');
   });
 });
 
