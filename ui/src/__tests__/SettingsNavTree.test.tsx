@@ -115,11 +115,11 @@ describe('SettingsNavTree', () => {
   it('shows count badges with correct item counts', () => {
     render(<SettingsNavTree {...defaultProps} />);
 
-    // 2 items in Business, 6 in Operations, 3 in System (topology moved here)
+    // 2 items in Business, 6 in Operations, 4 in System (topology + local-api)
     const badges = screen.getAllByText(/^\d+$/);
     expect(badges.length).toBe(3);
     const counts = badges.map((b) => Number(b.textContent)).sort((a, b) => a - b);
-    expect(counts).toEqual([2, 3, 6]);
+    expect(counts).toEqual([2, 4, 6]);
   });
 
   it('highlights the active section nav item', () => {
@@ -335,12 +335,12 @@ describe('SettingsNavTree', () => {
 
     it('ArrowDown wraps around from last to first item', () => {
       const onNavigate = vi.fn();
-      // Active section is topology (last in System category, which is last)
-      render(<SettingsNavTree {...defaultProps} onNavigate={onNavigate} activeSection="topology" />);
+      // Active section is local-api (last in System category, which is last)
+      render(<SettingsNavTree {...defaultProps} onNavigate={onNavigate} activeSection="local-api" />);
 
       fireKey('ArrowDown');
 
-      // topology → wraps around to first item: general
+      // local-api → wraps around to first item: general
       expect(onNavigate).toHaveBeenCalledWith('general');
     });
 
@@ -350,8 +350,8 @@ describe('SettingsNavTree', () => {
 
       fireKey('ArrowUp');
 
-      // general → wraps around to last item: topology
-      expect(onNavigate).toHaveBeenCalledWith('topology');
+      // general → wraps around to last item: local-api
+      expect(onNavigate).toHaveBeenCalledWith('local-api');
     });
 
     it('ArrowDown is no-op when focused on an input element', () => {
