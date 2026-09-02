@@ -165,12 +165,18 @@
       heroLabelRow.appendChild(refreshBtn);
       hero.appendChild(heroLabelRow);
       hero.appendChild(el('div', 'hero-value', fmtIdr(heroIdr)));
-      hero.appendChild(el('div', 'hero-value', fmtIdr(heroIdr)));
       const heroChip = el('span', 'hero-chip', heroSrc);
       heroChip.style.cssText = 'font-size:.72rem;opacity:.75;font-weight:600;letter-spacing:.03em;text-transform:uppercase';
       const heroSub = el('div', 'hero-sub');
       heroSub.appendChild(heroChip);
+      // Net keepable: gross minus refunds this month (when refunds exist).
+      const monthRefund = m.kpis.monthlyRefundIdr > 0 ? m.kpis.monthlyRefundIdr : 0;
       heroSub.appendChild(document.createTextNode(` · ${t('kpi.mrr')} ${fmtUsd(m.kpis.mrrUsd)} (${t('common.estimate')}) · ${t('kpi.arpu')} ${fmtUsd(m.kpis.arpuUsd)}`));
+      if (monthRefund > 0) {
+        const refundChip = el('span', 'hero-chip', '−' + t('common.refunds') + ' ' + fmtIdr(monthRefund));
+        refundChip.style.cssText = 'font-size:.72rem;opacity:.9;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--bad)';
+        heroSub.appendChild(refundChip);
+      }
       // Last-refreshed timestamp (provider ledger cache time, not fetch time).
       if (m.kpis.revenueCachedAt) {
         const fresht = new Date(m.kpis.revenueCachedAt);

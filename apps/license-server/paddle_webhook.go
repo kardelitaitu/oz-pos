@@ -646,6 +646,19 @@ func handlePaddleWebhook(app core.App) func(e *core.RequestEvent) error {
 			log.Printf("paddle webhook: %s event=%s acknowledged", ev.EventType, ev.EventID)
 			return e.JSON(http.StatusOK, map[string]any{"status": "ok"})
 
+		case "transaction.revoked", "transaction.refunded":
+			// A revoked / refunded transaction claws back previously captured
+			// gross — record the adjustment so the dashboard can show it.
+			paddleCaptureAdjustment(app, ev, "refund")
+			log.Printf("paddle webhook: %s event=%s acknowledged", ev.EventType, ev.EventID)
+			return e.JSON(http.StatusOK, map[string]any{"status": "ok"})
+
+		case "subscription.payment_refunded":
+			// Paddle sends this when a subscription payment is refunded.
+			paddleSubscriptionRefundAdjustment(app, ev)
+			log.Printf("paddle webhook: %s event=%s acknowledged", ev.EventType, ev.EventID)
+			return e.JSON(http.StatusOK, map[string]any{"status": "ok"})
+
 		default:
 			// customer.*, address.*, discount.*, etc. — acknowledge so
 			// Paddle doesn't retry events we deliberately don't process.
@@ -792,6 +805,122 @@ func paddleCaptureRevenue(app core.App, ev paddleEvent) {
 		NativeAmountMinor: cents,
 		NativeCurrency:    "USD",
 		SubscriptionID:    txn.SubscriptionID,
+		Notes:             notes,
+	})
+}
+
+// paddleCaptureAdjustment records a revoked/refunded Paddle transaction as
+// a revenue_adjustments row. Best-effort: failures are logged, never
+// returned (the webhook already acknowledged the event).
+func paddleCaptureAdjustment(app core.App, ev paddleEvent, kind string) {
+	txn, err := parsePaddleTransaction(ev)
+	if err != nil {
+		log.Printf("paddle adjustment: failed to parse transaction: %v", err)
+		return
+	}
+	// Resolve the buyer email (custom_data > customer entity).
+	email := ""
+	if e := strings.TrimSpace(strings.ToLower(txn.CustomData["email"])); e != "" {
+		email = e
+	} else if txn.Customer != nil {
+		email = strings.TrimSpace(strings.ToLower(txn.Customer.Email))
+	}
+	tenantID := ""
+	if email != "" {
+		if tenant, terr := app.FindFirstRecordByData("tenants", "email", email); terr == nil && tenant != nil {
+			tenantID = tenant.Id
+		}
+	}
+	cents := paddleTransactionTotalCents(txn)
+	if cents <= 0 {
+		log.Printf("paddle adjustment: no positive total for event=%s", ev.EventID)
+		return
+	}
+	notes := ""
+	if txn.SubscriptionID != "" {
+		notes = "subscription_id=" + txn.SubscriptionID
+	}
+	saveRevenueAdjustment(app, revenueAdjustment{
+		Provider:          "paddle",
+		EventID:           ev.EventID,
+		TenantID:          tenantID,
+		Kind:              kind,
+		NativeAmountMinor: cents,
+		NativeCurrency:    "USD",
+		Notes:             notes,
+	})
+}
+
+// paddleSubscriptionRefundAdjustment handles subscription.payment_refunded:
+// the payload is a subscription entity with items, not a transaction, so it
+// is parsed separately and the refund amount approximated from the item
+// price totals. Best-effort.
+func paddleSubscriptionRefundAdjustment(app core.App, ev paddleEvent) {
+	var sub struct {
+		ID         string `json:"id"`
+		CustomerID string `json:"customer_id"`
+		Items      []struct {
+			Price struct {
+				ID string `json:"id"`
+			} `json:"price"`
+			Quantity int `json:"quantity"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(ev.Data, &sub); err != nil || sub.ID == "" {
+		log.Printf("paddle adjustment: failed to decode subscription refund payload: %v", err)
+		return
+	}
+	// Sum the item price amounts via the price-map tiers map (value is
+	// "tier:period:bundle" — no amount), so fall back to a search of the
+	// subscriptions record for the tier price. Simplest robust source: the
+	// local subscription record's tier_key → TierPriceUSD.
+	var cents int64
+	var tier string
+	tiers, terr := paddlePriceTiers()
+	if terr == nil {
+		for _, it := range sub.Items {
+			if val, ok := tiers[it.Price.ID]; ok {
+				parts := strings.SplitN(val, ":", 2)
+				if len(parts) >= 1 && parts[0] != "" {
+					tier = parts[0]
+					break
+				}
+			}
+		}
+	}
+	if tier != "" {
+		if price, ok := TierPriceUSD[tier]; ok {
+			cents = int64(price * 100)
+		}
+	}
+	if cents <= 0 {
+		// Fall back to the local subscription record.
+		if subRec, err := app.FindFirstRecordByData("subscriptions", "paddle_sub_id", sub.ID); err == nil {
+			tier = subRec.GetString("tier_key")
+			if price, ok := TierPriceUSD[tier]; ok {
+				cents = int64(price * 100)
+			}
+		}
+	}
+	if cents <= 0 {
+		log.Printf("paddle adjustment: cannot determine refund amount for subscription=%s", sub.ID)
+		return
+	}
+	tenantID := ""
+	if subRec, err := app.FindFirstRecordByData("subscriptions", "paddle_sub_id", sub.ID); err == nil && subRec != nil {
+		tenantID = subRec.GetString("tenant_id")
+	}
+	notes := "subscription_id=" + sub.ID
+	if tier != "" {
+		notes += " tier=" + tier
+	}
+	saveRevenueAdjustment(app, revenueAdjustment{
+		Provider:          "paddle",
+		EventID:           ev.EventID,
+		TenantID:          tenantID,
+		Kind:              "refund",
+		NativeAmountMinor: cents,
+		NativeCurrency:    "USD",
 		Notes:             notes,
 	})
 }

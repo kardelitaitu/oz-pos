@@ -1265,7 +1265,9 @@
       'mrrUsd', 'mrrIdr', 'lifetimeUsd', 'lifetimeIdr', 'arpuUsd',
       'trialToPaidRate', 'fxRate', 'monthlyGrossUsd', 'monthlyGrossIdr',
       'monthlyPaddleUsd', 'monthlyPaddleIdr', 'monthlyMidtransUsd', 'monthlyMidtransIdr',
-      'lifetimePaddleUsd', 'lifetimePaddleIdr', 'lifetimeMidtransUsd', 'lifetimeMidtransIdr']
+      'monthlyRefundUsd', 'monthlyRefundIdr',
+      'lifetimePaddleUsd', 'lifetimePaddleIdr', 'lifetimeMidtransUsd', 'lifetimeMidtransIdr',
+      'lifetimeRefundUsd', 'lifetimeRefundIdr']
       .forEach(function (key) { kpis[key] = num(k[key]); });
     return {
       revenueTrend: arr(m.revenueTrend),
@@ -1307,6 +1309,7 @@
     'common.active': 'active',
     'common.refresh': 'Refresh',
     'common.refreshedAt': 'updated',
+    'common.refunds': 'refunds',
     'common.estimate': 'estimate',
     'common.providerVerified': 'Paddle/Midtrans webhooks',
     'kpi.totalUsers': 'Total Users',

@@ -662,6 +662,16 @@ describe('admin-utils normalizeStats (B6: partial payload killed the dashboard)'
     expect(m.kpis.grossSource).toBe('estimate');
   });
 
+  it('coerces the refund kpis (revenue_adjustments ledger)', () => {
+    const m = utils.normalizeStats({
+      kpis: { monthlyRefundUsd: null, monthlyRefundIdr: '160000', lifetimeRefundUsd: 25.5, lifetimeRefundIdr: undefined },
+    });
+    expect(m.kpis.monthlyRefundUsd).toBe(0);
+    expect(m.kpis.monthlyRefundIdr).toBe(160000);
+    expect(m.kpis.lifetimeRefundUsd).toBe(25.5);
+    expect(m.kpis.lifetimeRefundIdr).toBe(0);
+  });
+
   it('keeps provider-verified per-month trend values and source labels', () => {
     const src = {
       revenueTrend: [

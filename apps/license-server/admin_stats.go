@@ -182,6 +182,8 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 			PaddleIdr   float64 `json:"paddleIdr,omitempty"`
 			MidtransUsd float64 `json:"midtransUsd,omitempty"`
 			MidtransIdr float64 `json:"midtransIdr,omitempty"`
+			RefundUsd   float64 `json:"refundUsd,omitempty"`
+			RefundIdr   float64 `json:"refundIdr,omitempty"`
 			Count       int     `json:"count"`
 			Churn       int     `json:"churn"`
 			Source      string  `json:"source,omitempty"`
@@ -244,7 +246,8 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 		for _, key := range bucketKeys {
 			est := revenueByMonth[key]
 			if m, ok := realByMonth[key]; ok && m.Count > 0 && (m.Usd > 0 || m.Idr > 0) {
-				// Provider-verified webhook revenue.
+				// Provider-verified webhook revenue (refunds included when
+				// revenue_adjustments rows exist for the month).
 				revenueTrend = append(revenueTrend, monthBucket{
 					Month:       key,
 					Usd:         math.Round(m.Usd*100) / 100,
@@ -253,8 +256,20 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 					PaddleIdr:   math.Round(m.PaddleIdr),
 					MidtransUsd: math.Round(m.MidtransUsd*100) / 100,
 					MidtransIdr: math.Round(m.MidtransIdr),
+					RefundUsd:   math.Round(m.RefundUsd*100) / 100,
+					RefundIdr:   math.Round(m.RefundIdr),
 					Count:       m.Count,
 					Source:      providerRevenueSource(m),
+				})
+			} else if m, ok := realByMonth[key]; ok && (m.RefundUsd > 0 || m.RefundIdr > 0) {
+				// A month with refunds but no recorded gross (edge case:
+				// claw-back arrived without a matching revenue_events row) —
+				// still surface the refund so it is never silently dropped.
+				revenueTrend = append(revenueTrend, monthBucket{
+					Month:     key,
+					RefundUsd: math.Round(m.RefundUsd*100) / 100,
+					RefundIdr: math.Round(m.RefundIdr),
+					Source:    "provider",
 				})
 			} else {
 				// Price-map estimate (labeled fallback).
@@ -419,6 +434,7 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 		monthlyGrossUsd, monthlyGrossIdr := 0.0, 0.0
 		monthlyPaddleUsd, monthlyPaddleIdr := 0.0, 0.0
 		monthlyMidUsd, monthlyMidIdr := 0.0, 0.0
+		monthlyRefundUsd, monthlyRefundIdr := 0.0, 0.0
 		grossSource := "estimate"
 		if cm, ok := realByMonth[curKey]; ok && cm.Count > 0 && (cm.Usd > 0 || cm.Idr > 0) {
 			monthlyGrossUsd = math.Round(cm.Usd*100) / 100
@@ -427,7 +443,14 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 			monthlyPaddleIdr = math.Round(cm.PaddleIdr)
 			monthlyMidUsd = math.Round(cm.MidtransUsd*100) / 100
 			monthlyMidIdr = math.Round(cm.MidtransIdr)
+			monthlyRefundUsd = math.Round(cm.RefundUsd*100) / 100
+			monthlyRefundIdr = math.Round(cm.RefundIdr)
 			grossSource = providerRevenueSource(cm)
+		} else if cm, ok := realByMonth[curKey]; ok && (cm.RefundUsd > 0 || cm.RefundIdr > 0) {
+			// Refund-only month (no gross): still surface the claw-back.
+			monthlyRefundUsd = math.Round(cm.RefundUsd*100) / 100
+			monthlyRefundIdr = math.Round(cm.RefundIdr)
+			grossSource = "provider"
 		} else {
 			// Fall back to subscription estimate when no provider events.
 			monthlyGrossUsd = math.Round(mrrUsd*100) / 100
@@ -444,6 +467,8 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 				"mrrIdr":              math.Round(mrrUsd * fxRate),
 				"monthlyGrossUsd":     monthlyGrossUsd,
 				"monthlyGrossIdr":     monthlyGrossIdr,
+				"monthlyRefundUsd":    monthlyRefundUsd,
+				"monthlyRefundIdr":    monthlyRefundIdr,
 				"monthlyPaddleUsd":    monthlyPaddleUsd,
 				"monthlyPaddleIdr":    monthlyPaddleIdr,
 				"monthlyMidtransUsd":  monthlyMidUsd,
@@ -451,6 +476,8 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 				"grossSource":         grossSource,
 				"lifetimeUsd":         math.Round(lifetimeUsd*100) / 100,
 				"lifetimeIdr":         math.Round(lifetimeIdr),
+				"lifetimeRefundUsd":   math.Round(rev.LifetimeRefundUsd*100) / 100,
+				"lifetimeRefundIdr":   math.Round(rev.LifetimeRefundIdr),
 				"lifetimePaddleUsd":   math.Round(rev.LifetimePaddleUsd*100) / 100,
 				"lifetimePaddleIdr":   math.Round(rev.LifetimePaddleIdr),
 				"lifetimeMidtransUsd": math.Round(rev.LifetimeMidUsd*100) / 100,

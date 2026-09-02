@@ -3,11 +3,12 @@ package main
 // Provider-revenue ledger — income/gross source of truth for the admin
 // dashboard (ADR #42 Phase 3+).  Revenue_events is an append-only ledger
 // written exclusively by signature-verified Paddle/Midtrans webhooks (see
-// revenue_events.go).  This module buckets that ledger per month and
-// computes lifetime totals, with a short-TTL cache so repeated stats calls
-// don't rescan the whole table.  The price-map / subscription estimate
-// survives only as a clearly-labeled fallback when a month has no provider
-// events at all.
+// revenue_events.go); revenue_adjustments (see revenue_adjustments.go)
+// records the refunds/chargebacks that claw gross back.  This module buckets
+// both ledgers per month and computes lifetime totals, with a short-TTL
+// cache so repeated stats calls don't rescan the whole table.  The
+// price-map / subscription estimate survives only as a clearly-labeled
+// fallback when a month has no provider events at all.
 //
 // Cache TTL: 5 minutes by default, overridable for tests.
 
@@ -24,12 +25,14 @@ import (
 const defaultProviderRevTTL = 5 * time.Minute
 
 // providerRevenueCacheEntry holds one computed snapshot of the revenue_events
-// ledger plus metadata.
+// and revenue_adjustments ledgers plus metadata.
 type providerRevenueCacheEntry struct {
 	ByMonth           map[string]monthRevenue
 	Providers         map[string]int // paddle → count, midtrans → count
 	LifetimeUsd       float64
 	LifetimeIdr       float64
+	LifetimeRefundUsd float64
+	LifetimeRefundIdr float64
 	LifetimePaddleUsd float64
 	LifetimePaddleIdr float64
 	LifetimeMidUsd    float64
@@ -53,6 +56,8 @@ type providerRevenueCacheEntry struct {
 //	MidtransIdr  = amount_idr of midtrans rows (native IDR)
 //
 // PaddleIdr + MidtransIdr == Idr and PaddleUsd + MidtransUsd == Usd.
+// RefundUsd/RefundIdr are the month's claw-backs from revenue_adjustments
+// (kept separate from gross so net = gross - refunds is never hidden).
 type monthRevenue struct {
 	Usd         float64
 	Idr         float64
@@ -60,6 +65,8 @@ type monthRevenue struct {
 	PaddleIdr   float64
 	MidtransUsd float64
 	MidtransIdr float64
+	RefundUsd   float64
+	RefundIdr   float64
 	Count       int
 	Sources     map[string]bool // "paddle", "midtrans"
 }
@@ -70,19 +77,21 @@ var (
 	providerRevTTL     = defaultProviderRevTTL
 )
 
-// loadProviderRevenue scans revenue_events once, buckets by month, and
-// returns a fresh snapshot.  The caller owns the returned value.
+// loadProviderRevenue scans revenue_events and revenue_adjustments once,
+// buckets each by month, and returns a fresh snapshot.  The caller owns the
+// returned value.
 func loadProviderRevenue(app core.App) *providerRevenueCacheEntry {
 	byMonth := make(map[string]monthRevenue)
 	providers := make(map[string]int)
 	var lifetimeUsd, lifetimeIdr float64
+	var lifetimeRefundUsd, lifetimeRefundIdr float64
 	var lifetimePaddleUsd, lifetimePaddleIdr float64
 	var lifetimeMidUsd, lifetimeMidIdr float64
 
 	events, err := app.FindRecordsByFilter("revenue_events",
 		"id != ''", "-created", 0, 0)
 	if err != nil {
-		log.Printf("provider-revenue: scan failed: %v", err)
+		log.Printf("provider-revenue: revenue_events scan failed: %v", err)
 		return &providerRevenueCacheEntry{
 			ByMonth:   byMonth,
 			Providers: providers,
@@ -135,11 +144,40 @@ func loadProviderRevenue(app core.App) *providerRevenueCacheEntry {
 		}
 	}
 
+	// Second ledger: refunds / chargebacks (kept separate from gross).
+	adjustments, err := app.FindRecordsByFilter("revenue_adjustments",
+		"id != ''", "-created", 0, 0)
+	if err != nil {
+		log.Printf("provider-revenue: revenue_adjustments scan failed: %v", err)
+		return &providerRevenueCacheEntry{
+			ByMonth:   byMonth,
+			Providers: providers,
+			UpdatedAt: time.Now().UTC(),
+			ttl:       providerRevTTL,
+		}
+	}
+	for _, adj := range adjustments {
+		usd := adj.GetFloat("amount_usd")
+		idr := float64(adj.GetInt("amount_idr"))
+		created := adj.GetDateTime("created").Time()
+		key := fmt.Sprintf("%d-%02d", created.Year(), created.Month())
+
+		m := byMonth[key]
+		m.RefundUsd += usd
+		m.RefundIdr += idr
+		byMonth[key] = m
+
+		lifetimeRefundUsd += usd
+		lifetimeRefundIdr += idr
+	}
+
 	return &providerRevenueCacheEntry{
 		ByMonth:           byMonth,
 		Providers:         providers,
 		LifetimeUsd:       lifetimeUsd,
 		LifetimeIdr:       lifetimeIdr,
+		LifetimeRefundUsd: lifetimeRefundUsd,
+		LifetimeRefundIdr: lifetimeRefundIdr,
 		LifetimePaddleUsd: lifetimePaddleUsd,
 		LifetimePaddleIdr: lifetimePaddleIdr,
 		LifetimeMidUsd:    lifetimeMidUsd,
