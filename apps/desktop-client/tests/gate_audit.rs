@@ -136,6 +136,7 @@ static PINNED_DESKTOP: &[(&str, usize, &[&str])] = &[
             "PRODUCTS_UPDATE",
         ],
     ),
+    ("products_images", 3, &["PRODUCTS_READ", "PRODUCTS_UPDATE"]),
     (
         "promotions",
         4,
@@ -203,7 +204,7 @@ static PINNED_DESKTOP: &[(&str, usize, &[&str])] = &[
             "TERMINALS_REGISTER",
         ],
     ),
-    ("topology", 2, &["STAFF_UPDATE"]),
+    ("topology", 3, &["STAFF_UPDATE"]),
     ("void", 1, &["SALES_VOID"]),
     (
         "workspaces",

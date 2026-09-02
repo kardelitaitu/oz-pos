@@ -709,6 +709,9 @@ fn every_enforced_key_is_granted_by_at_least_one_preset() {
         permissions::GIFTCARDS_MANAGE,
         permissions::SECURITY_MANAGE,
         permissions::SYNC_MANAGE,
+        permissions::REFERENCE_READ,
+        permissions::PLAN_READ,
+        permissions::CATEGORIES_READ,
         permissions::DATA_EXPORT,
     ];
 

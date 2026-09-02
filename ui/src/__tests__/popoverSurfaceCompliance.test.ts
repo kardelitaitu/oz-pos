@@ -51,7 +51,7 @@ const POPOVER_SURFACES: ReadonlyArray<{ selector: string; file: string }> = [
   { selector: '.canvas-hud', file: 'features/stores/NodeTopologyEditor.css' },
   { selector: '.canvas-zoom-controls', file: 'features/stores/NodeTopologyEditor.css' },
   { selector: '.canvas-zoom-slider-pop', file: 'features/stores/NodeTopologyEditor.css' },
-  { selector: '.topology-shortcuts-popover', file: 'features/stores/NodeTopologyEditor.css' },
+  // topology-shortcuts-popover removed with the shortcuts feature (agent-1 UX merge)
   { selector: '.topology-context-menu', file: 'features/stores/NodeTopologyEditor.css' },
   { selector: '.topology-align-toolbar', file: 'features/stores/NodeTopologyEditor.css' },
   { selector: '.topology-minimap', file: 'features/stores/NodeTopologyEditor.css' },

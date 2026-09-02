@@ -1892,7 +1892,7 @@
   left: 0;
 }
 .node-port-row--left .node-port-label {
-  padding-left: 18px;
+  padding-left: calc(var(--space-4) + var(--space-0_5));
   text-align: left;
 }
 
@@ -1904,7 +1904,7 @@
   right: 0;
 }
 .node-port-row--right .node-port-label {
-  padding-right: 18px;
+  padding-right: calc(var(--space-4) + var(--space-0_5));
   text-align: right;
 }
 

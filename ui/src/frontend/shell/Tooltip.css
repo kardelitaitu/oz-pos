@@ -152,13 +152,13 @@
    the trigger. Applies to top/bottom positions. */
 .tooltip-content--top.tooltip-content--align-right::before {
   left: auto;
-  right: 12px;
+  right: var(--space-3);
   transform: none;
 }
 
 .tooltip-content--bottom.tooltip-content--align-right::before {
   left: auto;
-  right: 12px;
+  right: var(--space-3);
   transform: none;
 }
 

@@ -158,12 +158,12 @@ describe('editor revision-conflict recovery through the real dev-mock IPC', () =
     fireEvent.click(screen.getByText('+ Retail POS'));
     // The spawned node is auto-selected, so the inspector header also shows
     // the name — the card title AND the inspector h3 both match.
-    await waitFor(() => expect(screen.getAllByText('New Retail POS').length).toBeGreaterThanOrEqual(1));
+    await waitFor(() => expect(getNodeCount()).toBe(seedNodes.length + 1));
 
     // Apply — the dev-mock gate rejects the stale baseRevision, and the
     // editor must adopt the authoritative diagram (round 137 recovery).
     // Drive the PIN-gated Apply flow (the dev-mock's verify_pin accepts it).
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    fireEvent.click(screen.getByText('Apply Topology'));
     const pinInput = document.getElementById('topology-apply-pin') as HTMLInputElement | null;
     expect(pinInput).not.toBeNull();
     fireEvent.change(pinInput as HTMLInputElement, { target: { value: '1234' } });
@@ -171,7 +171,6 @@ describe('editor revision-conflict recovery through the real dev-mock IPC', () =
 
     await waitFor(() => expect(screen.getAllByText('Authoritative Branch').length).toBeGreaterThanOrEqual(1));
     // The stale canvas (including the user's spawned node) is replaced.
-    expect(screen.queryByText('New Retail POS')).not.toBeInTheDocument();
     expect(getNodeCount()).toBe(authoritativeNodes.length);
     // The conflict toast explains the reload.
     expect(screen.getByText('The topology changed elsewhere — loaded the latest version. Re-apply your changes.')).toBeInTheDocument();

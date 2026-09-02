@@ -363,7 +363,7 @@ fn seed_data_bootstraps_essential_rows() {
     );
 }
 
-/// Pin the consolidated schema surface: 102 tables, 141 indexes (123 in
+/// Pin the consolidated schema surface: 104 tables, 142 indexes (123 in
 /// init plus the two per-tenant unique indexes from
 /// `20260815_tenant_unique_indexes.sql` plus 4 multi-KDS indexes from
 /// `20260820_kds_devices.sql` plus 4 media/EDC indexes from
@@ -382,14 +382,14 @@ fn init_sql_creates_complete_schema_surface() {
     let mut conn = fresh();
     run(&mut conn).unwrap();
 
-    // All migrations applied (init + incremental) yield 102 tables,
+    // All migrations applied (init + incremental) yield 104 tables,
     // excluding the runner's `schema_migrations` bookkeeping table.
     assert_eq!(
         row_count(
             &conn,
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'schema_migrations'",
         ),
-        102,
+        104,
         "table surface drifted"
     );
     assert_eq!(
@@ -397,7 +397,7 @@ fn init_sql_creates_complete_schema_surface() {
             &conn,
             "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'",
         ),
-        141,
+        142,
         "index surface drifted"
     );
     assert_eq!(
@@ -518,6 +518,8 @@ fn existing_db_with_legacy_rows_upgrades_idempotently() {
             "20260901_gift_card_redeem_idempotency.sql".to_string(),
             "20260901_image_refs.sql".to_string(),
             "20260901_product_images.sql".to_string(),
+            "20260902_outbox.sql".to_string(),
+            "20260902_snapshot_versions.sql".to_string(),
         ]
     );
 
@@ -549,7 +551,7 @@ fn existing_db_with_legacy_rows_upgrades_idempotently() {
             &conn,
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'schema_migrations'"
         ),
-        102,
+        104,
         "table surface must be unchanged after upgrade"
     );
 }

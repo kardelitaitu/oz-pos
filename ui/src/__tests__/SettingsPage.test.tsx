@@ -543,10 +543,11 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('treeitem', { name: /operations/i }));
     fireEvent.click(screen.getByRole('treeitem', { name: /cloud sync/i }));
 
-    // TEMPORARILY DISABLED (2026-08-16): no local-Docker pre-fill while
-    // testing against the deployed cloud server.
-    expect(screen.getByLabelText(/server url/i)).toHaveValue('');
-    expect(screen.getByRole('switch', { name: /toggle/i })).not.toBeChecked();
+    // Sync pre-fills the deployed cloud server URL so an unconfigured
+    // device has a usable target (cloud server draft default).
+    expect(screen.getByLabelText(/server url/i)).toHaveValue('https://license.ozpos.my.id');
+    expect(screen.getByRole('switch', { name: /toggle/i })).toBeChecked();
+    expect(screen.getByRole('switch', { name: /toggle/i })).toBeChecked();
   });
 
   // ── About section ────────────────────────────────────────────
