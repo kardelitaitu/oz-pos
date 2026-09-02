@@ -87,7 +87,7 @@ describe('admin-utils svgChart', () => {
   it('wide variant stretches the canvas so text is not upscaled', () => {
     const data = Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, '0')}`, idr: (i + 1) * 100 }));
     const svg = utils.svgChart('rev', data, ['idr'], { area: true, wide: true });
-    expect(svg).toContain('viewBox="0 0 1280 220"');
+    expect(svg).toContain('viewBox="0 0 1280 230"');
     // A label under every point on the wide canvas (12 months → 12 x-labels).
     expect(svg.match(/text-anchor="middle"/g)?.length).toBe(12);
   });
@@ -415,9 +415,9 @@ describe('admin-utils svgBarChart (B3: churn chart read the wrong field)', () =>
 
   it('scales bars by the requested valueKey, not a hardcoded field', () => {
     const svg = utils.svgBarChart('churn', churnData, { valueKey: 'churn', color: 'var(--bad)' });
-    // max=10 → full height 140; 5 → half height 70.
-    expect(svg).toContain('height="140"');
-    expect(svg).toContain('height="70"');
+    // max=10 → full height 141; 5 → half height 70.5.
+    expect(svg).toContain('height="141"');
+    expect(svg).toContain('height="70.5"');
     expect(svg).not.toContain('NaN');
   });
 
@@ -426,8 +426,8 @@ describe('admin-utils svgBarChart (B3: churn chart read the wrong field)', () =>
       { month: '2026-01', count: 4 },
       { month: '2026-02', count: 8 },
     ], { color: 'var(--accent)' });
-    expect(svg).toContain('height="140"');
-    expect(svg).toContain('height="70"');
+    expect(svg).toContain('height="141"');
+    expect(svg).toContain('height="70.5"');
   });
 
   it('renders the empty state instead of Infinity geometry for zero rows', () => {
@@ -445,11 +445,11 @@ describe('admin-utils svgBarChart (B3: churn chart read the wrong field)', () =>
     const data = Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, '0')}`, churn: i + 1 }));
     const narrow = utils.svgBarChart('c', data, { valueKey: 'churn' });
     const wide = utils.svgBarChart('c', data, { valueKey: 'churn', wide: true });
-    expect(narrow).toContain('viewBox="0 0 620 180"');
-    expect(wide).toContain('viewBox="0 0 1280 220"');
+    expect(narrow).toContain('viewBox="0 0 620 200"');
+    expect(wide).toContain('viewBox="0 0 1280 230"');
     expect(wide).not.toContain('max-height');
-    // Max bar still reaches the same plot height (160) in both canvases.
-    expect(wide).toContain('height="160"');
+    // Max bar still reaches the same plot height (161) in both canvases.
+    expect(wide).toContain('height="161"');
   });
 });
 
@@ -1068,9 +1068,11 @@ describe('admin-utils phone chart variants (mobile 1:1 canvases)', () => {
     expect(svg).toMatch(/d="M \d/);
   });
 
-  it('svgChart wide canvas is unchanged (1280×220)', () => {
+  it('svgChart wide canvas is 1280×230 with readable font sizes', () => {
     const svg = utils.svgChart('rev', months, ['idr'], { wide: true });
-    expect(svg).toContain('viewBox="0 0 1280 220"');
+    expect(svg).toContain('viewBox="0 0 1280 230"');
+    expect(svg).toContain('font-size="13"');
+    expect(svg).toContain('font-size="12"');
   });
 
   it('svgBarChart phone canvas is ~350×200 with 11px values', () => {

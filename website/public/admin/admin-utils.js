@@ -94,13 +94,15 @@
     // viewBox font sizes are true rendered sizes (no downscaling).
     var phone = !wide && !!(opts && opts.phone);
     var w = wide ? 1280 : (phone ? 350 : 600);
-    var h = wide ? 220 : (phone ? 230 : 180);
-    var px = wide ? 56 : 40;
+    var h = wide ? 230 : (phone ? 230 : 200);
+    // Y-axis gutter: wide leaves room for the "Rp999.9jt" style labels
+    // (~58px at 13px font); narrow/phone only draw short integer counts.
+    var px = wide ? 72 : (phone ? 52 : 40);
     var py = wide ? 24 : 20;
     // Wide adds right padding so the last point's centered label stays
     // inside the viewBox; narrow keeps its exact legacy geometry.
     var pw = wide ? w - px - 24 : (phone ? w - px - 8 : w - px);
-    var ph = wide ? h - py - 36 : (phone ? h - py - 30 : h - py - 20);
+    var ph = wide ? h - py - 40 : (phone ? h - py - 30 : h - py - 30);
     var max = Math.max.apply(null, vals);
     var min = 0;
     var rng = max - min || 1;
@@ -130,8 +132,8 @@
     var yLabels = '';
     for (var i = 0; i <= 4; i++) {
       var v = min + (rng / 4) * i;
-      var fs = phone ? 11 : 10;
-      yLabels += '<text x="' + (px - 5) + '" y="' + (y(v) + 3) + '" text-anchor="end" fill="var(--muted)" font-size="' + fs + '">' + (opts && opts.fmt ? opts.fmt(v) : Math.round(v)) + '</text>';
+      var fs = wide ? 13 : (phone ? 11 : 12);
+      yLabels += '<text x="' + (px - 6) + '" y="' + (y(v) + 4) + '" text-anchor="end" fill="var(--muted)" font-size="' + fs + '">' + (opts && opts.fmt ? opts.fmt(v) : Math.round(v)) + '</text>';
     }
     var xLabels = '';
     // Wide canvas fits a label under every point; narrow keeps the
@@ -142,7 +144,7 @@
       if (i % step === 0 || i === data.length - 1) {
         // B5 fix: the M1 guard protected values but not labels — a row
         // without month threw on .slice and killed the whole dashboard.
-        xLabels += '<text x="' + x(i) + '" y="' + (py + ph + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="' + (phone ? 10 : 9) + '">' + escapeHtml(d.month ? String(d.month).slice(5) : '') + '</text>';
+        xLabels += '<text x="' + x(i) + '" y="' + (py + ph + 18) + '" text-anchor="middle" fill="var(--muted)" font-size="' + (wide ? 12 : (phone ? 10 : 11)) + '">' + escapeHtml(d.month ? String(d.month).slice(5) : '') + '</text>';
       }
     });
     return '<svg viewBox="0 0 ' + w + ' ' + h + '" class="chart-svg">' + grid + fills + paths + yLabels + xLabels + '</svg>';
@@ -398,9 +400,11 @@
     // opts.phone: ~350-unit canvas rendered ~1:1 on a phone card.
     var phone = !wide && !!(opts && opts.phone);
     var w = wide ? 1280 : (phone ? 350 : 620);
-    var h = wide ? 220 : (phone ? 200 : 180);
-    var baseline = wide ? 190 : (phone ? 160 : 150);
-    var topPad = wide ? 30 : (phone ? 26 : 10);
+    var h = wide ? 230 : (phone ? 200 : 200);
+    var baseline = wide ? 195 : (phone ? 160 : 165);
+    // Top padding must clear the tallest bar's value label (12-13px glyphs
+    // sit above the bar top) — 10px clipped the label on the max bar.
+    var topPad = wide ? 34 : (phone ? 30 : 24);
     var plotH = baseline - topPad;
     var maxS = Math.max.apply(null, data.map(function (d) { return Number(d[valueKey]) || 0; }));
     var barW = (w - 20) / data.length;
@@ -413,10 +417,10 @@
       // drawn width and center it in the slot so bars stay elegant.
       var bw = Math.min(barW * 0.7, 48);
       var cx = bx + barW / 2;
-      var vfs = phone ? 11 : 10, lfs = phone ? 10 : 9;
+      var vfs = wide ? 13 : (phone ? 11 : 12), lfs = wide ? 12 : (phone ? 10 : 11);
       bars += '<rect x="' + (cx - bw / 2) + '" y="' + (baseline - bh) + '" width="' + bw + '" height="' + bh + '" rx="4" fill="' + (opts && opts.color || 'var(--primary)') + '"/>' +
-        '<text x="' + cx + '" y="' + (baseline - bh - 6) + '" text-anchor="middle" fill="var(--text)" font-size="' + vfs + '" font-weight="600">' + v + '</text>' +
-        '<text x="' + cx + '" y="' + (baseline + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="' + lfs + '">' + escapeHtml(d.month ? d.month.slice(5) : '') + '</text>';
+        '<text x="' + cx + '" y="' + (baseline - bh - 8) + '" text-anchor="middle" fill="var(--text)" font-size="' + vfs + '" font-weight="600">' + v + '</text>' +
+        '<text x="' + cx + '" y="' + (baseline + 18) + '" text-anchor="middle" fill="var(--muted)" font-size="' + lfs + '">' + escapeHtml(d.month ? d.month.slice(5) : '') + '</text>';
     });
     return '<svg viewBox="0 0 ' + w + ' ' + h + '"' + ((wide || phone) ? '' : ' style="max-height:180px"') + ' class="chart-svg">' + bars + '</svg>';
   }

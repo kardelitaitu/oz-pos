@@ -176,12 +176,17 @@
       // Chart canvas variant: the 1280-wide "wide" canvases are 1:1 on a
       // desktop full-row card but downscale chart text to ~3px on a phone
       // card. The phone variant renders ~1:1 (labels at true size).
-      const cv = window.matchMedia && window.matchMedia('(max-width: 640px)').matches ? { phone: true } : { wide: true };
+      // Half-width cards (2-column grid, ~620px) MUST use the narrow 600px
+      // viewBox instead of wide — otherwise the 1280 viewBox gets downscaled
+      // 0.48× and 9px text becomes ~4.3px.
+      const cvPhone = window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+      const fullCv = cvPhone ? { phone: true } : { wide: true };
+      const halfCv = cvPhone ? { phone: true } : {}; // narrow (600px) — proportional to half-column
 
       // Revenue trend (spans the full row — the hero chart)
       const revCard = el('div', 'chart-card chart-card--wide');
       revCard.appendChild(el('h3', null, t('chart.revenueTrendIdr')));
-      revCard.innerHTML += svgChart('rev', m.revenueTrend, ['idr'], Object.assign({ area: true, fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt' }, cv));
+      revCard.innerHTML += svgChart('rev', m.revenueTrend, ['idr'], Object.assign({ area: true, fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt' }, fullCv));
       chartGrid.appendChild(revCard);
 
       // Tier distribution (donut)
@@ -216,13 +221,13 @@
       // Subscriber growth
       const subCard = el('div', 'chart-card');
       subCard.appendChild(el('h3', null, t('chart.subscriberGrowth')));
-      subCard.innerHTML += svgChart('subs', m.subscriberGrowth, ['count'], Object.assign({ area: true }, cv));
+      subCard.innerHTML += svgChart('subs', m.subscriberGrowth, ['count'], Object.assign({ area: true }, halfCv));
       chartGrid2.appendChild(subCard);
 
       // Signups per month (bar chart — extracted to admin-utils.svgBarChart)
       const signupCard = el('div', 'chart-card');
       signupCard.appendChild(el('h3', null, t('chart.signupsPerMonth')));
-      signupCard.innerHTML += svgBarChart('signups', m.signupsPerMonth, Object.assign({ valueKey: 'count', color: 'var(--accent)' }, cv));
+      signupCard.innerHTML += svgBarChart('signups', m.signupsPerMonth, Object.assign({ valueKey: 'count', color: 'var(--accent)' }, halfCv));
       chartGrid2.appendChild(signupCard);
 
       // Churn per month — B3 fix: the server's churnPerMonth rows carry the
@@ -232,7 +237,7 @@
       // bars read better with room.
       const churnCard = el('div', 'chart-card chart-card--wide');
       churnCard.appendChild(el('h3', null, t('chart.churnCanceled')));
-      churnCard.innerHTML += svgBarChart('churn', m.churnPerMonth, Object.assign({ valueKey: 'churn', color: 'var(--bad)' }, cv));
+      churnCard.innerHTML += svgBarChart('churn', m.churnPerMonth, Object.assign({ valueKey: 'churn', color: 'var(--bad)' }, fullCv));
       chartGrid2.appendChild(churnCard);
 
       c.appendChild(chartGrid2);
