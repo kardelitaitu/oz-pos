@@ -20,7 +20,7 @@ use std::sync::LazyLock;
 use std::time::Instant;
 
 use axum::{
-    extract::Request,
+    extract::{Request, State},
     http::{StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -32,12 +32,16 @@ use tokio::sync::RwLock;
 
 const DEFAULT_EXPIRY_HOURS: i64 = 24;
 
-/// JWT validation cache: token → (claims, cached_at).
+/// JWT validation cache: (resolved secret, token) → (claims, cached_at).
 /// Reduces CPU by skipping HMAC + base64 decode on repeat requests.
 /// TTL is 60 seconds — short enough that expired tokens are caught
 /// quickly, long enough to eliminate redundant crypto on hot paths.
+/// The secret is part of the key so a server configured with one secret
+/// can never serve a cached validation result produced under another
+/// (relevant now that the desktop app signs with a per-install secret
+/// while tests/dev may use the fallback constant in the same process).
 const JWT_CACHE_TTL_SECS: u64 = 60;
-static JWT_CACHE: LazyLock<RwLock<HashMap<String, (ApiTokenClaims, Instant)>>> =
+static JWT_CACHE: LazyLock<RwLock<HashMap<(String, String), (ApiTokenClaims, Instant)>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
 /// The payload embedded in every API token.
@@ -215,13 +219,29 @@ pub fn create_token_full(
 /// Returns `Ok(claims)` if the token is valid and not expired.
 /// Uses an in-memory cache to skip redundant HMAC + base64 decode
 /// on hot paths (saves ~0.005 core at 200+ terminals).
-pub async fn validate_token(
+pub async fn validate_token(token_str: &str) -> Result<ApiTokenClaims, jsonwebtoken::errors::Error> {
+    validate_token_with_secret(token_str, None).await
+}
+
+/// Validate a JWT against an explicit signing secret.
+///
+/// `secret` follows the same resolution order as [`signing_secret`]:
+/// non-empty provided value → `OZ_API_SECRET` env → dev fallback
+/// constant. This is the variant the stateful middleware uses so a
+/// server can sign and validate with a per-instance secret (the desktop
+/// local API) instead of the process-wide env, without ever touching
+/// `std::env::set_var` (UB from async workers — removed in C-2).
+pub async fn validate_token_with_secret(
     token_str: &str,
+    secret: Option<&str>,
 ) -> Result<ApiTokenClaims, jsonwebtoken::errors::Error> {
+    let secret = signing_secret(secret);
+    let cache_key = (secret.clone(), token_str.to_string());
+
     // Check cache first (read lock — non-blocking for concurrent readers).
     {
         let cache = JWT_CACHE.read().await;
-        if let Some((claims, cached_at)) = cache.get(token_str)
+        if let Some((claims, cached_at)) = cache.get(&cache_key)
             && cached_at.elapsed().as_secs() < JWT_CACHE_TTL_SECS
         {
             return Ok(claims.clone());
@@ -229,7 +249,6 @@ pub async fn validate_token(
     }
 
     // Cache miss or expired — validate the token cryptographically.
-    let secret = signing_secret(None);
     let decoding_key = DecodingKey::from_secret(secret.as_bytes());
     let mut validation = Validation::default();
     validation.validate_exp = true;
@@ -243,7 +262,7 @@ pub async fn validate_token(
         if cache.len() > 1000 {
             cache.retain(|_, (_, at)| at.elapsed().as_secs() < JWT_CACHE_TTL_SECS);
         }
-        cache.insert(token_str.to_owned(), (claims.clone(), Instant::now()));
+        cache.insert(cache_key, (claims.clone(), Instant::now()));
     }
 
     Ok(claims)
@@ -271,14 +290,16 @@ fn error_code_for(e: &jsonwebtoken::errors::Error) -> &'static str {
     }
 }
 
-/// Axum middleware that rejects requests without a valid JWT.
+/// Extract the bearer token, validate it, and insert the claims into the
+/// request extensions. Shared by both middleware variants.
 ///
-/// Attach to protected routes via `Router::layer(from_fn(auth_middleware))`.
-/// Returns a structured 401 body (`token_expired` / `invalid_token` /
-/// `missing_token`) plus `WWW-Authenticate: Bearer` so clients can tell
-/// why auth failed (ADR sync-auth-hardening P4).
+/// `secret` is forwarded to [`validate_token_with_secret`] (None = env /
+/// dev-fallback resolution).
 #[allow(clippy::result_large_err)]
-pub async fn auth_middleware(mut req: Request, next: Next) -> Result<Response, Response> {
+async fn authenticate(
+    req: &mut Request,
+    secret: Option<&str>,
+) -> Result<(), Response> {
     let auth_header = req
         .headers()
         .get(header::AUTHORIZATION)
@@ -289,13 +310,43 @@ pub async fn auth_middleware(mut req: Request, next: Next) -> Result<Response, R
         .strip_prefix("Bearer ")
         .ok_or_else(|| unauthorized("missing_token"))?;
 
-    match validate_token(token).await {
+    match validate_token_with_secret(token, secret).await {
         Ok(claims) => {
             req.extensions_mut().insert(claims);
-            Ok(next.run(req).await)
+            Ok(())
         }
         Err(e) => Err(unauthorized(error_code_for(&e))),
     }
+}
+
+/// Axum middleware that rejects requests without a valid JWT.
+///
+/// Attach to protected routes via `Router::layer(from_fn(auth_middleware))`.
+/// Returns a structured 401 body (`token_expired` / `invalid_token` /
+/// `missing_token`) plus `WWW-Authenticate: Bearer` so clients can tell
+/// why auth failed (ADR sync-auth-hardening P4).
+///
+/// Resolves the signing secret from the environment — use
+/// [`auth_middleware_with_state`] when the server carries its own secret
+/// in [`crate::AppState`] (the desktop local API does).
+#[allow(clippy::result_large_err)]
+pub async fn auth_middleware(mut req: Request, next: Next) -> Result<Response, Response> {
+    authenticate(&mut req, None).await?;
+    Ok(next.run(req).await)
+}
+
+/// Stateful variant of [`auth_middleware`]: validates bearer tokens
+/// against `AppState::api_secret` instead of the process environment, so
+/// multiple servers with different secrets can coexist (and the desktop
+/// app can sign with a per-install random secret without mutating env).
+#[allow(clippy::result_large_err)]
+pub async fn auth_middleware_with_state(
+    State(state): State<crate::AppState>,
+    mut req: Request,
+    next: Next,
+) -> Result<Response, Response> {
+    authenticate(&mut req, Some(&state.api_secret)).await?;
+    Ok(next.run(req).await)
 }
 
 #[cfg(test)]

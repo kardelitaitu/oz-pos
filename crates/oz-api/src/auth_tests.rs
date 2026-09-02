@@ -1,4 +1,5 @@
 use super::*;
+use crate::AppState;
 
 #[tokio::test]
 async fn create_and_validate() {
@@ -128,4 +129,89 @@ fn token_with_zero_hour_expiry_is_well_formed() {
     assert!(!resp.token.is_empty());
     assert!(!resp.token_id.is_empty());
     assert!(!resp.expires_at.is_empty());
+}
+
+// ── Per-state secret resolution (desktop local API) ─────────────────
+
+#[tokio::test]
+async fn custom_secret_roundtrip() {
+    let secret = "per-install-secret-a7f3";
+    let resp = create_token_full("custom", Some(1), None, None, None, Some(secret)).unwrap();
+    let claims = validate_token_with_secret(&resp.token, Some(secret))
+        .await
+        .unwrap();
+    assert_eq!(claims.sub, "custom");
+}
+
+#[tokio::test]
+async fn custom_secret_token_rejected_by_default_resolution() {
+    // A token signed with a per-install secret must NOT validate under
+    // the env/dev-fallback resolution — otherwise the desktop secret
+    // buys nothing against the known dev constant.
+    let secret = "per-install-secret-b8e4";
+    let resp = create_token_full("custom", Some(1), None, None, None, Some(secret)).unwrap();
+    assert!(validate_token(&resp.token).await.is_err());
+}
+
+#[tokio::test]
+async fn dev_secret_token_rejected_by_custom_secret() {
+    // The reverse direction: a token forged with the known dev constant
+    // must not pass validation on a server configured with a real secret.
+    let secret = "per-install-secret-c9f5";
+    let forged = create_token("forged", Some(1), None, None).unwrap();
+    assert!(validate_token_with_secret(&forged.token, Some(secret)).await.is_err());
+}
+
+#[tokio::test]
+async fn stateful_middleware_uses_state_secret() {
+    use axum::Router;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use axum::routing::get;
+    use tower::ServiceExt;
+
+    let secret = "middleware-secret-d1a6";
+    let state = AppState {
+        api_secret: secret.to_string(),
+        ..AppState::test(rusqlite::Connection::open_in_memory().unwrap())
+    };
+    async fn protected() -> &'static str {
+        "ok"
+    }
+    let app = Router::new()
+        .route("/x", get(protected))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware_with_state,
+        ))
+        .with_state(state);
+
+    let good = create_token_full("ok", Some(1), None, None, None, Some(secret))
+        .unwrap()
+        .token;
+    let forged = create_token("forged", Some(1), None, None).unwrap().token;
+
+    let req = Request::builder()
+        .uri("/x")
+        .header("authorization", format!("Bearer {good}"))
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK, "state-secret token accepted");
+
+    let req = Request::builder()
+        .uri("/x")
+        .header("authorization", format!("Bearer {forged}"))
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::UNAUTHORIZED,
+        "dev-constant token rejected on a state-secret server"
+    );
+
+    let req = Request::builder().uri("/x").body(Body::empty()).unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }

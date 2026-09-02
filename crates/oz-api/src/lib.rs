@@ -241,6 +241,9 @@ impl AppState {
 /// - `GET /api/v1/categories`
 pub fn router(state: AppState) -> Router {
     let cors = build_cors(&state.cors_origins);
+    // Clone for the stateful auth middleware (the original moves into
+    // `.with_state` at the end).
+    let auth_state = state.clone();
 
     let public = Router::new()
         .route("/api/v1/health", get(routes::health::health))
@@ -316,7 +319,14 @@ pub fn router(state: AppState) -> Router {
         // Read-tier gate runs INSIDE auth (auth inserts claims first, then
         // this gates GETs against them) — spec 0047 F3.
         .layer(middleware::from_fn(read_tiers::read_gate_middleware))
-        .layer(middleware::from_fn(auth::auth_middleware));
+        // Stateful auth: validates against AppState::api_secret so the
+        // desktop local API can sign/verify with a per-install secret
+        // without touching the process env. Cloud servers set api_secret
+        // from OZ_API_SECRET, so behavior there is unchanged.
+        .layer(middleware::from_fn_with_state(
+            auth_state,
+            auth::auth_middleware_with_state,
+        ));
 
     Router::new()
         .merge(public)

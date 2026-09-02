@@ -38,15 +38,15 @@ fn cleanup(dir: &std::path::Path) {
 }
 
 /// Generate a test JWT for the given tenant_id, signed with the same
-/// resolved secret the auth middleware uses.
-fn test_token(_state: &AppState, tenant_id: &str) -> String {
+/// secret the stateful auth middleware validates against
+/// (`AppState::api_secret`).
+fn test_token(state: &AppState, tenant_id: &str) -> String {
     use crate::auth::create_token;
-    use crate::auth::signing_secret_for_tests;
     create_token(
         "test",
         Some(1),
         Some(tenant_id),
-        Some(&signing_secret_for_tests()),
+        Some(&state.api_secret),
     )
     .unwrap()
     .token
