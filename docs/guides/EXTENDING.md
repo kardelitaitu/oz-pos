@@ -1,6 +1,6 @@
 # Extending OZ-POS — Scripting & Integration Guide
 
-<!-- Audit stamp: 2026-09-03 · DSH · status: NEW (created from verified code state) · every claim below cross-referenced against: crates/oz-api/src/{lib.rs,auth.rs,read_tiers.rs}, crates/oz-api/src/routes/{tokens.rs,terminals.rs,sales.rs,settings.rs,products.rs,tax_rates.rs,exchange_rates.rs,users.rs,images.rs}, apps/cloud-server/src/{main.rs,openapi.rs,openapi_tests.rs,sync_api.rs}, foundation/src/money.rs, crates/oz-lua/README.md, crates/oz-cli/README.md, docs/guides/plugin-guide.md, docs/specs/_active/0047-openapi-drift-guard-and-read-tiers.md · spec-vs-code drift findings recorded here were repaired the same day (see §10) -->
+<!-- Audit stamp: 2026-09-03 · DSH · status: UPDATED (local API wired into the desktop app the same day) · every claim below cross-referenced against: crates/oz-api/src/{lib.rs,auth.rs,read_tiers.rs}, crates/oz-api/src/routes/{tokens.rs,terminals.rs,sales.rs,settings.rs,products.rs,tax_rates.rs,exchange_rates.rs,users.rs,images.rs}, apps/cloud-server/src/{main.rs,openapi.rs,openapi_tests.rs,sync_api.rs}, apps/desktop-client/src/{local_api.rs,commands/local_api.rs}, foundation/src/money.rs, crates/oz-lua/README.md, crates/oz-cli/README.md, docs/guides/plugin-guide.md, docs/specs/_active/0047-openapi-drift-guard-and-read-tiers.md · spec-vs-code drift findings recorded here were repaired the same day (see §10) -->
 
 This guide is for people writing **their own scripts** against an OZ-POS
 installation — automation on the counter machine, a dashboard against the
@@ -13,7 +13,7 @@ status of each (what is live today vs. wired-but-not-started).
 | You want to… | Surface | Status |
 |---|---|---|
 | Change discounts / tax / order validation **inside** the register flow | Lua plugin (`crates/oz-lua` + `crates/oz-plugin`) | Stable — see [plugin-guide.md](./plugin-guide.md) |
-| Read/write products, stock, sales, rates from an **external process** (KDS, scanner, dashboard, sync job) | REST API (`crates/oz-api`) | Live on **cloud-server**; the crate exists but the desktop/tablet apps do **not** start it yet (§3.2) |
+| Read/write products, stock, sales, rates from an **external process** (KDS, scanner, dashboard, sync job) | REST API (`crates/oz-api`) | Live on **cloud-server**; on the **desktop app** it runs loopback-only behind Settings → Local API (off by default, §2.1); tablet: not started |
 | Batch maintenance against the local SQLite DB (migrations, backup, import/export, CRUD) | `oz` CLI (`crates/oz-cli`) | Stable — see [oz-cli README](../../crates/oz-cli/README.md) |
 | Drive custom hardware (printer, scanner, drawer, display) | Rust HAL traits (`crates/oz-hal`) | Stable — plugin-guide §HAL |
 | Call the app's internals (505 Tauri IPC commands) | **Not an extension surface** — internal front-end↔backend contract, no stability guarantee for third parties | — |
@@ -30,15 +30,31 @@ status of each (what is live today vs. wired-but-not-started).
 | Host | What it serves | Evidence |
 |---|---|---|
 | **Cloud server** (`oz-cloud-server`, the unified deployment) | The full surface: `oz-api` router + sync + webhooks + docs + metrics | `apps/cloud-server/src/main.rs` `build_router()` merges `oz_api::router(...)` with `sync_router`, `webhooks_router`, `docs_router` |
-| **Local terminal** (desktop/tablet app) | **Nothing yet** — `oz_api::serve()` is referenced nowhere in `apps/desktop-client`, `apps/tablet-client`, or `apps/unified` | grep `oz_api::serve\|oz_api::router` → only `apps/cloud-server` |
+| **Desktop app** (`oz-pos-app`) | The `oz-api` router **only**, bound to `127.0.0.1` (default port 3099), **off by default** — enable in Settings → Local API. Tokens are minted in that panel; the server signs with a per-install secret generated on first enable | `apps/desktop-client/src/local_api.rs` (embeds `oz_api::router()`; never `serve()`, which binds 0.0.0.0) |
+| **Tablet app** | Nothing yet — no `local_api` module | grep `local_api` → only `apps/desktop-client` |
 
 Production cloud origin: `https://license.ozpos.my.id` (the Northflank
 origin per spec 0049; your deployment may differ — use the URL configured
 in the terminal's Settings → Cloud Sync).
 
-### 2.2 Run a local playground right now
+### 2.2 Local options: built-in server vs playground
 
-The quickest way to script against the API without touching production:
+**Built-in (recommended for "script against the register on my desk"):**
+open the desktop app → Settings → System → **Local API** → enable. The
+panel shows the base URL (`http://127.0.0.1:3099/api/v1` by default) and
+mints 30-day read tokens for your scripts. Differences from the cloud
+deployment, by design:
+
+- **loopback-only** bind — nothing on your LAN can reach it;
+- tokens are signed with a **per-install secret** generated on first
+  enable (persisted, so they survive restarts); a token forged with the
+  known dev fallback constant is rejected;
+- the secret doubles as the `X-Admin-Key` for master-data writes (§5) and
+  for token minting over HTTP — it lives in the settings table and is
+  deliberately not shown in the UI;
+- no `/api/docs*` and no `/api/sync/*` — those are cloud-server extras.
+
+**Standalone playground (develop against the full cloud surface):**
 
 ```bash
 # SQLite-backed dev server, admin key unset => token minting is OPEN (dev mode)
@@ -163,6 +179,13 @@ curl -X POST https://<server>/api/v1/tokens \
 `client_id` is the `terminal_id`. The tenant comes from the terminal's
 registration, never the request body. These tokens bind the `terminal`
 read preset server-side and **cannot self-elevate**.
+
+**C. Desktop built-in mint** (scripts against your own register): the
+Settings → Local API panel mints tokens in-process (same HS256 shape,
+30-day default, full-read) — no admin key needed in the UI because the
+Tauri command itself is permission-gated (`settings:edit`). Over HTTP on
+that server, path A works with `X-Admin-Key` set to the per-install
+secret (§2.2).
 
 ### 4.2 Token shape and lifecycle
 
@@ -330,13 +353,10 @@ itself. Subcommand table and conventions (minor units, `--db`):
 
 Documented so scripts don't build on sand:
 
-1. **Local terminal API is not started.** The `oz-api` crate is complete and
-   tested, but no desktop/tablet entry point calls `serve()`. "Script
-   against the register on my desk" currently means running
-   `oz-cloud-server` locally (§2.2) against the same DB file — which also
-   has an unresolved design question: `serve()` opens a single
-   `OZ_DB_PATH` connection while the apps have moved to per-store scoped
-   DBs. Wiring + a Settings toggle + localhost binding is planned work.
+1. **Local API scope (desktop v1).** Desktop-only (the tablet app does not
+   wire it yet), and it serves the **primary-store DB** — additional
+   per-store files are not exposed. Loopback-only: LAN exposure would
+   need the `lan_server` PSK pattern first (§2.1).
 2. **Reserved tags without paths** — Inventory/Orders/Reports/Customers/
    Notifications/Analytics appear in the spec's tag list but declare no
    operations.
@@ -347,6 +367,10 @@ Documented so scripts don't build on sand:
    in spec 0047 as the eventual permanent fix; deliberately not done yet.
 
 > **Repaired 2026-09-03** (same day these were first recorded here):
+> the local terminal API is now **wired** — the desktop app embeds
+> `oz_api::router()` on loopback behind Settings → Local API (§2.2), with
+> stateful JWT validation (`auth_middleware_with_state`) so it signs with
+> a per-install secret instead of the process env;
 > `GET|PUT /api/v1/settings`, `GET /api/sync/snapshot` and the three
 > `/api/docs*` paths are now in the OpenAPI spec; the drift guard gained
 > its router→spec direction (source-scan equality); and the spec's

@@ -1,14 +1,19 @@
 # oz-api
 
-<!-- Audit stamp: 2026-09-03 · DSH · status: ACCURATE (route table re-repaired + auth column corrected) · F1: table was again missing 10 routes (exchange-rates ×5, images ×5) · F2: auth column was wrong — tokens/terminals/plan/settings are admin-key-gated (X-Admin-Key when OZ_ADMIN_KEY set; open in dev), settings gated inside the handler despite public-router placement; master-data writes (products POST, stock PATCH, tax-rates POST, exchange-rates POST/DELETE, users POST) additionally require the admin key and reject terminal-scoped tokens (D1) · verified accurate: oz_api::serve() exists, default port 3099 via OZ_API_PORT, Swagger/OpenAPI correctly absent here (lives in cloud-server) · NOTE: serve() is not yet started by desktop/tablet — see docs/guides/EXTENDING.md §10 -->
+<!-- Audit stamp: 2026-09-03 · DSH · status: ACCURATE (route table re-repaired + auth column corrected; local-API note refreshed same day) · F1: table was again missing 10 routes (exchange-rates ×5, images ×5) · F2: auth column was wrong — tokens/terminals/plan/settings are admin-key-gated (X-Admin-Key when OZ_ADMIN_KEY set; open in dev), settings gated inside the handler despite public-router placement; master-data writes (products POST, stock PATCH, tax-rates POST, exchange-rates POST/DELETE, users POST) additionally require the admin key and reject terminal-scoped tokens (D1) · verified accurate: oz_api::serve() exists, default port 3099 via OZ_API_PORT, Swagger/OpenAPI correctly absent here (lives in cloud-server) · NOTE: the desktop app embeds router() on 127.0.0.1 behind Settings → Local API (per-install secret via auth_middleware_with_state); serve() (0.0.0.0) stays standalone-only; tablet not wired — see docs/guides/EXTENDING.md §2.1 -->
 
-REST API server for OZ-POS. An axum HTTP API for third-party scripts, kitchen displays, and inventory scanners. Mounted by `apps/cloud-server` today; intended to also run alongside the Tauri front-end (not wired yet — see [EXTENDING guide](../../docs/guides/EXTENDING.md) §10).
+REST API server for OZ-POS. An axum HTTP API for third-party scripts, kitchen displays, and inventory scanners. Mounted by `apps/cloud-server`, and embedded loopback-only by the desktop app (`apps/desktop-client/src/local_api.rs`, off by default — see [EXTENDING guide](../../docs/guides/EXTENDING.md) §2.2).
 
 ## Quick start
 
 ```rust
-// Background task in apps/desktop-client/src/main.rs
+// Standalone (binds 0.0.0.0, env-configured):
 oz_api::serve().await?;
+
+// Embedded on loopback (what the desktop app does — never serve()):
+let app = oz_api::router(app_state); // AppState carries db + api_secret
+let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
+axum::serve(listener, app).await?;
 ```
 
 Listens on `OZ_API_PORT` (default `3099`). DB path from `OZ_DB_PATH` (default `oz-pos.db`).
