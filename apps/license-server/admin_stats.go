@@ -171,12 +171,16 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 		// ── Time series (12 months) ─────────────────────────────────
 		now := time.Now()
 		type monthBucket struct {
-			Month  string  `json:"month"`
-			Usd    float64 `json:"usd"`
-			Idr    float64 `json:"idr"`
-			Count  int     `json:"count"`
-			Churn  int     `json:"churn"`
-			Source string  `json:"source,omitempty"`
+			Month       string  `json:"month"`
+			Usd         float64 `json:"usd"`
+			Idr         float64 `json:"idr"`
+			PaddleUsd   float64 `json:"paddleUsd,omitempty"`
+			PaddleIdr   float64 `json:"paddleIdr,omitempty"`
+			MidtransUsd float64 `json:"midtransUsd,omitempty"`
+			MidtransIdr float64 `json:"midtransIdr,omitempty"`
+			Count       int     `json:"count"`
+			Churn       int     `json:"churn"`
+			Source      string  `json:"source,omitempty"`
 		}
 		// Build 12-month window.
 		buckets := make([]monthBucket, 12)
@@ -238,11 +242,15 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 			if m, ok := realByMonth[key]; ok && m.Count > 0 && (m.Usd > 0 || m.Idr > 0) {
 				// Provider-verified webhook revenue.
 				revenueTrend = append(revenueTrend, monthBucket{
-					Month:  key,
-					Usd:    math.Round(m.Usd*100) / 100,
-					Idr:    math.Round(m.Idr),
-					Count:  m.Count,
-					Source: providerRevenueSource(m),
+					Month:       key,
+					Usd:         math.Round(m.Usd*100) / 100,
+					Idr:         math.Round(m.Idr),
+					PaddleUsd:   math.Round(m.PaddleUsd*100) / 100,
+					PaddleIdr:   math.Round(m.PaddleIdr),
+					MidtransUsd: math.Round(m.MidtransUsd*100) / 100,
+					MidtransIdr: math.Round(m.MidtransIdr),
+					Count:       m.Count,
+					Source:      providerRevenueSource(m),
 				})
 			} else {
 				// Price-map estimate (labeled fallback).
@@ -405,10 +413,16 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 		// ── Current month provider gross (income/gross source of truth) ─
 		curKey := fmt.Sprintf("%d-%02d", now.Year(), now.Month())
 		monthlyGrossUsd, monthlyGrossIdr := 0.0, 0.0
+		monthlyPaddleUsd, monthlyPaddleIdr := 0.0, 0.0
+		monthlyMidUsd, monthlyMidIdr := 0.0, 0.0
 		grossSource := "estimate"
 		if cm, ok := realByMonth[curKey]; ok && cm.Count > 0 && (cm.Usd > 0 || cm.Idr > 0) {
 			monthlyGrossUsd = math.Round(cm.Usd*100) / 100
 			monthlyGrossIdr = math.Round(cm.Idr)
+			monthlyPaddleUsd = math.Round(cm.PaddleUsd*100) / 100
+			monthlyPaddleIdr = math.Round(cm.PaddleIdr)
+			monthlyMidUsd = math.Round(cm.MidtransUsd*100) / 100
+			monthlyMidIdr = math.Round(cm.MidtransIdr)
 			grossSource = providerRevenueSource(cm)
 		} else {
 			// Fall back to subscription estimate when no provider events.
@@ -419,22 +433,30 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 		// ── Response ────────────────────────────────────────────────
 		return e.JSON(http.StatusOK, map[string]any{
 			"kpis": map[string]any{
-				"totalUsers":       totalUsers,
-				"activeUsers":      activeUsers,
-				"totalSubscribers": totalSubscribers,
-				"mrrUsd":           math.Round(mrrUsd*100) / 100,
-				"mrrIdr":           math.Round(mrrUsd * fxRate),
-				"monthlyGrossUsd":  monthlyGrossUsd,
-				"monthlyGrossIdr":  monthlyGrossIdr,
-				"grossSource":      grossSource,
-				"lifetimeUsd":      math.Round(lifetimeUsd*100) / 100,
-				"lifetimeIdr":      math.Round(lifetimeIdr),
-				"arpuUsd":          arpuUsd,
-				"activeDevices":    activeDevices,
-				"trialToPaidRate":  trialToPaidRate,
-				"fxRate":           fxRate,
-				"fxLive":           fxLive,
-				"fxUpdatedAt":      fxUpdatedAt.Format(time.RFC3339),
+				"totalUsers":          totalUsers,
+				"activeUsers":         activeUsers,
+				"totalSubscribers":    totalSubscribers,
+				"mrrUsd":              math.Round(mrrUsd*100) / 100,
+				"mrrIdr":              math.Round(mrrUsd * fxRate),
+				"monthlyGrossUsd":     monthlyGrossUsd,
+				"monthlyGrossIdr":     monthlyGrossIdr,
+				"monthlyPaddleUsd":    monthlyPaddleUsd,
+				"monthlyPaddleIdr":    monthlyPaddleIdr,
+				"monthlyMidtransUsd":  monthlyMidUsd,
+				"monthlyMidtransIdr":  monthlyMidIdr,
+				"grossSource":         grossSource,
+				"lifetimeUsd":         math.Round(lifetimeUsd*100) / 100,
+				"lifetimeIdr":         math.Round(lifetimeIdr),
+				"lifetimePaddleUsd":   math.Round(rev.LifetimePaddleUsd*100) / 100,
+				"lifetimePaddleIdr":   math.Round(rev.LifetimePaddleIdr),
+				"lifetimeMidtransUsd": math.Round(rev.LifetimeMidUsd*100) / 100,
+				"lifetimeMidtransIdr": math.Round(rev.LifetimeMidIdr),
+				"arpuUsd":             arpuUsd,
+				"activeDevices":       activeDevices,
+				"trialToPaidRate":     trialToPaidRate,
+				"fxRate":              fxRate,
+				"fxLive":              fxLive,
+				"fxUpdatedAt":         fxUpdatedAt.Format(time.RFC3339),
 			},
 			"revenueTrend":     revenueTrend,
 			"subscriberGrowth": subGrowth,

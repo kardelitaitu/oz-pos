@@ -26,21 +26,42 @@ const defaultProviderRevTTL = 5 * time.Minute
 // providerRevenueCacheEntry holds one computed snapshot of the revenue_events
 // ledger plus metadata.
 type providerRevenueCacheEntry struct {
-	ByMonth     map[string]monthRevenue
-	Providers   map[string]int // paddle → count, midtrans → count
-	LifetimeUsd float64
-	LifetimeIdr float64
-	UpdatedAt   time.Time
-	ttl         time.Duration
+	ByMonth           map[string]monthRevenue
+	Providers         map[string]int // paddle → count, midtrans → count
+	LifetimeUsd       float64
+	LifetimeIdr       float64
+	LifetimePaddleUsd float64
+	LifetimePaddleIdr float64
+	LifetimeMidUsd    float64
+	LifetimeMidIdr    float64
+	UpdatedAt         time.Time
+	ttl               time.Duration
 }
 
 // monthRevenue holds the gross amounts for one calendar month from provider
 // webhook data.  Sources records which providers had events in this month.
+//
+// Currency honesty: every revenue_events row stores BOTH currencies
+// (native + the other converted at webhook write time).  Summing the
+// combined Usd/Idr totals mixes native and converted amounts across
+// providers, so this struct ALSO carries per-provider splits computed
+// from each row's native currency:
+//
+//	PaddleUsd    = amount_usd of paddle rows (native USD)
+//	PaddleIdr    = amount_idr of paddle rows (converted at write time)
+//	MidtransUsd  = amount_usd of midtrans rows (converted at write time)
+//	MidtransIdr  = amount_idr of midtrans rows (native IDR)
+//
+// PaddleIdr + MidtransIdr == Idr and PaddleUsd + MidtransUsd == Usd.
 type monthRevenue struct {
-	Usd     float64
-	Idr     float64
-	Count   int
-	Sources map[string]bool // "paddle", "midtrans"
+	Usd         float64
+	Idr         float64
+	PaddleUsd   float64
+	PaddleIdr   float64
+	MidtransUsd float64
+	MidtransIdr float64
+	Count       int
+	Sources     map[string]bool // "paddle", "midtrans"
 }
 
 var (
@@ -54,7 +75,9 @@ var (
 func loadProviderRevenue(app core.App) *providerRevenueCacheEntry {
 	byMonth := make(map[string]monthRevenue)
 	providers := make(map[string]int)
-	lifetimeUsd, lifetimeIdr := 0.0, 0.0
+	var lifetimeUsd, lifetimeIdr float64
+	var lifetimePaddleUsd, lifetimePaddleIdr float64
+	var lifetimeMidUsd, lifetimeMidIdr float64
 
 	events, err := app.FindRecordsByFilter("revenue_events",
 		"id != ''", "-created", 0, 0)
@@ -63,8 +86,6 @@ func loadProviderRevenue(app core.App) *providerRevenueCacheEntry {
 		return &providerRevenueCacheEntry{
 			ByMonth:     byMonth,
 			Providers:   providers,
-			LifetimeUsd: 0,
-			LifetimeIdr: 0,
 			UpdatedAt:   time.Now().UTC(),
 			ttl:         providerRevTTL,
 		}
@@ -80,6 +101,16 @@ func loadProviderRevenue(app core.App) *providerRevenueCacheEntry {
 		m := byMonth[key]
 		m.Usd += usd
 		m.Idr += idr
+		// Per-provider split from each row's native currency (see the
+		// monthRevenue doc comment for the currency semantics).
+		switch provider {
+		case "paddle":
+			m.PaddleUsd += usd
+			m.PaddleIdr += idr
+		case "midtrans":
+			m.MidtransUsd += usd
+			m.MidtransIdr += idr
+		}
 		m.Count++
 		if m.Sources == nil {
 			m.Sources = make(map[string]bool)
@@ -94,15 +125,27 @@ func loadProviderRevenue(app core.App) *providerRevenueCacheEntry {
 
 		lifetimeUsd += usd
 		lifetimeIdr += idr
+		switch provider {
+		case "paddle":
+			lifetimePaddleUsd += usd
+			lifetimePaddleIdr += idr
+		case "midtrans":
+			lifetimeMidUsd += usd
+			lifetimeMidIdr += idr
+		}
 	}
 
 	return &providerRevenueCacheEntry{
-		ByMonth:     byMonth,
-		Providers:   providers,
-		LifetimeUsd: lifetimeUsd,
-		LifetimeIdr: lifetimeIdr,
-		UpdatedAt:   time.Now().UTC(),
-		ttl:         providerRevTTL,
+		ByMonth:           byMonth,
+		Providers:         providers,
+		LifetimeUsd:       lifetimeUsd,
+		LifetimeIdr:       lifetimeIdr,
+		LifetimePaddleUsd: lifetimePaddleUsd,
+		LifetimePaddleIdr: lifetimePaddleIdr,
+		LifetimeMidUsd:    lifetimeMidUsd,
+		LifetimeMidIdr:    lifetimeMidIdr,
+		UpdatedAt:         time.Now().UTC(),
+		ttl:               providerRevTTL,
 	}
 }
 
