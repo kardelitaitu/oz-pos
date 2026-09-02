@@ -192,6 +192,26 @@
       revCard.innerHTML += svgChart('rev', m.revenueTrend, ['idr'], Object.assign({ area: true, sourceKey: 'source', fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt' }, fullCv));
       chartGrid.appendChild(revCard);
 
+      // Provider revenue mix (stacked bars — recommendation #2): each month
+      // shows the Paddle (IDR, write-time converted) + Midtrans (native IDR)
+      // portions stacked, so the provider mix of gross is visible at a
+      // glance instead of a single mixed-currency total. Estimate months
+      // (no provider events) render an empty slot, matching the dashed
+      // segment on the trend line.
+      const mixCard = el('div', 'chart-card chart-card--wide');
+      const mixHead = el('div', 'chart-head');
+      mixHead.appendChild(el('h3', null, t('chart.revenueByProvider')));
+      mixHead.appendChild(el('span', 'chart-legend', '<span class="sw sw--paddle"></span>Paddle <span class="sw sw--midtrans"></span>Midtrans'));
+      mixCard.appendChild(mixHead);
+      mixCard.innerHTML += svgStackedBars('mix', m.revenueTrend, Object.assign({
+        stack: [
+          { key: 'paddleIdr', color: 'var(--primary)' },
+          { key: 'midtransIdr', color: 'var(--success)' },
+        ],
+        fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt',
+      }, fullCv));
+      chartGrid.appendChild(mixCard);
+
       // Tier distribution (donut)
       const tierCard = el('div', 'chart-card');
       tierCard.appendChild(el('h3', null, t('chart.tierDistribution')));

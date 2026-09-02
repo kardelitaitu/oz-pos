@@ -487,6 +487,60 @@ describe('admin-utils svgBarChart (B3: churn chart read the wrong field)', () =>
   });
 });
 
+describe('admin-utils svgStackedBars (provider revenue mix)', () => {
+  it('returns empty state for empty or missing data', () => {
+    expect(utils.svgStackedBars('x', [], { stack: [{ key: 'a', color: 'red' }] })).toContain('chart-empty');
+    expect(utils.svgStackedBars('x', null, { stack: [{ key: 'a', color: 'red' }] })).toContain('chart-empty');
+    expect(utils.svgStackedBars('x', undefined, { stack: [{ key: 'a', color: 'red' }] })).toContain('chart-empty');
+  });
+
+  it('returns empty state when no stack segments are defined', () => {
+    expect(utils.svgStackedBars('x', [{ month: '2026-01', a: 10 }], {})).toContain('chart-empty');
+  });
+
+  it('stacks two segments per month and renders the total label', () => {
+    const data = [
+      { month: '2026-01', paddleIdr: 60000, midtransIdr: 40000 }, // total 100000
+      { month: '2026-02', paddleIdr: 30000, midtransIdr: 20000 }, // total 50000
+    ];
+    const svg = utils.svgStackedBars('mix', data, {
+      stack: [
+        { key: 'paddleIdr', color: 'var(--primary)' },
+        { key: 'midtransIdr', color: 'var(--success)' },
+      ],
+    });
+    // Two months → two month labels
+    expect(svg.match(/text-anchor="middle" fill="var\(--muted\)"/g)?.length).toBe(2);
+    // Total labels: month 1 = 100k, month 2 = 50k
+    expect(svg).toContain('100000');
+    expect(svg).toContain('50000');
+  });
+
+  it('skips the total label for zero-total (estimate) months', () => {
+    const data = [
+      { month: '2026-01', paddleIdr: 60000, midtransIdr: 40000 },
+      { month: '2026-02', paddleIdr: 0, midtransIdr: 0 }, // estimate
+    ];
+    const svg = utils.svgStackedBars('mix', data, {
+      stack: [{ key: 'paddleIdr', color: 'var(--primary)' }, { key: 'midtransIdr', color: 'var(--success)' }],
+    });
+    // Only one total label for the non-zero month; the estimate month has no
+    // value label but still gets a month x-label.
+    expect(svg.match(/font-weight="600"/g)?.length).toBe(1);
+    expect(svg.match(/02/)).toBeTruthy();
+  });
+
+  it('renders both color segments in the correct order', () => {
+    const data = [{ month: '2026-01', paddleIdr: 60000, midtransIdr: 40000 }];
+    const svg = utils.svgStackedBars('mix', data, {
+      stack: [{ key: 'paddleIdr', color: 'red' }, { key: 'midtransIdr', color: 'blue' }],
+    });
+    // Both rects with their respective fill colors
+    expect(svg.match(/fill="red"/)).toBeTruthy();
+    expect(svg.match(/fill="blue"/)).toBeTruthy();
+  });
+});
+
 describe('admin-utils svgDonut single-slice (B4: invisible 100% donut)', () => {
   it('renders a visible full circle when one entry holds 100%', () => {
     // Common early deployment state: every tenant on one tier (or one

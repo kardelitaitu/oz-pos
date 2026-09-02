@@ -460,6 +460,66 @@
     return '<svg viewBox="0 0 ' + w + ' ' + h + '"' + ((wide || phone) ? '' : ' style="max-height:180px"') + ' class="chart-svg">' + bars + '</svg>';
   }
 
+  // svgStackedBars renders a stacked bar chart for the per-provider revenue
+  // mix (provider revenue split, recommendation #2).  Each data row carries
+  // one numeric key per stack segment (e.g. paddleIdr, midtransIdr); segments
+  // are stacked from the baseline up, and the total is labeled above each
+  // bar.  Pure: returns an SVG string; empty/non-object rows degrade to the
+  // chart-empty state like the other chart helpers.
+  //
+  // opts.stack: [{ key, color, label }] — segment order (bottom → top).
+  // opts.fmt:   value formatter for the total label (optional).
+  // opts.wide/opts.phone: same canvas sizing as svgBarChart.
+  function svgStackedBars(_id, data, opts) {
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      return '<div class="chart-empty">No data</div>';
+    }
+    data = data.filter(function (d) { return d && typeof d === 'object'; });
+    var stack = (opts && opts.stack) || [];
+    if (stack.length === 0) {
+      return '<div class="chart-empty">No data</div>';
+    }
+    // Totals per row; drop rows with no positive total.
+    var totals = data.map(function (d) {
+      var t = 0;
+      stack.forEach(function (s) { t += Number(d[s.key]) || 0; });
+      return t;
+    });
+    var wide = !!(opts && opts.wide);
+    var phone = !wide && !!(opts && opts.phone);
+    var w = wide ? 1280 : (phone ? 350 : 620);
+    var h = wide ? 230 : (phone ? 200 : 200);
+    var baseline = wide ? 195 : (phone ? 160 : 165);
+    var topPad = wide ? 34 : (phone ? 30 : 24);
+    var plotH = baseline - topPad;
+    var maxT = Math.max.apply(null, totals.filter(function (n) { return Number.isFinite(n); }));
+    if (!(maxT > 0)) {
+      return '<div class="chart-empty">No data</div>';
+    }
+    var barW = (w - 20) / data.length;
+    var out = '<line x1="10" y1="' + baseline + '" x2="' + (w - 10) + '" y2="' + baseline + '" stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+    var vfs = wide ? 13 : (phone ? 11 : 12), lfs = wide ? 12 : (phone ? 10 : 11);
+    data.forEach(function (d, i) {
+      var total = totals[i];
+      var bx = 10 + i * barW;
+      var bw = Math.min(barW * 0.7, 48);
+      var cx = bx + barW / 2;
+      var yCursor = baseline;
+      stack.forEach(function (s) {
+        var v = Number(d[s.key]) || 0;
+        var bh = maxT > 0 ? (v / maxT) * plotH : 0;
+        if (bh <= 0) return;
+        yCursor -= bh;
+        out += '<rect x="' + (cx - bw / 2) + '" y="' + yCursor + '" width="' + bw + '" height="' + bh + '" rx="2" fill="' + (s.color || 'var(--primary)') + '"/>';
+      });
+      if (total > 0) {
+        out += '<text x="' + cx + '" y="' + (yCursor - 8) + '" text-anchor="middle" fill="var(--text)" font-size="' + vfs + '" font-weight="600">' + (opts && opts.fmt ? opts.fmt(total) : Math.round(total)) + '</text>';
+      }
+      out += '<text x="' + cx + '" y="' + (baseline + 18) + '" text-anchor="middle" fill="var(--muted)" font-size="' + lfs + '">' + escapeHtml(d.month ? d.month.slice(5) : '') + '</text>';
+    });
+    return '<svg viewBox="0 0 ' + w + ' ' + h + '"' + ((wide || phone) ? '' : ' style="max-height:180px"') + ' class="chart-svg">' + out + '</svg>';
+  }
+
   // timeoutSignal builds an AbortSignal for a request, degrading to NO
   // signal where AbortSignal.timeout is unavailable (B20: the static is
   // Chrome/WebView 103+/Safari 16+; calling it unguarded threw TypeError
@@ -1100,7 +1160,9 @@
     // (boolean) intentionally pass through.
     ['totalUsers', 'activeUsers', 'totalSubscribers', 'activeDevices',
       'mrrUsd', 'mrrIdr', 'lifetimeUsd', 'lifetimeIdr', 'arpuUsd',
-      'trialToPaidRate', 'fxRate', 'monthlyGrossUsd', 'monthlyGrossIdr']
+      'trialToPaidRate', 'fxRate', 'monthlyGrossUsd', 'monthlyGrossIdr',
+      'monthlyPaddleUsd', 'monthlyPaddleIdr', 'monthlyMidtransUsd', 'monthlyMidtransIdr',
+      'lifetimePaddleUsd', 'lifetimePaddleIdr', 'lifetimeMidtransUsd', 'lifetimeMidtransIdr']
       .forEach(function (key) { kpis[key] = num(k[key]); });
     return {
       revenueTrend: arr(m.revenueTrend),
@@ -1150,6 +1212,7 @@
     'kpi.activeTerminals': 'Active Terminals',
     'kpi.trialToPaid': 'Trial → Paid',
     'chart.revenueTrendIdr': 'Revenue Trend (IDR)',
+    'chart.revenueByProvider': 'Revenue by Provider (IDR)',
     'chart.monthsVerified': 'months verified (rest estimated)',
     'chart.subscriberGrowth': 'Subscriber Growth',
     'chart.tierDistribution': 'Tier Distribution',
@@ -1401,6 +1464,7 @@
     tenantDetailRows: tenantDetailRows,
     revokeConfirmModal: revokeConfirmModal,
     svgBarChart: svgBarChart,
+    svgStackedBars: svgStackedBars,
     normalizeStats: normalizeStats,
     startLockoutCountdown: startLockoutCountdown,
     startCountdown: startCountdown,
