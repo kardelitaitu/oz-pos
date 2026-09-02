@@ -268,17 +268,21 @@ pub(crate) const TOPOLOGY_APPLY_REQUEST_PREFIX: &str = "oz-pos/topology/apply-re
 /// version bump. It changes only when the envelope's own structure changes.
 pub(crate) const TOPOLOGY_SCHEMA_VERSION: u64 = 1;
 
-/// Schema version of the vendored **semantics contract** (`topologySemantics.json`).
-///
-/// A different axis from [`TOPOLOGY_SCHEMA_VERSION`], and the two must never be
-/// conflated: this one describes the pairing table the editor and the backend
-/// both read (ADR #45 §1 moved it to 2 by giving every row explicit `endpoints`),
-/// while the envelope version describes the shape of a saved diagram. A
-/// merchant's existing graph is unaffected by a contract change, so a contract
-/// bump must not touch the envelope constant, and vice versa. The number itself
-/// is owned by `oz_core` — see the re-export in `topology.rs`, which exists so
-/// this module asserts against one declaration rather than a copy that can
-/// drift.
+// Schema version of the vendored **semantics contract** (`topologySemantics.json`).
+//
+// A different axis from [`TOPOLOGY_SCHEMA_VERSION`], and the two must never be
+// conflated: this one describes the pairing table the editor and the backend
+// both read (ADR #45 §1 moved it to 2 by giving every row explicit `endpoints`),
+// while the envelope version describes the shape of a saved diagram. A
+// merchant's existing graph is unaffected by a contract change, so a contract
+// bump must not touch the envelope constant, and vice versa. The number itself
+// is owned by `oz_core` — re-exported in `topology.rs`, which exists so callers
+// assert against one declaration rather than a copy that can drift.
+//
+// A plain comment rather than `///`: the constant lives in `topology.rs`, so a
+// doc comment here attached to nothing. `cargo check` accepts that silently;
+// `clippy -D warnings` fails it as "empty line after doc comment", which is how
+// this was found.
 
 /// Path segment under a branch's topology key holding its saved diagram
 /// templates (ADR #45 §4.2).

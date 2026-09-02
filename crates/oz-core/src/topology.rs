@@ -407,19 +407,21 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
     // gate can recover from, because every lookup by id now resolves to an
     // arbitrary one of them, so it is refused here before anything reads the
     // index. The TypeScript validator already reported this as `duplicate-node`;
-    // the backend core validator did not have it. The Apply gate in desktop-client DID catch duplicates with its own check, so this was not reachable through Apply - the gap was in every other caller of the core validator.
+    // the core validator did not have it. The Apply gate in desktop-client DID
+    // catch duplicates with its own check, so this was not reachable through
+    // Apply — the gap was in every other caller of the core validator.
     let mut node_by_id: std::collections::HashMap<&str, &Value> = std::collections::HashMap::new();
     for node in nodes {
-        if let Some(id) = value_string(node, "id") {
-            if node_by_id.insert(id, node).is_some() {
-                return Err(topology_validation(
-                    "duplicate-node",
-                    Some(id),
-                    None,
-                    None,
-                    format!("two nodes share the id `{id}`"),
-                ));
-            }
+        if let Some(id) = value_string(node, "id")
+            && node_by_id.insert(id, node).is_some()
+        {
+            return Err(topology_validation(
+                "duplicate-node",
+                Some(id),
+                None,
+                None,
+                format!("two nodes share the id `{id}`"),
+            ));
         }
     }
     // ADR #45 §4.3 follow-up, and the last item of the validation-code coverage
