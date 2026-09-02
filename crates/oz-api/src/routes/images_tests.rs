@@ -42,14 +42,9 @@ fn cleanup(dir: &std::path::Path) {
 /// (`AppState::api_secret`).
 fn test_token(state: &AppState, tenant_id: &str) -> String {
     use crate::auth::create_token;
-    create_token(
-        "test",
-        Some(1),
-        Some(tenant_id),
-        Some(&state.api_secret),
-    )
-    .unwrap()
-    .token
+    create_token("test", Some(1), Some(tenant_id), Some(&state.api_secret))
+        .unwrap()
+        .token
 }
 
 fn make_webp_body() -> Vec<u8> {

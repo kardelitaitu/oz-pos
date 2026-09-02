@@ -159,7 +159,11 @@ async fn dev_secret_token_rejected_by_custom_secret() {
     // must not pass validation on a server configured with a real secret.
     let secret = "per-install-secret-c9f5";
     let forged = create_token("forged", Some(1), None, None).unwrap();
-    assert!(validate_token_with_secret(&forged.token, Some(secret)).await.is_err());
+    assert!(
+        validate_token_with_secret(&forged.token, Some(secret))
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]

@@ -71,11 +71,18 @@ async fn mint_uses_persisted_secret_stably() {
         let db = state.db.lock().await;
         local_api::load_or_create_secret(&db).unwrap()
     };
-    assert_eq!(secret, second_secret, "secret must not rotate between mints");
+    assert_eq!(
+        secret, second_secret,
+        "secret must not rotate between mints"
+    );
     let second = local_api::mint_token(&second_secret, "script-b", Some(1)).unwrap();
     assert_ne!(first.token_id, second.token_id);
     // Both validate under the same per-install secret.
     for t in [&first.token, &second.token] {
-        assert!(oz_api::auth::validate_token_with_secret(t, Some(&secret)).await.is_ok());
+        assert!(
+            oz_api::auth::validate_token_with_secret(t, Some(&secret))
+                .await
+                .is_ok()
+        );
     }
 }

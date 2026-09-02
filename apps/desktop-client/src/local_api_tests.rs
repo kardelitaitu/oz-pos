@@ -98,7 +98,9 @@ async fn server_serves_health_protected_routes_and_stops() {
     assert_eq!(resp.status(), reqwest::StatusCode::OK);
 
     // Protected route without a token → 401.
-    let resp = reqwest::get(format!("{base}/api/v1/products")).await.unwrap();
+    let resp = reqwest::get(format!("{base}/api/v1/products"))
+        .await
+        .unwrap();
     assert_eq!(resp.status(), reqwest::StatusCode::UNAUTHORIZED);
 
     // Protected route with a UI-minted token → 200.
@@ -168,8 +170,18 @@ async fn start_reports_port_conflict_as_error() {
     .unwrap();
     // Same explicit port twice → the second bind must fail cleanly.
     let taken = first.port;
-    let dup = start(db, PathBuf::from(":memory:"), dir.clone(), "e".repeat(32), taken).await;
-    assert!(dup.is_err(), "re-binding a taken port must error, not panic");
+    let dup = start(
+        db,
+        PathBuf::from(":memory:"),
+        dir.clone(),
+        "e".repeat(32),
+        taken,
+    )
+    .await;
+    assert!(
+        dup.is_err(),
+        "re-binding a taken port must error, not panic"
+    );
     first.stop();
     let _ = std::fs::remove_dir_all(&dir);
 }
