@@ -154,6 +154,22 @@ func (s *otpStore) deleteSession(tokenHash string) {
 	delete(s.sessions, tokenHash)
 }
 
+// deleteSessionsForTenant removes every session bound to a tenant and
+// returns how many were dropped (used by the admin tenant delete so a
+// deleted account's dashboard logins die immediately).
+func (s *otpStore) deleteSessionsForTenant(tenantID string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	dropped := 0
+	for hash, sess := range s.sessions {
+		if sess.tenantID == tenantID {
+			delete(s.sessions, hash)
+			dropped++
+		}
+	}
+	return dropped
+}
+
 // sweep removes expired codes and sessions. Runs on a background
 // goroutine and is exposed for tests.
 func (s *otpStore) sweep() {

@@ -84,36 +84,68 @@
     if (vals.length === 0) {
       return '<div class="chart-empty">No data</div>';
     }
-    var w = 600, h = 180, px = 40, py = 20, pw = w - px, ph = h - py - 20;
+    // Canvas: narrow (default) keeps the historical 600×180 geometry.
+    // opts.wide selects a 1280-wide canvas for full-row cards — a 600-unit
+    // viewBox stretched across a ~1300px card upscaled every glyph ~2.2×
+    // (10px labels rendered ~22px, "too zoomed in"). At 1280 the rendered
+    // scale is ~1.0, so viewBox font sizes are the rendered sizes.
+    var wide = !!(opts && opts.wide);
+    // opts.phone: a ~350-unit canvas rendered ~1:1 on a phone card, so
+    // viewBox font sizes are true rendered sizes (no downscaling).
+    var phone = !wide && !!(opts && opts.phone);
+    var w = wide ? 1280 : (phone ? 350 : 600);
+    var h = wide ? 220 : (phone ? 230 : 180);
+    var px = wide ? 56 : 40;
+    var py = wide ? 24 : 20;
+    // Wide adds right padding so the last point's centered label stays
+    // inside the viewBox; narrow keeps its exact legacy geometry.
+    var pw = wide ? w - px - 24 : (phone ? w - px - 8 : w - px);
+    var ph = wide ? h - py - 36 : (phone ? h - py - 30 : h - py - 20);
     var max = Math.max.apply(null, vals);
     var min = 0;
     var rng = max - min || 1;
     var x = function (i) { return px + (i / (data.length - 1 || 1)) * pw; };
     var y = function (v) { return py + ph - ((v - min) / rng) * ph; };
-    var colors = { usd: '#147efb', idr: '#22c55e', count: '#147efb', mrr: '#147efb' };
+    // Design-language semantic tokens — the chart re-themes with the page.
+    var colors = { usd: 'var(--primary)', idr: 'var(--success)', count: 'var(--primary)', mrr: 'var(--primary)' };
+    // Horizontal gridlines at each y-label (hairline borders, not fills).
+    // non-scaling-stroke keeps the hairline 1 CSS px at any canvas scale.
+    var grid = '';
+    for (var gi = 0; gi <= 4; gi++) {
+      var gv = min + (rng / 4) * gi;
+      grid += '<line x1="' + px + '" y1="' + y(gv) + '" x2="' + w + '" y2="' + y(gv) + '" stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+    }
     var paths = '', fills = '';
     series.forEach(function (s) {
       var pts = data.map(function (d, i) { return x(i) + ',' + y(Number(d[s]) || 0); }).join(' L ');
-      paths += '<path d="M ' + pts + '" stroke="' + (colors[s] || '#147efb') + '" stroke-width="2" fill="none" class="chart-line"/>';
+      paths += '<path d="M ' + pts + '" stroke="' + (colors[s] || 'var(--primary)') + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" class="chart-line" vector-effect="non-scaling-stroke"/>';
       if (opts && opts.area) {
-        var base = x(0) + ',' + (py + ph) + ' L ' + pts + ' L ' + x(data.length - 1) + ',' + (py + ph) + ' Z';
-        fills += '<path d="' + base + '" fill="' + (colors[s] || '#147efb') + '" opacity=".08"/>';
+        // B42: the area path was missing its leading "M" — an invalid
+        // d= meant the browser dropped the whole element, so the 10%
+        // area shading under the line silently never rendered.
+        var base = 'M ' + x(0) + ',' + (py + ph) + ' L ' + pts + ' L ' + x(data.length - 1) + ',' + (py + ph) + ' Z';
+        fills += '<path d="' + base + '" fill="' + (colors[s] || 'var(--primary)') + '" opacity=".1"/>';
       }
     });
     var yLabels = '';
     for (var i = 0; i <= 4; i++) {
       var v = min + (rng / 4) * i;
-      yLabels += '<text x="' + (px - 5) + '" y="' + (y(v) + 3) + '" text-anchor="end" fill="var(--muted)" font-size="10">' + (opts && opts.fmt ? opts.fmt(v) : Math.round(v)) + '</text>';
+      var fs = phone ? 11 : 10;
+      yLabels += '<text x="' + (px - 5) + '" y="' + (y(v) + 3) + '" text-anchor="end" fill="var(--muted)" font-size="' + fs + '">' + (opts && opts.fmt ? opts.fmt(v) : Math.round(v)) + '</text>';
     }
     var xLabels = '';
+    // Wide canvas fits a label under every point; narrow keeps the
+    // every-other-point legacy density; phone uses every third point
+    // so labels never collide at true size.
+    var step = wide ? 1 : (phone ? 3 : 2);
     data.forEach(function (d, i) {
-      if (i % 2 === 0 || i === data.length - 1) {
+      if (i % step === 0 || i === data.length - 1) {
         // B5 fix: the M1 guard protected values but not labels — a row
         // without month threw on .slice and killed the whole dashboard.
-        xLabels += '<text x="' + x(i) + '" y="' + (py + ph + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="9">' + escapeHtml(d.month ? String(d.month).slice(5) : '') + '</text>';
+        xLabels += '<text x="' + x(i) + '" y="' + (py + ph + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="' + (phone ? 10 : 9) + '">' + escapeHtml(d.month ? String(d.month).slice(5) : '') + '</text>';
       }
     });
-    return '<svg viewBox="0 0 ' + w + ' ' + h + '" class="chart-svg">' + fills + paths + yLabels + xLabels + '</svg>';
+    return '<svg viewBox="0 0 ' + w + ' ' + h + '" class="chart-svg">' + grid + fills + paths + yLabels + xLabels + '</svg>';
   }
 
   // svgDonut renders a donut chart + legend. Pure; guards empty/zero data.
@@ -134,7 +166,9 @@
     var acc = 0;
     var slices = '';
     var cx = 80, cy = 80, r = 60;
-    var colorList = ['#147efb', '#22c55e', '#e879f9', '#fb923c', '#22d3ee', '#f59e0b'];
+    // Brand palette in the design-language order (blue → green → orange →
+    // sky → pink → yellow); tokens so dark mode keeps the same hues.
+    var colorList = ['var(--primary)', 'var(--success)', 'var(--warning)', 'var(--info)', 'var(--pink)', 'var(--yellow)'];
     data.forEach(function (d, i) {
       var pct = (Number(d[valueKey]) || 0) / total;
       var ang = pct * 360;
@@ -151,9 +185,9 @@
         // 100%. A full circle needs two arcs; split at the halfway angle.
         var mid = start + Math.PI;
         var xm = cx + r * Math.cos(mid), ym = cy + r * Math.sin(mid);
-        slices += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + r + ' ' + r + ' 0 0 1 ' + xm + ' ' + ym + ' A ' + r + ' ' + r + ' 0 0 1 ' + x1 + ' ' + y1 + ' Z" fill="' + c + '" stroke="var(--bg)" stroke-width="2"/>';
+        slices += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + r + ' ' + r + ' 0 0 1 ' + xm + ' ' + ym + ' A ' + r + ' ' + r + ' 0 0 1 ' + x1 + ' ' + y1 + ' Z" fill="' + c + '" stroke="var(--bg-surface)" stroke-width="2"/>';
       } else {
-        slices += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + r + ' ' + r + ' 0 ' + large + ' 1 ' + x2 + ' ' + y2 + ' Z" fill="' + c + '" stroke="var(--bg)" stroke-width="2"/>';
+        slices += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + r + ' ' + r + ' 0 ' + large + ' 1 ' + x2 + ' ' + y2 + ' Z" fill="' + c + '" stroke="var(--bg-surface)" stroke-width="2"/>';
       }
       acc += ang;
     });
@@ -163,7 +197,9 @@
       var c = colors && colors[i] ? colors[i] : colorList[i % colorList.length];
       legend += '<div class="donut-legend-item"><span class="donut-swatch" style="background:' + c + '"></span><span class="donut-label">' + escapeHtml(d[labelKey]) + '</span> <span class="donut-pct">' + Math.round(pct * 100) + '%</span></div>';
     });
-    return { svg: '<svg viewBox="0 0 160 160">' + slices + '</svg>', legend: legend };
+    // Pie geometry + a surface-colored center disc = donut ring. The disc
+    // is a <circle>, not an arc, so the per-slice arc contract holds.
+    return { svg: '<svg viewBox="0 0 160 160">' + slices + '<circle cx="' + cx + '" cy="' + cy + '" r="34" fill="var(--bg-surface)"/></svg>', legend: legend };
   }
 
   // kpiC builds a KPI stat card (label + value + optional sub + icon).
@@ -181,6 +217,21 @@
     if (sub) body.appendChild(el('div', 'kpi-sub', sub));
     s.appendChild(body);
     return s;
+  }
+
+  // statC builds the design-language tinted stat card ("Card Colour
+  // Variants"): 8–10% semantic background + 20% border, hero 24px/800
+  // number in the semantic colour, small label beneath — "one number, one
+  // semantic colour, one label". variant: primary|success|warning|danger|info;
+  // unknown variants fall back to primary so a typo can never render
+  // an unstyled card.
+  function statC(label, value, sub, variant) {
+    var v = ['primary', 'success', 'warning', 'danger', 'info'].indexOf(variant) !== -1 ? variant : 'primary';
+    var card = el('div', 'stat stat--' + v);
+    card.appendChild(el('div', 'stat-value', value));
+    card.appendChild(el('div', 'stat-label', label));
+    if (sub) card.appendChild(el('div', 'stat-sub', sub));
+    return card;
   }
 
   // tableCard builds a card with a header + data table (or an empty state).
@@ -227,8 +278,17 @@
     var row = el('tr');
     row.appendChild(el('td', null, tenant.email || '—'));
     var td1 = el('td'); td1.appendChild(statusPill(tenant.status)); row.appendChild(td1);
-    row.appendChild(el('td', null, (tenant.license && tenant.license.key) || '—'));
-    row.appendChild(el('td', null, (tenant.subscription && tenant.subscription.tierKey) || '—'));
+    // Merged license/tier cell — "[tier] date expired" (user-requested
+    // format). Tier prefers the billing subscription; expiry falls back
+    // license → subscription. The raw license key column was dropped;
+    // the key survives as the hover title so support can still see it.
+    var lic = tenant.license || {}, sub = tenant.subscription || {};
+    var tier = sub.tierKey || lic.tierKey || '';
+    var exp = sub.expiresAt || lic.expiresAt || '';
+    var combo = (tier ? '[' + tier + '] ' : '') + (exp ? String(exp).slice(0, 10) : '—');
+    var td2 = el('td', null, combo || '—');
+    if (combo && lic.key) { td2.title = combo + ' · ' + lic.key; }
+    row.appendChild(td2);
     // B37 (fuzz-found): a non-string truthy created (number/object from a
     // truncated payload) crashed .slice and killed the whole table render.
     row.appendChild(el('td', null, tenant.created ? String(tenant.created).slice(0, 10) : '—'));
@@ -245,16 +305,72 @@
   function tenantDetailRows(data) {
     var tenant = data.tenant || {}, lic = data.license || {}, sub = data.subscription || {};
     var devices = Array.isArray(data.devices) ? data.devices : []; // B37 class
-    return [
+    var rows = [
       [t('th.status'), statusLabel(tenant.status)],
       [t('th.emailVerified'), tenant.emailVerified ? '✓' : '○'],
+      [t('tenant.phone'), tenant.phone || '—'],
       [t('th.created'), tenant.created ? String(tenant.created).slice(0, 10) : '—'],
       [t('th.licenseKey'), lic.key || '—'],
       [t('th.tier'), sub.tierKey || lic.tierKey || '—'],
       [t('th.subscriptionStatus'), statusLabel(sub.status)],
       [t('th.expires'), sub.expiresAt || '—'],
+      // Grace is a conditional hardship state — show the row only when
+      // the tenant is actually in one (avoids a meaningless '—' row for
+      // the 95% of tenants not in grace).
+      sub.graceUntil ? [t('tenant.graceUntil'), sub.graceUntil] : null,
       [t('th.devices'), devices.length],
     ];
+    return rows.filter(function (r) { return r; });
+  }
+
+  // revokeConfirmModal builds the confirm-by-email dialog for destructive
+  // tenant actions (previously one click — no guard at all). The confirm
+  // button stays disabled until the typed email matches the tenant's
+  // address (trimmed, case-insensitive); a live mismatch hint appears when
+  // text is present. Returns { box, cancelBtn } — the caller mounts it and
+  // wires cancel to its closeModal.
+  // opts (Phase 4) reuses the same gate for "delete tenant": title, hint,
+  // confirmLabel and an extraWarn paragraph (cascade consequences).
+  function revokeConfirmModal(email, onConfirm, opts) {
+    opts = opts || {};
+    var box = el('div', 'modal');
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+    box.appendChild(el('h3', null, opts.title || t('tenant.revokeTitle')));
+    var p = el('p', 'small');
+    p.style.marginBottom = '.6rem';
+    p.textContent = (opts.hint || t('tenant.revokeHint')) + (email || '—');
+    box.appendChild(p);
+    if (opts.extraWarn) {
+      var warn = el('p', 'small', opts.extraWarn);
+      warn.style.cssText = 'color:var(--danger);margin:0 0 .6rem';
+      box.appendChild(warn);
+    }
+    var input = el('input', 'input');
+    input.placeholder = t('tenant.revokePlaceholder');
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    box.appendChild(input);
+    var err = el('p', 'small', t('tenant.revokeMismatch'));
+    err.style.cssText = 'color:var(--danger);margin:.4rem 0 0;display:none';
+    box.appendChild(err);
+    var act = el('div', 'modal-actions');
+    var cancelBtn = el('button', 'btn btn-ghost', t('tenant.cancel'));
+    act.appendChild(cancelBtn);
+    var confirmBtn = el('button', 'btn btn-bad', opts.confirmLabel || t('tenant.revoke'));
+    confirmBtn.disabled = true;
+    var matches = function () { return input.value.trim().toLowerCase() === String(email || '').trim().toLowerCase(); };
+    input.addEventListener('input', function () {
+      confirmBtn.disabled = !matches();
+      err.style.display = input.value.trim() === '' || matches() ? 'none' : 'block';
+    });
+    act.appendChild(confirmBtn);
+    box.appendChild(act);
+    // busyWrap (B19): one confirm click fires exactly one action POST.
+    confirmBtn.addEventListener('click', busyWrap(confirmBtn, function () {
+      if (matches()) onConfirm();
+    }));
+    return { box: box, cancelBtn: cancelBtn };
   }
 
   // svgBarChart renders a simple bar chart as an SVG string (extracted
@@ -273,18 +389,36 @@
     // (an all-filtered set falls to the existing maxS>0 empty guard).
     data = data.filter(function (d) { return d && typeof d === 'object'; });
     var valueKey = (opts && opts.valueKey) || 'count';
+    // Canvas: narrow uses a 620-unit canvas (matches the half-column card
+    // width at desktop widths → ~1:1 scale); opts.wide selects a 1280-wide
+    // canvas for full-row cards so text isn't upscaled ~2.2× when the
+    // SVG stretches across the row (same "too zoomed in" defect as the
+    // line chart).
+    var wide = !!(opts && opts.wide);
+    // opts.phone: ~350-unit canvas rendered ~1:1 on a phone card.
+    var phone = !wide && !!(opts && opts.phone);
+    var w = wide ? 1280 : (phone ? 350 : 620);
+    var h = wide ? 220 : (phone ? 200 : 180);
+    var baseline = wide ? 190 : (phone ? 160 : 150);
+    var topPad = wide ? 30 : (phone ? 26 : 10);
+    var plotH = baseline - topPad;
     var maxS = Math.max.apply(null, data.map(function (d) { return Number(d[valueKey]) || 0; }));
-    var barW = 420 / data.length;
-    var bars = '';
+    var barW = (w - 20) / data.length;
+    var bars = '<line x1="10" y1="' + baseline + '" x2="' + (w - 10) + '" y2="' + baseline + '" stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
     data.forEach(function (d, i) {
       var v = Number(d[valueKey]) || 0;
-      var bh = maxS > 0 ? (v / maxS) * 140 : 0;
-      var bx = 10 + i * (barW + 2);
-      bars += '<rect x="' + bx + '" y="' + (150 - bh) + '" width="' + (barW * 0.7) + '" height="' + bh + '" rx="2" fill="' + (opts && opts.color || 'var(--accent)') + '" opacity=".8"/>' +
-        '<text x="' + (bx + barW * 0.35) + '" y="' + (150 - bh - 4) + '" text-anchor="middle" fill="var(--text)" font-size="9">' + v + '</text>' +
-        '<text x="' + (bx + barW * 0.35) + '" y="165" text-anchor="middle" fill="var(--muted)" font-size="8">' + escapeHtml(d.month ? d.month.slice(5) : '') + '</text>';
+      var bh = maxS > 0 ? (v / maxS) * plotH : 0;
+      var bx = 10 + i * barW;
+      // Wide slots would make each bar ~74 units thick at 1:1 — cap the
+      // drawn width and center it in the slot so bars stay elegant.
+      var bw = Math.min(barW * 0.7, 48);
+      var cx = bx + barW / 2;
+      var vfs = phone ? 11 : 10, lfs = phone ? 10 : 9;
+      bars += '<rect x="' + (cx - bw / 2) + '" y="' + (baseline - bh) + '" width="' + bw + '" height="' + bh + '" rx="4" fill="' + (opts && opts.color || 'var(--primary)') + '"/>' +
+        '<text x="' + cx + '" y="' + (baseline - bh - 6) + '" text-anchor="middle" fill="var(--text)" font-size="' + vfs + '" font-weight="600">' + v + '</text>' +
+        '<text x="' + cx + '" y="' + (baseline + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="' + lfs + '">' + escapeHtml(d.month ? d.month.slice(5) : '') + '</text>';
     });
-    return '<svg viewBox="0 0 440 180" style="max-height:180px">' + bars + '</svg>';
+    return '<svg viewBox="0 0 ' + w + ' ' + h + '"' + ((wide || phone) ? '' : ' style="max-height:180px"') + ' class="chart-svg">' + bars + '</svg>';
   }
 
   // timeoutSignal builds an AbortSignal for a request, degrading to NO
@@ -320,6 +454,246 @@
       }
     } catch (e) { /* not live */ }
     return { rate: null, updatedAt: '', live: false };
+  }
+
+  // fxTimeLabel renders an FX updatedAt timestamp in WIB (UTC+7) — the
+  // operating timezone of the product — instead of the raw UTC clock time
+  // the chip used to show. Both producers (the stats API and
+  // fetchFxRate's toISOString) emit 'YYYY-MM-DDTHH:MM…Z'.
+  // Returns '' for unparseable input so the caller can drop the suffix
+  // rather than render garbage; a zone-less string falls back to the
+  // legacy raw "HH:MM UTC" (Date would parse it as browser-local and a
+  // +7 shift would then double-apply).
+  function fxTimeLabel(iso) {
+    if (!iso || typeof iso !== 'string') return '';
+    var utcAnchored = /Z$/i.test(iso) || /[+-]\d{2}:?\d{2}$/.test(iso);
+    if (!utcAnchored) {
+      var raw = iso.slice(11, 16);
+      return raw ? raw + ' UTC' : '';
+    }
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    var shifted = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+    if (isNaN(shifted.getTime())) return '';
+    var hh = ('0' + shifted.getUTCHours()).slice(-2);
+    var mm = ('0' + shifted.getUTCMinutes()).slice(-2);
+    return hh + ':' + mm + ' UTC+7';
+  }
+
+  // stripAnsi removes ANSI terminal escape sequences (colors, cursor
+  // moves, OSC titles) that container logs carry, so the log panel shows
+  // clean text.
+  function stripAnsi(s) {
+    return String(s == null ? '' : s)
+      .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+      .replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
+      .replace(/\x1b[@-_]/g, '');
+  }
+
+  // logTsWib formats a log timestamp as HH:MM:SS in WIB (UTC+7) — the
+  // same operating-timezone convention as the FX chip. Returns '' for
+  // unparseable input; the row then simply omits the stamp.
+  function logTsWib(iso) {
+    if (!iso || typeof iso !== 'string') return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    var shifted = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+    if (isNaN(shifted.getTime())) return '';
+    return ('0' + shifted.getUTCHours()).slice(-2) + ':' +
+      ('0' + shifted.getUTCMinutes()).slice(-2) + ':' +
+      ('0' + shifted.getUTCSeconds()).slice(-2);
+  }
+
+  // logView renders the platform log lines (Northflank via the worker
+  // proxy) as a terminal-style panel. Rows are built with el() →
+  // textContent, so hostile log content can never inject markup.
+  function logView(lines) {
+    var wrap = el('div', 'log-view');
+    if (!Array.isArray(lines) || lines.length === 0) {
+      wrap.appendChild(el('p', 'empty', t('health.logsEmpty')));
+      return wrap;
+    }
+    lines.forEach(function (l) {
+      var msgText = stripAnsi(l && l.log);
+      var isErr = /\b(error|failed|exception|fatal|panic)\b/i.test(msgText);
+      var row = el('div', 'log-line' + (isErr ? ' log-line--err' : ''));
+      var ts = l && l.ts ? logTsWib(l.ts) : '';
+      if (ts) row.appendChild(el('span', 'log-ts', ts));
+      row.appendChild(el('span', 'log-msg', msgText));
+      wrap.appendChild(row);
+    });
+    return wrap;
+  }
+
+  // cfDeployRows renders Cloudflare Worker deployment history (newest
+  // first) as compact rows: deploy message with the git sha highlighted,
+  // author, trigger chip and a WIB timestamp. Built with el() →
+  // textContent; API data never touches innerHTML.
+  function cfDeployRows(deploys) {
+    var wrap = el('div', 'deploy-list');
+    if (!Array.isArray(deploys) || deploys.length === 0) {
+      wrap.appendChild(el('p', 'empty', t('health.deploysEmpty')));
+      return wrap;
+    }
+    deploys.forEach(function (d) {
+      var row = el('div', 'deploy-row');
+      var main = el('span', 'deploy-msg');
+      var msg = String((d && d.message) || '');
+      // Highlight the embedded git sha ("Coding Agent — 47e3ea90 …").
+      var m = msg.match(/\b[0-9a-f]{8}\b/);
+      if (m && m.index !== undefined) {
+        if (m.index > 0) main.appendChild(document.createTextNode(msg.slice(0, m.index)));
+        main.appendChild(el('span', 'deploy-sha', m[0]));
+        if (m.index + m[0].length < msg.length) main.appendChild(document.createTextNode(msg.slice(m.index + m[0].length)));
+      } else {
+        main.textContent = msg || '—';
+      }
+      row.appendChild(main);
+      if (d && d.author) row.appendChild(el('span', 'deploy-author', String(d.author)));
+      var trig = String((d && d.trigger) || 'deployment');
+      row.appendChild(el('span', 'deploy-chip deploy-chip--' + (trig === 'secret' ? 'secret' : 'deploy'), trig));
+      var ts = d && d.time ? logTsWib(d.time) : '';
+      if (ts) row.appendChild(el('span', 'deploy-time', ts + ' WIB'));
+      wrap.appendChild(row);
+    });
+    return wrap;
+  }
+
+  // relTime renders a coarse relative timestamp ("just now", "4m ago",
+  // "3h ago", "2d ago"). nowMs is injectable so tests are deterministic.
+  // Returns '' for junk input.
+  function relTime(iso, nowMs) {
+    if (!iso || typeof iso !== 'string') return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    var now = typeof nowMs === 'number' && isFinite(nowMs) ? nowMs : Date.now();
+    var s = Math.floor((now - d.getTime()) / 1000);
+    if (s < 10) return t('health.justNow');
+    if (s < 60) return s + 's' + t('health.agoSuffix');
+    if (s < 3600) return Math.floor(s / 60) + 'm' + t('health.agoSuffix');
+    if (s < 86400) return Math.floor(s / 3600) + 'h' + t('health.agoSuffix');
+    return Math.floor(s / 86400) + 'd' + t('health.agoSuffix');
+  }
+
+  // sparkline renders a request-per-minute area chart as an SVG string
+  // (caller sets innerHTML). buckets: [{t: ISO, req, err}] ascending.
+  // Errors overlay as a red line scaled to their own max (error counts
+  // are orders of magnitude smaller than requests).
+  function sparkline(buckets, opts) {
+    if (!Array.isArray(buckets) || buckets.length < 2) {
+      return '<div class="chart-empty">' + escapeHtml(t('health.trafficEmpty')) + '</div>';
+    }
+    // Readability fix: the plot was a bare line — no gridlines, no y
+    // values. Gridlines every 25% of peak + a y-label column. Labels are
+    // HTML (not SVG <text>) because preserveAspectRatio="none" stretches
+    // SVG text horizontally when the card width ≠ viewBox width; HTML
+    // stays crisp at any card width. The opts arg is kept for signature
+    // compatibility (the old phone variant is obsolete — HTML labels made
+    // it unnecessary).
+    var w = 620, h = 150, baseline = 118, top = 18, pad = 10;
+    var plotW = w - pad * 2, plotH = baseline - top;
+    var maxR = Math.max.apply(null, buckets.map(function (b) { return Number(b && b.req) || 0; }));
+    var maxE = Math.max.apply(null, buckets.map(function (b) { return Number(b && b.err) || 0; }));
+    if (maxR <= 0) {
+      return '<div class="chart-empty">' + escapeHtml(t('health.trafficEmpty')) + '</div>';
+    }
+    var x = function (i) { return pad + (i * plotW) / (buckets.length - 1); };
+    var yR = function (v) { return baseline - (v / maxR) * plotH; };
+    // Gridlines at 0/25/50/75/100% of peak. The svg is rendered at a CSS
+    // height of 150px with a 150-unit viewBox, so viewBox y maps 1:1 to
+    // pixels and the HTML label column can align with top:18/43/68/93/118.
+    var grid = '', yLabels = '';
+    var fmt = function (v) { v = Math.round(v); return v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(v); };
+    for (var gi = 0; gi <= 4; gi++) {
+      var gy = top + (plotH / 4) * gi;
+      grid += '<line x1="' + pad + '" y1="' + gy + '" x2="' + (w - pad) + '" y2="' + gy + '" stroke="var(--border)" stroke-width="1"' + (gi === 4 ? '' : ' stroke-dasharray="4 4"') + ' vector-effect="non-scaling-stroke"/>';
+      yLabels += '<span style="top:' + Math.round(gy) + 'px">' + fmt(maxR * (4 - gi) / 4) + '</span>';
+    }
+    // B42 lesson: the area path must START with the M command.
+    var pts = buckets.map(function (b, i) { return x(i) + ',' + yR(Number(b.req) || 0).toFixed(1); }).join(' L ');
+    var area = 'M ' + x(0) + ',' + baseline + ' L ' + pts + ' L ' + x(buckets.length - 1) + ',' + baseline + ' Z';
+    var errs = '';
+    if (maxE > 0) {
+      var yE = function (v) { return baseline - (v / maxE) * plotH; };
+      var ePts = buckets.map(function (b, i) { return x(i) + ',' + yE(Number(b.err) || 0).toFixed(1); }).join(' ');
+      errs = '<polyline points="' + ePts + '" fill="none" stroke="var(--danger)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>';
+    }
+    var t0 = logTsWib(buckets[0].t), t1 = logTsWib(buckets[buckets.length - 1].t);
+    return '<div class="spark-wrap">' +
+      '<div class="spark-y" aria-hidden="true">' + yLabels + '</div>' +
+      '<div class="spark-plot">' +
+        '<svg viewBox="0 0 ' + w + ' ' + h + '" class="chart-svg spark-svg" preserveAspectRatio="none">' +
+          grid +
+          '<path d="' + area + '" fill="var(--tint-primary-bg)" stroke="none"/>' +
+          '<polyline points="' + buckets.map(function (b, i) { return x(i) + ',' + yR(Number(b.req) || 0).toFixed(1); }).join(' ') + '" fill="none" stroke="var(--primary)" stroke-width="2" vector-effect="non-scaling-stroke"/>' +
+          errs +
+        '</svg>' +
+        '<div class="spark-x" aria-hidden="true"><span>' + escapeHtml(t0) + '</span><span>' + escapeHtml(t1) + '</span></div>' +
+      '</div>' +
+      '</div>';
+  }
+
+  // nfStatusCard renders the Northflank service status (deployment,
+  // build, running git sha, branch, region, instances) as a compact
+  // key-value card. Built with el() → textContent.
+  function nfStatusCard(s) {
+    var wrap = el('div', 'svc-grid');
+    if (!s || typeof s !== 'object') {
+      wrap.appendChild(el('p', 'empty', t('health.serviceEmpty')));
+      return wrap;
+    }
+    function kv(label, valueText, valueCls) {
+      wrap.appendChild(el('span', 'muted', label));
+      var v = el('span', valueCls || null, valueText);
+      v.style.textAlign = 'right';
+      wrap.appendChild(v);
+    }
+    var dStatus = String(s.deploymentStatus || '—');
+    var dCls = dStatus === 'COMPLETED' ? 'status-ok' : (dStatus === 'ERROR' ? 'status-bad' : 'status-warn');
+    kv(t('health.status'), dStatus, 'status-chip ' + dCls);
+    kv(t('health.svcRegion'), String(s.region || '—'));
+    kv(t('health.svcBranch'), String(s.branch || '—'));
+    if (s.deployedSha) {
+      wrap.appendChild(el('span', 'muted', t('health.svcRunningSha')));
+      var fullSha = String(s.deployedSha);
+      var shaCell = el('span', 'mono-cell');
+      var shaEl = el('span', 'deploy-sha', fullSha.slice(0, 8));
+      shaEl.title = fullSha;
+      shaCell.appendChild(shaEl);
+      if (s.deploymentAt) shaCell.appendChild(el('span', 'muted', ' · ' + relTime(s.deploymentAt)));
+      shaCell.style.textAlign = 'right';
+      wrap.appendChild(shaCell);
+    }
+    kv(t('health.svcInstances'), String(s.instances != null ? s.instances : '—'));
+    if (s.buildStatus) kv(t('health.svcBuild'), String(s.buildStatus), 'status-chip ' + (s.buildStatus === 'SUCCESS' ? 'status-ok' : 'status-warn'));
+    return wrap;
+  }
+
+  // uptimeRows renders the public-surface uptime checks: name, up dot,
+  // latency in ms, and the failure reason when down. el() → textContent.
+  function uptimeRows(checks) {
+    var wrap = el('div', 'up-list');
+    if (!Array.isArray(checks) || checks.length === 0) {
+      wrap.appendChild(el('p', 'empty', t('health.serviceEmpty')));
+      return wrap;
+    }
+    checks.forEach(function (c) {
+      var row = el('div', 'up-row');
+      row.appendChild(el('span', 'up-dot ' + (c && c.up ? 'up-dot--ok' : 'up-dot--bad')));
+      row.appendChild(el('span', 'up-name', String((c && c.name) || '?')));
+      if (c && c.vantage) {
+        row.appendChild(el('span', 'up-vantage', c.vantage === 'browser' ? t('health.vantageBrowser') : t('health.vantageEdge')));
+      }
+      if (c && c.up) {
+        row.appendChild(el('span', 'up-ms', (Number(c.ms) || 0) + ' ms'));
+      } else {
+        var err = el('span', 'up-err', String((c && c.error) || t('health.uptimeFailed')));
+        err.title = err.textContent;
+        row.appendChild(err);
+      }
+      wrap.appendChild(row);
+    });
+    return wrap;
   }
 
   // exchangeUrlFrom validates the /exchange-issue response and builds the
@@ -724,6 +1098,9 @@
   // fall back to the key itself so the UI never shows a blank label).
   var STRINGS = {
     'dashboard.title': 'Dashboard',
+    'section.revenue': 'Revenue',
+    'section.growth': 'Growth',
+    'common.active': 'active',
     'kpi.totalUsers': 'Total Users',
     'kpi.totalSubscribers': 'Total Subscribers',
     'kpi.mrr': 'MRR',
@@ -754,6 +1131,16 @@
     'th.expires': 'Expires',
     'th.licenseKey': 'License key',
     'th.license': 'License',
+    'th.licenseTier': 'License / Tier',
+    'tenant.phone': 'Phone',
+    'tenant.graceUntil': 'Grace until',
+    'tenant.revokeTitle': 'Revoke tenant access',
+    'tenant.revokeHint': 'This disables the tenant immediately. Type their email to confirm: ',
+    'tenant.revokePlaceholder': 'tenant email',
+    'tenant.revokeMismatch': 'Email does not match yet.',
+    'tenant.renewNoSub': 'Renew (no subscription)',
+    'tenant.renewNoSubTip': 'No subscription record — renew would fail. Use "Grant subscription" to add one.',
+    'tenant.noSubWarn': 'This tenant has NO subscription record — saving would silently do nothing server-side.',
     'th.devices': 'Devices',
     'th.subscriptionStatus': 'Subscription status',
     'th.emailVerified': 'Email verified',
@@ -763,6 +1150,31 @@
     'tenant.changeTier': 'Change tier',
     'tenant.reasonOverride': 'Reason for override (audit)',
     'tenant.renew365': 'Renew +365d',
+    // ── Phase 4: tenant lifecycle UI ──────────────────────────────
+    'tenant.editContact': 'Edit contact',
+    'tenant.editTitle': 'Edit tenant contact',
+    'tenant.emailTaken': 'That email is already in use.',
+    'tenant.contactUpdated': 'Contact updated',
+    'tenant.devices': 'Devices',
+    'tenant.lastSeen': 'Last seen',
+    'tenant.deviceRevoked': 'Device revoked',
+    'tenant.renewTitle': 'Renew subscription',
+    'tenant.setExactDate': 'Set exact date',
+    'tenant.or': 'or',
+    'tenant.grantTitle': 'Grant subscription',
+    'tenant.grantHint': 'For transfer/e-wallet payments made outside Paddle/Midtrans.',
+    'tenant.months': 'Months',
+    'tenant.exactDate': 'Exact date (inclusive)',
+    'tenant.reasonGrant': 'Reason (audit trail)',
+    'tenant.reasonRequired': 'Reason is required.',
+    'tenant.granted': 'Granted',
+    'tenant.delete': 'Delete tenant',
+    'tenant.deleteTitle': 'Delete tenant permanently',
+    'tenant.deleteHint': 'This cannot be undone. Type the tenant email to confirm: ',
+    'tenant.deleteWarn': 'All devices and subscriptions are deleted. License keys are unlinked but kept for the audit trail.',
+    'tenant.deleteConfirm': 'Delete permanently',
+    'tenant.deleted': 'Tenant deleted',
+    // ──────────────────────────────────────────────────────────────
     'tenant.revoke': 'Revoke',
     'tenant.revoked': 'Revoked',
     'tenant.activate': 'Activate',
@@ -794,6 +1206,43 @@
     'health.notConfigured': '— Not configured',
     'health.version': 'Version',
     'health.time': 'Time',
+    'health.logsTitle': 'Service Logs — cloud (last 100 lines)',
+    'health.logsRefresh': '↻ Refresh',
+    'health.logsCaption': 'times in UTC+7 · source: Northflank',
+    'health.logsEmpty': 'No log lines in the last 24 hours.',
+    'health.logsFailed': 'Could not load logs.',
+    'health.deploysTitle': 'Cloudflare Deployments — worker oz-pos',
+    'health.deploysRefresh': '↻ Refresh',
+    'health.deploysCaption': 'times in UTC+7 · source: Cloudflare',
+    'health.deploysEmpty': 'No deployments found.',
+    'health.deploysFailed': 'Could not load deployments.',
+    'health.serviceTitle': 'Cloud Service — cloud @ oz-pos',
+    'health.serviceRefresh': '↻ Refresh',
+    'health.serviceEmpty': 'Service status unavailable.',
+    'health.serviceFailed': 'Could not load service status.',
+    'health.svcRegion': 'Region',
+    'health.svcBranch': 'Branch',
+    'health.svcRunningSha': 'Running build',
+    'health.svcInstances': 'Instances',
+    'health.svcBuild': 'Last build',
+    'health.uptimeTitle': 'Uptime — public surfaces',
+    'health.uptimeRefresh': '↻ Refresh',
+    'health.uptimeFailed': 'unreachable',
+    'health.vantageEdge': 'edge',
+    'health.vantageBrowser': 'browser',
+    'health.workerLogsTitle': 'Worker Logs — oz-pos (last hour)',
+    'health.workerLogsRefresh': '↻ Refresh',
+    'health.workerLogsEmpty': 'No worker log events in the last hour.',
+    'health.workerLogsFailed': 'Could not load worker logs.',
+    'health.trafficTitle': 'Traffic — requests/minute (24h)',
+    'health.trafficRefresh': '↻ Refresh',
+    'health.trafficEmpty': 'No traffic in the last 24 hours.',
+    'health.trafficFailed': 'Could not load traffic.',
+    'health.justNow': 'just now',
+    'health.agoSuffix': ' ago',
+    'health.autoOn': 'Auto-refresh: on',
+    'health.autoOff': 'Auto-refresh: off',
+    'health.updated': 'updated',
     'common.loading': 'Loading…',
     'common.loadingTenants': 'Loading tenants…',
     'common.failedToLoadTenants': 'Failed to load tenants.',
@@ -904,9 +1353,11 @@
     svgChart: svgChart,
     svgDonut: svgDonut,
     kpiC: kpiC,
+    statC: statC,
     tableCard: tableCard,
     tenantRow: tenantRow,
     tenantDetailRows: tenantDetailRows,
+    revokeConfirmModal: revokeConfirmModal,
     svgBarChart: svgBarChart,
     normalizeStats: normalizeStats,
     startLockoutCountdown: startLockoutCountdown,
@@ -916,6 +1367,15 @@
     setAuthMode: setAuthMode,
     busyWrap: busyWrap,
     fetchFxRate: fetchFxRate,
+    fxTimeLabel: fxTimeLabel,
+    stripAnsi: stripAnsi,
+    logTsWib: logTsWib,
+    logView: logView,
+    cfDeployRows: cfDeployRows,
+    relTime: relTime,
+    sparkline: sparkline,
+    nfStatusCard: nfStatusCard,
+    uptimeRows: uptimeRows,
     mountModal: mountModal,
     flashMessage: flashMessage,
     fetchWithTimeout: fetchWithTimeout,

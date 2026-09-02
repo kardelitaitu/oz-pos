@@ -1,5 +1,8 @@
     const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'https://license.ozpos.my.id';
     let currentTab = 'dashboard';
+    // Health-tab auto-refresh interval handles; cleared when the health
+    // tab is left so tab switches never leave orphan timers firing.
+    let healthTimers = [];
 
     // ── FX rate (live from open.er-api.com, fallback to 16000) ───
     let fxRate = 16000;
@@ -14,14 +17,17 @@
     // defined in admin-utils.js (loaded first) so they're unit-testable.
     // admin-utils.js sets these as globals for backward compatibility.
 
-    async function api(path, body) {
+    async function api(path, body, method) {
       // B12 fix: both fetches go through admin-utils.fetchWithTimeout —
       // the old un-timed awaits left the whole render pending forever on
       // a hung connection (skeleton, no retry UI, no console error).
+      // Phase 4: third arg sets PATCH/DELETE explicitly; the historic
+      // contract (body ⇒ POST, no body ⇒ GET) is unchanged for the
+      // existing call sites.
       const sess = await fetchWithTimeout(undefined, '/__oz/session');
       const token = (await sess.json()).token;
       const opts = { headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } };
-      if (body) { opts.method = 'POST'; opts.body = body; }
+      if (body) { opts.method = method || 'POST'; opts.body = body; }
       const res = await fetchWithTimeout(undefined, API + path, opts);
       if (isAuthDenied(res.status)) {
         // P3: build the card via DOM API (el() uses textContent), NOT
@@ -59,10 +65,11 @@
     // response landing after the user switched tabs overwrote the tenants/
     // health view. Same last-click-wins pattern as renderTenants (B15).
     const dashboardGuard = createSeqGuard();
-    async function renderDashboard() {
-      const c = document.getElementById('content');
+    async function renderDashboard(background) {
+      // Build into a detached fragment and swap only when fully rendered —
+      // a background refresh never flashes a skeleton over the live view.
+      const c = el('div');
       const seq = dashboardGuard.next();
-      c.innerHTML = '<div class="skeleton" style="height:8rem"></div>';
 
       // Load real stats; on failure show an error state (no MOCK fallback).
       let stats = null;
@@ -73,8 +80,10 @@
       if (!stats) {
         // api() already rendered an "Access denied" screen for 401/403 —
         // don't overwrite it with a generic error. Only show the retry UI
-        // for network / server errors.
+        // for network / server errors. A BACKGROUND refresh keeps the
+        // last good view mounted instead of replacing it with an error.
         if (loadError && loadError.authDenied) { return; }
+        if (background) { return; }
         c.innerHTML =
           '<div class="card" style="text-align:center;padding:2rem">' +
           '<h2 style="margin:0 0 .5rem;color:var(--bad)">' + t('common.statsUnavailable') + '</h2>' +
@@ -82,7 +91,8 @@
           '<button class="btn" id="retry-stats">' + t('common.retry') + '</button>' +
           '</div>';
         const retry = document.getElementById('retry-stats');
-        if (retry) { retry.addEventListener('click', renderDashboard); }
+        if (retry) { retry.addEventListener('click', () => renderDashboard(false)); }
+        setTabContent('dashboard', c);
         return;
       }
       // B6 fix: normalizeStats guarantees the array/kpis shapes the render
@@ -104,53 +114,53 @@
 
       c.innerHTML = '';
 
-      // --- FX chip ---
-      const top = el('div', null);
-      top.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem';
+      // --- Page head: title + context caption + FX chip (design-language
+      //     page header — one h1 per page, secondary caption in muted) ---
+      const head = el('div', 'page-head');
+      const headTitle = el('div');
+      headTitle.appendChild(el('h1', null, t('dashboard.title')));
+      headTitle.appendChild(el('p', 'page-sub', t('kpi.totalSubscribers') + ' ' + m.kpis.totalSubscribers + ' · ' + t('kpi.activeTerminals') + ' ' + m.kpis.activeDevices));
       const fx = el('div', 'fx-chip');
       const fxDot = el('span', null, fxLive ? '●' : '○');
       fxDot.style.color = fxLive ? 'var(--ok)' : 'var(--warn)';
       fx.appendChild(fxDot);
       fx.appendChild(document.createTextNode(`1 USD = ${fxRate.toLocaleString()} IDR`));
-      if (fxUpdatedAt) { fx.appendChild(el('span', 'small', ` (${fxUpdatedAt.slice(11,16)} UTC)`)); }
+      if (fxUpdatedAt) { const lbl = fxTimeLabel(fxUpdatedAt); if (lbl) fx.appendChild(el('span', 'small', ` (${lbl})`)); }
       if (!fxLive) fx.appendChild(el('span', 'small', t('common.stale')));
-      top.appendChild(fx);
-      c.appendChild(top);
+      head.appendChild(headTitle);
+      head.appendChild(fx);
+      c.appendChild(head);
 
-      // --- KPI grid ---
-      const ICONS = {
-        users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Users"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
-        subscribers: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Subscribers"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
-        mrr: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="MRR"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
-        devices: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Devices"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
-        trend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Revenue trend"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',
-        conversion: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Conversion"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>',
-        arpu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="ARPU"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
-      };
-      const kpiGrid = el('div', 'kpi-grid');
-      kpiGrid.appendChild(kpiC(t('kpi.totalUsers'), String(m.kpis.totalUsers), `active: ${m.kpis.activeUsers}`, ICONS.users, 'kpi-icon-blue'));
-      kpiGrid.appendChild(kpiC(t('kpi.totalSubscribers'), String(m.kpis.totalSubscribers), t('toolbar.nonFree'), ICONS.subscribers, 'kpi-icon-green'));
-      kpiGrid.appendChild(kpiC(t('kpi.mrr'), fmtUsd(m.kpis.mrrUsd), '', ICONS.mrr, 'kpi-icon-orange'));
-      kpiGrid.appendChild(kpiC(t('kpi.monthlyGrossIdr'), fmtIdr(mrrIdr), `≈ $${m.kpis.mrrUsd} × ${fxRate.toLocaleString()}`, ICONS.trend, 'kpi-icon-cyan'));
-      kpiGrid.appendChild(kpiC(t('kpi.arpu'), fmtUsd(m.kpis.arpuUsd), t('toolbar.perSubscriber'), ICONS.arpu, 'kpi-icon-pink'));
-      kpiGrid.appendChild(kpiC(t('kpi.activeTerminals'), String(m.kpis.activeDevices), '', ICONS.devices, 'kpi-icon-blue'));
-      kpiGrid.appendChild(kpiC(t('kpi.trialToPaid'), m.kpis.trialToPaidRate + '%', t('toolbar.conversionRate'), ICONS.conversion, 'kpi-icon-green'));
-      c.appendChild(kpiGrid);
+      // --- Hero: the ONE brand-colored highlight card per view
+      //     (design-language → Cards → Highlight) — revenue is the hero. ---
+      const hero = el('div', 'hero-card');
+      hero.appendChild(el('div', 'hero-label', t('kpi.monthlyGrossIdr')));
+      hero.appendChild(el('div', 'hero-value', fmtIdr(mrrIdr)));
+      hero.appendChild(el('div', 'hero-sub', `≈ $${m.kpis.mrrUsd} × ${fxRate.toLocaleString()} · ${t('kpi.mrr')} ${fmtUsd(m.kpis.mrrUsd)} · ${t('kpi.arpu')} ${fmtUsd(m.kpis.arpuUsd)}`));
+      c.appendChild(hero);
 
-      // --- Charts row ---
+      // --- Stats row: tinted stat cards (spec: tinted bg + 20% border +
+      //     hero number in the semantic color, used sparingly) ---
+      const statGrid = el('div', 'stat-grid');
+      statGrid.appendChild(statC(t('kpi.totalUsers'), String(m.kpis.totalUsers), m.kpis.activeUsers + ' ' + t('common.active'), 'primary'));
+      statGrid.appendChild(statC(t('kpi.totalSubscribers'), String(m.kpis.totalSubscribers), t('toolbar.nonFree'), 'success'));
+      statGrid.appendChild(statC(t('kpi.activeTerminals'), String(m.kpis.activeDevices), t('toolbar.perSubscriber'), 'info'));
+      statGrid.appendChild(statC(t('kpi.trialToPaid'), m.kpis.trialToPaidRate + '%', t('toolbar.conversionRate'), 'warning'));
+      c.appendChild(statGrid);
+
+      // --- Revenue section: full-width trend + tier/provider distribution ---
+      c.appendChild(el('h2', 'section-title', t('section.revenue')));
       const chartGrid = el('div', 'chart-grid');
+      // Chart canvas variant: the 1280-wide "wide" canvases are 1:1 on a
+      // desktop full-row card but downscale chart text to ~3px on a phone
+      // card. The phone variant renders ~1:1 (labels at true size).
+      const cv = window.matchMedia && window.matchMedia('(max-width: 640px)').matches ? { phone: true } : { wide: true };
 
-      // Revenue trend
-      const revCard = el('div', 'chart-card');
+      // Revenue trend (spans the full row — the hero chart)
+      const revCard = el('div', 'chart-card chart-card--wide');
       revCard.appendChild(el('h3', null, t('chart.revenueTrendIdr')));
-      revCard.innerHTML += svgChart('rev', m.revenueTrend, ['idr'], { area: true, fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt' });
+      revCard.innerHTML += svgChart('rev', m.revenueTrend, ['idr'], Object.assign({ area: true, fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt' }, cv));
       chartGrid.appendChild(revCard);
-
-      // Subscriber growth
-      const subCard = el('div', 'chart-card');
-      subCard.appendChild(el('h3', null, t('chart.subscriberGrowth')));
-      subCard.innerHTML += svgChart('subs', m.subscriberGrowth, ['count'], { area: true });
-      chartGrid.appendChild(subCard);
 
       // Tier distribution (donut)
       const tierCard = el('div', 'chart-card');
@@ -167,7 +177,7 @@
       // Provider split (donut)
       const provCard = el('div', 'chart-card');
       provCard.appendChild(el('h3', null, t('chart.paymentProvider')));
-      const donut2 = svgDonut('prov', m.providerSplit, 'provider', 'count', ['#147efb','#22c55e']);
+      const donut2 = svgDonut('prov', m.providerSplit, 'provider', 'count', ['var(--primary)', 'var(--success)']);
       const provRow = el('div', 'donut-row');
       const donutDiv2 = el('div', 'donut-chart'); donutDiv2.innerHTML = donut2.svg;
       provRow.appendChild(donutDiv2);
@@ -175,23 +185,35 @@
       provRow.appendChild(legendDiv2);
       provCard.appendChild(provRow);
       chartGrid.appendChild(provCard);
+      c.appendChild(chartGrid);
+
+      // --- Growth section: subscribers + signups + monthly churn ---
+      c.appendChild(el('h2', 'section-title', t('section.growth')));
+      const chartGrid2 = el('div', 'chart-grid');
+
+      // Subscriber growth
+      const subCard = el('div', 'chart-card');
+      subCard.appendChild(el('h3', null, t('chart.subscriberGrowth')));
+      subCard.innerHTML += svgChart('subs', m.subscriberGrowth, ['count'], Object.assign({ area: true }, cv));
+      chartGrid2.appendChild(subCard);
 
       // Signups per month (bar chart — extracted to admin-utils.svgBarChart)
       const signupCard = el('div', 'chart-card');
       signupCard.appendChild(el('h3', null, t('chart.signupsPerMonth')));
-      signupCard.innerHTML += svgBarChart('signups', m.signupsPerMonth, { valueKey: 'count', color: 'var(--accent)' });
-      chartGrid.appendChild(signupCard);
+      signupCard.innerHTML += svgBarChart('signups', m.signupsPerMonth, Object.assign({ valueKey: 'count', color: 'var(--accent)' }, cv));
+      chartGrid2.appendChild(signupCard);
 
       // Churn per month — B3 fix: the server's churnPerMonth rows carry the
       // number in `churn` (count is Go's zero value), so the old inline code
       // reading d.count rendered permanently-zero/NaN bars. Churn also reused
-      // the signups barW; each chart now sizes itself.
-      const churnCard = el('div', 'chart-card');
+      // the signups barW; each chart now sizes itself. Wide row: monthly
+      // bars read better with room.
+      const churnCard = el('div', 'chart-card chart-card--wide');
       churnCard.appendChild(el('h3', null, t('chart.churnCanceled')));
-      churnCard.innerHTML += svgBarChart('churn', m.churnPerMonth, { valueKey: 'churn', color: 'var(--bad)' });
-      chartGrid.appendChild(churnCard);
+      churnCard.innerHTML += svgBarChart('churn', m.churnPerMonth, Object.assign({ valueKey: 'churn', color: 'var(--bad)' }, cv));
+      chartGrid2.appendChild(churnCard);
 
-      c.appendChild(chartGrid);
+      c.appendChild(chartGrid2);
 
       // --- Tables ---
       // Top subscribers
@@ -206,20 +228,74 @@
       if (m.expiringSoon && m.expiringSoon.length > 0) {
         c.appendChild(tableCard(t('table.expiringSoon'), [t('th.email'),t('th.tier'),t('th.expires'),t('th.daysLeft')], m.expiringSoon.map(d => [d.email, d.tier, d.expiresAt, String(d.daysLeft)])));
       }
+      setTabContent('dashboard', c);
     }
 
 // kpiC, tableCard are defined in admin-utils.js (loaded first).
 
-    // ── Tab switching ──────────────────────────────────────────────
+    // ── Phase 4 capability probe ────────────────────────────────────
+    // The lifecycle endpoints (edit/grant/delete/device-revoke/exact-date
+    // renew) only exist on license-server 0.0.34+. Until the server is
+    // redeployed, the UI must not offer controls that can only fail —
+    // worse, an exact-date renew against the old server would silently
+    // fall back to +365 days. One cheap /admin/health call at boot gives
+    // an honest gate; the controls appear as soon as the server reports
+    // the new version.
+    let lifecycleReady = false;
+    async function probeLifecycle() {
+      try {
+        const h = await api('/api/v1/admin/health');
+        lifecycleReady = String((h && h.version) || '') >= '0.0.34';
+      } catch { lifecycleReady = false; }
+      return lifecycleReady;
+    }
+    probeLifecycle();
+
+    // ── Tab switching: cached DOM + per-card background refresh ─────
+    // Clicking back to an earlier tab used to re-fetch everything and
+    // rebuild the DOM from zero (a full reload per switch). Each tab's
+    // DOM is now built once and cached; revisiting mounts it instantly
+    // and every card refreshes its own data BEHIND the cached view
+    // (stale-while-revalidate) — content swaps only when fresh data has
+    // fully arrived, so there is never a skeleton flash.
+    const tabCache = { dashboard: null, tenants: null, health: null };
+    function setTabContent(name, node) {
+      tabCache[name] = node;
+      if (currentTab === name) {
+        const content = document.getElementById('content');
+        content.innerHTML = '';
+        content.appendChild(node);
+      }
+    }
+    function refreshTab(name) {
+      // Never yank state from under an open dialog.
+      if (document.querySelector('.modal-back')) return;
+      if (name === 'dashboard') renderDashboard(true);
+      if (name === 'tenants') renderTenants(true);
+      if (name === 'health') { startHealthAuto(); if (healthLoader) healthLoader.refreshAll(); }
+    }
+    function showTab(name) {
+      if (currentTab === 'health' && name !== 'health') stopHealthAuto();
+      currentTab = name;
+      if (!tabCache[name]) {
+        const content = document.getElementById('content');
+        content.innerHTML = '<div class="skeleton" style="height:8rem"></div>';
+        if (name === 'dashboard') renderDashboard(false);
+        if (name === 'tenants') renderTenants(false);
+        if (name === 'health') buildHealthTab();
+        return;
+      }
+      const content = document.getElementById('content');
+      content.innerHTML = '';
+      content.appendChild(tabCache[name]);
+      refreshTab(name);
+    }
     // B38: use setNavActive so aria-current moves with .nav-active — the
     // screen reader must know which admin section is open.
     document.querySelectorAll('.nav-btn').forEach(tab => {
       tab.addEventListener('click', () => {
         setNavActive(document.querySelectorAll('.nav-btn'), tab);
-        currentTab = tab.dataset.tab;
-        if (currentTab === 'dashboard') renderDashboard();
-        if (currentTab === 'tenants') renderTenants();
-        if (currentTab === 'health') renderHealth();
+        showTab(tab.dataset.tab);
       });
     });
 
@@ -234,21 +310,21 @@
     // last-arrival-wins).
     const tenantsGuard = createSeqGuard();
 
-    async function renderTenants() {
-      const c = document.getElementById('content');
+    async function renderTenants(background) {
+      // Detached build + single swap: a background refresh (cache hit,
+      // pagination, search) never flashes a skeleton over the live view.
+      const c = el('div');
       const seq = tenantsGuard.next();
-      c.innerHTML = '<div class="card"><p class="empty">' + t('common.loadingTenants') + '</p></div>';
+      if (!background) c.appendChild(el('p', 'empty', t('common.loadingTenants')));
       let data;
       try {
         const qs = '?page=' + tenantsPage + '&perPage=' + tenantsPerPage +
           (tenantsSearch ? '&search=' + encodeURIComponent(tenantsSearch) : '');
         data = await api('/api/v1/admin/tenants' + qs);
-      } catch (err) { if (!tenantsGuard.isCurrent(seq)) { return; } if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">' + t('common.failedToLoadTenants') + '</p></div>'; return; }
+      } catch (err) { if (!tenantsGuard.isCurrent(seq)) { return; } if (err && err.authDenied) { return; } if (background) { return; } c.appendChild(el('p', 'empty', t('common.failedToLoadTenants'))); setTabContent('tenants', c); return; }
       if (!tenantsGuard.isCurrent(seq)) { return; } // a newer request superseded this one
       tenants = data.tenants || [];
       tenantsTotal = data.total || 0;
-
-      c.innerHTML = '';
 
       // ── Search + pagination toolbar ─────────────────────────────
       const toolbar = el('div', 'tenant-toolbar');
@@ -262,16 +338,27 @@
       searchBtn.addEventListener('click', () => { tenantsSearch = searchBox.value.trim(); tenantsPage = 1; renderTenants(); });
       const clearBtn = el('button', 'btn btn-sm btn-ghost', t('toolbar.clear'));
       clearBtn.addEventListener('click', () => { tenantsSearch = ''; searchBox.value = ''; tenantsPage = 1; renderTenants(); });
-      toolbar.appendChild(searchBox); toolbar.appendChild(searchBtn); toolbar.appendChild(clearBtn);
+      // Search field wrapper: icon + input, so the search affordance is
+      // obvious in both themes (the bare field was nearly invisible on
+      // the white card in light theme).
+      const searchField = el('div', 'search-field');
+      searchField.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>';
+      searchField.appendChild(searchBox);
+      toolbar.appendChild(searchField); toolbar.appendChild(searchBtn); toolbar.appendChild(clearBtn);
       const totalLabel = el('span', 'tenant-total', t('toolbar.showing') + tenants.length + t('toolbar.of') + tenantsTotal);
       toolbar.appendChild(totalLabel);
       c.appendChild(toolbar);
 
-      const card = el('div', 'card'); card.appendChild(el('h2', null, t('table.tenants')));
-      if (tenants.length === 0) { card.appendChild(el('p', 'empty', t('table.noTenantsMatch'))); c.appendChild(card); return; }
+      // table-card (not just card): the tenants table keeps its readable
+      // column widths on phones and scrolls horizontally INSIDE the card
+      // instead of pushing the whole page wide (mobile audit finding).
+      const card = el('div', 'card table-card'); card.appendChild(el('h2', null, t('table.tenants')));
+      if (tenants.length === 0) { card.appendChild(el('p', 'empty', t('table.noTenantsMatch'))); c.appendChild(card); setTabContent('tenants', c); return; }
       const table = el('table');
       const thead = el('thead'); const tr = el('tr');
-      [t('th.email'),t('th.status'),t('th.license'),t('th.tier'),t('th.created'),''].forEach(h => tr.appendChild(el('th', null, h)));
+      // Columns (user-requested): email | status | license/tier merged
+      // ("[tier] date expired") | created | details action.
+      [t('th.email'),t('th.status'),t('th.licenseTier'),t('th.created'),''].forEach(h => tr.appendChild(el('th', null, h)));
       thead.appendChild(tr); table.appendChild(thead);
       const tbody = el('tbody');
       // B1 fix: the row builder moved to admin-utils.tenantRow — the old
@@ -296,12 +383,18 @@
         nav.appendChild(next);
         c.appendChild(nav);
       }
+      setTabContent('tenants', c);
     }
 
     // ── Tenant detail (from ADR #42 Phase 3) ────────────────────────
     async function showTenantDetail(id) {
       const modal = document.getElementById('modal-root');
       modal.innerHTML = '<div class="modal-back"><div class="modal"><h3>' + t('common.loading') + '</h3></div></div>';
+      // Phase 4: re-probe on every detail open — the boot-time probe goes
+      // stale across a server redeploy, and a panel that stayed open
+      // through it would keep hiding the lifecycle controls. Awaiting it
+      // keeps the button set in sync with the server that will serve them.
+      await probeLifecycle();
       try {
         const data = await api('/api/v1/admin/tenants/' + id);
         // B2 fix: the old `const t = data.tenant` shadowed the global i18n
@@ -319,18 +412,97 @@
           kv.appendChild(el('span', 'muted', label));
           const vs = el('span', null, val === undefined || val === null ? '—' : String(val));
           vs.style.textAlign = 'right';
-          if (label === t('th.licenseKey')) { vs.style.cssText += ';font-family:monospace;font-size:.75rem'; }
+          if (label === t('th.licenseKey')) { vs.style.cssText += ';font-family:var(--font-mono);font-size:.72rem'; }
           kv.appendChild(vs);
         }
         tenantDetailRows(data).forEach(pair => addRow(pair[0], pair[1]));
         box.appendChild(kv);
+        // Phase 4: device inventory — the detail payload always carried
+        // devices nobody could act on. Per-device revoke (busyWrap guard),
+        // revoked devices shown as a badge; timestamps via relTime.
+        if (data.devices && data.devices.length) {
+          const devHead = el('p', 'muted', t('tenant.devices') + ' (' + data.devices.length + ')');
+          devHead.style.cssText = 'margin:.9rem 0 .2rem;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em';
+          box.appendChild(devHead);
+          data.devices.forEach(d => {
+            const row = el('div'); row.style.cssText = 'display:flex;align-items:center;gap:.5rem;font-size:.8rem;padding:.3rem 0;border-top:1px solid var(--border)';
+            const mid = el('span', null, d.machine_id || d.id);
+            mid.style.cssText = 'font-family:var(--font-mono);font-size:.72rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+            row.appendChild(mid);
+            if (d.revoked_at) {
+              row.appendChild(el('span', 'muted', t('tenant.revoked')));
+            } else {
+              if (d.last_seen_at) {
+                const seen = el('span', 'muted', t('tenant.lastSeen') + ' ' + relTime(d.last_seen_at));
+                seen.style.cssText = 'font-size:.72rem';
+                row.appendChild(seen);
+              }
+              const rv = el('button', 'btn btn-ghost btn-sm', t('tenant.revoke'));
+              if (lifecycleReady) {
+                rv.addEventListener('click', busyWrap(rv, async () => {
+                  try {
+                    await api('/api/v1/admin/tenants/' + id + '/devices/' + d.id + '/revoke', '{}');
+                    flash(t('tenant.deviceRevoked') + ' ' + t('common.successfully'));
+                    showTenantDetail(id); // reload the same dialog with fresh state
+                  } catch { flash(t('tenant.deviceRevoked') + ' ' + t('common.failed')); }
+                }));
+                row.appendChild(rv);
+              }
+            }
+            box.appendChild(row);
+          });
+        }
+        // Drop the pre-fetch loading backdrop before mounting — mountModal
+        // appends, so the stale "Loading…" card would otherwise stay
+        // mounted underneath the real dialog (two modal-backs stacked).
+        modal.innerHTML = '';
         const actions = el('div', null); actions.style.cssText = 'display:flex;gap:.4rem;margin-top:.8rem;flex-wrap:wrap';
         // B19: busyWrap (single-flight guard) on every action button —
         // Renew POSTs +365 days per call, so a double-click granted 730.
-        if (tenant.status === 'active') { const revoke = el('button', 'btn btn-sm btn-bad', t('tenant.revoke')); revoke.addEventListener('click', busyWrap(revoke, () => doAction(id,'revoke',t('tenant.revoked'),undefined,closeModal))); actions.appendChild(revoke); }
-        if (tenant.status !== 'active') { const activate = el('button', 'btn btn-sm btn-ok', t('tenant.activate')); activate.addEventListener('click', busyWrap(activate, () => doAction(id,'activate',t('tenant.activated'),undefined,closeModal))); actions.appendChild(activate); }
-        const renew = el('button', 'btn btn-sm', t('tenant.renew365')); renew.addEventListener('click', busyWrap(renew, () => doAction(id,'renew',t('tenant.renewed'),'{"days":365}',closeModal))); actions.appendChild(renew);
-        const upgrade = el('button', 'btn btn-sm btn-warn', t('tenant.upgrade')); upgrade.addEventListener('click', () => upgradePrompt(id,data)); actions.appendChild(upgrade);
+        // Phase 4: Edit contact opens the PATCH dialog (0.0.34+ only).
+        if (lifecycleReady) {
+          const editBtn = el('button', 'btn btn-sm btn-ghost', t('tenant.editContact'));
+          editBtn.addEventListener('click', () => { closeModal(); editContactPrompt(id, data); });
+          actions.appendChild(editBtn);
+        }
+        if (tenant.status === 'active') {
+          // Confirm-by-email: revoke used to fire on a single click.
+          const revoke = el('button', 'btn btn-sm btn-bad', t('tenant.revoke'));
+          revoke.addEventListener('click', () => {
+            // Close the detail dialog first — the confirm replaces it
+            // (no two-dialog stack fighting over ESC/backdrop clicks).
+            closeModal();
+            // Body '{}' (not undefined): api() only sets method POST when
+            // a body is given, and the server registers revoke as POST-only —
+            // undefined body sent a GET and the action silently 404'd.
+            const rc = revokeConfirmModal(tenant.email, () => doAction(id, 'revoke', t('tenant.revoked'), '{}', closeConfirm));
+            var closeConfirm = mountModal(modal, rc.box);
+            rc.cancelBtn.addEventListener('click', closeConfirm);
+          });
+          actions.appendChild(revoke);
+        }
+        if (tenant.status !== 'active') { const activate = el('button', 'btn btn-sm btn-ok', t('tenant.activate')); activate.addEventListener('click', busyWrap(activate, () => doAction(id,'activate',t('tenant.activated'),'{}',closeModal))); actions.appendChild(activate); }
+        // Guarded renew: the endpoint 404s ("no subscription found") when
+        // the tenant has no subscription record — disable + reword instead
+        // of letting the admin press a button that can only fail.
+        // Phase 4: renew opens a dialog — quick +365d OR an exact expiry
+        // date (both re-sign server-side now). On a pre-0.0.34 server the
+        // exact-date branch is hidden (it would silently become +365d).
+        const hasSub = !!data.subscription;
+        const renew = el('button', 'btn btn-sm', hasSub ? t('tenant.renew365') : t('tenant.renewNoSub'));
+        if (hasSub) {
+          renew.addEventListener('click', () => { closeModal(); if (lifecycleReady) { renewPrompt(id); } else { doAction(id, 'renew', t('tenant.renewed'), '{"days":365}', null); } });
+        } else { renew.disabled = true; renew.title = t('tenant.renewNoSubTip'); renew.setAttribute('aria-disabled', 'true'); }
+        actions.appendChild(renew);
+        // Manual grant (Phase 4): transfer/e-wallet customers with no
+        // subscription record — the dead-end that used to disable renew
+        // AND silently no-op tier-override.
+        if (!hasSub && lifecycleReady) {
+          const grant = el('button', 'btn btn-sm btn-ok', t('tenant.grantTitle'));
+          grant.addEventListener('click', () => { closeModal(); grantPrompt(id); });
+          actions.appendChild(grant);
+        }
+        const upgrade = el('button', 'btn btn-sm btn-warn', t('tenant.upgrade')); upgrade.addEventListener('click', () => { closeModal(); upgradePrompt(id,data); }); actions.appendChild(upgrade);
         box.appendChild(actions);
         // B11: mountModal owns the backdrop/ESC/close wiring and always
         // detaches the keydown listener — the old inline blocks leaked one
@@ -338,6 +510,31 @@
         // to later ESC presses.
         const closeModal = mountModal(modal, box);
         const closeBtn = el('button', 'btn btn-ghost', t('tenant.close')); closeBtn.style.cssText = 'margin-top:.8rem;width:100%'; closeBtn.addEventListener('click', closeModal); box.appendChild(closeBtn);
+        // Phase 4: guarded cascade delete — full-width destructive row at
+        // the very bottom, confirm-by-email with a cascade warning.
+        // (0.0.34+ only; hidden against the old server.)
+        if (lifecycleReady) {
+          const del = el('button', 'btn btn-sm btn-bad', t('tenant.delete'));
+          del.style.cssText = 'margin-top:.4rem;width:100%';
+          del.addEventListener('click', () => {
+            closeModal();
+            const rc = revokeConfirmModal(tenant.email, async () => {
+              const modalRoot = document.getElementById('modal-root');
+              try {
+                await api('/api/v1/admin/tenants/' + id, JSON.stringify({ confirm_email: tenant.email }), 'DELETE');
+                modalRoot.innerHTML = '';
+                flash(t('tenant.deleted') + ' ' + t('common.successfully'));
+                renderTenants();
+              } catch (err) {
+                if (err && err.authDenied) { modalRoot.innerHTML = ''; return; }
+                flash(t('tenant.delete') + ' ' + t('common.failed'));
+              }
+            }, { title: t('tenant.deleteTitle'), hint: t('tenant.deleteHint'), confirmLabel: t('tenant.deleteConfirm'), extraWarn: t('tenant.deleteWarn') });
+            const closeDelete = mountModal(modal, rc.box);
+            rc.cancelBtn.addEventListener('click', closeDelete);
+          });
+          box.appendChild(del);
+        }
       } catch (err) {
         if (err && err.authDenied) { modal.innerHTML = ''; return; }
         modal.innerHTML = '<div class="modal-back"><div class="modal"><p class="empty">' + t('common.failedToLoadTenantDetail') + '</p></div></div>';
@@ -349,6 +546,108 @@
       try { await api('/api/v1/admin/tenants/' + id + '/' + action, body); if (close) { close(); } else { modal.innerHTML = ''; } flash(label + t('common.successfully')); renderTenants(); } catch { flash(label + t('common.failed')); }
     }
 
+    // ── Phase 4: lifecycle dialogs (each REPLACES the detail dialog —
+    // mountModal appends, so a stale dialog underneath would fight over
+    // ESC/backdrop — the established close-then-mount pattern) ────────
+
+    function editContactPrompt(id, data) {
+      const modal = document.getElementById('modal-root');
+      const box = el('div', 'modal'); box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true');
+      box.appendChild(el('h3', null, t('tenant.editTitle')));
+      const tenant = data.tenant || {};
+      const lbl1 = el('p', 'muted', t('th.email')); lbl1.style.cssText = 'margin:.5rem 0 .15rem;font-size:.72rem';
+      const email = el('input', 'input'); email.type = 'email'; email.value = tenant.email || ''; email.autocomplete = 'off'; email.spellcheck = false;
+      const lbl2 = el('p', 'muted', t('tenant.phone')); lbl2.style.cssText = 'margin:.6rem 0 .15rem;font-size:.72rem';
+      const phone = el('input', 'input'); phone.type = 'tel'; phone.value = tenant.phone || ''; phone.placeholder = '+62 …';
+      const errLine = el('p', 'small', ''); errLine.style.cssText = 'color:var(--danger);margin:.4rem 0 0;display:none';
+      box.appendChild(lbl1); box.appendChild(email); box.appendChild(lbl2); box.appendChild(phone); box.appendChild(errLine);
+      const act = el('div', 'modal-actions');
+      const closeModal = mountModal(modal, box);
+      const cancel = el('button', 'btn btn-ghost', t('tenant.cancel')); cancel.addEventListener('click', closeModal); act.appendChild(cancel);
+      const save = el('button', 'btn', t('tenant.save'));
+      save.addEventListener('click', busyWrap(save, async () => {
+        errLine.style.display = 'none';
+        const payload = {};
+        const newEmail = email.value.trim().toLowerCase();
+        if (newEmail && newEmail !== String(tenant.email || '').toLowerCase()) { payload.email = newEmail; }
+        const newPhone = phone.value.trim();
+        if (newPhone && newPhone !== String(tenant.phone || '')) { payload.phone = newPhone; }
+        if (!payload.email && !payload.phone) { closeModal(); return; } // nothing changed
+        try {
+          await api('/api/v1/admin/tenants/' + id, JSON.stringify(payload), 'PATCH');
+          closeModal();
+          flash(t('tenant.contactUpdated') + ' ' + t('common.successfully'));
+          renderTenants();
+        } catch (err) {
+          if (err && err.authDenied) { closeModal(); return; }
+          // api() throws Error('<path> (<status>)') — surface the collision
+          // case inline instead of a generic toast.
+          errLine.textContent = /409/.test(String(err && err.message)) ? t('tenant.emailTaken') : t('common.failed');
+          errLine.style.display = 'block';
+        }
+      }));
+      act.appendChild(save);
+      box.appendChild(act);
+    }
+
+    function grantPrompt(id) {
+      const modal = document.getElementById('modal-root');
+      const box = el('div', 'modal'); box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true');
+      box.appendChild(el('h3', null, t('tenant.grantTitle')));
+      const hint = el('p', 'small', t('tenant.grantHint')); hint.style.marginBottom = '.6rem';
+      box.appendChild(hint);
+      const lblT = el('p', 'muted', t('th.tier')); lblT.style.cssText = 'margin:.2rem 0 .15rem;font-size:.72rem';
+      const select = el('select', 'input'); ['plus','pro','premium','enterprise'].forEach(tier => select.appendChild(el('option', null, tier)));
+      const lblM = el('p', 'muted', t('tenant.months') + ' (' + t('tenant.or') + ' ' + t('tenant.exactDate') + ')'); lblM.style.cssText = 'margin:.6rem 0 .15rem;font-size:.72rem';
+      const months = el('input', 'input'); months.type = 'number'; months.min = '1'; months.value = '12';
+      const dateIn = el('input', 'input'); dateIn.type = 'date'; dateIn.style.marginTop = '.35rem';
+      const lblR = el('p', 'muted', t('tenant.reasonGrant')); lblR.style.cssText = 'margin:.6rem 0 .15rem;font-size:.72rem';
+      const reason = el('input', 'input'); reason.placeholder = t('tenant.reasonGrant'); reason.autocomplete = 'off';
+      const errLine = el('p', 'small', t('tenant.reasonRequired')); errLine.style.cssText = 'color:var(--danger);margin:.4rem 0 0;display:none';
+      box.appendChild(lblT); box.appendChild(select); box.appendChild(lblM); box.appendChild(months); box.appendChild(dateIn); box.appendChild(lblR); box.appendChild(reason); box.appendChild(errLine);
+      const act = el('div', 'modal-actions');
+      const closeModal = mountModal(modal, box);
+      const cancel = el('button', 'btn btn-ghost', t('tenant.cancel')); cancel.addEventListener('click', closeModal); act.appendChild(cancel);
+      const save = el('button', 'btn', t('tenant.grantTitle'));
+      save.addEventListener('click', busyWrap(save, () => {
+        errLine.style.display = 'none';
+        if (!reason.value.trim()) { errLine.style.display = 'block'; return; }
+        if (dateIn.value && Number(months.value) > 0) { errLine.textContent = t('common.failed'); errLine.style.display = 'block'; return; }
+        const payload = { tier_key: select.value, reason: reason.value.trim() };
+        if (dateIn.value) { payload.expires_at = dateIn.value; }
+        else if (Number(months.value) > 0) { payload.months = Number(months.value); }
+        else { errLine.textContent = t('common.failed'); errLine.style.display = 'block'; return; }
+        doAction(id, 'grant-subscription', t('tenant.granted'), JSON.stringify(payload), closeModal);
+      }));
+      act.appendChild(save);
+      box.appendChild(act);
+    }
+
+    function renewPrompt(id) {
+      const modal = document.getElementById('modal-root');
+      const box = el('div', 'modal'); box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true');
+      box.appendChild(el('h3', null, t('tenant.renewTitle')));
+      const quick = el('button', 'btn btn-ok', t('tenant.renew365')); quick.style.cssText = 'width:100%';
+      quick.addEventListener('click', busyWrap(quick, () => doAction(id, 'renew', t('tenant.renewed'), '{"days":365}', closeModal)));
+      box.appendChild(quick);
+      const or = el('p', 'muted', '— ' + t('tenant.or') + ' —'); or.style.cssText = 'text-align:center;margin:.5rem 0;font-size:.72rem';
+      box.appendChild(or);
+      const dateIn = el('input', 'input'); dateIn.type = 'date'; dateIn.style.width = '100%';
+      box.appendChild(dateIn);
+      const setBtn = el('button', 'btn', t('tenant.setExactDate')); setBtn.style.cssText = 'margin-top:.5rem;width:100%'; setBtn.disabled = true;
+      dateIn.addEventListener('input', () => { setBtn.disabled = !dateIn.value; });
+      setBtn.addEventListener('click', busyWrap(setBtn, () => {
+        if (!dateIn.value) { return; }
+        doAction(id, 'renew', t('tenant.renewed'), JSON.stringify({ expires_at: dateIn.value }), closeModal);
+      }));
+      box.appendChild(setBtn);
+      const act = el('div', 'modal-actions');
+      const closeModal = mountModal(modal, box);
+      const cancel = el('button', 'btn btn-ghost', t('tenant.cancel')); cancel.addEventListener('click', closeModal);
+      act.appendChild(cancel);
+      box.appendChild(act);
+    }
+
     function upgradePrompt(id, data) {
       const modal = document.getElementById('modal-root');
       const box = el('div', 'modal');
@@ -357,6 +656,14 @@
       box.appendChild(el('h3', null, t('tenant.changeTier')));
       const p = el('p', 'small'); p.style.marginBottom = '.6rem'; p.textContent = t('tenant.currentTier') + ((data.subscription && data.subscription.tierKey) || 'none');
       box.appendChild(p);
+      // Tier-override honesty: the server silently no-ops when the tenant
+      // has no subscription record (finds 0 rows, saves nothing, still
+      // returns ok). Warn and disable Save instead of pretending.
+      if (!data.subscription) {
+        const warn = el('p', 'small', t('tenant.noSubWarn'));
+        warn.style.cssText = 'color:var(--bad);margin:.2rem 0 .6rem';
+        box.appendChild(warn);
+      }
       // Tier override dropdown — hardcoded to non-free plans (server-side
       // upgradeable tiers only; 'free' is excluded because a free tenant
       // gets a tier-override when they subscribe, not via admin override).
@@ -368,24 +675,379 @@
       const act = el('div', 'modal-actions');
       const closeModal = mountModal(modal, box);
       const cancel = el('button', 'btn btn-ghost', t('tenant.cancel')); cancel.addEventListener('click', closeModal); act.appendChild(cancel);
-      const save = el('button', 'btn', t('tenant.save')); save.addEventListener('click', busyWrap(save, async () => { await doAction(id,'tier-override',t('tenant.tierChanged'),JSON.stringify({tier_key:select.value,reason:reason.value||'admin override'}),closeModal); })); act.appendChild(save);
+      const save = el('button', 'btn', t('tenant.save'));
+      if (!data.subscription) { save.disabled = true; save.title = t('tenant.noSubWarn'); save.setAttribute('aria-disabled', 'true'); }
+      else { save.addEventListener('click', busyWrap(save, async () => { await doAction(id,'tier-override',t('tenant.tierChanged'),JSON.stringify({tier_key:select.value,reason:reason.value||'admin override'}),closeModal); })); }
+      act.appendChild(save);
       box.appendChild(act);
     }
 
     // ── Health tab ──────────────────────────────────────────────────
-    async function renderHealth() {
-      const c = document.getElementById('content'); c.innerHTML = '<div class="card"><p class="empty">' + t('common.loading') + '</p></div>';
-      try { const h = await api('/api/v1/admin/health');
-        c.innerHTML = ''; const card = el('div', 'card'); card.appendChild(el('h2', null, t('health.title')));
-        const kv = el('div'); kv.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.82rem';
-        const status = h.status === 'ok' ? t('health.ok') : t('health.degraded');
-        kv.innerHTML = '<span class="muted">'+t('health.status')+'</span><span style="text-align:right">'+escapeHtml(status)+'</span>' +
-          '<span class="muted">'+t('health.database')+'</span><span style="text-align:right">'+(h.db_ok?t('health.connected'):t('health.unreachable'))+'</span>' +
-          '<span class="muted">'+t('health.smtp')+'</span><span style="text-align:right">'+(h.smtp_host?t('health.configured'):t('health.notConfigured'))+'</span>' +
-          '<span class="muted">'+t('health.version')+'</span><span style="text-align:right">'+escapeHtml(h.version||'—')+'</span>' +
-          '<span class="muted">'+t('health.time')+'</span><span style="text-align:right">'+escapeHtml(h.time||'—')+'</span>';
-        card.appendChild(kv); c.appendChild(card);
-      } catch (err) { if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">' + t('common.failedToLoadHealth') + '</p></div>'; }
+    // ── Health tab: built once, cached, refreshed per card ───────────
+    // The old renderHealth() re-fetched /admin/health and rebuilt the
+    // whole tab on EVERY visit. Now the DOM is built once and cached;
+    // revisiting mounts it instantly while each card refreshes its own
+    // data behind the cached view (stale-while-revalidate). Timer and
+    // toggle state live at module scope so they survive tab switches;
+    // auto-refresh only runs while the health tab is visible.
+    let healthAutoOn = true;
+    let healthLastRefresh = 0;
+    let healthUpdatedAgo = null;
+    let healthLoader = null; // set by buildHealthTab: { refreshAll, refreshAuto }
+    function stopHealthAuto() { healthTimers.forEach(clearInterval); healthTimers = []; }
+    function startHealthAuto() {
+      stopHealthAuto();
+      healthTimers.push(setInterval(() => { if (healthAutoOn && document.visibilityState !== 'hidden') refreshAutoHealth(); }, 60000));
+      healthTimers.push(setInterval(() => {
+        if (healthUpdatedAgo) healthUpdatedAgo.textContent = healthLastRefresh ? (t('health.updated') + ' ' + relTime(new Date(healthLastRefresh).toISOString())) : '';
+      }, 5000));
+    }
+    function refreshAutoHealth() {
+      // Same cadence and scope as the original auto-refresh — the two
+      // heaviest proxies (NF logs, CF deploys) refresh on demand only.
+      if (healthLoader) healthLoader.refreshAuto();
+      healthLastRefresh = Date.now();
+    }
+    function buildHealthTab() {
+      stopHealthAuto();
+      const c = el('div');
+      const card = el('div', 'card');
+      // Auto-refresh control lives in the card's header row (title left,
+      // toggle + updated-ago right) — not as an orphan strip floating
+      // between two cards. (The old build also appended the title twice.)
+      const cardHead = el('div', 'card-head');
+      cardHead.appendChild(el('h2', null, t('health.title')));
+      const autoBtn = el('button', 'btn btn-ghost btn-sm', t('health.autoOn'));
+      autoBtn.type = 'button';
+      const updatedAgo = el('span', 'muted log-meta', '');
+      const headRight = el('div', 'card-head-right');
+      headRight.appendChild(updatedAgo); headRight.appendChild(autoBtn);
+      cardHead.appendChild(headRight);
+      card.appendChild(cardHead);
+      // kv values are live element references updated in place by
+      // loadHealthKv — the grid is never rebuilt, so a background
+      // refresh cannot flash the row.
+      const kv = el('div'); kv.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.82rem';
+      const kvValue = (label) => { kv.appendChild(el('span', 'muted', label)); const v = el('span', null, '—'); v.style.textAlign = 'right'; kv.appendChild(v); return v; };
+      const kvStatus = kvValue(t('health.status'));
+      const kvDb = kvValue(t('health.database'));
+      const kvSmtp = kvValue(t('health.smtp'));
+      const kvVersion = kvValue(t('health.version'));
+      const kvTime = kvValue(t('health.time'));
+      card.appendChild(kv);
+      c.appendChild(card);
+      healthUpdatedAgo = updatedAgo;
+      const healthKvGuard = createSeqGuard();
+      async function loadHealthKv() {
+        const seq = healthKvGuard.next();
+        let h = null;
+        try { h = await api('/api/v1/admin/health'); } catch (e) { h = null; }
+        if (!healthKvGuard.isCurrent(seq)) { return; }
+        if (!h) { return; } // background refresh: keep the last known values
+        kvStatus.textContent = h.status === 'ok' ? t('health.ok') : t('health.degraded');
+        kvDb.textContent = h.db_ok ? t('health.connected') : t('health.unreachable');
+        kvSmtp.textContent = h.smtp_host ? t('health.configured') : t('health.notConfigured');
+        kvVersion.textContent = h.version || '—';
+        kvTime.textContent = h.time || '—';
+      }
+
+        // ── Cloud Service card (Northflank metadata via worker proxy) ───
+        const svcCard = el('div', 'card table-card');
+        const svcHead = el('div', 'logs-head');
+        svcHead.appendChild(el('h2', null, t('health.serviceTitle')));
+        const svcRefresh = el('button', 'btn btn-ghost btn-sm', t('health.serviceRefresh'));
+        svcRefresh.type = 'button';
+        svcHead.appendChild(svcRefresh);
+        svcCard.appendChild(svcHead);
+        const svcWrap = el('div');
+        svcWrap.appendChild(el('p', 'empty', t('common.loading')));
+        svcCard.appendChild(svcWrap);
+        c.appendChild(svcCard);
+
+        // ── Uptime card (edge self-check via worker proxy, no API key) ──
+        const upCard = el('div', 'card table-card');
+        const upHead = el('div', 'logs-head');
+        upHead.appendChild(el('h2', null, t('health.uptimeTitle')));
+        const upRefresh = el('button', 'btn btn-ghost btn-sm', t('health.uptimeRefresh'));
+        upRefresh.type = 'button';
+        upHead.appendChild(upRefresh);
+        upCard.appendChild(upHead);
+        const upWrap = el('div');
+        upWrap.appendChild(el('p', 'empty', t('common.loading')));
+        upCard.appendChild(upWrap);
+        c.appendChild(upCard);
+
+        // ── Platform logs (Northflank cloud pod, via the worker proxy) ──
+        // The NF key lives in a Worker secret; the browser only talks to
+        // same-origin /__oz/nf-logs, which requires the admin session.
+        const logsCard = el('div', 'card table-card');
+        const logsHead = el('div', 'logs-head');
+        logsHead.appendChild(el('h2', null, t('health.logsTitle')));
+        const logMeta = el('span', 'muted log-meta');
+        logsHead.appendChild(logMeta);
+        const linesSel = el('select', 'lines-sel');
+        ['100', '300', '500'].forEach(n => {
+          const o = el('option', null, n + ' lines');
+          o.value = n;
+          if (n === '100') o.selected = true;
+          linesSel.appendChild(o);
+        });
+        logsHead.appendChild(linesSel);
+        const refreshBtn = el('button', 'btn btn-ghost btn-sm', t('health.logsRefresh'));
+        refreshBtn.type = 'button';
+        logsHead.appendChild(refreshBtn);
+        logsCard.appendChild(logsHead);
+        const logWrap = el('div');
+        logWrap.appendChild(el('p', 'empty', t('common.loading')));
+        logsCard.appendChild(logWrap);
+        c.appendChild(logsCard);
+
+        // Sequence guard: a stale log response must not overwrite a
+        // fresher one (same last-click-wins pattern as the other tabs).
+        const logsGuard = createSeqGuard();
+        async function loadLogs() {
+          const seq = logsGuard.next();
+          refreshBtn.disabled = true;
+          logWrap.innerHTML = '';
+          logWrap.appendChild(el('p', 'empty', t('common.loading')));
+          let body = null;
+          try {
+            const res = await fetchWithTimeout(undefined, '/__oz/nf-logs?lines=' + linesSel.value);
+            body = await res.json();
+          } catch (e) { body = null; }
+          if (!logsGuard.isCurrent(seq)) { return; }
+          refreshBtn.disabled = false;
+          logWrap.innerHTML = '';
+          if (!body || !body.ok) {
+            const detail = body && body.error ? ' ' + body.error : '';
+            logWrap.appendChild(el('p', 'empty', t('health.logsFailed') + detail));
+            return;
+          }
+          logMeta.textContent = t('health.logsCaption');
+          logWrap.appendChild(logView(body.lines));
+        }
+        refreshBtn.addEventListener('click', loadLogs);
+
+        // ── Cloudflare deployments (worker oz-pos, via the worker proxy) ─
+        // Same trust shape as the log panel: the CF token lives in a Worker
+        // secret; the browser talks only to same-origin /__oz/cf-deploys.
+        const cfCard = el('div', 'card table-card');
+        const cfHead = el('div', 'logs-head');
+        cfHead.appendChild(el('h2', null, t('health.deploysTitle')));
+        const cfMeta = el('span', 'muted log-meta');
+        cfHead.appendChild(cfMeta);
+        const cfRefresh = el('button', 'btn btn-ghost btn-sm', t('health.deploysRefresh'));
+        cfRefresh.type = 'button';
+        cfHead.appendChild(cfRefresh);
+        cfCard.appendChild(cfHead);
+        const cfWrap = el('div');
+        cfWrap.appendChild(el('p', 'empty', t('common.loading')));
+        cfCard.appendChild(cfWrap);
+        c.appendChild(cfCard);
+
+        const cfGuard = createSeqGuard();
+        async function loadDeploys() {
+          const seq = cfGuard.next();
+          cfRefresh.disabled = true;
+          cfWrap.innerHTML = '';
+          cfWrap.appendChild(el('p', 'empty', t('common.loading')));
+          let body = null;
+          try {
+            const res = await fetchWithTimeout(undefined, '/__oz/cf-deploys');
+            body = await res.json();
+          } catch (e) { body = null; }
+          if (!cfGuard.isCurrent(seq)) { return; }
+          cfRefresh.disabled = false;
+          cfWrap.innerHTML = '';
+          if (!body || !body.ok) {
+            const detail = body && body.error ? ' ' + body.error : '';
+            cfWrap.appendChild(el('p', 'empty', t('health.deploysFailed') + detail));
+            return;
+          }
+          cfMeta.textContent = t('health.deploysCaption');
+          cfWrap.appendChild(cfDeployRows(body.deploys));
+        }
+        cfRefresh.addEventListener('click', loadDeploys);
+
+        // ── Worker runtime logs (Cloudflare observability, via proxy) ───
+        const wlCard = el('div', 'card table-card');
+        const wlHead = el('div', 'logs-head');
+        wlHead.appendChild(el('h2', null, t('health.workerLogsTitle')));
+        const wlMeta = el('span', 'muted log-meta');
+        wlHead.appendChild(wlMeta);
+        const wlRefresh = el('button', 'btn btn-ghost btn-sm', t('health.workerLogsRefresh'));
+        wlRefresh.type = 'button';
+        wlHead.appendChild(wlRefresh);
+        wlCard.appendChild(wlHead);
+        const wlWrap = el('div');
+        wlWrap.appendChild(el('p', 'empty', t('common.loading')));
+        wlCard.appendChild(wlWrap);
+        c.appendChild(wlCard);
+        const wlGuard = createSeqGuard();
+        async function loadWorkerLogs() {
+          const seq = wlGuard.next();
+          wlRefresh.disabled = true;
+          wlWrap.innerHTML = '';
+          wlWrap.appendChild(el('p', 'empty', t('common.loading')));
+          let body = null;
+          try {
+            const res = await fetchWithTimeout(undefined, '/__oz/worker-logs');
+            body = await res.json();
+          } catch (e) { body = null; }
+          if (!wlGuard.isCurrent(seq)) { return; }
+          wlRefresh.disabled = false;
+          wlWrap.innerHTML = '';
+          if (!body || !body.ok) {
+            const detail = body && body.error ? ' ' + body.error : '';
+            wlWrap.appendChild(el('p', 'empty', t('health.workerLogsFailed') + detail));
+            return;
+          }
+          wlMeta.textContent = t('health.logsCaption');
+          const rows = (body.events || []).map(e => ({
+            ts: e.ts,
+            log: (e.outcome && e.outcome !== 'ok' ? '[' + e.outcome + '] ' : '') + (e.message || ('HTTP ' + e.status)),
+          }));
+          wlWrap.appendChild(logView(rows));
+        }
+
+        // ── Traffic card (GraphQL analytics via worker proxy) ───────────
+        const trCard = el('div', 'card table-card');
+        const trHead = el('div', 'logs-head');
+        trHead.appendChild(el('h2', null, t('health.trafficTitle')));
+        const trMeta = el('span', 'muted log-meta');
+        trHead.appendChild(trMeta);
+        const trRefresh = el('button', 'btn btn-ghost btn-sm', t('health.trafficRefresh'));
+        trRefresh.type = 'button';
+        trHead.appendChild(trRefresh);
+        trCard.appendChild(trHead);
+        const trWrap = el('div');
+        trWrap.appendChild(el('p', 'empty', t('common.loading')));
+        trCard.appendChild(trWrap);
+        c.appendChild(trCard);
+        const trGuard = createSeqGuard();
+        async function loadTraffic() {
+          const seq = trGuard.next();
+          trRefresh.disabled = true;
+          trWrap.innerHTML = '';
+          trWrap.appendChild(el('p', 'empty', t('common.loading')));
+          let body = null;
+          try {
+            const res = await fetchWithTimeout(undefined, '/__oz/traffic');
+            body = await res.json();
+          } catch (e) { body = null; }
+          if (!trGuard.isCurrent(seq)) { return; }
+          trRefresh.disabled = false;
+          trWrap.innerHTML = '';
+          if (!body || !body.ok) {
+            const detail = body && body.error ? ' ' + body.error : '';
+            trWrap.appendChild(el('p', 'empty', t('health.trafficFailed') + detail));
+            return;
+          }
+          const buckets = body.buckets || [];
+          const total = buckets.reduce((a, b) => a + (b.req || 0), 0);
+          const errs = buckets.reduce((a, b) => a + (b.err || 0), 0);
+          trMeta.textContent = total + ' requests · ' + errs + ' errors / 24h';
+          // sparkline() returns HTML (label column + svg plot) with only
+          // generated labels — all labels are escaped inside the helper.
+          // The y-axis labels are HTML so they never stretch with the
+          // preserveAspectRatio="none" plot.
+          trWrap.innerHTML = sparkline(buckets);
+        }
+
+        // ── Loaders for the two cards created above the logs panel ──────
+        const svcGuard = createSeqGuard();
+        async function loadService() {
+          const seq = svcGuard.next();
+          svcRefresh.disabled = true;
+          try {
+            const res = await fetchWithTimeout(undefined, '/__oz/nf-status');
+            const body = await res.json();
+            if (!svcGuard.isCurrent(seq)) { return; }
+            svcWrap.innerHTML = '';
+            if (!body || !body.ok) {
+              const detail = body && body.error ? ' ' + body.error : '';
+              svcWrap.appendChild(el('p', 'empty', t('health.serviceFailed') + detail));
+            } else {
+              svcWrap.appendChild(nfStatusCard(body.status));
+            }
+          } catch (e) {
+            if (!svcGuard.isCurrent(seq)) { return; }
+            svcWrap.innerHTML = '';
+            svcWrap.appendChild(el('p', 'empty', t('health.serviceFailed')));
+          }
+          svcRefresh.disabled = false;
+        }
+
+        const upGuard = createSeqGuard();
+        // The three ozpos.my.id-zone hosts cannot be probed from inside
+        // the Worker (same-zone subrequests bypass Workers routes and 522
+        // against a nonexistent origin), so they are probed from the
+        // browser instead — no-cors fetch, opaque but honest reachability
+        // from the user's real vantage.
+        async function probeBrowser(name, url, sameOrigin) {
+          const t0 = performance.now();
+          try {
+            const opts = sameOrigin ? { cache: 'no-store' } : { mode: 'no-cors', cache: 'no-store' };
+            await fetchWithTimeout(undefined, url, opts, 6000);
+            return { name, up: true, ms: Math.round(performance.now() - t0), error: '', vantage: 'browser' };
+          } catch (e) {
+            return { name, up: false, ms: Math.round(performance.now() - t0), error: 'unreachable', vantage: 'browser' };
+          }
+        }
+        async function loadUptime() {
+          const seq = upGuard.next();
+          upRefresh.disabled = true;
+          try {
+            const res = await fetchWithTimeout(undefined, '/__oz/uptime');
+            const body = await res.json();
+            const browserChecks = await Promise.all([
+              probeBrowser('website (ozpos.my.id)', 'https://ozpos.my.id/'),
+              probeBrowser('dashboard', 'https://dashboard.ozpos.my.id/'),
+              probeBrowser('admin', '/', true),
+            ]);
+            if (!upGuard.isCurrent(seq)) { return; }
+            upWrap.innerHTML = '';
+            const edgeOk = body && body.ok;
+            const checks = (edgeOk ? body.checks : []).concat(browserChecks);
+            if (checks.length === 0) {
+              upWrap.appendChild(el('p', 'empty', (body && body.error ? t('health.uptimeFailed') + ' ' + body.error : t('health.uptimeFailed'))));
+            } else {
+              if (!edgeOk) checks.unshift({ name: 'license api', up: false, ms: 0, error: body && body.error ? body.error : 'edge probe failed', vantage: 'edge' });
+              upWrap.appendChild(uptimeRows(checks));
+            }
+          } catch (e) {
+            if (!upGuard.isCurrent(seq)) { return; }
+            upWrap.innerHTML = '';
+            upWrap.appendChild(el('p', 'empty', t('health.uptimeFailed')));
+          }
+          upRefresh.disabled = false;
+        }
+
+        // ── Wire refresh buttons + auto-refresh (60s, health tab only) ──
+        svcRefresh.addEventListener('click', loadService);
+        upRefresh.addEventListener('click', loadUptime);
+        wlRefresh.addEventListener('click', loadWorkerLogs);
+        trRefresh.addEventListener('click', loadTraffic);
+        autoBtn.addEventListener('click', () => {
+          healthAutoOn = !healthAutoOn;
+          autoBtn.textContent = healthAutoOn ? t('health.autoOn') : t('health.autoOff');
+        });
+        healthLoader = {
+          // Revisit + first build: every card, including the kv row.
+          refreshAll() {
+            loadService(); loadUptime(); loadLogs(); loadDeploys(); loadWorkerLogs(); loadTraffic();
+            loadHealthKv();
+            healthLastRefresh = Date.now();
+          },
+          // 60s auto-tick: same scope as the original auto-refresh (the
+          // two heaviest proxies stay on-demand only).
+          refreshAuto() {
+            loadService(); loadUptime(); loadWorkerLogs(); loadTraffic();
+          },
+        };
+        setTabContent('health', c);
+        startHealthAuto();
+        healthLoader.refreshAll();
     }
 
     // ── Flash ───────────────────────────────────────────────────────

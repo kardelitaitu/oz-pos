@@ -2,7 +2,7 @@
 // Unit tests for the admin dashboard's pure helpers (H2 hardening).
 // The helpers live in public/admin/admin-utils.js — a UMD module that
 // exports for Node/vitest and defines window.AdminUtils in the browser.
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import utils from '../../public/admin/admin-utils.js';
 
 describe('admin-utils escapeHtml', () => {
@@ -83,6 +83,14 @@ describe('admin-utils svgChart', () => {
     expect(svg).toContain('<svg');
     expect(svg).toContain('01');
   });
+
+  it('wide variant stretches the canvas so text is not upscaled', () => {
+    const data = Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, '0')}`, idr: (i + 1) * 100 }));
+    const svg = utils.svgChart('rev', data, ['idr'], { area: true, wide: true });
+    expect(svg).toContain('viewBox="0 0 1280 220"');
+    // A label under every point on the wide canvas (12 months → 12 x-labels).
+    expect(svg.match(/text-anchor="middle"/g)?.length).toBe(12);
+  });
 });
 
 describe('admin-utils svgDonut', () => {
@@ -133,6 +141,28 @@ describe('admin-utils kpiC', () => {
     expect(icon).not.toBeNull();
     expect(icon.className).toContain('kpi-icon-green');
     expect(icon.querySelector('svg')).not.toBeNull();
+  });
+});
+
+describe('admin-utils statC (design-language tinted stat card)', () => {
+  it('builds a tinted stat card with value + label + sub', () => {
+    const s = utils.statC('Orders Today', '142', 'caption', 'primary');
+    expect(s.className).toBe('stat stat--primary');
+    expect(s.querySelector('.stat-value').textContent).toBe('142');
+    expect(s.querySelector('.stat-label').textContent).toBe('Orders Today');
+    expect(s.querySelector('.stat-sub').textContent).toBe('caption');
+  });
+
+  it('maps every known variant to its class', () => {
+    for (const v of ['primary', 'success', 'warning', 'danger', 'info']) {
+      expect(utils.statC('L', '1', '', v).className).toBe('stat stat--' + v);
+    }
+  });
+
+  it('falls back to primary for unknown variants and omits empty sub', () => {
+    const s = utils.statC('X', '1', '', 'chartreuse');
+    expect(s.className).toBe('stat stat--primary');
+    expect(s.querySelector('.stat-sub')).toBeNull();
   });
 });
 
@@ -206,18 +236,29 @@ describe('admin-utils tenantRow (B1: t() shadowing regression)', () => {
     email: 'a@b.c',
     status: 'active',
     license: { key: 'OZ-KEY' },
-    subscription: { tierKey: 'pro' },
+    subscription: { tierKey: 'pro', expiresAt: '2027-08-01T00:00:00Z' },
     created: '2026-08-01T10:00:00Z',
   };
 
-  it('renders all six cells without crashing', () => {
+  it('renders five cells: email, status, merged license/tier, created, action', () => {
     const row = utils.tenantRow(tenant, () => {});
     const cells = row.querySelectorAll('td');
-    expect(cells.length).toBe(6);
+    expect(cells.length).toBe(5);
     expect(cells[0].textContent).toBe('a@b.c');
-    expect(cells[2].textContent).toBe('OZ-KEY');
-    expect(cells[3].textContent).toBe('pro');
-    expect(cells[4].textContent).toBe('2026-08-01');
+    // merged "[tier] date expired" format, date = subscription expiry
+    expect(cells[2].textContent).toBe('[pro] 2027-08-01');
+    expect(cells[2].getAttribute('title')).toBe('[pro] 2027-08-01 · OZ-KEY');
+    expect(cells[3].textContent).toBe('2026-08-01');
+  });
+
+  it('expiry falls back to the license when the subscription has none', () => {
+    const row = utils.tenantRow({
+      id: 't2', status: 'active',
+      license: { key: 'OZ-L', tierKey: 'plus', expiresAt: '2026-12-25' },
+      subscription: {},
+    }, () => {});
+    const cells = row.querySelectorAll('td');
+    expect(cells[2].textContent).toBe('[plus] 2026-12-25');
   });
 
   it('labels the action button via i18n and wires the click to the tenant id', () => {
@@ -234,7 +275,7 @@ describe('admin-utils tenantRow (B1: t() shadowing regression)', () => {
     const cells = row.querySelectorAll('td');
     expect(cells[0].textContent).toBe('—');
     expect(cells[2].textContent).toBe('—');
-    expect(cells[4].textContent).toBe('—');
+    expect(cells[3].textContent).toBe('—');
   });
 });
 
@@ -246,25 +287,120 @@ describe('admin-utils tenantDetailRows (B2: t() shadowing regression)', () => {
     devices: [{ id: 'd1' }, { id: 'd2' }],
   };
 
-  it('builds the 8 key/value rows without crashing', () => {
+  it('builds the 9 key/value rows (phone added, devices last) without crashing', () => {
     const rows = utils.tenantDetailRows(data);
-    expect(rows.length).toBe(8);
+    expect(rows.length).toBe(9);
     // B16 superseded the raw-enum expectation: status rows carry labels.
     expect(rows[0]).toEqual(['Status', 'Active']);
     expect(rows[1]).toEqual(['Email verified', '✓']);
-    expect(rows[2]).toEqual(['Created', '2026-08-01']);
-    expect(rows[3]).toEqual(['License key', 'OZ-KEY']);
-    expect(rows[4]).toEqual(['Tier', 'pro']);
-    expect(rows[5]).toEqual(['Subscription status', 'Active']);
-    expect(rows[6]).toEqual(['Expires', '2027-08-01']);
-    expect(rows[7]).toEqual(['Devices', 2]);
+    expect(rows[2]).toEqual(['Phone', '—']);
+    expect(rows[3]).toEqual(['Created', '2026-08-01']);
+    expect(rows[4]).toEqual(['License key', 'OZ-KEY']);
+    expect(rows[5]).toEqual(['Tier', 'pro']);
+    expect(rows[6]).toEqual(['Subscription status', 'Active']);
+    expect(rows[7]).toEqual(['Expires', '2027-08-01']);
+    expect(rows[8]).toEqual(['Devices', 2]);
+  });
+
+  it('includes phone when present, grace only when set', () => {
+    const rows = utils.tenantDetailRows({
+      tenant: { status: 'active', emailVerified: true, created: '2026-08-01', phone: '+62 812-3456-7890' },
+      license: { key: 'OZ-K' },
+      subscription: { tierKey: 'pro', status: 'active', expiresAt: '2027-08-01' },
+      devices: [],
+    });
+    const labels = rows.map((r: [string, string]) => r[0]);
+    expect(labels).toContain('Phone');
+    expect(labels).not.toContain('Grace until');
+    // position: right after Email verified
+    expect(labels.indexOf('Phone')).toBe(labels.indexOf('Email verified') + 1);
+  });
+
+  it('shows the grace row when graceUntil is set', () => {
+    const rows = utils.tenantDetailRows({
+      tenant: { status: 'active' },
+      subscription: { tierKey: 'pro', graceUntil: '2026-09-10' },
+    });
+    const labels = rows.map((r: [string, string]) => r[0]);
+    expect(labels).toContain('Grace until');
+    expect(rows.find((r: [string, string]) => r[0] === 'Grace until')![1]).toBe('2026-09-10');
   });
 
   it('handles a fully empty payload with em-dash values', () => {
     const rows = utils.tenantDetailRows({});
-    expect(rows.length).toBe(8);
+    expect(rows.length).toBe(9);
     expect(rows[0][1]).toBe('—');
-    expect(rows[7][1]).toBe(0);
+    expect(rows[8][1]).toBe(0);
+  });
+});
+
+describe('admin-utils revokeConfirmModal (confirm-by-email guard)', () => {
+  const setup = () => {
+    const confirmSpy = vi.fn();
+    const { box, cancelBtn } = utils.revokeConfirmModal('Owner@Example.com ', confirmSpy);
+    document.body.appendChild(box);
+    return { box, cancelBtn, confirmSpy };
+  };
+  const teardown = () => document.querySelectorAll('.modal').forEach(m => m.remove());
+
+  afterEach(teardown);
+
+  it('confirm stays disabled until the typed email matches (trim+case-insensitive)', () => {
+    const { box, confirmSpy } = setup();
+    const input = box.querySelector('input') as HTMLInputElement;
+    const confirm = [...box.querySelectorAll('button')].find(b => b.textContent === 'Revoke') as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    input.value = 'wrong@b.c';
+    input.dispatchEvent(new Event('input'));
+    expect(confirm.disabled).toBe(true);
+    input.value = 'owner@example.com';
+    input.dispatchEvent(new Event('input'));
+    expect(confirm.disabled).toBe(false);
+    confirm.click();
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a live mismatch hint while typing, hides it on match/clear', () => {
+    const { box } = setup();
+    const input = box.querySelector('input') as HTMLInputElement;
+    const err = box.querySelector('p[style*="danger"]') as HTMLElement;
+    input.value = 'wron';
+    input.dispatchEvent(new Event('input'));
+    expect(err.style.display).toBe('block');
+    input.value = 'owner@example.com';
+    input.dispatchEvent(new Event('input'));
+    expect(err.style.display).toBe('none');
+    input.value = '';
+    input.dispatchEvent(new Event('input'));
+    expect(err.style.display).contains('none');
+  });
+
+  it('cancel button is returned for the caller to wire', () => {
+    const { box, cancelBtn } = setup();
+    expect(box.contains(cancelBtn)).toBe(true);
+    expect(cancelBtn.textContent).toBe('Cancel');
+  });
+
+  it('opts reuse the gate for the delete flow (title, hint, label, cascade warn)', () => {
+    const confirmSpy = vi.fn();
+    const { box } = utils.revokeConfirmModal('del@x.id', confirmSpy, {
+      title: 'Delete tenant permanently',
+      hint: 'Cannot be undone. Type the tenant email to confirm: ',
+      confirmLabel: 'Delete permanently',
+      extraWarn: 'All devices and subscriptions are deleted.',
+    });
+    document.body.appendChild(box);
+    expect(box.querySelector('h3')!.textContent).toBe('Delete tenant permanently');
+    expect(box.textContent).toContain('Cannot be undone.');
+    expect(box.textContent).toContain('All devices and subscriptions are deleted.');
+    const confirm = [...box.querySelectorAll('button')].find(b => b.textContent === 'Delete permanently') as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    const input = box.querySelector('input') as HTMLInputElement;
+    input.value = 'del@x.id';
+    input.dispatchEvent(new Event('input'));
+    expect(confirm.disabled).toBe(false);
+    confirm.click();
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -303,6 +439,17 @@ describe('admin-utils svgBarChart (B3: churn chart read the wrong field)', () =>
     const svg = utils.svgBarChart('x', [{ count: 1 }, { count: 1, month: '2026-<b>' }], { valueKey: 'count' });
     expect(svg).not.toContain('<b>');
     expect(svg).toContain('&lt;b&gt;');
+  });
+
+  it('wide variant stretches the canvas so text is not upscaled', () => {
+    const data = Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, '0')}`, churn: i + 1 }));
+    const narrow = utils.svgBarChart('c', data, { valueKey: 'churn' });
+    const wide = utils.svgBarChart('c', data, { valueKey: 'churn', wide: true });
+    expect(narrow).toContain('viewBox="0 0 620 180"');
+    expect(wide).toContain('viewBox="0 0 1280 220"');
+    expect(wide).not.toContain('max-height');
+    // Max bar still reaches the same plot height (160) in both canvases.
+    expect(wide).toContain('height="160"');
   });
 });
 
@@ -723,6 +870,206 @@ describe('admin-utils startCountdown (B18: OTP cooldown lifecycle)', () => {
     expect(() => utils.startCountdown(null, 5, (s) => `${s}`, () => {})).not.toThrow();
     expect(() => utils.stopCountdown(null)).not.toThrow();
     expect(utils.countdownActive(null)).toBe(false);
+  });
+});
+
+describe('admin-utils fxTimeLabel (FX chip shows WIB, not raw UTC)', () => {
+  it('shifts a UTC ISO timestamp to UTC+7', () => {
+    expect(utils.fxTimeLabel('2026-06-01T12:51:00Z')).toBe('19:51 UTC+7');
+    // Date-line rollover: 23:00 UTC is 06:00 the NEXT day in WIB.
+    expect(utils.fxTimeLabel('2026-06-01T23:00:00Z')).toBe('06:00 UTC+7');
+    expect(utils.fxTimeLabel('2026-06-01T16:59:59Z')).toBe('23:59 UTC+7');
+  });
+
+  it('accepts an explicit +HH:MM offset', () => {
+    // 09:00 at +00:30 = 08:30 UTC = 15:30 UTC+7.
+    expect(utils.fxTimeLabel('2026-06-01T09:00:00+00:30')).toBe('15:30 UTC+7');
+  });
+
+  it('falls back to raw UTC for a zone-less timestamp (no double-shift)', () => {
+    expect(utils.fxTimeLabel('2026-06-01T12:51:00')).toBe('12:51 UTC');
+  });
+
+  it('returns empty for junk or missing input so the suffix is dropped', () => {
+    expect(utils.fxTimeLabel('')).toBe('');
+    expect(utils.fxTimeLabel(undefined)).toBe('');
+    expect(utils.fxTimeLabel('not-a-date')).toBe('');
+  });
+});
+
+describe('admin-utils logView / stripAnsi / logTsWib (health platform logs)', () => {
+  it('stripAnsi removes color, cursor and OSC escapes', () => {
+    expect(utils.stripAnsi('\x1b[32mok\x1b[0m')).toBe('ok');
+    expect(utils.stripAnsi('\x1b[2Jclear')).toBe('clear');
+    expect(utils.stripAnsi('\x1b]0;title\x07tail')).toBe('tail');
+    expect(utils.stripAnsi(null)).toBe('');
+  });
+
+  it('logTsWib shifts UTC to WIB with seconds', () => {
+    expect(utils.logTsWib('2026-09-01T12:51:17.310Z')).toBe('19:51:17');
+    expect(utils.logTsWib('garbage')).toBe('');
+  });
+
+  it('logView renders rows via textContent (no markup injection)', () => {
+    const v = utils.logView([{ ts: '2026-09-01T12:51:17.310Z', log: '<img src=x onerror=alert(1)>' }]);
+    expect(v.querySelectorAll('.log-line').length).toBe(1);
+    expect(v.querySelector('.log-msg').textContent).toBe('<img src=x onerror=alert(1)>');
+    expect(v.querySelector('.log-msg').querySelector('img')).toBeNull();
+    expect(v.querySelector('.log-ts').textContent).toBe('19:51:17');
+  });
+
+  it('logView shows the empty state for no lines', () => {
+    expect(utils.logView([]).querySelector('.empty')).not.toBeNull();
+    expect(utils.logView(null).querySelector('.empty')).not.toBeNull();
+  });
+});
+
+describe('admin-utils cfDeployRows (health Cloudflare deployments)', () => {
+  const deploys = [
+    { id: 'd1', time: '2026-09-01T14:12:07.544Z', author: 'adikaradwiatmaja@gmail.com', trigger: 'deployment', message: 'Coding Agent — 47e3ea90 health logs (feat/agent-4-website)', versionId: 'v1' },
+    { id: 'd2', time: '2026-09-01T14:08:43.612Z', author: 'adikaradwiatmaja@gmail.com', trigger: 'secret', message: '', versionId: 'v2' },
+  ];
+
+  it('renders rows newest-first with sha highlighted via textContent', () => {
+    const v = utils.cfDeployRows(deploys);
+    const rows = v.querySelectorAll('.deploy-row');
+    expect(rows.length).toBe(2);
+    const sha = rows[0].querySelector('.deploy-sha');
+    expect(sha.textContent).toBe('47e3ea90');
+    expect(rows[0].querySelector('.deploy-msg').querySelector('img')).toBeNull();
+    expect(rows[0].innerHTML).not.toContain('<img');
+    expect(rows[0].querySelector('.deploy-time').textContent).toBe('21:12:07 WIB');
+  });
+
+  it('tags secret-triggered rows with the warning chip and falls back to —', () => {
+    const v = utils.cfDeployRows(deploys);
+    const rows = v.querySelectorAll('.deploy-row');
+    expect(rows[1].querySelector('.deploy-chip--secret')).not.toBeNull();
+    expect(rows[1].querySelector('.deploy-msg').textContent).toBe('—');
+  });
+
+  it('shows the empty state for no deploys', () => {
+    expect(utils.cfDeployRows([]).querySelector('.empty')).not.toBeNull();
+    expect(utils.cfDeployRows(null).querySelector('.empty')).not.toBeNull();
+  });
+});
+
+describe('admin-utils relTime / sparkline / nfStatusCard / uptimeRows (health v2)', () => {
+  const NOW = Date.parse('2026-09-01T15:00:00Z');
+
+  it('relTime buckets deltas and handles junk', () => {
+    expect(utils.relTime('2026-09-01T14:59:56Z', NOW)).toBe('just now');
+    expect(utils.relTime('2026-09-01T14:59:30Z', NOW)).toBe('30s ago');
+    expect(utils.relTime('2026-09-01T14:56:00Z', NOW)).toBe('4m ago');
+    expect(utils.relTime('2026-09-01T12:00:00Z', NOW)).toBe('3h ago');
+    expect(utils.relTime('2026-08-30T15:00:00Z', NOW)).toBe('2d ago');
+    expect(utils.relTime('garbage', NOW)).toBe('');
+  });
+
+  it('sparkline draws an area path starting with M and WIB edge labels', () => {
+    const svg = utils.sparkline([
+      { t: '2026-09-01T13:00:00Z', req: 4, err: 0 },
+      { t: '2026-09-01T13:01:00Z', req: 9, err: 1 },
+      { t: '2026-09-01T13:02:00Z', req: 2, err: 0 },
+    ]);
+    expect(svg).toContain('class="chart-svg spark-svg"');
+    expect(svg).toMatch(/d="M \d/);
+    expect(svg).toContain('stroke="var(--danger)"');
+    expect(svg).toContain('20:00');
+    expect(svg).toContain('20:02');
+  });
+
+  it('sparkline falls back to the empty state', () => {
+    expect(utils.sparkline([])).toContain('chart-empty');
+    expect(utils.sparkline([{ t: 'x', req: 0 }])).toContain('chart-empty');
+  });
+
+  it('nfStatusCard renders status chip, running sha and fields', () => {
+    const v = utils.nfStatusCard({
+      deploymentStatus: 'COMPLETED', deploymentReason: 'DEPLOYING', buildStatus: 'SUCCESS',
+      deployedSha: 'e0046a6fbd507b02f60bd1a868c53f83dea167bf', branch: 'main',
+      region: 'nf-europe-west', instances: 1, updatedAt: '2026-09-01T03:20:20.172Z',
+    });
+    expect(v.querySelector('.status-ok')).not.toBeNull();
+    expect(v.querySelector('.deploy-sha').textContent).toBe('e0046a6f');
+    expect(v.textContent).toContain('main');
+    expect(v.textContent).toContain('nf-europe-west');
+  });
+
+  it('nfStatusCard marks non-completed deployment as warn', () => {
+    const v = utils.nfStatusCard({ deploymentStatus: 'DEPLOYING', instances: 2 });
+    expect(v.querySelector('.status-warn')).not.toBeNull();
+  });
+
+  it('uptimeRows renders dots, latency and error text', () => {
+    const v = utils.uptimeRows([
+      { name: 'license api', up: true, ms: 42, vantage: 'edge' },
+      { name: 'admin', up: false, ms: 5000, error: 'HTTP 502' },
+    ]);
+    const rows = v.querySelectorAll('.up-row');
+    expect(rows.length).toBe(2);
+    expect(rows[0].querySelector('.up-dot--ok')).not.toBeNull();
+    expect(rows[0].querySelector('.up-ms').textContent).toBe('42 ms');
+    expect(rows[0].querySelector('.up-vantage').textContent).toBe('edge');
+    expect(rows[1].querySelector('.up-dot--bad')).not.toBeNull();
+    expect(rows[1].querySelector('.up-err').textContent).toBe('HTTP 502');
+    expect(rows[1].querySelector('.up-vantage')).toBeNull();
+  });
+
+  it('logView highlights error lines', () => {
+    const v = utils.logView([
+      { ts: '2026-09-01T12:00:00Z', log: 'all good' },
+      { ts: '2026-09-01T12:01:00Z', log: 'scanner: failed to connect' },
+    ]);
+    const rows = v.querySelectorAll('.log-line');
+    expect(rows[0].className).not.toContain('log-line--err');
+    expect(rows[1].className).toContain('log-line--err');
+  });
+});
+
+describe('admin-utils phone chart variants (mobile 1:1 canvases)', () => {
+  const months = Array.from({ length: 8 }, (_, i) => ({ month: '2026-0' + (i + 1), idr: 1000000 + i * 500000, count: 5 + i, churn: i % 3 }));
+
+  it('svgChart phone canvas is ~350 wide with larger labels and sparse ticks', () => {
+    const svg = utils.svgChart('rev', months, ['idr'], { area: true, phone: true, fmt: (v: number) => 'Rp' + (v / 1000000).toFixed(1) + 'jt' });
+    expect(svg).toContain('viewBox="0 0 350 230"');
+    expect(svg).toContain('font-size="11"');
+    expect(svg).toContain('font-size="10"');
+    // step 3 on 8 points → labels at 0,3,6,7 (last always shown)
+    expect(svg.match(/text-anchor="middle" fill="var\(--muted\)"/g)!.length).toBe(4);
+    expect(svg).toMatch(/d="M \d/);
+  });
+
+  it('svgChart wide canvas is unchanged (1280×220)', () => {
+    const svg = utils.svgChart('rev', months, ['idr'], { wide: true });
+    expect(svg).toContain('viewBox="0 0 1280 220"');
+  });
+
+  it('svgBarChart phone canvas is ~350×200 with 11px values', () => {
+    const svg = utils.svgBarChart('s', months, { valueKey: 'count', phone: true });
+    expect(svg).toContain('viewBox="0 0 350 200"');
+    expect(svg).toContain('font-size="11" font-weight="600"');
+    expect(svg).not.toContain('max-height');
+  });
+
+  it('sparkline renders gridlines + HTML y-labels (readable values)', () => {
+    const svg = utils.sparkline([
+      { t: '2026-09-01T13:00:00Z', req: 4, err: 0 },
+      { t: '2026-09-01T13:01:00Z', req: 900, err: 1 },
+    ]);
+    // 5 gridlines: dashed above, solid baseline
+    expect(svg.match(/<line /g)!.length).toBe(5);
+    expect(svg.match(/stroke-dasharray="4 4"/g)!.length).toBe(4);
+    // y-label column is HTML (5 labels), values compact (900 stays, top = max)
+    expect(svg).toContain('class="spark-y"');
+    expect(svg.match(/<span style="top:/g)!.length).toBe(5);
+    expect(svg).toContain('>900</span>');
+    expect(svg).toContain('>0</span>');
+    // no SVG <text> — labels must not stretch with preserveAspectRatio=none
+    expect(svg).not.toContain('<text');
+    // time labels moved to the HTML bottom row (WIB)
+    expect(svg).toContain('class="spark-x"');
+    expect(svg).toContain('20:00');
   });
 });
 
