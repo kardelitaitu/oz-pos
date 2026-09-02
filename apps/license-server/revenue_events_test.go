@@ -382,3 +382,78 @@ func TestAdminStats_RealRevenue(t *testing.T) {
 		t.Error("expected revenue trend to include the seeded revenue event")
 	}
 }
+
+// ── #5: recent revenue events feed ───────────────────────────────────
+
+func TestAdminStats_RecentRevenueFeed(t *testing.T) {
+	resetProviderRevenueCache()
+	resetRateLimiters()
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+
+	tenantID, _ := seedDashboardTenant(t, app, "feed@test.com")
+	t.Setenv("OZ_ADMIN_KEY", "secret-admin-key")
+	col, _ := app.FindCollectionByNameOrId("revenue_events")
+
+	seed := func(eventID, provider, tier string, usd float64, idr int64) {
+		rev := core.NewRecord(col)
+		rev.Set("event_id", eventID)
+		rev.Set("provider", provider)
+		rev.Set("tenant_id", tenantID)
+		rev.Set("currency", "USD")
+		rev.Set("amount_usd", usd)
+		rev.Set("amount_idr", idr)
+		rev.Set("tier_key", tier)
+		if err := app.Save(rev); err != nil {
+			t.Fatalf("save revenue event %s: %v", eventID, err)
+		}
+	}
+	seed("evt-feed-paddle", "paddle", "pro", 42.50, 680000)
+	seed("evt-feed-midtrans", "midtrans", "plus", 9.30, 149000)
+
+	rec := doJSON(mux, http.MethodGet, "/api/v1/admin/stats?refresh=1", "Bearer secret-admin-key", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var body struct {
+		RecentRevenueEvents []struct {
+			Email     string  `json:"email"`
+			Provider  string  `json:"provider"`
+			Tier      string  `json:"tier"`
+			AmountUsd float64 `json:"amountUsd"`
+			AmountIdr int64   `json:"amountIdr"`
+			Created   string  `json:"created"`
+		} `json:"recentRevenueEvents"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	if len(body.RecentRevenueEvents) < 2 {
+		t.Fatalf("expected >=2 feed rows, got %d", len(body.RecentRevenueEvents))
+	}
+	// The feed resolves the tenant email and carries provider/tier/amounts.
+	var sawPaddle, sawMidtrans bool
+	for _, row := range body.RecentRevenueEvents {
+		if row.Email != "feed@test.com" {
+			t.Errorf("feed row email = %q, want feed@test.com", row.Email)
+		}
+		if row.Provider == "paddle" {
+			sawPaddle = true
+			if row.AmountUsd != 42.50 || row.AmountIdr != 680000 || row.Tier != "pro" {
+				t.Errorf("paddle row amounts/tier wrong: %+v", row)
+			}
+		}
+		if row.Provider == "midtrans" {
+			sawMidtrans = true
+			if row.Tier != "plus" {
+				t.Errorf("midtrans row tier = %q, want plus", row.Tier)
+			}
+		}
+		if row.Created == "" {
+			t.Error("feed row missing created timestamp")
+		}
+	}
+	if !sawPaddle || !sawMidtrans {
+		t.Errorf("feed missing providers: paddle=%v midtrans=%v", sawPaddle, sawMidtrans)
+	}
+}

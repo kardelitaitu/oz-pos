@@ -553,6 +553,41 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
+		// ── Recent revenue events feed (#5) ──────────────────────────
+		// The last N webhook-verified charges (revenue_events ledger) with
+		// the paying tenant's email, so the operator sees money arriving in
+		// near-real-time. Refunds live in a separate ledger and surface via
+		// needsAttention, not here — this feed is income only.
+		type revenueFeedRow struct {
+			Email     string  `json:"email"`
+			Provider  string  `json:"provider"`
+			Tier      string  `json:"tier"`
+			AmountUsd float64 `json:"amountUsd"`
+			AmountIdr int64   `json:"amountIdr"`
+			Created   string  `json:"created"`
+		}
+		recentRevenueEvents := make([]revenueFeedRow, 0, 8)
+		feedEvents, _ := app.FindRecordsByFilter("revenue_events",
+			"id != ''", "-created", 8, 0)
+		for _, fe := range feedEvents {
+			email := ""
+			tenantID := fe.GetString("tenant_id")
+			if tenantID != "" {
+				if tenant, err := app.FindRecordById("tenants", tenantID); err == nil {
+					email = tenant.GetString("email")
+				}
+			}
+			created := fe.GetDateTime("created").Time()
+			recentRevenueEvents = append(recentRevenueEvents, revenueFeedRow{
+				Email:     email,
+				Provider:  fe.GetString("provider"),
+				Tier:      fe.GetString("tier_key"),
+				AmountUsd: math.Round(fe.GetFloat("amount_usd")*100) / 100,
+				AmountIdr: int64(fe.GetInt("amount_idr")),
+				Created:   created.Format(time.RFC3339),
+			})
+		}
+
 		// ── Response ────────────────────────────────────────────────
 		return e.JSON(http.StatusOK, map[string]any{
 			"kpis": map[string]any{
@@ -589,16 +624,17 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 				// income/gross figures are.
 				"revenueCachedAt": rev.UpdatedAt.Format(time.RFC3339),
 			},
-			"revenueTrend":     revenueTrend,
-			"subscriberGrowth": subGrowth,
-			"signupsPerMonth":  signupsArr,
-			"churnPerMonth":    churnArr,
-			"tierDistribution": tierDist,
-			"providerSplit":    providerSplit,
-			"topSubscribers":   topSubs,
-			"recentSignups":    recentSignups,
-			"expiringSoon":     expiringSoon,
-			"needsAttention":   needsAttention,
+			"revenueTrend":        revenueTrend,
+			"subscriberGrowth":    subGrowth,
+			"signupsPerMonth":     signupsArr,
+			"churnPerMonth":       churnArr,
+			"tierDistribution":    tierDist,
+			"providerSplit":       providerSplit,
+			"topSubscribers":      topSubs,
+			"recentSignups":       recentSignups,
+			"expiringSoon":        expiringSoon,
+			"needsAttention":      needsAttention,
+			"recentRevenueEvents": recentRevenueEvents,
 		})
 	}
 }

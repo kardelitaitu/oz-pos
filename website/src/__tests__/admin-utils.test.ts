@@ -698,6 +698,17 @@ describe('admin-utils normalizeStats (B6: partial payload killed the dashboard)'
     expect(m.needsAttention[0].type).toBe('grace_period');
   });
 
+  it('passes through recentRevenueEvents feed rows (currency-clean amounts)', () => {
+    const m = utils.normalizeStats({
+      recentRevenueEvents: [
+        { email: 'x@y.com', provider: 'paddle', tier: 'pro', amountUsd: 42.5, amountIdr: 680000, created: '2026-09-01T08:00:00Z' },
+      ],
+    });
+    expect(m.recentRevenueEvents).toHaveLength(1);
+    expect(m.recentRevenueEvents[0].provider).toBe('paddle');
+    expect(m.recentRevenueEvents[0].amountIdr).toBe(680000);
+  });
+
   it('tolerates non-object input entirely', () => {
     expect(() => utils.normalizeStats(null)).not.toThrow();
     expect(() => utils.normalizeStats(undefined)).not.toThrow();

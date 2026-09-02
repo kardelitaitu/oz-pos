@@ -305,6 +305,18 @@
       if (m.topSubscribers && m.topSubscribers.length > 0) {
         c.appendChild(tableCard(t('table.topSubscribers'), [t('th.email'),t('th.tier'),t('kpi.mrr'),t('th.renewal'),t('th.provider')], m.topSubscribers.map(d => [d.email, d.tier, fmtUsd(d.mrrUsd), d.renewal, d.provider])));
       }
+      // Recent revenue events (#5): the last webhook-verified charges, most
+      // recent first — the operator sees money arriving near-real-time.
+      if (m.recentRevenueEvents && m.recentRevenueEvents.length > 0) {
+        const fmtTime = (iso) => {
+          const d = new Date(iso);
+          if (isNaN(d.getTime())) return iso || '';
+          return d.toLocaleString('en', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+        };
+        c.appendChild(tableCard(t('table.recentRevenueEvents'),
+          [t('th.email'), t('th.provider'), t('th.tier'), t('th.amount'), t('th.when')],
+          m.recentRevenueEvents.map(d => [d.email || '—', d.provider || '—', d.tier || '—', fmtIdr(d.amountIdr), fmtTime(d.created)])));
+      }
       // Recent signups
       if (m.recentSignups && m.recentSignups.length > 0) {
         c.appendChild(tableCard(t('table.recentSignups'), [t('th.email'),t('th.created'),t('th.emailVerified'),t('th.tier')], m.recentSignups.map(d => [d.email, d.created, d.verified ? '✓' : '○', d.tier])));

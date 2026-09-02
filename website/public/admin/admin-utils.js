@@ -1280,6 +1280,7 @@
       recentSignups: arr(m.recentSignups),
       expiringSoon: arr(m.expiringSoon),
       needsAttention: arr(m.needsAttention),
+      recentRevenueEvents: arr(m.recentRevenueEvents),
       kpis: kpis,
     };
   }
@@ -1330,6 +1331,7 @@
     'chart.churnCanceled': 'Churn / Canceled',
     'table.topSubscribers': 'Top Subscribers',
     'table.recentSignups': 'Recent Signups',
+    'table.recentRevenueEvents': 'Recent Revenue Events',
     'table.expiringSoon': 'Expiring Soon (within 30 days)',
     'alert.title': 'Needs Attention',
     'alert.grace_period': 'Grace period',
@@ -1344,6 +1346,8 @@
     'th.renewal': 'Renewal',
     'th.provider': 'Provider',
     'th.status': 'Status',
+    'th.amount': 'Amount',
+    'th.when': 'When',
     'th.daysLeft': 'Days Left',
     'th.created': 'Created',
     'th.expires': 'Expires',
