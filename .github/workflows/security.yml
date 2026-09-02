@@ -18,7 +18,7 @@ defaults:
 jobs:
   audit:
     name: cargo audit
-    runs-on: [self-hosted, ozpos-ci]
+    runs-on: ubuntu-latest
     # The ubuntu runner image globally sets RUSTC_WRAPPER=sccache, but sccache
     # is only installed on PATH by mozilla/sccache-action (used by the other
     # Rust jobs). cargo-audit invokes `cargo metadata`, whose rustc version
@@ -35,7 +35,7 @@ jobs:
 
   deny:
     name: cargo deny
-    runs-on: [self-hosted, ozpos-ci]
+    runs-on: ubuntu-latest
     # Same runner-image sccache wrapper issue as the audit job: cargo-deny's
     # internal `cargo metadata` probe dies with "could not execute process
     # sccache .../bin/rustc -vV (No such file or directory)". Disable the
@@ -56,7 +56,7 @@ jobs:
   # Weekly schedule + manual dispatch complement the per-PR scan in ci.yml.
   container-scan:
     name: Trivy container scan
-    runs-on: [self-hosted, ozpos-ci]
+    runs-on: ubuntu-latest
     # SARIF upload needs the token to write code-scanning results; the repo
     # default GITHUB_TOKEN is read-only (no permissions block = no
     # security-events: write), which made upload-sarif fail with "Resource

@@ -65,7 +65,7 @@ permissions:
 jobs:
   e2e-pr:
     name: E2E (PR) — ${{ matrix.project }}
-    runs-on: [self-hosted, ozpos-ci]
+    runs-on: ubuntu-latest
     # One shard per Playwright project (desktop / tablet) so each job
     # runs ~half the suite (~125 of 250 tests) in parallel. A single
     # full-matrix job took ~25-30 min (canceled at 15 min mid-suite on

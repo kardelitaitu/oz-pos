@@ -408,12 +408,6 @@ CREATE TABLE IF NOT EXISTS image_push_queue (
     enqueued_at     TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
 );
 
-CREATE TABLE IF NOT EXISTS snapshot_versions (
-    tenant_id  TEXT PRIMARY KEY,
-    version    BIGINT NOT NULL DEFAULT 0,
-    updated_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
-);
-
 CREATE TABLE IF NOT EXISTS outbox (
     id              TEXT PRIMARY KEY,
     topic           TEXT NOT NULL,
@@ -426,6 +420,12 @@ CREATE TABLE IF NOT EXISTS outbox (
     next_attempt_at TEXT NOT NULL,       -- RFC 3339 timestamp
     created_at      TEXT NOT NULL,
     last_error      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS snapshot_versions (
+    tenant_id  TEXT PRIMARY KEY,
+    version    BIGINT NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
 );
 
 CREATE TABLE IF NOT EXISTS exchange_rates (

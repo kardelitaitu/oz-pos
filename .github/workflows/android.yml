@@ -51,7 +51,7 @@ permissions:
 jobs:
   android-build:
     name: Android APK
-    runs-on: [self-hosted, ozpos-ci]
+    runs-on: ubuntu-latest
     # AUDIT-28 RELEASE-02: the release.yml workflow creates the GitHub
     # Release only after all matrix builds finish (build timeouts are 60
     # min each), so this job must survive the build + a long poll window.

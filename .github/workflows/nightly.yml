@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [[self-hosted, ozpos-ci], windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
@@ -78,7 +78,7 @@ jobs:
   # slowing every PR.
   license-server-test:
     name: License-server Go tests (full)
-    runs-on: [self-hosted, ozpos-ci]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -91,7 +91,7 @@ jobs:
   # ── Rust: Doc generation ─────────────────────────────────────────
   rust-doc:
     name: Rust Doc
-    runs-on: [self-hosted, ozpos-ci]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
@@ -126,7 +126,7 @@ jobs:
   # ── UI: Tests (4-way sharded) ────────────────────────────────────
   ui-test:
     name: UI Tests (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
-    runs-on: [self-hosted, ozpos-ci]
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -168,7 +168,7 @@ jobs:
   # ── E2E Tests (Playwright) ───────────────────────────────────────
   e2e:
     name: E2E Tests (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
-    runs-on: [self-hosted, ozpos-ci]
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       packages: read
@@ -298,7 +298,7 @@ jobs:
   # ── Release: Desktop (Linux AppImage) ────────────────────────────
   release-desktop-linux:
     name: Release Desktop (Linux)
-    runs-on: [self-hosted, ozpos-ci]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -333,7 +333,7 @@ jobs:
   # ── Release: Desktop (Windows MSI) ───────────────────────────────
   release-desktop-windows:
     name: Release Desktop (Windows)
-    runs-on: [self-hosted, ozpos-ci]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -390,7 +390,7 @@ jobs:
   # ── Release: Tablet (Android APK) ────────────────────────────────
   release-tablet-android:
     name: Release Tablet (Android)
-    runs-on: [self-hosted, ozpos-ci]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       # Map secret to env var for use in if: condition
@@ -479,7 +479,7 @@ jobs:
   # workspace 3×, which is the expensive part; the verifier is seconds.
   flaky-detect:
     name: Flaky Detection
-    runs-on: [self-hosted, ozpos-ci]
+    runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -513,7 +513,7 @@ jobs:
 
   flaky-quarantine-registry:
     name: Flaky Quarantine Registry (nightly)
-    runs-on: [self-hosted, ozpos-ci]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Verify quarantine manifest (fail-closed)
@@ -527,7 +527,7 @@ jobs:
   # ci.yml `ci-docs-drift` gate. Pure python — no toolchain deps.
   ci-docs-drift:
     name: CI Docs Drift (nightly)
-    runs-on: [self-hosted, ozpos-ci]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Verify gates.json matches workflows + local runners
@@ -546,7 +546,7 @@ jobs:
   # See docs/benchmarks/regression-tracking.md for the full workflow.
   benchmarks:
     name: Benchmarks
-    runs-on: [self-hosted, ozpos-ci]
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
