@@ -38,6 +38,21 @@
   function fmtIdr(val) { return 'Rp ' + Math.round(val).toLocaleString('id-ID'); }
   function fmtUsd(val) { return '$' + Number(val).toFixed(2); }
 
+  // fmtMonthTick returns the x-axis month tick label for a "YYYY-MM"
+  // bucket string. When the year differs from prevYear (or prevYear is
+  // empty — the first emitted tick), the label carries a year suffix so
+  // a Dec→Jan boundary is unambiguous (e.g. "12" then "01/26"). Pure:
+  // no state; the caller tracks the last emitted year.
+  function fmtMonthTick(monthStr, prevYear) {
+    if (!monthStr) return { label: '', year: prevYear };
+    var mm = String(monthStr).slice(5);
+    var yyyy = String(monthStr).slice(0, 4);
+    if (yyyy && yyyy !== prevYear) {
+      return { label: mm + '/' + yyyy.slice(2), year: yyyy };
+    }
+    return { label: mm, year: prevYear };
+  }
+
   // statusLabel maps the server's status enum to a human label (B16).
   // Unknown values fall back to the raw string — never to a missing-key
   // placeholder, so a new server-side status still shows something real.
@@ -175,11 +190,16 @@
     // every-other-point legacy density; phone uses every third point
     // so labels never collide at true size.
     var step = wide ? 1 : (phone ? 3 : 2);
+    var lastYear = '';
     data.forEach(function (d, i) {
       if (i % step === 0 || i === data.length - 1) {
         // B5 fix: the M1 guard protected values but not labels — a row
         // without month threw on .slice and killed the whole dashboard.
-        xLabels += '<text x="' + x(i) + '" y="' + (py + ph + 18) + '" text-anchor="middle" fill="var(--muted)" font-size="' + (wide ? 12 : (phone ? 10 : 11)) + '">' + escapeHtml(d.month ? String(d.month).slice(5) : '') + '</text>';
+        // fmtMonthTick adds a year suffix at Dec→Jan boundaries (e.g.
+        // "12" then "01/26") so the same month in two years is legible.
+        var tick = fmtMonthTick(d.month, lastYear);
+        lastYear = tick.year;
+        xLabels += '<text x="' + x(i) + '" y="' + (py + ph + 18) + '" text-anchor="middle" fill="var(--muted)" font-size="' + (wide ? 12 : (phone ? 10 : 11)) + '">' + escapeHtml(tick.label) + '</text>';
       }
     });
     return '<svg viewBox="0 0 ' + w + ' ' + h + '" class="chart-svg">' + grid + fills + paths + yLabels + xLabels + '</svg>';
@@ -444,6 +464,7 @@
     var maxS = Math.max.apply(null, data.map(function (d) { return Number(d[valueKey]) || 0; }));
     var barW = (w - 20) / data.length;
     var bars = '<line x1="10" y1="' + baseline + '" x2="' + (w - 10) + '" y2="' + baseline + '" stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+    var lastYear = '';
     data.forEach(function (d, i) {
       var v = Number(d[valueKey]) || 0;
       var bh = maxS > 0 ? (v / maxS) * plotH : 0;
@@ -453,9 +474,11 @@
       var bw = Math.min(barW * 0.7, 48);
       var cx = bx + barW / 2;
       var vfs = wide ? 13 : (phone ? 11 : 12), lfs = wide ? 12 : (phone ? 10 : 11);
+      var tick = fmtMonthTick(d.month, lastYear);
+      lastYear = tick.year;
       bars += '<rect x="' + (cx - bw / 2) + '" y="' + (baseline - bh) + '" width="' + bw + '" height="' + bh + '" rx="4" fill="' + (opts && opts.color || 'var(--primary)') + '"/>' +
         '<text x="' + cx + '" y="' + (baseline - bh - 8) + '" text-anchor="middle" fill="var(--text)" font-size="' + vfs + '" font-weight="600">' + v + '</text>' +
-        '<text x="' + cx + '" y="' + (baseline + 18) + '" text-anchor="middle" fill="var(--muted)" font-size="' + lfs + '">' + escapeHtml(d.month ? d.month.slice(5) : '') + '</text>';
+        '<text x="' + cx + '" y="' + (baseline + 18) + '" text-anchor="middle" fill="var(--muted)" font-size="' + lfs + '">' + escapeHtml(tick.label) + '</text>';
     });
     return '<svg viewBox="0 0 ' + w + ' ' + h + '"' + ((wide || phone) ? '' : ' style="max-height:180px"') + ' class="chart-svg">' + bars + '</svg>';
   }
@@ -499,6 +522,7 @@
     var barW = (w - 20) / data.length;
     var out = '<line x1="10" y1="' + baseline + '" x2="' + (w - 10) + '" y2="' + baseline + '" stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
     var vfs = wide ? 13 : (phone ? 11 : 12), lfs = wide ? 12 : (phone ? 10 : 11);
+    var lastYear = '';
     data.forEach(function (d, i) {
       var total = totals[i];
       var bx = 10 + i * barW;
@@ -515,7 +539,9 @@
       if (total > 0) {
         out += '<text x="' + cx + '" y="' + (yCursor - 8) + '" text-anchor="middle" fill="var(--text)" font-size="' + vfs + '" font-weight="600">' + (opts && opts.fmt ? opts.fmt(total) : Math.round(total)) + '</text>';
       }
-      out += '<text x="' + cx + '" y="' + (baseline + 18) + '" text-anchor="middle" fill="var(--muted)" font-size="' + lfs + '">' + escapeHtml(d.month ? d.month.slice(5) : '') + '</text>';
+      var tick = fmtMonthTick(d.month, lastYear);
+      lastYear = tick.year;
+      out += '<text x="' + cx + '" y="' + (baseline + 18) + '" text-anchor="middle" fill="var(--muted)" font-size="' + lfs + '">' + escapeHtml(tick.label) + '</text>';
     });
     return '<svg viewBox="0 0 ' + w + ' ' + h + '"' + ((wide || phone) ? '' : ' style="max-height:180px"') + ' class="chart-svg">' + out + '</svg>';
   }
@@ -1456,6 +1482,7 @@
     escapeHtml: escapeHtml,
     fmtIdr: fmtIdr,
     fmtUsd: fmtUsd,
+    fmtMonthTick: fmtMonthTick,
     statusPill: statusPill,
     svgChart: svgChart,
     svgDonut: svgDonut,

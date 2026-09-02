@@ -127,6 +127,39 @@ describe('admin-utils svgChart', () => {
   });
 });
 
+describe('admin-utils fmtMonthTick (year-boundary x-labels)', () => {
+  it('keeps plain month labels within a single year', () => {
+    expect(utils.fmtMonthTick('2026-03', '2026')).toEqual({ label: '03', year: '2026' });
+    expect(utils.fmtMonthTick('2026-11', '2026')).toEqual({ label: '11', year: '2026' });
+  });
+
+  it('adds a year suffix when the year changes (Dec → Jan)', () => {
+    // Previous emitted tick was Dec 2025; the next is Jan 2026.
+    const jan = utils.fmtMonthTick('2026-01', '2025');
+    expect(jan).toEqual({ label: '01/26', year: '2026' });
+  });
+
+  it('adds a year suffix on the first emitted tick (no prior year)', () => {
+    expect(utils.fmtMonthTick('2025-12', '')).toEqual({ label: '12/25', year: '2025' });
+  });
+
+  it('keeps the year across the first tick until a boundary', () => {
+    // Simulate a 13-month window: first tick Nov 2025, then Dec 2025
+    // (same year), then Jan 2026 (boundary).
+    const nov = utils.fmtMonthTick('2025-11', '');
+    const dec = utils.fmtMonthTick('2025-12', nov.year);
+    const jan = utils.fmtMonthTick('2026-01', dec.year);
+    expect(nov.label).toBe('11/25');
+    expect(dec.label).toBe('12');
+    expect(jan.label).toBe('01/26');
+  });
+
+  it('survives rows without a month (B5-style)', () => {
+    expect(utils.fmtMonthTick(null, '2026')).toEqual({ label: '', year: '2026' });
+    expect(utils.fmtMonthTick(undefined, '2026')).toEqual({ label: '', year: '2026' });
+  });
+});
+
 describe('admin-utils svgDonut', () => {
   it('returns empty state for empty data (M1 guard)', () => {
     expect(utils.svgDonut('id', [], 'tier', 'count').svg).toContain('chart-empty');
@@ -487,8 +520,7 @@ describe('admin-utils svgBarChart (B3: churn chart read the wrong field)', () =>
   });
 });
 
-describe('admin-utils svgStackedBars (provider revenue mix)', () => {
-  it('returns empty state for empty or missing data', () => {
+describe('admin-utils svgStackedBars (provider revenue mix)', () => {  it('returns empty state for empty or missing data', () => {
     expect(utils.svgStackedBars('x', [], { stack: [{ key: 'a', color: 'red' }] })).toContain('chart-empty');
     expect(utils.svgStackedBars('x', null, { stack: [{ key: 'a', color: 'red' }] })).toContain('chart-empty');
     expect(utils.svgStackedBars('x', undefined, { stack: [{ key: 'a', color: 'red' }] })).toContain('chart-empty');
