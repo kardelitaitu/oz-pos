@@ -1,7 +1,7 @@
 ---
 title: API Read Tiers
 description: Control GET access through scoped JWT permissions — mint, preset, call.
-category: integration
+category: reference
 order: 8
 updated: "2026-09-01"
 ---

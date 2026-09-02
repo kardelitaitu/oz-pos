@@ -1,7 +1,7 @@
 ---
 title: Tingkat Akses Baca API
 description: Kontrol akses GET melalui izin JWT terbatas — mint, preset, panggil.
-category: integration
+category: reference
 order: 8
 updated: "2026-09-01"
 ---
