@@ -1,6 +1,6 @@
 # Extending OZ-POS — Scripting & Integration Guide
 
-<!-- Audit stamp: 2026-09-03 · DSH · status: NEW (created from verified code state) · every claim below cross-referenced against: crates/oz-api/src/{lib.rs,auth.rs,read_tiers.rs}, crates/oz-api/src/routes/{tokens.rs,terminals.rs,sales.rs,settings.rs,products.rs,tax_rates.rs,exchange_rates.rs,users.rs,images.rs}, apps/cloud-server/src/{main.rs,openapi.rs,openapi_tests.rs,sync_api.rs}, foundation/src/money.rs, crates/oz-lua/README.md, crates/oz-cli/README.md, docs/guides/plugin-guide.md, docs/specs/_active/0047-openapi-drift-guard-and-read-tiers.md · known spec-vs-code drift findings recorded in §10 -->
+<!-- Audit stamp: 2026-09-03 · DSH · status: NEW (created from verified code state) · every claim below cross-referenced against: crates/oz-api/src/{lib.rs,auth.rs,read_tiers.rs}, crates/oz-api/src/routes/{tokens.rs,terminals.rs,sales.rs,settings.rs,products.rs,tax_rates.rs,exchange_rates.rs,users.rs,images.rs}, apps/cloud-server/src/{main.rs,openapi.rs,openapi_tests.rs,sync_api.rs}, foundation/src/money.rs, crates/oz-lua/README.md, crates/oz-cli/README.md, docs/guides/plugin-guide.md, docs/specs/_active/0047-openapi-drift-guard-and-read-tiers.md · spec-vs-code drift findings recorded here were repaired the same day (see §10) -->
 
 This guide is for people writing **their own scripts** against an OZ-POS
 installation — automation on the counter machine, a dashboard against the
@@ -62,9 +62,11 @@ mint. `OZ_PRODUCTION=1` refuses to boot unless both are set
 
 These are public (no auth) on the cloud server. The spec is
 hand-maintained in `apps/cloud-server/src/openapi.rs`; drift-guard tests in
-`openapi_tests.rs` (spec 0047) keep spec→router liveness, security
-declarations, and read-key coverage honest — but they are **one-directional**
-(see §10).
+`openapi_tests.rs` (spec 0047) keep it honest in **both** directions:
+spec→router liveness, security declarations, read-key coverage, and
+router→spec coverage (a compile-time source scan of every `.route()`
+registration — added 2026-09-03 after the guard's original one-directional
+design let `settings` and `snapshot` drift undocumented).
 
 ## 3. Endpoint map
 
@@ -116,7 +118,7 @@ Cloud-only additions (not part of the `oz-api` crate):
 | POST | `/api/sync/push` | JWT | push offline-queue items |
 | POST | `/api/sync/pull` | JWT | pull other terminals' items (`since` cursor) |
 | GET | `/api/sync/status` | JWT | pending/conflict counts |
-| GET | `/api/sync/snapshot` | JWT | full snapshot pull (**not in the OpenAPI spec** — §10) |
+| GET | `/api/sync/snapshot` | JWT | full snapshot pull (ETag/304, 15-min per-tenant cache) |
 | POST | `/api/webhooks/stripe`, `/api/webhooks/square` | HMAC signature | **inbound** payment-provider events only — there are no outbound webhooks for your scripts yet (§10) |
 
 > The OpenAPI spec also declares tag groups (Inventory, Orders, Reports,
@@ -324,7 +326,7 @@ SQLite DB — the right tool for cron-style maintenance on the terminal
 itself. Subcommand table and conventions (minor units, `--db`):
 [crates/oz-cli/README.md](../../crates/oz-cli/README.md).
 
-## 10. Known gaps & drift findings (verified 2026-09-03)
+## 10. Known gaps (verified 2026-09-03)
 
 Documented so scripts don't build on sand:
 
@@ -335,21 +337,24 @@ Documented so scripts don't build on sand:
    has an unresolved design question: `serve()` opens a single
    `OZ_DB_PATH` connection while the apps have moved to per-store scoped
    DBs. Wiring + a Settings toggle + localhost binding is planned work.
-2. **Drift guard is one-directional.** `openapi_tests.rs` proves
-   spec→router liveness, not router→spec coverage. Undocumented-but-live
-   routes found while writing this guide: `GET|PUT /api/v1/settings`,
-   `GET /api/sync/snapshot`.
-3. **Spec schema-level errors** (guard doesn't check bodies):
-   terminal registration returns `device_secret`, spec says `secret`;
-   re-registering a terminal **rotates** the secret, spec claims `409`.
-4. **Reserved tags without paths** — Inventory/Orders/Reports/Customers/
+2. **Reserved tags without paths** — Inventory/Orders/Reports/Customers/
    Notifications/Analytics appear in the spec's tag list but declare no
    operations.
-5. **No outbound webhooks** — only inbound Stripe/Square receivers exist.
-6. **No token revocation** — keep `expiry_hours` short for third-party
+3. **No outbound webhooks** — only inbound Stripe/Square receivers exist.
+4. **No token revocation** — keep `expiry_hours` short for third-party
    scripts.
-7. **utoipa migration** (generating the spec from handler code) is recorded
+5. **utoipa migration** (generating the spec from handler code) is recorded
    in spec 0047 as the eventual permanent fix; deliberately not done yet.
+
+> **Repaired 2026-09-03** (same day these were first recorded here):
+> `GET|PUT /api/v1/settings`, `GET /api/sync/snapshot` and the three
+> `/api/docs*` paths are now in the OpenAPI spec; the drift guard gained
+> its router→spec direction (source-scan equality); and the spec's
+> schema-level lies were corrected against code — terminal registration
+> returns `device_secret` with 200 and **rotates** on re-register (was
+> `secret`/201/409), `label` is optional, and the sync push/pull/status
+> response schemas now match `PushResponse`/`PullResponse`/
+> `SyncStatusResponse` as serialized.
 
 ---
 

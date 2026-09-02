@@ -13,13 +13,18 @@ use serde_json::{Value, json};
 
 /// Returns the OpenAPI 3.1 specification as a JSON value.
 ///
-/// This documents the full cloud-server API surface across 19 tag groups
+/// This documents the full cloud-server API surface across 21 tag groups
 /// (Health, Auth, Products, Images, Categories, Tax Rates, Exchange Rates,
-/// Users, Sales, Sync, Plans, Terminals, Webhooks, plus reserved groups).
-/// The path set and per-operation `security` declarations are guarded by
-/// the drift-guard tests in `openapi_tests.rs` (spec 0047 §3): every path
-/// declared here must resolve to a live route in `build_router`, and every
-/// operation must carry `bearerAuth` unless on the public allowlist.
+/// Users, Sales, Sync, Plans, Terminals, Settings, Webhooks, Docs, plus
+/// reserved groups). The path set and per-operation `security`
+/// declarations are guarded by the drift-guard tests in `openapi_tests.rs`
+/// (spec 0047 §3): every path declared here must resolve to a live route
+/// in `build_router`, every operation must carry `bearerAuth` unless on
+/// the public allowlist, and — since 2026-09-03 — the reverse direction
+/// too: every route registered in the router sources must be documented
+/// here (axum 0.8 removed router introspection, so the reverse walk is a
+/// compile-time source scan; it catches the historical
+/// `/api/v1/settings` and `/api/sync/snapshot` undocumented drift).
 pub fn openapi_spec() -> Value {
     json!({
         "openapi": "3.1.0",
@@ -50,7 +55,9 @@ pub fn openapi_spec() -> Value {
             { "name": "Sync", "description": "Offline queue push/pull sync endpoints" },
             { "name": "Plans", "description": "Tenant cloud sync plans (ADR sync-plan-gating)" },
             { "name": "Terminals", "description": "Terminal registration for client-credential authentication" },
+            { "name": "Settings", "description": "Per-tenant cloud settings provisioning (SMTP, report schedule, store name). Gated by the admin key (X-Admin-Key), not by JWT — see the operation descriptions." },
             { "name": "Webhooks", "description": "Third-party payment provider webhook receivers" },
+            { "name": "Docs", "description": "Self-describing API documentation endpoints (OpenAPI 3.1 document, Swagger UI, Scalar)" },
             { "name": "Inventory", "description": "Stock movements, transfers, low-stock alerts, and purchase order management" },
             { "name": "Orders", "description": "Kitchen display order routing, course firing, and production tracking" },
             { "name": "Reports", "description": "Sales summaries, category breakdowns, hourly heatmaps, and staff performance reports" },
@@ -266,7 +273,11 @@ fn build_schemas() -> Value {
             "properties": {
                 "label": { "type": "string", "description": "Human-readable label for the token", "example": "kitchen-display-1" },
                 "expiry_hours": { "type": "integer", "format": "int64", "description": "Expiry in hours (default: 24)", "example": 24 },
-                "tenant_id": { "type": "string", "description": "Optional tenant/store ID for multi-tenant isolation" }
+                "tenant_id": { "type": "string", "description": "Optional tenant/store ID for multi-tenant isolation (admin-key path only — the client-credentials path takes the tenant from the terminal's registration, never the body)" },
+                "client_id": { "type": "string", "description": "Registered terminal ID — client-credentials mint path (ADR sync-auth-hardening P3); paired with client_secret, no admin key needed" },
+                "client_secret": { "type": "string", "description": "Device secret from terminal registration (verified against the stored SHA-256 hash)" },
+                "read_preset": { "type": "string", "enum": ["terminal", "dashboard", "audit"], "description": "Read-tier preset (spec 0047) — admin-key mint path only; terminal client-credentials always bind `terminal` server-side" },
+                "read_permissions": { "type": "array", "items": { "type": "string" }, "description": "Explicit permission-registry keys for the token's read tier — admin-key path only; overrides read_preset when both are present" }
             }
         },
         "CreateProductRequest": {
@@ -430,10 +441,12 @@ fn build_schemas() -> Value {
         },
         "SyncStatusResponse": {
             "type": "object",
+            "required": ["status", "version", "pending_count", "heartbeat_interval_secs"],
             "properties": {
-                "pending_count": { "type": "integer", "format": "int64" },
-                "conflict_count": { "type": "integer", "format": "int64" },
-                "total_items": { "type": "integer", "format": "int64" }
+                "status": { "type": "string", "description": "Server health status", "example": "ok" },
+                "version": { "type": "string", "description": "Server package version" },
+                "pending_count": { "type": "integer", "format": "int64", "description": "Queue items with status pending for this tenant" },
+                "heartbeat_interval_secs": { "type": "integer", "format": "int64", "description": "Recommended client poll interval (P-3 tiered heartbeat: <1000 tenants → 120s, 1000–5000 → 300s, above → scaled)" }
             }
         },
         "TokenResponse": {
@@ -510,19 +523,19 @@ fn build_schemas() -> Value {
         },
         "TerminalRegistrationRequest": {
             "type": "object",
-            "required": ["terminal_id", "label"],
+            "required": ["terminal_id"],
             "properties": {
                 "terminal_id": { "type": "string", "description": "Unique terminal identifier", "example": "pos-terminal-1" },
-                "label": { "type": "string", "description": "Human-readable label", "example": "Front Counter" },
+                "label": { "type": "string", "description": "Human-readable label (optional; stored as empty string when omitted)", "example": "Front Counter" },
                 "tenant_id": { "type": "string", "description": "Optional tenant/store ID" }
             }
         },
         "TerminalRegistrationResponse": {
             "type": "object",
-            "required": ["terminal_id", "secret"],
+            "required": ["terminal_id", "device_secret"],
             "properties": {
-                "terminal_id": { "type": "string", "description": "Registered terminal ID" },
-                "secret": { "type": "string", "description": "Device secret — store securely; only shown once" }
+                "terminal_id": { "type": "string", "description": "Registered terminal ID (also the `client_id` for token minting)" },
+                "device_secret": { "type": "string", "description": "Device secret — store securely; shown exactly once, never retrievable. Only its SHA-256 hash is persisted. Re-registering the same terminal_id ROTATES this secret (old credentials stop working immediately)." }
             }
         },
         "SyncPushItem": {
@@ -543,9 +556,81 @@ fn build_schemas() -> Value {
         },
         "SyncPullResponse": {
             "type": "object",
+            "required": ["items"],
             "properties": {
                 "items": { "type": "array", "items": { "$ref": "#/components/schemas/SyncPushItem" }, "description": "Pending items from other terminals" },
-                "server_time": { "type": "string", "format": "date-time", "description": "Current server timestamp for the next pull's `since`" }
+                "next_cursor": { "type": ["string", "null"], "description": "Opaque cursor for the next page (P-3); null when no more pages" }
+            }
+        },
+        "PushOutcome": {
+            "description": "Per-item push outcome (serde externally tagged enum): the bare string `\"Accepted\"`, or a single-key object `{\"Conflict\": <server item>}` / `{\"Rejected\": {\"reason\": ...}}`.",
+            "oneOf": [
+                { "type": "string", "enum": ["Accepted"] },
+                { "type": "object", "required": ["Conflict"], "additionalProperties": false, "properties": { "Conflict": { "$ref": "#/components/schemas/SyncPushItem" } } },
+                { "type": "object", "required": ["Rejected"], "additionalProperties": false, "properties": { "Rejected": { "type": "object", "required": ["reason"], "properties": { "reason": { "type": "string", "description": "e.g. \"duplicate id\"" } } } } }
+            ]
+        },
+        "PushResponse": {
+            "type": "object",
+            "required": ["results"],
+            "properties": {
+                "results": { "type": "array", "items": { "$ref": "#/components/schemas/PushOutcome" }, "description": "Per-item outcomes in the same order as the push request" }
+            }
+        },
+        "SnapshotResponse": {
+            "type": "object",
+            "required": ["products", "tax_rates", "users"],
+            "properties": {
+                "products": { "type": "array", "items": { "type": "object" }, "description": "Tenant's product rows" },
+                "tax_rates": { "type": "array", "items": { "type": "object" }, "description": "Tenant's tax rates" },
+                "users": { "type": "array", "items": { "type": "object" }, "description": "Tenant's user rows" }
+            }
+        },
+        "SmtpConfig": {
+            "type": "object",
+            "required": ["host", "port", "from", "use_tls"],
+            "properties": {
+                "host": { "type": "string", "description": "SMTP server hostname" },
+                "port": { "type": "integer", "description": "SMTP port (25, 465, 587, …)", "example": 587 },
+                "username": { "type": ["string", "null"], "description": "Optional authenticated-relay username" },
+                "password": { "type": ["string", "null"], "description": "Relay password — encrypted at rest server-side; returned DECRYPTED by GET (admin round-trip, API-2 tradeoff)" },
+                "from": { "type": "string", "description": "From-address for outgoing emails" },
+                "use_tls": { "type": "boolean", "description": "STARTTLS (true) or plaintext (false); port 465 uses implicit TLS" }
+            }
+        },
+        "ReportScheduleConfig": {
+            "type": "object",
+            "required": ["enabled", "cadence", "report_types", "recipients", "send_at_time", "timezone", "lookback_days"],
+            "properties": {
+                "enabled": { "type": "boolean", "description": "Whether scheduled delivery is on" },
+                "cadence": { "type": "string", "description": "\"daily\", \"weekly\", \"monthly\", or a cron expression", "example": "daily" },
+                "report_types": { "type": "array", "items": { "type": "string" }, "description": "Report types to include", "example": ["daily_revenue", "top_products"] },
+                "recipients": { "type": "array", "items": { "type": "string" }, "description": "Recipient email addresses" },
+                "send_at_time": { "type": "string", "description": "Time of day to send", "example": "08:00" },
+                "timezone": { "type": "string", "description": "IANA timezone for scheduling", "example": "Asia/Jakarta" },
+                "lookback_days": { "type": "integer", "description": "Date-range window in days", "example": 7 }
+            }
+        },
+        "SettingsView": {
+            "type": "object",
+            "required": ["tenant"],
+            "description": "Effective per-tenant settings (scoped key first, bare-key fallback). Returned by GET and after a successful PUT.",
+            "properties": {
+                "tenant": { "type": "string", "description": "Tenant these settings belong to" },
+                "store_name": { "type": ["string", "null"], "description": "Effective store display name" },
+                "smtp_config": { "type": ["object", "null"], "description": "Effective SMTP config (password decrypted), or null", "additionalProperties": true },
+                "report_schedule": { "type": ["object", "null"], "description": "Effective report schedule, or null", "additionalProperties": true },
+                "last_report_sent_at": { "type": ["string", "null"], "description": "Last-sent dedup timestamp, or null" }
+            }
+        },
+        "PutSettingsRequest": {
+            "type": "object",
+            "description": "Field-level upsert: an ABSENT field is left untouched, an explicit `null` deletes the tenant's scoped override (bare key applies again), a value writes the scoped key.",
+            "properties": {
+                "tenant": { "type": "string", "default": "default", "description": "Tenant to write; `[a-zA-Z0-9_-]`, max 64 chars" },
+                "store_name": { "type": ["string", "null"], "description": "Store display name override (null = delete)" },
+                "smtp_config": { "type": ["object", "null"], "description": "SMTP config override validated against SmtpConfig (null = delete); password encrypted at rest on write", "additionalProperties": true },
+                "report_schedule": { "type": ["object", "null"], "description": "Report schedule override validated against ReportScheduleConfig (null = delete)", "additionalProperties": true }
             }
         }
     })
@@ -607,7 +692,7 @@ fn build_paths() -> Value {
             "post": {
                 "tags": ["Auth"],
                 "summary": "Create a new API token",
-                "description": "Generates a signed JWT for API authentication. Currently unprotected — will be gated behind an admin key in future.",
+                "description": "Generates a signed JWT (HS256, default expiry 24 h, no revocation list — keep `expiry_hours` short). Two mint paths: (1) **admin-key path** — requires the `X-Admin-Key` header when `OZ_ADMIN_KEY` is configured (open in dev mode); optionally narrows reads via `read_preset`/`read_permissions`. (2) **terminal client-credentials path** — `client_id` + `client_secret` from a registered terminal (ADR sync-auth-hardening P3); no admin key, tenant taken from the registration, reads bound to the `terminal` preset server-side (spec 0047).",
                 "operationId": "createToken",
                 "requestBody": {
                     "required": true,
@@ -616,8 +701,9 @@ fn build_paths() -> Value {
                 "responses": {
                     "200": { "description": "Token created successfully", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTokenResponse" }, "example": { "token": { "token": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJraXRjaGVuLWRpc3BsYXktMSIsImV4cCI6MTc1MDAwMDAwMH0.abc123", "expires_at": "2026-08-13T00:00:00Z", "token_id": "550e8400-e29b-41d4-a716-446655440000" } } } } },
                     "400": { "description": "Invalid JSON body", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Admin key configured but missing/mismatched (`invalid_admin_key`), or terminal client credentials rejected (`invalid_credentials`)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "415": { "description": "Unsupported content type", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-                    "422": { "description": "Missing required field (label)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "422": { "description": "Missing required field (label), or unknown `read_preset` (`unknown_preset`) / `read_permissions` key (`unknown_permission`)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "500": { "description": "JWT encoding failed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
@@ -628,16 +714,17 @@ fn build_paths() -> Value {
             "post": {
                 "tags": ["Terminals"],
                 "summary": "Register a new terminal",
-                "description": "Registers a terminal for client-credential token minting (ADR sync-auth-hardening P3). Returns a device secret that must be stored securely — it is only returned once. Gated by the same OZ_ADMIN_KEY as token minting (X-Admin-Key header).",
+                "description": "Registers a terminal for client-credential token minting (ADR sync-auth-hardening P3). Returns a `device_secret` that must be stored securely — it is shown exactly once (only its SHA-256 hash is persisted). Re-registering an existing `terminal_id` ROTATES the secret (upsert; old credentials stop working immediately — there is no 409). Gated by the same OZ_ADMIN_KEY as token minting (X-Admin-Key header); open in dev mode.",
                 "operationId": "registerTerminal",
                 "requestBody": {
                     "required": true,
                     "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TerminalRegistrationRequest" } } }
                 },
                 "responses": {
-                    "201": { "description": "Terminal registered", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TerminalRegistrationResponse" } } } },
-                    "400": { "description": "Missing required field (terminal_id or label)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-                    "409": { "description": "Terminal ID already registered", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                    "200": { "description": "Terminal registered (or re-registered — secret rotated)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TerminalRegistrationResponse" } } } },
+                    "400": { "description": "Blank terminal_id", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Admin key configured but missing/mismatched (`invalid_admin_key`)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "500": { "description": "Registration persistence failed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
         },
@@ -847,6 +934,41 @@ fn build_paths() -> Value {
                     "200": { "description": "Plan updated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PlanResponse" } } } },
                     "400": { "description": "Unknown plan name", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "401": { "description": "Missing or invalid admin key", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+
+        // ── Settings ────────────────────────────────────────────────
+        "/api/v1/settings": {
+            "get": {
+                "tags": ["Settings"],
+                "summary": "Read a tenant's effective cloud settings",
+                "description": "Returns the tenant's effective settings exactly as the cloud report loop resolves them: scoped key `{base}:{tenant}` first, bare-key fallback. Includes `store_name`, `smtp_config` (password DECRYPTED for lossless admin round-trips — API-2 tradeoff, safe only while the admin-key gate + mandatory production key hold), `report_schedule`, and `last_report_sent_at`. Gated by the same OZ_ADMIN_KEY as token minting (X-Admin-Key header); open in dev mode. No JWT.",
+                "operationId": "getSettings",
+                "parameters": [
+                    { "name": "tenant", "in": "query", "required": false, "schema": { "type": "string", "default": "default" }, "description": "Tenant to read; `[a-zA-Z0-9_-]`, max 64 chars" }
+                ],
+                "responses": {
+                    "200": { "description": "Effective settings for the tenant", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SettingsView" } } } },
+                    "400": { "description": "Invalid tenant id charset (`invalid_tenant`)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Admin key configured but missing/mismatched (`invalid_admin_key`)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "500": { "description": "Settings read failed (`settings_read_failed`)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            },
+            "put": {
+                "tags": ["Settings"],
+                "summary": "Write a tenant's scoped settings",
+                "description": "Field-level upsert of the tenant's scoped keys (`store.name:{tenant}`, `smtp_config:{tenant}`, `report_schedule:{tenant}`). A field that is ABSENT is left untouched; an explicit `null` deletes the scoped override so the bare key applies again. Every provided field is validated and canonicalized BEFORE any write, so a bad request never leaves a half-applied config. SMTP passwords are encrypted at rest on write. Same OZ_ADMIN_KEY gate as GET.",
+                "operationId": "putSettings",
+                "requestBody": {
+                    "required": true,
+                    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PutSettingsRequest" } } }
+                },
+                "responses": {
+                    "200": { "description": "Effective settings after the write", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SettingsView" } } } },
+                    "400": { "description": "Validation failure (`invalid_tenant`, `invalid_store_name`, `invalid_smtp_config`, `invalid_report_schedule`)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Admin key configured but missing/mismatched (`invalid_admin_key`)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "500": { "description": "Write or re-read failed (`settings_write_failed` / `settings_read_failed`)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
         },
@@ -1063,7 +1185,7 @@ fn build_paths() -> Value {
             "get": {
                 "tags": ["Sync"],
                 "summary": "Sync status",
-                "description": "Returns the current state of the offline sync queue: pending count, conflict count, and total items. Scoped to the tenant in the JWT.\n\nRate limit headers returned when approaching per-tenant limits: `X-RateLimit-Remaining` (int), `X-RateLimit-Reset` (Unix timestamp), `Retry-After` (seconds).",
+                "description": "Returns the current state of the offline sync queue: server status, version, this tenant's pending count, and the recommended heartbeat poll interval. Scoped to the tenant in the JWT.\n\nRate limit headers returned when approaching per-tenant limits: `X-RateLimit-Remaining` (int), `X-RateLimit-Reset` (Unix timestamp), `Retry-After` (seconds).",
                 "operationId": "syncStatus",
                 "security": [{ "bearerAuth": [] }],
                 "responses": {
@@ -1076,29 +1198,18 @@ fn build_paths() -> Value {
             "post": {
                 "tags": ["Sync"],
                 "summary": "Push offline items to the server",
-                "description": "Accepts a JSON array of offline queue items and stores them in the server's database. Each item is stamped with the tenant ID from the JWT for multi-tenant isolation.",
+                "description": "Accepts a JSON array of offline queue items and stores them in the server's database. Each item is stamped with the tenant ID from the JWT for multi-tenant isolation. Duplicate item ids are reported per-item as `Rejected` (the request itself still succeeds). Plan-gated when `OZ_ENFORCE_PLANS` is on.",
                 "operationId": "syncPush",
                 "security": [{ "bearerAuth": [] }],
                 "requestBody": {
                     "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "array",
-                                "items": { "type": "object" },
-                                "description": "Array of offline queue items to push"
-                            }
-                        }
-                    }
+                    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SyncPushRequest" } } }
                 },
                 "responses": {
-                    "200": { "description": "Items accepted", "content": { "application/json": { "schema": { "type": "object", "properties": { "accepted": { "type": "integer", "format": "int64" } } } } } },
+                    "200": { "description": "Per-item outcomes in request order", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PushResponse" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Plan gate (`OZ_ENFORCE_PLANS`): free tenant (`plan_required`)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "429": { "description": "Rate limited (per-tenant)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
-                },
-                "requestBody": {
-                    "required": true,
-                    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SyncPushRequest" } } }
                 }
             }
         },
@@ -1106,26 +1217,49 @@ fn build_paths() -> Value {
             "post": {
                 "tags": ["Sync"],
                 "summary": "Pull pending items from the server",
-                "description": "Returns items pushed by other terminals in the same tenant since the given timestamp. Each terminal polls this endpoint to stay in sync.",
+                "description": "Returns items pushed by other terminals in the same tenant since the given timestamp, paginated via an opaque cursor (P-3). Each terminal polls this endpoint to stay in sync. Plan-gated when `OZ_ENFORCE_PLANS` is on.",
                 "operationId": "syncPull",
                 "security": [{ "bearerAuth": [] }],
                 "requestBody": {
+                    "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
                                 "type": "object",
                                 "properties": {
-                                    "since": { "type": ["string", "null"], "description": "ISO-8601 timestamp to filter items from" }
+                                    "since": { "type": ["string", "null"], "description": "ISO-8601 timestamp to filter items from (null = all)" },
+                                    "cursor": { "type": ["string", "null"], "description": "Opaque pagination cursor from the previous page's `next_cursor` (null = first page)" }
                                 }
                             },
-                            "example": { "since": null }
+                            "example": { "since": null, "cursor": null }
                         }
                     }
                 },
                 "responses": {
                     "200": { "description": "Items to sync (may be empty)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SyncPullResponse" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Plan gate (`OZ_ENFORCE_PLANS`): free tenant (`plan_required`)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "421": { "description": "Server migrated — use new URL", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+        "/api/sync/snapshot": {
+            "get": {
+                "tags": ["Sync"],
+                "summary": "Full reference-data snapshot for the tenant",
+                "description": "Returns the tenant's reference data (products, tax rates, users) as one JSON document — used to provision a fresh terminal without thousands of per-row pulls. Per-tenant cached (15-min TTL, single-flight recompute, version revalidation; Redis-shared when configured). Responses carry `ETag` + `Cache-Control: public, max-age=60`; a matching `If-None-Match` returns `304` with no body. A failed snapshot returns a non-2xx status — it never masquerades as a valid empty snapshot (SYNC-09). Plan-gated when `OZ_ENFORCE_PLANS` is on.",
+                "operationId": "syncSnapshot",
+                "security": [{ "bearerAuth": [] }],
+                "parameters": [
+                    { "name": "If-None-Match", "in": "header", "required": false, "schema": { "type": "string" }, "description": "ETag from a previous response; a match returns 304 Not Modified" }
+                ],
+                "responses": {
+                    "200": { "description": "Reference-data snapshot", "headers": { "ETag": { "description": "SHA-256 digest of the response bytes", "schema": { "type": "string" } }, "Cache-Control": { "description": "public, max-age=60", "schema": { "type": "string" } } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SnapshotResponse" } } } },
+                    "304": { "description": "Not Modified (If-None-Match matched the current ETag)" },
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "403": { "description": "Plan gate (`OZ_ENFORCE_PLANS`): free tenant (`plan_required`)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "429": { "description": "Rate limited (per-tenant)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "500": { "description": "Snapshot query failed — body carries `{\"error\": msg}`; never a fake empty snapshot", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
         },
@@ -1158,6 +1292,41 @@ fn build_paths() -> Value {
                 "responses": {
                     "200": { "description": "Webhook processed successfully" },
                     "400": { "description": "Invalid signature or malformed event", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+
+        // ── Docs ────────────────────────────────────────────────────
+        "/api/openapi.json": {
+            "get": {
+                "tags": ["Docs"],
+                "summary": "OpenAPI 3.1 specification",
+                "description": "This document. Public — no authentication required.",
+                "operationId": "openapiJson",
+                "responses": {
+                    "200": { "description": "OpenAPI 3.1 document", "content": { "application/json": { "schema": { "type": "object" } } } }
+                }
+            }
+        },
+        "/api/docs": {
+            "get": {
+                "tags": ["Docs"],
+                "summary": "Swagger UI",
+                "description": "Interactive Swagger UI loading the spec from /api/openapi.json (assets from the unpkg CDN). Public.",
+                "operationId": "swaggerUi",
+                "responses": {
+                    "200": { "description": "Swagger UI HTML page", "content": { "text/html": { "schema": { "type": "string" } } } }
+                }
+            }
+        },
+        "/api/docs/scalar": {
+            "get": {
+                "tags": ["Docs"],
+                "summary": "Scalar API reference",
+                "description": "Interactive Scalar API reference loading the spec from /api/openapi.json. Public.",
+                "operationId": "scalarUi",
+                "responses": {
+                    "200": { "description": "Scalar API reference HTML page", "content": { "text/html": { "schema": { "type": "string" } } } }
                 }
             }
         }
