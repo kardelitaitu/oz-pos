@@ -313,6 +313,26 @@
       if (m.expiringSoon && m.expiringSoon.length > 0) {
         c.appendChild(tableCard(t('table.expiringSoon'), [t('th.email'),t('th.tier'),t('th.expires'),t('th.daysLeft')], m.expiringSoon.map(d => [d.email, d.tier, d.expiresAt, String(d.daysLeft)])));
       }
+      // Needs attention (#4): surfaced ABOVE the revenue hero so the
+      // operator sees action items before the numbers. Grace-period
+      // subscriptions, expired-but-active keys, and recent refunds.
+      if (m.needsAttention && m.needsAttention.length > 0) {
+        const attCard = el('div', 'card alert-card');
+        attCard.appendChild(el('h2', null, t('alert.title')));
+        const attList = el('ul', 'alert-list');
+        m.needsAttention.forEach(item => {
+          const li = el('li', 'alert-item alert-item--' + item.type);
+          const cls = item.type === 'refund' ? 'alert-badge alert-badge--bad' : (item.type === 'expired_active' ? 'alert-badge alert-badge--warn' : 'alert-badge alert-badge--warn');
+          li.appendChild(el('span', cls, t('alert.' + item.type)));
+          li.appendChild(el('span', 'alert-email', item.email || '—'));
+          li.appendChild(el('span', 'alert-detail', item.detail || ''));
+          if (item.tier) li.appendChild(el('span', 'alert-tier', item.tier));
+          if (item.at) li.appendChild(el('span', 'alert-at', item.at));
+          attList.appendChild(li);
+        });
+        attCard.appendChild(attList);
+        c.insertBefore(attCard, c.firstChild);
+      }
       setTabContent('dashboard', c);
     }
 

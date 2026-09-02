@@ -637,6 +637,53 @@ select.input {
   color: var(--text);
   white-space: nowrap;
 }
+/* #4 needs-attention alert panel */
+.alert-card {
+  border-left: 4px solid var(--warning);
+  margin-bottom: 1.25rem;
+}
+.alert-card h2 {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 .5rem;
+}
+.alert-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+}
+.alert-item {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.alert-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: .15rem .45rem;
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
+}
+.alert-badge--warn { background: var(--tint-warning-bg); color: var(--warning); }
+.alert-badge--bad { background: var(--tint-bad-bg, rgba(239,68,68,.15)); color: var(--bad); }
+.alert-email { font-weight: 600; }
+.alert-detail { color: var(--text-muted); }
+.alert-tier {
+  font-size: 10px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 0 .35rem;
+}
+.alert-at { color: var(--text-muted); margin-left: auto; }
 .chart-card h3 {
   font-size: 13px;
   font-weight: 700;

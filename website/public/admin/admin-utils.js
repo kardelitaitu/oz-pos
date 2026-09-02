@@ -1279,6 +1279,7 @@
       topSubscribers: arr(m.topSubscribers),
       recentSignups: arr(m.recentSignups),
       expiringSoon: arr(m.expiringSoon),
+      needsAttention: arr(m.needsAttention),
       kpis: kpis,
     };
   }
@@ -1330,6 +1331,10 @@
     'table.topSubscribers': 'Top Subscribers',
     'table.recentSignups': 'Recent Signups',
     'table.expiringSoon': 'Expiring Soon (within 30 days)',
+    'alert.title': 'Needs Attention',
+    'alert.grace_period': 'Grace period',
+    'alert.expired_active': 'Expired key active',
+    'alert.refund': 'Refund',
     'table.tenants': 'Tenants',
     'table.noData': 'No data.',
     'table.noTenantsMatch': 'No tenants match.',

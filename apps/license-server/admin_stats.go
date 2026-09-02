@@ -457,6 +457,102 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 			monthlyGrossIdr = math.Round(mrrUsd * fxRate)
 		}
 
+		// ── Needs-attention items (alert panel) ──────────────────────
+		// Three actionable conditions for the operator, in priority order:
+		// 1) grace_period subscriptions (payment failed / past due),
+		// 2) expired subscriptions whose license key is still active
+		//    (un-revoked key — someone keeps using a dead plan),
+		// 3) refunds/chargebacks in the last 30 days.
+		type attentionItem struct {
+			Type   string `json:"type"` // grace_period | expired_active | refund
+			Email  string `json:"email"`
+			Tier   string `json:"tier,omitempty"`
+			Detail string `json:"detail"`
+			At     string `json:"at"` // date the condition was noticed
+		}
+		needsAttention := make([]attentionItem, 0)
+
+		// 1. Grace-period subscriptions (payment failed).
+		graceSubs, _ := app.FindRecordsByFilter("subscriptions",
+			"status = 'grace_period' && tier_key != 'free'",
+			"-updated", 20, 0)
+		for _, gs := range graceSubs {
+			tenantID := gs.GetString("tenant_id")
+			tenant, err := app.FindRecordById("tenants", tenantID)
+			if err != nil {
+				continue
+			}
+			graceUntil := gs.GetDateTime("grace_until").Time()
+			at := ""
+			if !graceUntil.IsZero() {
+				at = graceUntil.Format("2006-01-02")
+			}
+			needsAttention = append(needsAttention, attentionItem{
+				Type:   "grace_period",
+				Email:  tenant.GetString("email"),
+				Tier:   gs.GetString("tier_key"),
+				Detail: "payment failed — grace until " + at,
+				At:     at,
+			})
+		}
+
+		// 2. Expired subscriptions with still-active license keys.
+		expiredWithKey := 0
+		expiredSubs, _ := app.FindRecordsByFilter("subscriptions",
+			"status = 'expired' && tier_key != 'free'",
+			"-expires_at", 30, 0)
+		for _, es := range expiredSubs {
+			if len(needsAttention) >= 20 {
+				break
+			}
+			subID := es.Id
+			// Find an active license key bound to this subscription.
+			key, err := app.FindFirstRecordByFilter("license_keys",
+				"status = 'active' && (paddle_sub_id = {:sid} || midtrans_sub_id = {:sid})",
+				map[string]any{"sid": subID})
+			if err != nil || key == nil {
+				continue
+			}
+			expiredWithKey++
+			tenant, terr := app.FindRecordById("tenants", es.GetString("tenant_id"))
+			if terr != nil {
+				continue
+			}
+			needsAttention = append(needsAttention, attentionItem{
+				Type:   "expired_active",
+				Email:  tenant.GetString("email"),
+				Tier:   es.GetString("tier_key"),
+				Detail: "expired but key " + key.GetString("key") + " still active",
+				At:     es.GetDateTime("expires_at").Time().Format("2006-01-02"),
+			})
+		}
+
+		// 3. Recent refunds (last 30 days) from the adjustment ledger.
+		refundCutoff := now.AddDate(0, 0, -30).Format(time.RFC3339)
+		adjSubs, _ := app.FindRecordsByFilter("revenue_adjustments",
+			"created >= {:cutoff}",
+			"-created", 10, 0,
+			map[string]any{"cutoff": refundCutoff})
+		for _, ar := range adjSubs {
+			tenantID := ar.GetString("tenant_id")
+			email := ""
+			if tenantID != "" {
+				if tenant, err := app.FindRecordById("tenants", tenantID); err == nil {
+					email = tenant.GetString("email")
+				}
+			}
+			kind := ar.GetString("kind")
+			if kind == "" {
+				kind = "adjustment"
+			}
+			needsAttention = append(needsAttention, attentionItem{
+				Type:   "refund",
+				Email:  email,
+				Detail: kind + " — Rp " + fmt.Sprintf("%d", ar.GetInt("amount_idr")),
+				At:     ar.GetDateTime("created").Time().Format("2006-01-02"),
+			})
+		}
+
 		// ── Response ────────────────────────────────────────────────
 		return e.JSON(http.StatusOK, map[string]any{
 			"kpis": map[string]any{
@@ -502,6 +598,7 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 			"topSubscribers":   topSubs,
 			"recentSignups":    recentSignups,
 			"expiringSoon":     expiringSoon,
+			"needsAttention":   needsAttention,
 		})
 	}
 }

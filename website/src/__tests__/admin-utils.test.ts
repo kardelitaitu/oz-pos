@@ -688,6 +688,16 @@ describe('admin-utils normalizeStats (B6: partial payload killed the dashboard)'
     expect(m.revenueTrend[2].idr).toBeUndefined();
   });
 
+  it('passes through needsAttention array from the server', () => {
+    const m = utils.normalizeStats({
+      needsAttention: [
+        { type: 'grace_period', email: 'a@b.com', tier: 'pro', detail: 'payment failed', at: '2026-09-15' },
+      ],
+    });
+    expect(m.needsAttention).toHaveLength(1);
+    expect(m.needsAttention[0].type).toBe('grace_period');
+  });
+
   it('tolerates non-object input entirely', () => {
     expect(() => utils.normalizeStats(null)).not.toThrow();
     expect(() => utils.normalizeStats(undefined)).not.toThrow();

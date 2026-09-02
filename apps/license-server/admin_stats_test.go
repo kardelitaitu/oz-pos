@@ -113,3 +113,50 @@ func TestAdminStatsB32_TopSubsRenewalIsCleanDate(t *testing.T) {
 // so amount_usd already includes Midtrans IDR revenue. Adding idr/fx
 // double-counts every payment. Hypothesis dropped, merge reverted.
 // Lesson: check the WRITER's data model before "fixing" a reader.
+
+// ── #4 needsAttention panel ──────────────────────────────────────────
+
+func TestAdminStats_NeedsAttention(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+	t.Setenv("OZ_ADMIN_KEY", "secret-admin-key")
+
+	tenantID, _ := seedDashboardTenant(t, app, "attention@test.com")
+	// The seed created an ACTIVE pro subscription. Flip it to grace_period
+	// so the needs-attention scan finds it.
+	subs, _ := app.FindRecordsByFilter("subscriptions", "tenant_id = {:tid}", "", 1, 0, map[string]any{"tid": tenantID})
+	if len(subs) == 0 {
+		t.Fatal("expected the seeded subscription")
+	}
+	sub := subs[0]
+	sub.Set("status", "grace_period")
+	sub.Set("grace_until", time.Now().Add(7*24*time.Hour).Format(time.RFC3339))
+	sub.Set("expires_at", time.Now().Add(-1*24*time.Hour).Format(time.RFC3339))
+	if err := app.Save(sub); err != nil {
+		t.Fatalf("flip to grace_period: %v", err)
+	}
+
+	rec := doJSON(mux, http.MethodGet, "/api/v1/admin/stats", "Bearer secret-admin-key", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var body struct {
+		NeedsAttention []struct {
+			Type  string `json:"type"`
+			Email string `json:"email"`
+			Tier  string `json:"tier"`
+		} `json:"needsAttention"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	var found bool
+	for _, item := range body.NeedsAttention {
+		if item.Type == "grace_period" && item.Email == "attention@test.com" && item.Tier == "pro" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected a grace_period needs-attention item for attention@test.com, got %+v", body.NeedsAttention)
+	}
+}
