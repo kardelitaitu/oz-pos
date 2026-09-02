@@ -308,3 +308,90 @@ func TestGetProviderRevenueConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// ── revenueCachedAt + ?refresh=1 cache bypass ───────────────────────
+
+func TestAdminStats_RevenueCachedAtAndRefresh(t *testing.T) {
+	resetProviderRevenueCache()
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+
+	tenantID, _ := seedDashboardTenant(t, app, "cache-refresh@test.com")
+	t.Setenv("OZ_ADMIN_KEY", "secret-admin-key")
+
+	// Seed one revenue event, then fetch stats.
+	now := time.Now().UTC()
+	col, _ := app.FindCollectionByNameOrId("revenue_events")
+	rev := core.NewRecord(col)
+	rev.Set("event_id", "evt-cache-refresh-001")
+	rev.Set("provider", "paddle")
+	rev.Set("tenant_id", tenantID)
+	rev.Set("currency", "USD")
+	rev.Set("amount_usd", 10.00)
+	rev.Set("amount_idr", 160000)
+	rev.Set("created", now.Format(time.RFC3339))
+	if err := app.Save(rev); err != nil {
+		t.Fatalf("save revenue event: %v", err)
+	}
+
+	rec := doJSON(mux, http.MethodGet, "/api/v1/admin/stats", "Bearer secret-admin-key", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var body struct {
+		KPIs struct {
+			RevenueCachedAt string  `json:"revenueCachedAt"`
+			LifetimeUsd     float64 `json:"lifetimeUsd"`
+		} `json:"kpis"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	if body.KPIs.RevenueCachedAt == "" {
+		t.Error("expected revenueCachedAt to be set")
+	}
+	if _, err := time.Parse(time.RFC3339, body.KPIs.RevenueCachedAt); err != nil {
+		t.Errorf("revenueCachedAt=%q is not RFC3339: %v", body.KPIs.RevenueCachedAt, err)
+	}
+
+	// Add a second event, then fetch WITHOUT ?refresh=1 — the 5-minute
+	// cache must serve the stale lifetime (10.00 only).
+	rev2 := core.NewRecord(col)
+	rev2.Set("event_id", "evt-cache-refresh-002")
+	rev2.Set("provider", "midtrans")
+	rev2.Set("tenant_id", tenantID)
+	rev2.Set("currency", "IDR")
+	rev2.Set("amount_usd", 9.30)
+	rev2.Set("amount_idr", 149000)
+	rev2.Set("created", now.Format(time.RFC3339))
+	if err := app.Save(rev2); err != nil {
+		t.Fatalf("save second event: %v", err)
+	}
+
+	rec2 := doJSON(mux, http.MethodGet, "/api/v1/admin/stats", "Bearer secret-admin-key", "")
+	var body2 struct {
+		KPIs struct {
+			LifetimeUsd float64 `json:"lifetimeUsd"`
+		} `json:"kpis"`
+	}
+	if err := json.Unmarshal(rec2.Body.Bytes(), &body2); err != nil {
+		t.Fatalf("bad JSON (cached): %v", err)
+	}
+	if body2.KPIs.LifetimeUsd != 10.00 {
+		t.Errorf("cached lifetimeUsd = %v, want 10.00 (cache serves stale)", body2.KPIs.LifetimeUsd)
+	}
+
+	// Fetch WITH ?refresh=1 — the cache is bypassed and the new event shows.
+	rec3 := doJSON(mux, http.MethodGet, "/api/v1/admin/stats?refresh=1", "Bearer secret-admin-key", "")
+	var body3 struct {
+		KPIs struct {
+			LifetimeUsd float64 `json:"lifetimeUsd"`
+		} `json:"kpis"`
+	}
+	if err := json.Unmarshal(rec3.Body.Bytes(), &body3); err != nil {
+		t.Fatalf("bad JSON (refreshed): %v", err)
+	}
+	if body3.KPIs.LifetimeUsd != 19.30 {
+		t.Errorf("refreshed lifetimeUsd = %v, want 19.30", body3.KPIs.LifetimeUsd)
+	}
+}

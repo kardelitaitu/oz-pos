@@ -164,6 +164,10 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 		// grants, subscription rows) cannot move these numbers: they never
 		// touch revenue_events.  The price-map estimate below survives only
 		// as a clearly-labeled fallback for months with no provider events.
+		// ?refresh=1 bypasses the 5-minute cache to show the latest data.
+		if e.Request.URL.Query().Get("refresh") == "1" {
+			resetProviderRevenueCache()
+		}
 		rev := getProviderRevenue(app)
 		realByMonth := rev.ByMonth
 		lifetimeUsd, lifetimeIdr := rev.LifetimeUsd, rev.LifetimeIdr
@@ -457,6 +461,10 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 				"fxRate":              fxRate,
 				"fxLive":              fxLive,
 				"fxUpdatedAt":         fxUpdatedAt.Format(time.RFC3339),
+				// When the revenue snapshot was last refreshed (provider
+				// ledger cache TTL). Lets the hero show how fresh the
+				// income/gross figures are.
+				"revenueCachedAt": rev.UpdatedAt.Format(time.RFC3339),
 			},
 			"revenueTrend":     revenueTrend,
 			"subscriberGrowth": subGrowth,

@@ -84,10 +84,10 @@ func loadProviderRevenue(app core.App) *providerRevenueCacheEntry {
 	if err != nil {
 		log.Printf("provider-revenue: scan failed: %v", err)
 		return &providerRevenueCacheEntry{
-			ByMonth:     byMonth,
-			Providers:   providers,
-			UpdatedAt:   time.Now().UTC(),
-			ttl:         providerRevTTL,
+			ByMonth:   byMonth,
+			Providers: providers,
+			UpdatedAt: time.Now().UTC(),
+			ttl:       providerRevTTL,
 		}
 	}
 

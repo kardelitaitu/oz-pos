@@ -65,16 +65,17 @@
     // response landing after the user switched tabs overwrote the tenants/
     // health view. Same last-click-wins pattern as renderTenants (B15).
     const dashboardGuard = createSeqGuard();
-    async function renderDashboard(background) {
+    async function renderDashboard(background, forceRefresh) {
       // Build into a detached fragment and swap only when fully rendered —
       // a background refresh never flashes a skeleton over the live view.
       const c = el('div');
       const seq = dashboardGuard.next();
 
       // Load real stats; on failure show an error state (no MOCK fallback).
+      // ?refresh=1 bypasses the 5-minute provider-revenue cache on the server.
       let stats = null;
       let loadError = null;
-      try { stats = await api('/api/v1/admin/stats'); } catch (err) { loadError = err; }
+      try { stats = await api('/api/v1/admin/stats' + (forceRefresh ? '?refresh=1' : '')); } catch (err) { loadError = err; }
       // A newer render superseded this one while we awaited — drop out.
       if (!dashboardGuard.isCurrent(seq)) { return; }
       if (!stats) {
@@ -151,13 +152,32 @@
       // blank Rp 0 hero.
       const heroIdr = m.kpis.monthlyGrossIdr > 0 ? m.kpis.monthlyGrossIdr : Math.round(m.kpis.mrrUsd * fxRate);
       const hero = el('div', 'hero-card');
-      hero.appendChild(el('div', 'hero-label', t('kpi.monthlyGrossIdr')));
+      // Label: include the current month so the operator knows what period
+      // the gross covers, and a refresh button.
+      const heroLabelRow = el('div', 'hero-label-row');
+      const heroLabel = el('span', 'hero-label', t('kpi.monthlyGrossIdr') + ' · ' + new Date().toLocaleString('en', { month: 'short', year: 'numeric' }));
+      const refreshBtn = el('button', 'hero-refresh');
+      refreshBtn.type = 'button';
+      refreshBtn.textContent = '↻';
+      refreshBtn.title = t('common.refresh');
+      refreshBtn.addEventListener('click', function () { renderDashboard(false, true); });
+      heroLabelRow.appendChild(heroLabel);
+      heroLabelRow.appendChild(refreshBtn);
+      hero.appendChild(heroLabelRow);
+      hero.appendChild(el('div', 'hero-value', fmtIdr(heroIdr)));
       hero.appendChild(el('div', 'hero-value', fmtIdr(heroIdr)));
       const heroChip = el('span', 'hero-chip', heroSrc);
       heroChip.style.cssText = 'font-size:.72rem;opacity:.75;font-weight:600;letter-spacing:.03em;text-transform:uppercase';
       const heroSub = el('div', 'hero-sub');
       heroSub.appendChild(heroChip);
       heroSub.appendChild(document.createTextNode(` · ${t('kpi.mrr')} ${fmtUsd(m.kpis.mrrUsd)} (${t('common.estimate')}) · ${t('kpi.arpu')} ${fmtUsd(m.kpis.arpuUsd)}`));
+      // Last-refreshed timestamp (provider ledger cache time, not fetch time).
+      if (m.kpis.revenueCachedAt) {
+        const fresht = new Date(m.kpis.revenueCachedAt);
+        if (!isNaN(fresht.getTime())) {
+          heroSub.appendChild(el('span', 'small', ' · ' + t('common.refreshedAt') + ' ' + fresht.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })));
+        }
+      }
       hero.appendChild(heroSub);
       c.appendChild(hero);
 

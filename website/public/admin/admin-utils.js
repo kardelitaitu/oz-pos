@@ -1202,6 +1202,8 @@
     'section.revenue': 'Revenue',
     'section.growth': 'Growth',
     'common.active': 'active',
+    'common.refresh': 'Refresh',
+    'common.refreshedAt': 'updated',
     'common.estimate': 'estimate',
     'common.providerVerified': 'Paddle/Midtrans webhooks',
     'kpi.totalUsers': 'Total Users',

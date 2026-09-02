@@ -533,6 +533,27 @@ select.input {
   opacity: .7;
   margin-bottom: .5rem;
 }
+.hero-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.hero-label-row .hero-label { margin-bottom: 0; }
+.hero-refresh {
+  background: rgba(255, 255, 255, .15);
+  color: inherit;
+  border: 0;
+  border-radius: var(--r-sm);
+  width: 28px;
+  height: 28px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .15s ease;
+}
+.hero-refresh:hover { background: rgba(255, 255, 255, .28); }
 .hero-value {
   font-size: 30px;
   font-weight: 800;
