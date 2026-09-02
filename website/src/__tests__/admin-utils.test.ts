@@ -191,6 +191,24 @@ describe('admin-utils svgDonut', () => {
     expect(legend).not.toContain('<b>bad</b>');
     expect(legend).toContain('&lt;b&gt;bad&lt;/b&gt;');
   });
+
+  it('renders the total count in the center of the donut', () => {
+    const data = [
+      { tier: 'plus', count: 3 },
+      { tier: 'pro', count: 1 },
+    ];
+    const { svg } = utils.svgDonut('id', data, 'tier', 'count');
+    // Total = 4; center text should render "4" (toLocaleString form).
+    expect(svg).toContain('>4<');
+    // The text element sits inside the SVG at the center.
+    expect(svg).toContain('text-anchor="middle"');
+    expect(svg).toContain('font-size="17"');
+  });
+
+  it('shows a single entry count for 100% donuts', () => {
+    const { svg } = utils.svgDonut('id', [{ tier: 'free', count: 5 }], 'tier', 'count');
+    expect(svg).toContain('>5<');
+  });
 });
 
 describe('admin-utils kpiC', () => {

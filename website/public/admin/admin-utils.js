@@ -256,7 +256,14 @@
     });
     // Pie geometry + a surface-colored center disc = donut ring. The disc
     // is a <circle>, not an arc, so the per-slice arc contract holds.
-    return { svg: '<svg viewBox="0 0 160 160">' + slices + '<circle cx="' + cx + '" cy="' + cy + '" r="34" fill="var(--bg-surface)"/></svg>', legend: legend };
+    // The center carries the total count so the hole is not dead space.
+    return {
+      svg: '<svg viewBox="0 0 160 160">' + slices +
+        '<circle cx="' + cx + '" cy="' + cy + '" r="34" fill="var(--bg-surface)"/>' +
+        '<text x="' + cx + '" y="' + (cy + 2) + '" text-anchor="middle" dominant-baseline="central" fill="var(--text)" font-size="17" font-weight="700">' + Math.round(total).toLocaleString('en-US') + '</text>' +
+        '</svg>',
+      legend: legend,
+    };
   }
 
   // kpiC builds a KPI stat card (label + value + optional sub + icon).
