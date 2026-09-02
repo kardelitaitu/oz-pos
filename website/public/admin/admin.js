@@ -211,6 +211,8 @@
       if (verifiedCount > 0) revCard.appendChild(el('p', 'chart-sub', verifiedCount + ' of ' + m.revenueTrend.length + ' ' + t('chart.monthsVerified')));
       revCard.innerHTML += svgChart('rev', m.revenueTrend, ['idr'], Object.assign({ area: true, sourceKey: 'source', fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt' }, fullCv));
       chartGrid.appendChild(revCard);
+      // Hover tooltip: month + exact gross (IDR) value under the cursor.
+      bindChartTooltip(revCard.querySelector('.chart-svg'), m.revenueTrend, [{ key: 'idr', label: t('kpi.monthlyGrossIdr') }], v => fmtIdr(Math.round(v)));
 
       // Provider revenue mix (stacked bars — recommendation #2): each month
       // shows the Paddle (IDR, write-time converted) + Midtrans (native IDR)
@@ -231,6 +233,10 @@
         fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt',
       }, fullCv));
       chartGrid.appendChild(mixCard);
+      bindChartTooltip(mixCard.querySelector('.chart-svg'), m.revenueTrend, [
+        { key: 'paddleIdr', label: 'Paddle' },
+        { key: 'midtransIdr', label: 'Midtrans' },
+      ], v => 'Rp' + (v/1000000).toFixed(1) + 'jt');
 
       // Tier distribution (donut)
       const tierCard = el('div', 'chart-card');
@@ -266,12 +272,14 @@
       subCard.appendChild(el('h3', null, t('chart.subscriberGrowth')));
       subCard.innerHTML += svgChart('subs', m.subscriberGrowth, ['count'], Object.assign({ area: true }, halfCv));
       chartGrid2.appendChild(subCard);
+      bindChartTooltip(subCard.querySelector('.chart-svg'), m.subscriberGrowth, [{ key: 'count', label: t('kpi.totalSubscribers') }]);
 
       // Signups per month (bar chart — extracted to admin-utils.svgBarChart)
       const signupCard = el('div', 'chart-card');
       signupCard.appendChild(el('h3', null, t('chart.signupsPerMonth')));
       signupCard.innerHTML += svgBarChart('signups', m.signupsPerMonth, Object.assign({ valueKey: 'count', color: 'var(--accent)' }, halfCv));
       chartGrid2.appendChild(signupCard);
+      bindChartTooltip(signupCard.querySelector('.chart-svg'), m.signupsPerMonth, [{ key: 'count', label: t('chart.signupsPerMonth') }]);
 
       // Churn per month — B3 fix: the server's churnPerMonth rows carry the
       // number in `churn` (count is Go's zero value), so the old inline code
@@ -282,6 +290,7 @@
       churnCard.appendChild(el('h3', null, t('chart.churnCanceled')));
       churnCard.innerHTML += svgBarChart('churn', m.churnPerMonth, Object.assign({ valueKey: 'churn', color: 'var(--bad)' }, fullCv));
       chartGrid2.appendChild(churnCard);
+      bindChartTooltip(churnCard.querySelector('.chart-svg'), m.churnPerMonth, [{ key: 'churn', label: t('chart.churnCanceled') }]);
 
       c.appendChild(chartGrid2);
 

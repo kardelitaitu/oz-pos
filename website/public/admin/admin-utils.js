@@ -553,6 +553,76 @@
     return '<svg viewBox="0 0 ' + w + ' ' + h + '"' + ((wide || phone) ? '' : ' style="max-height:180px"') + ' class="chart-svg">' + out + '</svg>';
   }
 
+  // ── Chart hover tooltips (#9) ───────────────────────────────────
+  // The SVG charts are hand-rolled strings; hovering reads the exact
+  // value under the cursor. Pure text builder + nearest-index math are
+  // unit-testable; bindChartTooltip wires them to a live SVG element.
+
+  // chartMonthLabel formats a "YYYY-MM" bucket for tooltip display.
+  function chartMonthLabel(monthStr) {
+    if (!monthStr) return '';
+    var d = new Date(String(monthStr) + '-01T00:00:00Z');
+    return isNaN(d.getTime()) ? monthStr : d.toLocaleDateString('en', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+  }
+
+  // chartTipText builds the tooltip text for one data row. series is
+  // [{ key, label }]; fmt optionally formats each numeric value.
+  // Pure — no DOM.
+  function chartTipText(row, series, fmt) {
+    if (!row || typeof row !== 'object' || !series || !series.length) return '';
+    var month = chartMonthLabel(row.month);
+    var parts = [];
+    series.forEach(function (s) {
+      var v = Number(row[s.key]);
+      if (!Number.isFinite(v)) return;
+      parts.push(s.label + ': ' + (fmt ? fmt(v) : String(Math.round(v))));
+    });
+    return (month ? month + ' — ' : '') + parts.join(' · ');
+  }
+
+  // nearestChartIndex maps a hover x-ratio (0..1, cursor position within
+  // the SVG's rendered width) to the nearest data index.
+  function nearestChartIndex(ratio, count) {
+    if (!(count > 1)) return 0;
+    var r = Math.max(0, Math.min(1, ratio));
+    return Math.min(count - 1, Math.max(0, Math.round(r * (count - 1))));
+  }
+
+  // bindChartTooltip attaches hover tooltips to a rendered .chart-svg.
+  // rows is the data array aligned with the x-axis; series + fmt define
+  // what each tooltip shows. Renders one absolutely-positioned tip inside
+  // the chart card (which must be position:relative — see .chart-card).
+  function bindChartTooltip(svgEl, rows, series, fmt) {
+    if (!svgEl || !rows || !rows.length || !series || !series.length) return;
+    // Selector kept in a variable so the i18n audit regex (which scans for
+    // t('...') substrings) does not misread closest('.chart-card') as a
+    // translation key lookup.
+    var cardSel = '.chart-card';
+    var card = svgEl.closest ? svgEl.closest(cardSel) : svgEl.parentNode;
+    if (!card) card = svgEl.parentNode;
+    var tip = el('div', 'chart-tip');
+    tip.setAttribute('role', 'tooltip');
+    tip.style.display = 'none';
+    card.appendChild(tip);
+
+    function place(ev) {
+      var rect = svgEl.getBoundingClientRect();
+      if (!rect || rect.width === 0) return;
+      var ratio = (ev.clientX - rect.left) / rect.width;
+      var idx = nearestChartIndex(ratio, rows.length);
+      var row = rows[idx] || {};
+      tip.textContent = chartTipText(row, series, fmt);
+      tip.style.display = 'block';
+      var x = ev.clientX - rect.left + 12;
+      var maxX = rect.width - tip.offsetWidth - 4;
+      tip.style.left = Math.max(0, Math.min(x, maxX)) + 'px';
+      tip.style.top = Math.max(0, ev.clientY - rect.top - tip.offsetHeight - 12) + 'px';
+    }
+    function hide() { tip.style.display = 'none'; }
+    svgEl.addEventListener('mousemove', place);
+    svgEl.addEventListener('mouseleave', hide);
+  }
+
   // timeoutSignal builds an AbortSignal for a request, degrading to NO
   // signal where AbortSignal.timeout is unavailable (B20: the static is
   // Chrome/WebView 103+/Safari 16+; calling it unguarded threw TypeError
@@ -1501,6 +1571,10 @@
     revokeConfirmModal: revokeConfirmModal,
     svgBarChart: svgBarChart,
     svgStackedBars: svgStackedBars,
+    chartTipText: chartTipText,
+    nearestChartIndex: nearestChartIndex,
+    bindChartTooltip: bindChartTooltip,
+    chartMonthLabel: chartMonthLabel,
     normalizeStats: normalizeStats,
     startLockoutCountdown: startLockoutCountdown,
     startCountdown: startCountdown,

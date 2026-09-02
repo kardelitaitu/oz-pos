@@ -1672,3 +1672,58 @@ describe('admin-utils tableCard malformed input (B41: B36 class in the table bui
     expect(() => utils.tableCard('T', null as any, [['a']])).not.toThrow();
   });
 });
+
+describe('admin-utils chart tooltips (#9: chartTipText / nearestChartIndex / bindChartTooltip)', () => {
+  it('chartTipText shows the month and each series value', () => {
+    const text = utils.chartTipText({ month: '2026-09', idr: 68000000 }, [{ key: 'idr', label: 'Gross' }], (v: number) => 'Rp' + (v / 1000000).toFixed(1) + 'jt');
+    expect(text).toContain('2026');
+    expect(text).toContain('Gross: Rp68.0jt');
+  });
+
+  it('chartTipText skips non-finite series values', () => {
+    const text = utils.chartTipText({ month: '2026-01', a: 5, b: 'nope' }, [{ key: 'a', label: 'A' }, { key: 'b', label: 'B' }]);
+    expect(text).toContain('A: 5');
+    expect(text).not.toContain('B');
+  });
+
+  it('chartTipText handles missing row/month safely', () => {
+    expect(utils.chartTipText(null, [{ key: 'a', label: 'A' }])).toBe('');
+    expect(utils.chartTipText({}, [{ key: 'a', label: 'A' }])).toBe('');
+  });
+
+  it('nearestChartIndex clamps to valid indices', () => {
+    expect(utils.nearestChartIndex(0, 12)).toBe(0);
+    expect(utils.nearestChartIndex(1, 12)).toBe(11);
+    expect(utils.nearestChartIndex(-5, 12)).toBe(0);
+    expect(utils.nearestChartIndex(99, 12)).toBe(11);
+    expect(utils.nearestChartIndex(0.5, 2)).toBe(1);
+    expect(utils.nearestChartIndex(0.4, 2)).toBe(0);
+    expect(utils.nearestChartIndex(0.9, 1)).toBe(0);
+  });
+
+  it('bindChartTooltip attaches a hidden tip and shows it on mousemove', () => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'chart-svg');
+    const card = document.createElement('div');
+    card.className = 'chart-card';
+    card.appendChild(svg);
+    document.body.appendChild(card);
+    // jsdom returns a zero rect; the binder treats width===0 as "no chart
+    // yet", so stub a real-ish rect to exercise the show path.
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 100, right: 200, bottom: 100, x: 0, y: 0 } as DOMRect);
+    try {
+      utils.bindChartTooltip(svg, [{ month: '2026-01', count: 3 }, { month: '2026-02', count: 5 }], [{ key: 'count', label: 'N' }]);
+      const tip = card.querySelector('.chart-tip');
+      expect(tip).not.toBeNull();
+      expect((tip as HTMLElement).style.display).toBe('none');
+      // Hover at x=100 of 200 → ratio 0.5 → index 1 ('N: 5').
+      svg.dispatchEvent(new MouseEvent('mousemove', { clientX: 100, clientY: 10 }));
+      expect((tip as HTMLElement).textContent).toContain('N: 5');
+      expect((tip as HTMLElement).style.display).toBe('block');
+      svg.dispatchEvent(new MouseEvent('mouseleave'));
+      expect((tip as HTMLElement).style.display).toBe('none');
+    } finally {
+      document.body.removeChild(card);
+    }
+  });
+});
