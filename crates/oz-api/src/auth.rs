@@ -219,7 +219,9 @@ pub fn create_token_full(
 /// Returns `Ok(claims)` if the token is valid and not expired.
 /// Uses an in-memory cache to skip redundant HMAC + base64 decode
 /// on hot paths (saves ~0.005 core at 200+ terminals).
-pub async fn validate_token(token_str: &str) -> Result<ApiTokenClaims, jsonwebtoken::errors::Error> {
+pub async fn validate_token(
+    token_str: &str,
+) -> Result<ApiTokenClaims, jsonwebtoken::errors::Error> {
     validate_token_with_secret(token_str, None).await
 }
 
@@ -296,10 +298,7 @@ fn error_code_for(e: &jsonwebtoken::errors::Error) -> &'static str {
 /// `secret` is forwarded to [`validate_token_with_secret`] (None = env /
 /// dev-fallback resolution).
 #[allow(clippy::result_large_err)]
-async fn authenticate(
-    req: &mut Request,
-    secret: Option<&str>,
-) -> Result<(), Response> {
+async fn authenticate(req: &mut Request, secret: Option<&str>) -> Result<(), Response> {
     let auth_header = req
         .headers()
         .get(header::AUTHORIZATION)
