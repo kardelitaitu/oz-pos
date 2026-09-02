@@ -18,7 +18,6 @@ import { LocaleContext } from '@/i18n/LocaleContext';
 import { useContext } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
-import { checkLicenseStatus } from '@/api/license';
 import { plainErrorMessage, l10nErrorMessage } from '@/utils/app-error';
 import { openUpgradePricing } from '@/utils/upgrade';
 import SettingsSelect from '@/features/settings/SettingsSelect';
@@ -74,7 +73,6 @@ export default function TopologyScreen() {
     if (perms.includes('*')) return true;
     return perms.includes('staff:update');
   }, [session]);
-  const [licenseTier, setLicenseTier] = useState('free');
   /** Real workspace instances loaded from the backend, used to seed the editor. */
   const [workspaceInstances, setWorkspaceInstances] = useState<WorkspaceDto[]>([]);
   const [stores, setStores] = useState<StoreProfile[]>([]);
@@ -130,12 +128,8 @@ export default function TopologyScreen() {
   const instancesResolvedRef = useRef(false);
 
   const load = useCallback(async () => {
-    // License check is non-critical — a fresh install or offline environment
-    // may not have an activated license yet. Fail silently and default to
-    // 'free' tier (matching the backend's default when no subscription exists).
-    checkLicenseStatus()
-      .then((licStatus) => { setLicenseTier(licStatus.tier.toLowerCase()); })
-      .catch(() => { setLicenseTier('free'); });
+    // No tier fetch here. The header badge is derived from `caps` further down,
+    // which is the same source the backend quota gate reads — see `licenseTier`.
 
     if (!sessionToken) return; // not ready yet — effect re-runs when it resolves
 
@@ -330,6 +324,16 @@ export default function TopologyScreen() {
   // C2.2: second-store gate (Plus→Pro trigger) — the tier's `max_stores()`
   // quota caps how many store profiles can exist.
   const { caps, refresh: refreshCaps } = useSubscription();
+  // The header tier is derived, not fetched. It used to call `checkLicenseStatus`,
+  // which is a network probe to the license server: with no activated license it
+  // rejects, and the `catch → 'free'` fallback then displayed FREE on a debug
+  // build whose quota gate upgrades Free to Premium (`commands/subscription.rs`),
+  // so the label contradicted the behaviour the same screen enforced. `caps`
+  // comes from `get_subscription_capabilities` — local, no network, and the
+  // owner of that debug override — so the badge now inherits the gate's answer
+  // instead of duplicating it. `null` before first load stays conservatively
+  // FREE rather than advertising a tier nothing has confirmed.
+  const licenseTier = caps?.tier?.toLowerCase() ?? 'free';
   const locale = useContext(LocaleContext)?.locale ?? 'en';
   const atStoreLimit =
     caps !== null && caps.maxStores !== null && caps.storeCount >= caps.maxStores;
