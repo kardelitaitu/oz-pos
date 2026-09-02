@@ -1,6 +1,6 @@
 # Agents Configuration & Rules
 
-<!-- Audit stamp: 2026-08-31 · DSH · status: ACCURATE · version lock: 0.0.34 · 6 pre-commit gates · conventional commits enforced -->
+<!-- Audit stamp: 2026-08-31 · DSH · status: ACCURATE · version lock: 0.0.35 · 6 pre-commit gates · conventional commits enforced -->
 
 ## 🚨 Critical Agent Directives (MUST FOLLOW)
 
@@ -9,7 +9,7 @@
 | **Branching** | **NEVER create new branches. NEVER switch branches.** | Always work directly on the currently active branch unless specifically requested by the user. |
 | **Commits** | **ALWAYS commit with format `<type>(<area>): <description>`.** | Must follow conventional commits. Make local commits after each logical task. |
 | **Pushing** | **NEVER run `git push` without an explicit direct order.** | Even after completing all checks, wait for the user to explicitly say "push". |
-| **Version Lock** | **Version is locked at `0.0.34`. NEVER modify version numbers.** | Do not bump version in `Cargo.toml`, `package.json`, `tauri.conf.json`, etc. |
+| **Version Lock** | **Version is locked at `0.0.35`. NEVER modify version numbers.** | Do not bump version in `Cargo.toml`, `package.json`, `tauri.conf.json`, etc. |
 | **File Paths** | **ALWAYS use forward slashes (`/`) in path arguments on Windows.** | Avoid path escaping bugs. **Never anchor to a hardcoded checkout** (e.g. `C:/My Script/oz-pos/`) — resolve the repo root with `git rev-parse --show-toplevel`, or script-relative with `$PSScriptRoot`/`__file__`/`import.meta.url`, so tools work in any worktree of the multi-root layout (`<base>/main` bare + `<base>/<release>` + `<base>/worktrees/*`). |
 | **File Reading** | **ALWAYS read files in small chunks (≤ 500 lines).** | Preserves context window and prevents output truncation. |
 | **Discovery** | **ALWAYS use `codebase-memory-mcp` first for code exploration.** | Graph discovery saves context tokens and surfaces call chains faster. |
@@ -33,6 +33,34 @@ The `.githooks/pre-commit` hook runs six gates automatically before every commit
 6. **`PG schema drift guard`** — runs `scripts/generate-pg-migration.py --check` when any migration, the registry, or the generator is staged; `20260813_init.pg.sql` is generated, never hand-edited (see [`docs/records/sqlite-pg-roles.md`](./docs/records/sqlite-pg-roles.md)).
 
 > For full repository verification mirroring the entire CI matrix, see [`scripts/check.sh`](./scripts/check.sh).
+
+---
+
+## 🔑 Global Environment Variables (`OZPOS_*`)
+
+The developer machine's API keys are stored as **user-scope Windows environment variables** with an `OZPOS_` prefix (persisted in `HKCU\Environment`; they survive reboots and are available in every **new** PowerShell session — the session that set them must be reopened). Source of truth: the gitignored `.env` at the repo root.
+
+```powershell
+$env:OZPOS_CLOUDFLARE_API_TOKEN        # Cloudflare Workers deploy token
+$env:OZPOS_CLOUDFLARE_ACCOUNT_ID       # Cloudflare account id
+$env:OZPOS_CLOUDFLARE_ACCESS_KEY       # R2 access key id
+$env:OZPOS_CLOUDFLARE_SECRET_ACCESS_KEY# R2 secret access key
+$env:OZPOS_CLOUDFLARE_S3_ENDPOINT      # R2 S3 endpoint
+$env:OZPOS_NORTHFLANK_API_TOKEN        # Northflank deploy token
+$env:OZPOS_OZ_ADMIN_KEY                # admin dashboard API key
+$env:OZPOS_OZ_API_SECRET               # JWT signing secret
+$env:OZPOS_OZ_ENFORCE_PLANS            # plan gating flag
+$env:OZPOS_OZ_LICENSE_PRIVATE_KEY      # RSA license signing key (PEM, multiline)
+```
+
+- Use them in commands instead of hardcoding secrets, e.g. the website deploy:
+  ```powershell
+  $env:CLOUDFLARE_API_TOKEN=$env:OZPOS_CLOUDFLARE_API_TOKEN
+  $env:CLOUDFLARE_ACCOUNT_ID=$env:OZPOS_CLOUDFLARE_ACCOUNT_ID
+  npm run deploy   # from website/
+  ```
+- Update `.env` → variables by re-running the save step (same names/prefix); never commit `.env`.
+- ⚠️ These are plaintext in the user registry — local-dev convenience only, not a secrets manager.
 
 ---
 
