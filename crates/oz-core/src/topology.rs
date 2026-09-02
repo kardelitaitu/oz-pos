@@ -34,6 +34,15 @@ use crate::error::CoreError;
 /// `scripts/verify-topology-parity.py` keep the two byte-identical.
 const SHARED_TOPOLOGY_SEMANTICS_JSON: &str = include_str!("topologySemantics.json");
 
+/// Schema version the evaluator in this module understands.
+///
+/// Distinct from the saved-diagram envelope's `schema_version`, which describes
+/// the shape of a persisted graph and is enforced on read by the desktop client.
+/// A contract bump changes how pairings are *interpreted*; it does not change
+/// what is stored, so the two versions move independently (ADR #45 §1 moved this
+/// one to 2 by giving every pairing row explicit `endpoints`).
+pub const TOPOLOGY_CONTRACT_SCHEMA_VERSION: u64 = 2;
+
 /// Load the shared topology semantics contract JSON as a parsed value.
 ///
 /// The contract is checked-in compile-time JSON; malformed JSON is a
@@ -41,14 +50,24 @@ const SHARED_TOPOLOGY_SEMANTICS_JSON: &str = include_str!("topologySemantics.jso
 pub fn shared_topology_semantics() -> &'static Value {
     static CONTRACT: OnceLock<Value> = OnceLock::new();
     CONTRACT.get_or_init(|| {
-        serde_json::from_str(SHARED_TOPOLOGY_SEMANTICS_JSON)
+        let parsed: Value = serde_json::from_str(SHARED_TOPOLOGY_SEMANTICS_JSON)
             // INVARIANT: the vendored topologySemantics.json is a checked-in
             // compile-time contract; malformed JSON is a developer/build
             // error, not runtime user data, so initialization must fail
             // closed. Its parity with the UI copy is enforced by the
             // `vendored_contract_matches_ui_canonical` test — see the
             // INVARIANT rationale directly above.
-            .expect("shared topology semantics JSON must be valid")
+            .expect("shared topology semantics JSON must be valid");
+        // INVARIANT: refuse to evaluate a contract whose shape this module does
+        // not understand. Without this, a future contract bump read by older
+        // code would silently reinterpret the pairing table — the exact class of
+        // drift ADR #45 exists to remove. Fail closed at first use instead.
+        assert_eq!(
+            parsed.get("schemaVersion").and_then(Value::as_u64),
+            Some(TOPOLOGY_CONTRACT_SCHEMA_VERSION),
+            "vendored topologySemantics.json must declare schemaVersion {TOPOLOGY_CONTRACT_SCHEMA_VERSION}"
+        );
+        parsed
     })
 }
 
@@ -143,6 +162,78 @@ fn semantic_type_key(node: &Value) -> &str {
 /// The node's semantic `type` field.
 pub fn semantic_node_type(node: &Value) -> Option<&str> {
     value_string(node, "type")
+}
+
+/// Resolve a node's canonical kind token: `branch-location`, `warehouse`,
+/// `hardware`, or `workspace:<typeKey>`.
+///
+/// Collapsing the two identity halves (`type` and the workspace `typeKey`)
+/// into one string is what lets an endpoint predicate be a set lookup in both
+/// languages instead of a hand-written condition in each. `store` is the
+/// serialized compatibility alias for `branch-location` (ADR #34 §1), so the
+/// contract only ever speaks the canonical name. A workspace with no recorded
+/// type key is the Store POS baseline, matching [`semantic_type_key`].
+pub fn node_kind_token(node: &Value) -> String {
+    match semantic_node_type(node) {
+        Some("store") => "branch-location".to_string(),
+        Some("workspace") => format!("workspace:{}", semantic_type_key(node)),
+        Some(other) => other.to_string(),
+        None => String::new(),
+    }
+}
+
+/// True when a contract endpoint token admits a node's kind token.
+///
+/// Matching is exact, with one addition: a token written without a `:` suffix
+/// also covers that family, so `workspace` admits `workspace:store-pos` while
+/// `workspace:store-pos` admits only itself. The contract needs both — the
+/// Location row means "any workspace", the Operation row means "this one" —
+/// and one prefix rule keeps the comparison a line long in each language
+/// instead of an expression language in JSON. Rust twin of `kindTokenAdmits`
+/// in `ui/src/features/stores/topologyCard.ts`.
+fn kind_token_admits(endpoint_token: &str, node_kind: &str) -> bool {
+    endpoint_token == node_kind || node_kind.starts_with(&format!("{endpoint_token}:"))
+}
+
+/// True when the pairing row for `(source, target)` declares an endpoint pair
+/// admitting `(from_kind, to_kind)`.
+///
+/// This is the Rust twin of `pairingAdmitsKinds` in
+/// `ui/src/features/stores/topologyCard.ts`: same checked-in JSON, same
+/// comparison, no expression language. Unknown kinds and unknown `@`-tokens
+/// fail closed, and a row with no `endpoints` list admits nothing — a payload
+/// that lost its endpoints degrades to "no wire may be authored" rather than
+/// silently to the looser row-only check. See ADR #45 §1.
+pub fn pairing_admits_kinds(source: &str, target: &str, from_kind: &str, to_kind: &str) -> bool {
+    let Some(pairings) = shared_topology_semantics()
+        .get("semanticPairings")
+        .and_then(Value::as_array)
+    else {
+        return false;
+    };
+    let Some(row) = pairings.iter().find(|pairing| {
+        value_string(pairing, "source") == Some(source)
+            && value_string(pairing, "target") == Some(target)
+    }) else {
+        return false;
+    };
+    let Some(endpoints) = row.get("endpoints").and_then(Value::as_array) else {
+        return false;
+    };
+    // The graph's Branch Location node is addressed in the contract by the
+    // reserved `@branch-root` token; whether the graph has exactly one such
+    // node is enforced before the wire loop (`multiple-branch-locations`).
+    let source_kind = if from_kind == "branch-location" {
+        "@branch-root"
+    } else {
+        from_kind
+    };
+    endpoints.iter().any(|pair| {
+        let from = value_string(pair, "from").unwrap_or_default();
+        let to = value_string(pair, "to").unwrap_or_default();
+        (from == "*" || kind_token_admits(from, source_kind))
+            && (to == "*" || kind_token_admits(to, to_kind))
+    })
 }
 
 /// Return true when a geometric wire has no deterministic semantic migration.
@@ -250,51 +341,33 @@ fn find_directed_cycle_node(nodes: &[Value], wires: &[Value]) -> Option<String> 
     }
 }
 
-/// Mirror the frontend's cycle gate at the IPC boundary.
+/// True when a concrete wire satisfies the shared semantic contract: its
+/// (source, target, relationship) triple is a declared row AND the row's
+/// `endpoints` list admits the two node kinds it connects.
+///
+/// Before ADR #45 the second half lived here as a hand-written `match`, which
+/// drifted from the frontend's copy of the same rule — and one of its arms was
+/// unreachable, because the caller's pre-filter already skipped the pairs that
+/// arm admitted. Both sides now evaluate the contract file, and
+/// `scripts/verify-topology-parity.py` compares the two evaluators over a
+/// corpus generated from it.
 fn semantic_wire_matches_contract(wire: &Value, from_node: &Value, to_node: &Value) -> bool {
-    let from_port = value_string(wire, "from_port_id");
-    let to_port = value_string(wire, "to_port_id");
-    let relationship = value_string(wire, "relationship_type");
-    if !shared_semantic_pairing_contains(from_port, to_port, relationship) {
+    let (Some(from_port), Some(to_port), Some(relationship)) = (
+        value_string(wire, "from_port_id"),
+        value_string(wire, "to_port_id"),
+        value_string(wire, "relationship_type"),
+    ) else {
+        return false;
+    };
+    if !shared_semantic_pairing_contains(Some(from_port), Some(to_port), Some(relationship)) {
         return false;
     }
-    let from_type_key = semantic_type_key(from_node);
-    let to_type_key = semantic_type_key(to_node);
-    let from_type = semantic_node_type(from_node);
-    let to_type = semantic_node_type(to_node);
-
-    match (from_port, to_port, relationship) {
-        (Some("stock-out"), Some("stock-in"), Some("stock-routing")) => {
-            to_type == Some("warehouse")
-                && ((from_type == Some("workspace")
-                    && matches!(from_type_key, "store-pos" | "restaurant-pos"))
-                    || from_type == Some("warehouse"))
-        }
-        (Some("transfer-out"), Some("transfer-in"), Some("inventory-transfer")) => {
-            to_type == Some("warehouse")
-                && ((from_type == Some("workspace")
-                    && matches!(from_type_key, "store-pos" | "restaurant-pos"))
-                    || from_type == Some("warehouse"))
-        }
-        (Some("ticket-out"), Some("ticket-in"), Some("ticket-routing")) => {
-            from_type == Some("workspace") && from_type_key == "kds" && to_type == Some("hardware")
-        }
-        (Some("operation-out"), Some("operation-in"), Some("generic")) => {
-            from_type == Some("workspace")
-                && ((from_type_key == "restaurant-pos"
-                    && to_type == Some("workspace")
-                    && to_type_key == "kds")
-                    || (from_type_key == "store-pos" && to_type == Some("warehouse")))
-        }
-        (Some("device-out"), Some("generic-in"), Some("hardware-connection")) => {
-            from_type == Some("hardware") && to_type == Some("hardware")
-        }
-        // The generic pair is retained as a future-facing contract member;
-        // no current node emits generic-out, but a valid pair must not be
-        // rejected merely because its producer is not yet registered.
-        (Some("generic-out"), Some("generic-in"), Some("generic")) => true,
-        _ => false,
-    }
+    pairing_admits_kinds(
+        from_port,
+        to_port,
+        &node_kind_token(from_node),
+        &node_kind_token(to_node),
+    )
 }
 
 /// Build a structured [`CoreError::TopologyValidation`] failure.
@@ -324,33 +397,79 @@ fn topology_validation(
 /// used to infer ownership here.
 pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), CoreError> {
     // Index the graph once so the per-wire and per-node gates below are
-    // O(N + W) instead of O(N × W). `node_by_id` keeps the FIRST node for
-    // each id (matching the previous linear `find` scans); the id sets and
-    // the incoming-wire index preserve wire order and first-match
-    // semantics, so no gate changes its result or its report order.
+    // O(N + W) instead of O(N × W). The id sets and the incoming-wire index
+    // preserve wire order and first-match semantics, so no gate changes its
+    // result or its report order.
+    //
+    // ADR #45 §4.3 follow-up: this used to be `entry(id).or_insert(node)`, which
+    // SILENTLY DROPPED any node whose id was already present and then validated
+    // the collapsed graph. Two nodes sharing an id is the one defect no later
+    // gate can recover from, because every lookup by id now resolves to an
+    // arbitrary one of them, so it is refused here before anything reads the
+    // index. The TypeScript validator already reported this as `duplicate-node`;
+    // the core validator did not have it. The Apply gate in desktop-client DID
+    // catch duplicates with its own check, so this was not reachable through
+    // Apply — the gap was in every other caller of the core validator.
     let mut node_by_id: std::collections::HashMap<&str, &Value> = std::collections::HashMap::new();
     for node in nodes {
-        if let Some(id) = value_string(node, "id") {
-            node_by_id.entry(id).or_insert(node);
+        if let Some(id) = value_string(node, "id")
+            && node_by_id.insert(id, node).is_some()
+        {
+            return Err(topology_validation(
+                "duplicate-node",
+                Some(id),
+                None,
+                None,
+                format!("two nodes share the id `{id}`"),
+            ));
         }
     }
+    // ADR #45 §4.3 follow-up, and the last item of the validation-code coverage
+    // audit: the TypeScript validator has reported `multiple-ticket-inputs`
+    // since before this file had a pairing table, and the backend never checked
+    // it. A device wired to two ticket sources has no defined routing, so which
+    // queue a ticket lands in depends on wire order.
+    //
+    // Placed here because it needs no wire index, which keeps it independent of
+    // the index built above. That costs O(H × W) over hardware nodes rather than
+    // O(W); with a handful of devices per diagram it is not worth a second pass
+    // over every wire on every validation run.
+    for node in nodes {
+        if semantic_node_type(node) != Some("hardware") {
+            continue;
+        }
+        let Some(device_id) = value_string(node, "id") else {
+            continue;
+        };
+        let ticket_feeds = wires
+            .iter()
+            .filter(|wire| {
+                value_string(wire, "to_node_id") == Some(device_id)
+                    && value_string(wire, "relationship_type") == Some("ticket-routing")
+                    && value_string(wire, "to_port_id") == Some("ticket-in")
+            })
+            .count();
+        if ticket_feeds > 1 {
+            return Err(topology_validation(
+                "multiple-ticket-inputs",
+                Some(device_id),
+                None,
+                Some("ticket-in"),
+                format!("{ticket_feeds} ticket sources feed the device `{device_id}`"),
+            ));
+        }
+    }
+
     let warehouse_ids: std::collections::HashSet<&str> = nodes
         .iter()
         .filter(|node| semantic_node_type(node) == Some("warehouse"))
         .filter_map(|node| value_string(node, "id"))
         .collect();
-    let restaurant_pos_ids: std::collections::HashSet<&str> = nodes
-        .iter()
-        .filter(|node| semantic_type_key(node) == "restaurant-pos")
-        .filter_map(|node| value_string(node, "id"))
-        .collect();
-    let retail_pos_ids: std::collections::HashSet<&str> = nodes
-        .iter()
-        .filter(|node| {
-            semantic_node_type(node) == Some("workspace") && semantic_type_key(node) == "store-pos"
-        })
-        .filter_map(|node| value_string(node, "id"))
-        .collect();
+    // `retail_pos_ids` used to live here: a hand-built set of the nodes allowed
+    // to feed a warehouse's operation-in. ADR #45 §3 follow-up #2 removed it,
+    // because the contract's `endpoints` list for that pairing is the same
+    // information and the check now reads that instead. Two correct copies are
+    // still two copies.
     let mut incoming_by_target: std::collections::HashMap<&str, Vec<&Value>> =
         std::collections::HashMap::new();
     for wire in wires {
@@ -507,16 +626,17 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
         else {
             continue;
         };
-        let is_kds_operation = value_string(wire, "from_port_id") == Some("operation-out")
+        // Route a workspace-sourced operational feed to the specialized checks
+        // (`invalid-operation-source`, `invalid-warehouse-operation-source`) so
+        // the merchant gets the specific message instead of the broad one.
+        // Skipping on the TARGET alone — which is all this tested before ADR
+        // #45 — let any node type drop an operation-in wire past the semantic
+        // contract entirely, while the frontend gate refused the same wire.
+        let is_workspace_operation = value_string(wire, "from_port_id") == Some("operation-out")
             && value_string(wire, "to_port_id") == Some("operation-in")
             && value_string(wire, "relationship_type") == Some("generic")
-            && semantic_node_type(to_node) == Some("workspace")
-            && semantic_type_key(to_node) == "kds";
-        let is_warehouse_operation = value_string(wire, "from_port_id") == Some("operation-out")
-            && value_string(wire, "to_port_id") == Some("operation-in")
-            && value_string(wire, "relationship_type") == Some("generic")
-            && semantic_node_type(to_node) == Some("warehouse");
-        if is_kds_operation || is_warehouse_operation {
+            && semantic_node_type(from_node) == Some("workspace");
+        if is_workspace_operation {
             continue;
         }
         if !semantic_wire_matches_contract(wire, from_node, to_node) {
@@ -619,10 +739,29 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
         }
         if is_kds {
             let operation_wire = operation_inputs[0];
+            // ADR #45 follow-up #2: ask the contract which kinds may feed
+            // `operation-in` instead of testing a type key on its own.
+            // `restaurant_pos_ids` filtered on `semantic_type_key` only, so a
+            // warehouse or hardware node that happened to carry a
+            // "restaurant-pos" type key satisfied it — the same hole the
+            // adjacent `retail_pos_ids` set already closed by checking node
+            // type as well. The two sets disagreed in one file.
+            let feed_admitted = nodes
+                .iter()
+                .find(|node| {
+                    value_string(node, "id") == value_string(operation_wire, "from_node_id")
+                })
+                .is_some_and(|node| {
+                    pairing_admits_kinds(
+                        "operation-out",
+                        "operation-in",
+                        &node_kind_token(node),
+                        &format!("workspace:{type_key}"),
+                    )
+                });
             let source_is_restaurant_pos =
                 operation_wire.get("from_port_id").and_then(Value::as_str) == Some("operation-out")
-                    && restaurant_pos_ids
-                        .contains(value_string(operation_wire, "from_node_id").unwrap_or_default());
+                    && feed_admitted;
             if !source_is_restaurant_pos {
                 return Err(topology_validation(
                     "invalid-operation-source",
@@ -693,10 +832,26 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
             ));
         }
         for operation_wire in operation_inputs {
-            let source_is_retail_pos = retail_pos_ids
-                .contains(value_string(operation_wire, "from_node_id").unwrap_or_default())
-                && value_string(operation_wire, "from_port_id") == Some("operation-out");
-            if !source_is_retail_pos {
+            // ADR #45 §3 follow-up #2, second half: ask the contract which kinds
+            // may feed `operation-in` on a warehouse instead of consulting
+            // `retail_pos_ids`, a set built by hand from the same endpoints the
+            // contract already lists. Unlike the KDS variant this predicate was
+            // correct — it checked node type as well as type key — but a correct
+            // duplicate is still free to drift from the rule it copies, which is
+            // the whole argument sections 1-3 make.
+            let feed_admitted = value_string(operation_wire, "from_port_id")
+                == Some("operation-out")
+                && node_by_id
+                    .get(value_string(operation_wire, "from_node_id").unwrap_or_default())
+                    .is_some_and(|node| {
+                        pairing_admits_kinds(
+                            "operation-out",
+                            "operation-in",
+                            &node_kind_token(node),
+                            "warehouse",
+                        )
+                    });
+            if !feed_admitted {
                 return Err(topology_validation(
                     "invalid-warehouse-operation-source",
                     Some(warehouse_id),

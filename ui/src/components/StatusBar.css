@@ -1,0 +1,76 @@
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-lg);
+  /* Parents like the StaffLogin/SessionLock footers set
+   * `pointer-events: none` so decorative text doesn't block the form;
+   * re-enable interaction on the status row itself. */
+  pointer-events: auto;
+}
+
+/* Inline variant: no pill/box chrome — for embedding in a larger bar. */
+.statusbar--bare {
+  background: transparent;
+  border: none;
+  padding: 0;
+  gap: var(--space-2);
+}
+
+.statusbar-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 3px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--duration-200);
+  color: var(--color-fg-secondary);
+}
+
+.statusbar-item:hover {
+  background: var(--color-bg-hover);
+}
+
+.statusbar-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+/* ── Checking: slowly blinking grey ────────────────────────────── */
+.statusbar-item.statusbar-tone--checking {
+  color: var(--color-fg-tertiary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .statusbar-item.statusbar-tone--checking {
+    animation: statusbar-blink 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes statusbar-blink {
+  0% { opacity: 0.3; }
+  50% { opacity: 0.9; }
+  100% { opacity: 0.3; }
+}
+
+/* ── Good (green): latency < 1 s ──────────────────────────────── */
+.statusbar-item.statusbar-tone--good {
+  color: var(--color-success);
+}
+
+/* ── Warn (yellow): latency 1–3 s ─────────────────────────────── */
+.statusbar-item.statusbar-tone--warn {
+  color: var(--color-warning);
+}
+
+/* ── Bad (red): latency >= 3 s or unreachable ─────────────────── */
+.statusbar-item.statusbar-tone--bad {
+  color: var(--color-danger);
+}

@@ -68,7 +68,8 @@ import {
   legacyWireResolutionOptions,
   socketSemanticIds,
   type WireRelationshipOption,
-  NODE_TYPE_ICON,
+  iconForNode,
+  SELECTABLE_WORKSPACE_TYPE_KEYS,
   workspaceTypeLabel,
   settingsCardForTypeKey,
   topologyUiString,
@@ -93,7 +94,7 @@ import {
 } from './topologyEditorHelpers';
 import { AlignGlyph, ALIGN_ACTIONS, type AlignMode } from './topologyAlignGlyph';
 import { CanvasCursorReadout } from './topologyCanvasCursorReadout';
-import { TopologyHeader, type TopologyPreset } from './topologyHeader';
+import { TopologyHeader } from './topologyHeader';
 import { TopologyToolRack } from './topologyToolRack';
 import { TopologyContextMenu } from './topologyContextMenu';
 import { TopologyCanvasZoomControls } from './topologyCanvasZoomControls';
@@ -302,50 +303,9 @@ export interface NodeTopologyEditorProps {
   canSave?: boolean;
 }
 
-/** Valid workspace type keys selectable when creating a workspace node.
- *  Labels are resolved at render time via l10n.getString for i18n. */
-const WORKSPACE_TYPE_KEYS = ['store-pos', 'restaurant-pos', 'kds', 'warehouse'] as const;
-
-// ── Presets ────────────────────────────────────────────────────────
-
-const PRESET_RETAIL: { nodes: TopologyNodeData[]; wires: TopologyWireData[] } = {
-  nodes: [
-    // Cards are 240px tall: workspace rows sit at y 80/320 (240px apart on
-    // the 24px grid) so no cards overlap on first load. The store keeps its
-    // historical (80, 140) position — the geometry tests pin it.
-    { id: 'store-1', type: 'store', name: 'Downtown Branch', subtitle: 'Primary Store', x: 80, y: 140, telemetryBadge: 'Online (2 POS)', telemetryStatus: 'online' },
-    { id: 'ws-1', type: 'workspace', name: 'Retail POS #1', subtitle: 'Main Checkout', x: 380, y: 80, metadata: { typeKey: 'store-pos' }, telemetryBadge: 'Active', telemetryStatus: 'online' },
-    { id: 'wh-1', type: 'warehouse', name: 'Main Warehouse', subtitle: 'Primary Storage', x: 680, y: 140, telemetryBadge: '1,250 items', telemetryStatus: 'online' },
-  ],
-  wires: [
-    // Retail POS supplies the warehouse's one primary Operation scope.
-    // Runtime stock deduction consumes this typed route as the warehouse
-    // target, so the graph needs no second inbound stock wire.
-    { id: 'w-1', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-1', toPort: 'left', fromPortId: 'location-out', toPortId: 'location-in', relationshipType: 'location', direction: 'one-way', label: 'Binds Store' },
-    { id: 'w-2', fromNodeId: 'ws-1', fromPort: 'right', toNodeId: 'wh-1', toPort: 'left', fromPortId: 'operation-out', toPortId: 'operation-in', relationshipType: 'generic', direction: 'one-way', label: 'Operation Feed' },
-  ],
-};
-
-const PRESET_RESTAURANT: { nodes: TopologyNodeData[]; wires: TopologyWireData[] } = {
-  nodes: [
-    // 240px cards on a two-row grid (workspace y: 80 / 320, x: 380 / 680)
-    // so nothing overlaps on load. The store keeps its historical
-    // (80, 180) position — geometry tests pin the retail preset only.
-    { id: 'store-1', type: 'store', name: 'Grand Bistro', subtitle: 'Main Branch', x: 80, y: 180, telemetryBadge: 'Online (3 Terminals)', telemetryStatus: 'online' },
-    { id: 'ws-1', type: 'workspace', name: 'Resto POS #1', subtitle: 'Dining Room', x: 380, y: 80, metadata: { typeKey: 'restaurant-pos' }, telemetryBadge: 'Active', telemetryStatus: 'online' },
-    { id: 'ws-kds', type: 'workspace', name: 'Kitchen KDS', subtitle: 'Line Cook Display', x: 380, y: 320, metadata: { typeKey: 'kds' }, telemetryBadge: 'Active', telemetryStatus: 'online' },
-    { id: 'wh-kitchen', type: 'warehouse', name: 'Kitchen Pantry', subtitle: 'Cold & Dry Storage', x: 680, y: 80, telemetryBadge: '⚠️ 12 Low Stock', telemetryStatus: 'warning' },
-    { id: 'hw-prn', type: 'hardware', name: 'Kitchen Thermal Printer', subtitle: 'LAN 192.168.1.100', x: 680, y: 320, telemetryBadge: 'Ready', telemetryStatus: 'online' },
-  ],
-  wires: [
-    // Restaurant POS owns the KDS operation feed. The warehouse uses the
-    // alternative primary scope: the Branch Location connection.
-    { id: 'w-1', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-1', toPort: 'left', fromPortId: 'location-out', toPortId: 'location-in', relationshipType: 'location', direction: 'one-way', label: 'Binds Store' },
-    { id: 'w-2', fromNodeId: 'ws-1', fromPort: 'right', toNodeId: 'ws-kds', toPort: 'left', fromPortId: 'operation-out', toPortId: 'operation-in', relationshipType: 'generic', direction: 'one-way', label: 'Operation Feed' },
-    { id: 'w-3', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'wh-kitchen', toPort: 'left', fromPortId: 'location-out', toPortId: 'location-in', relationshipType: 'location', direction: 'one-way', label: 'Binds Store' },
-    { id: 'w-4', fromNodeId: 'ws-kds', fromPort: 'right', toNodeId: 'hw-prn', toPort: 'left', fromPortId: 'ticket-out', toPortId: 'ticket-in', relationshipType: 'ticket-routing', direction: 'one-way', label: 'Ticket Print' },
-  ],
-};
+/** Valid workspace type keys come from the node kind registry
+ *  (`SELECTABLE_WORKSPACE_TYPE_KEYS`, ADR #45 §3); labels are resolved at
+ *  render time via l10n.getString for i18n. */
 
 /** Evaluate a cubic bezier at parameter t (0-1). */
 const GRID_SIZE = 24;
@@ -373,7 +333,7 @@ const SELECTION_ANNOUNCE_SETTLE_MS = 120;
 /** Branch Location profile fields — fetched lazily from the backend. */
 function BranchLocationFields({ nodeId, sessionToken, l10n, beginInspectorEdit }: {
   nodeId: string;
-  sessionToken: string;
+  sessionToken: string | null | undefined;
   l10n: ReturnType<typeof useLocalization>['l10n'];
   beginInspectorEdit: (id: string) => void;
 }) {
@@ -401,7 +361,7 @@ function BranchLocationFields({ nodeId, sessionToken, l10n, beginInspectorEdit }
   const queuedRef = useRef(false);
 
   const persist = useCallback(async () => {
-    if (!profileRef.current) return;
+    if (!sessionToken || !profileRef.current) return;
     if (saveInFlightRef.current) {
       // A save is running; mark a newer edit arrived so the loop re-reads
       // the latest draft instead of the snapshot already in flight.
@@ -435,6 +395,13 @@ function BranchLocationFields({ nodeId, sessionToken, l10n, beginInspectorEdit }
 
   useEffect(() => {
     let cancelled = false;
+    // Session token resolves asynchronously after the workspace is selected.
+    // Do not fire a scoped IPC call with a null token — keep the section in
+    // its loading state until the token is available (effect re-runs on change).
+    if (!sessionToken) {
+      setLoading(true);
+      return () => { cancelled = true; };
+    }
     setLoading(true);
     getStoreProfileScoped(sessionToken, nodeId)
       .then((p) => { if (!cancelled) { setProfile(p); setLoading(false); } })
@@ -543,7 +510,7 @@ export default function NodeTopologyEditor({
     setWires,
     setHistory,
     setRedo,
-  } = useTopologyEditorGraph<TopologyNodeData, TopologyWireData>(PRESET_RETAIL.nodes, PRESET_RETAIL.wires);
+  } = useTopologyEditorGraph<TopologyNodeData, TopologyWireData>([], []);
   type HistoryEntry = TopologyHistoryEntry<TopologyNodeData, TopologyWireData>;
   /** Save/apply lifecycle: load settling, branch document revision, and the
    *  Apply in-flight guard now live in one typed state machine instead of
@@ -924,14 +891,6 @@ export default function NodeTopologyEditor({
   /** Batch delete confirmation (2+ nodes). Single nodes keep confirmDelete
    *  so the established single-node dialog text stays untouched. */
   const [confirmDeleteMany, setConfirmDeleteMany] = useState<string[] | null>(null);
-  const [confirmPreset, setConfirmPreset] = useState<'retail' | 'restaurant' | null>(null);
-
-  /** Shortcuts help popover open state — owned here because the central
-   *  keydown handler toggles it on F1; the button/popover JSX and its
-   *  Escape + outside-click dismissal live in `TopologyShortcutsHelp`. */
-  const [showShortcuts, setShowShortcuts] = useState(false);
-  const toggleShortcuts = useCallback(() => setShowShortcuts((p) => !p), []);
-  const closeShortcuts = useCallback(() => setShowShortcuts(false), []);
 
   /** Right-side tool rack panel state. Collapsed on mount so the editor
    *  opens on a clean canvas — arriving from the home screen's "Add
@@ -1013,9 +972,10 @@ export default function NodeTopologyEditor({
    * A null snapshot (never applied) counts as dirty.
    */
   const appliedSnapshotRef = useRef<{ nodes: TopologyNodeData[]; wires: TopologyWireData[] } | null>(
-    { nodes: PRESET_RETAIL.nodes, wires: PRESET_RETAIL.wires },
+    { nodes, wires },
   );
-  // Live mirrors so isCanvasDirty stays stable and always reads the latest canvas.
+  // Live mirrors so the drag, copy, and validation readers below always
+  // see the current canvas without re-binding their closures.
   const nodesRef = useRef<TopologyNodeData[]>(nodes);
   nodesRef.current = nodes;
   const wiresRef = useRef<TopologyWireData[]>(wires);
@@ -1033,16 +993,10 @@ export default function NodeTopologyEditor({
    *  holds still) must not scroll. Seeded at drag start so the first move
    *  has a baseline. */
   const lastDragMovePosRef = useRef<{ x: number; y: number } | null>(null);
-  const isCanvasDirty = useCallback(() => {
-    const snap = appliedSnapshotRef.current;
-    if (!snap) return true;
-    return !canvasStateEqual(snap.nodes, snap.wires, nodesRef.current, wiresRef.current);
-  }, []);
-
-  /** Reactive twin of isCanvasDirty for the header's "Unsaved changes"
-   *  chip: the ref above is the click-time source of truth, but a ref
-   *  cannot drive re-renders — so commitSnapshot bumps this version and
-   *  the memo re-derives the flag after every Apply/load/preset. */
+  /** The canvas's single dirty derivation. The comparison itself is a
+   *  memo over the current nodes/wires; `snapshotVersion` exists because a
+   *  ref cannot drive re-renders — commitSnapshot bumps it so the memo
+   *  re-derives after every Apply or authoritative load. */
   const [snapshotVersion, setSnapshotVersion] = useState(0);
   const commitSnapshot = useCallback((next: { nodes: TopologyNodeData[]; wires: TopologyWireData[] }) => {
     appliedSnapshotRef.current = next;
@@ -1120,8 +1074,6 @@ export default function NodeTopologyEditor({
    *  Escape or any document mousedown outside the picker (the picker
    *  wrapper stops propagation, so slider drags never close it). */
   const [zoomPickerOpen, setZoomPickerOpen] = useState(false);
-  /** Presets popover (Retail / Restaurant & KDS template loaders). */
-  const [presetsOpen, setPresetsOpen] = useState(false);
   /** Save-template popover: open flag + the in-flight template name. */
   const [templateSaveOpen, setTemplateSaveOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
@@ -1149,8 +1101,8 @@ export default function NodeTopologyEditor({
   }, [minimapKey, minimapVisible]);
 
   useEffect(() => {
-    if (!zoomPickerOpen && !presetsOpen) return;
-    const close = () => { setZoomPickerOpen(false); setPresetsOpen(false); };
+    if (!zoomPickerOpen) return;
+    const close = () => { setZoomPickerOpen(false); };
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
@@ -1163,7 +1115,7 @@ export default function NodeTopologyEditor({
       document.removeEventListener('mousedown', close);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [zoomPickerOpen, presetsOpen]);
+  }, [zoomPickerOpen]);
 
   /** Bounding box of the current multi-selection in canvas coords — the
    *  align/distribute toolbar floats above it. Null unless 2+ nodes are
@@ -2004,7 +1956,7 @@ export default function NodeTopologyEditor({
   };
 
   const pushHistory = useCallback((snapshot?: { nodes: TopologyNodeData[]; wires: TopologyWireData[] }) => {
-    // Dirty is derived (isCanvasDirty compares against appliedSnapshotRef),
+    // Dirty is derived (isDirty compares against appliedSnapshotRef),
     // so no flag needs arming here — the mutation itself is the dirty signal.
     setRedo([]); // new edit invalidates the redo branch
     // Any other history-pushing edit ends an open nudge burst — the next
@@ -2441,7 +2393,7 @@ export default function NodeTopologyEditor({
 
   /**
    * Canvas-replacement rule: every path that replaces the canvas wholesale
-   * (the three authoritative load-effect paths and loadPreset) must reset
+   * (the three authoritative load-effect paths) must reset
    * the transient editor state that outlives a specific canvas — the
    * in-flight port connection, port-snap target, node/wire hover,
    * simulation pulse, marquee, bend-drag, open context menu, and the
@@ -2586,32 +2538,6 @@ export default function NodeTopologyEditor({
       cancelConnection();
     }
   }, [selectedNodeId, selectedWireId, nodeMap, wires, relationshipPicker, pruneSelection, cancelConnection, pruneHover]);
-
-  const loadPreset = useCallback((preset: 'retail' | 'restaurant') => {
-    const data = preset === 'retail' ? PRESET_RETAIL : PRESET_RESTAURANT;
-    pushHistory();
-    // Reset transient state BEFORE the preset canvas lands (see
-    // resetTransientCanvasState) — the resets must never act on the new
-    // preset's nodes/wires.
-    resetTransientCanvasState();
-    setFreshNodeIds(new Set());
-    setNodes(data.nodes);
-    setWires(data.wires);
-    // The preset is now the applied state — the canvas matches it exactly,
-    // so a subsequent preset click must not confirm.
-    commitSnapshot({ nodes: data.nodes, wires: data.wires });
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-    // Preset ids only partially overlap — the re-validation effect will
-    // clear a selection pointing at an element the new preset lacks.
-    // Surface it so the user knows why the inspector closed instead of
-    // the drop happening silently.
-    if (selectedNodeId && !data.nodes.some((n) => n.id === selectedNodeId)) {
-      addToast({ message: l10n.getString('topology-toast-selection-dropped'), type: 'info' });
-    } else if (selectedWireId && !data.wires.some((w) => w.id === selectedWireId)) {
-      addToast({ message: l10n.getString('topology-toast-selection-dropped'), type: 'info' });
-    }
-  }, [pushHistory, selectedNodeId, selectedWireId, addToast, l10n, commitSnapshot, setNodes, setWires, resetTransientCanvasState]);
 
   const popUndo = useCallback(() => {
     const stack = historyRef.current;
@@ -2921,14 +2847,6 @@ export default function NodeTopologyEditor({
       // auto-fit must never yank it afterwards (even Delete/Undo, which
       // change the content key, must not trigger a refit).
       userInteractedRef.current = true;
-      // F1 — help: toggle the shortcuts popover. Deliberately BEFORE the
-      // typing/rack guards: help is never an accidental canvas edit, so it
-      // works even while typing or with a rack control focused.
-      if (e.key === 'F1') {
-        e.preventDefault();
-        setShowShortcuts((v) => !v);
-        return;
-      }
       // Guard: don't handle canvas shortcuts while the user is typing in a text field.
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
@@ -2970,7 +2888,7 @@ export default function NodeTopologyEditor({
         }
         return;
       }
-      if (confirmDelete || confirmDeleteMany || confirmPreset) {
+      if (confirmDelete || confirmDeleteMany) {
         return;
       }
       // Tool-slot shortcuts: 1-4 spawn nodes from the palette, matching the
@@ -3269,14 +3187,7 @@ export default function NodeTopologyEditor({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedNodeIds, selectedWireId, wires, pushHistory, popUndo, popRedo, confirmDelete, confirmDeleteMany, confirmPreset, pan, zoom, deleteNodes, relationshipPicker, cancelRelationshipPicker, selectAllNodes, duplicateSelection, copySelection, pasteClipboard, nodes, onRenameBranch, onRenameWorkspace, zoomToFit, zoomBy, resetView, snapEnabled, cancelDuplicateDrag, cancelNodeMove, convertDragToDuplicate, cancelBendDrag, finderOpen, clearSelection, setNodes, migrationOpen, cancelConnection, cancelMarquee, clearAll]);
-
-  const executePresetLoad = useCallback(() => {
-    if (confirmPreset) {
-      loadPreset(confirmPreset);
-    }
-    setConfirmPreset(null);
-  }, [confirmPreset, loadPreset]);
+  }, [selectedNodeIds, selectedWireId, wires, pushHistory, popUndo, popRedo, confirmDelete, confirmDeleteMany, pan, zoom, deleteNodes, relationshipPicker, cancelRelationshipPicker, selectAllNodes, duplicateSelection, copySelection, pasteClipboard, nodes, onRenameBranch, onRenameWorkspace, zoomToFit, zoomBy, resetView, snapEnabled, cancelDuplicateDrag, cancelNodeMove, convertDragToDuplicate, cancelBendDrag, finderOpen, clearSelection, setNodes, migrationOpen, cancelConnection, cancelMarquee, clearAll]);
 
   const executeDelete = useCallback(() => {
     if (confirmDeleteMany) {
@@ -5108,20 +5019,13 @@ export default function NodeTopologyEditor({
     setTimeout(() => applyPinRef.current?.focus(), 50);
   }, [nodes, wires, allowLegacyApply, currentTier, resolvedIssues, workspaceInstances, sessionStoreId, addToast, l10n, setValidationPanelOpen, setApplyConfirmData, setApplyPin, setApplyPinError, setApplyConfirmOpen]);
 
-  /** Preset menu item click: close the popover, then dirty-gate the load. */
-  const handleLoadPreset = useCallback((preset: TopologyPreset) => {
-    setPresetsOpen(false);
-    if (isCanvasDirty()) setConfirmPreset(preset);
-    else loadPreset(preset);
-  }, [isCanvasDirty, loadPreset]);
-
   /** Reactive "Unsaved changes" chip data. Round 153: the chip always
    *  previews the workspace-instance diff through the SAME planTopologyDiff
    *  the save path's payload builder is built on, so the preview can never
    *  drift from the Apply. With real instances the before-side is the loaded
    *  backend instances (round 150); on a standalone/demo canvas it is
-   *  synthesized from the committed snapshot (the preset or the last-loaded
-   *  diagram) — the workspace format is the single honest signal everywhere.
+   *  synthesized from the committed snapshot (the last-loaded diagram) — the
+   *  workspace format is the single honest signal everywhere.
    *  The plan is total: a workspace mid-wiring (no store ownership yet)
    *  still counts as a creation instead of crashing the chip (round 152: a
    *  type change surfaces as a destructive recreate, not a plain create +
@@ -5189,19 +5093,6 @@ export default function NodeTopologyEditor({
         />
       )}
 
-      {/* ── Confirm preset overwrite dialog ── */}
-      {confirmPreset !== null && (
-        <ConfirmDialog
-          open
-          onCancel={() => setConfirmPreset(null)}
-          onConfirm={executePresetLoad}
-          title={l10n.getString('topology-confirm-preset-title')}
-          message={l10n.getString('topology-confirm-preset-msg')}
-          variant="warning"
-          confirmLabel={l10n.getString('topology-confirm-preset-label')}
-        />
-      )}
-
       <TopologyHeader
         l10n={l10n}
         branchToolbar={branchToolbar}
@@ -5210,14 +5101,6 @@ export default function NodeTopologyEditor({
         currentTier={currentTier}
         saving={saving}
         onApply={() => void handleApplyClick()}
-        presetsOpen={presetsOpen}
-        onTogglePresets={() => setPresetsOpen((o) => !o)}
-        onLoadPreset={handleLoadPreset}
-        dirtySummary={dirtySummary}
-        topologyRevision={topologyRevision}
-        showShortcuts={showShortcuts}
-        onToggleShortcuts={toggleShortcuts}
-        onCloseShortcuts={closeShortcuts}
       />
 
       <div className="node-topology-main">
@@ -5307,6 +5190,22 @@ export default function NodeTopologyEditor({
                 </Localized>
               </span>
             </div>
+          )}
+          {dirtySummary && (
+            <span className="topology-dirty-chip" role="status" onMouseDown={(e) => e.stopPropagation()}>
+              <span className="topology-dirty-dot" aria-hidden="true" />
+              <Localized id="topology-unsaved">Unsaved changes</Localized>
+              <span className="topology-diff-summary">
+                {l10n.getString('topology-apply-workspace-diff', {
+                  created: dirtySummary.created,
+                  updated: dirtySummary.updated,
+                  archived: dirtySummary.archived,
+                  typeChanged: dirtySummary.typeChanged,
+                  from: topologyRevision,
+                  to: topologyRevision + 1,
+                })}
+              </span>
+            </span>
           )}
           {totalIssues > 0 && (
             <TopologyValidationWidget
@@ -5809,7 +5708,7 @@ export default function NodeTopologyEditor({
         </div>
 
         {selectedNode && (() => {
-          const NodeIcon = NODE_TYPE_ICON[selectedNode.type];
+          const NodeIcon = iconForNode(selectedNode);
           const typeColors: Record<string, string> = {
             store: 'var(--color-warning, #f59e0b)',
             workspace: 'var(--color-accent, #5a9fd4)',
@@ -5940,7 +5839,7 @@ export default function NodeTopologyEditor({
                     }}
                     aria-label={l10n.getString('topology-ws-type-select-aria')}
                   >
-                    {WORKSPACE_TYPE_KEYS.filter((k) => k !== 'warehouse').map((k) => (
+                    {SELECTABLE_WORKSPACE_TYPE_KEYS.map((k) => (
                       <option key={k} value={k}>
                         {workspaceTypeLabel(k, (id, vars) => topologyUiString(l10n, id, vars ?? null))}
                       </option>

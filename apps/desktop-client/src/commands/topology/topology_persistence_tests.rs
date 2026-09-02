@@ -602,3 +602,172 @@ fn runtime_setting_key_rejects_empty_branch_suffix() {
     let err = topology_runtime_setting_key("oz-pos/topology/");
     assert!(err.is_err(), "empty branch suffix must fail");
 }
+
+// ── ADR #45 §4.2: diagram templates in persisted storage ────────────
+
+#[test]
+fn template_roundtrips_under_its_branch_key() {
+    let conn = fresh_conn();
+    let topo = topology_setting_key(Some("main")).unwrap();
+    let payload = serde_json::json!({ "nodes": [{"id": "store-1"}], "wires": [] });
+
+    template_save(&conn, &topo, "Weekend Setup", &payload).unwrap();
+    let loaded = template_load(&conn, &topo, "Weekend Setup").unwrap();
+
+    assert_eq!(loaded, Some(payload));
+}
+
+#[test]
+fn template_is_stored_in_the_settings_table_not_browser_storage() {
+    // The defect this section fixes is loss: a localStorage template vanishes on
+    // a device change, a profile switch, or a reinstall, and the list simply
+    // comes back empty with nothing to show for it. Proof of the fix is that
+    // the bytes land in the same durable table the diagram itself uses.
+    let conn = fresh_conn();
+    let topo = topology_setting_key(Some("main")).unwrap();
+    template_save(&conn, &topo, "Setup", &serde_json::json!({"nodes": []})).unwrap();
+
+    let raw = oz_core::Settings::get(&conn, &template_setting_key(&topo, "Setup")).unwrap();
+    assert!(raw.is_some(), "template must live in settings");
+}
+
+#[test]
+fn template_name_is_trimmed_on_save_and_matches_on_lookup() {
+    // The UI passes what the merchant typed; padding must not create a second
+    // template that the list shows twice.
+    let conn = fresh_conn();
+    let topo = topology_setting_key(Some("main")).unwrap();
+    let payload = serde_json::json!({ "nodes": [], "wires": [] });
+
+    template_save(&conn, &topo, "  Opening  ", &payload).unwrap();
+
+    assert_eq!(
+        template_load(&conn, &topo, "Opening").unwrap(),
+        Some(payload)
+    );
+    assert_eq!(
+        template_list(&conn, &topo).unwrap(),
+        vec!["Opening".to_string()]
+    );
+}
+
+#[test]
+fn saving_the_same_name_again_replaces_rather_than_duplicates() {
+    let conn = fresh_conn();
+    let topo = topology_setting_key(Some("main")).unwrap();
+    template_save(&conn, &topo, "Setup", &serde_json::json!({"v": 1})).unwrap();
+    template_save(&conn, &topo, "Setup", &serde_json::json!({"v": 2})).unwrap();
+
+    assert_eq!(
+        template_load(&conn, &topo, "Setup").unwrap(),
+        Some(serde_json::json!({"v": 2}))
+    );
+    assert_eq!(template_list(&conn, &topo).unwrap().len(), 1);
+}
+
+#[test]
+fn template_list_is_scoped_to_its_branch() {
+    // Templates belong to a branch. A shared list would seed branch B with
+    // branch A's layout, which is the drift ADR #34's one-root rule exists to
+    // prevent.
+    let conn = fresh_conn();
+    let main = topology_setting_key(Some("main")).unwrap();
+    let uptown = topology_setting_key(Some("uptown")).unwrap();
+
+    template_save(&conn, &main, "Main Only", &serde_json::json!({"n": 1})).unwrap();
+    template_save(&conn, &uptown, "Uptown Only", &serde_json::json!({"n": 2})).unwrap();
+
+    assert_eq!(
+        template_list(&conn, &main).unwrap(),
+        vec!["Main Only".to_string()]
+    );
+    assert_eq!(
+        template_list(&conn, &uptown).unwrap(),
+        vec!["Uptown Only".to_string()]
+    );
+    assert_eq!(template_load(&conn, &main, "Uptown Only").unwrap(), None);
+}
+
+#[test]
+fn template_list_does_not_see_the_diagram_or_runtime_plan() {
+    // A branch's diagram lives at `.../topology/main` and its runtime plan at
+    // `.../topology-runtime/main`. Neither may surface as a template name.
+    let conn = fresh_conn();
+    let topo = topology_setting_key(Some("main")).unwrap();
+    save_topology_json_at_key(&conn, vec![], vec![], &topo).unwrap();
+    let runtime_key = topology_runtime_setting_key(&topo).unwrap();
+    oz_core::Settings::set(&conn, &runtime_key, "{}").unwrap();
+
+    assert!(template_list(&conn, &topo).unwrap().is_empty());
+}
+
+#[test]
+fn template_list_is_sorted_for_a_stable_panel() {
+    let conn = fresh_conn();
+    let topo = topology_setting_key(Some("main")).unwrap();
+    for name in ["zulu", "Alpha", "mike"] {
+        template_save(&conn, &topo, name, &serde_json::json!({})).unwrap();
+    }
+    assert_eq!(
+        template_list(&conn, &topo).unwrap(),
+        vec!["Alpha".to_string(), "mike".to_string(), "zulu".to_string()]
+    );
+}
+
+#[test]
+fn deleting_a_template_removes_it_and_reports_whether_it_existed() {
+    let conn = fresh_conn();
+    let topo = topology_setting_key(Some("main")).unwrap();
+    template_save(&conn, &topo, "Temp", &serde_json::json!({})).unwrap();
+
+    assert!(template_delete(&conn, &topo, "Temp").unwrap());
+    assert_eq!(template_load(&conn, &topo, "Temp").unwrap(), None);
+    assert!(template_list(&conn, &topo).unwrap().is_empty());
+    // A second delete reports "there was nothing to delete" rather than erroring,
+    // so a double-click in the panel cannot surface a stack trace.
+    assert!(!template_delete(&conn, &topo, "Temp").unwrap());
+}
+
+#[test]
+fn corrupt_template_reads_as_absent_instead_of_failing() {
+    // The list is built from keys, so one unreadable row must not brick the
+    // whole panel — the merchant keeps access to their other templates.
+    let conn = fresh_conn();
+    let topo = topology_setting_key(Some("main")).unwrap();
+    oz_core::Settings::set(&conn, &template_setting_key(&topo, "Broken"), "{not json").unwrap();
+
+    assert_eq!(template_load(&conn, &topo, "Broken").unwrap(), None);
+    assert_eq!(
+        template_list(&conn, &topo).unwrap(),
+        vec!["Broken".to_string()]
+    );
+}
+
+#[test]
+fn invalid_template_names_are_rejected_at_the_boundary() {
+    let conn = fresh_conn();
+    let topo = topology_setting_key(Some("main")).unwrap();
+    for bad in ["", "   ", "a/b", "a\\b", "x\u{0}y"] {
+        assert!(
+            template_save(&conn, &topo, bad, &serde_json::json!({})).is_err(),
+            "name {bad:?} must not be storable"
+        );
+    }
+    assert!(template_list(&conn, &topo).unwrap().is_empty());
+}
+
+#[test]
+fn a_nested_template_key_is_not_listed_as_a_name() {
+    // Defensive: if an older build or a hand-written row ever produced
+    // `.../template/a/b`, listing must not report "a/b" as one selectable name
+    // that load can never round-trip (normalize rejects the slash).
+    let conn = fresh_conn();
+    let topo = topology_setting_key(Some("main")).unwrap();
+    oz_core::Settings::set(&conn, &format!("{topo}/template/a/b"), "{}").unwrap();
+    template_save(&conn, &topo, "Good", &serde_json::json!({})).unwrap();
+
+    assert_eq!(
+        template_list(&conn, &topo).unwrap(),
+        vec!["Good".to_string()]
+    );
+}

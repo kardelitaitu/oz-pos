@@ -14,10 +14,21 @@ import type { SubscriptionCapabilities } from '@/api/subscription';
 // ── Mocks ──────────────────────────────────────────────────────────
 
 // Tier is switchable per test — the capacity guards are Pro-gated, and
-// the screen's Apply gate must agree with the editor's live gate.
+// the screen's Apply gate must agree with the editor's live gate. The screen
+// reads the tier from `caps` (the same local source the backend quota gate
+// uses), so `mockLicenseTier` now flows through the default caps rather than a
+// separate `checkLicenseStatus` probe. `maxStores: null` keeps the store-limit
+// gate inactive by default, matching the previous `caps === null` behaviour;
+// tests that want the limit set caps explicitly.
 let mockLicenseTier: string = 'plus';
+// Kept as a spy rather than a plain stub so a test can assert the screen never
+// reaches for it again: the tier badge used to come from this network probe,
+// which is what made it disagree with the local quota gate.
+const { mockCheckLicenseStatus } = vi.hoisted(() => ({
+  mockCheckLicenseStatus: vi.fn(() => Promise.resolve({ tier: 'plus' })),
+}));
 vi.mock('@/api/license', () => ({
-  checkLicenseStatus: () => Promise.resolve({ tier: mockLicenseTier }),
+  checkLicenseStatus: mockCheckLicenseStatus,
 }));
 
 const mockListStores = vi.fn();
@@ -58,7 +69,12 @@ const { mockUseSubscriptionCaps } = vi.hoisted(() => ({
   mockUseSubscriptionCaps: vi.fn<(v: SubscriptionCapabilities | null) => SubscriptionCapabilities | null>(() => null),
 }));
 vi.mock('@/contexts/SubscriptionContext', () => ({
-  useSubscription: () => ({ caps: mockUseSubscriptionCaps(null), loading: false, refresh: vi.fn() }),
+  useSubscription: () => ({
+    caps:
+      mockUseSubscriptionCaps(null) ?? makeSubscriptionCaps({ tier: mockLicenseTier, maxStores: null }),
+    loading: false,
+    refresh: vi.fn(),
+  }),
 }));
 
 // The editor's Apply gate mirrors the backend `staff:update` permission via
@@ -131,6 +147,8 @@ let capturedEditorProps: {
   compareOverlay?: unknown;
   compareFocus?: boolean;
   canSave?: boolean;
+  /** The tier the header badge renders from — asserted by the badge tests. */
+  currentTier?: string;
 } = {};
 vi.mock('@/features/stores/NodeTopologyEditor', () => ({
   default: (props: {
@@ -162,15 +180,23 @@ vi.mock('@/features/stores/NodeTopologyEditor', () => ({
 // select once the panel is open.
 let capturedBranchOnChange: ((value: string) => void) | null = null;
 let capturedBranchOptions: { value: string; label: string }[] = [];
+let capturedBranchSelectProps: { placeholder?: string; disabled?: boolean } = {};
 let capturedCompareOtherOnChange: ((value: string) => void) | null = null;
 vi.mock('@/features/settings/SettingsSelect', () => ({
-  default: (props: { id?: string; onChange: (value: string) => void; options?: { value: string; label: string }[] }) => {
+  default: (props: {
+    id?: string;
+    onChange: (value: string) => void;
+    options?: { value: string; label: string }[];
+    placeholder?: string;
+    disabled?: boolean;
+  }) => {
     if (props.id === 'topology-compare-other-select') {
       capturedCompareOtherOnChange = props.onChange;
       return null;
     }
     capturedBranchOnChange = props.onChange;
     capturedBranchOptions = props.options ?? [];
+    capturedBranchSelectProps = props;
     return null;
   },
 }));
@@ -284,6 +310,7 @@ describe('TopologyScreen', () => {
     capturedEditorProps = {};
     capturedBranchOnChange = null;
     capturedBranchOptions = [];
+    capturedBranchSelectProps = {};
     capturedCompareOtherOnChange = null;
     mockListStores.mockResolvedValue(sampleStores);
     mockListWorkspacesScoped.mockResolvedValue(loadedInstances);
@@ -315,6 +342,37 @@ describe('TopologyScreen', () => {
         subtitle: 'Old desc',
       },
     ]);
+  });
+
+  // ── Branch selector empty states ──────────────────────────────
+
+  it('shows the empty-state placeholder and disables the selector when no branch exists', async () => {
+    // The bare "Branch" label read like a fake selected value sitting on
+    // an openable empty dropdown; the settled-empty state must say why
+    // it's empty and point at the adjacent Add Branch button instead.
+    mockListStores.mockResolvedValue([]);
+    render(<TopologyScreen />);
+    await waitFor(() =>
+      expect(capturedBranchSelectProps.placeholder).toBe('topology-branch-selector-empty'),
+    );
+    expect(capturedBranchSelectProps.disabled).toBe(true);
+  });
+
+  it('reports branch unavailability (not an empty state) when the store list fails to load', async () => {
+    // A failed fetch also renders an empty list — "No branches yet" would
+    // be a lie while the load-error toast explains the real state.
+    mockListStores.mockRejectedValue(new Error('boom'));
+    render(<TopologyScreen />);
+    await waitFor(() =>
+      expect(capturedBranchSelectProps.placeholder).toBe('topology-branch-selector-unavailable'),
+    );
+    expect(capturedBranchSelectProps.disabled).toBe(true);
+  });
+
+  it('keeps the selector enabled with the branch label while branches exist', async () => {
+    await renderReady();
+    expect(capturedBranchSelectProps.placeholder).toBe('topology-branch-selector-label');
+    expect(capturedBranchSelectProps.disabled).toBe(false);
   });
 
   it('excludes Inventory Management instances — the warehouse node is the single storage card', async () => {
@@ -1409,5 +1467,38 @@ describe('TopologyScreen', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'topology-branch-add' }));
     expect(screen.queryByText('store-limit-upgrade-pro')).not.toBeInTheDocument();
+  });
+
+  // ── Tier badge must agree with the quota gate ──────────────────
+
+  it('takes the tier badge from subscription caps, not the license probe', async () => {
+    // The badge used to call `checkLicenseStatus`, a network probe to the license
+    // server. With no activated license that rejects, the `catch` fell back to
+    // 'free', and the header read FREE while the backend quota gate
+    // (`commands/subscription.rs`) was treating the same debug build as Premium.
+    // Both values were correct about their own source; the screen was displaying
+    // the wrong one. It now reads `caps`, which is the gate's own source, so the
+    // debug override is inherited rather than duplicated.
+    mockUseSubscriptionCaps.mockReturnValue(
+      makeSubscriptionCaps({ tier: 'Premium', maxStores: null }),
+    );
+    render(<TopologyScreen />);
+    await waitFor(() => expect(capturedEditorProps.onSave).toBeDefined());
+
+    // Asserted on the prop the badge renders from, not its text: the header
+    // upper-cases through Fluent, so the string is a localisation artefact while
+    // this is the actual wiring.
+    expect(capturedEditorProps.currentTier).toBe('premium');
+  });
+
+  it('never probes the license server to decide the tier badge', async () => {
+    // Regression guard. Calling it again would reintroduce the disagreement
+    // silently: the probe succeeds against a live license server and fails on an
+    // offline dev machine, so the badge would be right sometimes.
+    mockCheckLicenseStatus.mockClear();
+    render(<TopologyScreen />);
+    await waitFor(() => expect(capturedEditorProps.onSave).toBeDefined());
+
+    expect(mockCheckLicenseStatus).not.toHaveBeenCalled();
   });
 });

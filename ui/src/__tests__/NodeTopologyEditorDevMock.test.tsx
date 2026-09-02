@@ -149,10 +149,16 @@ describe('editor revision-conflict recovery through the real dev-mock IPC', () =
     expect(bumped.revision).toBe(seedRevision + 1);
 
     // The stale editor user makes an edit on the old revision.
-    fireEvent.click(screen.getByText('+ Store Node'));
+    // Open the add panel and add a retail POS workspace node.
+    const addLabel = 'topology-rack-add-title';
+    const addBtn = document.querySelector(`.rack-icon-btn[aria-label="${addLabel}"]`) as HTMLElement;
+    if (addBtn && !addBtn.classList.contains('is-active')) {
+      fireEvent.click(addBtn);
+    }
+    fireEvent.click(screen.getByText('+ Retail POS'));
     // The spawned node is auto-selected, so the inspector header also shows
     // the name — the card title AND the inspector h3 both match.
-    await waitFor(() => expect(screen.getAllByText('New Store').length).toBeGreaterThanOrEqual(1));
+    await waitFor(() => expect(screen.getAllByText('New Retail POS').length).toBeGreaterThanOrEqual(1));
 
     // Apply — the dev-mock gate rejects the stale baseRevision, and the
     // editor must adopt the authoritative diagram (round 137 recovery).
@@ -165,7 +171,7 @@ describe('editor revision-conflict recovery through the real dev-mock IPC', () =
 
     await waitFor(() => expect(screen.getAllByText('Authoritative Branch').length).toBeGreaterThanOrEqual(1));
     // The stale canvas (including the user's spawned node) is replaced.
-    expect(screen.queryByText('New Store')).not.toBeInTheDocument();
+    expect(screen.queryByText('New Retail POS')).not.toBeInTheDocument();
     expect(getNodeCount()).toBe(authoritativeNodes.length);
     // The conflict toast explains the reload.
     expect(screen.getByText('The topology changed elsewhere — loaded the latest version. Re-apply your changes.')).toBeInTheDocument();

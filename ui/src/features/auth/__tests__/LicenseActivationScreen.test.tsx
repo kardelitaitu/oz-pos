@@ -73,11 +73,8 @@ vi.mock('@fluent/react', () => ({
 }));
 
 
-vi.mock('@/components/ConnectionStatus', () => ({
-  default: ({ label, url }: { label: string; url: string }) => <div data-testid={`conn-status-${label}`}>{label}: {url}</div>
-}));
-vi.mock('@/components/MachineIdStatus', () => ({
-  default: () => <div data-testid="conn-status-machine-id">Machine Status</div>
+vi.mock('@/components/StatusBar', () => ({
+  default: () => <div data-testid="status-bar">StatusBar</div>,
 }));
 vi.mock('@/frontend/shell/ThemeToggle', () => ({
   default: () => <div data-testid="theme-toggle">ThemeToggle</div>,
@@ -629,21 +626,9 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
   });
 
   describe('7. Child Components & Hero', () => {
-    it('46. Renders the ConnectionStatus for the Auth server with the correct URL', () => {
+    it('46. Renders the unified status bar (auth/sync/version icons)', () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      const authConn = screen.getByTestId('conn-status-Auth');
-      expect(authConn).toHaveTextContent('Auth: https://oz--cloud--76cyv4d6bn54.code.run');
-    });
-
-    it('47. Renders the ConnectionStatus for the Sync server', () => {
-      render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      const syncConn = screen.getByTestId('conn-status-Sync');
-      expect(syncConn).toHaveTextContent('Sync:');
-    });
-
-    it('48. Renders the MachineIdStatus component', () => {
-      render(<LicenseActivationScreen onActivated={mockOnActivated} />);
-      expect(screen.getByTestId('conn-status-machine-id')).toBeInTheDocument();
+      expect(screen.getByTestId('status-bar')).toBeInTheDocument();
     });
 
     it('49. Renders the 256x256 OZ-POS logo hero image', () => {

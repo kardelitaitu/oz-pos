@@ -22,6 +22,15 @@ vi.mock('@/hooks/useSyncConnection', () => ({
   useSyncConnection: () => ({ state: 'connected', latencyMs: 10, label: 'Sync' }),
 }));
 
+vi.mock('@/components/StatusBar', () => ({
+  default: () => (
+    <div className="session-lock-statusbar-mock">
+      <span>Auth</span>
+      <span>Sync</span>
+    </div>
+  ),
+}));
+
 vi.mock('@/api/license', () => ({
   testAuthConnection: vi.fn().mockResolvedValue({ ok: true, status: 'Connected', latencyMs: 10 }),
 }));
@@ -40,7 +49,6 @@ vi.mock('@fluent/react', () => ({
           'session-lock-title': 'Session Locked',
           'session-lock-expired': 'Sesi telah berakhir',
           'session-lock-invalid-pin': 'PIN tidak dikenali',
-          'session-lock-enter-pin': 'Enter PIN to unlock',
           'session-lock-pin-aria': 'PIN: { $length } of { $max } digits entered',
           'session-lock-lockout': 'Wait { $seconds }s.',
           'session-lock-pad-aria': 'PIN pad',
@@ -102,11 +110,6 @@ describe('SessionLockScreen', () => {
       }
     });
 
-    it('renders "Enter PIN to unlock" text', () => {
-      render(<SessionLockScreen onUnlock={mockOnUnlock} />);
-      expect(screen.getByText('Enter PIN to unlock')).toBeInTheDocument();
-    });
-
     it('renders 4 empty PIN dots', () => {
       render(<SessionLockScreen onUnlock={mockOnUnlock} />);
       const dotsContainer = screen.getByLabelText(/PIN: 0 of 4 digits entered/);
@@ -126,7 +129,6 @@ describe('SessionLockScreen', () => {
       expect(screen.getByText('Auth')).toBeInTheDocument();
       expect(screen.getByText('Sync')).toBeInTheDocument();
     });
-
     it('focuses the PIN pad on mount', () => {
       render(<SessionLockScreen onUnlock={mockOnUnlock} />);
       const pad = screen.getByRole('application', { name: 'PIN pad' });
@@ -385,17 +387,16 @@ describe('SessionLockScreen', () => {
   });
 
   describe('8. Connection Status', () => {
-    it('shows Auth as connected when license check succeeds', async () => {
+    it('renders the unified StatusBar (auth/sync/version icons)', () => {
       render(<SessionLockScreen onUnlock={mockOnUnlock} />);
-      await waitFor(() => {
-        const authStatus = screen.getByText('Auth').closest('.connection-status')!;
-        expect(authStatus.querySelector('.status-indicator')).toHaveClass('online');
-      }, FAST_WAIT);
+      expect(screen.getByText('Auth')).toBeInTheDocument();
+      expect(screen.getByText('Sync')).toBeInTheDocument();
     });
 
-    it('shows Sync latency when connected', () => {
+    it('shows the status bar when connection succeeds', () => {
       render(<SessionLockScreen onUnlock={mockOnUnlock} />);
-      expect(screen.getByText('10ms')).toBeInTheDocument();
+      const bar = document.querySelector('.session-lock-statusbar-mock');
+      expect(bar).toBeInTheDocument();
     });
   });
 });

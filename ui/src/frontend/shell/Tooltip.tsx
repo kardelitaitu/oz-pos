@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useId, type ReactNode, type ReactElement, cloneElement } from 'react';
+import { useState, useRef, useCallback, useId, useLayoutEffect, type ReactNode, type ReactElement, cloneElement } from 'react';
 import { createPortal } from 'react-dom';
 import './Tooltip.css';
 
@@ -14,10 +14,16 @@ export interface TooltipProps {
   hideDelay?: number;
   /** Maximum width of the tooltip bubble (CSS value). Default '280px'. */
   maxWidth?: string;
+  /** Horizontal alignment of the bubble relative to the trigger.
+   *  Applies to `position="top"` / `"bottom"`; default 'center'.
+   *  Use 'right' when the trigger sits near the right viewport edge. */
+  align?: 'center' | 'left' | 'right';
   /** Render the tooltip to document.body via a portal so it escapes
    *  overflow:hidden/scroll clipping. Use when the trigger is inside
    *  a scrollable or clipped container. */
   portal?: boolean;
+  /** Prevent the tooltip text from wrapping onto multiple lines. */
+  nowrap?: boolean;
   /** The element that triggers the tooltip on hover/focus. */
   children: ReactElement;
 }
@@ -41,6 +47,8 @@ export default function Tooltip({
   hideDelay = 100,
   maxWidth = '280px',
   portal = false,
+  nowrap = false,
+  align = 'center',
   children,
 }: TooltipProps) {
   const [visible, setVisible] = useState(false);
@@ -90,12 +98,82 @@ export default function Tooltip({
         } as React.CSSProperties)
       : undefined;
 
+  // ── Clamp to viewport (portal mode only) ──────────────────────────
+  const [clamped, setClamped] = useState<{ left: number; top: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!visible || !portal || !triggerRect || !tooltipRef.current) {
+      setClamped(null);
+      return;
+    }
+    const tip = tooltipRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const margin = 8;
+
+    const clampX = (x: number) => Math.max(margin, Math.min(x, vw - tip.width - margin));
+    const clampY = (y: number) => Math.max(margin, Math.min(y, vh - tip.height - margin));
+
+    let left: number;
+    let top: number;
+    if (position === 'right') {
+      // Bubble to the right of the trigger, vertically centered
+      left = clampX(triggerRect.right + 10);
+      top = clampY(triggerRect.top + triggerRect.height / 2 - tip.height / 2);
+    } else if (position === 'left') {
+      // Bubble to the left of the trigger, vertically centered
+      left = clampX(triggerRect.left - tip.width - 10);
+      top = clampY(triggerRect.top + triggerRect.height / 2 - tip.height / 2);
+    } else if (position === 'bottom') {
+      // Bubble below the trigger, horizontally aligned per `align`
+      if (align === 'right') {
+        left = clampX(triggerRect.right - tip.width);
+      } else if (align === 'left') {
+        left = clampX(triggerRect.left);
+      } else {
+        left = clampX(triggerRect.left + triggerRect.width / 2 - tip.width / 2);
+      }
+      top = clampY(triggerRect.bottom + 10);
+    } else {
+      // top: bubble above the trigger, horizontally aligned per `align`
+      if (align === 'right') {
+        left = clampX(triggerRect.right - tip.width);
+      } else if (align === 'left') {
+        left = clampX(triggerRect.left);
+      } else {
+        left = clampX(triggerRect.left + triggerRect.width / 2 - tip.width / 2);
+      }
+      top = clampY(triggerRect.top - tip.height - 10);
+    }
+
+    setClamped({ left, top });
+  }, [visible, portal, position, triggerRect]);
+
   const tooltipNode = (
     <div
       ref={tooltipRef}
       id={tooltipId}
-      className={`tooltip-content tooltip-content--${position}${visible ? ' tooltip-content--visible' : ''}${portal ? ' tooltip-content--portal' : ''}`}
-      style={portal ? portalStyle : (maxWidth ? { maxWidth } : undefined)}
+      className={`tooltip-content tooltip-content--${position}${visible ? ' tooltip-content--visible' : ''}${portal ? ' tooltip-content--portal' : ''}${nowrap ? ' tooltip-content--nowrap' : ''}${align !== 'center' ? ` tooltip-content--align-${align}` : ''}`}
+      style={
+        portal
+          ? clamped
+            ? {
+                left: `${clamped.left}px`,
+                top: `${clamped.top}px`,
+                // Clear the opposing CSS anchor so the fixed bubble is not
+                // stretched between two insets (top+bottom or left+right),
+                // which would give it the wrong height/width.
+                right: 'auto',
+                bottom: 'auto',
+                // Inline left/top are already the final centered position,
+                // so drop the CSS translateX/Y centering transform. This also
+                // removes the scale-pop transition, but opacity fade remains.
+                transform: 'none',
+                maxWidth,
+              }
+            : portalStyle
+          : maxWidth ? { maxWidth } : undefined
+      }
       role="tooltip"
       onMouseEnter={() => {
         clearTimeout(hideTimer.current);

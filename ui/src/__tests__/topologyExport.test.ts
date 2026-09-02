@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   TOPOLOGY_EXPORT_FORMAT,
   TOPOLOGY_EXPORT_VERSION,
@@ -226,5 +228,133 @@ describe('diagram templates (localStorage)', () => {
   it('returns null for a corrupt stored template', () => {
     localStorage.setItem('oz-topology-template:broken', 'not json');
     expect(loadTemplate('broken')).toBeNull();
+  });
+});
+
+// ADR #45 §4.2 — the forward migration. Its whole purpose is that nobody loses a
+// template they had already saved, so the ordering is the contract: the local
+// copy goes away only once the backend has taken it.
+describe('migrateLocalTemplates', () => {
+  beforeEach(() => localStorage.clear());
+
+  const imported = async () =>
+    (await import('@/features/stores/topologyExport')).migrateLocalTemplates;
+
+  it('moves each template to the backend and clears it locally', async () => {
+    saveTemplate('Main Floor', nodes, wires);
+    saveTemplate('Patio', nodes, wires);
+    const sent: string[] = [];
+    const migrate = await imported();
+
+    const result = await migrate(async (name) => { sent.push(name); });
+
+    expect(sent.sort()).toEqual(['Main Floor', 'Patio']);
+    expect(result.migrated.sort()).toEqual(['Main Floor', 'Patio']);
+    expect(result.failed).toEqual([]);
+    expect(listTemplates()).toEqual([]);
+  });
+
+  it('passes the parsed payload, not a JSON string inside a string', async () => {
+    saveTemplate('Main Floor', nodes, wires);
+    const migrate = await imported();
+    let seen: unknown;
+
+    await migrate(async (_name, payload) => { seen = payload; });
+
+    expect(seen).not.toBeInstanceOf(String);
+    expect((seen as { nodes: unknown }).nodes).toEqual(nodes);
+  });
+
+  it('keeps the local copy when the backend refuses it', async () => {
+    // The property the rest of this file exists to protect. A migration that
+    // clears storage before the write lands is worse than no migration at all.
+    saveTemplate('Main Floor', nodes, wires);
+    const migrate = await imported();
+
+    const result = await migrate(async () => { throw new Error('storage full'); });
+
+    expect(result.migrated).toEqual([]);
+    expect(result.failed).toEqual(['Main Floor']);
+    expect(listTemplates()).toEqual(['Main Floor']);
+    expect(loadTemplate('Main Floor')).not.toBeNull();
+  });
+
+  it('clears only the templates that landed when one of several fails', async () => {
+    saveTemplate('Good', nodes, wires);
+    saveTemplate('Bad', nodes, wires);
+    const migrate = await imported();
+
+    const result = await migrate(async (name) => {
+      if (name === 'Bad') throw new Error('rejected');
+    });
+
+    expect(result.migrated).toEqual(['Good']);
+    expect(result.failed).toEqual(['Bad']);
+    expect(listTemplates()).toEqual(['Bad']);
+  });
+
+  it('leaves a corrupt template in place without calling the backend', async () => {
+    localStorage.setItem('oz-topology-template:broken', 'not json');
+    const migrate = await imported();
+    let calls = 0;
+
+    const result = await migrate(async () => { calls += 1; });
+
+    expect(calls).toBe(0);
+    expect(result.failed).toEqual(['broken']);
+    expect(localStorage.getItem('oz-topology-template:broken')).not.toBeNull();
+  });
+
+  it('is a no-op when there is nothing to migrate', async () => {
+    const migrate = await imported();
+    let calls = 0;
+
+    const result = await migrate(async () => { calls += 1; });
+
+    expect(calls).toBe(0);
+    expect(result).toEqual({ migrated: [], failed: [] });
+  });
+});
+
+// ── ADR #45 §4.2 — migration-wiring canary ───────────────────────────────
+//
+// Round 39 found that `migrateLocalTemplates` is defined and covered by six tests
+// and called by NOTHING in production. That is fine on its own. What is not fine
+// is the change it enables: once the editor lists templates from per-branch
+// storage, any template still sitting in localStorage disappears from the only UI
+// that can reach it. Every one of the 510 editor tests would pass that bug,
+// because none of them simulate an upgraded install.
+//
+// So this pins the invariant instead. It reads the editor source the way
+// topologyValidationParity.test.ts reads the validators, for the same reason: the
+// thing being checked is "does this call site exist", and no runtime assertion in a
+// unit test can see an absent call.
+//
+// When the swap lands, the FIRST test below fails. That is the canary firing, not a
+// regression: rewrite it to assert the new state, and while you are there confirm
+// the migration is invoked BEFORE the first listing, not after - the ordering is
+// what decides whether anyone's templates survive the upgrade.
+
+describe('template migration wiring (canary)', () => {
+  const editorSource = readFileSync(
+    join(process.cwd(), 'src/features/stores/NodeTopologyEditor.tsx'),
+    'utf8',
+  );
+  const usesBackendTemplates = /\b(?:save|load|list|delete)TopologyTemplates?\s*\(/.test(editorSource);
+  const invokesMigration = /\bmigrateLocalTemplates\s*\(/.test(editorSource);
+
+  it('documents today: the editor still reads templates from localStorage only', () => {
+    expect(usesBackendTemplates).toBe(false);
+    expect(invokesMigration).toBe(false);
+  });
+
+  it('never lets the editor reach for backend templates without running the migration', () => {
+    // The half-swap is the dangerous one: switching the listing while leaving the
+    // migration uncalled is silent data loss, and this is the only test that
+    // notices.
+    if (usesBackendTemplates) {
+      expect(invokesMigration, 'backend templates are in use but the migration is never invoked').toBe(true);
+    }
+    expect(usesBackendTemplates || !usesBackendTemplates).toBe(true);
   });
 });

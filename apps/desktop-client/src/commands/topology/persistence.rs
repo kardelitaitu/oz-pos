@@ -99,6 +99,126 @@ pub(crate) fn topology_setting_key(branch_id: Option<&str>) -> Result<String, Ap
     Ok(format!("{TOPOLOGY_SETTING_KEY}/{branch_id}"))
 }
 
+/// Validate a merchant-supplied template name and return its stored form.
+///
+/// The name becomes a segment of the settings key, so it is checked the way
+/// [`topology_setting_key`] checks a branch id rather than the way a display
+/// label is checked: trimmed, non-empty, bounded in length, and free of
+/// separators that would let one template forge a key outside the template
+/// namespace. Whitespace inside a name is kept — "Weekend Setup" is a fine
+/// template name.
+pub(crate) fn normalize_template_name(raw: &str) -> Result<String, AppError> {
+    let name = raw.trim();
+    if name.is_empty() {
+        return Err(AppError::Invalid("template name is empty".into()));
+    }
+    if name.chars().count() > MAX_TEMPLATE_NAME_CHARS {
+        return Err(AppError::Invalid(format!(
+            "template name exceeds {MAX_TEMPLATE_NAME_CHARS} characters"
+        )));
+    }
+    if name
+        .chars()
+        .any(|ch| ch.is_control() || ch == '/' || ch == '\\')
+    {
+        return Err(AppError::Invalid(
+            "template name contains invalid characters".into(),
+        ));
+    }
+    Ok(name.to_owned())
+}
+
+/// Settings key for one template under one branch's topology key.
+pub(crate) fn template_setting_key(topology_key: &str, name: &str) -> String {
+    format!("{topology_key}/{TOPOLOGY_TEMPLATE_SEGMENT}/{name}")
+}
+
+/// Shared prefix of every template under one branch's topology key.
+pub(crate) fn template_key_prefix(topology_key: &str) -> String {
+    format!("{topology_key}/{TOPOLOGY_TEMPLATE_SEGMENT}/")
+}
+
+/// Save a diagram template. `payload` is the serialized canvas, opaque to the
+/// backend: a template is a starting point a merchant edits before Apply, so it
+/// deliberately does NOT run the diagram gates that `apply_topology_diff` runs.
+pub(crate) fn template_save(
+    conn: &Connection,
+    topology_key: &str,
+    raw_name: &str,
+    payload: &Value,
+) -> Result<(), AppError> {
+    let name = normalize_template_name(raw_name)?;
+    let key = template_setting_key(topology_key, &name);
+    let json = serde_json::to_string(payload)
+        .map_err(|e| AppError::Internal(format!("serialize topology template: {e}")))?;
+    oz_core::Settings::set(conn, &key, &json)?;
+    Ok(())
+}
+
+/// Load one diagram template, or `None` when it was never saved or has become
+/// unreadable. A corrupt template is reported as absent rather than as an error:
+/// the list is built from keys, so one bad row must not brick the whole panel.
+pub(crate) fn template_load(
+    conn: &Connection,
+    topology_key: &str,
+    raw_name: &str,
+) -> Result<Option<Value>, AppError> {
+    let name = normalize_template_name(raw_name)?;
+    let key = template_setting_key(topology_key, &name);
+    let Some(raw) = oz_core::Settings::get(conn, &key)? else {
+        return Ok(None);
+    };
+    Ok(serde_json::from_str(&raw).ok())
+}
+
+/// Names of a branch's templates, sorted for a stable list.
+///
+/// Scoped to a key prefix in SQL instead of `Settings::load_all`, which would
+/// deserialize every stored setting — including every branch's diagram envelope
+/// and runtime plan — merely to list a handful of names. The `LIKE` is only an
+/// index-friendly prefilter: `%` and `_` are legal in a branch id and would
+/// over-match, so each candidate is still checked with `starts_with`.
+pub(crate) fn template_list(
+    conn: &Connection,
+    topology_key: &str,
+) -> Result<Vec<String>, AppError> {
+    let prefix = template_key_prefix(topology_key);
+    let mut stmt = conn.prepare("SELECT key FROM settings WHERE key LIKE ?1 || '%'")?;
+    let names = stmt
+        .query_map(rusqlite::params![prefix], |row| row.get::<_, String>(0))?
+        .filter_map(|r| r.ok())
+        .filter_map(|key| {
+            key.strip_prefix(&prefix)
+                .filter(|name| !name.is_empty() && !name.contains('/'))
+                .map(str::to_owned)
+        })
+        .collect();
+    Ok(sort_template_names(names))
+}
+
+/// Delete one template. Returns `false` when it did not exist.
+pub(crate) fn template_delete(
+    conn: &Connection,
+    topology_key: &str,
+    raw_name: &str,
+) -> Result<bool, AppError> {
+    let name = normalize_template_name(raw_name)?;
+    let key = template_setting_key(topology_key, &name);
+    Ok(oz_core::Settings::remove(conn, &key)?)
+}
+
+/// Sort template names for the list. Case-insensitive with a case-sensitive
+/// tiebreak so "café", "Café" and "apple" land in the order a merchant reads
+/// them, deterministically, on every platform.
+pub(crate) fn sort_template_names(mut names: Vec<String>) -> Vec<String> {
+    names.sort_by(|a, b| {
+        a.to_lowercase()
+            .cmp(&b.to_lowercase())
+            .then_with(|| a.cmp(b))
+    });
+    names
+}
+
 /// Test convenience wrapper: save a topology envelope under an explicit key.
 #[cfg(test)]
 pub(crate) fn save_topology_json_at_key(
@@ -107,7 +227,7 @@ pub(crate) fn save_topology_json_at_key(
     wires: Vec<Value>,
     setting_key: &str,
 ) -> Result<u64, AppError> {
-    save_topology_json_at_key_with_revision(conn, nodes, wires, setting_key, &[], None, None)
+    save_topology_json_at_key_with_revision(conn, nodes, wires, setting_key, &[], None, None, None)
 }
 
 /// Save a versioned topology envelope under a settings key.
@@ -118,6 +238,11 @@ pub(crate) fn save_topology_json_at_key(
 /// committed first aborts this save with a `topology-revision-conflict`.
 /// When `request` is given, the request ledger is persisted and the Apply
 /// recovery journal is cleared in the same transaction.
+///
+/// `branch_registry` (ADR #7): when given, the canonical Branch Location
+/// profile may live in EITHER `conn` (global registry) or this connection
+/// (the session store's database, where the scoped profile family writes
+/// branch profiles). Pass `None` for single-registry callers and tests.
 pub(crate) fn save_topology_json_at_key_with_revision(
     conn: &Connection,
     nodes: Vec<Value>,
@@ -126,8 +251,12 @@ pub(crate) fn save_topology_json_at_key_with_revision(
     resolved_issue_keys: &[String],
     expected_revision: Option<u64>,
     request: Option<(&str, &str)>,
+    branch_registry: Option<&Connection>,
 ) -> Result<u64, AppError> {
-    validate_semantic_ownership(conn, &nodes, &wires)?;
+    match branch_registry {
+        Some(branch_db) => validate_semantic_ownership_in(&[conn, branch_db], &nodes, &wires)?,
+        None => validate_semantic_ownership(conn, &nodes, &wires)?,
+    }
     // The legacy typed structs validate geometry and known serialized node
     // kinds. `branch-location` is a semantic alias, so normalize only the
     // temporary validation copy; the raw command payload is persisted intact.
@@ -421,9 +550,33 @@ pub(crate) async fn compensate_workspace_diff(
     Ok(())
 }
 
-/// Verify the canonical Branch Location exists in the current global database.
+/// Verify the canonical Branch Location exists in the given registry
+/// database.
+///
+/// Single-registry form of [`validate_semantic_ownership_in`]; see it for
+/// the ownership contract and the ADR #7 rationale for multiple
+/// registries.
 pub(crate) fn validate_semantic_ownership(
     conn: &Connection,
+    nodes: &[Value],
+    wires: &[Value],
+) -> Result<(), AppError> {
+    validate_semantic_ownership_in(&[conn], nodes, wires)
+}
+
+/// Verify the canonical Branch Location exists in at least one of the
+/// given registry databases.
+///
+/// ADR #7: the scoped store-profile family (create/list/delete) writes
+/// branch profiles into the **session store's** database, while the global
+/// database only carries the seeded default profile. A branch created
+/// after bootstrap therefore never appears in the global registry, and a
+/// diagram referencing it must not be rejected with
+/// `unknown-branch-location`. Ownership passes when the profile id exists
+/// in ANY registry; the semantic-shape checks (missing/multiple branch
+/// locations) still run once, on the first registry.
+pub(crate) fn validate_semantic_ownership_in(
+    registries: &[&Connection],
     nodes: &[Value],
     wires: &[Value],
 ) -> Result<(), AppError> {
@@ -434,21 +587,23 @@ pub(crate) fn validate_semantic_ownership(
     let Some(profile_id) = semantic_branch_profile_id(nodes, wires) else {
         return Ok(());
     };
-    let exists: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM store_profiles WHERE id = ?1)",
-        rusqlite::params![profile_id],
-        |row| row.get(0),
-    )?;
-    if !exists {
-        return Err(topology_validation(
-            "unknown-branch-location",
-            None,
-            None,
-            None,
-            format!("Branch Location references unknown store_profile_id: {profile_id}"),
-        ));
+    for conn in registries {
+        let exists: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM store_profiles WHERE id = ?1)",
+            rusqlite::params![profile_id],
+            |row| row.get(0),
+        )?;
+        if exists {
+            return Ok(());
+        }
     }
-    Ok(())
+    Err(topology_validation(
+        "unknown-branch-location",
+        None,
+        None,
+        None,
+        format!("Branch Location references unknown store_profile_id: {profile_id}"),
+    ))
 }
 
 /// Pre-mutation validation gate for a topology Apply.
@@ -461,7 +616,7 @@ pub(crate) fn validate_semantic_ownership(
 /// diagram mutate workspace rows and then fail at save, forcing the
 /// compensation cycle to unwind a partial apply.
 pub(crate) fn validate_apply_gate(
-    conn: &Connection,
+    registries: &[&Connection],
     nodes: &[Value],
     wires: &[Value],
 ) -> Result<(), AppError> {
@@ -478,7 +633,7 @@ pub(crate) fn validate_apply_gate(
             "topology Apply requires canonical semantic node and wire fields",
         ));
     }
-    validate_semantic_ownership(conn, nodes, wires)?;
+    validate_semantic_ownership_in(registries, nodes, wires)?;
     validate_diagram_payloads(nodes, wires)
 }
 

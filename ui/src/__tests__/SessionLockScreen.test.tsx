@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { LocalizationProvider, ReactLocalization } from '@fluent/react';
 import type { ReactElement, ReactNode } from 'react';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import SessionLockScreen from '@/features/auth/SessionLockScreen';
 
 // vi.hoisted ensures the mock references exist before vitest hoists the
@@ -58,9 +59,15 @@ staff-login-connection-disconnected = Disconnected
 staff-login-connection-auth = Auth
 staff-login-connection-sync = Sync
 staff-login-clear = Clear
+statusbar-group-aria = Connection and version status
+statusbar-version-label = Version
+statusbar-checking-msg = { $name } · Checking…
+statusbar-offline-msg = { $name } · Offline
+statusbar-latency-msg = { $name } · { $ms }ms
+statusbar-version-latest-msg = Version up to date
+statusbar-version-update-msg = Update available
 session-lock-expired = Session expired. Please log in again.
 session-lock-invalid-pin = Invalid PIN
-session-lock-enter-pin = Enter PIN to unlock
 session-lock-pin-aria = PIN: { $length } of { $max } digits entered
 session-lock-pad-aria = PIN pad
 session-lock-lockout = Wait { $seconds }s.
@@ -73,7 +80,9 @@ function withProviders(children: ReactNode): ReactElement {
 
   return (
     <LocalizationProvider l10n={l10n}>
-      {children}
+      <ToastProvider>
+        {children}
+      </ToastProvider>
     </LocalizationProvider>
   );
 }
@@ -102,9 +111,9 @@ beforeEach(() => {
 // ── Rendering ───────────────────────────────────────────────────
 
 describe('SessionLockScreen rendering', () => {
-  it('renders the lock icon', () => {
+  it('renders the lock badge on the card corner', () => {
     renderScreen();
-    const lockIcon = document.querySelector('.session-lock-icon');
+    const lockIcon = document.querySelector('.session-lock-lock-badge');
     expect(lockIcon).toBeTruthy();
     expect(lockIcon?.querySelector('svg')).toBeTruthy();
   });
@@ -121,11 +130,6 @@ describe('SessionLockScreen rendering', () => {
     const dateEl = document.querySelector('.session-lock-date');
     expect(dateEl).toBeTruthy();
     expect(dateEl?.textContent).toBeTruthy();
-  });
-
-  it('shows "Enter PIN to unlock" message', () => {
-    renderScreen();
-    expect(screen.getByText('Enter PIN to unlock')).toBeInTheDocument();
   });
 
   it('renders 4 PIN dots (all unfilled)', () => {
@@ -156,10 +160,10 @@ describe('SessionLockScreen rendering', () => {
 
   it('shows auth and sync connection status indicators', () => {
     renderScreen();
-    const indicators = document.querySelectorAll('.connection-status');
+    const indicators = document.querySelectorAll('.statusbar-item');
     expect(indicators.length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText('Auth')).toBeInTheDocument();
-    expect(screen.getByText('Sync')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Auth' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sync' })).toBeInTheDocument();
   });
 });
 
@@ -427,7 +431,7 @@ describe('SessionLockScreen license status', () => {
     renderScreen();
 
     await waitFor(() => {
-      const offlineIndicator = document.querySelector('.status-indicator.offline');
+      const offlineIndicator = document.querySelector('.statusbar-tone--bad');
       expect(offlineIndicator).toBeTruthy();
     });
   });
@@ -440,35 +444,72 @@ describe('SessionLockScreen visual contract', () => {
     renderScreen();
     expect(document.querySelector('.session-lock-overlay')).toBeTruthy();
     expect(document.querySelector('.session-lock-backdrop')).toBeTruthy();
+    expect(document.querySelector('.session-lock-stage')).toBeTruthy();
     expect(document.querySelector('.session-lock-top-bar')).toBeTruthy();
     expect(document.querySelector('.session-lock-main-area')).toBeTruthy();
     expect(document.querySelector('.session-lock-bottom-bar')).toBeTruthy();
   });
 
-  it('places lock icon, time, and date in the top bar', () => {
+  it('places time and date in the viewport header, outside the card', () => {
     renderScreen();
-    const topBar = document.querySelector('.session-lock-top-bar');
-    expect(topBar?.querySelector('.session-lock-icon svg')).toBeTruthy();
-    expect(topBar?.querySelector('.session-lock-time')?.textContent).toBeTruthy();
-    expect(topBar?.querySelector('.session-lock-date')?.textContent).toBeTruthy();
+    const header = document.querySelector('.session-lock-header');
+    expect(header?.querySelector('.session-lock-time')?.textContent).toBeTruthy();
+    expect(header?.querySelector('.session-lock-date')?.textContent).toBeTruthy();
+    // Anything inside the card can reflow the keypad off its login-matching
+    // box, so the clock stays out of it — and out of the top band.
+    expect(document.querySelector('.session-lock-card .session-lock-header')).toBeNull();
+    expect(document.querySelector('.session-lock-top-bar .session-lock-time')).toBeNull();
   });
 
-  it('places hint, dots, and keypad in the main area', () => {
+  it('marks the lock badge decorative and pins it to the card corner', () => {
+    renderScreen();
+    const badge = document.querySelector('.session-lock-card > .session-lock-lock-badge');
+    expect(badge?.querySelector('svg')).toBeTruthy();
+    expect(badge?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('places the PIN dots in the top bar, mirroring the login PIN step', () => {
+    renderScreen();
+    expect(document.querySelectorAll('.session-lock-top-bar .session-lock-pin-dot')).toHaveLength(4);
+  });
+
+  it('keeps the keypad as the sole child of the main area', () => {
     renderScreen();
     const mainArea = document.querySelector('.session-lock-main-area');
-    expect(mainArea?.querySelector('.session-lock-sub')).toBeTruthy();
-    expect(mainArea?.querySelectorAll('.session-lock-pin-dot')).toHaveLength(4);
-    expect(mainArea?.querySelector('.session-lock-pad')).toBeTruthy();
+    expect(mainArea?.children).toHaveLength(1);
+    expect(mainArea?.firstElementChild?.id).toBe('session-lock-pin-pad');
+  });
+
+  it('keeps the bottom band content-free', () => {
+    renderScreen();
+    expect(document.querySelector('.session-lock-bottom-bar')?.childElementCount).toBe(0);
+  });
+
+  it('renders notices below the card so they cannot reflow the keypad', async () => {
+    mockStaffLogin.mockRejectedValueOnce({ message: 'Invalid PIN' });
+    const user = userEvent.setup();
+    renderScreen();
+
+    for (const digit of ['1', '2', '3', '4']) {
+      await user.click(screen.getByRole('button', { name: digit }));
+    }
+
+    await waitFor(() => {
+      expect(
+        document.querySelector('.session-lock-notice .session-lock-error')?.textContent,
+      ).toContain('Invalid PIN');
+    });
+    expect(document.querySelector('.session-lock-card .session-lock-error')).toBeNull();
   });
 
   it('moves the connection status pills into the login-style footer', () => {
     renderScreen();
     const footer = document.querySelector('.session-lock-footer');
     expect(footer).toBeTruthy();
-    expect(footer?.querySelector('.session-lock-footer-version')?.textContent).toContain('v0.0.33');
-    expect(footer?.querySelectorAll('.connection-status').length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText('Auth')).toBeInTheDocument();
-    expect(screen.getByText('Sync')).toBeInTheDocument();
+    expect(footer?.querySelector('.session-lock-footer-version')?.textContent).toContain('v0.0.34');
+    expect(footer?.querySelectorAll('.statusbar-item').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole('button', { name: 'Auth' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sync' })).toBeInTheDocument();
   });
 
   it('keeps the card token-backed with no inline styles', () => {

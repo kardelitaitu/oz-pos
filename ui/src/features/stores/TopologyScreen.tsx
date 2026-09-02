@@ -18,8 +18,7 @@ import { LocaleContext } from '@/i18n/LocaleContext';
 import { useContext } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
-import { checkLicenseStatus } from '@/api/license';
-import { plainErrorMessage } from '@/utils/app-error';
+import { plainErrorMessage, l10nErrorMessage } from '@/utils/app-error';
 import { openUpgradePricing } from '@/utils/upgrade';
 import SettingsSelect from '@/features/settings/SettingsSelect';
 import { Button } from '@/components/Button';
@@ -74,7 +73,6 @@ export default function TopologyScreen() {
     if (perms.includes('*')) return true;
     return perms.includes('staff:update');
   }, [session]);
-  const [licenseTier, setLicenseTier] = useState('free');
   /** Real workspace instances loaded from the backend, used to seed the editor. */
   const [workspaceInstances, setWorkspaceInstances] = useState<WorkspaceDto[]>([]);
   const [stores, setStores] = useState<StoreProfile[]>([]);
@@ -130,15 +128,13 @@ export default function TopologyScreen() {
   const instancesResolvedRef = useRef(false);
 
   const load = useCallback(async () => {
-    // License check is non-critical — a fresh install or offline environment
-    // may not have an activated license yet. Fail silently and default to
-    // 'free' tier (matching the backend's default when no subscription exists).
-    checkLicenseStatus()
-      .then((licStatus) => { setLicenseTier(licStatus.tier.toLowerCase()); })
-      .catch(() => { setLicenseTier('free'); });
+    // No tier fetch here. The header badge is derived from `caps` further down,
+    // which is the same source the backend quota gate reads — see `licenseTier`.
+
+    if (!sessionToken) return; // not ready yet — effect re-runs when it resolves
 
     try {
-      const storeData = await listStoresScoped(sessionToken!);
+      const storeData = await listStoresScoped(sessionToken);
       setStores(storeData);
       setStoresUnavailable(false);
       storesResolvedRef.current = true;
@@ -151,7 +147,7 @@ export default function TopologyScreen() {
         type: 'error',
       });
     }
-  }, [addToast, l10n]);
+  }, [addToast, l10n, sessionToken]);
 
   /** Fetch the workspace instances for the selected branch. Runs on mount
    *  AND whenever the branch selector changes: each branch owns its own
@@ -327,7 +323,17 @@ export default function TopologyScreen() {
 
   // C2.2: second-store gate (Plus→Pro trigger) — the tier's `max_stores()`
   // quota caps how many store profiles can exist.
-  const { caps } = useSubscription();
+  const { caps, refresh: refreshCaps } = useSubscription();
+  // The header tier is derived, not fetched. It used to call `checkLicenseStatus`,
+  // which is a network probe to the license server: with no activated license it
+  // rejects, and the `catch → 'free'` fallback then displayed FREE on a debug
+  // build whose quota gate upgrades Free to Premium (`commands/subscription.rs`),
+  // so the label contradicted the behaviour the same screen enforced. `caps`
+  // comes from `get_subscription_capabilities` — local, no network, and the
+  // owner of that debug override — so the badge now inherits the gate's answer
+  // instead of duplicating it. `null` before first load stays conservatively
+  // FREE rather than advertising a tier nothing has confirmed.
+  const licenseTier = caps?.tier?.toLowerCase() ?? 'free';
   const locale = useContext(LocaleContext)?.locale ?? 'en';
   const atStoreLimit =
     caps !== null && caps.maxStores !== null && caps.storeCount >= caps.maxStores;
@@ -336,15 +342,26 @@ export default function TopologyScreen() {
     const name = newBranchName.trim();
     if (!name) return;
     if (atStoreLimit) return; // the inline banner explains why
+    if (!sessionToken) {
+      // Session not minted yet (admin-shell fallback race) — fail honestly
+      // instead of sending a null token that yields the generic toast.
+      addToast({
+        message: `${l10n.getString('topology-branch-add-error')}: ${l10n.getString('topology-branch-session-pending')}`,
+        type: 'error',
+      });
+      return;
+    }
     try {
-      const created = await createStoreProfileScoped(sessionToken!, { id: `store-${crypto.randomUUID()}`, name });
+      const created = await createStoreProfileScoped(sessionToken, { id: `store-${crypto.randomUUID()}`, name });
       setStores((prev) => [...prev, created]);
       setSelectedBranchId(created.id);
       setAddingBranch(false);
       setNewBranchName('');
+      // Keep the C2.2 gate honest: storeCount in caps just changed.
+      refreshCaps();
     } catch (err) {
       addToast({
-        message: `${l10n.getString('topology-branch-add-error')}: ${plainErrorMessage(err)}`,
+        message: `${l10n.getString('topology-branch-add-error')}: ${l10nErrorMessage(err, l10n)}`,
         type: 'error',
       });
     }
@@ -358,10 +375,17 @@ export default function TopologyScreen() {
   const handleDeleteBranch = async () => {
     if (!deleteTargetId) return;
     const id = deleteTargetId;
+    if (!sessionToken) {
+      addToast({
+        message: `${l10n.getString('topology-branch-delete-error')}: ${l10n.getString('topology-branch-session-pending')}`,
+        type: 'error',
+      });
+      return;
+    }
     const remaining = stores.filter((s) => s.id !== id);
     setDeleteBranchSaving(true);
     try {
-      await deleteStoreProfileScoped(sessionToken!, id);
+      await deleteStoreProfileScoped(sessionToken, id);
       setStores(remaining);
       setSelectedBranchId(remaining[0]?.id ?? null);
       // No branches left: nothing owns the graph — clear the instances so
@@ -369,6 +393,8 @@ export default function TopologyScreen() {
       if (remaining.length === 0) setWorkspaceInstances([]);
       setDeleteTargetId(null);
       setDeletingBranch(false);
+      // Keep the C2.2 gate honest: storeCount in caps just changed.
+      refreshCaps();
     } catch (err) {
       addToast({
         message: `${l10n.getString('topology-branch-delete-error')}: ${plainErrorMessage(err)}`,
@@ -391,8 +417,15 @@ export default function TopologyScreen() {
     if (!store) return false;
     const trimmed = name.trim();
     if (!trimmed || trimmed === store.name) return false;
+    if (!sessionToken) {
+      addToast({
+        message: `${l10n.getString('topology-branch-rename-error')}: ${l10n.getString('topology-branch-session-pending')}`,
+        type: 'error',
+      });
+      return false;
+    }
     try {
-      const updated = await updateStoreProfileScoped(sessionToken!, {
+      const updated = await updateStoreProfileScoped(sessionToken, {
         id: store.id,
         name: trimmed,
         address: store.address,
@@ -409,7 +442,7 @@ export default function TopologyScreen() {
       });
       return false;
     }
-  }, [stores, canSaveTopology, addToast, l10n]);
+  }, [stores, canSaveTopology, sessionToken, addToast, l10n]);
 
   /** Persist a workspace instance rename (the live row, not just the canvas
    *  label) from the editor's card. Same contract as handleRenameBranch. */
@@ -539,8 +572,26 @@ export default function TopologyScreen() {
                 }}
                 options={stores.map((s) => ({ value: s.id, label: s.name }))}
                 ariaLabel={l10n.getString('topology-branch-selector-aria')}
-                placeholder={l10n.getString('topology-branch-selector-label')}
-                disabled={deletingBranch}
+                /* With branches present a branch is always auto-selected, so
+                   the placeholder never shows — it only surfaces when the
+                   list settles empty, where the bare "Branch" label read
+                   like a fake selected value sitting on an openable empty
+                   dropdown. A failed store fetch also renders [] and must
+                   not claim the branches don't exist ("No branches yet"
+                   would lie — the load-error toast already fired), and the
+                   pre-resolution window keeps the plain label so a slow IPC
+                   roundtrip doesn't flash the empty-state text. */
+                placeholder={
+                  storesUnavailable
+                    ? l10n.getString('topology-branch-selector-unavailable')
+                    : storesResolvedRef.current && stores.length === 0
+                      ? l10n.getString('topology-branch-selector-empty')
+                      : l10n.getString('topology-branch-selector-label')
+                }
+                /* Nothing to pick while the list is empty (or still loading)
+                   — disabling also keeps the empty dropdown popover closed;
+                   the adjacent Add Branch button is the real action. */
+                disabled={deletingBranch || stores.length === 0}
               />
             </div>
             {addingBranch && atStoreLimit && (

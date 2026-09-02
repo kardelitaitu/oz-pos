@@ -5,16 +5,15 @@ findings: clean — no unwrap/panic/unsafe in production paths; sibling tests pe
 next: none | perf: N/A
 */
 //! Debug-only bootstrap that auto-connects the desktop client to the
-//! local dev sync server.
+//! cloud sync server.
 //!
-//! `scripts/start-local-sync.bat` runs the cloud server in Docker on
-//! `http://localhost:3099`, but a fresh app DB ships with an empty
-//! `sync_server_url` and sync disabled — so the background sync daemon
-//! silently no-ops (`SyncConfig::from_settings` returns `None`) until the
-//! user manually configures Settings → Sync. This module closes that gap
-//! for local development: on debug builds, if no server URL is configured
-//! yet and the local server answers a health probe, we request a JWT and
-//! persist the connection so sync works out of the box.
+//! A fresh app DB ships with an empty `sync_server_url` and sync
+//! disabled — so the background sync daemon silently no-ops
+//! (`SyncConfig::from_settings` returns `None`) until the user manually
+//! configures Settings → Sync. This module closes that gap: on debug
+//! builds, if no server URL is configured yet and the server answers a
+//! health probe, we request a JWT and persist the connection so sync
+//! works out of the box.
 //!
 //! Release builds never run this code (the call site in `lib.rs` is
 //! `#[cfg(debug_assertions)]`-gated), so a production install's
@@ -35,8 +34,8 @@ use oz_core::sync_client;
 use rusqlite::Connection;
 use tokio::sync::Mutex;
 
-/// Default local dev sync server (`scripts/start-local-sync.bat`).
-const LOCAL_SYNC_URL: &str = "http://localhost:3099";
+/// Default cloud sync server — the unified auth+sync service at the custom domain.
+const LOCAL_SYNC_URL: &str = "https://license.ozpos.my.id";
 
 /// How many probe + token attempts before giving up. The docker backend
 /// can take a few seconds to answer on a cold start, so a bounded retry
@@ -175,7 +174,7 @@ async fn auto_provision_local_sync_with_url(db: Arc<Mutex<Connection>>, server_u
                 match persist_provisioned_sync(&mut conn, server_url, &key) {
                     Ok(()) => tracing::info!(
                         expires_at = token.expires_at.as_deref().unwrap_or("unknown"),
-                        "auto-provisioned local sync connection to {LOCAL_SYNC_URL}"
+                        "auto-provisioned sync connection to {LOCAL_SYNC_URL}"
                     ),
                     Err(e) => tracing::warn!("persisting auto-provisioned sync failed: {e}"),
                 }

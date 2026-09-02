@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { TopologyNodeData, TopologyWireData } from '@/features/stores/NodeTopologyEditor';
 import {
   TOPOLOGY_SCHEMA_VERSION,
@@ -9,6 +11,9 @@ import {
   normalizeTopologyGraph,
   normalizeWireDirection,
   validateTopologyGraph,
+  firstTopologyValidationError,
+  orderTopologyValidationErrors,
+  type TopologyValidationError,
 } from '@/features/stores/topologyContract';
 
 const branch = (id = 'branch-1'): TopologyNodeData => ({
@@ -1271,5 +1276,151 @@ describe('semantic topology contract', () => {
     expect(validateTopologyGraph(normalized, 'premium')).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: 'warehouse-missing-stock-routing' }),
     ]));
+  });
+});
+
+// ── ADR #45 §4.3 — validation ordering ─────────────────────────────
+
+const err = (code: string, nodeId?: string): TopologyValidationError => ({
+  code: code as TopologyValidationError['code'],
+  messageId: `topology-validation-${code}`,
+  ...(nodeId ? { nodeId } : {}),
+});
+const codes = (errors: TopologyValidationError[]): string[] => errors.map((e) => e.code);
+
+describe('orderTopologyValidationErrors', () => {
+  it('puts an unreadable graph ahead of everything else', () => {
+    const ordered = orderTopologyValidationErrors([
+      err('missing-location-input', 'ws-1'),
+      err('unsupported-schema-version'),
+      err('invalid-purpose', 'ws-1'),
+    ]);
+    expect(codes(ordered)[0]).toBe('unsupported-schema-version');
+  });
+
+  it('prefers a structurally impossible graph over a node with the wrong inputs', () => {
+    const ordered = orderTopologyValidationErrors([
+      err('missing-operation-input', 'kds-1'),
+      err('cycle-detected'),
+    ]);
+    expect(codes(ordered)).toEqual(['cycle-detected', 'missing-operation-input']);
+  });
+
+  it('prefers an illegal wire over a legal one that exceeds a capacity limit', () => {
+    const ordered = orderTopologyValidationErrors([
+      err('warehouse-at-capacity', 'wh-1'),
+      err('invalid-semantic-connection'),
+    ]);
+    expect(codes(ordered)).toEqual(['invalid-semantic-connection', 'warehouse-at-capacity']);
+  });
+
+  it('is stable within a tier, so insertion order is the tie-break', () => {
+    const ordered = orderTopologyValidationErrors([
+      err('missing-location-input', 'a'),
+      err('missing-location-input', 'b'),
+      err('missing-location-input', 'c'),
+    ]);
+    expect(ordered.map((e) => e.nodeId)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('sorts an unlisted code last without reordering the listed ones', () => {
+    // Guards the table: adding a code to the validator must not silently shuffle
+    // the priority of codes that are already ranked.
+    const ordered = orderTopologyValidationErrors([
+      err('some-future-code' as TopologyValidationError['code']),
+      err('missing-branch-location'),
+      err('cycle-detected'),
+    ]);
+    expect(codes(ordered)).toEqual(['missing-branch-location', 'cycle-detected', 'some-future-code']);
+  });
+
+  it('does not mutate the caller array', () => {
+    const input = [err('warehouse-tier-limit', 'wh-1'), err('duplicate-node')];
+    const before = codes(input);
+    orderTopologyValidationErrors(input);
+    expect(codes(input)).toEqual(before);
+  });
+
+  it('returns an empty result for no errors', () => {
+    expect(orderTopologyValidationErrors([])).toEqual([]);
+  });
+});
+
+describe('firstTopologyValidationError', () => {
+  it('reports the highest-priority failure, not the first pushed', () => {
+    // The behaviour this replaces was `errors[0]`, which depended on Set
+    // iteration and node insertion order — so the same graph could name a
+    // different "next step" after the merchant dragged a card.
+    const first = firstTopologyValidationError([
+      err('missing-location-input', 'ws-1'),
+      err('invalid-purpose', 'ws-2'),
+      err('duplicate-wire'),
+    ]);
+    expect(first?.code).toBe('duplicate-wire');
+  });
+
+  it('is independent of the order the errors arrived in', () => {
+    const a = [err('missing-operation-input'), err('cycle-detected')];
+    const b = [err('cycle-detected'), err('missing-operation-input')];
+    expect(firstTopologyValidationError(a)?.code).toBe(firstTopologyValidationError(b)?.code);
+    expect(firstTopologyValidationError(a)?.code).toBe('cycle-detected');
+  });
+
+  it('is undefined for a valid graph', () => {
+    expect(firstTopologyValidationError([])).toBeUndefined();
+  });
+});
+
+// ── ADR #45 §4.3 — the priority table must stay complete ───────────
+//
+// `orderTopologyValidationErrors` sorts an unlisted code last, stably. That is
+// the right behaviour for a code mid-addition, and it is also how a table goes
+// quietly stale: a 25th code could ship, land in the last tier, and nothing would
+// fail. So the completeness check reads the source rather than trusting a
+// hand-maintained list — the same technique topologyThemeParity.test.ts uses for
+// CSS tokens, and for the same reason: the thing being checked is a type, and a
+// type is not enumerable at runtime.
+
+describe('validation error priority table', () => {
+  const source = readFileSync(join(process.cwd(), 'src/features/stores/topologyContract.ts'), 'utf8');
+
+  const unionBlock = /export type TopologyValidationCode\s*=\s*([\s\S]*?);/.exec(source)?.[1]
+    ?? /code:\s*([\s\S]*?)\n\s*\}/.exec(source)?.[1]
+    ?? '';
+  const declaredCodes = [...unionBlock.matchAll(/'([a-z][a-z0-9-]*)'/g)]
+    .map((m) => m[1] ?? '')
+    .filter((c) => c.startsWith('invalid-') || c.startsWith('missing-') || c.startsWith('multiple-')
+      || c.startsWith('duplicate-') || c.startsWith('unknown-') || c.startsWith('cycle-')
+      || c.startsWith('warehouse-') || c.startsWith('branch-') || c.startsWith('ambiguous-')
+      || c.startsWith('unsupported-'));
+
+  const tierBlock = /const TOPOLOGY_ERROR_TIER[^=]*=\s*\{([\s\S]*?)\n\};/.exec(source)?.[1] ?? '';
+  const rankedCodes = [...tierBlock.matchAll(/^\s*'([a-z][a-z0-9-]*)':\s*\d+/gm)].map((m) => m[1] ?? '');
+
+  it('finds both lists, so the checks below cannot pass vacuously', () => {
+    // Without this, a regex that stops matching would make every assertion
+    // trivially true — the failure mode source-parsing tests are prone to.
+    expect(declaredCodes.length).toBeGreaterThan(20);
+    expect(rankedCodes.length).toBeGreaterThan(20);
+  });
+
+  it('ranks every declared validation code', () => {
+    const unranked = declaredCodes.filter((c) => !rankedCodes.includes(c));
+    expect(unranked, `codes with no tier: ${unranked.join(', ')}`).toEqual([]);
+  });
+
+  it('ranks no code that the validator cannot produce', () => {
+    // A typo in a tier key is worse than a missing one: it looks handled, sorts
+    // the real code last, and no test about that code's position would notice.
+    const phantom = rankedCodes.filter((c) => !declaredCodes.includes(c));
+    expect(phantom, `tier keys not in the code union: ${phantom.join(', ')}`).toEqual([]);
+  });
+
+  it('assigns each tier a contiguous number starting at 1', () => {
+    const tiers = [...new Set(rankedCodes.map((c) => {
+      const re = new RegExp(`'${c}':\\s*(\\d+)`);
+      return Number(re.exec(tierBlock)?.[1]);
+    }))].sort((a, b) => a - b);
+    expect(tiers).toEqual(tiers.map((_, i) => i + 1));
   });
 });

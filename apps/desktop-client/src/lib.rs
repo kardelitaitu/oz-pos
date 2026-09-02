@@ -215,27 +215,22 @@ pub fn run() {
                 let _ = main_window.show();
             }
 
-            // ── Auto-provision local sync (debug builds only) ────────
+            // ── Auto-provision cloud sync (debug builds only) ────────
             // A fresh dev DB ships with an empty `sync_server_url` and sync
             // disabled, so the background daemon silently no-ops until the
-            // user manually configures Settings → Sync. If the local dev
-            // server (`start-local-sync.bat` → :3099) is up, request a JWT
-            // and persist the connection. Spawned BEFORE the sync daemon
-            // so the daemon's first tick (60–120s out) sees the fresh
-            // config. Never runs in release builds — an existing
-            // configuration is never touched.
-            //
-            // TEMPORARILY DISABLED (2026-08-16): while testing against the
-            // deployed cloud server the app must NOT auto-connect to the
-            // local Docker dev server. Re-enable by uncommenting the block
-            // below (the sync_bootstrap module + tests are kept intact).
-            // #[cfg(debug_assertions)]
-            // {
-            //     let bootstrap_db = app.state::<AppState>().db.clone();
-            //     platform_startup::spawn_daemon("sync auto-provision", async move {
-            //         crate::sync_bootstrap::auto_provision_local_sync(bootstrap_db).await;
-            //     });
-            // }
+            // user manually configures Settings → Sync. If the cloud server
+            // (`https://license.ozpos.my.id`) is up, request a JWT and
+            // persist the connection. Spawned BEFORE the sync daemon so the
+            // daemon's first tick (60–120s out) sees the fresh config. Never
+            // runs in release builds — an existing configuration is never
+            // touched.
+            #[cfg(debug_assertions)]
+            {
+                let bootstrap_db = app.state::<AppState>().db.clone();
+                platform_startup::spawn_daemon("sync auto-provision", async move {
+                    crate::sync_bootstrap::auto_provision_local_sync(bootstrap_db).await;
+                });
+            }
 
             // ── Background sync daemon ────────────────────────────────
             let db = app.state::<AppState>().db.clone();
@@ -465,6 +460,7 @@ pub fn run() {
             commands::auth::verify_pin,
             commands::auth::refresh_picker_ticket,
             commands::branding::get_brand_settings_scoped,
+            commands::branding::get_brand_settings,
             commands::branding::pick_logo_file,
             commands::branding::pick_logo_file_scoped,
             commands::customers::list_customers_scoped,
@@ -731,6 +727,8 @@ pub fn run() {
             commands::tables::assign_table_order_scoped,
             commands::tables::release_table_scoped,
             commands::tables::list_sections_scoped,
+            commands::workspaces::list_workspaces,
+            commands::workspaces::list_workspace_screens,
             commands::workspaces::list_workspaces_scoped,
             commands::workspaces::list_workspaces_for_store_scoped,
             commands::workspaces::get_workspace_instance_scoped,
@@ -768,6 +766,12 @@ pub fn run() {
             commands::topology::load_topology,
             commands::topology::can_save_topology,
             commands::topology::apply_topology_diff,
+            // ADR #45 §4.2 — diagram templates, persisted per branch in the
+            // same settings namespace as the graph they seed.
+            commands::topology::save_topology_template,
+            commands::topology::load_topology_template,
+            commands::topology::list_topology_templates,
+            commands::topology::delete_topology_template,
             // ── Newly registered scoped variants (H-1/H-2 remediation) ──
             commands::branding::set_brand_primary_colour_scoped,
             commands::branding::set_brand_store_name_scoped,
@@ -838,6 +842,7 @@ pub fn run() {
             commands::sync::pending_sync_count_scoped,
             commands::sync::request_sync_token_scoped,
             commands::sync::get_sync_plan_scoped,
+            commands::sync::test_sync_connection,
             commands::sync::test_sync_connection_scoped,
             commands::sync::sync_run_scoped,
             commands::sync::sync_pull_scoped,

@@ -460,28 +460,28 @@ describe('WorkspaceContext', () => {
     });
   });
 
-  describe('fallback workspaces', () => {
-    it('uses fallback data when API returns empty list', async () => {
+  describe('registered-only workspaces', () => {
+    it('keeps an empty list when API returns empty (no demo fallback)', async () => {
       mocks.listWorkspaces.mockResolvedValue([]);
 
       const { result } = renderWorkspaceHook();
 
       await waitForLoaded(result);
 
-      expect(result.current.workspace.availableWorkspaces.length).toBeGreaterThan(0);
+      expect(result.current.workspace.availableWorkspaces).toEqual([]);
       expect(result.current.workspace.error).toBeNull();
     });
 
-    it('uses fallback data and sets error when API throws', async () => {
+    it('clears the list and sets error when API throws (no demo fallback)', async () => {
       mocks.listWorkspaces.mockRejectedValue(new Error('IPC unavailable'));
 
       const { result } = renderWorkspaceHook();
 
       await waitForLoaded(result);
 
-      expect(result.current.workspace.availableWorkspaces.length).toBeGreaterThan(0);
+      expect(result.current.workspace.availableWorkspaces).toEqual([]);
       expect(result.current.workspace.error).toBe(
-        'Failed to load workspaces from server. Using demo workspaces.',
+        'Failed to load workspaces from server.',
       );
     });
   });

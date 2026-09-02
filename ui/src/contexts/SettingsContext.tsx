@@ -55,33 +55,23 @@ export interface SettingsState {
   appVersion: string;
 }
 
-// TEMPORARILY DISABLED (2026-08-16): the local Docker dev sync endpoint
-// must not be pre-filled while testing against the deployed cloud server.
-// Re-enable by uncommenting the const + the fallback body in
-// `withSyncDefaults`.
-// export const DEFAULT_LOCAL_SYNC_SERVER_URL = 'http://localhost:3099';
+const DEFAULT_LOCAL_SYNC_SERVER_URL = 'https://license.ozpos.my.id';
 
 /**
- * Give an unconfigured settings page a usable local-sync draft.
+ * Give an unconfigured settings page a usable cloud-sync draft.
  *
  * A missing/blank URL means there is no target to connect to, regardless of
  * whether an old API key was retained. Keep configured URLs and explicit
- * enabled states untouched; this fallback only supplies the local defaults
- * for the unconfigured settings surface.
- *
- * TEMPORARILY DISABLED (2026-08-16): the local-Docker default is commented
- * out so an unconfigured sync stays unconfigured (no localhost pre-fill)
- * while testing against the deployed cloud server. Re-enable with the
- * `DEFAULT_LOCAL_SYNC_SERVER_URL` const above.
+ * enabled states untouched; this fallback only supplies the defaults for the
+ * unconfigured settings surface.
  */
 export function withSyncDefaults(sync: SyncSettingsDto): SyncSettingsDto {
   if (sync.serverUrl?.trim()) return sync;
-  // return {
-  //   ...sync,
-  //   serverUrl: DEFAULT_LOCAL_SYNC_SERVER_URL,
-  //   enabled: true,
-  // };
-  return sync;
+  return {
+    ...sync,
+    serverUrl: DEFAULT_LOCAL_SYNC_SERVER_URL,
+    enabled: true,
+  };
 }
 
 /** Default state used before the initial fetch completes. */
@@ -101,8 +91,7 @@ const DEFAULT_SETTINGS: SettingsState = {
   },
   store: { name: '', address: '', taxId: '', currency: 'IDR', branch: '' },
   sync: {
-    // TEMPORARILY DISABLED (2026-08-16): was DEFAULT_LOCAL_SYNC_SERVER_URL
-    serverUrl: null,
+    serverUrl: DEFAULT_LOCAL_SYNC_SERVER_URL,
     hasApiKey: false,
     enabled: false,
   },

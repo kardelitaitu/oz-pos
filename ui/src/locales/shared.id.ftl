@@ -58,6 +58,14 @@ statusbar-version = v0.0.34
 statusbar-sync-name = Sinkronisasi
 statusbar-gateway-name = Stripe
 statusbar-license = Lisensi Proprietary
+# Unified status area (activation screen): auth / sync / version icons
+statusbar-group-aria = Status koneksi dan versi
+statusbar-version-label = Versi
+statusbar-checking-msg = { $name } · Memeriksa…
+statusbar-offline-msg = { $name } · Luring
+statusbar-latency-msg = { $name } · { $ms }ms
+statusbar-version-latest-msg = Versi terbaru
+statusbar-version-update-msg = Pembaruan tersedia
 
 # POS Cart Line Items
 shared-loading = Memuat…

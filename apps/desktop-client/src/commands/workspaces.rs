@@ -9,6 +9,8 @@
 //! commands; legacy mutation and user-targeted assignment commands are not
 //! registered with Tauri.
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use serde::Serialize;
 use tauri::State;
 
@@ -21,6 +23,7 @@ use oz_core::permissions;
 use oz_core::subscription::TenantSubscription;
 
 use crate::commands::authz::require_permission_for_session;
+use crate::commands::picker_ticket;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -71,6 +74,115 @@ pub struct CreateInstanceRequest {
     pub description: Option<String>,
     /// Colour.
     pub colour: Option<String>,
+}
+
+// ── Pre-session Picker Commands (audit-open-findings residual) ────
+// The workspace picker (shown right after login, before a session token
+// exists) calls `list_workspaces` / `list_workspace_screens` with the
+// short-lived picker ticket minted by `staff_login`. These verify the
+// ticket and resolve the REAL user + role from the global identity DB —
+// caller-supplied `role_id` / `user_id` are never trusted.
+
+/// List workspace instances for the pre-session workspace picker.
+///
+/// The caller presents the picker ticket minted by `staff_login`; the REAL
+/// user is resolved from the global identity database and the REAL role is
+/// used for the listing. The requested store is opened through
+/// `StoreDatabaseManager` so this read cannot accidentally query the
+/// global identity database or another store's connection.
+#[tauri::command]
+pub async fn list_workspaces(
+    state: State<'_, AppState>,
+    ticket: String,
+    store_id: String,
+) -> Result<Vec<WorkspaceDto>, AppError> {
+    // 1. Verify the ticket — uniform denial for forged/expired/malformed.
+    let now_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let user_id = picker_ticket::verify_picker_ticket(&state.picker_ticket_secret, &ticket, now_ts)
+        .ok_or_else(|| AppError::PermissionDenied("invalid or expired picker session".into()))?;
+
+    // 2. Resolve the REAL user + role + assignment from the global identity
+    //    DB. The ticket binds the user; the role is derived from the DB,
+    //    never the claim. The assignment (ADR #35 D5 / spec 0048) is what
+    //    constrains a scoped user's picker below.
+    let (real_role_id, real_user_id, assignment) = {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        let user = store.get_user(&user_id)?.ok_or_else(|| {
+            AppError::PermissionDenied("picker session user no longer exists".into())
+        })?;
+        if !user.is_active {
+            return Err(AppError::PermissionDenied(
+                "picker session user is inactive".into(),
+            ));
+        }
+        let role = store
+            .get_role(&user.role_id)?
+            .ok_or_else(|| AppError::Internal(format!("role {} not found", user.role_id)))?;
+        let assignment = store.assignment_for_user(&user.id)?;
+        (role.id, user.id, assignment)
+    };
+
+    // 3. List instances in the requested store using the REAL role + user.
+    let conn = state
+        .db_manager
+        .open_store(&store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let rows = store.list_workspaces(&real_role_id, Some(&real_user_id), &store_id)?;
+    drop(db);
+
+    // 4. Scope-filter the listing through the user's assignment (ADR #35 D5
+    //    / spec 0048): global assignments and legacy users pass everything;
+    //    a scoped assignment keeps only in-scope store + workspace type.
+    Ok(match assignment {
+        Some(assignment) => rows
+            .into_iter()
+            .filter(|d| assignment.matches_scope(Some(&store_id), Some(&d.type_key)))
+            .collect(),
+        None => rows,
+    })
+}
+
+/// List screens (nav items) for a workspace type during boot/workspace
+/// selection. The store ID is explicit so the read is routed to the correct
+/// store database.
+#[tauri::command]
+pub async fn list_workspace_screens(
+    state: State<'_, AppState>,
+    ticket: String,
+    type_key: String,
+    store_id: String,
+) -> Result<Vec<WorkspaceScreenDto>, AppError> {
+    let now_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    picker_ticket::verify_picker_ticket(&state.picker_ticket_secret, &ticket, now_ts)
+        .ok_or_else(|| AppError::PermissionDenied("invalid or expired picker session".into()))?;
+    let conn = state
+        .db_manager
+        .open_store(&store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let rows = store.list_workspace_type_screens(&type_key)?;
+    drop(db);
+    Ok(rows
+        .into_iter()
+        .map(|r| WorkspaceScreenDto {
+            screen_key: r.screen_key,
+            sort_order: r.sort_order,
+        })
+        .collect())
 }
 
 // ── Scoped Commands (ADR #7) ────────────────────────────────────────

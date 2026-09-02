@@ -922,6 +922,7 @@ fn revision_aware_save_increments_and_rejects_stale_writer() {
         &[],
         Some(0),
         None,
+        None,
     )
     .unwrap();
     assert_eq!(first, 1);
@@ -932,6 +933,7 @@ fn revision_aware_save_increments_and_rejects_stale_writer() {
         TOPOLOGY_SETTING_KEY,
         &[],
         Some(0),
+        None,
         None,
     );
     assert!(
@@ -988,6 +990,7 @@ fn in_flight_peer_writer_is_not_silently_overwritten() {
             TOPOLOGY_SETTING_KEY,
             &[],
             Some(0),
+            None,
             None,
         )
     });
@@ -1508,7 +1511,10 @@ fn request_ledger_key_rejects_path_injection() {
 #[test]
 fn shared_topology_contract_matches_backend_warehouse_roles() {
     let contract = shared_topology_semantics();
-    assert_eq!(contract["schemaVersion"], TOPOLOGY_SCHEMA_VERSION);
+    // The CONTRACT version, not the envelope version. ADR #45 §1 raised the
+    // semantics contract to 2 by giving every pairing row explicit `endpoints`;
+    // the saved-diagram envelope is unchanged and stays at 1.
+    assert_eq!(contract["schemaVersion"], TOPOLOGY_CONTRACT_SCHEMA_VERSION);
     assert!(is_warehouse_primary_input_port(Some("location-in")));
     assert!(is_warehouse_primary_input_port(Some("operation-in")));
     assert!(is_warehouse_operational_input_port(Some("stock-in")));
@@ -1520,6 +1526,40 @@ fn shared_topology_contract_matches_backend_warehouse_roles() {
         Some("transfer-in"),
         Some("inventory-transfer"),
     ));
+}
+
+#[test]
+fn contract_and_envelope_versions_are_independent_axes() {
+    // The trap this pins: `TOPOLOGY_SCHEMA_VERSION` is enforced on READ by
+    // `validate_topology_envelope`, which rejects any stored diagram whose
+    // `schema_version` is not exactly it. Someone "fixing" a version mismatch by
+    // raising the envelope constant would silently make every merchant's saved
+    // graph unreadable — a data-availability event dressed up as a bump.
+    assert_eq!(TOPOLOGY_SCHEMA_VERSION, 1);
+    assert_eq!(TOPOLOGY_CONTRACT_SCHEMA_VERSION, 2);
+    assert_ne!(TOPOLOGY_SCHEMA_VERSION, TOPOLOGY_CONTRACT_SCHEMA_VERSION);
+
+    // And the envelope validator still accepts the version real diagrams carry.
+    let stored = serde_json::json!({
+        "schema_version": TOPOLOGY_SCHEMA_VERSION,
+        "nodes": [],
+        "wires": [],
+    });
+    assert!(
+        validate_topology_envelope(&stored).is_ok(),
+        "a diagram saved under the current envelope version must stay readable"
+    );
+
+    let future = serde_json::json!({
+        "schema_version": TOPOLOGY_CONTRACT_SCHEMA_VERSION,
+        "nodes": [],
+        "wires": [],
+    });
+    let err = validate_topology_envelope(&future).unwrap_err();
+    assert!(
+        format!("{err}").contains("unsupported topology schema version"),
+        "the envelope validator must still reject a version it does not know"
+    );
 }
 
 #[test]

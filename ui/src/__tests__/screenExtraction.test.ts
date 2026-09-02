@@ -131,6 +131,18 @@ const SCREENS: ScreenEntry[] = [
     css: ['auth/StaffLoginScreen.css'],
     dynamicClassPrefixes: ['staff-login-logo', 'staff-login-card'],
     knownDynamicFragments: ['skeleton'],
+    // These classes are defined in StaffLoginScreen.css but are used by the
+    // StatusBar component (imported and rendered inside StaffLoginScreen).
+    externalClasses: [
+      'staff-login-connection-group',
+      'connection-status',
+      'status-indicator',
+      'checking',
+      'online',
+      'offline',
+      'connection-label',
+      'connection-latency',
+    ],
   },
 
   // ── Audit ─────────────────────────────────────────────

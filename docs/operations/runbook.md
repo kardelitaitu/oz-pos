@@ -397,7 +397,7 @@ docker volume prune
 | Setting | Value |
 |---------|-------|
 | Service name | `oz-cloud` |
-| Public URL | `https://oz--cloud--76cyv4d6bn54.code.run` |
+| Public URL | `https://license.ozpos.my.id` |
 | Dockerfile | `Dockerfile.unified` (repo root) |
 | Port | `80` (caddy; routes to :8080 PocketBase / :3099 Rust) |
 | Volume | single volume at `/data` (Northflank free tier = 1 volume) |
@@ -461,7 +461,7 @@ longer exists — migrating that data requires a PocketBase backup → restore
 ### Verification checklist (post-deploy)
 
 ```bash
-BASE="https://oz--cloud--76cyv4d6bn54.code.run"
+BASE="https://license.ozpos.my.id"
 curl -s "$BASE/health"                                  # sync pill → 200 ok
 curl -s "$BASE/api/health"                              # auth pill → 200
 curl -s -X POST "$BASE/api/v1/license/activate" \
@@ -487,7 +487,7 @@ All point at the unified host; each also has an env-var override:
 | `ui/src/features/auth/__tests__/LicenseActivationScreen.test.tsx` | pinned URL | — |
 
 The **sync server URL** is per-install user config: Settings → Cloud Sync
-→ enter `https://oz--cloud--76cyv4d6bn54.code.run`. Unlike auth, it is
+→ enter `https://license.ozpos.my.id`. Unlike auth, it is
 stored in the local DB (never compiled in).
 
 ### 8.5 Automated deploys (deploy.yml)
