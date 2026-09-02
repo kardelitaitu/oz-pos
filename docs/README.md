@@ -28,6 +28,7 @@
 - [PCI-DSS Checklist](./security/PCI-DSS_CHECKLIST.md) — compliance status
 - [Security Audit Completion](./security/security-audit-completion.md) — final report
 - [Architecture](./guides/ARCHITECTURE.md) — system overview
+- [Extending OZ-POS](./guides/EXTENDING.md) — scripting & integration surfaces (REST API, Lua plugins, CLI)
 - [Quickstart](./guides/QUICKSTART.md) — getting started
 
 ## Conventions
