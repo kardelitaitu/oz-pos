@@ -55,6 +55,7 @@ const GeneralSection = lazy(() => import('./sections/GeneralSection'));
 const AppearanceSection = lazy(() => import('./sections/AppearanceSection'));
 const ReceiptSection = lazy(() => import('./sections/ReceiptSection'));
 const SyncSection = lazy(() => import('./sections/SyncSection'));
+const LocalApiSection = lazy(() => import('./sections/LocalApiSection'));
 const AboutSection = lazy(() => import('./sections/AboutSection'));
 import { useContextMenu, ContextMenu } from '@/frontend/shared';
 import SettingsNavTree, {
@@ -778,6 +779,9 @@ function SettingsPageContent() {
             addToast={addToast}
           />
         );
+
+      case 'local-api':
+        return <LocalApiSection />;
 
       case 'email':
         return <EmailReportSettings />;
