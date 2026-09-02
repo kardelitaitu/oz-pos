@@ -91,6 +91,7 @@ fn semantic_save_persists_and_clears_resolved_issue_keys() {
         std::slice::from_ref(&issue),
         None,
         None,
+        None,
     )
     .unwrap();
     let raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
@@ -105,6 +106,7 @@ fn semantic_save_persists_and_clears_resolved_issue_keys() {
         wires,
         TOPOLOGY_SETTING_KEY,
         &[],
+        None,
         None,
         None,
     )
@@ -783,7 +785,7 @@ fn apply_gate_rejects_duplicate_node_ids_before_mutation() {
         semantic_node("ws-1", "workspace", None),
     ];
     let wires = vec![semantic_location_wire("wire-1", "ws-1")];
-    let result = validate_apply_gate(&conn, &nodes, &wires);
+    let result = validate_apply_gate(&[&conn], &nodes, &wires);
     assert!(result.is_err(), "gate must reject duplicate node ids");
     let err = result.unwrap_err().to_string();
     // Layer-agnostic on purpose. This used to match only the Apply gate's own
@@ -841,6 +843,101 @@ fn semantic_validate_reports_multiple_branches_when_graph_has_two() {
             panic!("expected TopologyValidation(multiple-branch-locations), got {other:?}")
         }
     }
+}
+
+#[test]
+fn semantic_ownership_accepts_branch_profile_in_second_registry() {
+    // ADR #7 regression: branch profiles created through the scoped
+    // store-profile family are written into the SESSION's store database
+    // (store-<id>.sqlite); the global database only carries the seeded
+    // default profile. The Apply gate used to run the ownership check
+    // against the global connection alone, so every freshly created
+    // branch was rejected with `unknown-branch-location` forever.
+    // Ownership must pass when the profile exists in ANY registry.
+    let global = fresh_conn();
+    let store_db = fresh_conn();
+    let nodes = vec![
+        semantic_node("branch", "branch-location", Some("branch-1")),
+        semantic_node("ws-1", "workspace", None),
+    ];
+    let wires = vec![semantic_location_wire("wire-1", "ws-1")];
+
+    // Sanity: neither registry knows the profile yet, so the
+    // single-registry check on the global connection rejects.
+    assert!(matches!(
+        validate_semantic_ownership(&global, &nodes, &wires),
+        Err(AppError::TopologyValidation { code, .. }) if code == "unknown-branch-location"
+    ));
+
+    // The scoped create command wrote the profile into the store database.
+    store_db
+        .execute(
+            "INSERT INTO store_profiles (id, name) VALUES ('branch-1', 'Branch One')",
+            [],
+        )
+        .unwrap();
+    validate_semantic_ownership_in(&[&global, &store_db], &nodes, &wires).unwrap();
+}
+
+#[test]
+fn apply_gate_and_save_accept_branch_profile_from_store_registry() {
+    // The production Apply path runs the gate and the revision-guarded
+    // save with [global, session store] registries. A branch profile that
+    // only exists in the session store database must pass both.
+    let global = fresh_conn();
+    let store_db = fresh_conn();
+    store_db
+        .execute(
+            "INSERT INTO store_profiles (id, name) VALUES ('branch-1', 'Branch One')",
+            [],
+        )
+        .unwrap();
+    let nodes = vec![
+        semantic_node("branch", "branch-location", Some("branch-1")),
+        semantic_node("ws-1", "workspace", None),
+    ];
+    let wires = vec![semantic_location_wire("wire-1", "ws-1")];
+
+    validate_apply_gate(&[&global, &store_db], &nodes, &wires).unwrap();
+    let revision = save_topology_json_at_key_with_revision(
+        &global,
+        nodes,
+        wires,
+        TOPOLOGY_SETTING_KEY,
+        &[],
+        None,
+        None,
+        Some(&store_db),
+    )
+    .unwrap();
+    assert_eq!(revision, 1);
+}
+
+#[test]
+fn save_with_registry_still_rejects_unknown_branch() {
+    // The dual-registry acceptance must not become a blanket bypass: a
+    // profile id present in NEITHER registry is still rejected.
+    let global = fresh_conn();
+    let store_db = fresh_conn();
+    let nodes = vec![
+        semantic_node("branch", "branch-location", Some("ghost-branch")),
+        semantic_node("ws-1", "workspace", None),
+    ];
+    let wires = vec![semantic_location_wire("wire-1", "ws-1")];
+    let result = save_topology_json_at_key_with_revision(
+        &global,
+        nodes,
+        wires,
+        TOPOLOGY_SETTING_KEY,
+        &[],
+        None,
+        None,
+        Some(&store_db),
+    );
+    assert!(matches!(
+        result,
+        Err(AppError::TopologyValidation { code, .. }) if code == "unknown-branch-location"
+    ));
 }
 
 #[test]

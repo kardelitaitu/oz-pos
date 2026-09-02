@@ -389,11 +389,26 @@ pub async fn apply_topology_diff(
         }
     }
 
-    // Reject malformed graphs before any workspace mutation. Legacy
-    // geometric payloads remain accepted during the migration window.
+    // Reject malformed graphs before any workspace mutation. The gate
+    // requires canonical semantic node and wire fields, semantic ownership,
+    // and structural validity.
+    //
+    // Ownership registries: branch profiles created through the scoped
+    // commands land in the SESSION's store database (store-<id>.sqlite),
+    // while the global database only carries the seeded default profile.
+    // The gate therefore accepts a canonical branch profile from either
+    // registry — validating the global one alone rejected every freshly
+    // created branch with `unknown-branch-location` forever.
     {
         let global_db = state.db.lock().await;
-        validate_apply_gate(&global_db, &diagram_nodes, &diagram_wires)?;
+        let branch_conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db for topology gate: {e}")))?;
+        let branch_db = branch_conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        validate_apply_gate(&[&global_db, &branch_db], &diagram_nodes, &diagram_wires)?;
     }
 
     // Capture lengths before the workspace block consumes the vectors
@@ -746,15 +761,33 @@ pub async fn apply_topology_diff(
         "topology Apply: workspace CRUD committed, saving diagram"
     );
     let global_db = state.db.lock().await;
-    if let Err(save_error) = save_topology_json_at_key_with_revision(
-        &global_db,
-        diagram_nodes,
-        diagram_wires,
-        &topology_key,
-        &resolved_issue_keys,
-        Some(base_revision),
-        Some((&request_key, &request_fingerprint)),
-    ) {
+    // Same ownership registries as the pre-mutation gate: the session's
+    // store database may be the only one holding the branch profile row.
+    // The store guards live only inside this block — a MutexGuard over a
+    // rusqlite Connection is !Send, so it must not be held across the
+    // error-path awaits below (lexical scope, not explicit drop, is what
+    // the async generator liveness analysis respects here).
+    let save_result = {
+        let branch_conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db for topology save: {e}")))?;
+        let branch_db = branch_conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        save_topology_json_at_key_with_revision(
+            &global_db,
+            diagram_nodes,
+            diagram_wires,
+            &topology_key,
+            &resolved_issue_keys,
+            Some(base_revision),
+            Some((&request_key, &request_fingerprint)),
+            Some(&branch_db),
+        )
+        // branch_db and branch_conn drop here with the block.
+    };
+    if let Err(save_error) = save_result {
         drop(global_db);
         // The durable recovery journal was written before the workspace
         // transaction. Keep it until both databases have been compensated.

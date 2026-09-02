@@ -922,6 +922,7 @@ fn revision_aware_save_increments_and_rejects_stale_writer() {
         &[],
         Some(0),
         None,
+        None,
     )
     .unwrap();
     assert_eq!(first, 1);
@@ -932,6 +933,7 @@ fn revision_aware_save_increments_and_rejects_stale_writer() {
         TOPOLOGY_SETTING_KEY,
         &[],
         Some(0),
+        None,
         None,
     );
     assert!(
@@ -988,6 +990,7 @@ fn in_flight_peer_writer_is_not_silently_overwritten() {
             TOPOLOGY_SETTING_KEY,
             &[],
             Some(0),
+            None,
             None,
         )
     });

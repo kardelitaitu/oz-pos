@@ -227,7 +227,7 @@ pub(crate) fn save_topology_json_at_key(
     wires: Vec<Value>,
     setting_key: &str,
 ) -> Result<u64, AppError> {
-    save_topology_json_at_key_with_revision(conn, nodes, wires, setting_key, &[], None, None)
+    save_topology_json_at_key_with_revision(conn, nodes, wires, setting_key, &[], None, None, None)
 }
 
 /// Save a versioned topology envelope under a settings key.
@@ -238,6 +238,11 @@ pub(crate) fn save_topology_json_at_key(
 /// committed first aborts this save with a `topology-revision-conflict`.
 /// When `request` is given, the request ledger is persisted and the Apply
 /// recovery journal is cleared in the same transaction.
+///
+/// `branch_registry` (ADR #7): when given, the canonical Branch Location
+/// profile may live in EITHER `conn` (global registry) or this connection
+/// (the session store's database, where the scoped profile family writes
+/// branch profiles). Pass `None` for single-registry callers and tests.
 pub(crate) fn save_topology_json_at_key_with_revision(
     conn: &Connection,
     nodes: Vec<Value>,
@@ -246,8 +251,12 @@ pub(crate) fn save_topology_json_at_key_with_revision(
     resolved_issue_keys: &[String],
     expected_revision: Option<u64>,
     request: Option<(&str, &str)>,
+    branch_registry: Option<&Connection>,
 ) -> Result<u64, AppError> {
-    validate_semantic_ownership(conn, &nodes, &wires)?;
+    match branch_registry {
+        Some(branch_db) => validate_semantic_ownership_in(&[conn, branch_db], &nodes, &wires)?,
+        None => validate_semantic_ownership(conn, &nodes, &wires)?,
+    }
     // The legacy typed structs validate geometry and known serialized node
     // kinds. `branch-location` is a semantic alias, so normalize only the
     // temporary validation copy; the raw command payload is persisted intact.
@@ -541,9 +550,33 @@ pub(crate) async fn compensate_workspace_diff(
     Ok(())
 }
 
-/// Verify the canonical Branch Location exists in the current global database.
+/// Verify the canonical Branch Location exists in the given registry
+/// database.
+///
+/// Single-registry form of [`validate_semantic_ownership_in`]; see it for
+/// the ownership contract and the ADR #7 rationale for multiple
+/// registries.
 pub(crate) fn validate_semantic_ownership(
     conn: &Connection,
+    nodes: &[Value],
+    wires: &[Value],
+) -> Result<(), AppError> {
+    validate_semantic_ownership_in(&[conn], nodes, wires)
+}
+
+/// Verify the canonical Branch Location exists in at least one of the
+/// given registry databases.
+///
+/// ADR #7: the scoped store-profile family (create/list/delete) writes
+/// branch profiles into the **session store's** database, while the global
+/// database only carries the seeded default profile. A branch created
+/// after bootstrap therefore never appears in the global registry, and a
+/// diagram referencing it must not be rejected with
+/// `unknown-branch-location`. Ownership passes when the profile id exists
+/// in ANY registry; the semantic-shape checks (missing/multiple branch
+/// locations) still run once, on the first registry.
+pub(crate) fn validate_semantic_ownership_in(
+    registries: &[&Connection],
     nodes: &[Value],
     wires: &[Value],
 ) -> Result<(), AppError> {
@@ -554,21 +587,23 @@ pub(crate) fn validate_semantic_ownership(
     let Some(profile_id) = semantic_branch_profile_id(nodes, wires) else {
         return Ok(());
     };
-    let exists: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM store_profiles WHERE id = ?1)",
-        rusqlite::params![profile_id],
-        |row| row.get(0),
-    )?;
-    if !exists {
-        return Err(topology_validation(
-            "unknown-branch-location",
-            None,
-            None,
-            None,
-            format!("Branch Location references unknown store_profile_id: {profile_id}"),
-        ));
+    for conn in registries {
+        let exists: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM store_profiles WHERE id = ?1)",
+            rusqlite::params![profile_id],
+            |row| row.get(0),
+        )?;
+        if exists {
+            return Ok(());
+        }
     }
-    Ok(())
+    Err(topology_validation(
+        "unknown-branch-location",
+        None,
+        None,
+        None,
+        format!("Branch Location references unknown store_profile_id: {profile_id}"),
+    ))
 }
 
 /// Pre-mutation validation gate for a topology Apply.
@@ -581,7 +616,7 @@ pub(crate) fn validate_semantic_ownership(
 /// diagram mutate workspace rows and then fail at save, forcing the
 /// compensation cycle to unwind a partial apply.
 pub(crate) fn validate_apply_gate(
-    conn: &Connection,
+    registries: &[&Connection],
     nodes: &[Value],
     wires: &[Value],
 ) -> Result<(), AppError> {
@@ -598,7 +633,7 @@ pub(crate) fn validate_apply_gate(
             "topology Apply requires canonical semantic node and wire fields",
         ));
     }
-    validate_semantic_ownership(conn, nodes, wires)?;
+    validate_semantic_ownership_in(registries, nodes, wires)?;
     validate_diagram_payloads(nodes, wires)
 }
 
