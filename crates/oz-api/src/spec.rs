@@ -86,8 +86,12 @@ pub fn local_spec(port: u16) -> Value {
         "REST API served by the OZ-POS desktop app on this machine only \
          (127.0.0.1). Enable it in Settings → Local API. Tokens are minted \
          in that panel; every operation here is `x-oz-scope: \"both\"` — \
-         cloud-only endpoints (sync, webhooks, docs UI) are absent. See \
-         docs/guides/EXTENDING.md in the source tree for scripting recipes.\n\n\
+         cloud-only endpoints (sync, webhooks, docs UI) are absent. This \
+         server reads and writes the PRIMARY STORE's database — the same \
+         data the register UI shows; note `POST /api/v1/users` therefore \
+         does not create register login accounts (identity lives outside \
+         this server). See docs/guides/EXTENDING.md in the source tree \
+         for scripting recipes.\n\n\
          ## Authentication\nJWT bearer from the Settings panel: \
          `Authorization: Bearer <token>`. Master-data writes additionally \
          require `X-Admin-Key` (the per-install secret — see the guide §2.2)."
