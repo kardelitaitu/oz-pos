@@ -133,12 +133,14 @@ fi
 # cheap-fail-fast guard. Skipped silently when no eligible file is
 # staged (e.g. a commit touching only Rust code or .ftl locale files).
 #
-# Scope covers the rev-2 surfaces (--include-getstring
-# --include-nav-keys) and every ui/src directory that renders copy
-# (--scan-dirs), not just features/. Before this change the hook
-# printed "path outside ui/src/features, skipping" for every shared
-# chrome and context file it was handed, so `ContextMenu.tsx` could
-# ship an unresolvable key with the gate reporting success.
+# Scope covers eight surfaces (rev-2 getString/nav-keys, rev-3 key-fields
+# and dynamic ternary literals, rev-4 id-map values) and every ui/src
+# directory that renders copy (--scan-dirs), not just features/. Before the
+# Fluent page audit the hook walked only literal <Localized id> under
+# ui/src/features/**, and printed "path outside ui/src/features, skipping"
+# for every shared chrome and context file it was handed, so
+# `ContextMenu.tsx` could ship an unresolvable key with the gate reporting
+# success.
 #
 # Reads .tsx/.ts from `git diff --cached --diff-filter=ACM` (added /
 # copied / modified) and feeds them as positional args to the
