@@ -45,8 +45,8 @@
 | UI lint | `ui-lint` | Required | `check.sh` (ui lint), `check:all` (eslint) |
 | UI typecheck | `ui-typecheck` | Required | `check.sh` (ui typecheck), `check:all` (type check) |
 | UI unit tests | `ui-test` | Required | `check.sh` (ui test), `check:all` (unit tests) |
-| i18n lint | `ui-test` | Required | `check.sh` (i18n lint), `check:all` (i18n lint) |
-| FTL dedupe | — | Required | `check.sh` (ftl dedupe), `check:all` (ftl dedupe) |
+| i18n lint | `i18n` | Required | `check.sh` (i18n lint), `check:all` (i18n lint) |
+| FTL dedupe | `i18n` | Required | `check.sh` (ftl dedupe), `check:all` (ftl dedupe) |
 | Rust fmt | `rust-fmt` | Required | `check.sh` (cargo fmt) |
 | Clippy | `rust-clippy` | Required | `check.sh` (clippy) |
 | Rust tests | `rust-test-fast` | Required | `check.sh` (test workspace, test doctests) |

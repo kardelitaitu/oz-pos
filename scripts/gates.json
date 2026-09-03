@@ -28,13 +28,14 @@
       "label": "i18n lint",
       "status": "required",
       "runners": { "check.sh": ["i18n lint"], "check:all": ["i18n lint"] },
-      "ci": { "workflow": "ci.yml", "job": "ui-test" }
+      "ci": { "workflow": "dev-ci.yml", "job": "i18n" }
     },
     {
       "id": "ftl-dedupe",
       "label": "FTL dedupe",
       "status": "required",
-      "runners": { "check.sh": ["ftl dedupe"], "check:all": ["ftl dedupe"] }
+      "runners": { "check.sh": ["ftl dedupe"], "check:all": ["ftl dedupe"] },
+      "ci": { "workflow": "dev-ci.yml", "job": "i18n" }
     },
     {
       "id": "rust-fmt",
