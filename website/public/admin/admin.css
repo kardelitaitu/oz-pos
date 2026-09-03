@@ -518,11 +518,18 @@ select.input {
 /* ── Hero — the ONE brand-colored highlight card per view ──────────
    Spec "Highlight" card: primary fill, white text, shadow-md, r-lg.
    One per screen; revenue is the hero of a revenue dashboard.        */
+/* ── Hero card — revenue highlight, quiet surface + blue accent ──
+   Redesign (hero v2): the full-width solid blue block read as a wall
+   of colour; the hero is now a neutral card like the stats, with its
+   emphasis carried by a 4px solid primary top-border and a primary-
+   colored value. One accent line + blue number instead of full blue.  */
 .hero-card {
-  background: var(--primary);
-  color: var(--text-on-color);
+  background: var(--bg-surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--primary);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
   padding: 1.5rem;
 }
 .hero-label {
@@ -530,7 +537,7 @@ select.input {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .08em;
-  opacity: .7;
+  color: var(--text-muted);
   margin-bottom: .5rem;
 }
 .hero-label-row {
@@ -541,8 +548,8 @@ select.input {
 }
 .hero-label-row .hero-label { margin-bottom: 0; }
 .hero-refresh {
-  background: rgba(255, 255, 255, .15);
-  color: inherit;
+  background: var(--ghost-bg);
+  color: var(--text);
   border: 0;
   border-radius: var(--r-sm);
   width: 28px;
@@ -553,15 +560,16 @@ select.input {
   flex-shrink: 0;
   transition: background .15s ease;
 }
-.hero-refresh:hover { background: rgba(255, 255, 255, .28); }
+.hero-refresh:hover { background: var(--ghost-bg-hover); }
 .hero-value {
   font-size: 30px;
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.1;
+  color: var(--primary);
   font-variant-numeric: tabular-nums;
 }
-.hero-sub { font-size: 12px; opacity: .85; margin-top: .5rem; }
+.hero-sub { font-size: 12px; color: var(--text-muted); margin-top: .5rem; }
 
 /* ── Stat cards — neutral surface, semantic accent on the sub-line ──
    Redesign (stat-grid v2): a full row of four tinted cards read as
