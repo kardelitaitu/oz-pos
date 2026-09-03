@@ -290,13 +290,32 @@ sale status; that is the device's job.
 
 ## 7. Recipes
 
+**Get a token first (two paths).** Cloud / standalone playground: mint
+over HTTP as in the recipes below (open in the dev playground; with
+`X-Admin-Key: $OZ_ADMIN_KEY` in production). Desktop Local API: click
+**Generate Token** in Settings → Local API — HTTP minting there requires
+the per-install secret as `X-Admin-Key`, and the panel deliberately
+never displays it. When scripts need the secret itself (HTTP minting,
+master-data writes), read it from the global database:
+
+```bash
+sqlite3 "$APPDATA/com.ozpos.app/oz-pos.db" \
+  "SELECT value FROM settings WHERE key='local_api.secret'"
+```
+
+The desktop server binds `127.0.0.1` only — use that literal IP in
+scripts; `localhost` may resolve to `::1` first on IPv6-preferring
+stacks, where nothing listens.
+
 ### 7.1 Python — read catalog, write a sale
 
 ```python
 import requests
 
-BASE = "http://localhost:3099/api/v1"  # or your cloud origin
-ADMIN_KEY = "..."                      # omit header in dev mode
+BASE = "http://127.0.0.1:3099/api/v1"  # desktop; or your cloud origin
+ADMIN_KEY = "..."                      # dev playground: omit header;
+                                       # desktop: the per-install secret
+                                       # (see "Get a token first" above)
 
 tok = requests.post(f"{BASE}/tokens",
     headers={"X-Admin-Key": ADMIN_KEY},
@@ -318,7 +337,7 @@ requests.patch(f"{BASE}/sales/{sale['id']}/status", headers=H,
 ### 7.2 Node — stock watch (operator write needs the admin key too)
 
 ```js
-const BASE = "http://localhost:3099/api/v1";
+const BASE = "http://127.0.0.1:3099/api/v1";
 const H = { Authorization: `Bearer ${process.env.OZ_TOKEN}` };
 
 const low = (await (await fetch(`${BASE}/products`, { headers: H })).json())
@@ -336,6 +355,10 @@ await fetch(`${BASE}/products/${low[0].sku}/stock`, {
 ### 7.3 curl — terminal lifecycle
 
 ```bash
+HOST=http://127.0.0.1:3099   # or your cloud origin
+ADMIN=...                    # OZ_ADMIN_KEY (cloud) / per-install secret (desktop, §7 intro)
+SECRET=...                   # the client_secret returned by the register call
+
 # register (once, operator)
 curl -sX POST $HOST/api/v1/terminals -H "X-Admin-Key: $ADMIN" \
   -H 'Content-Type: application/json' -d '{"terminal_id":"kds-1"}'
