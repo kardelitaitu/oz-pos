@@ -4,6 +4,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { l10nErrorMessage } from '@/utils/app-error';
+import { transactionTypeLabel } from './transactionTypeLabel';
 import {
   listInventoryTransactions,
   listInventoryLocations,
@@ -239,7 +240,7 @@ export default function TransactionLogScreen() {
                     <td>{new Date(tx.created_at).toLocaleString(numLocale)}</td>
                     <td>
                       <span className={`badge badge-${tx.type}`}>
-                        {l10n.getString(`inv-log-type-${tx.type}`) ?? tx.type.replace('-', ' ')}
+                        {transactionTypeLabel(l10n, tx.type)}
                       </span>
                     </td>
                     <td>{locationName}</td>
