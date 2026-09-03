@@ -219,6 +219,7 @@ nav-exchange-rates = Exchange Rates
 nav-categories = Categories
 nav-customers = Customers
 nav-loyalty = Loyalty
+nav-gift-cards = Gift Cards
 nav-staff = Staff
 nav-terminals = Terminals
 nav-stores = Stores
@@ -234,6 +235,7 @@ nav-dashboard-report = Dashboard
 nav-analytics = Staff Analytics
 nav-sales-report = Sales Report
 nav-inventory-report = Inventory Report
+nav-menu-engineering = Menu Engineering
 nav-design-system = Design System
 nav-tooltip-preview = Tooltip Preview
 nav-kiosk = Kiosk
@@ -242,6 +244,7 @@ nav-promotions = Promotions
 nav-suppliers = Suppliers
 nav-purchase-orders = Purchase Orders
 nav-stock-transfers = Stock Transfers
+nav-stock-counts = Stock Counts
 nav-custom-report = Custom Report
 nav-pos = POS
 app-sidebar-subtitle = Point of Sale
@@ -352,6 +355,12 @@ auth-phone-label = Phone Number
 auth-phone-placeholder = 08123456789
 auth-license-label = License Key
 auth-license-placeholder = OZ-PRO-XXXX-XXXX-XXXX
+# Accessible names for the icon-only clear (×) buttons on each field of the
+# license activation form. Resolved via l10n.getString() at the render
+# boundary, so a missing key here leaves the button unnamed, not English.
+auth-clear-email = Clear email address
+auth-clear-phone = Clear phone number
+auth-clear-key = Clear license key
 auth-activate-button = Activate License
 auth-activating = Activating...
 auth-activation-success = License activated successfully!

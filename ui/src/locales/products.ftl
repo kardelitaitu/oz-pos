@@ -89,6 +89,7 @@ product-mgmt-error-invalid-stock = Stock must be a whole, non-negative number
 product-mgmt-modal-add-title = Add Product
 product-mgmt-modal-edit-title = Edit Product
 product-mgmt-modal-close = Close
+product-mgmt-field-name-required = Name *
 product-mgmt-field-sku-required = SKU *
 product-mgmt-field-price = Price (minor units)
 product-mgmt-field-currency = Currency

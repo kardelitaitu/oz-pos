@@ -110,3 +110,7 @@ suppliers-field-address = Alamat
 suppliers-field-tax-id = NPWP
 suppliers-field-payment-terms = Ketentuan Pembayaran
 suppliers-field-notes = Catatan
+
+# Save-handler validation for the supplier form (see purchasing.ftl).
+supplier-name-required = Nama pemasok wajib diisi
+supplier-code-required = Kode pemasok wajib diisi

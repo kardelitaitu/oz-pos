@@ -88,6 +88,7 @@ product-mgmt-error-invalid-stock = Stok harus berupa bilangan bulat non-negatif
 product-mgmt-modal-add-title = Tambah Produk
 product-mgmt-modal-edit-title = Ubah Produk
 product-mgmt-modal-close = Tutup
+product-mgmt-field-name-required = Nama *
 product-mgmt-field-sku-required = SKU *
 product-mgmt-field-price = Harga (unit minor)
 product-mgmt-field-currency = Mata Uang
