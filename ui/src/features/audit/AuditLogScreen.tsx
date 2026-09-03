@@ -367,12 +367,12 @@ export default function AuditLogScreen() {
             <table className="audit-log-table" aria-hidden="true">
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Action</th>
-                  <th>Target</th>
-                  <th>User ID</th>
-                  <th>Outcome</th>
-                  <th>Details</th>
+                  <Localized id="audit-log-col-date"><th>Date</th></Localized>
+                  <Localized id="audit-log-col-action"><th>Action</th></Localized>
+                  <Localized id="audit-log-col-target"><th>Target</th></Localized>
+                  <Localized id="audit-log-col-user"><th>User ID</th></Localized>
+                  <Localized id="audit-log-col-outcome"><th>Outcome</th></Localized>
+                  <Localized id="audit-log-col-details"><th>Details</th></Localized>
                 </tr>
               </thead>
               <tbody>{Array.from({ length: 6 }).map((_, i) => (

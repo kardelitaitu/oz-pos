@@ -260,15 +260,15 @@ export default function ShiftManagementScreen() {
               <table className="shift-mgmt-table" aria-hidden="true">
                 <thead>
                   <tr>
-                    <th>Status</th>
-                    <th>Opened</th>
-                    <th>Closed</th>
-                    <th>Opening</th>
-                    <th>Counted</th>
-                    <th>Expected</th>
-                    <th>Diff</th>
-                    <th>Sales</th>
-                    <th>Actions</th>
+                    <Localized id="shift-table-status"><th>Status</th></Localized>
+                    <Localized id="shift-table-opened"><th>Opened</th></Localized>
+                    <Localized id="shift-table-closed"><th>Closed</th></Localized>
+                    <Localized id="shift-table-opening"><th>Opening</th></Localized>
+                    <Localized id="shift-table-counted"><th>Counted</th></Localized>
+                    <Localized id="shift-table-expected"><th>Expected</th></Localized>
+                    <Localized id="shift-table-diff"><th>Diff</th></Localized>
+                    <Localized id="shift-table-sales"><th>Sales</th></Localized>
+                    <Localized id="shift-table-actions"><th>Actions</th></Localized>
                   </tr>
                 </thead>
                 <tbody>{Array.from({ length: 4 }).map((_, i) => (
