@@ -303,6 +303,18 @@ async fn push_handler(
             })?
     };
 
+    // Outbound webhook fan-out (2026-09-03): accepted event-action
+    // items enqueue signed `webhook` outbox entries. Never fails the
+    // push — fan-out errors are logged, the items are already durable.
+    crate::outbound_webhooks::fanout_from_outcomes(
+        &state.db,
+        &state.pg,
+        tenant_id,
+        &valid_items,
+        &batch_results,
+    )
+    .await;
+
     // Reassemble in request order: invalid ids stay Rejected at their
     // original position; batch outcomes land at the valid items' slots.
     let mut results = Vec::with_capacity(items.len());

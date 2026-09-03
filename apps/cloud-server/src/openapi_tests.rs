@@ -444,6 +444,7 @@ fn source_registered_routes() -> BTreeMap<String, BTreeSet<String>> {
         include_str!("main.rs"),
         include_str!("sync_api.rs"),
         include_str!("webhooks.rs"),
+        include_str!("outbound_webhooks.rs"),
     ];
     let mut routes: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for &src in sources {
@@ -645,6 +646,7 @@ fn security_coverage_walk_every_operation() {
             || path == "/api/v1/terminals"
             || path == "/api/v1/tenants/{tenant_id}/plan"
             || path == "/api/v1/settings"
+            || path == "/api/webhooks"
             || path.starts_with("/api/webhooks/")
     }
 
@@ -695,6 +697,7 @@ fn every_operation_carries_correct_scope() {
 
     fn expected_scope(path: &str) -> &'static str {
         if path.starts_with("/api/sync/")
+            || path == "/api/webhooks"
             || path.starts_with("/api/webhooks/")
             || path == "/health"
             || path == "/api/health"

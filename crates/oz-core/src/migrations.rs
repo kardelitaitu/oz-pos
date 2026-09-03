@@ -131,6 +131,10 @@ pub const ALL: &[Migration] = &[
         id: "20260902_snapshot_versions.sql",
         sql: include_str!("../migrations/20260902_snapshot_versions.sql"),
     },
+    Migration {
+        id: "20260903_webhook_endpoints.sql",
+        sql: include_str!("../migrations/20260903_webhook_endpoints.sql"),
+    },
 ];
 
 /// Postgres DDL for the full schema, parallel to the SQLite `init.sql`.

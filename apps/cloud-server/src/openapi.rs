@@ -208,6 +208,19 @@ fn build_cloud_schemas() -> Value {
                 "heartbeat_interval_secs": { "type": "integer", "format": "int64", "description": "Recommended client poll interval (P-3 tiered heartbeat: <1000 tenants → 120s, 1000–5000 → 300s, above → scaled)" }
             }
         },
+        "WebhookEndpoint": {
+            "type": "object",
+            "description": "A registered outbound webhook endpoint. The HMAC signing secret is never included — it is returned once at creation.",
+            "properties": {
+                "id": { "type": "string" },
+                "tenant_id": { "type": "string" },
+                "url": { "type": "string", "format": "uri" },
+                "events": { "type": "array", "items": { "type": "string" }, "description": "Subscribed queue actions, or [\"*\"]" },
+                "active": { "type": "boolean" },
+                "created_at": { "type": "string", "format": "date-time" },
+                "updated_at": { "type": "string", "format": "date-time" }
+            }
+        },
         "SyncPushItem": {
             "type": "object",
             "required": ["id", "table_name", "action", "row_data"],
@@ -410,6 +423,52 @@ fn build_cloud_paths() -> Value {
                 "responses": {
                     "200": { "description": "Webhook processed successfully" },
                     "400": { "description": "Invalid signature or malformed event", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+        "/api/webhooks": {
+            "get": {
+                "tags": ["Webhooks"],
+                "summary": "List outbound webhook endpoints",
+                "description": "Returns the tenant's registered outbound webhook endpoints (signing secrets are never listed — shown once at creation only). Gated by the server's admin key (X-Admin-Key header); open in dev mode.",
+                "operationId": "listWebhookEndpoints",
+                "parameters": [
+                    { "name": "tenant_id", "in": "query", "required": false, "schema": { "type": "string", "default": "default" } }
+                ],
+                "responses": {
+                    "200": { "description": "Endpoint list", "content": { "application/json": { "schema": { "type": "object", "properties": { "endpoints": { "type": "array", "items": { "$ref": "#/components/schemas/WebhookEndpoint" } } } } } } },
+                    "401": { "description": "Missing or invalid `X-Admin-Key` when configured", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            },
+            "post": {
+                "tags": ["Webhooks"],
+                "summary": "Register an outbound webhook endpoint",
+                "description": "Registers a URL to receive signed event POSTs (`sale`/`stock`/`product` queue actions, see the guide §7.4). `events` is a JSON array of action names or `[\"*\"]` for all. The response `secret` is shown exactly once — it is the HMAC-SHA256 key for `X-OZ-Signature: sha256=<hex>` verification. Gated by the server's admin key (X-Admin-Key header); open in dev mode.",
+                "operationId": "createWebhookEndpoint",
+                "requestBody": {
+                    "required": true,
+                    "content": { "application/json": { "schema": { "type": "object", "required": ["url"], "properties": { "tenant_id": { "type": "string", "default": "default" }, "url": { "type": "string", "format": "uri", "example": "https://scripts.example.com/oz-events" }, "events": { "type": "array", "items": { "type": "string" }, "example": ["complete_sale", "stock.adjusted"] } } } } }
+                },
+                "responses": {
+                    "201": { "description": "Endpoint created; secret shown once", "content": { "application/json": { "schema": { "type": "object", "properties": { "endpoint": { "$ref": "#/components/schemas/WebhookEndpoint" }, "secret": { "type": "string" }, "note": { "type": "string" } } } } } },
+                    "400": { "description": "Invalid url or event list", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid `X-Admin-Key` when configured", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+        "/api/webhooks/{id}": {
+            "delete": {
+                "tags": ["Webhooks"],
+                "summary": "Delete an outbound webhook endpoint",
+                "description": "Stops NEW events from fanning out to this endpoint; in-flight outbox retries continue (delivery payloads are self-contained). Idempotent: 204 whether or not the endpoint existed. Gated by the server's admin key (X-Admin-Key header); open in dev mode.",
+                "operationId": "deleteWebhookEndpoint",
+                "parameters": [
+                    { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+                    { "name": "tenant_id", "in": "query", "required": false, "schema": { "type": "string", "default": "default" } }
+                ],
+                "responses": {
+                    "204": { "description": "Deleted (or already absent)" },
+                    "401": { "description": "Missing or invalid `X-Admin-Key` when configured", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
         },

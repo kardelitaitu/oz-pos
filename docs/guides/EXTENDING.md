@@ -155,7 +155,8 @@ Cloud-only additions (not part of the `oz-api` crate):
 | POST | `/api/sync/pull` | JWT | pull other terminals' items (`since` cursor) |
 | GET | `/api/sync/status` | JWT | pending/conflict counts |
 | GET | `/api/sync/snapshot` | JWT | full snapshot pull (ETag/304, 15-min per-tenant cache) |
-| POST | `/api/webhooks/stripe`, `/api/webhooks/square` | HMAC signature | **inbound** payment-provider events only — there are no outbound webhooks for your scripts yet (§10) |
+| POST | `/api/webhooks/stripe`, `/api/webhooks/square` | HMAC signature | **inbound** payment-provider events only |
+| GET/POST | `/api/webhooks` · DELETE `/api/webhooks/{id}` | admin key | **outbound** webhook endpoint registry for your scripts (§7.4) |
 
 > The OpenAPI spec also declares tag groups (Inventory, Orders, Reports,
 > Customers, Notifications, Analytics) with **no paths behind them** —
@@ -374,9 +375,70 @@ curl -sX POST $HOST/api/v1/tokens -H 'Content-Type: application/json' \
   -d '{"label":"kds-1","client_id":"kds-1","client_secret":"'$SECRET'","expiry_hours":6}'
 ```
 
-### 7.4 Polling instead of webhooks
+### 7.4 Outbound webhooks (cloud surface)
 
-There are no outbound webhooks yet (§10). For near-real-time scripts, poll
+The cloud server pushes events to your scripts — no polling. The
+**desktop local API does not deliver webhooks** (a loopback POS gains no
+unsolicited outbound path); scripts against §2.2 poll instead.
+
+**Register an endpoint** (admin key, like token minting):
+
+```bash
+HOST=https://your-cloud.example.com   # or http://127.0.0.1:3099 (playground)
+curl -sX POST $HOST/api/webhooks -H "X-Admin-Key: $ADMIN" \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"https://scripts.example.com/oz-events","events":["complete_sale","stock.adjusted"]}'
+# → 201 {"endpoint":{...,"id":"01a..."},"secret":"<32 hex>","note":"shown exactly once"}
+```
+
+`events` is the queue-action vocabulary — `complete_sale`, `void_sale`,
+`refund_sale`, `product.created`, `stock.adjusted`, `stock.movement` —
+or `["*"]` for all. Manage with `GET /api/webhooks` (secrets redacted)
+and `DELETE /api/webhooks/{id}`.
+
+**Events fire when terminals sync** (the push path), so they reflect
+register activity — including offline work that syncs later. Sales
+created directly through the REST API on cloud do not (v1 limitation).
+
+**Delivery contract**: `POST` JSON
+
+```json
+{"id":"01event","type":"complete_sale","occurred_at":"2026-09-03T12:00:00Z",
+ "tenant_id":"default","data":{ ...the synced item payload... }}
+```
+
+with headers `X-OZ-Event`, `X-OZ-Event-Id`, and
+`X-OZ-Signature: sha256=<hex HMAC-SHA256(secret, raw body)>`. Your
+receiver must answer 2xx within 10 s; anything else retries with
+exponential backoff (2^n minutes, 5 attempts) and then dead-letters in
+the outbox for operator inspection. Ordering is not guaranteed — dedupe
+on `id`.
+
+**Verify in Python** (Flask receiver):
+
+```python
+import hmac, hashlib
+from flask import request, jsonify
+
+@app.post("/oz-events")
+def oz_events():
+    body = request.get_data()                     # raw bytes, not parsed
+    expected = "sha256=" + hmac.new(
+        SECRET.encode(), body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, request.headers.get("X-OZ-Signature", "")):
+        return "bad signature", 401
+    event = request.get_json()                    # {"id","type","occurred_at","data"}
+    ...                                           # handle event["type"]
+    return "", 200
+```
+
+Node is the same shape: `crypto.createHmac("sha256", secret)
+.update(rawBody).digest("hex")` against the header, constant-time
+compare.
+
+### 7.5 Polling fallback
+
+For surfaces without webhooks (desktop §2.2), poll
 `POST /api/sync/pull` with a `since` cursor (cloud) to observe other
 terminals' writes, or re-`GET /api/v1/sales/{id}` for a sale you track.
 
@@ -412,13 +474,22 @@ Documented so scripts don't build on sand:
 2. **Reserved tags without paths** — Inventory/Orders/Reports/Customers/
    Notifications/Analytics appear in the spec's tag list but declare no
    operations.
-3. **No outbound webhooks** — only inbound Stripe/Square receivers exist.
+3. **Webhook v1 limits** (cloud, §7.4) — events fire on the sync-push
+   path only (REST-created sales don't emit); fan-out runs just after
+   the push commits (a crash in that window loses the fan-out, not the
+   data); no per-endpoint delivery history UI yet (outbox rows are the
+   record).
 4. **No token revocation** — keep `expiry_hours` short for third-party
    scripts.
 5. **utoipa migration** (generating the spec from handler code) is recorded
    in spec 0047 as the eventual permanent fix; deliberately not done yet.
 
 > **Repaired 2026-09-03** (same day these were first recorded here):
+> **outbound webhooks are live on the cloud surface** (§7.4) — endpoint
+> registry (`/api/webhooks`, admin-key gated), sync-push fan-out through
+> the transactional outbox (ADR #43 D7), HMAC-SHA256 signed delivery with
+> retry/backoff/dead-letter, and the PG outbox drainer wired (previously
+> built but never started);
 > the local terminal API is now **wired** — the desktop app embeds
 > `oz_api::router()` on loopback behind Settings → Local API (§2.2), with
 > stateful JWT validation (`auth_middleware_with_state`) so it signs with
