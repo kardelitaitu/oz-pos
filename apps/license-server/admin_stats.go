@@ -12,11 +12,11 @@ package main
 // from the revenue_events ledger — written ONLY by signature-verified
 // Paddle/Midtrans webhooks (see provider_revenue.go) — so admin DB edits
 // (tier overrides, renews, grants) can never move the money numbers. MRR is
-// computed from active subscriptions × tier price map and is labeled a
-// subscription estimate, distinct from provider-verified gross. The price
-// map also survives only as a labeled fallback for months with no provider
-// events. The FX rate for USD→IDR is fetched from open.er-api.com with a
-// 1-hour cache (5-minute cache for the revenue snapshot).
+// computed from active subscriptions × tier price map and is always labeled
+// a subscription estimate, distinct from (and never recycled into) the
+// provider-verified gross. The FX rate for USD→IDR is fetched from
+// open.er-api.com with a 1-hour cache (5-minute cache for the revenue
+// snapshot).
 
 import (
 	"encoding/json"
@@ -200,14 +200,16 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 			buckets[i] = monthBucket{Month: key}
 		}
 
-		// Revenue trend: group active subscriptions by starts_at month,
-		// sum tier prices.
+		// Revenue trend: provider-verified revenue_events only (no
+		// subscription-price projection — see the trend build below).
 		// Subscriber growth: cumulative count over time.
 		// Signups: group tenants.created by month.
 		// Churn: group expired/revoked subscriptions by expires_at month.
 
-		// Scan active subscriptions (MRR contribution per month).
-		revenueByMonth := make(map[string]float64)
+		// Scan subscriptions for subscriber growth + churn.  Revenue is NOT
+		// derived here — the price-map estimate that used to be recycled
+		// into the money chart was removed so manual DB tier overrides can
+		// never move gross income (no webhook payment = no revenue).
 		subGrowthByMonth := make(map[string]int)
 		churnByMonth := make(map[string]int)
 
@@ -216,14 +218,10 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 			"tier_key != 'free'",
 			"-created", 0, 0)
 		for _, sub := range allSubs {
-			tier := sub.GetString("tier_key")
-			price := TierPriceUSD[tier]
-
-			// Active: add to revenue + growth.
+			// Active: add to subscriber growth.
 			if sub.GetString("status") == "active" {
 				startsAt := sub.GetDateTime("starts_at").Time()
 				key := fmt.Sprintf("%d-%02d", startsAt.Year(), startsAt.Month())
-				revenueByMonth[key] += price
 				subGrowthByMonth[key]++
 			}
 
@@ -239,14 +237,16 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 
 		// Build revenue trend, subscriber growth, churn arrays.
 		// Revenue trend uses the provider-verified revenue_events ledger
-		// when a month has recorded payments; months without provider
-		// events fall back to the price-map estimate, clearly labeled.
+		// ONLY: months without webhook-verified payments are 0.  No
+		// subscription/price-map projection is ever recycled into the
+		// money chart — a manual DB tier override (free→plus) creates a
+		// subscription row but no webhook payment, so it must not move
+		// the trend. MRR is reported separately and labeled.
 		revenueTrend := make([]monthBucket, 0, 12)
 		subGrowth := make([]monthBucket, 0, 12)
 		churnArr := make([]monthBucket, 0, 12)
 		cumulative := 0
 		for _, key := range bucketKeys {
-			est := revenueByMonth[key]
 			if m, ok := realByMonth[key]; ok && m.Count > 0 && (m.Usd > 0 || m.Idr > 0) {
 				// Provider-verified webhook revenue (refunds included when
 				// revenue_adjustments rows exist for the month).
@@ -274,11 +274,9 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 					Source:    "provider",
 				})
 			} else {
-				// Price-map estimate (labeled fallback).
+				// No provider-verified income this month — explicit zero.
 				revenueTrend = append(revenueTrend, monthBucket{
 					Month:  key,
-					Usd:    math.Round(est*100) / 100,
-					Idr:    math.Round(est * fxRate),
 					Source: "estimate",
 				})
 			}

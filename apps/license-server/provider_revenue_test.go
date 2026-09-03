@@ -364,6 +364,12 @@ func TestAdminStats_TierOverrideNoGross(t *testing.T) {
 		KPIs struct {
 			MmrUsd float64 `json:"mrrUsd"`
 		} `json:"kpis"`
+		RevenueTrend []struct {
+			Month  string  `json:"month"`
+			Usd    float64 `json:"usd"`
+			Idr    float64 `json:"idr"`
+			Source string  `json:"source,omitempty"`
+		} `json:"revenueTrend"`
 	}
 	rec := doJSON(mux, http.MethodGet, "/api/v1/admin/stats?refresh=1", "Bearer secret-admin-key", "")
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
@@ -371,6 +377,17 @@ func TestAdminStats_TierOverrideNoGross(t *testing.T) {
 	}
 	if body.KPIs.MmrUsd != 4.99 {
 		t.Errorf("mrrUsd after override = %v, want 4.99 (plus tier) — the DB edit should register in MRR only", body.KPIs.MmrUsd)
+	}
+	// The revenue trend for the current month must ALSO stay at 0/0 — the
+	// trend is provider-verified income only, never a subscription estimate.
+	curKey := time.Now().UTC().Format("2006-01")
+	for _, row := range body.RevenueTrend {
+		if row.Month == curKey {
+			if row.Usd != 0 || row.Idr != 0 {
+				t.Errorf("revenueTrend current month after override = %v/%v, want 0/0 (no webhook payment)", row.Usd, row.Idr)
+			}
+			break
+		}
 	}
 }
 

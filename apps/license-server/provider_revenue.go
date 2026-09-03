@@ -6,9 +6,10 @@ package main
 // revenue_events.go); revenue_adjustments (see revenue_adjustments.go)
 // records the refunds/chargebacks that claw gross back.  This module buckets
 // both ledgers per month and computes lifetime totals, with a short-TTL
-// cache so repeated stats calls don't rescan the whole table.  The
-// price-map / subscription estimate survives only as a clearly-labeled
-// fallback when a month has no provider events at all.
+// cache so repeated stats calls don't rescan the whole table.  Only
+// webhook-verified amounts ever appear here — a subscription price-map
+// projection is never mixed in, so manual admin DB edits (tier overrides,
+// renews, grants) cannot move the money figures (see admin_stats.go).
 //
 // Cache TTL: 5 minutes by default, overridable for tests.
 
