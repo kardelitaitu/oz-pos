@@ -175,6 +175,13 @@ export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
                   >
                     {tier.cta}
                   </a>
+                ) : isEnterprise ? (
+                  <a
+                    href={contactHref}
+                    className="block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:opacity-90"
+                  >
+                    {tier.cta}
+                  </a>
                 ) : (
                   <CheckoutButton tier={checkoutTier} locale={locale} />
                 )}
