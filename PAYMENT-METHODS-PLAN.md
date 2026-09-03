@@ -1,6 +1,6 @@
 # Payment Methods per Workspace — Planning Notes
 
-> **Status:** DISCUSSION NOTES — not yet a spec. Next step tomorrow: answer the open questions, then draft `docs/specs/_active/` package (spec.yaml + plan.md + validation.md).
+> **Status:** DECISIONS ROUND 1 COMPLETE — Q1–Q4 decided (see §2a), Q5 parked for deeper discussion (terminology expanded the scope, see §2b). Next: draft `docs/specs/_active/` package (spec.yaml + plan.md + validation.md).
 > **Date:** 2026-09-03 · Session with DSH (DeepSeek Harness agent)
 
 ---
@@ -107,13 +107,32 @@ Phase 1 ships `qris_manual` + `bank_transfer` with **zero gateway work** — imm
 
 ---
 
-## 2. Open questions (answer tomorrow)
+## 2a. Open questions — DECIDED (round 1, 2026-09-03)
 
-1. **Piutang in reports** — separate `pay_later` method (+ optional "count as cash" report toggle) — recommended — or strictly inside the cash total?
-2. **Debit vs credit card** — one `card` button (today's EDC flow) or two separate buttons? Matters only if deposits reconcile differently.
-3. **Config scope** — per workspace *type* first (one config for all retail, one for all resto), per-*instance* override later? (Precedent: `terminal_override`.)
-4. **E-wallet scope** — Midtrans umbrella only, or each provider as an individually toggleable button?
-5. **Pay-later permission** — new `payments:pay_later` permission key (clean; ripples through registry/presets/`ALL_ENFORCED`) or ride existing `payments:cash`?
+| # | Question | Decision | Notes |
+|---|---|---|---|
+| 1 | **Piutang in reports** | **Option A — separate `pay_later` method + collection-day settlement record.** Sale day: `method='pay_later'` + `receivables` row. Collection day: settlement record with the **actual tender** (cash/transfer/…) → daily report gets a **"Piutang Collections"** line feeding that day's cash-equivalent total. | Money appears as cash on the day it is *actually* received; drawer reconciliation correct both days; "who owes me / overdue" is one query. Pattern reusable to fix the existing `credit` settlement hole (settled_at stamp records no cash movement today). |
+| 2 | **Debit vs credit card** | **Option B — two methods `card_debit` + `card_credit`.** | Zero migration (free-string method); historical `card` rows keep working; reports group the card family (`card` + `card_debit` + `card_credit`); banks settle debit/credit separately so per-type reconciliation matters; ⚠️ `credit` stays customer-tab (naming collision avoided). Each toggles independently per config — matches the original spec list. |
+| 3 | **Config scope** | **Tier-gated scope.** Free/Plus/Pro: one config per workspace **type** (`payment_methods.<type_key>`). **Premium/Enterprise unlock per-location (per workspace instance) overrides.** Precedence: instance > type > built-in defaults. | Nice tier differentiator, consistent with analytics/KDS gating. Per-instance editor shows a **locked teaser below Premium** (same pattern as the QRIS teaser); backend accepts instance overrides only when effective tier is Premium+ (fail-closed). Assumption to confirm: "per location" = per workspace instance within a store. |
+| 4 | **E-wallet scope** | **Option A — one `ewallet` umbrella toggle**, `method='ewallet'`. | Customer picks GoPay/OVO/DANA/ShopeePay on their phone; provider enablement is a Midtrans merchant-dashboard concern. Per-provider toggles (via SNAP `enabled_payments`) documented as a Phase 2.5 refinement. |
+| 5 | **Pay-later permission** | **PARKED — talk more.** | User expanded the discussion with terminology + the buying-side mirror (see §2b). Revisit after the terminology/AP design settles. |
+
+## 2b. Terminology law + scope expansion (from the round-1 discussion)
+
+The user supplied the canonical bilingual terminology. **All UI labels, i18n keys, and doc language must mirror these:**
+
+| Process | Indonesian term | International English standard | Accounting category |
+|---|---|---|---|
+| Selling to customer (goods now, paid in 2 weeks) | Jual Tempo / Kasbon | Sale on Account / Pay Later | **Accounts Receivable (Piutang)** |
+| Buying from distributor (goods now, paid in 2 weeks) | Beli Tempo / Hutang | Purchase on Account / Vendor Bill | **Accounts Payable (Hutang)** |
+
+**UI recommendation adopted:** the back-office purchasing (stock-in from distributor) flow gets a payment-method choice of **"Cash" and "On Account"** (Vendor Credit).
+
+**Scope consequence:** the deferred-payment design is **two-sided** —
+- **AR side (selling):** `pay_later` method → `receivables` (piutang) — Phase 3 as planned.
+- **AP side (buying):** purchasing/stock-in gains "On Account" → **payables (hutang)** tracking with due dates, reminders, and settlement records — new phase (proposed as Phase 4, or designed together with Phase 3 so the schema mirrors: `receivables` / `payables` tables with the same shape and a shared settlement pattern).
+
+Fact for the AP side: purchasing permissions (`purchasing:view` / `purchasing:manage`) exist in `ALL_ENFORCED` but are **not in any Manager/Admin preset** — purchasing screens are effectively Owner-only today. The AP permission question may partially answer itself via `purchasing:manage`; revisit when speccing Phase 4.
 
 ---
 
@@ -123,17 +142,23 @@ Phase 1 ships `qris_manual` + `bank_transfer` with **zero gateway work** — imm
 |---|---|
 | Role/subscription contracts need no rework | ✅ agreed (today) |
 | TOML auth/quota configs shelved | ✅ agreed (today) |
-| Payment-method config keyed by workspace type in `settings` table (Phase 1, no migration) | leaning yes — confirm tomorrow |
-| `qris_manual` + `bank_transfer` as Phase 1 manual-check methods | proposed |
-| Midtrans via existing `payment_gateways` table + encryption (Phase 2) | proposed |
-| Piutang = `pay_later` method + `receivables` table, NOT marked as cash (Phase 3, retail-only) | proposed — user to confirm |
-| Backend re-validates method list (fail-closed), UI hiding is cosmetic | proposed |
+| Payment-method config keyed by workspace type in `settings` table (Phase 1, no migration); Premium+ unlocks per-instance overrides | ✅ decided (Q3) |
+| `qris_manual` + `bank_transfer` as Phase 1 manual-check methods | ✅ decided (§1.2–1.3) |
+| Card split into `card_debit` + `card_credit` (zero migration, legacy `card` rows preserved) | ✅ decided (Q2) |
+| One `ewallet` umbrella toggle (Midtrans SNAP; per-provider via `enabled_payments` later) | ✅ decided (Q4) |
+| Midtrans via existing `payment_gateways` table + encryption (Phase 2) | ✅ decided (§1.4) |
+| Piutang = `pay_later` method + `receivables` table + **collection-day settlement record** (NOT marked as cash) | ✅ decided (Q1) |
+| Backend re-validates method list (fail-closed), UI hiding is cosmetic | ✅ decided (§1.2 safety rules) |
+| Terminology: Jual Tempo/Kasbon → Pay Later/AR (Piutang); Beli Tempo/Hutang → Purchase on Account/AP; purchasing UI = "Cash / On Account" | ✅ adopted as naming law (§2b) |
+| AP (hutang) side = payables tracking in purchasing — new phase, schema mirrored with receivables | 🆕 scope expansion — to spec (§2b) |
+| Pay-later permission key (`payments:pay_later`) vs riding `payments:cash` | ⏸️ parked — discuss more (Q5) |
 
-## 4. Tomorrow's next steps
+## 4. Next steps
 
-1. Answer open questions §2.
-2. If green-lit: draft spec package `docs/specs/_active/<next-id>-workspace-payment-methods/` (spec.yaml + plan.md + validation.md per house format; see `0043-architecture-boundary-checker` as the example).
-3. Phase 1 implementation order would be: settings key + load/validate module → backend checkout validation → PaymentModal reads config (delete hardcoded array) → Settings UI section → tests (unit + `PaymentModal*.test.tsx` + contract tests).
+1. **Phase 1 is unblocked by today's decisions** — draft the spec package `docs/specs/_active/<next-id>-workspace-payment-methods/` (spec.yaml + plan.md + validation.md per house format; see `0043-architecture-boundary-checker` as the example).
+2. Phase 1 implementation order: settings key + load/validate module → backend checkout validation → PaymentModal reads config (delete hardcoded array; add `qris_manual`, `bank_transfer`, split card buttons) → Settings UI section → tests (unit + `PaymentModal*.test.tsx` + contract tests).
+3. Continue the Q5 discussion (pay-later permission) together with the Phase 3/4 deferred-payment design (AR + AP, shared settlement pattern).
+4. Update the tier-gating table (`subscription.rs` capabilities) if per-instance payment config becomes a marketed Premium feature — check whether a `supports_*` method or just UI gating is wanted.
 
 ---
 
