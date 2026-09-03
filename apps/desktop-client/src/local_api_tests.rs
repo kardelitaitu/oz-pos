@@ -134,8 +134,7 @@ async fn server_serves_health_protected_routes_and_stops() {
     assert_eq!(
         resp.headers()
             .get("x-content-type-options")
-            .and_then(|v| v.to_str().ok())
-            .as_deref(),
+            .and_then(|v| v.to_str().ok()),
         Some("nosniff"),
         "local docs route must sit inside the security-headers layer"
     );

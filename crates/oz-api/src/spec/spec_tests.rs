@@ -14,10 +14,8 @@ fn collect_refs(v: &Value, out: &mut Vec<String>) {
                 collect_refs(child, out);
             }
         }
-        Value::String(s) => {
-            if s.starts_with("#/components/") {
-                out.push(s.clone());
-            }
+        Value::String(s) if s.starts_with("#/components/") => {
+            out.push(s.clone());
         }
         _ => {}
     }

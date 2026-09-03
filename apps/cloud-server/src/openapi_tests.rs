@@ -753,10 +753,8 @@ fn every_merged_ref_resolves() {
                     collect(c, out);
                 }
             }
-            Value::String(s) => {
-                if s.starts_with("#/components/") {
-                    out.push(s.clone());
-                }
+            Value::String(s) if s.starts_with("#/components/") => {
+                out.push(s.clone());
             }
             _ => {}
         }

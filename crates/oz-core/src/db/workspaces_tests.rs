@@ -1604,7 +1604,7 @@ fn list_workspaces_with_entitlement_staff_filters_by_tier_after_assignment() {
     // Free tier allows restaurant-pos, store-pos, admin — but NOT kds.
     // A staff user explicitly assigned kds + store-pos must see only
     // store-pos after entitlement filtering (kds pruned by tier).
-    let (store, user_id) = fresh();
+    let (store, _user_id) = fresh();
     store.seed_default_roles().unwrap();
     store
         .conn

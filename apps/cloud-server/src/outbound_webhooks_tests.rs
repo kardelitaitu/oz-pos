@@ -396,7 +396,7 @@ async fn admin_api_dev_open_create_list_delete() {
         .oneshot(
             axum::http::Request::builder()
                 .method("DELETE")
-                .uri(&format!("/api/webhooks/{id}"))
+                .uri(format!("/api/webhooks/{id}"))
                 .body(axum::body::Body::empty())
                 .unwrap(),
         )
