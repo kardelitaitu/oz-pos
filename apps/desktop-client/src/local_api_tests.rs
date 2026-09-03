@@ -97,6 +97,42 @@ async fn server_serves_health_protected_routes_and_stops() {
     let resp = reqwest::get(format!("{base}/api/v1/health")).await.unwrap();
     assert_eq!(resp.status(), reqwest::StatusCode::OK);
 
+    // Self-documenting OpenAPI: the shared base surface, all scope
+    // "both", cloud-only paths absent.
+    let resp = reqwest::get(format!("{base}/api/openapi.json"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+    let spec: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(spec["info"]["title"], "OZ-POS Local Terminal API");
+    assert_eq!(
+        spec["servers"][0]["url"].as_str(),
+        Some(format!("http://127.0.0.1:{}", handle.port).as_str())
+    );
+    assert!(
+        spec["paths"]["/api/v1/products"].is_object(),
+        "shared surface present"
+    );
+    assert!(
+        spec["paths"]["/api/sync/push"].is_null(),
+        "cloud-only path leaked into local spec"
+    );
+    assert!(
+        spec["paths"]["/api/docs"].is_null(),
+        "docs UI leaked into local spec"
+    );
+    for (path, item) in spec["paths"].as_object().unwrap() {
+        for (verb, op) in item.as_object().unwrap() {
+            if matches!(verb.as_str(), "get" | "post" | "put" | "patch" | "delete") {
+                assert_eq!(
+                    op["x-oz-scope"].as_str(),
+                    Some("both"),
+                    "{verb} {path} in the local spec must be scope both"
+                );
+            }
+        }
+    }
+
     // Protected route without a token → 401.
     let resp = reqwest::get(format!("{base}/api/v1/products"))
         .await

@@ -12,7 +12,9 @@
 //! The server shares `AppState::db` (the primary-store connection) with
 //! the Tauri commands — same `Arc<tokio::sync::Mutex<Connection>>` type
 //! `oz_api::AppState` expects. CORS is fail-closed (empty allowlist):
-//! local scripts are curl/Python/Node, not browser pages.
+//! local scripts are curl/Python/Node, not browser pages. `GET
+//! /api/openapi.json` serves `oz_api::spec::local_spec()` — the shared
+//! contract with every operation tagged `x-oz-scope: "both"`.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -128,6 +130,17 @@ pub async fn start(
     secret: String,
     port: u16,
 ) -> Result<LocalApiHandle, String> {
+    // Bind BEFORE building the router so the self-documenting
+    // /api/openapi.json handler can advertise the actual port
+    // (OS-chosen when 0).
+    let listener = TcpListener::bind(("127.0.0.1", port))
+        .await
+        .map_err(|e| format!("binding 127.0.0.1:{port}: {e}"))?;
+    let bound_port = listener
+        .local_addr()
+        .map_err(|e| format!("reading bound address: {e}"))?
+        .port();
+
     let api_state = oz_api::AppState {
         db,
         pg: None,
@@ -136,7 +149,7 @@ pub async fn start(
         admin_key: Some(secret.clone()),
         api_secret: secret,
         db_path: db_path.display().to_string(),
-        port,
+        port: bound_port,
         // Fail-closed: no browser origin may call the local API. Local
         // scripts (curl/Python/Node) do not send CORS preflights.
         cors_origins: Vec::new(),
@@ -146,15 +159,13 @@ pub async fn start(
     // exist before the image routes can write to it.
     std::fs::create_dir_all(&api_state.image_dir)
         .map_err(|e| format!("creating image dir {}: {e}", api_state.image_dir.display()))?;
-    let app = oz_api::router(api_state);
-
-    let listener = TcpListener::bind(("127.0.0.1", port))
-        .await
-        .map_err(|e| format!("binding 127.0.0.1:{port}: {e}"))?;
-    let bound_port = listener
-        .local_addr()
-        .map_err(|e| format!("reading bound address: {e}"))?
-        .port();
+    // The shared OpenAPI document (every operation `x-oz-scope: "both"`)
+    // served locally — scripts can discover the contract from the
+    // running server instead of the repo docs.
+    let app = oz_api::router(api_state).route(
+        "/api/openapi.json",
+        axum::routing::get(move || async move { axum::Json(oz_api::spec::local_spec(bound_port)) }),
+    );
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let task = tokio::spawn(async move {
