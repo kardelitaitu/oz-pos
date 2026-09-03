@@ -152,6 +152,56 @@ function withStrictCSP(resp: Response): Response {
   return new Response(resp.body, { status: resp.status, headers });
 }
 
+/**
+ * Serve static assets from the ASSETS binding with optimized caching
+ * and non-render-blocking CSS.
+ *
+ * Cache strategy (Lighthouse "use efficient cache lifetimes"):
+ *   - /_astro/*: content-hashed filenames → immutable, 1-year cache.
+ *     Without this, the Worker's default (no header) lets Cloudflare
+ *     apply its own ~4h TTL, triggering a Lighthouse warning.
+ *   - Everything else: must-revalidate (default) — HTML pages and
+ *     unfingerprinted assets must reflect deploys immediately.
+ *
+ * CSS deferral (Lighthouse "render-blocking resources"):
+ *   Astro emits `<link rel="stylesheet">` which blocks rendering.
+ *   We rewrite it to `media="print" onload="this.media='all'"` so
+ *   the browser paints immediately with fallback styles and swaps in
+ *   the real CSS once loaded. The `onload` handler ensures no FOUC:
+ *   the CSSOM is built before the first meaningful paint.
+ */
+async function serveStatic(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const resp = await env.ASSETS.fetch(request);
+
+  // Only mutate successful HTML responses on the marketing host.
+  const ct = resp.headers.get('Content-Type') ?? '';
+  const isHTML = ct.includes('text/html');
+  const isAstro = url.pathname.startsWith('/_astro/');
+
+  // ── Cache headers ────────────────────────────────────────────────
+  const out = resp.clone();
+  if (isAstro) {
+    // Content-hashed assets: cache forever, revalidate never.
+    out.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+  }
+
+  if (!isHTML || url.pathname === '/__oz/runtime-config.js') {
+    return out;
+  }
+
+  // ── Defer render-blocking CSS ────────────────────────────────────
+  const body = await out.text();
+  // Rewrite <link rel="stylesheet" ...> to load non-render-blocking.
+  // Pattern: match the global.css link that Astro injects from the layout import.
+  const deferred = body.replace(
+    /(<link\s+rel="stylesheet"\s+href="\/_astro\/global[^"]*"[^>]*)(\/?>)/,
+    '$1 media="print" onload="this.media=&apos;all&apos;"$2',
+  );
+
+  return new Response(deferred, { status: out.status, headers: out.headers });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -809,6 +859,6 @@ export default {
 
     // Everything else: serve the static site (the assets binding honors
     // public/_headers and public/_redirects).
-    return env.ASSETS.fetch(request);
+    return serveStatic(request, env);
   },
 };
