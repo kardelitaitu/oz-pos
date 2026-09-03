@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "postbuild": "node scripts/bust-admin-cache.mjs",
+    "postbuild": "node scripts/bust-admin-cache.mjs && node scripts/inject-module-preloads.mjs",
     "prebuild": "node scripts/prebuild.mjs",
     "build:fast": "astro build",
     "check": "astro check",
