@@ -105,6 +105,14 @@
 }
 
 /* ── Base typography (design language) ────────────────────────── */
+html,
+body {
+  /* Hero-carousel slides park beyond the viewport edges between
+     transitions (translateX(±100vw)); html+body need the clip so the
+     parked windows never create a horizontal scrollbar. */
+  overflow-x: hidden;
+}
+
 body {
   font-family: var(--font);
   font-size: 16px;
@@ -113,10 +121,6 @@ body {
   background: var(--color-bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Hero-carousel slides park off-screen right between transitions
-     (translateX(calc(100% + 1rem))); without this clip the parked
-     windows would create a horizontal scrollbar. */
-  overflow-x: hidden;
 }
 
 /* Theme toggle icon: both icons overlap absolutely inside the button;

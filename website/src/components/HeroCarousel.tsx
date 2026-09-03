@@ -26,9 +26,11 @@ function slideContent(id: SlideId): ReactNode | undefined {
 }
 
 /**
- * Per-slide transform: active sits at 0; exiting sweeps to the left;
- * every other slide parks off-screen to the right so the next advance
- * enters from beyond the viewport edge ("from outside the screen").
+ * Per-slide transform: active sits at 0; exiting sweeps fully past the
+ * left viewport edge; every other slide parks fully past the right
+ * viewport edge so the next advance enters from outside the screen.
+ * Viewport units (not %) guarantee off-screen on any width — the stage
+ * is always inset from the viewport by the centered-layout margin.
  */
 function slideTransform(
   i: number,
@@ -36,8 +38,8 @@ function slideTransform(
   leaving: number | null,
 ): string {
   if (i === index) return 'translateX(0)';
-  if (leaving !== null && i === leaving) return 'translateX(calc(-100% - 1rem))';
-  return 'translateX(calc(100% + 1rem))';
+  if (leaving !== null && i === leaving) return 'translateX(-100vw)';
+  return 'translateX(100vw)';
 }
 
 export default function HeroCarousel({ labels, descriptions, comingSoon }: Props) {
@@ -143,6 +145,10 @@ export default function HeroCarousel({ labels, descriptions, comingSoon }: Props
           const isLeaving = leaving !== null && i === leaving;
           const transform = slideTransform(i, index, leaving);
           const zIndex = isLeaving ? 10 : isActive ? 20 : 0;
+          // Only the moving slides animate. Parked slides must NOT carry a
+          // transition — otherwise clearing `leaving` would visibly sweep
+          // the departed window from the left edge back to its parking
+          // spot on the right (ghost sweep across the screen).
 
           return (
             <div
@@ -152,9 +158,10 @@ export default function HeroCarousel({ labels, descriptions, comingSoon }: Props
               style={{
                 transform,
                 zIndex,
-                transition: reduceMotion
-                  ? 'none'
-                  : `transform ${transitionMs}ms cubic-bezier(0.2, 0, 0, 1)`,
+                transition:
+                  !reduceMotion && (isActive || isLeaving)
+                    ? `transform ${transitionMs}ms cubic-bezier(0.2, 0, 0, 1)`
+                    : 'none',
               }}
             >
               <SlideWindow title={`OZ-POS — ${labels[id]}`} content={slideContent(id)}>

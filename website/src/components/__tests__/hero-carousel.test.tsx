@@ -74,9 +74,14 @@ describe('HeroCarousel', () => {
     const buttons = pillButtons(container);
     expect(buttons[0].getAttribute('aria-current')).toBe('true');
     expect(buttons[1].getAttribute('aria-current')).toBeNull();
-    // Track is at translateX(0) — first slide visible.
-    const track = container.querySelector('div[style*="translateX"]') as HTMLElement | null;
-    expect(track?.style.transform).toMatch(/translateX\(-?0%\)/);
+    // Active slide rests at translateX(0) with a transform transition;
+    // every other slide parks off-screen right (sweeps in from beyond
+    // the viewport edge on advance).
+    const active = container.querySelector('[data-slide-id="restaurant"]') as HTMLElement;
+    expect(active.style.transform).toBe('translateX(0)');
+    expect(active.style.transition).toMatch(/transform 700ms/);
+    const parked = container.querySelector('[data-slide-id="retail"]') as HTMLElement;
+    expect(parked.style.transform).toBe('translateX(100vw)');
     await unmount();
   });
 
@@ -111,8 +116,12 @@ describe('HeroCarousel', () => {
       buttons[3].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(buttons[3].getAttribute('aria-current')).toBe('true');
-    const track = container.querySelector('div[style*="translateX"]') as HTMLElement | null;
-    expect(track?.style.transform).toContain('translateX(-300%)');
+    // The clicked slide rests at 0 while the previously active slide
+    // sweeps out to the left (leftward-advance direction).
+    const active = container.querySelector('[data-slide-id="warehouse"]') as HTMLElement;
+    expect(active.style.transform).toBe('translateX(0)');
+    const leaving = container.querySelector('[data-slide-id="restaurant"]') as HTMLElement;
+    expect(leaving.style.transform).toBe('translateX(-100vw)');
 
     // The manual jump must reset the auto-advance timer: advancing less
     // than one dwell after a click must not move the slide again.
