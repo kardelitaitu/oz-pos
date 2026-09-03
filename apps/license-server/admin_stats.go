@@ -454,9 +454,12 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 			monthlyRefundIdr = math.Round(cm.RefundIdr)
 			grossSource = "provider"
 		} else {
-			// Fall back to subscription estimate when no provider events.
-			monthlyGrossUsd = math.Round(mrrUsd*100) / 100
-			monthlyGrossIdr = math.Round(mrrUsd * fxRate)
+			// No provider-verified revenue events this month — the gross
+			// must be zero.  MRR (computed from active subscriptions × tier
+			// price) is a subscription projection, not received income, and
+			// must never be recycled into monthlyGross where it would
+			// falsely report a manual DB tier override as revenue.
+			grossSource = "estimate"
 		}
 
 		// ── Needs-attention items (alert panel) ──────────────────────

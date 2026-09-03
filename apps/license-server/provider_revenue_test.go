@@ -292,6 +292,88 @@ func TestAdminStats_MonthlyGrossProviderSourced(t *testing.T) {
 	}
 }
 
+// ── No-provider-events immunity: manual tier override ≠ gross income ──
+
+// TestAdminStats_TierOverrideNoGross pins the exact reported bug: with NO
+// webhook-verified revenue_events for the current month, manually editing a
+// subscription tier (free→plus via admin/PocketBase) must leave monthly
+// gross at zero.  The old code recycled the MRR projection (active subs ×
+// tier price) into monthlyGross, so a DB-only override — no payment
+// received — inflated the gross figure.
+func TestAdminStats_TierOverrideNoGross(t *testing.T) {
+	resetProviderRevenueCache()
+	resetRateLimiters()
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+
+	tenantID, _ := seedDashboardTenant(t, app, "tier-override@test.com")
+	t.Setenv("OZ_ADMIN_KEY", "secret-admin-key")
+
+	// No revenue_events rows are seeded — the current month has zero
+	// provider-verified income by construction.
+
+	// Fetch stats BEFORE the override: gross must already be 0.
+	fetchGross := func(tag string) (usd, idr float64, src string) {
+		rec := doJSON(mux, http.MethodGet, "/api/v1/admin/stats?refresh=1", "Bearer secret-admin-key", "")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: expected 200, got %d", tag, rec.Code)
+		}
+		var body struct {
+			KPIs struct {
+				MonthlyGrossUsd float64 `json:"monthlyGrossUsd"`
+				MonthlyGrossIdr float64 `json:"monthlyGrossIdr"`
+				GrossSource     string  `json:"grossSource"`
+				MmrUsd          float64 `json:"mrrUsd"`
+			} `json:"kpis"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s: bad JSON: %v", tag, err)
+		}
+		return body.KPIs.MonthlyGrossUsd, body.KPIs.MonthlyGrossIdr, body.KPIs.GrossSource
+	}
+
+	if usd, idr, _ := fetchGross("before"); usd != 0 || idr != 0 {
+		t.Fatalf("before override: gross = %v/%v, want 0/0", usd, idr)
+	}
+
+	// Simulate the admin overriding free→plus directly in the DB.
+	subs, _ := app.FindRecordsByFilter("subscriptions",
+		"tenant_id = {:tid}", "", 1, 0,
+		map[string]any{"tid": tenantID})
+	if len(subs) == 0 {
+		t.Fatal("expected a seeded subscription to override")
+	}
+	subs[0].Set("tier_key", "plus")
+	subs[0].Set("status", "active")
+	if err := app.Save(subs[0]); err != nil {
+		t.Fatalf("save tier override: %v", err)
+	}
+
+	// After the override: MRR rises (projection) but GROSS must stay 0 —
+	// no webhook ever fired, no money arrived.
+	usd, idr, src := fetchGross("after override")
+	if usd != 0 || idr != 0 {
+		t.Errorf("after tier override: gross = %v/%v, want 0/0 (no webhook payment received)", usd, idr)
+	}
+	if src != "estimate" {
+		t.Errorf("grossSource = %q, want estimate (no provider events)", src)
+	}
+	// Sanity: the subscription projection did change — proving the DB edit
+	// happened and the zero gross is not because the edit was ignored.
+	var body struct {
+		KPIs struct {
+			MmrUsd float64 `json:"mrrUsd"`
+		} `json:"kpis"`
+	}
+	rec := doJSON(mux, http.MethodGet, "/api/v1/admin/stats?refresh=1", "Bearer secret-admin-key", "")
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bad JSON (mrr): %v", err)
+	}
+	if body.KPIs.MmrUsd != 4.99 {
+		t.Errorf("mrrUsd after override = %v, want 4.99 (plus tier) — the DB edit should register in MRR only", body.KPIs.MmrUsd)
+	}
+}
+
 // ── Concurrency smoke test ──────────────────────────────────────────
 
 func TestGetProviderRevenueConcurrent(t *testing.T) {

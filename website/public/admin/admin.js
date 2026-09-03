@@ -147,10 +147,13 @@
       // money.
       const heroIsEstimate = m.kpis.grossSource === 'estimate' || !m.kpis.grossSource || !(m.kpis.monthlyGrossUsd > 0);
       const heroSrc = heroIsEstimate ? t('common.estimate') : t('common.providerVerified');
-      // Hero value: provider-verified monthly gross when the server sent it
-      // (new build), else the MRR estimate so an old server never shows a
-      // blank Rp 0 hero.
-      const heroIdr = m.kpis.monthlyGrossIdr > 0 ? m.kpis.monthlyGrossIdr : Math.round(m.kpis.mrrUsd * fxRate);
+      // Hero value: provider-verified monthly gross ONLY.  When the server
+      // sends no verified gross (monthlyGrossIdr 0 / grossSource estimate)
+      // the hero must show 0 — a manual DB tier override (free→plus) creates
+      // a subscription row but NO webhook payment, and the MRR projection
+      // must not be recycled into the gross number.  MRR is always shown
+      // separately in the hero sub-line.
+      const heroIdr = m.kpis.monthlyGrossIdr > 0 ? m.kpis.monthlyGrossIdr : 0;
       const hero = el('div', 'hero-card');
       // Label: include the current month so the operator knows what period
       // the gross covers, and a refresh button.
