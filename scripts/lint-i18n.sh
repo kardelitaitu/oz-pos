@@ -5,10 +5,8 @@
 # (the `i18n quality gate` step). Contributors run this locally to
 # catch i18n issues before pushing to CI.
 #
-# Reports three categories of regressions. Only 1 and 2 fail-closed
-# (drive the script's exit code); 3 is an informational pre-flight
-# until the landing-baseline gaps in the parity check are resolved
-# (see the inline comment near the parity gate):
+# Reports three categories of regressions. ALL THREE fail-closed
+# (each drives the script's exit code):
 #   1. `[i18n]` — translation completeness tests in
 #      `ui/src/__tests__/i18nBundle.test.tsx` flag any .id.ftl file
 #      that is byte-identical to its .ftl sibling (Indonesian users
@@ -17,40 +15,52 @@
 #      warns when two .ftl files in the same joined bundle define
 #      the same key; the first loaded file wins silently, the
 #      duplicate is dropped.
-#   3. Pre-flight parity: every `<Localized id="…">` site in
-#      `ui/src/features/**` must have a matching key in BOTH the
-#      en .ftl AND the id .id.ftl (see
-#      `scripts/verify-bundle-parity.py`).
+#   3. Parity: every literal Fluent key reference must have a
+#      matching key in BOTH the en .ftl AND the id .id.ftl. Since the
+#      Fluent page audit this covers `getString()`,
+#      `requiredLocalized()`, `registerNavItem` i18nKey and
+#      `SECTION_LABELS`, across features + components + frontend +
+#      contexts + hooks + platform (see `--full-census` in
+#      `scripts/verify-bundle-parity.py`). The rev-1 features-only
+#      `<Localized id>` walk reported clean while 14 keys shipped
+#      broken.
 #
 # Usage:  bash scripts/lint-i18n.sh
 #         (run from any directory)
 #
-# Exits 0 if no fail-closed regressions (1 and 2) are detected;
-# 1 otherwise, with a categorized error report on stderr. The
-# parity pre-flight (3) is reported to stderr when it finds issues
-# but does NOT influence the exit code.
+# Exits 0 only when all three categories are clean; 1 otherwise, with a
+# categorized error report on stderr.
 
 set -uo pipefail
 
 cd "$(dirname "$0")/.."
 
-# ── Pre-flight: bundle parity (silent on clean runs) ────────────────
+# ── Pre-flight: bundle parity (FAIL-CLOSED since the Fluent audit) ───
 #
 # Sentinel-grep on the parity script's always-last stdout line
 # `verify-bundle-parity: <N> missing key(s).` — robust to bucket
-# renames / additions. Match triggers an informational `cat >&2`
-# display (NOT a gate). `--report-only` is forced so the parity
-# script's exit never propagates; this script fails-closed only
-# via categories 1 and 2 downstream. Promote — once `--report-only`
-# reports `0 missing` — by dropping `--report-only` AND adding
-# `exit 1` inside the `if grep -q` block below.
+# renames / additions.
+#
+# Promoted from informational to a gate, exactly as the rev-1 comment
+# prescribed ("Promote — once --report-only reports 0 missing — by
+# dropping --report-only AND adding `exit 1` inside the `if grep -q`
+# block"). The promotion is safe because the census reached 0 missing
+# once the 14 phantom keys found by the page audit landed.
+#
+# Scope is now `--full-census`, not the rev-1 features-only
+# <Localized> walk. The narrower scan reported "0 missing key(s)" while
+# 14 keys shipped broken, because it could not see getString(),
+# requiredLocalized(), registerNavItem i18nKey, or anything outside
+# ui/src/features/** — including the shared chrome every page renders.
 OUT=$(mktemp)
 PARITY_OUT=$(mktemp)
 trap 'rm -f "$OUT" "$PARITY_OUT"' EXIT
-python3 scripts/verify-bundle-parity.py --report-only > "$PARITY_OUT" 2>&1
+python3 scripts/verify-bundle-parity.py --full-census > "$PARITY_OUT" 2>&1
 if grep -qE '^verify-bundle-parity: [1-9][0-9]* missing' "$PARITY_OUT"; then
     cat "$PARITY_OUT" >&2
     echo "" >&2
+    echo "error: bundle parity — a literal Fluent key resolves in neither .ftl bundle (or only one). See verify-bundle-parity.py output above." >&2
+    exit 1
 fi
 
 # Targeted: i18nBundle.test.tsx is the sole source of `[i18n]`

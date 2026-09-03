@@ -127,12 +127,18 @@ fi
 # Runs `scripts/verify-bundle-parity.py --staged-only` against
 # .tsx / .ts files modified in the current commit (cheap ~100ms;
 # targeted, not full repo). Catches missing-translation regressions
-# BEFORE push, independently of the 78-key baseline because it
-# inspects only the files this commit touches. CI's `lint-i18n.sh`
-# still runs the full-tree scan in complement; this hook is the
-# commit-time cheap-fail-fast guard. Skipped silently when no
-# feature files are staged (e.g. a commit touching only Rust code
-# or .ftl locale files).
+# BEFORE push, independently of the baseline because it inspects only
+# the files this commit touches. CI's `lint-i18n.sh` still runs the
+# full-tree scan in complement; this hook is the commit-time
+# cheap-fail-fast guard. Skipped silently when no eligible file is
+# staged (e.g. a commit touching only Rust code or .ftl locale files).
+#
+# Scope covers the rev-2 surfaces (--include-getstring
+# --include-nav-keys) and every ui/src directory that renders copy
+# (--scan-dirs), not just features/. Before this change the hook
+# printed "path outside ui/src/features, skipping" for every shared
+# chrome and context file it was handed, so `ContextMenu.tsx` could
+# ship an unresolvable key with the gate reporting success.
 #
 # Reads .tsx/.ts from `git diff --cached --diff-filter=ACM` (added /
 # copied / modified) and feeds them as positional args to the
@@ -147,7 +153,10 @@ if [ -f scripts/verify-bundle-parity.py ]; then
         | grep -E '\.(tsx|ts)$' || true)
     # || true: swallow grep no-match (e.g. no .tsx/.ts staged) + mask any upstream pipe failure.
     if [ "${#STAGED_FILES[@]}" -gt 0 ]; then
-        if ! "$PYTHON" scripts/verify-bundle-parity.py --staged-only "${STAGED_FILES[@]}"; then
+        if ! "$PYTHON" scripts/verify-bundle-parity.py --staged-only \
+                --include-getstring --include-nav-keys \
+                --scan-dirs features,components,frontend,contexts,hooks,platform \
+                "${STAGED_FILES[@]}"; then
             printf '%s\n' "error: bundle parity — staged files reference keys missing from one or both .ftl bundles. See verify-bundle-parity.py output above." >&2
             exit 1
         fi
