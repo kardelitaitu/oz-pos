@@ -201,13 +201,13 @@ describe('HeroCarousel', () => {
     await unmount();
   });
 
-  it('shows a caption on placeholder slides but the rich mockup on restaurant', async () => {
+  it('renders all slides with their distinct labels and descriptions', async () => {
     const { container, unmount } = await renderCarousel();
-    // Restaurant slide keeps the rich HTML mockup content (e.g. Bayar · QRIS).
-    expect(container.textContent).toContain('Bayar · QRIS');
-    // A placeholder caption is present (shown on whichever non-restaurant
-    // slide is visible or queued in the DOM).
-    expect(container.textContent).toContain('Screenshot coming soon');
+    expect(container.textContent).toContain('Restaurant');
+    expect(container.textContent).toContain('Retail');
+    expect(container.textContent).toContain('Kitchen');
+    expect(container.textContent).toContain('Warehouse');
+    expect(container.textContent).toContain('Topology');
     expect(container.textContent).toContain('Stock, transfers, and purchase orders');
     await unmount();
   });

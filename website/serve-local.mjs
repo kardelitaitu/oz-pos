@@ -27,6 +27,17 @@ const MIME = {
 const server = http.createServer((req, res) => {
   try {
     let urlPath = decodeURIComponent(new URL(req.url, `http://localhost:${PORT}`).pathname);
+    
+    // Intercept runtime config endpoint (handled by Cloudflare Worker in production)
+    if (urlPath === '/__oz/runtime-config.js') {
+      res.writeHead(200, {
+        'Content-Type': 'application/javascript; charset=utf-8',
+        'Cache-Control': 'no-store',
+      });
+      res.end('window.__OZ_CONFIG__ = { licenseApiUrl: "http://localhost:8080", contactEndpoint: "/api/contact" };');
+      return;
+    }
+
     if (urlPath === '/' || urlPath === '') {
       urlPath = '/en/';
     }
