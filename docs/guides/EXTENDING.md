@@ -1,6 +1,6 @@
 # Extending OZ-POS — Scripting & Integration Guide
 
-<!-- Audit stamp: 2026-09-03 · DSH · status: UPDATED (local API wired + shared OpenAPI source with x-oz-scope; same-day review fixes: primary-store DB targeting, lifecycle op-lock, managed-key guard) · every claim below cross-referenced against: crates/oz-api/src/{lib.rs,auth.rs,read_tiers.rs,spec/mod.rs}, crates/oz-api/src/routes/{tokens.rs,terminals.rs,sales.rs,settings.rs,products.rs,tax_rates.rs,exchange_rates.rs,users.rs,images.rs}, apps/cloud-server/src/{main.rs,openapi.rs,openapi_tests.rs,sync_api.rs}, apps/desktop-client/src/{local_api.rs,commands/local_api.rs}, foundation/src/money.rs, crates/oz-lua/README.md, crates/oz-cli/README.md, docs/guides/plugin-guide.md, docs/specs/_active/0047-openapi-drift-guard-and-read-tiers.md · spec-vs-code drift findings recorded here were repaired the same day (see §10) -->
+<!-- Audit stamp: 2026-09-03 · DSH · status: UPDATED (local API wired + shared OpenAPI source with x-oz-scope; same-day review fixes: primary-store DB targeting, lifecycle op-lock, managed-key guard; then: outbound webhooks on cloud (§7.4), API-write audit + store selector on desktop (§2.2), smoke-found spec/guide drift) · every claim below cross-referenced against: crates/oz-api/src/{lib.rs,auth.rs,read_tiers.rs,api_audit.rs,spec/mod.rs}, crates/oz-api/src/routes/{tokens.rs,terminals.rs,sales.rs,settings.rs,products.rs,tax_rates.rs,exchange_rates.rs,users.rs,images.rs}, apps/cloud-server/src/{main.rs,openapi.rs,openapi_tests.rs,sync_api.rs,outbound_webhooks.rs,outbox.rs}, apps/desktop-client/src/{local_api.rs,commands/local_api.rs}, foundation/src/money.rs, crates/oz-lua/README.md, crates/oz-cli/README.md, docs/guides/plugin-guide.md, docs/specs/_active/0047-openapi-drift-guard-and-read-tiers.md · spec-vs-code drift findings recorded here were repaired the same day (see §10); the §7 recipes are executed verbatim against a live playground by target/smoke-local-api.ps1 (22/22) -->
 
 This guide is for people writing **their own scripts** against an OZ-POS
 installation — automation on the counter machine, a dashboard against the
@@ -46,12 +46,17 @@ mints 30-day read tokens for your scripts. Differences from the cloud
 deployment, by design:
 
 - **loopback-only** bind — nothing on your LAN can reach it;
-- it serves the **primary store's database** — the same
-  `store-{id}.sqlite` file the register reads (resolved via
-  `store_profiles.is_primary`), so scripts see exactly what the UI
-  shows. One caveat: `POST /api/v1/users` writes the store DB's `users`
-  table, while the register's login accounts live in the global
+- it serves **one store's database at a time** — by default the
+  **primary store**, the same `store-{id}.sqlite` file the register
+  reads (resolved via `store_profiles.is_primary`); multi-store
+  installs can switch the served store in the same Settings panel
+  (restarts the server against the new file). Scripts see exactly what
+  the UI shows. One caveat: `POST /api/v1/users` writes the store DB's
+  `users` table, while the register's login accounts live in the global
   identity DB — create staff accounts through the UI, not scripts;
+- **API writes land in the served store's audit log** (`api.write`
+  entries with method, path, status, and the minted token's label), so
+  script mutations are visible in the merchant's audit review UI;
 - tokens are signed with a **per-install secret** generated on first
   enable (persisted, so they survive restarts); a token forged with the
   known dev fallback constant is rejected;
@@ -463,14 +468,15 @@ itself. Subcommand table and conventions (minor units, `--db`):
 
 Documented so scripts don't build on sand:
 
-1. **Local API scope (desktop v1).** Desktop-only (the tablet app does not
-   wire it yet). It serves the **primary-store DB** — the same file the
-   register UI reads (regression-tested: an API write is visible through
-   the UI's connection path and never touches the global identity DB) —
-   and additional per-store files are not exposed; `POST /api/v1/users`
-   is therefore not the register's account store (see §2.2).
-   Loopback-only: LAN exposure would need the `lan_server` PSK pattern
-   first (§2.1).
+1. **Local API scope (desktop v1).** Desktop-only (the tablet app does
+   not wire it yet). It serves **one store at a time** (primary by
+   default, switchable in Settings; §2.2) — the same file the register
+   UI reads (regression-tested: an API write is visible through the
+   UI's connection path and never touches the global identity DB);
+   `POST /api/v1/users` is therefore not the register's account store
+   (see §2.2). API writes are audited into the served store's
+   `audit_log`. Loopback-only: LAN exposure would need the
+   `lan_server` PSK pattern first (§2.1).
 2. **Reserved tags without paths** — Inventory/Orders/Reports/Customers/
    Notifications/Analytics appear in the spec's tag list but declare no
    operations.
