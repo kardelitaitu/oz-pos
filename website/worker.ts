@@ -174,24 +174,27 @@ async function serveStatic(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const resp = await env.ASSETS.fetch(request);
 
-  // Only mutate successful HTML responses on the marketing host.
-  const ct = resp.headers.get('Content-Type') ?? '';
-  const isHTML = ct.includes('text/html');
+  // Copy original headers into a plain object we can pass to the Response
+  // constructor. Using resp.headers directly sometimes fails in Workers
+  // because the Headers object is tied to the original body stream.
+  const headers: Record<string, string> = {};
+  resp.headers.forEach((v, k) => { headers[k] = v; });
+
   const isAstro = url.pathname.startsWith('/_astro/');
 
-  // ── Cache headers ────────────────────────────────────────────────
-  const out = resp.clone();
+  // ── Cache headers for content-hashed assets ──────────────────────
   if (isAstro) {
-    // Content-hashed assets: cache forever, revalidate never.
-    out.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+    headers['cache-control'] = 'public, max-age=31536000, immutable';
   }
 
-  if (!isHTML || url.pathname === '/__oz/runtime-config.js') {
-    return out;
+  // Only rewrite HTML pages for CSS deferral.
+  const ct = headers['content-type'] ?? '';
+  if (!ct.includes('text/html') || url.pathname === '/__oz/runtime-config.js') {
+    return new Response(resp.body, { status: resp.status, headers });
   }
 
   // ── Defer render-blocking CSS ────────────────────────────────────
-  const body = await out.text();
+  const body = await resp.text();
   // Rewrite <link rel="stylesheet" ...> to load non-render-blocking.
   // Pattern: match the global.css link that Astro injects from the layout import.
   const deferred = body.replace(
@@ -199,7 +202,7 @@ async function serveStatic(request: Request, env: Env): Promise<Response> {
     '$1 media="print" onload="this.media=&apos;all&apos;"$2',
   );
 
-  return new Response(deferred, { status: out.status, headers: out.headers });
+  return new Response(deferred, { status: resp.status, headers });
 }
 
 export default {
