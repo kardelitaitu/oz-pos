@@ -320,10 +320,11 @@ ADMIN_KEY = "..."                      # dev playground: omit header;
 
 tok = requests.post(f"{BASE}/tokens",
     headers={"X-Admin-Key": ADMIN_KEY},
-    json={"label": "python-script", "expiry_hours": 4}).json()["token"]
+    json={"label": "python-script", "expiry_hours": 4}
+    ).json()["token"]["token"]   # response nests TokenResponse under "token"
 H = {"Authorization": f"Bearer {tok}"}
 
-products = requests.get(f"{BASE}/products", headers=H).json()
+products = requests.get(f"{BASE}/products", headers=H).json()["products"]
 
 sale = requests.post(f"{BASE}/sales", headers=H, json={"lines": [
     {"sku": "COFFEE-001", "qty": 2,
@@ -331,6 +332,10 @@ sale = requests.post(f"{BASE}/sales", headers=H, json={"lines": [
 ]}).json()
 print(sale["id"], sale["status"])
 
+# The sale state machine is Pending → Active → Completed (or
+# Active → Voided); skipping a step returns 422.
+requests.patch(f"{BASE}/sales/{sale['id']}/status", headers=H,
+               json={"status": "active"})
 requests.patch(f"{BASE}/sales/{sale['id']}/status", headers=H,
                json={"status": "completed"})
 ```
@@ -341,9 +346,9 @@ requests.patch(f"{BASE}/sales/{sale['id']}/status", headers=H,
 const BASE = "http://127.0.0.1:3099/api/v1";
 const H = { Authorization: `Bearer ${process.env.OZ_TOKEN}` };
 
-const low = (await (await fetch(`${BASE}/products`, { headers: H })).json())
-  .filter(p => p.stock_quantity !== undefined && p.stock_quantity <= 5);
-console.table(low.map(p => [p.sku, p.stock_quantity]));
+const low = (await (await fetch(`${BASE}/products`, { headers: H })).json()).products
+  .filter(p => p.stock_qty !== undefined && p.stock_qty <= 5);
+console.table(low.map(p => [p.sku, p.stock_qty]));
 
 // restock: operator-tier write — JWT + X-Admin-Key, terminal tokens rejected
 await fetch(`${BASE}/products/${low[0].sku}/stock`, {

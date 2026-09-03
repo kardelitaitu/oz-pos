@@ -145,6 +145,14 @@ pub(super) fn build_base_schemas() -> Value {
                 "new_qty": { "type": "integer", "format": "int64" }
             }
         },
+        "ListProductsResponse": {
+            "type": "object",
+            "description": "Envelope for the product list. `missing_hashes` lists content hashes referenced by product image assignments whose files are not present in the server's image store — clients can fetch them via the image endpoints (spec 0046b).",
+            "properties": {
+                "products": { "type": "array", "items": { "$ref": "#/components/schemas/ProductDetail" } },
+                "missing_hashes": { "type": "array", "items": { "type": "string" }, "description": "Content hashes referenced by products but absent from the image store" }
+            }
+        },
         "CategoryDto": {
             "type": "object",
             "properties": {

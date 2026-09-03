@@ -67,7 +67,7 @@ pub(super) fn build_base_paths() -> Value {
             "get": {
                 "tags": ["Products"],
                 "summary": "List all products",
-                "description": "Returns all products ordered by name, including category name and stock quantity. Requires JWT auth. Returns a flat array today; will adopt `PaginatedResponse` envelope when pagination support lands.",
+                "description": "Returns all products ordered by name, including category name and stock quantity, wrapped in a `ListProductsResponse` envelope (`products` + `missing_hashes`). Requires JWT auth. The pagination query parameters are reserved for a future release and currently ignored.",
                 "operationId": "listProducts",
                 "security": [{ "bearerAuth": [] }],
                 "parameters": [
@@ -78,7 +78,7 @@ pub(super) fn build_base_paths() -> Value {
                     { "$ref": "#/components/parameters/PaginationQ" }
                 ],
                 "responses": {
-                    "200": { "description": "List of products (may be empty)", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/ProductDetail" } } } } },
+                    "200": { "description": "Product list envelope (may be empty)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ListProductsResponse" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "403": { "description": "Token lacks the `products:read` read-tier permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "insufficient_scope" } } } }
                 }
