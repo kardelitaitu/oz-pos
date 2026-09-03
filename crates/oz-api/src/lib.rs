@@ -88,6 +88,15 @@ pub struct AppState {
     /// Falls back to a dev default when empty.
     pub api_secret: String,
 
+    /// Whether `POST /api/v1/tokens` accepts the terminal
+    /// client-credentials path (`client_id` + `client_secret` against
+    /// `sync_terminals`). Cloud: true. The desktop local API sets it
+    /// false — device credentials are provisioned for the cloud fleet,
+    /// and a secret that ever lands in the served DB (restore, scripted
+    /// registration) must not silently become a local-API credential
+    /// the operator never minted (review MED-5).
+    pub allow_terminal_credentials: bool,
+
     /// Database path (default: `oz-pos.db`).
     pub db_path: String,
 
@@ -153,7 +162,11 @@ pub fn parse_cors_origins(env: Option<String>) -> Vec<String> {
             .collect(),
         None => DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
     };
-    origins.dedup();
+    // Full dedup preserving first-seen order — `Vec::dedup` only
+    // collapses ADJACENT runs, so "a,b,a" used to keep both `a`s
+    // despite the doc promising a de-duplicated list.
+    let mut seen = std::collections::HashSet::new();
+    origins.retain(|o| seen.insert(o.clone()));
     origins
 }
 
@@ -225,6 +238,7 @@ impl AppState {
             pg: None,
             admin_key: None,
             api_secret: String::new(),
+            allow_terminal_credentials: true,
             db_path: ":memory:".into(),
             port: 3099,
             cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
@@ -261,9 +275,12 @@ pub fn router(state: AppState) -> Router {
 /// appended to the returned `Router<()>` escapes all three).
 pub fn router_with_openapi(state: AppState, openapi_json: Option<serde_json::Value>) -> Router {
     let cors = build_cors(&state.cors_origins);
-    // Clone for the stateful auth middleware (the original moves into
-    // `.with_state` at the end).
-    let auth_state = state.clone();
+    // Slim middleware state: one Arc clone per protected request instead
+    // of a full AppState clone (the original moves into `.with_state`
+    // at the end).
+    let auth_state = auth::AuthState {
+        secret: Arc::new(state.api_secret.clone()),
+    };
 
     let public = Router::new()
         .route("/api/v1/health", get(routes::health::health))
@@ -433,6 +450,7 @@ pub async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         pg: None,
         admin_key,
         api_secret: api_secret_env.unwrap_or_default(),
+        allow_terminal_credentials: true,
         db_path: db_path.clone(),
         port: std::env::var("OZ_API_PORT")
             .ok()

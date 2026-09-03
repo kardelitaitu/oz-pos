@@ -177,6 +177,7 @@ async fn stateful_middleware_uses_state_secret() {
     let secret = "middleware-secret-d1a6";
     let state = AppState {
         api_secret: secret.to_string(),
+        allow_terminal_credentials: true,
         ..AppState::test(rusqlite::Connection::open_in_memory().unwrap())
     };
     async fn protected() -> &'static str {
@@ -185,7 +186,9 @@ async fn stateful_middleware_uses_state_secret() {
     let app = Router::new()
         .route("/x", get(protected))
         .layer(axum::middleware::from_fn_with_state(
-            state.clone(),
+            AuthState {
+                secret: std::sync::Arc::new(secret.to_string()),
+            },
             auth_middleware_with_state,
         ))
         .with_state(state);

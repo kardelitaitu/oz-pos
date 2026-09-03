@@ -125,3 +125,50 @@ fn annotate_scope_skips_non_operation_keys() {
     assert!(paths["/x"]["parameters"].get("x-oz-scope").is_none());
     assert!(paths["/x"]["summary"].get("x-oz-scope").is_none());
 }
+
+#[test]
+fn pagination_parameters_live_in_components_parameters() {
+    let spec = base_spec();
+    // Parameter Objects must not sit under components/schemas — they
+    // are not Schema Objects (review LOW-9).
+    assert!(
+        spec["components"]["schemas"]
+            .get("PaginationParams")
+            .is_none()
+    );
+    for name in [
+        "PaginationLimit",
+        "PaginationOffset",
+        "PaginationSort",
+        "PaginationOrder",
+        "PaginationQ",
+    ] {
+        let p = &spec["components"]["parameters"][name];
+        assert_eq!(p["in"], "query", "{name} must be a query Parameter Object");
+        assert!(p["name"].is_string(), "{name} must carry its name");
+    }
+    // Every path-level $ref resolves — including the new pointers.
+    let mut refs = Vec::new();
+    collect_refs(&spec["paths"], &mut refs);
+    assert!(
+        refs.iter()
+            .any(|r| r == "#/components/parameters/PaginationLimit"),
+        "pagination refs were not moved: {refs:?}"
+    );
+    for r in &refs {
+        assert!(ref_resolves(&spec, r), "unresolved {r}");
+    }
+}
+
+#[test]
+fn local_spec_has_no_dev_mode_affordance() {
+    // Canary first: the shared document does mention dev mode, so the
+    // strip has a target and a wording rename cannot pass silently.
+    let base = serde_json::to_string(&base_spec()).unwrap();
+    assert!(base.contains("open in dev mode"));
+    let local = serde_json::to_string(&local_spec(3099)).unwrap();
+    assert!(
+        !local.contains("open in dev mode"),
+        "desktop doc must not advertise open-in-dev minting"
+    );
+}

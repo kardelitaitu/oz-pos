@@ -47,6 +47,7 @@ fn test_app_seeded() -> Router {
         pg: None,
         admin_key: None,
         api_secret: String::new(),
+        allow_terminal_credentials: true,
         db_path: ":memory:".into(),
         port: 3099,
         cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
@@ -683,6 +684,7 @@ fn test_app_with_roles() -> Router {
         pg: None,
         admin_key: None,
         api_secret: String::new(),
+        allow_terminal_credentials: true,
         db_path: ":memory:".into(),
         port: 3099,
         cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
@@ -1064,6 +1066,16 @@ fn parse_cors_origins_star_means_allow_all() {
 #[test]
 fn parse_cors_origins_blank_denies_all() {
     assert!(parse_cors_origins(Some(" ".into())).is_empty());
+}
+
+#[test]
+fn parse_cors_origins_dedups_non_adjacent_preserving_order() {
+    // "a,b,a" used to keep both `a`s — Vec::dedup only collapses
+    // adjacent runs, despite the doc promising a de-duplicated list.
+    assert_eq!(
+        parse_cors_origins(Some("https://a.com,https://b.com,https://a.com".into())),
+        vec!["https://a.com".to_string(), "https://b.com".to_string()],
+    );
 }
 
 #[tokio::test]

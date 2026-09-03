@@ -12,6 +12,7 @@ fn state_with_admin_key(key: Option<&str>) -> AppState {
         pg: None,
         admin_key: key.map(|s| s.to_owned()),
         api_secret: String::new(),
+        allow_terminal_credentials: true,
         db_path: ":memory:".into(),
         port: 3099,
         cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),

@@ -334,17 +334,27 @@ pub async fn auth_middleware(mut req: Request, next: Next) -> Result<Response, R
     Ok(next.run(req).await)
 }
 
+/// Minimal state for [`auth_middleware_with_state`]: just the signing
+/// secret behind an `Arc`, so per-request extraction is an `Arc::clone`
+/// instead of a full [`crate::AppState`] clone (~7 heap allocations on
+/// every protected request).
+#[derive(Clone)]
+pub struct AuthState {
+    /// JWT signing secret for this server instance.
+    pub secret: std::sync::Arc<String>,
+}
+
 /// Stateful variant of [`auth_middleware`]: validates bearer tokens
-/// against `AppState::api_secret` instead of the process environment, so
+/// against [`AuthState::secret`] instead of the process environment, so
 /// multiple servers with different secrets can coexist (and the desktop
 /// app can sign with a per-install random secret without mutating env).
 #[allow(clippy::result_large_err)]
 pub async fn auth_middleware_with_state(
-    State(state): State<crate::AppState>,
+    State(auth): State<AuthState>,
     mut req: Request,
     next: Next,
 ) -> Result<Response, Response> {
-    authenticate(&mut req, Some(&state.api_secret)).await?;
+    authenticate(&mut req, Some(auth.secret.as_str())).await?;
     Ok(next.run(req).await)
 }
 
