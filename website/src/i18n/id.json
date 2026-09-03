@@ -587,6 +587,36 @@
         "Loyalitas bawaan yang meningkatkan kunjungan berulang.",
         "Pembayaran native QRIS yang sudah dipakai pelanggan Anda."
       ]
+    },
+    "warehouse": {
+      "label": "Gudang & Stok",
+      "title": "Sinkronisasi Multi-Gudang & Manajemen Stok",
+      "tagline": "Manajemen gudang murni, transfer stok, pelacakan barcode, dan sinkronisasi multi-fasilitas — tanpa beban sistem POS.",
+      "tierAnchor": "pro",
+      "ctaPrimary": "Lihat paket Pro",
+      "features": [
+        {
+          "title": "Sinkronisasi Multi-Fasilitas",
+          "description": "Hubungkan pusat logistik, gudang transit, dan depo regional dalam satu topologi live."
+        },
+        {
+          "title": "Transfer & Manifest Masuk",
+          "description": "Buat order transfer, kirim batch manifest, dan verifikasi stok masuk dengan pemindaian barcode."
+        },
+        {
+          "title": "Gudang Pihak Ketiga (3PL)",
+          "description": "Workspace inventaris khusus untuk penyedia logistik yang menyimpan dan memilih stok atas nama klien."
+        },
+        {
+          "title": "Inti Offline-First",
+          "description": "Lakukan stok opname, audit, dan penerimaan tanpa internet — tidak ada data hilang saat jaringan mati."
+        }
+      ],
+      "benefits": [
+        "Mode pergudangan khusus untuk pusat pemenuhan pesanan dan depo stok.",
+        "Jejak audit lengkap untuk setiap penyesuaian rak, pengiriman, dan penerimaan.",
+        "Keandalan SQLite lokal — tetap scan palet meski di gudang berdinding baja tanpa sinyal."
+      ]
     }
   },
   "enterpriseTrial": {

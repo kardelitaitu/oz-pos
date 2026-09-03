@@ -11,9 +11,17 @@ import { t, dict } from '../i18n';
  * natural tier on the pricing page (kafe/minimarket → Pro, warung → Plus,
  * restoran → Premium).
  */
-export type VerticalKey = 'kafe' | 'minimarket' | 'warung' | 'restoran';
+export type VerticalKey = 'kafe' | 'minimarket' | 'warung' | 'restoran' | 'warehouse';
 
-export const verticalKeys: VerticalKey[] = ['kafe', 'minimarket', 'warung', 'restoran'];
+export const verticalKeys: VerticalKey[] = ['restoran', 'kafe', 'minimarket', 'warung', 'warehouse'];
+
+export const verticalPathMap: Record<VerticalKey, string> = {
+  kafe: 'cafe',
+  minimarket: 'minimarket',
+  warung: 'warung',
+  restoran: 'restaurant',
+  warehouse: 'warehouse',
+};
 
 interface VerticalFeature {
   title: string;
@@ -51,6 +59,7 @@ interface VerticalSection {
   minimarket: VerticalContent;
   warung: VerticalContent;
   restoran: VerticalContent;
+  warehouse: VerticalContent;
 }
 
 interface Props {
@@ -95,6 +104,11 @@ const vStrings: Record<VerticalKey, { label: string; ctaPrimary: string; tierAnc
     ctaPrimary: t(locale, 'vertical.restoran.ctaPrimary'),
     tierAnchor: t(locale, 'vertical.restoran.tierAnchor'),
   },
+  warehouse: {
+    label: t(locale, 'vertical.warehouse.label'),
+    ctaPrimary: t(locale, 'vertical.warehouse.ctaPrimary'),
+    tierAnchor: t(locale, 'vertical.warehouse.tierAnchor'),
+  },
 };
 const trialCta = t(locale, 'vertical.kafe.trialCta');
 // Structured per-vertical keys (features/benefits arrays) — referenced via
@@ -116,6 +130,10 @@ const vStructuredKeys: Record<VerticalKey, { features: string; benefits: string 
   restoran: {
     features: t(locale, 'vertical.restoran.features'),
     benefits: t(locale, 'vertical.restoran.benefits'),
+  },
+  warehouse: {
+    features: t(locale, 'vertical.warehouse.features'),
+    benefits: t(locale, 'vertical.warehouse.benefits'),
   },
 };
 // The kafe vertical alone carries the lead-with-trial flag (a boolean in the
@@ -247,7 +265,7 @@ const secondaryCta = {
           .filter((key) => key !== vertical)
           .map((key) => (
             <a
-              href={getRelativeLocaleUrl(locale, `untuk-${key}`)}
+              href={getRelativeLocaleUrl(locale, verticalPathMap[key])}
               class="rounded-full border border-ink/10 px-4 py-2 text-sm text-muted transition-all duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] hover:border-accent hover:text-ink hover:scale-[1.03] active:scale-[0.97]"
             >
               {vStrings[key].label}

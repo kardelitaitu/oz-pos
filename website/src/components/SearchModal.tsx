@@ -38,10 +38,11 @@ export default function SearchModal({ isOpen, onClose, locale }: Props) {
       { id: 'support', title: locale === 'id' ? 'Bantuan & Kontak' : 'Support & Contact', category: 'pages', url: `/${locale}/support`, keywords: 'faq contact discord email help' },
       
       // Vertical Solutions
-      { id: 'kafe', title: locale === 'id' ? 'POS untuk Kafe & Kedai Kopi' : 'POS for Cafes & Coffee Shops', category: 'pages', url: `/${locale}/untuk-kafe`, keywords: 'cafe coffee table orders kds modifiers' },
-      { id: 'restoran', title: locale === 'id' ? 'POS untuk Restoran & F&B' : 'POS for Restaurants', category: 'pages', url: `/${locale}/untuk-restoran`, keywords: 'restaurant kitchen display split bill service charge' },
-      { id: 'minimarket', title: locale === 'id' ? 'POS untuk Minimarket & Retail' : 'POS for Minimarkets & Retail', category: 'pages', url: `/${locale}/untuk-minimarket`, keywords: 'barcode scanning sku inventory fast retail' },
-      { id: 'warung', title: locale === 'id' ? 'POS untuk Warung & UMKM' : 'POS for Warung & Small Business', category: 'pages', url: `/${locale}/untuk-warung`, keywords: 'umkm warung simple affordable fast cash qris' },
+      { id: 'cafe', title: locale === 'id' ? 'Solusi untuk Kafe & Kedai Kopi' : 'Solutions for Cafes & Coffee Shops', category: 'pages', url: `/${locale}/cafe`, keywords: 'cafe coffee table orders kds modifiers' },
+      { id: 'restaurant', title: locale === 'id' ? 'Solusi untuk Restoran & F&B' : 'Solutions for Restaurants', category: 'pages', url: `/${locale}/restaurant`, keywords: 'restaurant kitchen display split bill service charge' },
+      { id: 'minimarket', title: locale === 'id' ? 'Solusi untuk Minimarket & Ritel' : 'Solutions for Minimarkets & Retail', category: 'pages', url: `/${locale}/minimarket`, keywords: 'barcode scanning sku inventory fast retail' },
+      { id: 'warung', title: locale === 'id' ? 'Solusi untuk Warung & UMKM' : 'Solutions for Warung & Small Business', category: 'pages', url: `/${locale}/warung`, keywords: 'umkm warung simple affordable fast cash qris' },
+      { id: 'warehouse', title: locale === 'id' ? 'Solusi Manajemen & Sinkronisasi Gudang' : 'Solutions for Warehouse Sync & Stock Management', category: 'pages', url: `/${locale}/warehouse`, keywords: 'warehouse stock inventory 3pl transfer logistics offline' },
 
       // Documentation
       { id: 'doc-welcome', title: locale === 'id' ? 'Pengenalan OZ-POS' : 'Welcome to OZ-POS', category: 'docs', url: `/${locale}/docs/welcome`, keywords: 'getting started overview architecture introduction' },

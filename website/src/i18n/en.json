@@ -587,6 +587,36 @@
         "Built-in loyalty that increases repeat visits.",
         "QRIS-native payments your customers already use."
       ]
+    },
+    "warehouse": {
+      "label": "Warehouses & Stock",
+      "title": "Multi-Warehouse Sync & Stock Management",
+      "tagline": "Pure warehousing, stock transfers, barcode tracking, and multi-facility sync — without POS overhead.",
+      "tierAnchor": "pro",
+      "ctaPrimary": "See the Pro plan",
+      "features": [
+        {
+          "title": "Multi-Facility Sync",
+          "description": "Connect central hubs, transit depots, and regional distribution centers in one live topology."
+        },
+        {
+          "title": "Transfers & Inbound Manifests",
+          "description": "Issue transfer orders, dispatch manifest batches, and verify received stock with barcode scan verification."
+        },
+        {
+          "title": "3rd-Party Warehousing (3PL)",
+          "description": "Dedicated stock workspaces for logistics providers storing and picking inventory on behalf of clients."
+        },
+        {
+          "title": "Offline-First Core",
+          "description": "Perform stocktakes, audits, and manifests without internet — zero dropped records during network blackouts."
+        }
+      ],
+      "benefits": [
+        "Dedicated warehousing mode for fulfillment centers and stock depots.",
+        "Full audit trail for every bin adjustment, dispatch, and receipt.",
+        "Local SQLite reliability — keep scanning pallets even in steel warehouses with dead zones."
+      ]
     }
   },
   "enterpriseTrial": {

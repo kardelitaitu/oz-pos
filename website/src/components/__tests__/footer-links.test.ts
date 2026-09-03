@@ -22,16 +22,11 @@ const FOOTER_SRC = readFileSync(
 // ─── Link structure tests ────────────────────────────────────────────
 
 describe('Footer link structure', () => {
-  it('defines all 4 vertical keys in the source', () => {
-    const verticalKeys = ['kafe', 'minimarket', 'warung', 'restoran'];
+  it('defines all 5 vertical entries in the source', () => {
+    const verticalKeys = ['kafe', 'minimarket', 'warung', 'restoran', 'warehouse'];
     for (const key of verticalKeys) {
       expect(FOOTER_SRC).toContain(`'${key}'`);
     }
-  });
-
-  it('maps vertical keys to untuk-* hrefs via template literal', () => {
-    // The vertical links are generated dynamically: `untuk-${key}`
-    expect(FOOTER_SRC).toContain('`untuk-${key}`');
   });
 
   it('renders 2 legal links (privacy and terms)', () => {
@@ -65,20 +60,24 @@ describe('Footer link structure', () => {
 describe('Footer link targets exist', () => {
   const pagesDir = join(import.meta.dirname, '..', '..', 'pages', '[locale]');
 
-  it('untuk-kafe page exists', () => {
-    expect(() => readFileSync(join(pagesDir, 'untuk-kafe.astro'))).not.toThrow();
+  it('cafe page exists', () => {
+    expect(() => readFileSync(join(pagesDir, 'cafe.astro'))).not.toThrow();
   });
 
-  it('untuk-minimarket page exists', () => {
-    expect(() => readFileSync(join(pagesDir, 'untuk-minimarket.astro'))).not.toThrow();
+  it('minimarket page exists', () => {
+    expect(() => readFileSync(join(pagesDir, 'minimarket.astro'))).not.toThrow();
   });
 
-  it('untuk-warung page exists', () => {
-    expect(() => readFileSync(join(pagesDir, 'untuk-warung.astro'))).not.toThrow();
+  it('warung page exists', () => {
+    expect(() => readFileSync(join(pagesDir, 'warung.astro'))).not.toThrow();
   });
 
-  it('untuk-restoran page exists', () => {
-    expect(() => readFileSync(join(pagesDir, 'untuk-restoran.astro'))).not.toThrow();
+  it('restaurant page exists', () => {
+    expect(() => readFileSync(join(pagesDir, 'restaurant.astro'))).not.toThrow();
+  });
+
+  it('warehouse page exists', () => {
+    expect(() => readFileSync(join(pagesDir, 'warehouse.astro'))).not.toThrow();
   });
 
   it('legal/privacy page exists', () => {

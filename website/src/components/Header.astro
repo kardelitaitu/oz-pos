@@ -69,7 +69,7 @@ const login = getRelativeLocaleUrl(locale, 'login');
                 </p>
                 <div class="space-y-1">
                   <a
-                    href={getRelativeLocaleUrl(locale, 'untuk-restoran')}
+                    href={getRelativeLocaleUrl(locale, 'restaurant')}
                     class="group/item flex items-center gap-3 rounded-xl p-2 transition hover:bg-ink/5"
                   >
                     <div class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary transition-all duration-300 group-hover/item:scale-105 group-hover/item:bg-primary group-hover/item:text-white group-hover/item:shadow-md group-hover/item:shadow-primary/20">
@@ -91,7 +91,7 @@ const login = getRelativeLocaleUrl(locale, 'login');
                   </a>
 
                   <a
-                    href={getRelativeLocaleUrl(locale, 'untuk-kafe')}
+                    href={getRelativeLocaleUrl(locale, 'cafe')}
                     class="group/item flex items-center gap-3 rounded-xl p-2 transition hover:bg-ink/5"
                   >
                     <div class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary transition-all duration-300 group-hover/item:scale-105 group-hover/item:bg-primary group-hover/item:text-white group-hover/item:shadow-md group-hover/item:shadow-primary/20">
@@ -114,7 +114,7 @@ const login = getRelativeLocaleUrl(locale, 'login');
                   </a>
 
                   <a
-                    href={getRelativeLocaleUrl(locale, 'untuk-minimarket')}
+                    href={getRelativeLocaleUrl(locale, 'minimarket')}
                     class="group/item flex items-center gap-3 rounded-xl p-2 transition hover:bg-ink/5"
                   >
                     <div class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary transition-all duration-300 group-hover/item:scale-105 group-hover/item:bg-primary group-hover/item:text-white group-hover/item:shadow-md group-hover/item:shadow-primary/20">
@@ -134,7 +134,7 @@ const login = getRelativeLocaleUrl(locale, 'login');
                   </a>
 
                   <a
-                    href={getRelativeLocaleUrl(locale, 'untuk-warung')}
+                    href={getRelativeLocaleUrl(locale, 'warung')}
                     class="group/item flex items-center gap-3 rounded-xl p-2 transition hover:bg-ink/5"
                   >
                     <div class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary transition-all duration-300 group-hover/item:scale-105 group-hover/item:bg-primary group-hover/item:text-white group-hover/item:shadow-md group-hover/item:shadow-primary/20">
@@ -164,6 +164,27 @@ const login = getRelativeLocaleUrl(locale, 'login');
                 </p>
                 <div class="space-y-1">
                   <a
+                    href={getRelativeLocaleUrl(locale, 'warehouse')}
+                    class="group/item flex items-center gap-3 rounded-xl p-2 transition hover:bg-ink/5"
+                  >
+                    <div class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary transition-all duration-300 group-hover/item:scale-105 group-hover/item:bg-primary group-hover/item:text-white group-hover/item:shadow-md group-hover/item:shadow-primary/20">
+                      <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path>
+                        <path d="m3.3 7 8.7 5 8.7-5"></path>
+                        <path d="M12 22V12"></path>
+                      </svg>
+                    </div>
+                    <div>
+                      <p class="text-sm font-semibold text-ink group-hover/item:text-primary transition-colors">
+                        {t(locale, 'nav.solutionWarehouses')}
+                      </p>
+                      <p class="text-xs text-muted leading-snug">
+                        {t(locale, 'nav.solutionWarehousesDesc')}
+                      </p>
+                    </div>
+                  </a>
+
+                  <a
                     href={getRelativeLocaleUrl(locale, 'docs/inventory')}
                     class="group/item flex items-center gap-3 rounded-xl p-2 transition hover:bg-ink/5"
                   >
@@ -180,27 +201,6 @@ const login = getRelativeLocaleUrl(locale, 'login');
                       </p>
                       <p class="text-xs text-muted leading-snug">
                         {t(locale, 'nav.solutionKitchensDesc')}
-                      </p>
-                    </div>
-                  </a>
-
-                  <a
-                    href={getRelativeLocaleUrl(locale, 'docs/inventory')}
-                    class="group/item flex items-center gap-3 rounded-xl p-2 transition hover:bg-ink/5"
-                  >
-                    <div class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary transition-all duration-300 group-hover/item:scale-105 group-hover/item:bg-primary group-hover/item:text-white group-hover/item:shadow-md group-hover/item:shadow-primary/20">
-                      <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path>
-                        <path d="m3.3 7 8.7 5 8.7-5"></path>
-                        <path d="M12 22V12"></path>
-                      </svg>
-                    </div>
-                    <div>
-                      <p class="text-sm font-semibold text-ink group-hover/item:text-primary transition-colors">
-                        {t(locale, 'nav.solutionWarehouses')}
-                      </p>
-                      <p class="text-xs text-muted leading-snug">
-                        {t(locale, 'nav.solutionWarehousesDesc')}
                       </p>
                     </div>
                   </a>
@@ -319,34 +319,40 @@ const login = getRelativeLocaleUrl(locale, 'login');
             </p>
             <div class="mt-1 space-y-0.5">
               <a
-                href={getRelativeLocaleUrl(locale, 'untuk-restoran')}
+                href={getRelativeLocaleUrl(locale, 'restaurant')}
                 class="block rounded-md px-3 py-1.5 text-xs text-muted transition hover:bg-ink/5 hover:text-ink"
               >
                 🍽️ {t(locale, 'nav.solutionRestaurants')}
               </a>
               <a
-                href={getRelativeLocaleUrl(locale, 'untuk-kafe')}
+                href={getRelativeLocaleUrl(locale, 'cafe')}
                 class="block rounded-md px-3 py-1.5 text-xs text-muted transition hover:bg-ink/5 hover:text-ink"
               >
                 ☕ {t(locale, 'nav.solutionCafes')}
               </a>
               <a
-                href={getRelativeLocaleUrl(locale, 'untuk-minimarket')}
+                href={getRelativeLocaleUrl(locale, 'minimarket')}
                 class="block rounded-md px-3 py-1.5 text-xs text-muted transition hover:bg-ink/5 hover:text-ink"
               >
                 🏷️ {t(locale, 'nav.solutionRetail')}
               </a>
               <a
-                href={getRelativeLocaleUrl(locale, 'untuk-warung')}
+                href={getRelativeLocaleUrl(locale, 'warung')}
                 class="block rounded-md px-3 py-1.5 text-xs text-muted transition hover:bg-ink/5 hover:text-ink"
               >
                 🏪 {t(locale, 'nav.solutionWarung')}
               </a>
               <a
-                href={getRelativeLocaleUrl(locale, 'docs/inventory')}
+                href={getRelativeLocaleUrl(locale, 'warehouse')}
                 class="block rounded-md px-3 py-1.5 text-xs text-muted transition hover:bg-ink/5 hover:text-ink"
               >
                 📦 {t(locale, 'nav.solutionWarehouses')}
+              </a>
+              <a
+                href={getRelativeLocaleUrl(locale, 'docs/inventory')}
+                class="block rounded-md px-3 py-1.5 text-xs text-muted transition hover:bg-ink/5 hover:text-ink"
+              >
+                🍳 {t(locale, 'nav.solutionKitchens')}
               </a>
               <a
                 href={getRelativeLocaleUrl(locale, 'docs/shifts')}
