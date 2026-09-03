@@ -184,6 +184,8 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 			MidtransIdr float64 `json:"midtransIdr,omitempty"`
 			RefundUsd   float64 `json:"refundUsd,omitempty"`
 			RefundIdr   float64 `json:"refundIdr,omitempty"`
+			Trials      int     `json:"trials,omitempty"`
+			Paid        int     `json:"paid,omitempty"`
 			Count       int     `json:"count"`
 			Churn       int     `json:"churn"`
 			Source      string  `json:"source,omitempty"`
@@ -553,6 +555,44 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
+		// ── Trial→paid funnel (#6) ───────────────────────────────────
+		// Per month: trial registrations started (first_seen_at) vs paid
+		// conversions (subscriptions with tier != free and webhook-verified
+		// payment_provider).  The conversion rate = paid / trials.
+		trialsByMonth := make(map[string]int)
+		trialRecs, _ := app.FindRecordsByFilter("trial_registrations",
+			"id != ''", "", 0, 0)
+		for _, tr := range trialRecs {
+			firstSeen := tr.GetDateTime("first_seen_at").Time()
+			if firstSeen.IsZero() {
+				continue
+			}
+			key := fmt.Sprintf("%d-%02d", firstSeen.Year(), firstSeen.Month())
+			trialsByMonth[key]++
+		}
+		paidByMonth := make(map[string]int)
+		paidSubs, _ := app.FindRecordsByFilter("subscriptions",
+			"tier_key != 'free'", "-starts_at", 0, 0)
+		for _, sub := range paidSubs {
+			pp := sub.GetString("payment_provider")
+			if pp != "paddle" && pp != "midtrans" {
+				continue
+			}
+			startsAt := sub.GetDateTime("starts_at").Time()
+			if startsAt.IsZero() {
+				continue
+			}
+			key := fmt.Sprintf("%d-%02d", startsAt.Year(), startsAt.Month())
+			paidByMonth[key]++
+		}
+		funnelArr := make([]monthBucket, 0, 12)
+		for _, key := range bucketKeys {
+			funnelArr = append(funnelArr, monthBucket{
+				Month:  key,
+				Trials: trialsByMonth[key],
+				Paid:   paidByMonth[key],
+			})
+		}
 		// ── Recent revenue events feed (#5) ──────────────────────────
 		// The last N webhook-verified charges (revenue_events ledger) with
 		// the paying tenant's email, so the operator sees money arriving in
@@ -635,6 +675,7 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 			"expiringSoon":        expiringSoon,
 			"needsAttention":      needsAttention,
 			"recentRevenueEvents": recentRevenueEvents,
+			"trialFunnel":         funnelArr,
 		})
 	}
 }

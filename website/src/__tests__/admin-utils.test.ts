@@ -709,6 +709,18 @@ describe('admin-utils normalizeStats (B6: partial payload killed the dashboard)'
     expect(m.recentRevenueEvents[0].amountIdr).toBe(680000);
   });
 
+  it('passes through trialFunnel array (trials vs paid per month)', () => {
+    const m = utils.normalizeStats({
+      trialFunnel: [
+        { month: '2026-09', trials: 10, paid: 3 },
+        { month: '2026-10', trials: 0, paid: 0 },
+      ],
+    });
+    expect(m.trialFunnel).toHaveLength(2);
+    expect(m.trialFunnel[0].trials).toBe(10);
+    expect(m.trialFunnel[0].paid).toBe(3);
+  });
+
   it('tolerates non-object input entirely', () => {
     expect(() => utils.normalizeStats(null)).not.toThrow();
     expect(() => utils.normalizeStats(undefined)).not.toThrow();

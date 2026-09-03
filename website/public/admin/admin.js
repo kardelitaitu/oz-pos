@@ -298,6 +298,29 @@
       chartGrid2.appendChild(churnCard);
       bindChartTooltip(churnCard.querySelector('.chart-svg'), m.churnPerMonth, [{ key: 'churn', label: t('chart.churnCanceled') }]);
 
+      // Trial→paid funnel (#6): stacked bars showing paid conversions (green)
+      // within each month's total trials (total bar height = trials started).
+      if (m.trialFunnel && m.trialFunnel.length > 0) {
+        const funnelData = m.trialFunnel.map(function (d) { return { month: d.month, paid: d.paid, notConverted: Math.max(0, d.trials - d.paid) }; });
+        const totalTrials = funnelData.reduce(function (s, d) { return s + d.paid + d.notConverted; }, 0);
+        if (totalTrials > 0) {
+          const funnelCard = el('div', 'chart-card chart-card--wide');
+          funnelCard.appendChild(el('h3', null, t('chart.trialFunnel')));
+          funnelCard.innerHTML += svgStackedBars('funnel', funnelData, Object.assign({
+            stack: [
+              { key: 'paid', color: 'var(--success)' },
+              { key: 'notConverted', color: 'var(--tint-warning-bg)' },
+            ],
+            fmt: function (v) { return String(v); },
+          }, fullCv));
+          chartGrid2.appendChild(funnelCard);
+          bindChartTooltip(funnelCard.querySelector('.chart-svg'), m.trialFunnel, [
+            { key: 'trials', label: 'Trials' },
+            { key: 'paid', label: 'Paid' },
+          ]);
+        }
+      }
+
       c.appendChild(chartGrid2);
 
       // --- Tables ---

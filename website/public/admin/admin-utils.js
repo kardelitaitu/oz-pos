@@ -1281,6 +1281,7 @@
       expiringSoon: arr(m.expiringSoon),
       needsAttention: arr(m.needsAttention),
       recentRevenueEvents: arr(m.recentRevenueEvents),
+      trialFunnel: arr(m.trialFunnel),
       kpis: kpis,
     };
   }
@@ -1329,6 +1330,7 @@
     'chart.paymentProvider': 'Payment Provider',
     'chart.signupsPerMonth': 'Signups per Month',
     'chart.churnCanceled': 'Churn / Canceled',
+    'chart.trialFunnel': 'Trial → Paid Funnel',
     'table.topSubscribers': 'Top Subscribers',
     'table.recentSignups': 'Recent Signups',
     'table.recentRevenueEvents': 'Recent Revenue Events',
