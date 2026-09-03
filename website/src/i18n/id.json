@@ -101,7 +101,19 @@
     "title": "Fitur Kelas Enterprise, Tanpa Biaya Enterprise",
     "subtitle": "Sistem POS kelas korporasi yang dapat diakses siapa saja. Tetap jualan saat internet mati dengan inti offline-first ultra-ringan, tanpa biaya per-fitur tersembunyi.",
     "ctaPrimary": "Unduh Gratis",
-    "ctaSecondary": "Lihat Harga"
+    "ctaSecondary": "Lihat Harga",
+    "carousel": {
+      "restaurant": "Restoran",
+      "retail": "Ritel",
+      "kitchen": "Dapur",
+      "warehouse": "Gudang",
+      "topology": "Topologi",
+      "restaurantDesc": "Pesan, bayar, dan kelola meja",
+      "retailDesc": "Kasir cepat dengan pencarian produk dan scan barcode",
+      "kitchenDesc": "Antrean pesanan KDS untuk dapur",
+      "warehouseDesc": "Stok, transfer antar gudang, dan PO",
+      "topologyDesc": "Editor visual untuk toko, terminal, dan gudang"
+    }
   },
   "techStack": {
     "subtitle": "Fondasi open-source yang andal, pembayaran teruji, dan alat keamanan tingkat pertama."

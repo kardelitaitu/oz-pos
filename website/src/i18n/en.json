@@ -101,7 +101,19 @@
     "title": "Enterprise-Grade POS, Without the Enterprise Price",
     "subtitle": "Corporate-grade POS accessible to everyone. Keep selling through outages with a blazing-fast offline-first core, with zero hidden per-feature fees.",
     "ctaPrimary": "Download free",
-    "ctaSecondary": "See Pricing"
+    "ctaSecondary": "See Pricing",
+    "carousel": {
+      "restaurant": "Restaurant",
+      "retail": "Retail",
+      "kitchen": "Kitchen",
+      "warehouse": "Warehouse",
+      "topology": "Topology",
+      "restaurantDesc": "Order, pay, and manage tables",
+      "retailDesc": "Ring up sales with product search and barcode scan",
+      "kitchenDesc": "KDS order queue for the kitchen line",
+      "warehouseDesc": "Stock, transfers, and purchase orders",
+      "topologyDesc": "Visual editor for stores, terminals, and warehouses"
+    }
   },
   "techStack": {
     "subtitle": "Reliable open-source foundations, battle-tested payments, and security-first tooling."
