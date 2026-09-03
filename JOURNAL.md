@@ -205,7 +205,7 @@ manager user + a cashier user, then updates the cashier's display_name.
 All assertions pass on first run (behavior is already correct) — this
 is a regression pin.
 
-**Commits:** pending (round-8 TDD commit).
+**Commits:** e9c57015 (round-8 TDD commit).
 **Test counts:** desktop staff 45→46; fmt clean.
 
 ## 2026-08-29 — Gap analysis round 2: renew-badge thresholds + checkout feedback states (website AccountView)
