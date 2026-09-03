@@ -54,7 +54,7 @@ staff-login-license-inactive = Lisensi tidak aktif
 statusbar-conflict-count = { $count } konflik sinkronisasi terselesaikan
 # SYNC-12: StatusBar visible labels + ARIA (localized at the render boundary)
 statusbar-app-status-aria = Status aplikasi
-statusbar-version = v0.0.34
+statusbar-version = v0.0.35
 statusbar-sync-name = Sinkronisasi
 statusbar-gateway-name = Stripe
 statusbar-license = Lisensi Proprietary
@@ -295,6 +295,8 @@ workspace-home-coming-soon = Segera hadir
 workspace-card-active-aria = Ruang kerja aktif
 workspace-home-empty = Tidak ada ruang kerja tersedia
 workspace-home-empty-desc = Anda belum memiliki akses ke ruang kerja apa pun. Hubungi administrator.
+workspace-home-staff-empty = Tidak ada ruang kerja tersedia
+workspace-home-staff-empty-desc = Hubungi Administrator
 workspace-home-logout = Keluar
 workspace-home-logout-confirm-title = Keluar?
 workspace-home-logout-confirm-desc = Anda akan kembali ke layar masuk. Semua pekerjaan yang belum disimpan akan hilang.

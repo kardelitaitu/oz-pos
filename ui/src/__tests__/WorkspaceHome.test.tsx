@@ -104,6 +104,55 @@ function mockAuditorUser() {
   });
 }
 
+function mockStaffUser() {
+  mockAuthSession.mockReturnValue({
+    session: {
+      user_id: 'user-3',
+      display_name: 'Staff One',
+      role_name: 'staff',
+      role_id: 'role-staff',
+    },
+    loading: false,
+    error: null,
+    login: vi.fn(),
+    logout: vi.fn(),
+    clearError: vi.fn(),
+    isManager: false,
+    isOwner: false,
+  });
+}
+
+function mockManagerUser() {
+  mockAuthSession.mockReturnValue({
+    session: {
+      user_id: 'user-4',
+      display_name: 'Manager One',
+      role_name: 'manager',
+      role_id: 'role-manager',
+    },
+    loading: false,
+    error: null,
+    login: vi.fn(),
+    logout: vi.fn(),
+    clearError: vi.fn(),
+    isManager: true,
+    isOwner: false,
+  });
+}
+
+function mockEmptyWorkspaces() {
+  mockWorkspaceValue.mockReturnValue({
+    availableWorkspaces: [],
+    loading: false,
+    error: null,
+    retry: vi.fn(),
+    setActiveWorkspace: mockSetActiveWorkspace,
+    activeWorkspace: null,
+    workspaceScreens: [],
+    lastWorkspace: null,
+  });
+}
+
 // ── Tests ──────────────────────────────────────────────────────
 
 describe('WorkspaceHome', () => {
@@ -200,16 +249,7 @@ describe('WorkspaceHome', () => {
     it('shows empty message when no workspaces available', async () => {
       // Non-owner/non-admin user gets the 'no access' empty message
       mockAuditorUser();
-      mockWorkspaceValue.mockReturnValue({
-        availableWorkspaces: [],
-        loading: false,
-        error: null,
-        retry: vi.fn(),
-        setActiveWorkspace: mockSetActiveWorkspace,
-        activeWorkspace: null,
-        workspaceScreens: [],
-        lastWorkspace: null,
-      });
+      mockEmptyWorkspaces();
 
       await renderWithFluent(<WorkspaceHome />);
 
@@ -217,6 +257,43 @@ describe('WorkspaceHome', () => {
         expect(screen.getByText(/No workspaces/i)).toBeInTheDocument();
       });
       expect(screen.getByText(/Contact an administrator/)).toBeInTheDocument();
+    });
+
+    it('shows staff-specific no-workspace notice for a staff user', async () => {
+      mockStaffUser();
+      mockEmptyWorkspaces();
+
+      await renderWithFluent(<WorkspaceHome />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('workspace-empty-staff')).toBeInTheDocument();
+      });
+      expect(screen.getByText('No workspaces available')).toBeInTheDocument();
+      expect(screen.getByText('Contact Administrator')).toBeInTheDocument();
+      // Staff never gets the Add-workspace affordance.
+      expect(screen.queryByTestId('workspace-card-add')).not.toBeInTheDocument();
+    });
+
+    it('shows Add Workspace card for owner when no workspaces exist', async () => {
+      mockDefaultUser();
+      mockEmptyWorkspaces();
+
+      await renderWithFluent(<WorkspaceHome />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('workspace-card-add')).toBeInTheDocument();
+      });
+    });
+
+    it('shows Add Workspace card for manager when no workspaces exist', async () => {
+      mockManagerUser();
+      mockEmptyWorkspaces();
+
+      await renderWithFluent(<WorkspaceHome />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('workspace-card-add')).toBeInTheDocument();
+      });
     });
   });
 
@@ -513,6 +590,72 @@ describe('WorkspaceHome', () => {
       await waitFor(() => {
         expect(mockSetActiveWorkspace).toHaveBeenCalledWith('kds');
       });
+    });
+
+    it('hides Add Workspace card when workspaces exist (owner)', async () => {
+      mockDefaultUser();
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+        lastWorkspace: null,
+      });
+
+      await renderWithFluent(<WorkspaceHome />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
+      });
+      // Per the home-screen rules the Add card is hidden once workspaces exist.
+      expect(screen.queryByTestId('workspace-card-add')).not.toBeInTheDocument();
+    });
+
+    it('shows Tools section for owner', async () => {
+      mockDefaultUser();
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+        lastWorkspace: null,
+      });
+
+      await renderWithFluent(<WorkspaceHome />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
+      });
+      expect(screen.getByText('Tools')).toBeInTheDocument();
+      expect(screen.getAllByTestId('workspace-tool-card').length).toBeGreaterThan(0);
+    });
+
+    it('hides Tools section for staff (owner/admin/manager only)', async () => {
+      mockStaffUser();
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+        lastWorkspace: null,
+      });
+
+      await renderWithFluent(<WorkspaceHome />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
+      });
+      expect(screen.queryByText('Tools')).not.toBeInTheDocument();
+      expect(screen.queryAllByTestId('workspace-tool-card').length).toBe(0);
     });
   });
 

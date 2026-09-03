@@ -265,6 +265,8 @@ workspace-home-coming-soon = Coming soon
 workspace-card-active-aria = Active workspace
 workspace-home-empty = No workspaces available
 workspace-home-empty-desc = You don't have access to any workspaces yet. Contact an administrator.
+workspace-home-staff-empty = No workspaces available
+workspace-home-staff-empty-desc = Contact Administrator
 workspace-card-open-aria = Open { $name }
 workspace-card-no-access-aria = { $name } — not available for your role
 workspace-card-no-access-badge = Not available
@@ -298,7 +300,7 @@ staff-login-license-inactive = License inactive
 statusbar-conflict-count = { $count } sync conflict(s) resolved
 # SYNC-12: StatusBar visible labels + ARIA (localized at the render boundary)
 statusbar-app-status-aria = Application status
-statusbar-version = v0.0.34
+statusbar-version = v0.0.35
 statusbar-sync-name = Sync
 statusbar-gateway-name = Stripe
 statusbar-license = Proprietary License

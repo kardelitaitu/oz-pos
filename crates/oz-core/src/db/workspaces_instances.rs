@@ -76,11 +76,15 @@ impl Store<'_> {
         // This enables multi-store mode where an owner may only manage a
         // subset of stores. When no `user_store_access` rows exist, the
         // legacy single-store bypass applies unchanged.
+        //
+        // Staff is deliberately NOT in this bypass: it falls through to the
+        // explicit `user_workspace_instances` assignment (step 2) and the
+        // `role_workspace_types` fallback (step 3), so a staff user only ever
+        // sees workspaces assigned to them — never the full store listing.
         if role_id == "role-owner"
             || role_id == "role-admin"
             || role_id == "admin"
             || role_id == "role-manager"
-            || role_id == "role-staff"
             || role_id == "role-auditor"
             || role_id == "manager"
             || role_id == "auditor"
@@ -413,11 +417,13 @@ impl Store<'_> {
         let role_id = &user.role_id;
 
         // 1. Owner/admin bypass — check store access if user_store_access is active.
+        // Staff is deliberately NOT in this bypass: access resolves through
+        // explicit `user_workspace_instances` (step 2) or `role_workspace_types`
+        // (step 3) so a staff user can only open assigned workspaces.
         if role_id == "role-owner"
             || role_id == "role-admin"
             || role_id == "admin"
             || role_id == "role-manager"
-            || role_id == "role-staff"
             || role_id == "role-auditor"
             || role_id == "manager"
             || role_id == "auditor"
