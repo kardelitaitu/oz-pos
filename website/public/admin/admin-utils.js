@@ -283,17 +283,17 @@
     return s;
   }
 
-  // statC builds the design-language tinted stat card ("Card Colour
-  // Variants"): 8–10% semantic background + 20% border, hero 24px/800
-  // number in the semantic colour, small label beneath — "one number, one
-  // semantic colour, one label". variant: primary|success|warning|danger|info;
-  // unknown variants fall back to primary so a typo can never render
-  // an unstyled card.
+  // statC builds a stat card ("one number, one semantic accent, one
+  // label"). Cards are neutral surfaces (white + hairline border); the
+  // semantic colour is reserved for the sub-line/delta so a full row of
+  // coloured fills never competes with the hero. variant:
+  // primary|success|warning|danger|info; unknown variants fall back to
+  // primary so a typo can never render an unstyled card.
   function statC(label, value, sub, variant) {
     var v = ['primary', 'success', 'warning', 'danger', 'info'].indexOf(variant) !== -1 ? variant : 'primary';
     var card = el('div', 'stat stat--' + v);
-    card.appendChild(el('div', 'stat-value', value));
     card.appendChild(el('div', 'stat-label', label));
+    card.appendChild(el('div', 'stat-value', value));
     if (sub) card.appendChild(el('div', 'stat-sub', sub));
     return card;
   }

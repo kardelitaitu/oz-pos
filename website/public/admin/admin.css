@@ -563,10 +563,12 @@ select.input {
 }
 .hero-sub { font-size: 12px; opacity: .85; margin-top: .5rem; }
 
-/* ── Stat cards — spec "Card Colour Variants": 8–10% tinted bg + ────
-   20% border, hero 24px/800 number in the semantic colour, small
-   label. Used sparingly (4 stats; a full row of colored cards would
-   read as decoration).                                                */
+/* ── Stat cards — neutral surface, semantic accent on the sub-line ──
+   Redesign (stat-grid v2): a full row of four tinted cards read as
+   decoration, so the cards are now quiet — white surface + hairline
+   border + soft shadow, dark 26px/800 number, uppercase muted label.
+   The semantic colour appears ONLY on the delta/sub line and a small
+   accent dot, keeping the hero the single solid-colour moment.          */
 .stat-grid {
   display: grid;
   gap: 1rem;
@@ -574,31 +576,52 @@ select.input {
   margin-top: 1.25rem;
 }
 .stat {
-  border: 1px solid transparent;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: var(--r-md);
-  padding: 1.25rem 1rem;
-  text-align: center;
+  box-shadow: var(--shadow-sm);
+  padding: 1.15rem 1.25rem;
   min-width: 0;
 }
 .stat-value {
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.15;
+  color: var(--text);
   font-variant-numeric: tabular-nums;
 }
-.stat-label { font-size: 11px; font-weight: 600; margin-top: 4px; }
-.stat-sub { font-size: 11px; margin-top: 2px; color: var(--text-muted); }
-.stat--primary { background: var(--tint-primary-bg); border-color: var(--tint-primary-border); }
-.stat--primary .stat-value, .stat--primary .stat-label { color: var(--primary); }
-.stat--success { background: var(--tint-success-bg); border-color: var(--tint-success-border); }
-.stat--success .stat-value, .stat--success .stat-label { color: var(--success); }
-.stat--warning { background: var(--tint-warning-bg); border-color: var(--tint-warning-border); }
-.stat--warning .stat-value, .stat--warning .stat-label { color: var(--warning); }
-.stat--danger { background: var(--tint-danger-bg); border-color: var(--tint-danger-border); }
-.stat--danger .stat-value, .stat--danger .stat-label { color: var(--danger); }
-.stat--info { background: var(--tint-info-bg); border-color: var(--tint-info-border); }
-.stat--info .stat-value, .stat--info .stat-label { color: var(--info); }
+.stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-muted);
+  margin-bottom: .35rem;
+}
+.stat-sub {
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: .25rem;
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+}
+/* Accent dot + coloured sub-line — the ONLY semantic colour on the
+   card; the number and label stay neutral. */
+.stat-sub::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.stat--primary .stat-sub { color: var(--primary); }
+.stat--success .stat-sub { color: var(--success); }
+.stat--warning .stat-sub { color: var(--warning); }
+.stat--danger .stat-sub { color: var(--danger); }
+.stat--info .stat-sub { color: var(--info); }
 
 /* ── Section titles — quiet uppercase kickers between dashboard bands */
 .section-title {
