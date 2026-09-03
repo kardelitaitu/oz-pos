@@ -1,6 +1,6 @@
 # oz-api
 
-<!-- Audit stamp: 2026-09-03 · DSH · status: ACCURATE (route table re-repaired + auth column corrected; local-API note refreshed same day) · F1: table was again missing 10 routes (exchange-rates ×5, images ×5) · F2: auth column was wrong — tokens/terminals/plan/settings are admin-key-gated (X-Admin-Key when OZ_ADMIN_KEY set; open in dev), settings gated inside the handler despite public-router placement; master-data writes (products POST, stock PATCH, tax-rates POST, exchange-rates POST/DELETE, users POST) additionally require the admin key and reject terminal-scoped tokens (D1) · verified accurate: oz_api::serve() exists, default port 3099 via OZ_API_PORT, Swagger/OpenAPI correctly absent here (lives in cloud-server) · NOTE: the desktop app embeds router() on 127.0.0.1 behind Settings → Local API (per-install secret via auth_middleware_with_state); serve() (0.0.0.0) stays standalone-only; tablet not wired — see docs/guides/EXTENDING.md §2.1 -->
+<!-- Audit stamp: 2026-09-03 · DSH · status: ACCURATE (route table re-repaired + auth column corrected; local-API note refreshed same day) · F1: table was again missing 10 routes (exchange-rates ×5, images ×5) · F2: auth column was wrong — tokens/terminals/plan/settings are admin-key-gated (X-Admin-Key when OZ_ADMIN_KEY set; open in dev), settings gated inside the handler despite public-router placement; master-data writes (products POST, stock PATCH, tax-rates POST, exchange-rates POST/DELETE, users POST) additionally require the admin key and reject terminal-scoped tokens (D1) · verified accurate: oz_api::serve() exists, default port 3099 via OZ_API_PORT · NOTE: this crate now OWNS the OpenAPI document (`spec.rs`, `x-oz-scope`-tagged) — cloud-server merges its cloud-only paths on top and adds the Swagger/Scalar UI pages; the desktop app embeds router() on 127.0.0.1 behind Settings → Local API (per-install secret via auth_middleware_with_state) and serves the base document at /api/openapi.json; tablet not wired — see docs/guides/EXTENDING.md §2.1 -->
 
 REST API server for OZ-POS. An axum HTTP API for third-party scripts, kitchen displays, and inventory scanners. Mounted by `apps/cloud-server`, and embedded loopback-only by the desktop app (`apps/desktop-client/src/local_api.rs`, off by default — see [EXTENDING guide](../../docs/guides/EXTENDING.md) §2.2).
 
@@ -50,7 +50,7 @@ Listens on `OZ_API_PORT` (default `3099`). DB path from `OZ_DB_PATH` (default `o
 | GET | `/api/v1/images:missing` | JWT | Missing-hash set difference |
 | GET | `/api/v1/images/{hash16}` | JWT | Immutable WebP bytes |
 
-¹ `X-Admin-Key` header required when `OZ_ADMIN_KEY` is configured; open in dev mode.
+¹ `X-Admin-Key` header required when the server has an admin key configured (`OZ_ADMIN_KEY` on the cloud server; the per-install secret on the desktop local API); open in dev mode.
 ² Operator write tier (D1): admin key **and** a non-terminal token — device credentials
 must never mutate master data. Sales writes are exempt (terminals sell).
 GETs on JWT routes are additionally gated by read-tier permissions (spec 0047).
@@ -70,5 +70,9 @@ curl http://localhost:3099/api/v1/products \
 ## State
 
 `AppState` wraps SQLite in `Arc<Mutex<Connection>>`. CORS uses a configurable origin allowlist (`OZ_CORS_ORIGINS`, default `DEFAULT_CORS_ORIGINS`; `"*"` is an explicit dev opt-in, otherwise fail-closed). All JWT-protected routes return 401 without a valid token.
+
+## OpenAPI document (`spec.rs`)
+
+This crate owns the machine-readable contract: `spec::base_spec()` builds the OpenAPI 3.1 document for every route above (all operations tagged `x-oz-scope: "both"`), and `spec::local_spec(port)` adds the loopback server info the desktop app serves at `GET /api/openapi.json`. `apps/cloud-server/src/openapi.rs` merges its cloud-only paths (`x-oz-scope: "cloud"`: sync, webhooks, docs UI, host health/metrics) on top. Drift is policed by the cloud-server guard tests in both directions, including `$ref` resolution across the split.
 
 > last audited 03-09-26 by DSH

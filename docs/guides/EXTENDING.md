@@ -1,6 +1,6 @@
 # Extending OZ-POS — Scripting & Integration Guide
 
-<!-- Audit stamp: 2026-09-03 · DSH · status: UPDATED (local API wired into the desktop app the same day) · every claim below cross-referenced against: crates/oz-api/src/{lib.rs,auth.rs,read_tiers.rs}, crates/oz-api/src/routes/{tokens.rs,terminals.rs,sales.rs,settings.rs,products.rs,tax_rates.rs,exchange_rates.rs,users.rs,images.rs}, apps/cloud-server/src/{main.rs,openapi.rs,openapi_tests.rs,sync_api.rs}, apps/desktop-client/src/{local_api.rs,commands/local_api.rs}, foundation/src/money.rs, crates/oz-lua/README.md, crates/oz-cli/README.md, docs/guides/plugin-guide.md, docs/specs/_active/0047-openapi-drift-guard-and-read-tiers.md · spec-vs-code drift findings recorded here were repaired the same day (see §10) -->
+<!-- Audit stamp: 2026-09-03 · DSH · status: UPDATED (local API wired + shared OpenAPI source with x-oz-scope the same day) · every claim below cross-referenced against: crates/oz-api/src/{lib.rs,auth.rs,read_tiers.rs,spec.rs}, crates/oz-api/src/routes/{tokens.rs,terminals.rs,sales.rs,settings.rs,products.rs,tax_rates.rs,exchange_rates.rs,users.rs,images.rs}, apps/cloud-server/src/{main.rs,openapi.rs,openapi_tests.rs,sync_api.rs}, apps/desktop-client/src/{local_api.rs,commands/local_api.rs}, foundation/src/money.rs, crates/oz-lua/README.md, crates/oz-cli/README.md, docs/guides/plugin-guide.md, docs/specs/_active/0047-openapi-drift-guard-and-read-tiers.md · spec-vs-code drift findings recorded here were repaired the same day (see §10) -->
 
 This guide is for people writing **their own scripts** against an OZ-POS
 installation — automation on the counter machine, a dashboard against the
@@ -52,7 +52,10 @@ deployment, by design:
 - the secret doubles as the `X-Admin-Key` for master-data writes (§5) and
   for token minting over HTTP — it lives in the settings table and is
   deliberately not shown in the UI;
-- no `/api/docs*` and no `/api/sync/*` — those are cloud-server extras.
+- no `/api/sync/*`, no webhooks, and no Swagger/Scalar UI pages — those
+  are cloud-server extras. `GET /api/openapi.json` **is** served: the
+  machine-readable contract for exactly this surface, every operation
+  tagged `x-oz-scope: "both"` (§2.3).
 
 **Standalone playground (develop against the full cloud surface):**
 
@@ -68,21 +71,31 @@ network: it falls back to a hard-coded dev signing secret and an open token
 mint. `OZ_PRODUCTION=1` refuses to boot unless both are set
 (`validate_production_secrets` in `crates/oz-api/src/lib.rs`).
 
-### 2.3 Interactive documentation (cloud server)
+### 2.3 Interactive documentation & the shared spec
 
-| URL | What |
-|---|---|
-| `GET /api/openapi.json` | OpenAPI 3.1 spec (machine-readable contract) |
-| `GET /api/docs` | Swagger UI |
-| `GET /api/docs/scalar` | Scalar API reference |
+| URL | Cloud server | Desktop local API |
+|---|---|---|
+| `GET /api/openapi.json` | merged superset (both + cloud scopes) | base document only (all `x-oz-scope: "both"`) |
+| `GET /api/docs` | Swagger UI | — |
+| `GET /api/docs/scalar` | Scalar API reference | — |
 
-These are public (no auth) on the cloud server. The spec is
-hand-maintained in `apps/cloud-server/src/openapi.rs`; drift-guard tests in
-`openapi_tests.rs` (spec 0047) keep it honest in **both** directions:
-spec→router liveness, security declarations, read-key coverage, and
-router→spec coverage (a compile-time source scan of every `.route()`
-registration — added 2026-09-03 after the guard's original one-directional
-design let `settings` and `snapshot` drift undocumented).
+These are public (no auth). Since 2026-09-03 the spec has a **single
+source of truth**: `crates/oz-api/src/spec.rs` builds the shared
+document; `apps/cloud-server/src/openapi.rs` merges its cloud-only
+paths (sync, webhooks, docs UI, host health/metrics) on top. Every
+operation carries `x-oz-scope`:
+
+- `"both"` — served by the cloud server **and** the desktop local API;
+- `"cloud"` — cloud-server-only.
+
+Scripts can therefore discover from the running server which surface
+they are talking to. Drift-guard tests in `openapi_tests.rs` (spec 0047)
+keep it honest in **both** directions: spec→router liveness, security
+declarations, read-key coverage, scope correctness, `$ref` resolution
+across the split, and router→spec coverage (a compile-time source scan
+of every `.route()` registration — added 2026-09-03 after the guard's
+original one-directional design let `settings` and `snapshot` drift
+undocumented).
 
 ## 3. Endpoint map
 
@@ -370,7 +383,11 @@ Documented so scripts don't build on sand:
 > the local terminal API is now **wired** — the desktop app embeds
 > `oz_api::router()` on loopback behind Settings → Local API (§2.2), with
 > stateful JWT validation (`auth_middleware_with_state`) so it signs with
-> a per-install secret instead of the process env;
+> a per-install secret instead of the process env; the OpenAPI document
+> moved to a **single source of truth** (`crates/oz-api/src/spec.rs`)
+> with per-operation `x-oz-scope` tagging, served by the local API at
+> `/api/openapi.json` and merged with cloud paths by the cloud server
+> (§2.3);
 > `GET|PUT /api/v1/settings`, `GET /api/sync/snapshot` and the three
 > `/api/docs*` paths are now in the OpenAPI spec; the drift guard gained
 > its router→spec direction (source-scan equality); and the spec's
