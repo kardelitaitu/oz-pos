@@ -50,6 +50,10 @@ const path = !rawPath || rawPath.replace(/^\/+/, '').startsWith('404') ? '/' : r
     <meta name="description" content={desc} />
     <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
     <link rel="sitemap" href="/sitemap-index.xml" />
+    <!-- Preconnect: Cloudflare Web Analytics beacon (auto-injected by the edge).
+         Establishes TLS + DNS early so the RUM request at ~300ms doesn't
+         block the critical path while waiting for a cold connection. -->
+    <link rel="preconnect" href="https://static.cloudflareinsights.com" crossorigin />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     {locales.map((code) => (
       <link rel="alternate" hreflang={code} href={getAbsoluteLocaleUrl(code, path)} />
