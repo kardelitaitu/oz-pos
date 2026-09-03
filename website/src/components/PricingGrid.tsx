@@ -144,17 +144,21 @@ export default function PricingGrid({ tiers, locale, downloadHref, contactHref }
               {/* Row 1: Title */}
               <h3 className="text-lg font-semibold">{tier.name}</h3>
               {/* Row 2: Price */}
-              <div className="mt-4">
+              <div className="mt-4 min-h-[58px] flex flex-col justify-start">
                 <p className="text-2xl font-bold whitespace-nowrap">
                   {isEnterprise ? 'Custom' : price.price}
                   {!isEnterprise && price.period && <span className="text-xs font-normal text-muted"> {price.period}</span>}
                 </p>
-                {billing === 'yearly' && !isFree && !isEnterprise && (
-                  <p className="mt-1 text-xs text-muted">{t(locale, 'pricingPage.billing.billedYearly')}</p>
+                {billing === 'yearly' && !isFree && !isEnterprise ? (
+                  <p className="mt-1 text-xs text-muted leading-tight">{t(locale, 'pricingPage.billing.billedYearly')}</p>
+                ) : (
+                  <span className="mt-1 block h-4" aria-hidden="true" />
                 )}
               </div>
               {/* Row 3: Description */}
-              <p className="mt-4 text-sm text-muted leading-relaxed">{tier.description}</p>
+              <div className="mt-4 min-h-[64px] flex items-start">
+                <p className="text-sm text-muted leading-relaxed">{tier.description}</p>
+              </div>
               {/* Row 4: Features — fills remaining space */}
               <ul className="mt-6 flex-1 space-y-2 text-sm">
                 {tier.features.map((f) => (
