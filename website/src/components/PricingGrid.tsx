@@ -27,7 +27,7 @@ interface Props {
   contactHref: string;
 }
 
-export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
+export default function PricingGrid({ tiers, locale, downloadHref, contactHref }: Props) {
   const [billing, setBilling] = useState<BillingPeriod>('yearly');
   const activeTiers = tiers;
   const trackRef = useRef<HTMLDivElement>(null);
