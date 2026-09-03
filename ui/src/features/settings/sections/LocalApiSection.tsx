@@ -9,6 +9,7 @@ import {
   getLocalApiStatusScoped,
   setLocalApiEnabledScoped,
   setLocalApiPortScoped,
+  rotateLocalApiSecretScoped,
   mintLocalApiTokenScoped,
   type LocalApiStatusDto,
   type LocalApiTokenDto,
@@ -41,6 +42,8 @@ export default function LocalApiSection() {
   const [token, setToken] = useState<LocalApiTokenDto | null>(null);
   const [tokenLabel, setTokenLabel] = useState('');
   const [minting, setMinting] = useState(false);
+  const [confirmRotate, setConfirmRotate] = useState(false);
+  const [rotating, setRotating] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!sessionToken) return;
@@ -57,12 +60,25 @@ export default function LocalApiSection() {
     void refresh();
   }, [refresh]);
 
+  // While the setting says on but no server is listening (boot
+  // auto-start still in flight, or a bind failure), poll so the panel
+  // converges without a manual reopen (review LOW-5).
+  useEffect(() => {
+    if (!status || status.running || !status.enabled) return;
+    const timer = setInterval(() => void refresh(), 2000);
+    return () => clearInterval(timer);
+  }, [status, refresh]);
+
   const onToggle = async (checked: boolean) => {
     if (!sessionToken) return;
     setBusy(true);
     try {
       const s = await setLocalApiEnabledScoped(sessionToken, checked);
       setStatus(s);
+      // A stopped server must not leave a stale token on screen — the
+      // next enable may run on a different port, and disable-then-
+      // rotate would otherwise show a token the server no longer accepts.
+      if (!checked) setToken(null);
       if (checked && !s.running) {
         addToast({ message: l10n.getString('settings-local-api-start-failed'), type: 'error' });
       }
@@ -90,6 +106,23 @@ export default function LocalApiSection() {
       void refresh();
     } finally {
       setBusy(false);
+    }
+  };
+
+  const onRotate = async () => {
+    if (!sessionToken) return;
+    setRotating(true);
+    try {
+      setStatus(await rotateLocalApiSecretScoped(sessionToken));
+      // Every old token is dead the moment the key changes.
+      setToken(null);
+      setConfirmRotate(false);
+      addToast({ message: l10n.getString('settings-local-api-rotate-done'), type: 'success' });
+    } catch {
+      addToast({ message: l10n.getString('settings-local-api-rotate-failed'), type: 'error' });
+      void refresh();
+    } finally {
+      setRotating(false);
     }
   };
 
@@ -190,6 +223,48 @@ export default function LocalApiSection() {
             </div>
           </span>
         </div>
+
+        {status?.enabled && (
+          <div className="settings-field settings-field--horizontal" data-testid="local-api-rotate-row">
+            <span className="settings-label">
+              <Localized id="settings-local-api-rotate">
+                <span>Rotate secret</span>
+              </Localized>
+            </span>
+            <span className="settings-field-input-wrap">
+              {confirmRotate ? (
+                <>
+                  <p className="settings-hint" data-testid="local-api-rotate-warning">
+                    <Localized id="settings-local-api-rotate-warning">
+                      <span>
+                        Rotating invalidates every minted token immediately and changes the
+                        operator key. Scripts will need freshly minted tokens.
+                      </span>
+                    </Localized>
+                  </p>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <Button variant="ghost" loading={rotating} onClick={() => void onRotate()}>
+                      <Localized id="settings-local-api-rotate-confirm">
+                        <span>Confirm rotate</span>
+                      </Localized>
+                    </Button>
+                    <Button variant="ghost" disabled={rotating} onClick={() => setConfirmRotate(false)}>
+                      <Localized id="settings-local-api-rotate-cancel">
+                        <span>Cancel</span>
+                      </Localized>
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <Button variant="ghost" disabled={busy || rotating} onClick={() => setConfirmRotate(true)}>
+                  <Localized id="settings-local-api-rotate">
+                    <span>Rotate secret</span>
+                  </Localized>
+                </Button>
+              )}
+            </span>
+          </div>
+        )}
 
         {baseUrl && (
           <>

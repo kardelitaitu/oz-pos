@@ -33,6 +33,14 @@ export const setLocalApiEnabledScoped = (sessionToken: string, enabled: boolean)
 export const setLocalApiPortScoped = (sessionToken: string, port: number): Promise<LocalApiStatusDto> =>
   loggedInvoke<LocalApiStatusDto>('local_api_set_port_scoped', { sessionToken, port });
 
+/**
+ * Rotate the per-install signing secret. Every previously minted token
+ * stops working immediately and the operator X-Admin-Key changes —
+ * confirm with the user before calling.
+ */
+export const rotateLocalApiSecretScoped = (sessionToken: string): Promise<LocalApiStatusDto> =>
+  loggedInvoke<LocalApiStatusDto>('local_api_rotate_secret_scoped', { sessionToken });
+
 /** Mint a long-lived API token signed with the per-install secret. */
 export const mintLocalApiTokenScoped = (
   sessionToken: string,

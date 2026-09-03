@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   getLocalApiStatusScoped: vi.fn(),
   setLocalApiEnabledScoped: vi.fn(),
   setLocalApiPortScoped: vi.fn(),
+  rotateLocalApiSecretScoped: vi.fn(),
   mintLocalApiTokenScoped: vi.fn(),
 }));
 vi.mock('@/api/localApi', () => api);
@@ -85,6 +86,12 @@ const testL10n = {
       'settings-local-api-token-copied': 'Token copied.',
       'settings-local-api-copy-failed': 'Copy failed.',
       'settings-local-api-mint-failed': 'Could not generate a token.',
+      'settings-local-api-rotate': 'Rotate secret',
+      'settings-local-api-rotate-warning': 'Rotating invalidates every minted token.',
+      'settings-local-api-rotate-confirm': 'Confirm rotate',
+      'settings-local-api-rotate-cancel': 'Cancel',
+      'settings-local-api-rotate-done': 'Signing secret rotated.',
+      'settings-local-api-rotate-failed': 'Could not rotate the signing secret.',
       'toggle': 'Toggle',
     };
     let result = defaults[id] ?? id;
@@ -126,6 +133,7 @@ beforeEach(() => {
   api.getLocalApiStatusScoped.mockResolvedValue(STOPPED);
   api.setLocalApiEnabledScoped.mockResolvedValue(RUNNING);
   api.setLocalApiPortScoped.mockResolvedValue({ ...RUNNING, port: 4010 });
+  api.rotateLocalApiSecretScoped.mockResolvedValue(RUNNING);
   api.mintLocalApiTokenScoped.mockResolvedValue({
     token: 'jwt.abc.def',
     expires_at: '2026-10-01T00:00:00Z',
@@ -223,5 +231,88 @@ describe('LocalApiSection', () => {
       expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })),
     );
     expect(screen.queryByTestId('local-api-token-row')).not.toBeInTheDocument();
+  });
+
+  it('rotate needs an explicit confirm and clears the minted token', async () => {
+    api.getLocalApiStatusScoped.mockResolvedValue(RUNNING);
+    render(<Wrapper><LocalApiSection /></Wrapper>);
+    await waitFor(() => expect(screen.getByTestId('local-api-status-row')).toBeInTheDocument());
+    // Mint a token first so we can assert rotation drops it.
+    fireEvent.click(screen.getByText('Generate Token'));
+    await waitFor(() => expect(screen.getByTestId('local-api-token-row')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate secret' }));
+    // Confirmation step shows the warning; nothing called yet.
+    expect(screen.getByTestId('local-api-rotate-warning')).toBeInTheDocument();
+    expect(api.rotateLocalApiSecretScoped).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm rotate' }));
+    await waitFor(() => expect(api.rotateLocalApiSecretScoped).toHaveBeenCalledWith('test-token'));
+    await waitFor(() => expect(screen.queryByTestId('local-api-token-row')).not.toBeInTheDocument());
+    expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+  });
+
+  it('rotate cancel returns to the idle row without calling the command', async () => {
+    api.getLocalApiStatusScoped.mockResolvedValue(RUNNING);
+    render(<Wrapper><LocalApiSection /></Wrapper>);
+    await waitFor(() => expect(screen.getByTestId('local-api-rotate-row')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate secret' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(api.rotateLocalApiSecretScoped).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('local-api-rotate-warning')).not.toBeInTheDocument();
+  });
+
+  it('rotate row is hidden while the API is disabled', async () => {
+    render(<Wrapper><LocalApiSection /></Wrapper>);
+    await waitFor(() => expect(api.getLocalApiStatusScoped).toHaveBeenCalled());
+    expect(screen.queryByTestId('local-api-rotate-row')).not.toBeInTheDocument();
+  });
+
+  it('rotate failure surfaces an error toast and keeps the confirm step', async () => {
+    api.getLocalApiStatusScoped.mockResolvedValue(RUNNING);
+    api.rotateLocalApiSecretScoped.mockRejectedValueOnce(new Error('boom'));
+    render(<Wrapper><LocalApiSection /></Wrapper>);
+    await waitFor(() => expect(screen.getByTestId('local-api-rotate-row')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate secret' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm rotate' }));
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })),
+    );
+    expect(screen.getByTestId('local-api-rotate-warning')).toBeInTheDocument();
+  });
+
+  it('disabling clears a minted token (survives re-enable)', async () => {
+    api.getLocalApiStatusScoped.mockResolvedValue(RUNNING);
+    api.setLocalApiEnabledScoped.mockResolvedValueOnce(STOPPED).mockResolvedValue(RUNNING);
+    render(<Wrapper><LocalApiSection /></Wrapper>);
+    await waitFor(() => expect(screen.getByTestId('local-api-status-row')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Generate Token'));
+    await waitFor(() => expect(screen.getByTestId('local-api-token-row')).toBeInTheDocument());
+    // Disable → re-enable: the token row area is back, but the stale
+    // token must NOT still be shown (it was cleared on disable).
+    fireEvent.click(screen.getByRole('switch', { name: /toggle/i }));
+    await waitFor(() => expect(screen.queryByTestId('local-api-status-row')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('switch', { name: /toggle/i }));
+    await waitFor(() => expect(screen.getByTestId('local-api-status-row')).toBeInTheDocument());
+    expect(screen.queryByTestId('local-api-token-row')).not.toBeInTheDocument();
+  });
+
+  it('polls status while enabled but not running', async () => {
+    vi.useFakeTimers();
+    try {
+      api.getLocalApiStatusScoped.mockResolvedValue({ ...RUNNING, running: false, baseUrl: null });
+      render(<Wrapper><LocalApiSection /></Wrapper>);
+      await vi.waitFor(() => expect(api.getLocalApiStatusScoped).toHaveBeenCalledTimes(1));
+      await vi.advanceTimersByTimeAsync(2000);
+      await vi.waitFor(() => expect(api.getLocalApiStatusScoped).toHaveBeenCalledTimes(2));
+      // Converged to running → polling stops.
+      api.getLocalApiStatusScoped.mockResolvedValue(RUNNING);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(api.getLocalApiStatusScoped).toHaveBeenCalledTimes(3);
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(api.getLocalApiStatusScoped).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
