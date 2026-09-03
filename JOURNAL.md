@@ -67,11 +67,41 @@ by the concurrent author — not my scope, left untouched.
   fallback) and calls `list_workspaces_with_entitlement`, mirroring
   `list_workspaces_scoped`.
 
-**Commits:** pending (round-3 TDD commit).
+**Commits:** d67b3f6a (round-3 TDD commit).
 **Test counts:** oz-core workspaces 63→64; desktop-client workspaces
 14→15; fmt + clippy clean.
-**Follow-up:** audit the remaining `store.list_workspaces(` call sites
-for the same missing entitlement filter.
+**Follow-up (resolved):** audited the remaining `store.list_workspaces(`
+call sites. The only other one is the pre-session picker
+(`workspaces.rs:138`), which feeds the home-screen Workspaces cards —
+kept role-only by explicit design decision (user spec: "for this area we
+only need user role"). Tier filtering remains on the post-login surfaces
+(scoped listing, terminal-management listing, creation quota), all
+verified.
+
+## 2026-09-03 — TDD round 4: session creation bypasses tier entitlement (desktop + tablet auth)
+
+**Problem:** `create_session` validated role access
+(`verify_instance_access`) but never checked the tenant subscription
+(ADR #5). The default tenant is Free (allows only store-pos /
+restaurant-pos / admin) yet a session into `default-kds` succeeded: a
+downgraded tenant could keep opening sessions in workspace types their
+subscription no longer covers, even though every post-login listing
+hides those types. Home-screen cards are role-gated by design, so the
+session boundary is the last line of defense — it was open.
+
+**Solution:** Red first — `create_session_denies_tier_disallowed_workspace_type`
+(desktop + tablet parity) confirmed the kds session was created. Green:
+both `create_session` commands now load `TenantSubscription` from the
+global DB (clock-rollback validated, Free fallback) and fail closed with
+`AppError::Invalid` when `allows_workspace_type` is false. Existing
+tests all use Free-allowed types (restaurant-pos), so no breakage.
+
+**Commits:** pending (round-4 TDD commit).
+**Test counts:** desktop auth 43→44 (incl. security integration);
+tablet auth 15→16; fmt clean.
+**Note:** mirroring the tablet `create_session` (no picker-ticket arg)
+kept the two clients' entitlement behavior identical — verified by the
+parity test.
 
 ## 2026-08-29 — Gap analysis round 2: renew-badge thresholds + checkout feedback states (website AccountView)
 

@@ -17,6 +17,7 @@ use tauri::State;
 use oz_core::auth::LoginSession;
 use oz_core::db::Store;
 use oz_core::session::SessionContext;
+use oz_core::subscription::TenantSubscription;
 use oz_security::mask::mask_token;
 
 use foundation::validate_not_empty;
@@ -381,6 +382,30 @@ pub async fn create_session(
                 "User does not have access to this workspace instance".into(),
             ));
         }
+    }
+
+    // ADR #5: the tenant subscription gates which workspace types a session
+    // may open. Role access (above) and tier entitlement are orthogonal —
+    // an owner whose subscription no longer covers the type (e.g. kds after
+    // a downgrade) must fail closed here, not after the session exists.
+    let sub = {
+        let db = state.db.lock().await;
+        TenantSubscription::validate_clock_rollback(&db)?;
+        TenantSubscription::load(&db, "default")?.unwrap_or_else(|| {
+            tracing::warn!("no subscription found for tenant 'default', defaulting to Free tier");
+            TenantSubscription::bootstrap_free()
+        })
+    };
+    if !sub.allows_workspace_type(&args.type_key) {
+        tracing::warn!(
+            user_id = %args.user_id,
+            type_key = %args.type_key,
+            "session creation denied — workspace type not entitled by tenant subscription"
+        );
+        return Err(AppError::Invalid(format!(
+            "Workspace type '{}' is not entitled by the tenant subscription",
+            args.type_key
+        )));
     }
 
     let token = uuid::Uuid::now_v7().to_string();
