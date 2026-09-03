@@ -86,62 +86,65 @@ export default function HeroCarousel({ labels, descriptions, comingSoon }: Props
   };
 
   return (
-    <div
-      ref={stageRef}
-      role="group"
-      aria-roledescription="carousel"
-      aria-label="OZ-POS app screenshots"
-      className="relative overflow-hidden rounded-2xl border border-ink/10 bg-gradient-to-br from-[#f8f9fa] via-[#f0f1f3] to-[#e8e9eb] shadow-2xl shadow-black/30"
-      style={{ aspectRatio: '1280 / 720' }}
-      onMouseEnter={handlePauseIn}
-      onMouseLeave={handlePauseOut}
-      onFocusCapture={handlePauseIn}
-      onBlurCapture={handlePauseOut}
-    >
-      {/* Track — all 5 slides slide horizontally */}
-      <div className="flex h-full w-full" style={trackStyle} aria-hidden="true">
-        {SLIDE_IDS.map((id) => (
-          <div key={id} className="h-full w-full shrink-0">
-            <SlideWindow title={`OZ-POS — ${labels[id]}`} content={slideContent(id)}>
-              {/* Shown only when a slide has no content (placeholder PNG window) */}
-              {slideContent(id) === undefined && (
-                <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-                  <p className="text-lg font-semibold text-ink/70">{labels[id]}</p>
-                  <p className="max-w-sm px-6 text-sm text-muted">{descriptions[id]}</p>
-                  <p className="mt-2 text-[11px] uppercase tracking-widest text-muted/60">{comingSoon}</p>
-                </div>
-              )}
-            </SlideWindow>
-          </div>
-        ))}
-      </div>
-
-      {/* Pill slider — bottom-center overlay */}
-      <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2">
-        <div className="relative flex rounded-full bg-black/35 p-1 backdrop-blur-sm">
-          {/* Sliding highlight */}
-          <div
-            className="absolute inset-y-1 left-1 rounded-full bg-white/90 shadow-sm"
-            style={highlightStyle}
-            aria-hidden="true"
-          />
-          {/* Pill buttons */}
-          {SLIDE_IDS.map((id, i) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => goTo(i)}
-              aria-current={i === index ? 'true' : undefined}
-              aria-label={labels[id]}
-              className="relative z-10 flex-1 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors duration-200"
-              style={{
-                color: i === index ? '#0f172a' : 'rgba(255,255,255,0.85)',
-              }}
-            >
-              {labels[id]}
-            </button>
+    <div className="flex flex-wrap items-center justify-center gap-12">
+      {/* Stage — the mockup window. Pause on hover/focus (WCAG 2.2.2). */}
+      <div
+        ref={stageRef}
+        role="group"
+        aria-roledescription="carousel"
+        aria-label="OZ-POS app screenshots"
+        className="relative w-full max-w-[1280px] overflow-hidden rounded-2xl border border-ink/10 bg-gradient-to-br from-[#f8f9fa] via-[#f0f1f3] to-[#e8e9eb] shadow-2xl shadow-black/30"
+        style={{ aspectRatio: '1280 / 720' }}
+        onMouseEnter={handlePauseIn}
+        onMouseLeave={handlePauseOut}
+        onFocusCapture={handlePauseIn}
+        onBlurCapture={handlePauseOut}
+      >
+        {/* Track — all 5 slides slide horizontally */}
+        <div className="flex h-full w-full" style={trackStyle} aria-hidden="true">
+          {SLIDE_IDS.map((id) => (
+            <div key={id} className="h-full w-full shrink-0">
+              <SlideWindow title={`OZ-POS — ${labels[id]}`} content={slideContent(id)}>
+                {/* Shown only when a slide has no content (placeholder PNG window) */}
+                {slideContent(id) === undefined && (
+                  <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+                    <p className="text-lg font-semibold text-ink/70">{labels[id]}</p>
+                    <p className="max-w-sm px-6 text-sm text-muted">{descriptions[id]}</p>
+                    <p className="mt-2 text-[11px] uppercase tracking-widest text-muted/60">{comingSoon}</p>
+                  </div>
+                )}
+              </SlideWindow>
+            </div>
           ))}
         </div>
+      </div>
+
+      {/* Pill slider — outside the mockup, centered beneath it.
+          Buttons sized to match the vertical entry-point pills below the
+          hero (Coffee shops · Minimarkets · Warung/kiosk · Restaurants). */}
+      <div className="relative flex rounded-full bg-black/35 p-1 backdrop-blur-sm">
+        {/* Sliding highlight */}
+        <div
+          className="absolute inset-y-1 left-1 rounded-full bg-white/90 shadow-sm"
+          style={highlightStyle}
+          aria-hidden="true"
+        />
+        {/* Pill buttons */}
+        {SLIDE_IDS.map((id, i) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => goTo(i)}
+            aria-current={i === index ? 'true' : undefined}
+            aria-label={labels[id]}
+            className="relative z-10 flex-1 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-200"
+            style={{
+              color: i === index ? '#0f172a' : 'rgba(255,255,255,0.85)',
+            }}
+          >
+            {labels[id]}
+          </button>
+        ))}
       </div>
     </div>
   );
