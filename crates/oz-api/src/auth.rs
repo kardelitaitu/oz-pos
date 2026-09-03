@@ -41,8 +41,17 @@ const DEFAULT_EXPIRY_HOURS: i64 = 24;
 /// (relevant now that the desktop app signs with a per-install secret
 /// while tests/dev may use the fallback constant in the same process).
 const JWT_CACHE_TTL_SECS: u64 = 60;
-static JWT_CACHE: LazyLock<RwLock<HashMap<(String, String), (ApiTokenClaims, Instant)>>> =
-    LazyLock::new(|| RwLock::new(HashMap::new()));
+
+/// Cache entry: validated claims + timestamp of validation.
+type JwtCacheEntry = (ApiTokenClaims, Instant);
+
+/// Cache key: (resolved_secret, raw_token).
+type JwtCacheKey = (String, String);
+
+/// In-memory JWT validation cache.
+type JwtCache = RwLock<HashMap<JwtCacheKey, JwtCacheEntry>>;
+
+static JWT_CACHE: LazyLock<JwtCache> = LazyLock::new(|| RwLock::new(HashMap::new()));
 
 /// The payload embedded in every API token.
 #[derive(Debug, Serialize, Deserialize, Clone)]
