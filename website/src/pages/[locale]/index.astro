@@ -59,7 +59,16 @@ const techStack = [
     <!-- Tech stack logos inside features area -->
     <div class="mt-12">
       <p class="text-center text-sm text-muted">{t(locale, 'techStack.subtitle')}</p>
-      <div class="mt-6 flex flex-wrap items-center justify-center gap-x-12 gap-y-6">
+      <!-- Locked to 6x1 at lg and up, 3x2 below. The breakpoint is arithmetic,
+           not taste: each logo's width is height * ratio from `techStack`
+           above, so the six sum to 621px and need 821px with 2.5rem gaps. The
+           section is max-w-6xl minus px-4, giving 992px at lg (fits) but only
+           736px at md (overflows by 85px) — hence lg, not md.
+           Tracks are max-content rather than grid-cols-6 because PostgreSQL is
+           180px wide while six equal columns of the 1120px container are 153px
+           each, which would squeeze it; max-content sizes each column to its
+           own logo and lg:justify-center centres the group. -->
+      <div class="mt-6 grid grid-cols-3 items-center justify-items-center gap-x-6 gap-y-6 lg:grid-cols-[repeat(6,max-content)] lg:justify-center lg:gap-x-10">
         {techStack.map((logo) => (
           <span
             class="opacity-70 transition-opacity duration-200 hover:opacity-100 flex-shrink-0"
