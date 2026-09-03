@@ -1,6 +1,6 @@
 # Extending OZ-POS — Scripting & Integration Guide
 
-<!-- Audit stamp: 2026-09-03 · DSH · status: UPDATED (local API wired + shared OpenAPI source with x-oz-scope; same-day review fixes: primary-store DB targeting, lifecycle op-lock, managed-key guard) · every claim below cross-referenced against: crates/oz-api/src/{lib.rs,auth.rs,read_tiers.rs,spec.rs}, crates/oz-api/src/routes/{tokens.rs,terminals.rs,sales.rs,settings.rs,products.rs,tax_rates.rs,exchange_rates.rs,users.rs,images.rs}, apps/cloud-server/src/{main.rs,openapi.rs,openapi_tests.rs,sync_api.rs}, apps/desktop-client/src/{local_api.rs,commands/local_api.rs}, foundation/src/money.rs, crates/oz-lua/README.md, crates/oz-cli/README.md, docs/guides/plugin-guide.md, docs/specs/_active/0047-openapi-drift-guard-and-read-tiers.md · spec-vs-code drift findings recorded here were repaired the same day (see §10) -->
+<!-- Audit stamp: 2026-09-03 · DSH · status: UPDATED (local API wired + shared OpenAPI source with x-oz-scope; same-day review fixes: primary-store DB targeting, lifecycle op-lock, managed-key guard) · every claim below cross-referenced against: crates/oz-api/src/{lib.rs,auth.rs,read_tiers.rs,spec/mod.rs}, crates/oz-api/src/routes/{tokens.rs,terminals.rs,sales.rs,settings.rs,products.rs,tax_rates.rs,exchange_rates.rs,users.rs,images.rs}, apps/cloud-server/src/{main.rs,openapi.rs,openapi_tests.rs,sync_api.rs}, apps/desktop-client/src/{local_api.rs,commands/local_api.rs}, foundation/src/money.rs, crates/oz-lua/README.md, crates/oz-cli/README.md, docs/guides/plugin-guide.md, docs/specs/_active/0047-openapi-drift-guard-and-read-tiers.md · spec-vs-code drift findings recorded here were repaired the same day (see §10) -->
 
 This guide is for people writing **their own scripts** against an OZ-POS
 installation — automation on the counter machine, a dashboard against the
@@ -86,7 +86,8 @@ mint. `OZ_PRODUCTION=1` refuses to boot unless both are set
 | `GET /api/docs/scalar` | Scalar API reference | — |
 
 These are public (no auth). Since 2026-09-03 the spec has a **single
-source of truth**: `crates/oz-api/src/spec.rs` builds the shared
+source of truth**: `crates/oz-api/src/spec/` (`mod.rs` + `paths.rs` +
+`schemas.rs`) builds the shared
 document; `apps/cloud-server/src/openapi.rs` merges its cloud-only
 paths (sync, webhooks, docs UI, host health/metrics) on top. Every
 operation carries `x-oz-scope`:
@@ -417,7 +418,7 @@ Documented so scripts don't build on sand:
 > `oz_api::router()` on loopback behind Settings → Local API (§2.2), with
 > stateful JWT validation (`auth_middleware_with_state`) so it signs with
 > a per-install secret instead of the process env; the OpenAPI document
-> moved to a **single source of truth** (`crates/oz-api/src/spec.rs`)
+> moved to a **single source of truth** (`crates/oz-api/src/spec/`)
 > with per-operation `x-oz-scope` tagging, served by the local API at
 > `/api/openapi.json` and merged with cloud paths by the cloud server
 > (§2.3);
