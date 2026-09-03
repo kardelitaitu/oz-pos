@@ -1,5 +1,28 @@
 
 
+## 2026-09-03 — TDD round 1: staff store-scope leak in workspace resolution (oz-core)
+
+**Problem:** The home-screen role-gating change (37b7530c) removed
+`role-staff` from the owner bypass in `list_workspaces_inner` and
+`verify_instance_access` so staff only sees assigned workspaces. The
+TDD audit found the `user_store_access` multi-store check was nested
+INSIDE the bypass block in both functions — so staff, no longer in the
+bypass, skipped the store-scope gate entirely (fail-open): a staff user
+with access limited to store A could enumerate instances in store B via
+`role_workspace_types` fallback, and could open a session in store B
+through `verify_instance_access`.
+
+**Solution:** Hoisted the `user_store_access` check to step 0 in both
+functions so it applies to every role before any bypass/assignment/
+role-type resolution. Fail-closed: rows exist + store not in rows →
+empty list / deny. Red tests first (2 new):
+- `list_workspaces_staff_respects_user_store_access_out_of_scope_store_denied`
+- `verify_instance_access_staff_respects_user_store_access_out_of_scope_denied`
+
+**Commits:** pending (round-1 TDD commit).
+**Test counts:** oz-core workspaces 61→63; desktop-client workspaces 14
+still green; clippy -D warnings clean; cargo fmt clean.
+
 ## 2026-08-29 — Gap analysis round 2: renew-badge thresholds + checkout feedback states (website AccountView)
 
 **Problem:** The systematic branch audit (objective item 1) found 3 more

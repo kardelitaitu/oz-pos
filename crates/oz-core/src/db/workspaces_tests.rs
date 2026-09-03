@@ -1433,3 +1433,130 @@ fn verify_instance_access_staff_falls_back_to_role_workspace_types() {
         "staff without role_workspace_types for restaurant-pos must be denied"
     );
 }
+
+#[test]
+fn list_workspaces_staff_respects_user_store_access_out_of_scope_store_denied() {
+    let (store, _) = fresh();
+    store.seed_default_roles().unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-staff', 'staff', 'hash', 'Staff', 'role-staff', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+    // Staff role gets store-pos via role_workspace_types.
+    store
+        .conn
+        .execute(
+            "INSERT INTO role_workspace_types (role_id, type_key) VALUES ('role-staff', 'store-pos')",
+            [],
+        )
+        .unwrap();
+    // A second store with a store-pos instance the staff role type-matches.
+    store
+        .conn
+        .execute(
+            "INSERT INTO store_profiles (id, name, address, currency, timezone)
+             VALUES ('store-b', 'Store B', '456 Elm', 'IDR', 'Asia/Jakarta')",
+            [],
+        )
+        .unwrap();
+    store
+        .create_workspace_instance(
+            "store-b-store-pos",
+            "store-pos",
+            "store-b",
+            "Store B POS",
+            "",
+            None,
+        )
+        .unwrap();
+    // Multi-store mode: staff is only granted access to the default store.
+    store
+        .conn
+        .execute(
+            "INSERT INTO user_store_access (user_id, store_id, access_level)
+             VALUES ('user-staff', 'default', 'staff')",
+            [],
+        )
+        .unwrap();
+
+    // In-scope store lists normally.
+    let in_scope = store
+        .list_workspaces("role-staff", Some("user-staff"), "default")
+        .unwrap();
+    assert!(!in_scope.is_empty(), "staff must see its assigned store");
+
+    // Out-of-scope store must be denied — empty list, not a leak.
+    let out_of_scope = store
+        .list_workspaces("role-staff", Some("user-staff"), "store-b")
+        .unwrap();
+    assert!(
+        out_of_scope.is_empty(),
+        "staff without user_store_access on store-b must not enumerate it, got {out_of_scope:?}"
+    );
+}
+
+#[test]
+fn verify_instance_access_staff_respects_user_store_access_out_of_scope_denied() {
+    let (store, _) = fresh();
+    store.seed_default_roles().unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-staff', 'staff', 'hash', 'Staff', 'role-staff', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO role_workspace_types (role_id, type_key) VALUES ('role-staff', 'store-pos')",
+            [],
+        )
+        .unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO store_profiles (id, name, address, currency, timezone)
+             VALUES ('store-b', 'Store B', '456 Elm', 'IDR', 'Asia/Jakarta')",
+            [],
+        )
+        .unwrap();
+    store
+        .create_workspace_instance(
+            "store-b-store-pos",
+            "store-pos",
+            "store-b",
+            "Store B POS",
+            "",
+            None,
+        )
+        .unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO user_store_access (user_id, store_id, access_level)
+             VALUES ('user-staff', 'default', 'staff')",
+            [],
+        )
+        .unwrap();
+
+    // In-scope store instance verifies.
+    let in_scope = store
+        .verify_instance_access("role-staff", "user-staff", "default-store-pos", "default")
+        .unwrap();
+    assert!(in_scope, "staff must open a session in its assigned store");
+
+    // Out-of-scope store instance is denied even though the role type-matches.
+    let out_of_scope = store
+        .verify_instance_access("role-staff", "user-staff", "store-b-store-pos", "store-b")
+        .unwrap();
+    assert!(
+        !out_of_scope,
+        "staff must not open a session in an unassigned store"
+    );
+}

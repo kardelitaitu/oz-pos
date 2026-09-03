@@ -69,13 +69,34 @@ impl Store<'_> {
         user_id: Option<&str>,
         store_id: &str,
     ) -> Result<Vec<WorkspaceDto>, CoreError> {
+        // 0. Multi-store enforcement (user_store_access) applies to every role,
+        //    not just the owner-bypass roles. If the user has store-access rows
+        //    and this store is not among them, fail closed — even staff fallback
+        //    resolution (user_workspace_instances or role_workspace_types) must
+        //    not leak instances from unassigned stores.
+        if let Some(uid) = user_id {
+            let has_store_access_rows: bool = self.conn.query_row(
+                "SELECT COUNT(*) > 0 FROM user_store_access WHERE user_id = ?1",
+                params![uid],
+                |row| row.get(0),
+            )?;
+
+            if has_store_access_rows {
+                let store_accessible: bool = self
+                    .conn
+                    .query_row(
+                        "SELECT COUNT(*) > 0 FROM user_store_access WHERE user_id = ?1 AND store_id = ?2",
+                        params![uid, store_id],
+                        |row| row.get(0),
+                    )?;
+
+                if !store_accessible {
+                    return Ok(vec![]); // User has no access to this store
+                }
+            }
+        }
+
         // 1. Owner bypass — all active instances in store.
-        //
-        // ADR #4 Phase 2: If the user has explicit `user_store_access` rows,
-        // even owner/admin roles are limited to their assigned stores.
-        // This enables multi-store mode where an owner may only manage a
-        // subset of stores. When no `user_store_access` rows exist, the
-        // legacy single-store bypass applies unchanged.
         //
         // Staff is deliberately NOT in this bypass: it falls through to the
         // explicit `user_workspace_instances` assignment (step 2) and the
@@ -89,29 +110,6 @@ impl Store<'_> {
             || role_id == "manager"
             || role_id == "auditor"
         {
-            // Phase 2: check user_store_access for multi-store enforcement.
-            if let Some(uid) = user_id {
-                let has_store_access_rows: bool = self.conn.query_row(
-                    "SELECT COUNT(*) > 0 FROM user_store_access WHERE user_id = ?1",
-                    params![uid],
-                    |row| row.get(0),
-                )?;
-
-                if has_store_access_rows {
-                    let store_accessible: bool = self
-                        .conn
-                        .query_row(
-                            "SELECT COUNT(*) > 0 FROM user_store_access WHERE user_id = ?1 AND store_id = ?2",
-                            params![uid, store_id],
-                            |row| row.get(0),
-                        )?;
-
-                    if !store_accessible {
-                        return Ok(vec![]); // User has no access to this store
-                    }
-                }
-            }
-
             return self.list_store_instances(store_id, user_id);
         }
 
@@ -416,7 +414,27 @@ impl Store<'_> {
         }
         let role_id = &user.role_id;
 
-        // 1. Owner/admin bypass — check store access if user_store_access is active.
+        // 0. Multi-store enforcement (user_store_access) applies to every role,
+        //    not just the owner-bypass roles. If the user has store-access rows
+        //    and this store is not among them, fail closed — staff fallback
+        //    resolution must not open a session in an unassigned store.
+        let has_store_access: bool = self.conn.query_row(
+            "SELECT COUNT(*) > 0 FROM user_store_access WHERE user_id = ?1",
+            params![user_id],
+            |row| row.get(0),
+        )?;
+        if has_store_access {
+            let store_accessible: bool = self.conn.query_row(
+                "SELECT COUNT(*) > 0 FROM user_store_access WHERE user_id = ?1 AND store_id = ?2",
+                params![user_id, store_id],
+                |row| row.get(0),
+            )?;
+            if !store_accessible {
+                return Ok(false);
+            }
+        }
+
+        // 1. Owner/admin bypass.
         // Staff is deliberately NOT in this bypass: access resolves through
         // explicit `user_workspace_instances` (step 2) or `role_workspace_types`
         // (step 3) so a staff user can only open assigned workspaces.
@@ -428,27 +446,6 @@ impl Store<'_> {
             || role_id == "manager"
             || role_id == "auditor"
         {
-            // Check if user has explicit store access rows (multi-store mode, ADR #4 Phase 2).
-            let has_store_access: bool = self.conn.query_row(
-                "SELECT COUNT(*) > 0 FROM user_store_access WHERE user_id = ?1",
-                params![user_id],
-                |row| row.get(0),
-            )?;
-
-            if has_store_access {
-                // Multi-store mode: user must have access to this specific store.
-                let store_accessible: bool = self
-                    .conn
-                    .query_row(
-                        "SELECT COUNT(*) > 0 FROM user_store_access WHERE user_id = ?1 AND store_id = ?2",
-                        params![user_id, store_id],
-                        |row| row.get(0),
-                    )?;
-                if !store_accessible {
-                    return Ok(false);
-                }
-            }
-
             // Instance must exist and be active in this store.
             let exists: bool = self
                 .conn
