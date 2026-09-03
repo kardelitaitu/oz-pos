@@ -42,6 +42,32 @@ fn secret_is_generated_once_and_stable() {
 }
 
 #[tokio::test]
+async fn rotate_secret_replaces_persisted_value_and_invalidates_old_tokens() {
+    let conn = oz_core::migrations::fresh_db();
+    let original = load_or_create_secret(&conn).unwrap();
+    let rotated = rotate_secret(&conn).unwrap();
+    assert_ne!(original, rotated);
+    assert_eq!(rotated.len(), 64);
+    // Later loads see the rotated value — rotation does not re-fire.
+    assert_eq!(load_or_create_secret(&conn).unwrap(), rotated);
+    // A token minted under the old key no longer validates against the
+    // new one (this is why the UI warns before rotating).
+    let stale = mint_token(&original, "stale", Some(1)).unwrap();
+    assert!(
+        oz_api::auth::validate_token_with_secret(&stale.token, Some(&rotated))
+            .await
+            .is_err(),
+        "rotated secret must invalidate previously minted tokens"
+    );
+    let fresh = mint_token(&rotated, "fresh", Some(1)).unwrap();
+    assert!(
+        oz_api::auth::validate_token_with_secret(&fresh.token, Some(&rotated))
+            .await
+            .is_ok()
+    );
+}
+
+#[tokio::test]
 async fn mint_token_roundtrip_and_clamp() {
     let secret = "a".repeat(32);
     let resp = mint_token(&secret, "my-script", Some(2)).unwrap();
@@ -103,6 +129,16 @@ async fn server_serves_health_protected_routes_and_stops() {
         .await
         .unwrap();
     assert_eq!(resp.status(), reqwest::StatusCode::OK);
+    // MED-4: the route is registered inside router()'s layer scope, so
+    // it carries the same security headers as every other endpoint.
+    assert_eq!(
+        resp.headers()
+            .get("x-content-type-options")
+            .and_then(|v| v.to_str().ok())
+            .as_deref(),
+        Some("nosniff"),
+        "local docs route must sit inside the security-headers layer"
+    );
     let spec: serde_json::Value = resp.json().await.unwrap();
     assert_eq!(spec["info"]["title"], "OZ-POS Local Terminal API");
     assert_eq!(

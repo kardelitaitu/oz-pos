@@ -574,6 +574,7 @@ pub fn run() {
             commands::local_api::local_api_status_scoped,
             commands::local_api::local_api_set_enabled_scoped,
             commands::local_api::local_api_set_port_scoped,
+            commands::local_api::local_api_rotate_secret_scoped,
             commands::local_api::local_api_mint_token_scoped,
             commands::data::get_backup_status,
             commands::data::get_backup_status_scoped,

@@ -852,6 +852,18 @@ pub async fn gateway_status(
 fn is_secret_key(key: &str) -> bool {
     SECRET_KEY_DENY_LIST.contains(&key)
 }
+
+/// Returns `true` if a key must never leave the backend through a
+/// bulk surface: the deny-listed credential secrets, or keys owned by
+/// a dedicated lifecycle manager (`local_api.*` — writing/restoring
+/// those through the generic path desyncs the manager, see
+/// [`is_managed_key`]). Used by the data export (review MED-2: the
+/// export carried `local_api.secret`, so an exported-then-restored
+/// backup would give two installs the same signing secret, breaking
+/// the per-install property).
+pub(crate) fn is_non_exportable_key(key: &str) -> bool {
+    is_secret_key(key) || is_managed_key(key)
+}
 /// **Deprecated — use `set_setting_scoped` (ADR #7).**
 ///
 /// Write (or overwrite) a single setting value.

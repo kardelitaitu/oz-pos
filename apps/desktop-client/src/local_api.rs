@@ -142,10 +142,20 @@ pub fn resolve_port(conn: &Connection) -> u16 {
         .unwrap_or(DEFAULT_PORT)
 }
 
-/// Load the per-install secret, generating and persisting one on first
-/// use. Two UUID v7s (simple form) give 64 hex chars — ~148 random bits
+/// Generate a fresh per-install secret value (NOT persisted here).
+/// Two UUID v7s (simple form) give 64 hex chars — ~148 random bits
 /// plus timestamps; adequate for a loopback-only signing key, and a
 /// pure-`rand` upgrade is tracked as a review follow-up.
+fn new_secret() -> String {
+    format!(
+        "{}{}",
+        uuid::Uuid::now_v7().simple(),
+        uuid::Uuid::now_v7().simple()
+    )
+}
+
+/// Load the per-install secret, generating and persisting one on first
+/// use.
 pub fn load_or_create_secret(conn: &Connection) -> Result<String, String> {
     if let Some(existing) = oz_core::Settings::get(conn, SETTINGS_SECRET)
         .map_err(|e| format!("reading {SETTINGS_SECRET}: {e}"))?
@@ -153,14 +163,23 @@ pub fn load_or_create_secret(conn: &Connection) -> Result<String, String> {
     {
         return Ok(existing);
     }
-    let secret = format!(
-        "{}{}",
-        uuid::Uuid::now_v7().simple(),
-        uuid::Uuid::now_v7().simple()
-    );
+    let secret = new_secret();
     oz_core::Settings::set(conn, SETTINGS_SECRET, &secret)
         .map_err(|e| format!("persisting {SETTINGS_SECRET}: {e}"))?;
     tracing::info!("local API: generated new per-install signing secret");
+    Ok(secret)
+}
+
+/// Replace the persisted per-install secret with a fresh one and return
+/// it. Every token minted under the old key stops validating
+/// immediately, and the operator `X-Admin-Key` changes with it — the
+/// UI must warn before calling this (review MED-2: rotation is also
+/// the recovery path when a backup carrying the old secret leaked).
+pub fn rotate_secret(conn: &Connection) -> Result<String, String> {
+    let secret = new_secret();
+    oz_core::Settings::set(conn, SETTINGS_SECRET, &secret)
+        .map_err(|e| format!("persisting {SETTINGS_SECRET}: {e}"))?;
+    tracing::info!("local API: signing secret rotated — previously minted tokens are invalid");
     Ok(secret)
 }
 
@@ -231,11 +250,11 @@ pub async fn start(
         .map_err(|e| format!("creating image dir {}: {e}", api_state.image_dir.display()))?;
     // The shared OpenAPI document (every operation `x-oz-scope: "both"`)
     // served locally — scripts can discover the contract from the
-    // running server instead of the repo docs.
-    let app = oz_api::router(api_state).route(
-        "/api/openapi.json",
-        axum::routing::get(move || async move { axum::Json(oz_api::spec::local_spec(bound_port)) }),
-    );
+    // running server instead of the repo docs. Built once with the
+    // actual bound port and registered INSIDE router()'s layer scope
+    // (review MED-4: routes appended to the returned Router escape the
+    // CORS/security-headers/trace layers).
+    let app = oz_api::router_with_openapi(api_state, Some(oz_api::spec::local_spec(bound_port)));
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let task = tokio::spawn(async move {

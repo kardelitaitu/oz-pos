@@ -96,7 +96,7 @@ static PINNED_DESKTOP: &[(&str, usize, &[&str])] = &[
     ("kds_device", 6, &["KDS_UPDATE", "KDS_VIEW"]),
     ("kds_routing", 1, &["KDS_VIEW"]),
     ("license", 3, &["SETTINGS_EDIT"]),
-    ("local_api", 4, &["SETTINGS_EDIT", "SETTINGS_READ"]),
+    ("local_api", 5, &["SETTINGS_EDIT", "SETTINGS_READ"]),
     (
         "loyalty",
         1,

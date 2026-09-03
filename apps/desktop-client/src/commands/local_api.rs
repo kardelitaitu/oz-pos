@@ -197,6 +197,42 @@ pub async fn local_api_set_port_scoped(
     build_status(&state).await
 }
 
+/// Rotate the per-install signing secret.
+///
+/// Every previously minted token stops validating immediately and the
+/// operator `X-Admin-Key` changes with it — the UI confirms this with
+/// the merchant before calling. When the server is running it restarts
+/// on the same port with the new secret (the secret lives in the serve
+/// state, not the socket); minted tokens must be regenerated from the
+/// panel afterwards.
+#[tauri::command]
+pub async fn local_api_rotate_secret_scoped(
+    session_token: String,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<LocalApiStatus, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SETTINGS_EDIT).await?;
+    let _op = state.local_api_op.lock().await;
+
+    {
+        let db = state.db.lock().await;
+        local_api::rotate_secret(&db).map_err(AppError::Internal)?;
+    }
+
+    // Running server still holds the OLD secret in its AppState —
+    // restart it so the new key takes effect immediately.
+    if let Some(handle) = state.local_api.lock().await.take() {
+        handle.stop_async().await;
+        let (port, secret, api_db, api_db_path, image_dir) = prepare(&state, &app).await?;
+        let handle = local_api::start(api_db, api_db_path, image_dir, secret, port)
+            .await
+            .map_err(AppError::Internal)?;
+        *state.local_api.lock().await = Some(handle);
+    }
+    build_status(&state).await
+}
+
 /// Mint a long-lived API token signed with the per-install secret.
 ///
 /// Returns the JWT + expiry; the secret itself never crosses the IPC
