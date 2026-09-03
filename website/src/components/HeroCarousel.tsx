@@ -14,9 +14,9 @@ interface Props {
   comingSoon: string;
 }
 
-const DWELL_MS = 5000;
+const DWELL_MS = 10000;
 const AUTO_MS = 700;
-const MANUAL_MS = 300;
+const MANUAL_MS = 400;
 const N = SLIDE_IDS.length;
 
 /** Slide-presentational content. Slide 1 keeps the rich HTML mockup; the rest are placeholders. */
@@ -25,38 +25,13 @@ function slideContent(id: SlideId): ReactNode | undefined {
   return undefined;
 }
 
-/**
- * Per-slide transform: active sits at 0; exiting sweeps fully past the
- * left viewport edge; every other slide parks fully past the right
- * viewport edge so the next advance enters from outside the screen.
- * Viewport units (not %) guarantee off-screen on any width — the stage
- * is always inset from the viewport by the centered-layout margin.
- */
-function slideTransform(
-  i: number,
-  index: number,
-  leaving: number | null,
-): string {
-  if (i === index) return 'translateX(0)';
-  if (leaving !== null && i === leaving) return 'translateX(-100vw)';
-  return 'translateX(100vw)';
-}
-
 export default function HeroCarousel({ labels, descriptions, comingSoon }: Props) {
   const [index, setIndex] = useState(0);
-  const [leaving, setLeaving] = useState<number | null>(null);
   const [transitionMs, setTransitionMs] = useState(AUTO_MS);
   const [paused, setPaused] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
   const [tick, setTick] = useState(0);
   const stageRef = useRef<HTMLDivElement>(null);
-  const leaveTimerRef = useRef<ReturnType<typeof setTimeout>>();
-  const prevIndexRef = useRef(index);
-
-  const scheduleClearLeaving = (ms: number) => {
-    clearTimeout(leaveTimerRef.current);
-    leaveTimerRef.current = setTimeout(() => setLeaving(null), ms);
-  };
 
   // ── Detect reduced motion + visibility changes ─────────────────────
   useEffect(() => {
@@ -76,29 +51,15 @@ export default function HeroCarousel({ labels, descriptions, comingSoon }: Props
     };
   }, []);
 
-  // Cleanup leave timer on unmount.
-  useEffect(() => {
-    return () => clearTimeout(leaveTimerRef.current);
-  }, []);
-
   // ── Auto-advance interval ──────────────────────────────────────────
   useEffect(() => {
     if (reduceMotion || paused) return;
     const id = setInterval(() => {
-      if (!reduceMotion) {
-        setTransitionMs(AUTO_MS);
-        setLeaving(prevIndexRef.current);
-        scheduleClearLeaving(AUTO_MS + 50);
-      }
+      setTransitionMs(AUTO_MS);
       setIndex((i) => (i + 1) % N);
     }, DWELL_MS);
     return () => clearInterval(id);
   }, [reduceMotion, paused, index, tick]);
-
-  // Keep prevIndexRef in sync.
-  useEffect(() => {
-    prevIndexRef.current = index;
-  }, [index]);
 
   // ── Manual jump to a specific slide ─────────────────────────────────
   const goTo = (i: number) => {
@@ -107,16 +68,17 @@ export default function HeroCarousel({ labels, descriptions, comingSoon }: Props
       setTick((t) => t + 1);
       return;
     }
-    if (!reduceMotion) {
-      setLeaving(index);
-      scheduleClearLeaving(MANUAL_MS + 50);
-    }
     setIndex(i);
   };
 
   // ── Pause on hover / focus (WCAG 2.2.2) ────────────────────────────
   const handlePauseIn = () => setPaused(true);
   const handlePauseOut = () => setPaused(false);
+
+  const trackStyle: React.CSSProperties = {
+    transform: `translateX(-${index * 100}%)`,
+    transition: reduceMotion ? 'none' : `transform ${transitionMs}ms cubic-bezier(0.2, 0, 0, 1)`,
+  };
 
   const highlightStyle: React.CSSProperties = {
     width: `calc((100% - ${2 * 4}px) / ${N})`,
@@ -126,56 +88,41 @@ export default function HeroCarousel({ labels, descriptions, comingSoon }: Props
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-12">
-      {/* Stage — the positioning container (no overflow-hidden, so slides
-          entering from off-screen are visible as they sweep across the page).
-          NOTE: no hover-pause here — the stage is huge and a resting cursor
-          would stall auto-slide forever. Pause lives on the pill bar only. */}
+      {/* Stage — overflow-hidden container hosting the horizontal track */}
       <div
         ref={stageRef}
         role="group"
         aria-roledescription="carousel"
         aria-label="OZ-POS app screenshots"
-        className="relative w-full max-w-[1280px]"
+        className="relative w-full max-w-[1280px] overflow-hidden rounded-2xl"
         style={{ aspectRatio: '1280 / 720' }}
       >
-        {SLIDE_IDS.map((id, i) => {
-          const isActive = i === index;
-          const isLeaving = leaving !== null && i === leaving;
-          const transform = slideTransform(i, index, leaving);
-          const zIndex = isLeaving ? 10 : isActive ? 20 : 0;
-          // Only the moving slides animate. Parked slides must NOT carry a
-          // transition — otherwise clearing `leaving` would visibly sweep
-          // the departed window from the left edge back to its parking
-          // spot on the right (ghost sweep across the screen).
-
-          return (
-            <div
-              key={id}
-              data-slide-id={id}
-              className="absolute inset-0"
-              style={{
-                transform,
-                zIndex,
-                transition:
-                  !reduceMotion && (isActive || isLeaving)
-                    ? `transform ${transitionMs}ms cubic-bezier(0.2, 0, 0, 1)`
-                    : 'none',
-              }}
-            >
-              <SlideWindow title={`OZ-POS — ${labels[id]}`} content={slideContent(id)}>
-                {slideContent(id) === undefined && (
-                  <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-                    <p className="text-lg font-semibold text-ink/70">{labels[id]}</p>
-                    <p className="max-w-sm px-6 text-sm text-muted">{descriptions[id]}</p>
-                    <p className="mt-2 text-[11px] uppercase tracking-widest text-muted/60">
-                      {comingSoon}
-                    </p>
-                  </div>
-                )}
-              </SlideWindow>
-            </div>
-          );
-        })}
+        {/* Continuous horizontal track: all slides sit side-by-side and glide horizontally */}
+        <div className="flex h-full w-full" style={trackStyle}>
+          {SLIDE_IDS.map((id, i) => {
+            const isActive = i === index;
+            return (
+              <div
+                key={id}
+                data-slide-id={id}
+                className="h-full w-full shrink-0"
+                aria-hidden={!isActive}
+              >
+                <SlideWindow title={`OZ-POS — ${labels[id]}`} content={slideContent(id)}>
+                  {slideContent(id) === undefined && (
+                    <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+                      <p className="text-lg font-semibold text-ink/70">{labels[id]}</p>
+                      <p className="max-w-sm px-6 text-sm text-muted">{descriptions[id]}</p>
+                      <p className="mt-2 text-[11px] uppercase tracking-widest text-muted/60">
+                        {comingSoon}
+                      </p>
+                    </div>
+                  )}
+                </SlideWindow>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Pill slider — outside the mockup, centered beneath it.

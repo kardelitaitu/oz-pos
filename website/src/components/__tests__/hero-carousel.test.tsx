@@ -74,14 +74,10 @@ describe('HeroCarousel', () => {
     const buttons = pillButtons(container);
     expect(buttons[0].getAttribute('aria-current')).toBe('true');
     expect(buttons[1].getAttribute('aria-current')).toBeNull();
-    // Active slide rests at translateX(0) with a transform transition;
-    // every other slide parks off-screen right (sweeps in from beyond
-    // the viewport edge on advance).
-    const active = container.querySelector('[data-slide-id="restaurant"]') as HTMLElement;
-    expect(active.style.transform).toBe('translateX(0)');
-    expect(active.style.transition).toMatch(/transform 700ms/);
-    const parked = container.querySelector('[data-slide-id="retail"]') as HTMLElement;
-    expect(parked.style.transform).toBe('translateX(100vw)');
+    // Track sits at translateX(-0%) with a transform transition
+    const track = container.querySelector('[role="group"] > div') as HTMLElement;
+    expect(track.style.transform).toMatch(/translateX\(-?0%\)/);
+    expect(track.style.transition).toMatch(/transform 700ms/);
     await unmount();
   });
 
@@ -89,20 +85,20 @@ describe('HeroCarousel', () => {
     const { container, unmount } = await renderCarousel();
     const buttons = pillButtons(container);
 
-    // After 5 s the carousel should be on slide 2.
+    // After 10 s the carousel should be on slide 2.
     await act(async () => {
-      vi.advanceTimersByTime(5000);
+      vi.advanceTimersByTime(10000);
     });
     expect(buttons[1].getAttribute('aria-current')).toBe('true');
 
     // Walk to the last slide (3 more advances → index 4), then wrap to the
     // first (1 more advance → index 0).
     await act(async () => {
-      vi.advanceTimersByTime(3 * 5000);
+      vi.advanceTimersByTime(3 * 10000);
     });
     expect(buttons[4].getAttribute('aria-current')).toBe('true');
     await act(async () => {
-      vi.advanceTimersByTime(5000);
+      vi.advanceTimersByTime(10000);
     });
     expect(buttons[0].getAttribute('aria-current')).toBe('true');
     await unmount();
@@ -116,17 +112,13 @@ describe('HeroCarousel', () => {
       buttons[3].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(buttons[3].getAttribute('aria-current')).toBe('true');
-    // The clicked slide rests at 0 while the previously active slide
-    // sweeps out to the left (leftward-advance direction).
-    const active = container.querySelector('[data-slide-id="warehouse"]') as HTMLElement;
-    expect(active.style.transform).toBe('translateX(0)');
-    const leaving = container.querySelector('[data-slide-id="restaurant"]') as HTMLElement;
-    expect(leaving.style.transform).toBe('translateX(-100vw)');
+    const track = container.querySelector('[role="group"] > div') as HTMLElement;
+    expect(track.style.transform).toBe('translateX(-300%)');
 
     // The manual jump must reset the auto-advance timer: advancing less
     // than one dwell after a click must not move the slide again.
     await act(async () => {
-      vi.advanceTimersByTime(4999);
+      vi.advanceTimersByTime(9999);
     });
     expect(buttons[3].getAttribute('aria-current')).toBe('true');
     await unmount();
@@ -138,7 +130,7 @@ describe('HeroCarousel', () => {
 
     // Advance to slide 2 (index 1).
     await act(async () => {
-      vi.advanceTimersByTime(5000);
+      vi.advanceTimersByTime(10000);
     });
     expect(buttons[1].getAttribute('aria-current')).toBe('true');
 
@@ -147,7 +139,7 @@ describe('HeroCarousel', () => {
       buttons[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await act(async () => {
-      vi.advanceTimersByTime(4999);
+      vi.advanceTimersByTime(9999);
     });
     expect(buttons[1].getAttribute('aria-current')).toBe('true');
     await unmount();
@@ -166,7 +158,7 @@ describe('HeroCarousel', () => {
       stage.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
     });
     await act(async () => {
-      vi.advanceTimersByTime(5000);
+      vi.advanceTimersByTime(10000);
     });
     expect(buttons[1].getAttribute('aria-current')).toBe('true');
 
@@ -175,7 +167,7 @@ describe('HeroCarousel', () => {
       pillBar.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
     });
     await act(async () => {
-      vi.advanceTimersByTime(3 * 5000);
+      vi.advanceTimersByTime(3 * 10000);
     });
     expect(buttons[1].getAttribute('aria-current')).toBe('true');
 
@@ -184,7 +176,7 @@ describe('HeroCarousel', () => {
       pillBar.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: null }));
     });
     await act(async () => {
-      vi.advanceTimersByTime(5000);
+      vi.advanceTimersByTime(10000);
     });
     expect(buttons[2].getAttribute('aria-current')).toBe('true');
     await unmount();
@@ -196,7 +188,7 @@ describe('HeroCarousel', () => {
     const buttons = pillButtons(container);
 
     await act(async () => {
-      vi.advanceTimersByTime(10 * 5000);
+      vi.advanceTimersByTime(10 * 10000);
     });
     // Never auto-advanced.
     expect(buttons[0].getAttribute('aria-current')).toBe('true');
