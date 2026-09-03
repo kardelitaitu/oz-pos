@@ -1256,15 +1256,53 @@
   }
 
   /**
+   * Response shapes for the admin stats payload.
+   *
+   * These mirror the server's response literally — the source of truth is
+   * `handleAdminStats` in apps/license-server/admin_stats.go, which builds
+   * the `kpis` map and the twelve arrays in one `e.JSON(...)` call. When a
+   * field is added there, `normalizeStats` already passes it through (it
+   * copies every key of the incoming kpis object), so only this declaration
+   * goes stale — which is exactly how the admin analytics features shipped
+   * with `astro check` failing on properties that existed at runtime and on
+   * the wire.
+   *
    * @typedef {Object} AdminKpis
-   * @property {number} mrrUsd
    * @property {number} totalUsers
-   * @property {number} arpuUsd
-   * @property {number} fxRate
    * @property {number} activeUsers
    * @property {number} totalSubscribers
    * @property {number} activeDevices
+   * @property {number} arpuUsd
    * @property {number} trialToPaidRate
+   * @property {number} fxRate
+   * ── Monthly income, gross and refunds, per currency ──
+   * @property {number} mrrUsd
+   * @property {number} mrrIdr
+   * @property {number} monthlyGrossUsd
+   * @property {number} monthlyGrossIdr
+   * @property {number} monthlyRefundUsd
+   * @property {number} monthlyRefundIdr
+   * @property {number} monthlyPaddleUsd
+   * @property {number} monthlyPaddleIdr
+   * @property {number} monthlyMidtransUsd
+   * @property {number} monthlyMidtransIdr
+   * ── Lifetime totals ──
+   * @property {number} lifetimeUsd
+   * @property {number} lifetimeIdr
+   * @property {number} lifetimeRefundUsd
+   * @property {number} lifetimeRefundIdr
+   * @property {number} lifetimePaddleUsd
+   * @property {number} lifetimePaddleIdr
+   * @property {number} lifetimeMidtransUsd
+   * @property {number} lifetimeMidtransIdr
+   * ── Provenance and freshness: deliberately excluded from
+   * normalizeStats' coercion list so they pass through untouched ──
+   * @property {string} grossSource - "provider" when backed by the payment
+   * ledger, "estimate" when derived from FX-converted MRR.
+   * @property {boolean} fxLive
+   * @property {string} fxUpdatedAt - RFC3339
+   * @property {string} revenueCachedAt - RFC3339, when the provider ledger
+   * snapshot was refreshed.
    */
 
   /**
@@ -1278,6 +1316,9 @@
    * @property {Array} topSubscribers
    * @property {Array} recentSignups
    * @property {Array} expiringSoon
+   * @property {Array} needsAttention
+   * @property {Array} recentRevenueEvents
+   * @property {Array} trialFunnel
    * @property {AdminKpis} kpis
    */
 
