@@ -142,6 +142,7 @@ staff-assignment-all-workspaces-short = Semua
 
 staff-login-close-aria = Tutup
 staff-login-last-login-title = Waktu login terakhir pada perangkat ini
+staff-login-last-login = Login terakhir: { $time }
 staff-login-next-aria = Lanjut
 
 fastpin-switch-user = Ganti Pengguna

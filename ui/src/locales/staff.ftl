@@ -115,6 +115,10 @@ staff-login-lockout = Locked out. Try again in { $seconds }s
 
 staff-login-close-aria = Close
 staff-login-last-login-title = Last login timestamp for this device
+# Visible footer text. The English previously read "Last login: " glued to the
+# timestamp as bare JSX text, which the audit's scanner initially missed
+# because the node is text-then-expression rather than text alone.
+staff-login-last-login = Last login: { $time }
 staff-login-next-aria = Next
 
 fastpin-switch-user = Switch User
