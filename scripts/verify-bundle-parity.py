@@ -214,6 +214,47 @@ KEY_FIELD_ID_PATTERN = re.compile(
     r"\b(?P<field>titleKey|descKey|labelId|nameKey|ariaKey|placeholderKey)"
     r"\s*:\s*(['\"])(?P<id>[A-Za-z0-9][A-Za-z0-9._-]*)\2"
 )
+# <Localized id={...}> where the id is an EXPRESSION rather than a literal.
+# Most of these are literals in disguise: a ternary of two keys
+#
+#     id={loading ? 'shared-loading' : 'audit-log-load-more'}
+#
+# has no ambiguity about which ids it can resolve to at runtime, so both are
+# checkable. The Fluent page audit surveyed all 98 such sites and found 39
+# ternaries carrying 80 key-shaped string literals between them -- checkable
+# coverage that the rev-1/rev-2 walker simply counted as "untracked".
+LOCALIZED_ID_EXPR_PATTERN = re.compile(r"<Localized\b[^>]*?\bid=\{", re.DOTALL)
+# Repo Fluent ids are kebab-case with at least one hyphen. Requiring a hyphen
+# keeps ordinary words inside an expression ('add', 'enabled') from being
+# mistaken for message ids.
+KEY_SHAPED_LITERAL = re.compile(
+    r"['\"]([a-z][a-z0-9]*(?:-[a-z0-9]+)+)['\"]"
+)
+# A quoted string being *compared* is not an id being *used*:
+#
+#     id={activeWorkspace === 'restaurant-pos' ? 'pos-cart-panel-title-order'
+#                                              : 'pos-cart-panel-title'}
+#
+# Without this, 'restaurant-pos' — a workspace type discriminator — is
+# reported as a missing message id. Blanked in place rather than removed so
+# the offsets of the surviving literals stay valid for line attribution.
+COMPARISON_OPERAND = re.compile(
+    r"(?:===|!==|==|!=|<=|>=|<|>)\s*['\"][^'\"]*['\"]"
+    r"|['\"][^'\"]*['\"]\s*(?:===|!==|==|!=|<=|>=|<|>)"
+    r"|\bcase\s+['\"][^'\"]*['\"]"
+)
+
+
+def _blank_in_place(text: str, pattern: re.Pattern) -> str:
+    """Overwrite every match with spaces, preserving length and newlines."""
+    if not text:
+        return text
+    chars = list(text)
+    for m in pattern.finditer(text):
+        for i in range(m.start(), m.end()):
+            if chars[i] != "\n":
+                chars[i] = " "
+    return "".join(chars)
 # Dynamic getString — unresolvable, but its volume must stay visible.
 GETSTRING_TEMPLATE_PATTERN = re.compile(r"\.getString\(\s*`")
 
@@ -256,6 +297,39 @@ DESCRIPTION = (
     "bundles. Catches missing-translation regressions before they ship. "
     "See the module docstring for the algorithm and rationale."
 )
+
+
+def _balanced_brace(text: str, open_idx: int) -> tuple[str, int]:
+    """Return (expression, index-of-closing-brace) for the `{` at open_idx."""
+    depth = 0
+    for i in range(open_idx, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_idx + 1 : i], i
+    return text[open_idx + 1 :], len(text)
+
+
+def extract_dynamic_id_literals(text: str) -> list[tuple[str, int]]:
+    """Key-shaped string literals inside <Localized id={...}> expressions.
+
+    `text` must already have had comments blanked, so a quoted key in a
+    comment cannot be mistaken for a live site.
+    """
+    found: list[tuple[str, int]] = []
+    for match in LOCALIZED_ID_EXPR_PATTERN.finditer(text):
+        brace = match.end() - 1
+        expr, _end = _balanced_brace(text, brace)
+        expr = _blank_in_place(expr, COMPARISON_OPERAND)
+        for lit in KEY_SHAPED_LITERAL.finditer(expr):
+            # Absolute offset = just past '{' plus the match offset within
+            # the expression; +1 because text.count() is a prefix count.
+            found.append(
+                (lit.group(1), text.count("\n", 0, brace + 1 + lit.start()) + 1)
+            )
+    return found
 
 
 def extract_ids_from_source(
@@ -310,6 +384,7 @@ KIND_LABELS = {
     "navkey": "nav i18nKey",
     "section": "SECTION_LABELS",
     "keyfield": "key-field literal",
+    "dynliteral": "<Localized id={expr}>",
 }
 
 
@@ -355,6 +430,10 @@ def extract_sites_from_source(
         for match in KEY_FIELD_ID_PATTERN.finditer(text):
             line = text.count("\n", 0, match.start("id")) + 1
             sites.append(("keyfield", match.group("id"), line))
+
+    if "dynliteral" in kinds:
+        for id_, line in extract_dynamic_id_literals(text):
+            sites.append(("dynliteral", id_, line))
 
     return sites, untracked_localized, dynamic_getstring
 
@@ -432,6 +511,14 @@ def main() -> int:
              "(rev-3 surface; off by default).",
     )
     parser.add_argument(
+        "--include-dynamic-literals",
+        action="store_true",
+        help="Also check key-shaped string literals that appear inside "
+             "<Localized id={...}> expressions (ternaries and inline maps "
+             "whose possible ids are statically known). Rev-3 surface; "
+             "off by default.",
+    )
+    parser.add_argument(
         "--check-domain-pairs",
         action="store_true",
         help="Fail when a key's .id.ftl twin is declared in a DIFFERENT "
@@ -465,6 +552,7 @@ def main() -> int:
         args.include_getstring = True
         args.include_nav_keys = True
         args.include_key_fields = True
+        args.include_dynamic_literals = True
         args.check_domain_pairs = True
         args.scan_dirs = ",".join(CENSUS_SCAN_DIRS)
 
@@ -475,6 +563,8 @@ def main() -> int:
         kinds |= {"navkey", "section"}
     if args.include_key_fields:
         kinds |= {"keyfield"}
+    if args.include_dynamic_literals:
+        kinds |= {"dynliteral"}
 
     dir_names = (
         DEFAULT_SCAN_DIRS
@@ -639,12 +729,25 @@ def main() -> int:
     print()
 
     if untracked_total > 0 or dynamic_getstring_total > 0:
+        # Report recovered coverage alongside the gap. Saying "neither is
+        # statically checkable" while silently checking 80 literals from
+        # ternary ids would understate the gate — and a report that
+        # misdescribes its own coverage is the failure mode this whole
+        # audit started from.
+        recovered = sum(1 for s in sites if s[0] == "dynliteral")
+        recovered_note = (
+            f" {recovered} key-shaped literal(s) were recovered from those "
+            f"expressions and ARE checked; the remainder is not resolvable "
+            f"statically."
+            if recovered
+            else " neither is statically checkable."
+        )
         print(
             f"  note: {untracked_total} <Localized> opening(s) used a programmatic "
             f"id={{...}} expression and {dynamic_getstring_total} getString() call(s) "
-            f"used a template literal; neither is statically checkable. Approximate "
-            f"upper-bound: also matches string literals that contain JSX-shaped "
-            f"openers (comments are blanked before matching)."
+            f"used a template literal." + recovered_note
+            + f" Approximate upper-bound: also matches string literals that contain "
+            f"JSX-shaped openers (comments are blanked before matching)."
         )
         print()
 

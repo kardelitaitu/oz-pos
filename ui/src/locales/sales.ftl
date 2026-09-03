@@ -550,6 +550,13 @@ pos-close-shift-notes-placeholder =
 pos-close-shift-opened = Opened
 pos-close-shift-opening-balance = Opening balance
 pos-close-shift-title = Close Shift
+# In-progress button states. sales.id.ftl has had these three since the shift
+# flow grew; sales.ftl never caught up, so English was rendering the hardcoded
+# <Localized> fallback child instead of bundle text -- visually correct, but
+# untranslatable and invisible to every locale tool. Surfaced by the
+# ternary-id scan added in the Fluent page audit.
+pos-close-shift-confirm = Close Shift
+pos-close-shift-closing = Closing…
 pos-hold-cancel = Cancel
 pos-hold-desc = Enter a name for this held order so you can find it later.
 pos-hold-title = Hold Current Order
@@ -559,6 +566,7 @@ pos-open-shift-balance-label = Opening balance
 pos-open-shift-balance-placeholder =
     .placeholder = e.g. 100.00
 pos-open-shift-title = Open Shift
+pos-open-shift-opening = Opening…
 pos-shift-card-sales = Card Sales
 pos-shift-cash-sales = Cash Sales
 pos-shift-closed-title = Shift Closed
