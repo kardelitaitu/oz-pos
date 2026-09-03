@@ -18,10 +18,101 @@ permissions:
   contents: read
 
 jobs:
+  # ── 0. Changes: path router ──────────────────────────────────────────
+  # Every job below is gated on this one's outputs. Motivation, measured on
+  # PR #95: three pushes cost 75.2 runner-minutes, and the last of them added a
+  # 254-line markdown file — 22.0 minutes of Cargo Nextest/Check/UI/Website
+  # re-running over a change no job can fail on. Rust is ~77% of every run.
+  #
+  # Deliberately a plain job rather than dorny/paths-filter: every action in
+  # this workflow is pinned to a full commit SHA, and introducing a new
+  # third-party dependency is a supply-chain decision that should be explicit.
+  # This costs one ~15s job to route the rest.
+  #
+  # NOTE ON BRANCH PROTECTION: main is currently unprotected, so a job that
+  # skips simply reports as skipped. If these jobs are ever made *required*
+  # status checks, workflow-level `paths:` would strand PRs (the check never
+  # reports), and job-level skipping as used here is the safe form — but a
+  # required check that reports "skipped" still satisfies the merge gate, so
+  # this design holds either way. What must NOT be done is moving these
+  # conditions up to `on.pull_request.paths`.
+  changes:
+    name: Detect Changed Paths
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      rust: ${{ steps.route.outputs.rust }}
+      ui: ${{ steps.route.outputs.ui }}
+      i18n: ${{ steps.route.outputs.i18n }}
+      website: ${{ steps.route.outputs.website }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Full history so the base..head diff has both endpoints. A shallow
+          # clone cannot resolve the merge base reliably.
+          fetch-depth: 0
+      - name: Route
+        id: route
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # Anything that is not a PR (workflow_dispatch) runs the full matrix,
+          # as does a change to this workflow itself -- a filter bug must never
+          # be able to hide the jobs it is supposed to gate.
+          all() {
+            for k in rust ui i18n website; do echo "$k=true" >> "$GITHUB_OUTPUT"; done
+            echo "  -> $1: running the full matrix"
+            exit 0
+          }
+
+          if [ "$EVENT" != "pull_request" ] || [ -z "${BASE:-}" ]; then
+            all "non-PR event"
+          fi
+
+          files=$(git diff --name-only "$BASE" "$HEAD_SHA")
+          echo "changed files:"; echo "$files" | sed 's/^/    /'
+
+          if printf '%s\n' "$files" | grep -qE '^\.github/workflows/dev-ci\.yml$'; then
+            all "this workflow changed"
+          fi
+
+          # Rust: every workspace member (crates/*, modules/*, platform/*,
+          # foundation, the three apps, fuzz, the updater compat check) plus
+          # anything that changes how cargo resolves the build.
+          printf '%s\n' "$files" | grep -qE \
+            '^crates/|^modules/|^platform/|^foundation/|^apps/(cloud-server|desktop-client|tablet-client)/|^fuzz/|^scripts/updater-compat-check/|^Cargo\.(toml|lock)$|^\.cargo/|^rust-toolchain' \
+            && echo "rust=true"  >> "$GITHUB_OUTPUT" || echo "rust=false" >> "$GITHUB_OUTPUT"
+
+          # UI: ui/src has zero imports reaching outside ui/, so ui/ is a sound
+          # boundary for the vitest suite and its lockfile.
+          printf '%s\n' "$files" | grep -qE '^ui/' \
+            && echo "ui=true" >> "$GITHUB_OUTPUT" || echo "ui=false" >> "$GITHUB_OUTPUT"
+
+          # i18n: the .ftl bundles, any TSX/TS the parity scanner reads, and the
+          # three scripts that implement the gate.
+          printf '%s\n' "$files" | grep -qE \
+            '^ui/src/locales/|^ui/src/.*\.(ts|tsx)$|^scripts/lint-i18n\.sh$|^scripts/verify-bundle-parity\.py$|^scripts/dedupe-ftl\.py$' \
+            && echo "i18n=true" >> "$GITHUB_OUTPUT" || echo "i18n=false" >> "$GITHUB_OUTPUT"
+
+          printf '%s\n' "$files" | grep -qE '^website/' \
+            && echo "website=true" >> "$GITHUB_OUTPUT" || echo "website=false" >> "$GITHUB_OUTPUT"
+
+      - name: Decisions
+        run: |
+          echo "rust=${{ steps.route.outputs.rust }} ui=${{ steps.route.outputs.ui }} i18n=${{ steps.route.outputs.i18n }} website=${{ steps.route.outputs.website }}"
+
   # ── 1. Website: check + test + build ─────────────────────────────────
   website:
     name: Website Check + Build
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.website == 'true'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -44,6 +135,8 @@ jobs:
   cargo-check:
     name: Cargo Check
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
@@ -69,6 +162,8 @@ jobs:
   cargo-nextest:
     name: Cargo Nextest
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     services:
       postgres:
         image: postgres:17-alpine
@@ -114,6 +209,8 @@ jobs:
   ui-test:
     name: UI Tests (Vitest)
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.ui == 'true'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -144,6 +241,8 @@ jobs:
   i18n:
     name: i18n Quality Gate
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.i18n == 'true'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -162,7 +261,17 @@ jobs:
   northflank-deploy:
     name: Deploy Backend (Northflank)
     runs-on: ubuntu-latest
-    needs: [website, cargo-check, cargo-nextest, ui-test, i18n]
+    needs: [changes, website, cargo-check, cargo-nextest, ui-test, i18n]
+    # A skipped dependency skips this job. That is intended and is unreachable
+    # in practice: `changes` forces every route to true for non-PR events, and
+    # the only non-PR event that can reach here is workflow_dispatch.
+    #
+    # Note the `github.event_name == 'push'` half of this condition is dead
+    # code: this workflow triggers on pull_request and workflow_dispatch only,
+    # so no push event ever runs it. Deploy therefore happens exclusively via
+    # manual workflow_dispatch. Left in place because removing it would change
+    # nothing observable and the clause is harmless, but it is misleading --
+    # see the 0.0.36 backlog.
     if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/0.0.'))) || github.event_name == 'workflow_dispatch'
     env:
       NF_API: https://api.northflank.com/v1
