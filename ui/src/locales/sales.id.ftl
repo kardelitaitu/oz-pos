@@ -1,19 +1,5 @@
-sales-report-title = Laporan Penjualan
-sales-report-daily = Harian
-sales-report-weekly = Mingguan
-sales-report-monthly = Bulanan
-sales-report-revenue-chart = Pendapatan
-sales-report-category-breakdown = Per Kategori
-sales-report-hourly-heatmap = Jam Tersibuk
-sales-report-top-products = Produk Terlaris
 sales-report-date-range = Rentang Tanggal
-sales-report-start-date = Tanggal Mulai
-sales-report-end-date = Tanggal Akhir
 sales-report-apply = Terapkan
-sales-report-total-revenue = Total Pendapatan
-sales-report-total-orders = Total Pesanan
-sales-report-total-gross-profit = Laba Kotor:
-sales-report-export-csv = Ekspor CSV
 sales-report-export-pdf = Ekspor PDF
 
 # ── Shortfall Resolution ──
@@ -224,8 +210,6 @@ pos-cart-table-label = Meja #
 pos-cart-table-placeholder = No.
 pos-shift-close-btn = Tutup
 pos-shift-open-btn = Buka
-sales-report-revenue-label = Pendapatan
-sales-report-rank = #
 sales-history-title = Riwayat Penjualan
 sales-history-loading = Memuat penjualan…
 sales-history-error-load = Gagal memuat riwayat penjualan

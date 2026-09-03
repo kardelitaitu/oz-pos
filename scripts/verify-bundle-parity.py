@@ -432,6 +432,14 @@ def main() -> int:
              "(rev-3 surface; off by default).",
     )
     parser.add_argument(
+        "--check-domain-pairs",
+        action="store_true",
+        help="Fail when a key's .id.ftl twin is declared in a DIFFERENT "
+             "domain file than its .ftl original. Resolves at runtime "
+             "(bundles are concatenated), so this is layout hygiene, not "
+             "a rendering bug (rev-3 surface; off by default).",
+    )
+    parser.add_argument(
         "--scan-dirs",
         default=None,
         help="Comma-separated directories under ui/src to walk "
@@ -457,6 +465,7 @@ def main() -> int:
         args.include_getstring = True
         args.include_nav_keys = True
         args.include_key_fields = True
+        args.check_domain_pairs = True
         args.scan_dirs = ",".join(CENSUS_SCAN_DIRS)
 
     kinds: set[str] = {"localized"}
@@ -497,6 +506,30 @@ def main() -> int:
     id_keys: set[str] = set()
     for path in id_files:
         id_keys.update(parse_ftl_keys(path))
+
+    # ── domain-pair locality ─────────────────────────────────────────
+    # Every .ftl is concatenated into ONE bundle per locale at build time,
+    # so a key whose English twin lives in reports.ftl and whose Indonesian
+    # twin lives in sales.id.ftl RESOLVES at runtime: the missing-key check
+    # below stays green while the file layout lies. A translator looking for
+    # "Laporan Penjualan" beside "Sales Report" would never find it, and a
+    # domain rename silently strands half a pair.
+    #
+    # The Fluent page audit found 16 such split pairs (all sales-report-*)
+    # and moved them; this check keeps the class from regrowing.
+    split_pairs: list[tuple[str, str, str]] = []
+    if args.check_domain_pairs:
+        id_domain: dict[str, str] = {}
+        for path in id_files:
+            domain = path.name[: -len(".id.ftl")]
+            for key in parse_ftl_keys(path):
+                id_domain.setdefault(key, domain)
+        for path in en_files:
+            domain = path.name[: -len(".ftl")]
+            for key in sorted(parse_ftl_keys(path)):
+                holder = id_domain.get(key)
+                if holder is not None and holder != domain:
+                    split_pairs.append((domain, key, holder))
 
     # Walk components, collect every enabled key surface with
     # attribution as (kind, key, file, line). Also accumulate the
@@ -658,13 +691,22 @@ def main() -> int:
     # the sentinel is the ONLY thing the lint depends on; the body
     # of the report (bucket names, file:line entries) can grow
     # freely without breaking the gate.
+    # Locality findings print BEFORE the sentinel: lint-i18n.sh greps the
+    # LAST stdout line, so nothing may follow it.
+    if split_pairs:
+        print(f"  split en/id pairs ({len(split_pairs)} unique):")
+        for domain, key, holder in sorted(split_pairs):
+            print(f"    {domain}.ftl + {holder}.id.ftl  ->  {key}")
+        print()
+
     total_missing = len(missing_ids)
     print(f"verify-bundle-parity: {total_missing} missing key(s).")
     # Default + --dry-run both fail-closed so CI/pre-commit block
     # the regression. --report-only succeeds regardless so human
     # readers can audit at their leisure; a clean report (0 missing)
     # also returns 0 so it is never a gate failure.
-    return 0 if (args.report_only or total_missing == 0) else 1
+    clean = total_missing == 0 and not split_pairs
+    return 0 if (args.report_only or clean) else 1
 
 
 if __name__ == "__main__":
