@@ -385,10 +385,12 @@ describe('withFluentLocale integration', () => {
 // hard-failing CI would block every PR until translators finish
 // the work, which is a disproportionate maintenance cost. Instead
 // these tests emit a `[i18n]`-prefixed `console.warn` whenever
-// the condition is detected, and the gates in
-// `.github/workflows/ci.yml` and `.github/workflows/release.yml`
-// grep stderr for that prefix and fail the build. Translator
-// engagement is async; the gate is loud, not blocking.
+// the condition is detected, and `scripts/lint-i18n.sh` greps the
+// captured output for that prefix and exits non-zero. That script runs as
+// the `i18n` job of `.github/workflows/dev-ci.yml` and as a pre-commit
+// gate. Translator engagement is async, but the gate IS blocking: it was
+// originally described as "loud, not blocking", which stopped being true
+// when lint-i18n.sh was made fail-closed during the Fluent page audit.
 describe('i18n translation completeness', () => {
   it('gift-cards.id.ftl is not a verbatim copy of gift-cards.ftl', () => {
     if (giftCardsId === giftCardsEn) {

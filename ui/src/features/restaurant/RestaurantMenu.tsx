@@ -27,7 +27,13 @@ function key(uid: string, name: string) {
   return `restaurant-${uid}-${name}`;
 }
 
-type SortMode = 'manual' | 'a-z' | 'date' | 'popularity';
+// Sort options in menu order. Exported, and SortMode derived from it rather
+// than written out separately, so the two cannot drift: the hamburger renders
+// `restaurant-sort-${mode}` by interpolation, which no static gate can follow,
+// and dynamicFluentFamilies.test.ts enumerates THIS array to pin all four ids
+// against both bundles.
+export const SORT_MODES = ['manual', 'a-z', 'date', 'popularity'] as const;
+type SortMode = (typeof SORT_MODES)[number];
 
 const COLOR_PALETTE = [
   '#10b981',
@@ -716,7 +722,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
               aria-label={l10n.getString('restaurant-menu-hamburger-aria')}
             >
               <span className="restaurant-hamburger-label"><Localized id="restaurant-sort-label"><span>Sort</span></Localized></span>
-              {(['manual', 'a-z', 'date', 'popularity'] as const).map((mode) => (
+              {SORT_MODES.map((mode) => (
                 <button
                   key={mode}
                   type="button"

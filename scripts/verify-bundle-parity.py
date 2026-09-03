@@ -210,8 +210,17 @@ SECTION_LABEL_VALUE_PATTERN = re.compile(r":\s*(['\"])(?P<v>[^'\"]+)\1")
 # the <Localized> walker can resolve it, and the literal itself sits in a
 # plain object with no call syntax to anchor on. This is the third dynamic
 # class, and by count the largest: AnalyticsScreen alone stores 36.
+# The field list is evidence-based, not guessed: a survey of every
+# `*Key:`/`*Id:` object-literal field holding a kebab-case value found these
+# carrying Fluent ids. portId / fromPortId / toPortId are topology PORT
+# identifiers (`location-in`, `operation-out`) and sectionId feeds a
+# template-built id rather than naming one directly — all four are
+# deliberately EXCLUDED, because treating them as message ids would demand
+# keys that must never exist.
 KEY_FIELD_ID_PATTERN = re.compile(
-    r"\b(?P<field>titleKey|descKey|labelId|nameKey|ariaKey|placeholderKey)"
+    r"\b(?P<field>titleKey|descKey|labelId|nameKey|ariaKey|placeholderKey"
+    r"|labelKey|descriptionKey|messageId|fluentKey|okKey"
+    r"|rightLabelId|rightAriaLabelId|typeLabelId|sectionI18nKey)"
     r"\s*:\s*(['\"])(?P<id>[A-Za-z0-9][A-Za-z0-9._-]*)\2"
 )
 # <Localized id={...}> where the id is an EXPRESSION rather than a literal.

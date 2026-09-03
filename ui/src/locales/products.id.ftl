@@ -18,6 +18,13 @@ restaurant-menu-loading = Memuat menu…
 restaurant-menu-empty = Menu kosong
 restaurant-size-label = Ukuran
 restaurant-sort-label = Urutkan
+# "Manual" and "A–Z" are intentionally identical to English — both are used
+# as-is in Indonesian. Only the two translated words here are real translation
+# work; do not "fix" the identical pair.
+restaurant-sort-manual = Manual
+restaurant-sort-a-z = A–Z
+restaurant-sort-date = Berdasarkan Tanggal
+restaurant-sort-popularity = Popularitas
 restaurant-card-add = Tambah
 restaurant-card-unavailable = Tidak tersedia
 restaurant-context-color-label = Warna

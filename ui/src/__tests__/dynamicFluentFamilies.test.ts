@@ -18,6 +18,8 @@ import { describe, it, expect } from 'vitest';
 import { getBundle } from '@/i18n';
 import { GRANULARITIES } from '@/features/analytics/AnalyticsScreen';
 import { MONTH_LABEL_KEYS } from '@/features/analytics/analytics-data';
+import { DAY_KEYS } from '@/features/reports/SalesReportScreen';
+import { SORT_MODES } from '@/features/restaurant/RestaurantMenu';
 
 /** Assert every id resolves to non-empty, non-self text in both bundles. */
 function expectResolved(ids: string[], label: string) {
@@ -115,6 +117,24 @@ describe('dynamic Fluent id families', () => {
         .map((t) => `inv-log-type-${t}`),
       'inv log type',
     );
+  });
+
+  it('restaurant sort modes: every interpolated id resolves', () => {
+    // A real defect found by this sweep: RestaurantMenu.tsx renders
+    // `restaurant-sort-${mode}` for four modes and NOT ONE of the four keys
+    // existed in either bundle. The buttons still looked right in English
+    // because each has a hardcoded JSX fallback child — which meant
+    // Indonesian users were silently seeing "Manual / A–Z / By Date /
+    // Popularity". Enumerated from the exported SORT_MODES the type is
+    // derived from, so a new mode cannot be added without this failing.
+    expectResolved(SORT_MODES.map((mode) => `restaurant-sort-${mode}`), 'restaurant sort');
+  });
+
+  it('heatmap weekday labels: every DAY_KEYS entry resolves', () => {
+    // `day-${dayKey}` across the sales heatmap. The domain is full weekday
+    // names, not the mon/tue abbreviations a reader would guess from the
+    // rendered label, which uppercases and slices to three characters.
+    expectResolved(DAY_KEYS.map((k) => `day-${k}`), 'day label');
   });
 });
 

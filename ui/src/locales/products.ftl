@@ -19,6 +19,16 @@ restaurant-menu-loading = Loading menu…
 restaurant-menu-empty = Menu is empty
 restaurant-size-label = Size
 restaurant-sort-label = Sort
+# Sort options for the restaurant menu grid. RestaurantMenu.tsx:732 builds
+# these ids by interpolating the mode value from the as-const tuple at
+# RestaurantMenu.tsx:719, so no static gate can see the reference — the keys
+# were simply never written, and every sort button fell through to its
+# hardcoded JSX child. Surfaced by the template-family sweep in the Fluent
+# page audit.
+restaurant-sort-manual = Manual
+restaurant-sort-a-z = A–Z
+restaurant-sort-date = By Date
+restaurant-sort-popularity = Popularity
 restaurant-card-add = Add
 restaurant-card-unavailable = Unavailable
 restaurant-context-color-label = Color
