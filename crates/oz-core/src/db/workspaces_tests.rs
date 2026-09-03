@@ -1560,3 +1560,38 @@ fn verify_instance_access_staff_respects_user_store_access_out_of_scope_denied()
         "staff must not open a session in an unassigned store"
     );
 }
+
+#[test]
+fn list_workspaces_with_entitlement_staff_filters_by_tier_after_assignment() {
+    // Free tier allows restaurant-pos, store-pos, admin — but NOT kds.
+    // A staff user explicitly assigned kds + store-pos must see only
+    // store-pos after entitlement filtering (kds pruned by tier).
+    let (store, user_id) = fresh();
+    store.seed_default_roles().unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-staff', 'staff', 'hash', 'Staff', 'role-staff', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+    store
+        .set_user_workspace_instances("user-staff", ["default-kds", "default-store-pos"], None)
+        .unwrap();
+    let free = sub_for_tier(SubscriptionTier::Free);
+    let dto = store
+        .list_workspaces_with_entitlement("role-staff", Some("user-staff"), "default", &free)
+        .unwrap();
+    // kds is NOT allowed by Free tier → must be filtered out.
+    assert!(
+        !dto.iter().any(|w| w.type_key == "kds"),
+        "Free tier staff must not see kds, got {dto:?}"
+    );
+    // store-pos IS allowed by Free tier → must remain.
+    assert!(
+        dto.iter().any(|w| w.type_key == "store-pos"),
+        "Free tier staff must still see store-pos, got {dto:?}"
+    );
+    assert_eq!(dto.len(), 1, "expected only store-pos, got {dto:?}");
+}

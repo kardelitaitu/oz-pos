@@ -36,12 +36,42 @@ half of the rule table, so a regression there would pass CI silently.
 untested role × state cell. All passed on first run (behavior was
 already correct) — these are regression pins, not Red→Green fixes.
 
-**Commits:** pending (round-2 TDD commit).
+**Commits:** bd54fd31 (round-2 TDD commit).
 **Test counts:** WorkspaceHome.test.tsx 36→42; i18n 20; a11y 1 — all
 green. tsc + eslint clean.
 **Note:** staff.ftl had concurrent uncommitted edits mid-round (bare
 `{value}` in a comment tripped the bare-placeholder scan once); resolved
 by the concurrent author — not my scope, left untouched.
+
+## 2026-09-03 — TDD round 3: staff entitlement composition pin + IPC tier-filter leak (oz-core, desktop-client)
+
+**Problem:** Two more gaps from the role-gating audit.
+
+1. oz-core `list_workspaces_with_entitlement` (ADR #5 tier filter) with
+   the new staff fallback path was never tested together — a Free-tier
+   staff user explicitly assigned kds + store-pos should see only
+   store-pos. Regression pin; green on first run (composition correct).
+2. REAL fail-open: `list_workspaces_for_store_scoped` (the terminal-
+   management listing, used by TerminalManagementScreen) called
+   `store.list_workspaces(...)` with NO subscription entitlement filter,
+   while its sibling `list_workspaces_scoped` used
+   `list_workspaces_with_entitlement(...)`. A Free-tier session could
+   enumerate tier-disallowed workspace types (kds/warehouse) through the
+   terminal screen — the exact C2.2/ADR #5 gate the picker enforces.
+
+**Solution:**
+- New oz-core pin: `list_workspaces_with_entitlement_staff_filters_by_tier_after_assignment`.
+- Red first: `list_workspaces_for_store_scoped_filters_by_tier_entitlement`
+  failed showing the kds leak. Green: the command now loads the tenant
+  subscription from the GLOBAL DB (clock-rollback validated, Free
+  fallback) and calls `list_workspaces_with_entitlement`, mirroring
+  `list_workspaces_scoped`.
+
+**Commits:** pending (round-3 TDD commit).
+**Test counts:** oz-core workspaces 63→64; desktop-client workspaces
+14→15; fmt + clippy clean.
+**Follow-up:** audit the remaining `store.list_workspaces(` call sites
+for the same missing entitlement filter.
 
 ## 2026-08-29 — Gap analysis round 2: renew-badge thresholds + checkout feedback states (website AccountView)
 

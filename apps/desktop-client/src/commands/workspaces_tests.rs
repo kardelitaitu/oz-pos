@@ -433,3 +433,44 @@ async fn scoped_assignment_workspace_dimension_filters_for_store_listing() {
         "out-of-scope workspace type must be hidden, got {rows:?}"
     );
 }
+
+#[tokio::test]
+async fn list_workspaces_for_store_scoped_filters_by_tier_entitlement() {
+    let (mut state, _dir) = picker_state();
+    // Add a kds instance to store-a. The Free tier (default subscription)
+    // does NOT allow kds — only store-pos, restaurant-pos, admin.
+    // The scoped listing must filter it out.
+    {
+        let conn = state.db_manager.open_store("store-a").unwrap();
+        let db = conn.lock().unwrap();
+        Store::new(&db)
+            .create_workspace_instance("ws-a-kds", "kds", "store-a", "KDS", "", None)
+            .unwrap();
+    }
+    mint_session(
+        &mut state,
+        "owner-token",
+        "user-owner",
+        "role-owner",
+        "store-a",
+    );
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let rows =
+        list_workspaces_for_store_scoped("owner-token".into(), "store-a".into(), app.state())
+            .await
+            .unwrap();
+    // store-pos (ws-a-1) is allowed by the Free tier → must be present.
+    assert!(
+        rows.iter().any(|d| d.type_key == "store-pos"),
+        "Free tier must still list store-pos, got {rows:?}"
+    );
+    // kds is NOT allowed by the Free tier → must be filtered out.
+    assert!(
+        rows.iter().all(|d| d.type_key != "kds"),
+        "Free tier must not list kds, got {rows:?}"
+    );
+}
