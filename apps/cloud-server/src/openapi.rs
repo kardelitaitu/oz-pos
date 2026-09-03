@@ -64,21 +64,21 @@ pub fn openapi_spec() -> Value {
         tags.extend_from_slice(&build_cloud_tags());
     }
     // Cloud-only schemas.
-    if let Some(dst) = spec["components"]["schemas"].as_object_mut() {
-        if let Some(src) = build_cloud_schemas().as_object() {
-            for (k, v) in src {
-                dst.insert(k.clone(), v.clone());
-            }
+    if let Some(dst) = spec["components"]["schemas"].as_object_mut()
+        && let Some(src) = build_cloud_schemas().as_object()
+    {
+        for (k, v) in src {
+            dst.insert(k.clone(), v.clone());
         }
     }
     // Cloud-only paths, annotated with their scope before merging.
     let mut cloud_paths = build_cloud_paths();
     oz_api::spec::annotate_scope(&mut cloud_paths, oz_api::spec::SCOPE_CLOUD);
-    if let Some(dst) = spec["paths"].as_object_mut() {
-        if let Some(src) = cloud_paths.as_object() {
-            for (k, v) in src {
-                dst.insert(k.clone(), v.clone());
-            }
+    if let Some(dst) = spec["paths"].as_object_mut()
+        && let Some(src) = cloud_paths.as_object()
+    {
+        for (k, v) in src {
+            dst.insert(k.clone(), v.clone());
         }
     }
     spec

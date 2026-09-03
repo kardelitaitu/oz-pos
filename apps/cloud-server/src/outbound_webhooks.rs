@@ -150,6 +150,7 @@ fn endpoint_matches(endpoint: &EndpointRow, event: &str) -> bool {
 
 // ── Registry CRUD — SQLite ────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 fn row_to_endpoint(
     id: String,
     tenant_id: String,
@@ -506,7 +507,7 @@ where
 /// `sha256=<hex HMAC-SHA256(key = secret, msg = body)>`.
 pub fn signature(secret: &str, body: &[u8]) -> String {
     let mut mac =
-        Hmac::<Sha256>::new_from_slice(secret.as_bytes()).expect("HMAC accepts any key length");
+        Hmac::<Sha256>::new_from_slice(secret.as_bytes()).expect("HMAC accepts any key length"); // INVARIANT: HMAC keys are any-length
     mac.update(body);
     format!("sha256={}", hex::encode(mac.finalize().into_bytes()))
 }
