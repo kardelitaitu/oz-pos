@@ -156,7 +156,7 @@ which passes verification in debug builds; in release builds the call
 site must not reach the fallback in production (a real subscription row
 is written by license activation).
 
-**Commits:** pending (round-6 TDD commit).
+**Commits:** 0b530a9e (round-6 TDD commit).
 **Test counts:** desktop auth 44→45 (incl. security integration);
 tablet auth 16→17; fmt clean.
 **Follow-up:** the listing paths (`list_workspaces_scoped`,
@@ -164,6 +164,31 @@ tablet auth 16→17; fmt clean.
 `verify_signature()` — a tampered row would show tier-disallowed types
 in the listing, though session creation into them is now blocked.
 Consider adding signature verification there for complete defense-in-depth.
+
+## 2026-09-03 — TDD round 7: listing paths trust tampered subscription without signature verification (desktop workspaces)
+
+**Problem:** Round 6 closed the session-creation path but the listing
+paths (`list_workspaces_scoped`, `list_workspaces_for_store_scoped`)
+still loaded the subscription without `verify_signature()`. A tampered
+`tenant_subscription` row (forged pro tier + kds, invalid signature)
+would show tier-disallowed types in the home-screen listing and
+terminal-management screen, though session creation into them was now
+blocked. Defense-in-depth gap: the listing is the UI gate — users see
+cards they can't open, which is both confusing and inconsistent with
+the other 14 subscription-trusting call sites.
+
+**Solution:** Red first — `list_workspaces_scoped_rejects_tampered_subscription_signature`
+confirmed the forged pro row listed store-pos. Green: both listing
+commands now call `sub.verify_signature()?` after loading, matching
+create_session (round 6) and the other subscription-trusting commands.
+
+**Commits:** pending (round-7 TDD commit).
+**Test counts:** desktop auth 45; desktop workspaces 15→16; fmt clean.
+**Scope:** tablet client has no scoped listing commands — no fix needed.
+**Note:** round-6 commit needed `--no-verify` (user-approved): the
+pre-commit i18n gate tripped on a concurrent agent's uncommitted
+LocalApiSection.tsx (missing settings-local-api-rotate* keys in both
+FTL bundles) — not my scope, left untouched.
 
 ## 2026-08-29 — Gap analysis round 2: renew-badge thresholds + checkout feedback states (website AccountView)
 

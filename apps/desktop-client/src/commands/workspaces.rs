@@ -210,6 +210,11 @@ pub async fn list_workspaces_scoped(
             tracing::warn!("no subscription found for tenant 'default', defaulting to Free tier");
             TenantSubscription::bootstrap_free()
         });
+        // Verify the RSA signature before honoring the row's tier/allowed-
+        // types — a tampered row (forged tier, invalid signature) must fail
+        // closed, matching create_session (round 6) and the other 13
+        // subscription-trusting call sites.
+        sub.verify_signature()?;
         let assignment = Store::new(&global_db).assignment_for_user(&session.user_id)?;
         (sub, assignment)
     };
@@ -574,6 +579,11 @@ pub async fn list_workspaces_for_store_scoped(
             tracing::warn!("no subscription found for tenant 'default', defaulting to Free tier");
             TenantSubscription::bootstrap_free()
         });
+        // Verify the RSA signature before honoring the row's tier/allowed-
+        // types — a tampered row (forged tier, invalid signature) must fail
+        // closed, matching create_session (round 6) and the other 13
+        // subscription-trusting call sites.
+        sub.verify_signature()?;
         let assignment = Store::new(&global_db).assignment_for_user(&session.user_id)?;
         (assignment, sub)
     };
