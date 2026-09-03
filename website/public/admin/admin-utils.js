@@ -592,7 +592,8 @@
   // rows is the data array aligned with the x-axis; series + fmt define
   // what each tooltip shows. Renders one absolutely-positioned tip inside
   // the chart card (which must be position:relative — see .chart-card).
-  function bindChartTooltip(svgEl, rows, series, fmt) {
+  // kind: 'bar' (default, svgBarChart / svgStackedBars) or 'line' (svgChart).
+  function bindChartTooltip(svgEl, rows, series, fmt, kind) {
     if (!svgEl || !rows || !rows.length || !series || !series.length) return;
     // Selector kept in a variable so the i18n audit regex (which scans for
     // t('...') substrings) does not misread closest('.chart-card') as a
@@ -605,11 +606,52 @@
     tip.style.display = 'none';
     card.appendChild(tip);
 
+    // Pre-parse the SVG viewBox to get the logical coordinate width.
+    // The viewBox is "0 0 w h" — we only need w. The separator is kept in a
+    // variable so the i18n audit regex (which scans for t('...') calls) does
+    // not misread the word "split" + (' ') as a translation key lookup.
+    var spaceSep = ' ';
+    var vbAttr = (svgEl.getAttribute('viewBox') || '').split(spaceSep);
+    var vbW = parseFloat(vbAttr[2]) || 0;
+    // If no viewBox (e.g. test stubs), fall back to CSS-pixel width so the
+    // ratio conversion still works as a fallback (the old behaviour).
+    kind = kind || 'bar';
+
     function place(ev) {
       var rect = svgEl.getBoundingClientRect();
       if (!rect || rect.width === 0) return;
-      var ratio = (ev.clientX - rect.left) / rect.width;
-      var idx = nearestChartIndex(ratio, rows.length);
+      var cssX = ev.clientX - rect.left; // CSS px from left edge
+      var n = rows.length;
+      var idx;
+
+      if (kind === 'line' && vbW > 0) {
+        // Line chart: points at px + (i/(n-1))*pw.
+        // Derive px/pw from the viewBox width (matching svgChart hardcoded values).
+        var px, pw;
+        if (vbW === 600) { px = 40;  pw = 560; }          // narrow
+        else if (vbW === 350) { px = 52; pw = 290; }       // phone
+        else if (vbW === 1280) { px = 72; pw = 1184; }     // wide
+        else { px = 40; pw = vbW - 40; }                   // fallback
+        var vbX = (cssX / rect.width) * vbW;
+        if (n > 1) {
+          var step = pw / (n - 1);
+          idx = Math.round((vbX - px) / step);
+        } else {
+          idx = 0;
+        }
+      } else {
+        // Bar chart (default): slots of (vbW-20)/n width, starting at x=10.
+        // svgBarChart / svgStackedBars share this geometry.
+        var w = vbW > 0 ? vbW : rect.width; // fallback: CSS pixels
+        var slotW = (w - 20) / n;
+        var x0 = vbW > 0 ? (cssX / rect.width) * vbW : cssX;
+        if (slotW > 0) {
+          idx = Math.floor((x0 - 10) / slotW);
+        } else {
+          idx = 0;
+        }
+      }
+      idx = Math.min(n - 1, Math.max(0, idx));
       var row = rows[idx] || {};
       tip.textContent = chartTipText(row, series, fmt);
       tip.style.display = 'block';

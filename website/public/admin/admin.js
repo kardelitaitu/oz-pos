@@ -218,7 +218,7 @@
       revCard.innerHTML += svgChart('rev', m.revenueTrend, ['idr'], Object.assign({ area: true, sourceKey: 'source', fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt' }, fullCv));
       chartGrid.appendChild(revCard);
       // Hover tooltip: month + exact gross (IDR) value under the cursor.
-      bindChartTooltip(revCard.querySelector('.chart-svg'), m.revenueTrend, [{ key: 'idr', label: t('kpi.monthlyGrossIdr') }], v => fmtIdr(Math.round(v)));
+      bindChartTooltip(revCard.querySelector('.chart-svg'), m.revenueTrend, [{ key: 'idr', label: t('kpi.monthlyGrossIdr') }], v => fmtIdr(Math.round(v)), 'line');
 
       // Provider revenue mix (stacked bars — recommendation #2): each month
       // shows the Paddle (IDR, write-time converted) + Midtrans (native IDR)

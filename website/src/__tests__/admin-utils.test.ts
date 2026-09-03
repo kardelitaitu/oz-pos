@@ -1769,4 +1769,72 @@ describe('admin-utils chart tooltips (#9: chartTipText / nearestChartIndex / bin
       document.body.removeChild(card);
     }
   });
+
+  // Regression (#10 tooltip geometry): on a 12-month bar chart the last bar
+  // (current month) sits at x=585 of a 620-unit viewBox (slots start at x=10,
+  // width (620-20)/12=50). The old linear-ratio mapping snapped that cursor
+  // position to index 10 — the PREVIOUS month. The slot-based mapping must
+  // return index 11 for the current month, and index 0 at the first bar.
+  it('bar-chart tooltip maps the current-month slot to the last index (not the previous month)', () => {
+    const months = Array.from({ length: 12 }, (_, i) => `2026-${String(i + 1).padStart(2, '0')}`);
+    const rows = months.map((month, i) => ({ month, count: i + 1 }));
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'chart-svg');
+    svg.setAttribute('viewBox', '0 0 620 200');
+    const card = document.createElement('div');
+    card.className = 'chart-card';
+    card.appendChild(svg);
+    document.body.appendChild(card);
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 620, height: 200, right: 620, bottom: 200, x: 0, y: 0 } as DOMRect);
+    try {
+      utils.bindChartTooltip(svg, rows, [{ key: 'count', label: 'N' }]);
+      const tip = card.querySelector('.chart-tip') as HTMLElement;
+      // Last bar center: 10 + 11.5*50 = 585 → current month (index 11).
+      svg.dispatchEvent(new MouseEvent('mousemove', { clientX: 585, clientY: 10 }));
+      expect(tip.textContent).toContain('Dec 2026');
+      // First bar center: 10 + 0.5*50 = 35 → January (index 0).
+      svg.dispatchEvent(new MouseEvent('mousemove', { clientX: 35, clientY: 10 }));
+      expect(tip.textContent).toContain('Jan 2026');
+      // Mid-slot boundary test: x=410 is inside slot 8 (10+8*50=410) → September.
+      svg.dispatchEvent(new MouseEvent('mousemove', { clientX: 410, clientY: 10 }));
+      expect(tip.textContent).toContain('Sep 2026');
+    } finally {
+      document.body.removeChild(card);
+    }
+  });
+
+  // Line-chart geometry: points sit at px + (i/(n-1))*pw with px=40, pw=560
+  // for the narrow 600-unit canvas. The old linear ratio also skewed line
+  // charts; the kind:'line' branch maps by point position instead.
+  it('line-chart tooltip snaps to the nearest point by viewBox geometry', () => {
+    const rows = [
+      { month: '2026-01', idr: 10 },
+      { month: '2026-02', idr: 20 },
+      { month: '2026-03', idr: 30 },
+      { month: '2026-04', idr: 40 },
+    ];
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'chart-svg');
+    svg.setAttribute('viewBox', '0 0 600 200');
+    const card = document.createElement('div');
+    card.className = 'chart-card';
+    card.appendChild(svg);
+    document.body.appendChild(card);
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 200, right: 600, bottom: 200, x: 0, y: 0 } as DOMRect);
+    try {
+      utils.bindChartTooltip(svg, rows, [{ key: 'idr', label: 'Gross' }], undefined, 'line');
+      const tip = card.querySelector('.chart-tip') as HTMLElement;
+      // Last point: px + 3*(560/3) = 600 → April (index 3).
+      svg.dispatchEvent(new MouseEvent('mousemove', { clientX: 600, clientY: 10 }));
+      expect(tip.textContent).toContain('Apr 2026');
+      // First point: x=40 → January.
+      svg.dispatchEvent(new MouseEvent('mousemove', { clientX: 40, clientY: 10 }));
+      expect(tip.textContent).toContain('Jan 2026');
+      // Mid-chart: x=340 → between points 1 (226) and 2 (413), closer to 2.
+      svg.dispatchEvent(new MouseEvent('mousemove', { clientX: 340, clientY: 10 }));
+      expect(tip.textContent).toContain('Mar 2026');
+    } finally {
+      document.body.removeChild(card);
+    }
+  });
 });
