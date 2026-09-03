@@ -24,15 +24,17 @@
 git config core.hooksPath .githooks   # enable pre-commit hook (fmt + i18n + bundle-parity + FTL dedupe + column types + PG drift)
 ```
 
-The `.githooks/pre-commit` hook runs six gates automatically before every commit (~1–3s total):
+The `.githooks/pre-commit` hook runs six gates automatically before every commit (~5–7s total; the i18n gate alone is ~4s):
 1. **`cargo fmt --all`** — auto-formats staged Rust files and re-stages them.
-2. **`i18n lint`** — runs `scripts/lint-i18n.sh` (validates Fluent `.id.ftl` vs `.ftl` bundles).
-3. **`Bundle parity: staged files only`** — runs `scripts/verify-bundle-parity.py --staged-only` on staged `ui/src/features/**` files; fails if an `<Localized id>` key is missing from `.ftl`.
+2. **`i18n lint`** — runs `scripts/lint-i18n.sh`, fail-closed on three categories: `.id.ftl` siblings byte-identical to their English source, duplicate Fluent keys silently dropped at bundle join, and literal key references resolving in neither locale.
+3. **`Bundle parity: staged files only`** — runs `scripts/verify-bundle-parity.py --staged-only --include-getstring --include-nav-keys --include-key-fields --check-domain-pairs` over staged files in `features`, `components`, `frontend`, `contexts`, `hooks` and `platform`; fails if any checked surface references a key missing from `.ftl` or `.id.ftl`. Before the Fluent page audit this walked only literal `<Localized id>` under `ui/src/features/**`, and skipped every shared-chrome and context file it was handed — so 14 broken keys shipped while it reported clean.
 4. **`FTL dedupe dry-run`** — runs `scripts/dedupe-ftl.py --dry-run` to detect duplicate Fluent keys before push.
 5. **`Migration column-type lint`** — runs `scripts/verify-migration-column-types.py --staged-only` when `crates/oz-core/migrations/*.sql` is staged; exact-decimal columns must be fixed-point integers (`*_minor`/`*_millionths`), new floats need a justified whitelist entry.
 6. **`PG schema drift guard`** — runs `scripts/generate-pg-migration.py --check` when any migration, the registry, or the generator is staged; `20260813_init.pg.sql` is generated, never hand-edited (see [`docs/records/sqlite-pg-roles.md`](./docs/records/sqlite-pg-roles.md)).
 
-> For full repository verification mirroring the entire CI matrix, see [`scripts/check.sh`](./scripts/check.sh).
+> **What CI actually runs.** `.github/workflows/dev-ci.yml` ("Dev CI") is the **only live workflow** — every other file in that directory is `.bak` and GitHub never executes it (`ci.yml.bak`, `nightly.yml.bak`, `release.yml.bak`, `e2e-pr.yml.bak`, `security.yml.bak`, `android.yml.bak`, `ios.yml.bak`, `deploy.yml.bak`, `website.yml.bak`, `docker-*.yml.bak`), per `23c96330`. Its jobs are `website`, `cargo-check`, `cargo-nextest`, `ui-test`, `i18n`, and `northflank-deploy` (which `needs` all five). So **E2E, a11y, release, security and nightly suites are NOT enforced in CI** — a green Dev CI run is not proof those passed. `scripts/check.sh` is the local full-matrix equivalent; run it before declaring a change verified.
+>
+> The `i18n` job was restored by the Fluent page audit after `ci.yml` was retired without a replacement. Note that the pre-commit hook is **opt-in per developer**: `core.hooksPath` is set by `scripts/setup-dev.ps1` and is not versioned, so a fresh clone that skips setup has no local gate — CI is the backstop.
 
 ---
 

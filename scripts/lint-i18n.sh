@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # scripts/lint-i18n.sh — local i18n quality gate.
 #
-# Mirrors `.github/workflows/ci.yml` and `.github/workflows/release.yml`
-# (the `i18n quality gate` step). Contributors run this locally to
-# catch i18n issues before pushing to CI.
+# Runs as the `i18n Quality Gate` job in `.github/workflows/dev-ci.yml` — the
+# only live workflow. It previously ran inside `ci.yml`, which 23c96330 retired
+# to `ci.yml.bak` without a replacement; the step was restored after the Fluent
+# page audit, because in between the only enforcement was the opt-in local
+# pre-commit hook (core.hooksPath is set by scripts/setup-dev.ps1 and is not
+# versioned, so a fresh clone gets no gate at all).
 #
 # Reports three categories of regressions. ALL THREE fail-closed
 # (each drives the script's exit code):
