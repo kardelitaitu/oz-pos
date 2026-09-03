@@ -1429,6 +1429,7 @@ async fn docs_route_is_served_inside_the_outer_layers() {
     let app = router_with_openapi(
         state,
         Some(serde_json::json!({"openapi": "3.1.0", "x-test": true})),
+        None,
     );
     let resp = app
         .oneshot(

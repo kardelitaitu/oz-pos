@@ -40,6 +40,7 @@ next: none | perf: N/A
 #![recursion_limit = "512"]
 
 /// JWT auth middleware and token generation.
+pub mod api_audit;
 pub mod auth;
 /// Postgres data layer for the REST handlers (Phase 1.2).
 pub mod pg;
@@ -261,11 +262,12 @@ impl AppState {
 /// - `GET /api/v1/products/:sku`
 /// - `GET /api/v1/categories`
 pub fn router(state: AppState) -> Router {
-    router_with_openapi(state, None)
+    router_with_openapi(state, None, None)
 }
 
 /// [`router`] with an optional pre-built OpenAPI document served
-/// publicly at `GET /api/openapi.json`.
+/// publicly at `GET /api/openapi.json`, and an optional write-audit
+/// sink (desktop local API; see [`api_audit`]).
 ///
 /// The document is a value (not a builder closure) because the desktop
 /// local API computes it once at bind time — it needs the actual bound
@@ -273,7 +275,11 @@ pub fn router(state: AppState) -> Router {
 /// call site keeps the route INSIDE the CORS / security-headers / trace
 /// layer scope that wraps every other route (review MED-4: a route
 /// appended to the returned `Router<()>` escapes all three).
-pub fn router_with_openapi(state: AppState, openapi_json: Option<serde_json::Value>) -> Router {
+pub fn router_with_openapi(
+    state: AppState,
+    openapi_json: Option<serde_json::Value>,
+    audit: Option<std::sync::Arc<dyn api_audit::AuditSink>>,
+) -> Router {
     let cors = build_cors(&state.cors_origins);
     // Slim middleware state: one Arc clone per protected request instead
     // of a full AppState clone (the original moves into `.with_state`
@@ -365,15 +371,23 @@ pub fn router_with_openapi(state: AppState, openapi_json: Option<serde_json::Val
         .route("/api/v1/images/{hash16}", get(routes::images::get_image))
         // Read-tier gate runs INSIDE auth (auth inserts claims first, then
         // this gates GETs against them) — spec 0047 F3.
-        .layer(middleware::from_fn(read_tiers::read_gate_middleware))
-        // Stateful auth: validates against AppState::api_secret so the
-        // desktop local API can sign/verify with a per-install secret
-        // without touching the process env. Cloud servers set api_secret
-        // from OZ_API_SECRET, so behavior there is unchanged.
-        .layer(middleware::from_fn_with_state(
-            auth_state,
-            auth::auth_middleware_with_state,
-        ));
+        .layer(middleware::from_fn(read_tiers::read_gate_middleware));
+
+    // Write-audit runs INSIDE auth (added before the auth layer, so auth
+    // stays outermost and 401s never reach it) and needs the validated
+    // claims from request extensions.
+    let protected = match audit {
+        Some(sink) => protected.layer(middleware::from_fn_with_state(
+            sink,
+            api_audit::audit_middleware,
+        )),
+        None => protected,
+    };
+
+    let protected = protected.layer(middleware::from_fn_with_state(
+        auth_state,
+        auth::auth_middleware_with_state,
+    ));
 
     Router::new()
         .merge(public)
