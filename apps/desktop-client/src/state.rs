@@ -182,6 +182,14 @@ pub struct AppState {
     /// Settings → Local API). Stopped in [`Drop`] so the listener socket
     /// dies with the process.
     pub local_api: Mutex<Option<crate::local_api::LocalApiHandle>>,
+
+    /// Serializes every local-API lifecycle transition (enable, disable,
+    /// port change, boot auto-start). The check-then-act sequences span
+    /// awaits (bind, persist), so without this lock a Settings toggle
+    /// racing the boot daemon could leave a server listening while the
+    /// persisted setting says off. Always acquired BEFORE `local_api`
+    /// and the db lock; nothing takes it while holding either.
+    pub local_api_op: Mutex<()>,
 }
 
 impl AppState {
@@ -354,6 +362,7 @@ impl AppState {
             picker_ticket_secret: uuid::Uuid::new_v4().as_bytes().to_vec(),
             topology_apply_lock: Mutex::new(()),
             local_api: Mutex::new(None),
+            local_api_op: Mutex::new(()),
         })
     }
 }
@@ -797,6 +806,7 @@ impl AppState {
             picker_ticket_secret: b"test-picker-ticket-secret".to_vec(),
             topology_apply_lock: Mutex::new(()),
             local_api: Mutex::new(None),
+            local_api_op: Mutex::new(()),
         }
     }
 

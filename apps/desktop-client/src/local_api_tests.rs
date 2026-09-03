@@ -221,3 +221,129 @@ async fn start_reports_port_conflict_as_error() {
     first.stop();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ── Primary-store targeting (review HIGH-1 regression) ─────────────
+
+#[test]
+fn primary_store_id_resolves_and_falls_back() {
+    let global = oz_core::migrations::fresh_db();
+    // Migration 025 seeds 'default' with is_primary = 0 → fallback.
+    assert_eq!(primary_store_id(&global), "default");
+    global
+        .execute(
+            "UPDATE store_profiles SET is_primary = 1 WHERE id = 'default'",
+            [],
+        )
+        .unwrap();
+    assert_eq!(primary_store_id(&global), "default");
+    // A flagged non-default store wins.
+    global
+        .execute(
+            "INSERT INTO store_profiles (id, name, address, tax_id, currency, timezone, is_primary, created_at, updated_at)
+             VALUES ('store-b', 'B', '', '', 'USD', 'UTC', 0, 'x', 'x')",
+            [],
+        )
+        .unwrap();
+    global
+        .execute(
+            "UPDATE store_profiles SET is_primary = 0 WHERE id = 'default'",
+            [],
+        )
+        .unwrap();
+    global
+        .execute(
+            "UPDATE store_profiles SET is_primary = 1 WHERE id = 'store-b'",
+            [],
+        )
+        .unwrap();
+    assert_eq!(primary_store_id(&global), "store-b");
+}
+
+#[tokio::test]
+async fn serves_the_primary_store_database_not_the_global_one() {
+    let tmp = std::env::temp_dir().join(format!("oz-local-api-store-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    let global = oz_core::migrations::fresh_db();
+    global
+        .execute(
+            "UPDATE store_profiles SET is_primary = 1 WHERE id = 'default'",
+            [],
+        )
+        .unwrap();
+    let manager = platform_core::StoreDatabaseManager::new(tmp.clone(), oz_core::migrations::ALL);
+
+    let store_id = primary_store_id(&global);
+    let (api_db, api_path) = open_api_store_connection(&manager, &store_id).unwrap();
+    assert_eq!(api_path, tmp.join("store-default.sqlite"));
+
+    let secret = "c".repeat(32);
+    let handle = start(api_db, api_path, tmp.join("images"), secret.clone(), 0)
+        .await
+        .unwrap();
+    let base = format!("http://127.0.0.1:{}", handle.port);
+
+    // Create a product through the API (JWT + operator admin key).
+    let token = mint_token(&secret, "t", Some(1)).unwrap().token;
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{base}/api/v1/products"))
+        .header("Authorization", format!("Bearer {token}"))
+        .header("X-Admin-Key", &secret)
+        .json(&serde_json::json!({
+            "sku": "API-001", "name": "From API",
+            "price": {"minor_units": 100, "currency": "USD"}
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::CREATED);
+
+    // The write must be visible through the MANAGER's connection — the
+    // exact path every scoped Tauri command uses (resolve_scope).
+    let ui_conn = manager.open_store("default").unwrap();
+    let in_store: i64 = ui_conn
+        .lock()
+        .unwrap()
+        .query_row(
+            "SELECT COUNT(*) FROM products WHERE sku = 'API-001'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        in_store, 1,
+        "API write must land in the store DB the UI reads"
+    );
+
+    // …and must NOT have touched the global identity DB.
+    let in_global: i64 = global
+        .query_row(
+            "SELECT COUNT(*) FROM products WHERE sku = 'API-001'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(in_global, 0, "API must not write to the global DB");
+
+    let stopped_port = handle.port;
+    handle.stop_async().await;
+    // stop_async guarantees the listener is gone: an immediate re-bind
+    // of the same port must not race OS socket teardown (review MED-3).
+    let again = start(
+        Arc::new(Mutex::new(oz_core::migrations::fresh_db())),
+        PathBuf::from(":memory:"),
+        tmp.join("images2"),
+        secret,
+        stopped_port,
+    )
+    .await;
+    assert!(
+        again.is_ok(),
+        "re-bind of the just-stopped port must succeed: {:?}",
+        again.err()
+    );
+    if let Ok(h) = again {
+        h.stop_async().await;
+    }
+    let _ = std::fs::remove_dir_all(&tmp);
+}

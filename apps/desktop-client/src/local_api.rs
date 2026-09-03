@@ -9,16 +9,21 @@
 //! it is on the settings secret deny-list and never leaves the backend
 //! except via the dedicated mint/status commands).
 //!
-//! The server shares `AppState::db` (the primary-store connection) with
-//! the Tauri commands — same `Arc<tokio::sync::Mutex<Connection>>` type
-//! `oz_api::AppState` expects. CORS is fail-closed (empty allowlist):
-//! local scripts are curl/Python/Node, not browser pages. `GET
-//! /api/openapi.json` serves `oz_api::spec::local_spec()` — the shared
-//! contract with every operation tagged `x-oz-scope: "both"`.
+//! The server serves the PRIMARY STORE's database — resolved at start
+//! via `store_profiles.is_primary` and opened as a dedicated WAL
+//! connection to `store-{id}.sqlite` (the same file the scoped Tauri
+//! commands read through `state.resolve_scope()`), so scripts see
+//! exactly what the register UI shows. The `local_api.*` settings
+//! themselves live on the GLOBAL DB (device-level). CORS is
+//! fail-closed (empty allowlist): local scripts are curl/Python/Node,
+//! not browser pages. `GET /api/openapi.json` serves
+//! `oz_api::spec::local_spec()` — the shared contract with every
+//! operation tagged `x-oz-scope: "both"`.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use platform_core::StoreDatabaseManager;
 use rusqlite::Connection;
 use serde::Serialize;
 use tokio::net::TcpListener;
@@ -48,12 +53,76 @@ pub struct LocalApiHandle {
 }
 
 impl LocalApiHandle {
-    /// Signal graceful shutdown and (belt-and-braces) abort the task.
+    /// Signal graceful shutdown and abort the task without waiting.
+    /// Used by `AppState::drop` (sync context); prefer [`Self::stop_async`]
+    /// when an await point is available — it guarantees the listener
+    /// socket is released before returning, so an immediate re-bind of
+    /// the same port cannot race the OS teardown.
     pub fn stop(self) {
         let _ = self.shutdown.send(());
         self.task.abort();
         tracing::info!(port = self.port, "local API server stopped");
     }
+
+    /// Graceful shutdown awaited up to 2 s (abort fallback). Returns
+    /// only after the serve task — and with it the listener — is gone.
+    pub async fn stop_async(self) {
+        let LocalApiHandle {
+            port,
+            shutdown,
+            mut task,
+            ..
+        } = self;
+        let _ = shutdown.send(());
+        if tokio::time::timeout(std::time::Duration::from_secs(2), &mut task)
+            .await
+            .is_err()
+        {
+            task.abort();
+            tracing::warn!(port, "local API graceful shutdown timed out, aborted");
+        }
+        tracing::info!(port, "local API server stopped");
+    }
+}
+
+/// The primary store's id from the GLOBAL DB (`store_profiles`),
+/// falling back to `'default'` when no row is flagged (fresh install
+/// before `seed_primary_store` promotion, or a corrupted profile).
+pub fn primary_store_id(global: &Connection) -> String {
+    global
+        .query_row(
+            "SELECT id FROM store_profiles WHERE is_primary = 1 LIMIT 1",
+            [],
+            |r| r.get::<_, String>(0),
+        )
+        .unwrap_or_else(|_| "default".to_string())
+}
+
+/// Open the dedicated API connection to a store's database.
+///
+/// Goes through `db_manager.open_store` first so the file exists and is
+/// migrated (the manager caches its own std-Mutex connection — the UI's
+/// path), then opens a SECOND connection to the same file wrapped in a
+/// tokio Mutex, which is what `oz_api::AppState` requires. WAL mode
+/// makes the two connections safe to share the file; `busy_timeout`
+/// absorbs write contention between API and UI instead of surfacing
+/// `SQLITE_BUSY` to scripts.
+pub fn open_api_store_connection(
+    db_manager: &StoreDatabaseManager,
+    store_id: &str,
+) -> Result<(Arc<Mutex<Connection>>, PathBuf), String> {
+    db_manager
+        .open_store(store_id)
+        .map_err(|e| format!("preparing store db {store_id}: {e}"))?;
+    let path = db_manager.store_db_path(store_id);
+    let conn = Connection::open(&path).map_err(|e| format!("opening {}: {e}", path.display()))?;
+    conn.pragma_update(None, "foreign_keys", "ON")
+        .map_err(|e| format!("enabling FK on {}: {e}", path.display()))?;
+    conn.pragma_update(None, "journal_mode", "WAL")
+        .map_err(|e| format!("enabling WAL on {}: {e}", path.display()))?;
+    conn.busy_timeout(std::time::Duration::from_secs(5))
+        .map_err(|e| format!("setting busy_timeout on {}: {e}", path.display()))?;
+    Ok((Arc::new(Mutex::new(conn)), path))
 }
 
 /// Read `local_api.enabled` from the settings table.
@@ -74,8 +143,9 @@ pub fn resolve_port(conn: &Connection) -> u16 {
 }
 
 /// Load the per-install secret, generating and persisting one on first
-/// use. Two UUID v7s (simple form) give 32 bytes of randomness without
-/// pulling another RNG dependency into this path.
+/// use. Two UUID v7s (simple form) give 64 hex chars — ~148 random bits
+/// plus timestamps; adequate for a loopback-only signing key, and a
+/// pure-`rand` upgrade is tracked as a review follow-up.
 pub fn load_or_create_secret(conn: &Connection) -> Result<String, String> {
     if let Some(existing) = oz_core::Settings::get(conn, SETTINGS_SECRET)
         .map_err(|e| format!("reading {SETTINGS_SECRET}: {e}"))?

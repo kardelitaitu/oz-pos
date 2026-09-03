@@ -455,60 +455,86 @@ pub fn run() {
             // demand. Loopback-only: LAN exposure is out of scope for
             // this surface (docs/guides/EXTENDING.md §10).
             {
-                let (enabled, port, secret, db_arc, db_path, image_dir) = {
+                let enabled_at_boot = {
                     let state = app.state::<AppState>();
                     let db_guard = state.db.blocking_lock();
-                    let enabled = crate::local_api::is_enabled(&db_guard);
-                    let port = crate::local_api::resolve_port(&db_guard);
-                    let secret = if enabled {
-                        crate::local_api::load_or_create_secret(&db_guard)
-                            .map_err(
-                                |e| tracing::warn!(error = %e, "local API: secret unavailable"),
-                            )
-                            .ok()
-                    } else {
-                        None
-                    };
-                    let image_dir = app
-                        .path()
-                        .app_cache_dir()
-                        .ok()
-                        .map(|d| d.join("images"));
-                    (
-                        enabled,
-                        port,
-                        secret,
-                        state.db.clone(),
-                        state.db_path.clone(),
-                        image_dir,
-                    )
+                    crate::local_api::is_enabled(&db_guard)
                 };
-                if enabled {
-                    if let (Some(secret), Some(image_dir)) = (secret, image_dir) {
-                        let app_handle = app.handle().clone();
-                        platform_startup::spawn_daemon("local API server", async move {
-                            match crate::local_api::start(
-                                db_arc,
-                                db_path,
-                                image_dir,
-                                secret,
-                                port,
-                            )
-                            .await
-                            {
-                                Ok(handle) => {
-                                    *app_handle.state::<AppState>().local_api.lock().await =
-                                        Some(handle);
+                if enabled_at_boot {
+                    let app_handle = app.handle().clone();
+                    platform_startup::spawn_daemon("local API server", async move {
+                        let state = app_handle.state::<AppState>();
+                        // Serialize with the Settings toggles (review
+                        // HIGH-2) and re-read the setting UNDER the op
+                        // lock: a disable that landed while we queued
+                        // must win, and a concurrent enable that already
+                        // bound must not be raced.
+                        let _op = state.local_api_op.lock().await;
+                        if state.local_api.lock().await.is_some() {
+                            return; // the toggle path won the race
+                        }
+                        let plan = {
+                            let db = state.db.lock().await;
+                            if !crate::local_api::is_enabled(&db) {
+                                None // disabled while we queued for the lock
+                            } else {
+                                match crate::local_api::load_or_create_secret(&db) {
+                                    Ok(secret) => Some((
+                                        crate::local_api::resolve_port(&db),
+                                        secret,
+                                        crate::local_api::primary_store_id(&db),
+                                    )),
+                                    Err(e) => {
+                                        tracing::warn!(
+                                            error = %e,
+                                            "local API auto-start: secret unavailable"
+                                        );
+                                        None
+                                    }
                                 }
+                            }
+                        };
+                        let Some((port, secret, store_id)) = plan else {
+                            return;
+                        };
+                        let image_dir = match app_handle.path().app_cache_dir() {
+                            Ok(dir) => dir.join("images"),
+                            Err(e) => {
+                                tracing::warn!(
+                                    error = %e,
+                                    "local API auto-start: cannot resolve app cache dir"
+                                );
+                                return;
+                            }
+                        };
+                        let (api_db, api_db_path) =
+                            match crate::local_api::open_api_store_connection(
+                                &state.db_manager,
+                                &store_id,
+                            ) {
+                                Ok(pair) => pair,
                                 Err(e) => {
                                     tracing::warn!(
                                         error = %e,
-                                        "local API auto-start failed — enable it again in Settings"
+                                        "local API auto-start: cannot open store database"
                                     );
+                                    return;
                                 }
+                            };
+                        match crate::local_api::start(api_db, api_db_path, image_dir, secret, port)
+                            .await
+                        {
+                            Ok(handle) => {
+                                *state.local_api.lock().await = Some(handle);
                             }
-                        });
-                    }
+                            Err(e) => {
+                                tracing::warn!(
+                                    error = %e,
+                                    "local API auto-start failed — enable it again in Settings"
+                                );
+                            }
+                        }
+                    });
                 }
             }
 
