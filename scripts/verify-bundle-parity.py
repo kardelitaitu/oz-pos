@@ -308,6 +308,42 @@ DESCRIPTION = (
 )
 
 
+# Object literals that map a domain value to a Fluent message id, e.g.
+#
+#     const ACTION_FLUENT_IDS: Record<string, string> = { login: 'audit-action-login', ... }
+#     <Localized id={ACTION_FLUENT_IDS[entry.action] ?? ACTION_FALLBACK_ID}>
+#
+# The subscript is dynamic, but the map's VALUES are literal ids, so they are
+# every bit as checkable as a `titleKey:` field — and the existing key-field
+# surface misses them entirely, because their field names are `login`, `void`,
+# `refund` rather than something ending in Key/Id. The name test is deliberately
+# narrow: a survey found exactly 8 such maps (67 ids) and no false positives.
+ID_MAP_NAME = re.compile(
+    r"(?:FLUENT_IDS|L10N_KEYS|L10N_IDS|STATUS_LABEL_IDS|_IDS$|Ids$|Keys$)"
+)
+ID_MAP_DECL = re.compile(
+    r"\b(?:const|let)\s+(?P<name>\w+)\b[^=;]{0,120}?=\s*\{(?P<body>[^{}]*)\}",
+    re.DOTALL,
+)
+ID_MAP_ENTRY = re.compile(
+    r"\s*:\s*(?P<q>['\"])(?P<v>[A-Za-z0-9][A-Za-z0-9._-]*)(?P=q)"
+)
+
+
+def extract_id_map_values(text: str) -> list[tuple[str, int]]:
+    """Every key-shaped string value inside an id-map object literal."""
+    found: list[tuple[str, int]] = []
+    for m in ID_MAP_DECL.finditer(text):
+        if not ID_MAP_NAME.search(m.group("name")):
+            continue
+        body_start = m.start("body")
+        for e in ID_MAP_ENTRY.finditer(m.group("body")):
+            v = e.group("v")
+            if KEY_SHAPED_LITERAL.fullmatch(f"'{v}'"):
+                found.append((v, text.count("\n", 0, body_start + e.start()) + 1))
+    return found
+
+
 def _balanced_brace(text: str, open_idx: int) -> tuple[str, int]:
     """Return (expression, index-of-closing-brace) for the `{` at open_idx."""
     depth = 0
@@ -394,6 +430,7 @@ KIND_LABELS = {
     "section": "SECTION_LABELS",
     "keyfield": "key-field literal",
     "dynliteral": "<Localized id={expr}>",
+    "idmap": "id-map value",
 }
 
 
@@ -443,6 +480,10 @@ def extract_sites_from_source(
     if "dynliteral" in kinds:
         for id_, line in extract_dynamic_id_literals(text):
             sites.append(("dynliteral", id_, line))
+
+    if "idmap" in kinds:
+        for id_, line in extract_id_map_values(text):
+            sites.append(("idmap", id_, line))
 
     return sites, untracked_localized, dynamic_getstring
 
@@ -520,6 +561,13 @@ def main() -> int:
              "(rev-3 surface; off by default).",
     )
     parser.add_argument(
+        "--include-id-maps",
+        action="store_true",
+        help="Also check the literal message-id values held by id-map object "
+             "literals such as ACTION_FLUENT_IDS, which back "
+             "<Localized id={MAP[key]}> sites. Rev-4 surface; off by default.",
+    )
+    parser.add_argument(
         "--include-dynamic-literals",
         action="store_true",
         help="Also check key-shaped string literals that appear inside "
@@ -562,6 +610,7 @@ def main() -> int:
         args.include_nav_keys = True
         args.include_key_fields = True
         args.include_dynamic_literals = True
+        args.include_id_maps = True
         args.check_domain_pairs = True
         args.scan_dirs = ",".join(CENSUS_SCAN_DIRS)
 
@@ -574,6 +623,8 @@ def main() -> int:
         kinds |= {"keyfield"}
     if args.include_dynamic_literals:
         kinds |= {"dynliteral"}
+    if args.include_id_maps:
+        kinds |= {"idmap"}
 
     dir_names = (
         DEFAULT_SCAN_DIRS
