@@ -1,6 +1,6 @@
 # Payment Methods per Workspace — Planning Notes
 
-> **Status:** DECISIONS ROUND 1 COMPLETE — Q1–Q4 decided (see §2a), Q5 parked for deeper discussion (terminology expanded the scope, see §2b). Next: draft `docs/specs/_active/` package (spec.yaml + plan.md + validation.md).
+> **Status:** ALL FIVE QUESTIONS DECIDED (rounds 1–2, 2026-09-03) — see §2a/§2b/§2c. Phase 1 is spec-ready; Phase 3/4 designs are complete on paper. Next: draft `docs/specs/_active/` package (spec.yaml + plan.md + validation.md).
 > **Date:** 2026-09-03 · Session with DSH (DeepSeek Harness agent)
 
 ---
@@ -115,7 +115,49 @@ Phase 1 ships `qris_manual` + `bank_transfer` with **zero gateway work** — imm
 | 2 | **Debit vs credit card** | **Option B — two methods `card_debit` + `card_credit`.** | Zero migration (free-string method); historical `card` rows keep working; reports group the card family (`card` + `card_debit` + `card_credit`); banks settle debit/credit separately so per-type reconciliation matters; ⚠️ `credit` stays customer-tab (naming collision avoided). Each toggles independently per config — matches the original spec list. |
 | 3 | **Config scope** | **Tier-gated scope.** Free/Plus/Pro: one config per workspace **type** (`payment_methods.<type_key>`). **Premium/Enterprise unlock per-location (per workspace instance) overrides.** Precedence: instance > type > built-in defaults. | Nice tier differentiator, consistent with analytics/KDS gating. Per-instance editor shows a **locked teaser below Premium** (same pattern as the QRIS teaser); backend accepts instance overrides only when effective tier is Premium+ (fail-closed). Assumption to confirm: "per location" = per workspace instance within a store. |
 | 4 | **E-wallet scope** | **Option A — one `ewallet` umbrella toggle**, `method='ewallet'`. | Customer picks GoPay/OVO/DANA/ShopeePay on their phone; provider enablement is a Midtrans merchant-dashboard concern. Per-provider toggles (via SNAP `enabled_payments`) documented as a Phase 2.5 refinement. |
-| 5 | **Pay-later permission** | **PARKED — talk more.** | User expanded the discussion with terminology + the buying-side mirror (see §2b). Revisit after the terminology/AP design settles. |
+| 5 | **Pay-later permission** | **Option 2 — full permission family (round 2, see §2c).** Dedicated `receivables:*` (AR) and `payables:*` (AP) domains — 8 keys — replacing the single-key and ride-on-`payments:cash` ideas. Credit-limit over-limit behavior: **warn only** (Q5b). | Chosen for explicitness: piutang/hutang are first-class accounting categories, so they get first-class permission domains. Collection is separated from creation (Staff can collect, not create); write-off is its own audited key; payables mirror purchasing's Owner-only reality. |
+
+## 2c. Q5 round 2 — the `receivables:` / `payables:` permission family (DECIDED)
+
+**AR — selling side (piutang / Jual Tempo):**
+
+| Key | Gates |
+|---|---|
+| `receivables:view` | Receivables list, aging report, overdue reminders |
+| `receivables:create` | The `pay_later` button at the register (creating the debt) |
+| `receivables:collect` | Recording a collection when the customer repays |
+| `receivables:writeoff` | Forgiving an uncollectible debt (money destruction — audit-logged) |
+
+**AP — buying side (hutang / Beli Tempo), mirrored 1:1:**
+
+| Key | Gates |
+|---|---|
+| `payables:view` | Vendor bills, due dates, aging |
+| `payables:create` | The "On Account" option at purchasing stock-in |
+| `payables:settle` | Recording payment to the vendor |
+| `payables:writeoff` | Forgiving a vendor debt (rare) |
+
+**Default preset matrix** (presets are defaults; Custom roles can rearrange):
+
+| Key | Owner | Admin | Manager | Staff | Auditor |
+|---|---|---|---|---|---|
+| `receivables:view` | `*` | ✅ | ✅ | ✅ | ✅ |
+| `receivables:create` | `*` | ✅ | ✅ | ❌ | ❌ |
+| `receivables:collect` | `*` | ✅ | ✅ | ✅ | ❌ |
+| `receivables:writeoff` | `*` | ✅ | ✅ | ❌ | ❌ |
+| `payables:view` | `*` | ❌ | ❌ | ❌ | ✅ |
+| `payables:create` / `settle` / `writeoff` | `*` | ❌ | ❌ | ❌ | ❌ |
+
+Rationale: **Staff collects but never creates** (taking the repayment money is cashier work; extending credit is a Manager decision — same trust line as `sales:void`/`refund`). **Admin gets the full AR family** (already has `sales:void`, same risk class) **but no payables** — Admin has no `purchasing:*` keys today, so vendor-bill powers without purchasing context would be inconsistent. **Payables is Owner-only**, mirroring purchasing's current reality; owners hand it out via Custom roles. Dedicated-bookkeeper orgs work out of the box: a Custom role with `receivables:collect` + `receivables:view`.
+
+**Credit-limit behavior (Q5b): WARN ONLY** — when a pay-later sale pushes a customer past their limit, show a warning ("Bapak Surya already owes 4.5 juta") and let the sale proceed. Trust-based, like a warung kasbon book. The limit is a **customer attribute** (`credit_limit` on customers, editable via `customers:edit` — Manager+); if stricter enforcement (hard block / manager-PIN bypass) is ever wanted, it's a later increment behind the same data.
+
+**What still rides existing keys (no new keys):** per-customer credit-limit editing → `customers:edit`; receivables settings (default due days, reminder timing) → `settings:edit`; AP authorization → `payables:*` family (no dependence on `purchasing:manage`).
+
+**Implementation ripple (lands with its phases — keys ship together with their first enforcement point, per the house `staff:delete` RESERVED convention):**
+- Phase 3 (AR): 4 constants + registry entries + `ALL_ENFORCED` + presets (Manager +4, Staff +2, Admin +4, Auditor +1) + role-editor i18n names + backend gates on `pay_later` checkout / collection / write-off + aging report gating.
+- Phase 4 (AP): the payables mirror, same shape, in the purchasing flow.
+- No DB change for the keys themselves (permissions live in role JSON strings); no version bumps.
 
 ## 2b. Terminology law + scope expansion (from the round-1 discussion)
 
@@ -148,6 +190,8 @@ Fact for the AP side: purchasing permissions (`purchasing:view` / `purchasing:ma
 | One `ewallet` umbrella toggle (Midtrans SNAP; per-provider via `enabled_payments` later) | ✅ decided (Q4) |
 | Midtrans via existing `payment_gateways` table + encryption (Phase 2) | ✅ decided (§1.4) |
 | Piutang = `pay_later` method + `receivables` table + **collection-day settlement record** (NOT marked as cash) | ✅ decided (Q1) |
+| Full permission family: `receivables:view/create/collect/writeoff` + `payables:view/create/settle/writeoff` (8 keys); Staff collects, never creates; payables Owner-only | ✅ decided (Q5 round 2) |
+| Credit limit = customer attribute, editable via `customers:edit`; over-limit = **warn only**, sale proceeds | ✅ decided (Q5b) |
 | Backend re-validates method list (fail-closed), UI hiding is cosmetic | ✅ decided (§1.2 safety rules) |
 | Terminology: Jual Tempo/Kasbon → Pay Later/AR (Piutang); Beli Tempo/Hutang → Purchase on Account/AP; purchasing UI = "Cash / On Account" | ✅ adopted as naming law (§2b) |
 | AP (hutang) side = payables tracking in purchasing — new phase, schema mirrored with receivables | 🆕 scope expansion — to spec (§2b) |

@@ -642,7 +642,10 @@ pub async fn apply_topology_diff(
         if !workspace_creations.is_empty()
             && let Some(limit) = effective_tier.max_pos_instances()
         {
-            let current = store.count_active_instances(&effective_store_id)?;
+            // Only POS registers (store-pos/restaurant-pos) consume the
+            // register budget — kds/warehouse/inventory/admin instances must
+            // not block legitimate register creation.
+            let current = store.count_active_pos_instances(&effective_store_id)?;
             let archived_ids: std::collections::HashSet<&str> =
                 workspace_archives.iter().map(String::as_str).collect();
             let archived_active = archived_ids

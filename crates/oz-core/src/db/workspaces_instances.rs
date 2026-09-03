@@ -293,6 +293,27 @@ impl Store<'_> {
         )?;
         Ok(count)
     }
+
+    /// Count active POS-register instances (store-pos / restaurant-pos) in
+    /// the given store.
+    ///
+    /// The tier's `max_pos_instances` limit governs POS **registers** only —
+    /// kds, warehouse, inventory and admin workspaces are separate
+    /// workspace types and must not consume the register budget. The
+    /// subscription quota gates (creation + topology Apply) use this count,
+    /// never the all-types `count_active_instances`, so a legacy non-POS
+    /// instance cannot block legitimate register creation.
+    pub fn count_active_pos_instances(&self, store_id: &str) -> Result<i64, CoreError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM workspace_instances
+             WHERE store_id = ?1
+               AND type_key IN ('store-pos', 'restaurant-pos')
+               AND status NOT IN ('archived', 'quota_suspended')",
+            params![store_id],
+            |row| row.get(0),
+        )?;
+        Ok(count)
+    }
 }
 
 impl Store<'_> {

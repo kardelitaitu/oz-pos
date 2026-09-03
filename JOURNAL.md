@@ -96,12 +96,43 @@ global DB (clock-rollback validated, Free fallback) and fail closed with
 `AppError::Invalid` when `allows_workspace_type` is false. Existing
 tests all use Free-allowed types (restaurant-pos), so no breakage.
 
-**Commits:** pending (round-4 TDD commit).
+**Commits:** 8d12dc6b (round-4 TDD commit).
 **Test counts:** desktop auth 43→44 (incl. security integration);
 tablet auth 15→16; fmt clean.
 **Note:** mirroring the tablet `create_session` (no picker-ticket arg)
 kept the two clients' entitlement behavior identical — verified by the
 parity test.
+
+## 2026-09-03 — TDD round 5: POS-instance quota counts non-POS types (oz-core, topology)
+
+**Problem:** `max_pos_instances` is documented as "Maximum POS register
+instances per store" (subscription.rs:146-148), but both quota gates
+counted **every** active workspace type:
+
+1. `Store::enforce_instance_quota` (workspaces_lifecycle.rs) — used by
+   `create_workspace_instance_scoped`
+2. `apply_topology_diff`'s inline quota check (topology/commands.rs)
+
+Both used `count_active_instances(store_id)`, which sums kds, warehouse,
+inventory and admin instances too. A store with 0 POS registers but 1
+legacy kds instance reported `current=1 >= limit=1` and denied creating
+the FIRST register — a tier-downgraded tenant (or any store with a
+non-POS instance) could never add a register their subscription allows.
+
+**Solution:** Red first — `enforce_instance_quota_non_pos_types_do_not_inflate_pos_count`
+failed showing the kds inflation (`SubscriptionLimitExceeded("...already
+has 1")`). Green: added `Store::count_active_pos_instances` (filters
+`type_key IN ('store-pos','restaurant-pos')`, same archived/suspended
+exclusion) and switched both quota gates to it. `auto_recover_instances`
+was left as-is (restores any suspended type, not a creation gate).
+
+**Commits:** pending (round-5 TDD commit).
+**Test counts:** oz-core workspaces 64→65; desktop topology 330 still
+green; clippy -D warnings clean; fmt clean.
+**Follow-up:** consider whether `auto_recover_instances` should also
+count POS-only — it uses `max_pos_instances` as the restore budget but
+counts all types; behavior is intentional (restore any suspended
+workspace), so left untouched.
 
 ## 2026-08-29 — Gap analysis round 2: renew-badge thresholds + checkout feedback states (website AccountView)
 

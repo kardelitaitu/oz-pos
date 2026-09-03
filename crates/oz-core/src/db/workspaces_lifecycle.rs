@@ -39,9 +39,12 @@ impl Store<'_> {
             .into());
         }
 
-        // 2. Per-store register limit from the effective tier.
+        // 2. Per-store register limit from the effective tier. Only POS
+        //    registers (store-pos/restaurant-pos) consume the register
+        //    budget — kds/warehouse/inventory/admin are separate types and
+        //    must not block register creation.
         if let Some(limit) = effective.max_pos_instances() {
-            let current = self.count_active_instances(store_id)?;
+            let current = self.count_active_pos_instances(store_id)?;
             if current >= limit {
                 return Err(QuotaError::RegisterLimit {
                     tier: effective.name().into(),

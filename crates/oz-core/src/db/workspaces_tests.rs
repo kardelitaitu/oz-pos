@@ -538,6 +538,44 @@ fn enforce_instance_quota_allows_type_but_fails_on_count() {
 }
 
 #[test]
+fn enforce_instance_quota_non_pos_types_do_not_inflate_pos_count() {
+    // A store with 0 POS instances (store-pos/restaurant-pos) but 1 non-POS
+    // instance (kds) should still allow creating 1 POS instance on Free tier
+    // (max_pos_instances = 1). The quota must count only POS-class types,
+    // not every workspace type — otherwise a legacy kds/warehouse inflates
+    // the register count and blocks legitimate POS creation.
+    let (store, _) = fresh();
+    let free = sub_for_tier(SubscriptionTier::Free);
+    // Use a fresh store with only a kds instance (no POS instances).
+    let store_id = "quota-test";
+    store
+        .conn
+        .execute(
+            "INSERT OR IGNORE INTO store_profiles (id, name) VALUES ('quota-test', 'Quota Test')",
+            [],
+        )
+        .unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO workspace_instances (id, type_key, store_id, name, status, created_at, updated_at)
+             VALUES ('quota-kds', 'kds', 'quota-test', 'KDS', 'active', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+    // count_active_instances returns 1 (the kds instance).
+    assert_eq!(store.count_active_instances(store_id).unwrap(), 1);
+    // Creating a store-pos should succeed: no POS instances exist yet,
+    // and the Free tier allows 1. But count_active_instances counts all
+    // types, so current=1 >= limit=1 → currently fails.
+    let result = store.enforce_instance_quota(&free, "store-pos", store_id);
+    assert!(
+        result.is_ok(),
+        "non-POS instances must not count toward the POS-instance limit, got {result:?}"
+    );
+}
+
+#[test]
 fn enforce_instance_quota_bundle_plus_allows_kds() {
     let (store, _) = fresh();
     // A fresh store id has zero active instances, so the type check is
