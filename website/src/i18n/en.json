@@ -250,7 +250,7 @@
     "trust2": "Cancel anytime",
     "note": "One-time (perpetual) licensing is not available yet — see the roadmap.",
     "comparison": "Feature comparison across plans",
-    "mostPopular": "⭐ Most Popular",
+    "mostPopular": "Popular",
     "billing": {
       "label": "Billing period",
       "monthly": "Monthly",

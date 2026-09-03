@@ -137,8 +137,8 @@ export default function PricingGrid({ tiers, locale, downloadHref, contactHref }
               ].join(' ')}
             >
               {tier.highlight && (
-                <span className="absolute -top-3.5 right-6 z-10 inline-flex items-center gap-1 rounded-full bg-primary px-3 py-0.5 text-xs font-bold text-white shadow-md uppercase tracking-wider text-[10px]">
-                  ★ {t(locale, 'pricingPage.mostPopular')}
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 z-10 inline-flex items-center rounded-full bg-primary px-3 py-0.5 text-[11px] font-bold text-white shadow-sm uppercase tracking-wider">
+                  {t(locale, 'pricingPage.mostPopular')}
                 </span>
               )}
               {/* Row 1: Title */}
