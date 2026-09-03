@@ -4404,6 +4404,7 @@ dependencies = [
  "platform-sync",
  "prometheus",
  "redis",
+ "reqwest 0.12.28",
  "rusqlite",
  "rustls",
  "rustls-native-certs",
