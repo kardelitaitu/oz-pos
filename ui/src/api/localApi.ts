@@ -12,6 +12,8 @@ export interface LocalApiStatusDto {
   port: number;
   /** Base URL for scripts, e.g. `http://127.0.0.1:3099/api/v1`. */
   baseUrl: string | null;
+  /** The store currently served (configured override or primary). */
+  storeId: string;
 }
 
 /** A minted long-lived API token (snake_case — mirrors the REST contract). */
@@ -32,6 +34,13 @@ export const setLocalApiEnabledScoped = (sessionToken: string, enabled: boolean)
 /** Change the listen port (restarts the server when running). */
 export const setLocalApiPortScoped = (sessionToken: string, port: number): Promise<LocalApiStatusDto> =>
   loggedInvoke<LocalApiStatusDto>('local_api_set_port_scoped', { sessionToken, port });
+
+/**
+ * Choose which store the API serves ('' = primary store). Restarts the
+ * server against the new target when running.
+ */
+export const setLocalApiStoreScoped = (sessionToken: string, storeId: string): Promise<LocalApiStatusDto> =>
+  loggedInvoke<LocalApiStatusDto>('local_api_set_store_scoped', { sessionToken, storeId });
 
 /**
  * Rotate the per-install signing secret. Every previously minted token

@@ -18,10 +18,16 @@ const api = vi.hoisted(() => ({
   getLocalApiStatusScoped: vi.fn(),
   setLocalApiEnabledScoped: vi.fn(),
   setLocalApiPortScoped: vi.fn(),
+  setLocalApiStoreScoped: vi.fn(),
   rotateLocalApiSecretScoped: vi.fn(),
   mintLocalApiTokenScoped: vi.fn(),
 }));
 vi.mock('@/api/localApi', () => api);
+
+const storesApi = vi.hoisted(() => ({
+  listStoresScoped: vi.fn(),
+}));
+vi.mock('@/api/stores', () => storesApi);
 
 const addToast = vi.hoisted(() => vi.fn());
 vi.mock('@/frontend/shared/Toast', () => ({ useToast: () => ({ addToast }) }));
@@ -71,6 +77,11 @@ const testL10n = {
       'settings-local-api-port-invalid': 'Port must be between 1024 and 65535.',
       'settings-local-api-port-applied': 'Port updated.',
       'settings-local-api-port-failed': 'Could not change the port.',
+      'settings-local-api-store': 'Served store',
+      'settings-local-api-store-primary': 'primary',
+      'settings-local-api-store-hint': 'Scripts see exactly one store.',
+      'settings-local-api-store-changed': 'Now serving the selected store.',
+      'settings-local-api-store-failed': 'Could not switch the served store.',
       'settings-local-api-start-failed': 'Could not start the local API server.',
       'settings-local-api-toggle-failed': 'Could not change the Local API setting.',
       'settings-local-api-stopped': 'The local API is stopped.',
@@ -120,6 +131,7 @@ const STOPPED: LocalApiStatusDto = {
   running: false,
   port: 3099,
   baseUrl: null,
+  storeId: 'default',
 };
 
 const RUNNING: LocalApiStatusDto = {
@@ -127,18 +139,30 @@ const RUNNING: LocalApiStatusDto = {
   running: true,
   port: 3099,
   baseUrl: 'http://127.0.0.1:3099/api/v1',
+  storeId: 'default',
+};
+
+const STORE_DEFAULT = {
+  id: 'default', name: 'Main', address: '', tax_id: '', currency: 'USD',
+  timezone: 'UTC', is_primary: true, created_at: '', updated_at: '',
+};
+const STORE_B = {
+  id: 'store-b', name: 'Beach Club', address: '', tax_id: '', currency: 'USD',
+  timezone: 'UTC', is_primary: false, created_at: '', updated_at: '',
 };
 
 beforeEach(() => {
   api.getLocalApiStatusScoped.mockResolvedValue(STOPPED);
   api.setLocalApiEnabledScoped.mockResolvedValue(RUNNING);
   api.setLocalApiPortScoped.mockResolvedValue({ ...RUNNING, port: 4010 });
+  api.setLocalApiStoreScoped.mockResolvedValue({ ...RUNNING, storeId: 'store-b' });
   api.rotateLocalApiSecretScoped.mockResolvedValue(RUNNING);
   api.mintLocalApiTokenScoped.mockResolvedValue({
     token: 'jwt.abc.def',
     expires_at: '2026-10-01T00:00:00Z',
     token_id: 'tid-1',
   });
+  storesApi.listStoresScoped.mockResolvedValue([STORE_DEFAULT]);
 });
 
 afterEach(() => {
@@ -295,6 +319,46 @@ describe('LocalApiSection', () => {
     fireEvent.click(screen.getByRole('switch', { name: /toggle/i }));
     await waitFor(() => expect(screen.getByTestId('local-api-status-row')).toBeInTheDocument());
     expect(screen.queryByTestId('local-api-token-row')).not.toBeInTheDocument();
+  });
+
+  it('store selector stays hidden on single-store installs', async () => {
+    api.getLocalApiStatusScoped.mockResolvedValue(RUNNING);
+    render(<Wrapper><LocalApiSection /></Wrapper>);
+    await waitFor(() => expect(screen.getByTestId('local-api-status-row')).toBeInTheDocument());
+    await waitFor(() => expect(storesApi.listStoresScoped).toHaveBeenCalledWith('test-token'));
+    expect(screen.queryByTestId('local-api-store-row')).not.toBeInTheDocument();
+  });
+
+  it('store selector appears with multiple stores and switches', async () => {
+    api.getLocalApiStatusScoped.mockResolvedValue(RUNNING);
+    storesApi.listStoresScoped.mockResolvedValue([STORE_DEFAULT, STORE_B]);
+    render(<Wrapper><LocalApiSection /></Wrapper>);
+    await waitFor(() => expect(screen.getByTestId('local-api-store-row')).toBeInTheDocument());
+    const select = screen.getByLabelText('Served store') as HTMLSelectElement;
+    expect(select.value).toBe('default');
+    fireEvent.change(select, { target: { value: 'store-b' } });
+    await waitFor(() =>
+      expect(api.setLocalApiStoreScoped).toHaveBeenCalledWith('test-token', 'store-b'),
+    );
+    expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+    // The switched status keeps the server running.
+    await waitFor(() => expect(screen.getByTestId('local-api-status-row')).toBeInTheDocument());
+  });
+
+  it('store switch failure surfaces an error toast and refetches', async () => {
+    api.getLocalApiStatusScoped.mockResolvedValue(RUNNING);
+    storesApi.listStoresScoped.mockResolvedValue([STORE_DEFAULT, STORE_B]);
+    api.setLocalApiStoreScoped.mockRejectedValueOnce(new Error('boom'));
+    render(<Wrapper><LocalApiSection /></Wrapper>);
+    await waitFor(() => expect(screen.getByTestId('local-api-store-row')).toBeInTheDocument());
+    const callsBefore = api.getLocalApiStatusScoped.mock.calls.length;
+    fireEvent.change(screen.getByLabelText('Served store'), { target: { value: 'store-b' } });
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })),
+    );
+    await waitFor(() =>
+      expect(api.getLocalApiStatusScoped.mock.calls.length).toBeGreaterThan(callsBefore),
+    );
   });
 
   it('polls status while enabled but not running', async () => {

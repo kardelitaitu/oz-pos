@@ -9,11 +9,13 @@ import {
   getLocalApiStatusScoped,
   setLocalApiEnabledScoped,
   setLocalApiPortScoped,
+  setLocalApiStoreScoped,
   rotateLocalApiSecretScoped,
   mintLocalApiTokenScoped,
   type LocalApiStatusDto,
   type LocalApiTokenDto,
 } from '@/api/localApi';
+import { listStoresScoped, type StoreProfile } from '@/api/stores';
 
 /** Copy text to the clipboard, reporting success for the toast. */
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -44,6 +46,9 @@ export default function LocalApiSection() {
   const [minting, setMinting] = useState(false);
   const [confirmRotate, setConfirmRotate] = useState(false);
   const [rotating, setRotating] = useState(false);
+  // Store selector: only meaningful on multi-store installs, so the
+  // list is fetched lazily and the row renders when >1 store exists.
+  const [stores, setStores] = useState<StoreProfile[]>([]);
 
   const refresh = useCallback(async () => {
     if (!sessionToken) return;
@@ -59,6 +64,23 @@ export default function LocalApiSection() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Store profiles for the selector (advisory — a failed fetch just
+  // hides the row, the server keeps serving the resolved store).
+  useEffect(() => {
+    if (!sessionToken || !status?.enabled) return;
+    let cancelled = false;
+    listStoresScoped(sessionToken)
+      .then((s) => {
+        if (!cancelled) setStores(s);
+      })
+      .catch(() => {
+        /* selector stays hidden */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionToken, status?.enabled]);
 
   // While the setting says on but no server is listening (boot
   // auto-start still in flight, or a bind failure), poll so the panel
@@ -103,6 +125,20 @@ export default function LocalApiSection() {
       addToast({ message: l10n.getString('settings-local-api-port-applied'), type: 'success' });
     } catch {
       addToast({ message: l10n.getString('settings-local-api-port-failed'), type: 'error' });
+      void refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onApplyStore = async (storeId: string) => {
+    if (!sessionToken) return;
+    setBusy(true);
+    try {
+      setStatus(await setLocalApiStoreScoped(sessionToken, storeId));
+      addToast({ message: l10n.getString('settings-local-api-store-changed'), type: 'success' });
+    } catch {
+      addToast({ message: l10n.getString('settings-local-api-store-failed'), type: 'error' });
       void refresh();
     } finally {
       setBusy(false);
@@ -223,6 +259,38 @@ export default function LocalApiSection() {
             </div>
           </span>
         </div>
+
+        {status?.enabled && stores.length > 1 && (
+          <div className="settings-field settings-field--horizontal" data-testid="local-api-store-row">
+            <label htmlFor="local-api-store" className="settings-label">
+              {l10n.getString('settings-local-api-store')}
+            </label>
+            <span className="settings-field-input-wrap">
+              <select
+                id="local-api-store"
+                className="settings-input"
+                value={status.storeId}
+                disabled={busy}
+                onChange={(e) => void onApplyStore(e.target.value)}
+              >
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                    {s.is_primary ? ` (${requiredLocalized(l10n, 'settings-local-api-store-primary')})` : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="settings-hint">
+                <Localized id="settings-local-api-store-hint">
+                  <span>
+                    Scripts see exactly one store&apos;s data. Switching restarts the server
+                    against the selected store&apos;s database.
+                  </span>
+                </Localized>
+              </p>
+            </span>
+          </div>
+        )}
 
         {status?.enabled && (
           <div className="settings-field settings-field--horizontal" data-testid="local-api-rotate-row">
