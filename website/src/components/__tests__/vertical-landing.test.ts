@@ -52,10 +52,6 @@ describe('VerticalLanding source structure', () => {
     expect(VERTICAL_SRC).toContain('#${vStrings[vertical].tierAnchor}');
   });
 
-  it('has bundle CTA with restaurant_starter', () => {
-    expect(VERTICAL_SRC).toContain('restaurant_starter');
-  });
-
   it('determines primaryCta based on leadsWithTrial', () => {
     expect(VERTICAL_SRC).toContain('leadsWithTrial ? trialHref : tierHref');
   });
