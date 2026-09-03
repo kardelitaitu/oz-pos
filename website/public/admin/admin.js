@@ -278,7 +278,7 @@
       subCard.appendChild(el('h3', null, t('chart.subscriberGrowth')));
       subCard.innerHTML += svgChart('subs', m.subscriberGrowth, ['count'], Object.assign({ area: true }, halfCv));
       chartGrid2.appendChild(subCard);
-      bindChartTooltip(subCard.querySelector('.chart-svg'), m.subscriberGrowth, [{ key: 'count', label: t('kpi.totalSubscribers') }]);
+      bindChartTooltip(subCard.querySelector('.chart-svg'), m.subscriberGrowth, [{ key: 'count', label: t('kpi.totalSubscribers') }], undefined, 'line');
 
       // Signups per month (bar chart — extracted to admin-utils.svgBarChart)
       const signupCard = el('div', 'chart-card');
