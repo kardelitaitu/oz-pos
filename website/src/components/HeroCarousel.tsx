@@ -8,7 +8,7 @@ export type SlideId = (typeof SLIDE_IDS)[number];
 interface Props {
   /** Localized display labels for each slide, keyed by slide id. */
   labels: Record<SlideId, string>;
-  /** Localized short descriptions under each label. */
+  /** Localized short descriptions under each slide. */
   descriptions: Record<SlideId, string>;
   /** Localized "screenshot coming soon" caption on placeholder slides. */
   comingSoon: string;
@@ -22,20 +22,42 @@ const N = SLIDE_IDS.length;
 /** Slide-presentational content. Slide 1 keeps the rich HTML mockup; the rest are placeholders. */
 function slideContent(id: SlideId): ReactNode | undefined {
   if (id === 'restaurant') return <RestaurantMockup />;
-  // Placeholder slides — user provides PNGs later.
   return undefined;
+}
+
+/**
+ * Per-slide transform: active sits at 0; exiting sweeps to the left;
+ * every other slide parks off-screen to the right so the next advance
+ * enters from beyond the viewport edge ("from outside the screen").
+ */
+function slideTransform(
+  i: number,
+  index: number,
+  leaving: number | null,
+): string {
+  if (i === index) return 'translateX(0)';
+  if (leaving !== null && i === leaving) return 'translateX(calc(-100% - 1rem))';
+  return 'translateX(calc(100% + 1rem))';
 }
 
 export default function HeroCarousel({ labels, descriptions, comingSoon }: Props) {
   const [index, setIndex] = useState(0);
+  const [leaving, setLeaving] = useState<number | null>(null);
   const [transitionMs, setTransitionMs] = useState(AUTO_MS);
   const [paused, setPaused] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [tick, setTick] = useState(0);
   const stageRef = useRef<HTMLDivElement>(null);
+  const leaveTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const prevIndexRef = useRef(index);
+
+  const scheduleClearLeaving = (ms: number) => {
+    clearTimeout(leaveTimerRef.current);
+    leaveTimerRef.current = setTimeout(() => setLeaving(null), ms);
+  };
 
   // ── Detect reduced motion + visibility changes ─────────────────────
   useEffect(() => {
-    // SSR guard: window is undefined during Astro render.
     if (typeof window === 'undefined') return;
 
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -52,19 +74,41 @@ export default function HeroCarousel({ labels, descriptions, comingSoon }: Props
     };
   }, []);
 
+  // Cleanup leave timer on unmount.
+  useEffect(() => {
+    return () => clearTimeout(leaveTimerRef.current);
+  }, []);
+
   // ── Auto-advance interval ──────────────────────────────────────────
   useEffect(() => {
     if (reduceMotion || paused) return;
     const id = setInterval(() => {
-      setTransitionMs(AUTO_MS);
+      if (!reduceMotion) {
+        setTransitionMs(AUTO_MS);
+        setLeaving(prevIndexRef.current);
+        scheduleClearLeaving(AUTO_MS + 50);
+      }
       setIndex((i) => (i + 1) % N);
     }, DWELL_MS);
     return () => clearInterval(id);
-  }, [reduceMotion, paused, index]);
+  }, [reduceMotion, paused, index, tick]);
+
+  // Keep prevIndexRef in sync.
+  useEffect(() => {
+    prevIndexRef.current = index;
+  }, [index]);
 
   // ── Manual jump to a specific slide ─────────────────────────────────
   const goTo = (i: number) => {
     setTransitionMs(MANUAL_MS);
+    if (i === index) {
+      setTick((t) => t + 1);
+      return;
+    }
+    if (!reduceMotion) {
+      setLeaving(index);
+      scheduleClearLeaving(MANUAL_MS + 50);
+    }
     setIndex(i);
   };
 
@@ -72,64 +116,70 @@ export default function HeroCarousel({ labels, descriptions, comingSoon }: Props
   const handlePauseIn = () => setPaused(true);
   const handlePauseOut = () => setPaused(false);
 
-  const trackStyle: React.CSSProperties = reduceMotion
-    ? { transform: `translateX(-${index * 100}%)` }
-    : {
-        transform: `translateX(-${index * 100}%)`,
-        transition: `transform ${transitionMs}ms cubic-bezier(0.2, 0, 0, 1)`,
-      };
-
   const highlightStyle: React.CSSProperties = {
-    width: `calc((100% - ${2 * 4}px) / ${N})`, // 4px padding each side
+    width: `calc((100% - ${2 * 4}px) / ${N})`,
     transform: `translateX(${index * 100}%)`,
     transition: reduceMotion ? 'none' : 'transform 300ms cubic-bezier(0.2, 0, 0, 1)',
   };
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-12">
-      {/* Stage — the mockup window. Pause on hover/focus (WCAG 2.2.2). */}
+      {/* Stage — the positioning container (no overflow-hidden, so slides
+          entering from off-screen are visible as they sweep across the page). */}
       <div
         ref={stageRef}
         role="group"
         aria-roledescription="carousel"
         aria-label="OZ-POS app screenshots"
-        className="relative w-full max-w-[1280px] overflow-hidden rounded-2xl border border-ink/10 bg-gradient-to-br from-[#f8f9fa] via-[#f0f1f3] to-[#e8e9eb] shadow-2xl shadow-black/30"
+        className="relative w-full max-w-[1280px]"
         style={{ aspectRatio: '1280 / 720' }}
         onMouseEnter={handlePauseIn}
         onMouseLeave={handlePauseOut}
         onFocusCapture={handlePauseIn}
         onBlurCapture={handlePauseOut}
       >
-        {/* Track — all 5 slides slide horizontally */}
-        <div className="flex h-full w-full" style={trackStyle} aria-hidden="true">
-          {SLIDE_IDS.map((id) => (
-            <div key={id} className="h-full w-full shrink-0">
+        {SLIDE_IDS.map((id, i) => {
+          const isActive = i === index;
+          const isLeaving = leaving !== null && i === leaving;
+          const transform = slideTransform(i, index, leaving);
+          const zIndex = isLeaving ? 10 : isActive ? 20 : 0;
+
+          return (
+            <div
+              key={id}
+              data-slide-id={id}
+              className="absolute inset-0"
+              style={{
+                transform,
+                zIndex,
+                transition: reduceMotion
+                  ? 'none'
+                  : `transform ${transitionMs}ms cubic-bezier(0.2, 0, 0, 1)`,
+              }}
+            >
               <SlideWindow title={`OZ-POS — ${labels[id]}`} content={slideContent(id)}>
-                {/* Shown only when a slide has no content (placeholder PNG window) */}
                 {slideContent(id) === undefined && (
                   <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
                     <p className="text-lg font-semibold text-ink/70">{labels[id]}</p>
                     <p className="max-w-sm px-6 text-sm text-muted">{descriptions[id]}</p>
-                    <p className="mt-2 text-[11px] uppercase tracking-widest text-muted/60">{comingSoon}</p>
+                    <p className="mt-2 text-[11px] uppercase tracking-widest text-muted/60">
+                      {comingSoon}
+                    </p>
                   </div>
                 )}
               </SlideWindow>
             </div>
-          ))}
-        </div>
+          );
+        })}
       </div>
 
-      {/* Pill slider — outside the mockup, centered beneath it.
-          Buttons sized to match the vertical entry-point pills below the
-          hero (Coffee shops · Minimarkets · Warung/kiosk · Restaurants). */}
+      {/* Pill slider — outside the mockup, centered beneath it. */}
       <div className="relative flex rounded-full bg-black/35 p-1 backdrop-blur-sm">
-        {/* Sliding highlight */}
         <div
           className="absolute inset-y-1 left-1 rounded-full bg-white/90 shadow-sm"
           style={highlightStyle}
           aria-hidden="true"
         />
-        {/* Pill buttons */}
         {SLIDE_IDS.map((id, i) => (
           <button
             key={id}

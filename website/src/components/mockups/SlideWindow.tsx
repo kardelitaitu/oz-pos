@@ -21,7 +21,7 @@ export default function SlideWindow({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-ink/10 bg-gradient-to-br from-[#f8f9fa] via-[#f0f1f3] to-[#e8e9eb]">
+    <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-ink/10 bg-gradient-to-br from-[#f8f9fa] via-[#f0f1f3] to-[#e8e9eb] shadow-2xl shadow-black/30">
       {/* Window chrome */}
       <div className="flex items-center gap-2 border-b border-ink/10 bg-white/80 px-4 py-1.5">
         <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
