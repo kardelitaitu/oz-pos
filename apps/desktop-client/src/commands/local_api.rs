@@ -46,49 +46,72 @@ fn persist_setting(conn: &Connection, key: &str, value: &str) -> Result<(), AppE
         .map_err(|e| AppError::Internal(format!("persisting {key}: {e}")))
 }
 
-/// Read port + secret + primary-store API connection from state.
+/// Read port + secret + served-store API connection from state.
 ///
 /// The global-db guard is dropped before returning —
-/// `open_api_store_connection` opens its own handle. The primary store
-/// id is resolved on the GLOBAL DB (`store_profiles`), never the store
-/// DB. `image_dir` is injected by the caller (command or test).
+/// `open_api_store_connection` opens its own handle. The served store
+/// id is resolved on the GLOBAL DB (`local_api.store_id` override,
+/// else `store_profiles.is_primary`), never the store DB. `image_dir`
+/// is injected by the caller (command or test).
 async fn prepare(
     state: &AppState,
-) -> Result<(u16, String, Arc<tokio::sync::Mutex<Connection>>, PathBuf), AppError> {
+) -> Result<
+    (
+        u16,
+        String,
+        Arc<tokio::sync::Mutex<Connection>>,
+        PathBuf,
+        String,
+    ),
+    AppError,
+> {
     let (port, secret, store_id) = {
         let db = state.db.lock().await;
         let port = local_api::resolve_port(&db);
         let secret = local_api::load_or_create_secret(&db).map_err(AppError::Internal)?;
-        let store_id = local_api::primary_store_id(&db);
+        let store_id = local_api::resolve_store_id(&db);
         (port, secret, store_id)
     }; // global db guard dropped — open_store below may await internally
     let (api_db, api_db_path) = local_api::open_api_store_connection(&state.db_manager, &store_id)
         .map_err(AppError::Internal)?;
-    Ok((port, secret, api_db, api_db_path))
+    Ok((port, secret, api_db, api_db_path, store_id))
 }
 
 /// Bind + register the server handle (callers hold the op lock).
 /// `port` 0 = use the persisted configuration. Shared with the boot
 /// auto-start daemon (`lib.rs`) so both paths run identical logic.
+/// API writes are audited into the served store's `audit_log`.
 pub(crate) async fn start_and_store(
     state: &AppState,
     image_dir: PathBuf,
     port: u16,
 ) -> Result<(), AppError> {
-    let (configured_port, secret, api_db, api_db_path) = prepare(state).await?;
+    let (configured_port, secret, api_db, api_db_path, store_id) = prepare(state).await?;
     let port = if port == 0 { configured_port } else { port };
-    let handle = local_api::start(api_db, api_db_path, image_dir, secret, port)
-        .await
-        .map_err(AppError::Internal)?;
+    let sink = local_api::StoreAuditSink::new(api_db.clone(), store_id);
+    let handle = local_api::start_with_audit(
+        api_db,
+        api_db_path,
+        image_dir,
+        secret,
+        port,
+        Some(Arc::new(sink)),
+    )
+    .await
+    .map_err(AppError::Internal)?;
     *state.local_api.lock().await = Some(handle);
     Ok(())
 }
 
 /// Build the status snapshot from current settings + running handle.
 async fn build_status(state: &AppState) -> Result<LocalApiStatus, AppError> {
-    let (enabled, port) = {
+    let (enabled, port, store_id) = {
         let db = state.db.lock().await;
-        (local_api::is_enabled(&db), local_api::resolve_port(&db))
+        (
+            local_api::is_enabled(&db),
+            local_api::resolve_port(&db),
+            local_api::resolve_store_id(&db),
+        )
     };
     let slot = state.local_api.lock().await;
     Ok(LocalApiStatus {
@@ -96,6 +119,7 @@ async fn build_status(state: &AppState) -> Result<LocalApiStatus, AppError> {
         running: slot.is_some(),
         port,
         base_url: slot.as_ref().map(|h| h.base_url.clone()),
+        store_id,
     })
 }
 
@@ -210,6 +234,42 @@ async fn run_rotate_secret(
     build_status(state).await
 }
 
+/// Store selection. Logic body of the scoped command. `store_id` empty
+/// = back to the primary store. When the server is running it restarts
+/// against the newly selected store's database (the served DB lives in
+/// the serve state, not the socket — same restart shape as a port
+/// change).
+async fn run_set_store(
+    state: &AppState,
+    image_dir: PathBuf,
+    store_id: &str,
+) -> Result<LocalApiStatus, AppError> {
+    let _op = state.local_api_op.lock().await;
+    let store_id = store_id.trim();
+    {
+        let db = state.db.lock().await;
+        if store_id.is_empty() {
+            persist_setting(&db, local_api::SETTINGS_STORE, "")?;
+        } else {
+            if !local_api::store_exists(&db, store_id) {
+                return Err(AppError::Invalid(format!("unknown store: {store_id}")));
+            }
+            persist_setting(&db, local_api::SETTINGS_STORE, store_id)?;
+        }
+    }
+
+    let running = {
+        let mut slot = state.local_api.lock().await;
+        slot.take()
+    };
+    if let Some(handle) = running {
+        let port = handle.port;
+        handle.stop_async().await;
+        start_and_store(state, image_dir, port).await?;
+    }
+    build_status(state).await
+}
+
 /// Report whether the local API is enabled/running and on which port.
 #[tauri::command]
 pub async fn local_api_status_scoped(
@@ -252,6 +312,20 @@ pub async fn local_api_set_port_scoped(
     let session = state.resolve_session(&session_token)?;
     require_permission_for_session(&state, &session, permissions::SETTINGS_EDIT).await?;
     run_set_port(&state, image_dir_for(&app)?, port).await
+}
+
+/// Choose which store the local API serves. Empty string resets to the
+/// primary store. Running servers restart against the new target.
+#[tauri::command]
+pub async fn local_api_set_store_scoped(
+    session_token: String,
+    store_id: String,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<LocalApiStatus, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SETTINGS_EDIT).await?;
+    run_set_store(&state, image_dir_for(&app)?, &store_id).await
 }
 
 /// Rotate the per-install signing secret.

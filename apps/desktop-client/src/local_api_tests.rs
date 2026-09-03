@@ -401,3 +401,125 @@ async fn serves_the_primary_store_database_not_the_global_one() {
     }
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+#[test]
+fn resolve_store_id_prefers_configured_and_degrades() {
+    let global = oz_core::migrations::fresh_db();
+    global
+        .execute(
+            "UPDATE store_profiles SET is_primary = 1 WHERE id = 'default'",
+            [],
+        )
+        .unwrap();
+    global
+        .execute(
+            "INSERT INTO store_profiles (id, name, address, tax_id, currency, timezone, is_primary, created_at, updated_at)
+             VALUES ('store-b', 'B', '', '', 'USD', 'UTC', 0, 'x', 'x')",
+            [],
+        )
+        .unwrap();
+    // Unset → primary.
+    assert_eq!(resolve_store_id(&global), "default");
+    // Configured real store → it.
+    oz_core::Settings::set(&global, SETTINGS_STORE, "store-b").unwrap();
+    assert_eq!(resolve_store_id(&global), "store-b");
+    // Configured but the store was deleted → degrade to primary.
+    global
+        .execute("DELETE FROM store_profiles WHERE id = 'store-b'", [])
+        .unwrap();
+    assert_eq!(resolve_store_id(&global), "default");
+}
+
+#[tokio::test]
+async fn api_writes_land_in_the_audit_log_of_the_served_store() {
+    let tmp = std::env::temp_dir().join(format!("oz-local-api-audit-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    let global = oz_core::migrations::fresh_db();
+    global
+        .execute(
+            "UPDATE store_profiles SET is_primary = 1 WHERE id = 'default'",
+            [],
+        )
+        .unwrap();
+    let manager = platform_core::StoreDatabaseManager::new(tmp.clone(), oz_core::migrations::ALL);
+    let (api_db, api_path) = open_api_store_connection(&manager, "default").unwrap();
+
+    let secret = "d".repeat(32);
+    let sink = StoreAuditSink::new(api_db.clone(), "default".to_string());
+    let handle = start_with_audit(
+        api_db,
+        api_path,
+        tmp.join("images"),
+        secret.clone(),
+        0,
+        Some(std::sync::Arc::new(sink)),
+    )
+    .await
+    .unwrap();
+    let base = format!("http://127.0.0.1:{}", handle.port);
+
+    let token = mint_token(&secret, "audit-script", Some(1)).unwrap().token;
+    let client = reqwest::Client::new();
+    // A successful write and a rejected one — both must be recorded.
+    let ok = client
+        .post(format!("{base}/api/v1/products"))
+        .header("Authorization", format!("Bearer {token}"))
+        .header("X-Admin-Key", &secret)
+        .json(&serde_json::json!({
+            "sku": "AUDIT-001", "name": "Audited",
+            "price": {"minor_units": 100, "currency": "USD"}
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), reqwest::StatusCode::CREATED);
+    let bad = client
+        .post(format!("{base}/api/v1/products"))
+        .header("Authorization", format!("Bearer {token}"))
+        .header("X-Admin-Key", &secret)
+        .json(&serde_json::json!({"sku": "AUDIT-001", "name": "dup", "price": {"minor_units": 1, "currency": "USD"}}))
+        .send()
+        .await
+        .unwrap();
+    assert!(bad.status().is_client_error(), "duplicate must be rejected");
+    // A read must NOT be recorded.
+    let read = client
+        .get(format!("{base}/api/v1/products"))
+        .header("Authorization", format!("Bearer {token}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(read.status(), reqwest::StatusCode::OK);
+
+    // The sink spawns the INSERT — poll until BOTH outcomes are present
+    // (the two rows race each other across spawned tasks).
+    let ui_conn = manager.open_store("default").unwrap();
+    let mut joined = String::new();
+    let mut count = 0usize;
+    for _ in 0..50 {
+        // (user_id, details) — the label lives in user_id; `details`
+        // carries only the numeric status (sanitize keeps it small).
+        let rows: Vec<String> = ui_conn
+            .lock()
+            .unwrap()
+            .prepare("SELECT user_id || ' ' || details FROM audit_log WHERE action = 'api.write'")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .filter_map(Result::ok)
+            .collect();
+        count = rows.len();
+        joined = rows.join("\n");
+        if count >= 2 && joined.contains("\"status\":201") && joined.contains("\"status\":4") {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert_eq!(count, 2, "exactly the two writes must be audited");
+    assert!(joined.contains("\"status\":201"), "success row: {joined}");
+    assert!(joined.contains("\"status\":4"), "failure row: {joined}");
+    assert!(joined.contains("audit-script"), "token label recorded");
+
+    handle.stop_async().await;
+    let _ = std::fs::remove_dir_all(&tmp);
+}

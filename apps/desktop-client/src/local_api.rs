@@ -9,11 +9,13 @@
 //! it is on the settings secret deny-list and never leaves the backend
 //! except via the dedicated mint/status commands).
 //!
-//! The server serves the PRIMARY STORE's database — resolved at start
-//! via `store_profiles.is_primary` and opened as a dedicated WAL
-//! connection to `store-{id}.sqlite` (the same file the scoped Tauri
-//! commands read through `state.resolve_scope()`), so scripts see
-//! exactly what the register UI shows. The `local_api.*` settings
+//! The server serves ONE store's database at a time — by default the
+//! PRIMARY store, switchable via `local_api.store_id` (Settings panel)
+//! — resolved on the GLOBAL DB and opened as a dedicated WAL connection
+//! to `store-{id}.sqlite` (the same file the scoped Tauri commands read
+//! through `state.resolve_scope()`), so scripts see exactly what the
+//! register UI shows. Mutating requests are audited into that store's
+//! `audit_log` via [`StoreAuditSink`]. The `local_api.*` settings
 //! themselves live on the GLOBAL DB (device-level). CORS is
 //! fail-closed (empty allowlist): local scripts are curl/Python/Node,
 //! not browser pages. `GET /api/openapi.json` serves
@@ -35,6 +37,8 @@ pub const SETTINGS_ENABLED: &str = "local_api.enabled";
 pub const SETTINGS_PORT: &str = "local_api.port";
 /// Settings key: per-install signing secret (hex, 32 bytes).
 pub const SETTINGS_SECRET: &str = "local_api.secret";
+/// Settings key: store served by the API (unset = primary store).
+pub const SETTINGS_STORE: &str = "local_api.store_id";
 /// Default listen port — matches `OZ_API_PORT` in the standalone crate.
 pub const DEFAULT_PORT: u16 = 3099;
 /// Default token lifetime for UI-minted keys (30 days).
@@ -96,6 +100,32 @@ pub fn primary_store_id(global: &Connection) -> String {
             |r| r.get::<_, String>(0),
         )
         .unwrap_or_else(|_| "default".to_string())
+}
+
+/// True when `id` names a registered store profile.
+pub fn store_exists(global: &Connection, id: &str) -> bool {
+    global
+        .query_row(
+            "SELECT 1 FROM store_profiles WHERE id = ?1 LIMIT 1",
+            rusqlite::params![id],
+            |_| Ok(true),
+        )
+        .unwrap_or(false)
+}
+
+/// The store the local API serves: `local_api.store_id` when it names a
+/// real profile, else the primary store. A stale setting (deleted
+/// store) silently degrades to primary rather than failing the boot
+/// auto-start — the Settings UI re-validates on the next explicit
+/// switch.
+pub fn resolve_store_id(global: &Connection) -> String {
+    match oz_core::Settings::get(global, SETTINGS_STORE)
+        .ok()
+        .flatten()
+    {
+        Some(id) if store_exists(global, id.trim()) => id.trim().to_string(),
+        _ => primary_store_id(global),
+    }
 }
 
 /// Open the dedicated API connection to a store's database.
@@ -206,7 +236,7 @@ pub fn mint_token(
         .map_err(|e| format!("minting local API token: {e}"))
 }
 
-/// Bind `127.0.0.1:port` and serve the `oz-api` router until the
+/// Binds `127.0.0.1:port` and serve the `oz-api` router until the
 /// returned handle is stopped.
 ///
 /// `port` 0 lets the OS choose (tests); the actual port is reported on
@@ -218,6 +248,20 @@ pub async fn start(
     image_dir: PathBuf,
     secret: String,
     port: u16,
+) -> Result<LocalApiHandle, String> {
+    start_with_audit(db, db_path, image_dir, secret, port, None).await
+}
+
+/// [`start`] with the write-audit sink (the merchant-visible record of
+/// API mutations; see [`StoreAuditSink`]).
+#[allow(clippy::too_many_arguments)]
+pub async fn start_with_audit(
+    db: Arc<Mutex<Connection>>,
+    db_path: PathBuf,
+    image_dir: PathBuf,
+    secret: String,
+    port: u16,
+    audit: Option<Arc<dyn oz_api::api_audit::AuditSink>>,
 ) -> Result<LocalApiHandle, String> {
     // Bind BEFORE building the router so the self-documenting
     // /api/openapi.json handler can advertise the actual port
@@ -258,7 +302,8 @@ pub async fn start(
     // actual bound port and registered INSIDE router()'s layer scope
     // (review MED-4: routes appended to the returned Router escape the
     // CORS/security-headers/trace layers).
-    let app = oz_api::router_with_openapi(api_state, Some(oz_api::spec::local_spec(bound_port)));
+    let app =
+        oz_api::router_with_openapi(api_state, Some(oz_api::spec::local_spec(bound_port)), audit);
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let task = tokio::spawn(async move {
@@ -293,6 +338,77 @@ pub struct LocalApiStatus {
     pub port: u16,
     /// Base URL when running.
     pub base_url: Option<String>,
+    /// The store currently served (resolved: configured or primary).
+    pub store_id: String,
+}
+
+/// Audit sink writing API mutations into the SERVED store's
+/// `audit_log` table, so script writes appear in the merchant's audit
+/// review UI next to register actions.
+///
+/// `record` is fire-and-forget by contract (the trait): the INSERT is
+/// spawned onto the local runtime; a failed write logs a warning and
+/// never surfaces to the API client (the audit trail must not become a
+/// request dependency). `user_id` carries the token LABEL — API tokens
+/// are not bound to register users, and inventing a synthetic user row
+/// would pollute the staff table.
+pub struct StoreAuditSink {
+    store: Arc<Mutex<Connection>>,
+    store_id: String,
+}
+
+impl StoreAuditSink {
+    /// Sink writing to the given store connection (the API's own
+    /// dedicated WAL connection — same file the handlers mutate).
+    pub fn new(store: Arc<Mutex<Connection>>, store_id: String) -> Self {
+        Self { store, store_id }
+    }
+}
+
+impl oz_api::api_audit::AuditSink for StoreAuditSink {
+    fn record(&self, event: &oz_api::api_audit::ApiWriteEvent) {
+        let store = self.store.clone();
+        let store_id = self.store_id.clone();
+        let event = event.clone();
+        tokio::spawn(async move {
+            // /api/v1/<segment>/<rest…> → target_type + target_id.
+            let mut segs = event.path.trim_start_matches("/api/v1/").split('/');
+            let target_type = segs.next().filter(|s| !s.is_empty()).map(str::to_string);
+            let target_id = segs.next().filter(|s| !s.is_empty()).map(str::to_string);
+            let details = serde_json::json!({
+                "method": event.method,
+                "path": event.path,
+                "status": event.status,
+                // NOT "token" — AUD-06 redacts that key name in details
+                // payloads (correctly so, for every other writer).
+                "token_label": event.token_label,
+                "store_id": store_id,
+            })
+            .to_string();
+            let entry = oz_core::AuditEntry {
+                id: uuid::Uuid::now_v7().to_string(),
+                user_id: event
+                    .token_label
+                    .clone()
+                    .unwrap_or_else(|| "api".to_string()),
+                action: "api.write".to_string(),
+                target_type,
+                target_id,
+                details,
+                outcome: if event.status < 400 {
+                    "success"
+                } else {
+                    "failure"
+                }
+                .to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+            };
+            let conn = store.lock().await;
+            if let Err(e) = oz_core::Store::new(&conn).log_audit(&entry) {
+                tracing::warn!(error = %e, "local API audit write failed");
+            }
+        });
+    }
 }
 
 #[cfg(test)]

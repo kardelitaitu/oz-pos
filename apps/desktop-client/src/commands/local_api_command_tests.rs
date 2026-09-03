@@ -244,3 +244,48 @@ async fn rotate_secret_swaps_key_and_keeps_server_up() {
     );
     let _ = std::fs::remove_dir_all(image_dir.parent().unwrap());
 }
+
+#[tokio::test]
+async fn set_store_restarts_server_against_new_target() {
+    let (state, image_dir, _port) = lifecycle_state();
+    // Register a second store profile on the global DB.
+    {
+        let db = state.db.lock().await;
+        db.execute(
+            "INSERT INTO store_profiles (id, name, address, tax_id, currency, timezone, is_primary, created_at, updated_at)
+             VALUES ('store-b', 'B', '', '', 'USD', 'UTC', 0, 'x', 'x')",
+            [],
+        )
+        .unwrap();
+    }
+    run_set_enabled(&state, image_dir.clone(), true)
+        .await
+        .unwrap();
+    assert_eq!(build_status(&state).await.unwrap().store_id, "default");
+
+    let s = run_set_store(&state, image_dir.clone(), "store-b")
+        .await
+        .unwrap();
+    assert!(s.running, "store switch keeps the server up");
+    assert_eq!(s.store_id, "store-b");
+    // store-b's file exists and is the served DB.
+    assert!(
+        image_dir
+            .parent()
+            .unwrap()
+            .join("store-store-b.sqlite")
+            .exists()
+    );
+
+    // Unknown store rejected without touching the running server.
+    let err = run_set_store(&state, image_dir.clone(), "ghost")
+        .await
+        .unwrap_err();
+    assert!(matches!(err, AppError::Invalid(_)));
+    assert_eq!(build_status(&state).await.unwrap().store_id, "store-b");
+
+    // Empty resets to primary.
+    let s = run_set_store(&state, image_dir.clone(), "").await.unwrap();
+    assert_eq!(s.store_id, "default");
+    let _ = std::fs::remove_dir_all(image_dir.parent().unwrap());
+}
