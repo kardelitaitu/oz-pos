@@ -130,7 +130,7 @@ function withStrictCSP(resp: Response): Response {
     "script-src 'self' https://static.cloudflareinsights.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "img-src 'self' data:",
-    "font-src 'self' https://fonts.gstatic.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
     "connect-src 'self' https://ozpos.my.id https://*.code.run https://*.ozpos.my.id https://open.er-api.com",
     "object-src 'none'",
     "base-uri 'self'",
