@@ -680,8 +680,99 @@ fn security_coverage_walk_every_operation() {
     );
 }
 
-// ── Drift-guard assertion 4 (spec 0047 §3) — READ_KEY_MAP coverage ──
+// ── Scope tagging (x-oz-scope) ───────────────────────────────────────
 
+/// Every operation in the merged document must carry `x-oz-scope`, and
+/// the scope must match the path family: the shared `/api/v1/*` surface
+/// and the self-documenting `/api/openapi.json` are `"both"`; host
+/// health/metrics, sync, webhooks, and the docs UI pages are `"cloud"`.
+/// This is the contract scripts use to decide whether an endpoint
+/// exists on their desktop local API.
+#[test]
+fn every_operation_carries_correct_scope() {
+    let spec = openapi_spec();
+    let paths = spec["paths"].as_object().unwrap();
+
+    fn expected_scope(path: &str) -> &'static str {
+        if path.starts_with("/api/sync/")
+            || path.starts_with("/api/webhooks/")
+            || path == "/health"
+            || path == "/api/health"
+            || path == "/metrics"
+            || path == "/api/docs"
+            || path == "/api/docs/scalar"
+        {
+            "cloud"
+        } else {
+            "both"
+        }
+    }
+
+    let mut violations = Vec::new();
+    let mut seen = 0usize;
+    for (path, item) in paths {
+        for (verb, operation) in item.as_object().unwrap() {
+            if !oz_api::spec::is_operation_key(verb) {
+                continue;
+            }
+            seen += 1;
+            let want = expected_scope(path);
+            let got = operation.get("x-oz-scope").and_then(|v| v.as_str());
+            if got != Some(want) {
+                violations.push(format!(
+                    "{verb} {path}: x-oz-scope={got:?}, expected \"{want}\""
+                ));
+            }
+        }
+    }
+    assert!(seen >= 35, "only {seen} operations walked — broken?");
+    assert!(
+        violations.is_empty(),
+        "Scope drift — {} violation(s):\n{}",
+        violations.len(),
+        violations.join("\n")
+    );
+}
+
+/// The merged document must not lose schemas the cloud paths reference —
+/// guards the base/cloud schema split against accidental deletion.
+#[test]
+fn every_merged_ref_resolves() {
+    fn collect(v: &Value, out: &mut Vec<String>) {
+        match v {
+            Value::Object(map) => {
+                for c in map.values() {
+                    collect(c, out);
+                }
+            }
+            Value::Array(arr) => {
+                for c in arr {
+                    collect(c, out);
+                }
+            }
+            Value::String(s) => {
+                if s.starts_with("#/components/") {
+                    out.push(s.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+    let spec = openapi_spec();
+    let mut refs = Vec::new();
+    collect(&spec, &mut refs);
+    assert!(!refs.is_empty());
+    for pointer in &refs {
+        let mut cur = &spec;
+        for seg in pointer.trim_start_matches("#/").split('/') {
+            cur = cur
+                .get(seg)
+                .unwrap_or_else(|| panic!("dangling $ref {pointer} in merged spec"));
+        }
+    }
+}
+
+// ── Drift-guard assertion 4 (spec 0047 §3) — READ_KEY_MAP coverage ──
 /// Every protected GET operation in the spec must have a corresponding
 /// entry in `oz_api::read_tiers::READ_KEY_MAP`.  Public/health/docs and
 /// sync routes are excluded (they keep their own gating).
