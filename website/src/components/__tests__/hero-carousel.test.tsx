@@ -21,6 +21,7 @@ const DESCRIPTIONS: Record<SlideId, string> = {
   warehouse: 'Stock, transfers, and purchase orders',
   topology: 'Visual editor',
 };
+const COMING_SOON = 'Screenshot coming soon';
 
 describe('HeroCarousel', () => {
   beforeEach(() => {
@@ -41,7 +42,7 @@ describe('HeroCarousel', () => {
     document.body.appendChild(container);
     const root = createRoot(container);
     await act(async () => {
-      root.render(<HeroCarousel labels={LABELS} descriptions={DESCRIPTIONS} />);
+      root.render(<HeroCarousel labels={LABELS} descriptions={DESCRIPTIONS} comingSoon={COMING_SOON} />);
     });
     return {
       container,

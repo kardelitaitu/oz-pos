@@ -112,7 +112,8 @@
       "retailDesc": "Kasir cepat dengan pencarian produk dan scan barcode",
       "kitchenDesc": "Antrean pesanan KDS untuk dapur",
       "warehouseDesc": "Stok, transfer antar gudang, dan PO",
-      "topologyDesc": "Editor visual untuk toko, terminal, dan gudang"
+      "topologyDesc": "Editor visual untuk toko, terminal, dan gudang",
+      "screenshotComingSoon": "Tangkapan layar segera hadir"
     }
   },
   "techStack": {

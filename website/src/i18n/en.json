@@ -112,7 +112,8 @@
       "retailDesc": "Ring up sales with product search and barcode scan",
       "kitchenDesc": "KDS order queue for the kitchen line",
       "warehouseDesc": "Stock, transfers, and purchase orders",
-      "topologyDesc": "Visual editor for stores, terminals, and warehouses"
+      "topologyDesc": "Visual editor for stores, terminals, and warehouses",
+      "screenshotComingSoon": "Screenshot coming soon"
     }
   },
   "techStack": {

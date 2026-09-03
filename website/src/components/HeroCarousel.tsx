@@ -10,6 +10,8 @@ interface Props {
   labels: Record<SlideId, string>;
   /** Localized short descriptions under each label. */
   descriptions: Record<SlideId, string>;
+  /** Localized "screenshot coming soon" caption on placeholder slides. */
+  comingSoon: string;
 }
 
 const DWELL_MS = 5000;
@@ -24,7 +26,7 @@ function slideContent(id: SlideId): ReactNode | undefined {
   return undefined;
 }
 
-export default function HeroCarousel({ labels, descriptions }: Props) {
+export default function HeroCarousel({ labels, descriptions, comingSoon }: Props) {
   const [index, setIndex] = useState(0);
   const [transitionMs, setTransitionMs] = useState(AUTO_MS);
   const [paused, setPaused] = useState(false);
@@ -106,7 +108,7 @@ export default function HeroCarousel({ labels, descriptions }: Props) {
                 <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
                   <p className="text-lg font-semibold text-ink/70">{labels[id]}</p>
                   <p className="max-w-sm px-6 text-sm text-muted">{descriptions[id]}</p>
-                  <p className="mt-2 text-[11px] uppercase tracking-widest text-muted/60">Screenshot coming soon</p>
+                  <p className="mt-2 text-[11px] uppercase tracking-widest text-muted/60">{comingSoon}</p>
                 </div>
               )}
             </SlideWindow>
