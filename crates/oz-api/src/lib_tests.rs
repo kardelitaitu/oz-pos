@@ -1408,3 +1408,54 @@ async fn write_routes_accept_admin_key_when_configured() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::CREATED);
 }
+
+// ── router_with_openapi (review MED-4 regression) ────────────────
+
+#[tokio::test]
+async fn docs_route_is_served_inside_the_outer_layers() {
+    let state = AppState::test(fresh_conn());
+    let app = router_with_openapi(
+        state,
+        Some(serde_json::json!({"openapi": "3.1.0", "x-test": true})),
+    );
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/openapi.json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    // The route must sit INSIDE the security-headers layer — it did not
+    // when the desktop appended it to the returned Router<()> (MED-4).
+    assert_eq!(
+        resp.headers()
+            .get("x-content-type-options")
+            .and_then(|v| v.to_str().ok()),
+        Some("nosniff"),
+        "docs route must carry the security headers every other route gets"
+    );
+    let body = body_json(resp).await;
+    assert_eq!(body["x-test"], serde_json::json!(true));
+}
+
+#[tokio::test]
+async fn plain_router_does_not_serve_the_docs_route() {
+    let app = test_app();
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/openapi.json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    // The document is only served when explicitly injected. Unknown
+    // paths hit the protected group's auth-layered fallback (axum's
+    // `.layer` wraps the not-found service too) — 401 without a bearer,
+    // never a 200 with a spec body.
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}

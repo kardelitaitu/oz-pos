@@ -54,7 +54,7 @@ pub mod spec;
 use std::sync::Arc;
 
 use axum::{
-    Router,
+    Json, Router,
     http::HeaderValue,
     middleware,
     routing::{get, patch, post, put},
@@ -247,6 +247,19 @@ impl AppState {
 /// - `GET /api/v1/products/:sku`
 /// - `GET /api/v1/categories`
 pub fn router(state: AppState) -> Router {
+    router_with_openapi(state, None)
+}
+
+/// [`router`] with an optional pre-built OpenAPI document served
+/// publicly at `GET /api/openapi.json`.
+///
+/// The document is a value (not a builder closure) because the desktop
+/// local API computes it once at bind time — it needs the actual bound
+/// port for `servers[0].url`. Registering it here rather than at the
+/// call site keeps the route INSIDE the CORS / security-headers / trace
+/// layer scope that wraps every other route (review MED-4: a route
+/// appended to the returned `Router<()>` escapes all three).
+pub fn router_with_openapi(state: AppState, openapi_json: Option<serde_json::Value>) -> Router {
     let cors = build_cors(&state.cors_origins);
     // Clone for the stateful auth middleware (the original moves into
     // `.with_state` at the end).
@@ -267,6 +280,16 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/settings",
             get(routes::settings::get_settings_handler).put(routes::settings::put_settings_handler),
         );
+    let public = match openapi_json {
+        Some(spec) => public.route(
+            "/api/openapi.json",
+            get(move || {
+                let spec = spec.clone();
+                async move { Json(spec) }
+            }),
+        ),
+        None => public,
+    };
 
     let protected = Router::new()
         .route(
