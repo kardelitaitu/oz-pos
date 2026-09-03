@@ -22,31 +22,14 @@ const FOOTER_SRC = readFileSync(
 // ─── Link structure tests ────────────────────────────────────────────
 
 describe('Footer link structure', () => {
-  it('defines all 4 vertical keys in the source', () => {
-    const verticalKeys = ['kafe', 'minimarket', 'warung', 'restoran'];
-    for (const key of verticalKeys) {
-      expect(FOOTER_SRC).toContain(`'${key}'`);
-    }
-  });
-
-  it('maps vertical keys to untuk-* hrefs via template literal', () => {
-    // The vertical links are generated dynamically: `untuk-${key}`
-    expect(FOOTER_SRC).toContain('`untuk-${key}`');
-  });
-
   it('renders 2 legal links (privacy and terms)', () => {
     expect(FOOTER_SRC).toContain("'legal/privacy'");
     expect(FOOTER_SRC).toContain("'legal/terms'");
   });
 
   it('uses getRelativeLocaleUrl for navigation links', () => {
-    // Vertical links use 1 getRelativeLocaleUrl inside .map(), legal has 2
     const matches = FOOTER_SRC.match(/getRelativeLocaleUrl\(/g);
-    expect(matches).toHaveLength(3);
-  });
-
-  it('has aria-label on the business verticals nav', () => {
-    expect(FOOTER_SRC).toContain("aria-label={t(locale, 'footer.business')}");
+    expect(matches).toHaveLength(2);
   });
 
   it('has aria-label on the legal nav', () => {
@@ -54,9 +37,8 @@ describe('Footer link structure', () => {
   });
 
   it('has footer-link class on navigation links', () => {
-    // 1 template for verticals + 2 static for legal = 3 occurrences
     const footerLinkMatches = FOOTER_SRC.match(/class="footer-link/g);
-    expect(footerLinkMatches).toHaveLength(3);
+    expect(footerLinkMatches).toHaveLength(2);
   });
 });
 
@@ -65,20 +47,24 @@ describe('Footer link structure', () => {
 describe('Footer link targets exist', () => {
   const pagesDir = join(import.meta.dirname, '..', '..', 'pages', '[locale]');
 
-  it('untuk-kafe page exists', () => {
-    expect(() => readFileSync(join(pagesDir, 'untuk-kafe.astro'))).not.toThrow();
+  it('cafe page exists', () => {
+    expect(() => readFileSync(join(pagesDir, 'cafe.astro'))).not.toThrow();
   });
 
-  it('untuk-minimarket page exists', () => {
-    expect(() => readFileSync(join(pagesDir, 'untuk-minimarket.astro'))).not.toThrow();
+  it('minimarket page exists', () => {
+    expect(() => readFileSync(join(pagesDir, 'minimarket.astro'))).not.toThrow();
   });
 
-  it('untuk-warung page exists', () => {
-    expect(() => readFileSync(join(pagesDir, 'untuk-warung.astro'))).not.toThrow();
+  it('warung page exists', () => {
+    expect(() => readFileSync(join(pagesDir, 'warung.astro'))).not.toThrow();
   });
 
-  it('untuk-restoran page exists', () => {
-    expect(() => readFileSync(join(pagesDir, 'untuk-restoran.astro'))).not.toThrow();
+  it('restaurant page exists', () => {
+    expect(() => readFileSync(join(pagesDir, 'restaurant.astro'))).not.toThrow();
+  });
+
+  it('warehouse page exists', () => {
+    expect(() => readFileSync(join(pagesDir, 'warehouse.astro'))).not.toThrow();
   });
 
   it('legal/privacy page exists', () => {
@@ -161,5 +147,41 @@ describe('Footer copyright', () => {
   it('has Discord social link', () => {
     expect(FOOTER_SRC).toContain('discord.gg');
     expect(FOOTER_SRC).toContain('aria-label="Discord"');
+  });
+
+  it('has X, Instagram, Facebook, and Telegram social links', () => {
+    // General platform web URLs — real profiles not created yet.
+    expect(FOOTER_SRC).toContain('https://x.com');
+    expect(FOOTER_SRC).toContain('aria-label="X (Twitter)"');
+    expect(FOOTER_SRC).toContain('https://www.instagram.com');
+    expect(FOOTER_SRC).toContain('aria-label="Instagram"');
+    expect(FOOTER_SRC).toContain('https://www.facebook.com');
+    expect(FOOTER_SRC).toContain('aria-label="Facebook"');
+    expect(FOOTER_SRC).toContain('https://telegram.org');
+    expect(FOOTER_SRC).toContain('aria-label="Telegram"');
+  });
+
+  it('all social links open safely in a new tab', () => {
+    // Every social anchor carries target=_blank + rel=noopener noreferrer.
+    const socials = ['Discord', 'X (Twitter)', 'Instagram', 'Facebook', 'Telegram'];
+    for (const label of socials) {
+      const anchorMatch = FOOTER_SRC.match(
+        new RegExp(`href="[^"]*"\\s+target="_blank"\\s+rel="noopener noreferrer"[^>]*aria-label="${label.replace(/[()]/g, '\\$&')}"`),
+      );
+      expect(anchorMatch, `missing safe-anchor attrs on ${label}`).not.toBeNull();
+    }
+  });
+
+  it('social links use brand-color hover tints', () => {
+    // Same effect as Discord: muted gray -> brand color on hover.
+    const tints = [
+      ['Discord', '#5865F2'],
+      ['Instagram', '#E4405F'],
+      ['Facebook', '#1877F2'],
+      ['Telegram', '#229ED9'],
+    ] as const;
+    for (const [, color] of tints) {
+      expect(FOOTER_SRC).toContain(`hover:text-[${color}]`);
+    }
   });
 });

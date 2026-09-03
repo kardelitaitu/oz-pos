@@ -27,7 +27,7 @@ interface Props {
   contactHref: string;
 }
 
-export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
+export default function PricingGrid({ tiers, locale, downloadHref, contactHref }: Props) {
   const [billing, setBilling] = useState<BillingPeriod>('yearly');
   const activeTiers = tiers;
   const trackRef = useRef<HTMLDivElement>(null);
@@ -105,7 +105,7 @@ export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
         </div>
       </div>
 
-      <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+      <div className="mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 items-stretch">
         {activeTiers.map((tier) => {
           const isFree = tier.tierKey === 'free';
           const isEnterprise = tier.tierKey === 'enterprise';
@@ -137,24 +137,28 @@ export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
               ].join(' ')}
             >
               {tier.highlight && (
-                <span className="absolute -top-3.5 right-6 z-10 inline-flex items-center gap-1 rounded-full bg-primary px-3 py-0.5 text-xs font-bold text-white shadow-md uppercase tracking-wider text-[10px]">
-                  ★ {t(locale, 'pricingPage.mostPopular')}
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 z-10 inline-flex items-center rounded-full bg-primary px-3 py-0.5 text-[11px] font-bold text-white shadow-sm uppercase tracking-wider">
+                  {t(locale, 'pricingPage.mostPopular')}
                 </span>
               )}
               {/* Row 1: Title */}
               <h3 className="text-lg font-semibold">{tier.name}</h3>
               {/* Row 2: Price */}
-              <div className="mt-4">
+              <div className="mt-4 min-h-[58px] flex flex-col justify-start">
                 <p className="text-2xl font-bold whitespace-nowrap">
                   {isEnterprise ? 'Custom' : price.price}
                   {!isEnterprise && price.period && <span className="text-xs font-normal text-muted"> {price.period}</span>}
                 </p>
-                {billing === 'yearly' && !isFree && !isEnterprise && (
-                  <p className="mt-1 text-xs text-muted">{t(locale, 'pricingPage.billing.billedYearly')}</p>
+                {billing === 'yearly' && !isFree && !isEnterprise ? (
+                  <p className="mt-1 text-xs text-muted leading-tight">{t(locale, 'pricingPage.billing.billedYearly')}</p>
+                ) : (
+                  <span className="mt-1 block h-4" aria-hidden="true" />
                 )}
               </div>
               {/* Row 3: Description */}
-              <p className="mt-4 text-sm text-muted leading-relaxed">{tier.description}</p>
+              <div className="mt-4 min-h-[64px] flex items-start">
+                <p className="text-sm text-muted leading-relaxed">{tier.description}</p>
+              </div>
               {/* Row 4: Features — fills remaining space */}
               <ul className="mt-6 flex-1 space-y-2 text-sm">
                 {tier.features.map((f) => (
@@ -171,7 +175,14 @@ export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
                 {isFree ? (
                   <a
                     href={downloadHref}
-                    className="block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:opacity-90"
+                    className="block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white whitespace-nowrap transition hover:opacity-90"
+                  >
+                    {tier.cta}
+                  </a>
+                ) : isEnterprise ? (
+                  <a
+                    href={contactHref}
+                    className="block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white whitespace-nowrap transition hover:opacity-90"
                   >
                     {tier.cta}
                   </a>

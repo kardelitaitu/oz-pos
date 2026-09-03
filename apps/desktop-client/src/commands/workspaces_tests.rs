@@ -433,3 +433,90 @@ async fn scoped_assignment_workspace_dimension_filters_for_store_listing() {
         "out-of-scope workspace type must be hidden, got {rows:?}"
     );
 }
+
+#[tokio::test]
+async fn list_workspaces_for_store_scoped_filters_by_tier_entitlement() {
+    let (mut state, _dir) = picker_state();
+    // Add a kds instance to store-a. The Free tier (default subscription)
+    // does NOT allow kds — only store-pos, restaurant-pos, admin.
+    // The scoped listing must filter it out.
+    {
+        let conn = state.db_manager.open_store("store-a").unwrap();
+        let db = conn.lock().unwrap();
+        Store::new(&db)
+            .create_workspace_instance("ws-a-kds", "kds", "store-a", "KDS", "", None)
+            .unwrap();
+    }
+    mint_session(
+        &mut state,
+        "owner-token",
+        "user-owner",
+        "role-owner",
+        "store-a",
+    );
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let rows =
+        list_workspaces_for_store_scoped("owner-token".into(), "store-a".into(), app.state())
+            .await
+            .unwrap();
+    // store-pos (ws-a-1) is allowed by the Free tier → must be present.
+    assert!(
+        rows.iter().any(|d| d.type_key == "store-pos"),
+        "Free tier must still list store-pos, got {rows:?}"
+    );
+    // kds is NOT allowed by the Free tier → must be filtered out.
+    assert!(
+        rows.iter().all(|d| d.type_key != "kds"),
+        "Free tier must not list kds, got {rows:?}"
+    );
+}
+
+#[tokio::test]
+async fn list_workspaces_scoped_rejects_tampered_subscription_signature() {
+    // Parity with create_session (round 6) and every other subscription-
+    // trusting command: the tenant_subscription row's RSA signature must
+    // be verified before its tier/allowed-types are honored. A tampered
+    // row (forged pro tier + kds, invalid signature) must fail closed.
+    let (mut state, _dir) = picker_state();
+    // Tamper the subscription before minting the session.
+    {
+        let db = state.db.lock().await;
+        db.execute(
+            "UPDATE tenant_subscription
+             SET tier_key = 'pro',
+                 allowed_types_json = '[\"store-pos\",\"restaurant-pos\",\"admin\",\"kds\"]',
+                 signature = 'TAMPERED_SIGNATURE'
+             WHERE tenant_id = 'default'",
+            [],
+        )
+        .unwrap();
+    }
+    mint_session(
+        &mut state,
+        "owner-token",
+        "user-owner",
+        "role-owner",
+        "store-a",
+    );
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = list_workspaces_scoped("owner-token".into(), app.state()).await;
+    let err = result.expect_err("tampered subscription must fail the scoped listing");
+    match err {
+        AppError::Invalid(msg) => {
+            assert!(
+                msg.contains("signature") || msg.contains("subscription"),
+                "error must name the signature gate, got: {msg}"
+            );
+        }
+        AppError::Core { .. } => {}
+        other => panic!("expected AppError::Invalid/Core, got {other:?}"),
+    }
+}

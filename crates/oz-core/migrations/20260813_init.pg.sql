@@ -428,6 +428,17 @@ CREATE TABLE IF NOT EXISTS snapshot_versions (
     updated_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
 );
 
+CREATE TABLE IF NOT EXISTS webhook_endpoints (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL DEFAULT 'default',
+    url         TEXT NOT NULL,
+    secret      TEXT NOT NULL,
+    events      TEXT NOT NULL DEFAULT '["*"]',
+    active      BIGINT NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS exchange_rates (
     id              TEXT PRIMARY KEY,
     from_currency   TEXT NOT NULL REFERENCES currencies(code),
@@ -1601,6 +1612,9 @@ CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id);
 
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
+CREATE INDEX IF NOT EXISTS idx_webhook_tenant
+    ON webhook_endpoints(tenant_id, active);
+
 CREATE INDEX IF NOT EXISTS idx_workspace_instances_bound_location
     ON workspace_instances(bound_location_id);
 
@@ -1741,6 +1755,7 @@ ON CONFLICT DO NOTHING;
 --   image_refs
 --   sale_lines
 --   snapshot_versions
+--   webhook_endpoints
 --
 -- ── Row-Level Security: tenant isolation (PG-only) ─────────────────────
 -- Curated coverage list (RLS_TABLES in scripts/generate-pg-migration.py);

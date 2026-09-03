@@ -1,5 +1,213 @@
 
 
+## 2026-09-03 — TDD round 1: staff store-scope leak in workspace resolution (oz-core)
+
+**Problem:** The home-screen role-gating change (37b7530c) removed
+`role-staff` from the owner bypass in `list_workspaces_inner` and
+`verify_instance_access` so staff only sees assigned workspaces. The
+TDD audit found the `user_store_access` multi-store check was nested
+INSIDE the bypass block in both functions — so staff, no longer in the
+bypass, skipped the store-scope gate entirely (fail-open): a staff user
+with access limited to store A could enumerate instances in store B via
+`role_workspace_types` fallback, and could open a session in store B
+through `verify_instance_access`.
+
+**Solution:** Hoisted the `user_store_access` check to step 0 in both
+functions so it applies to every role before any bypass/assignment/
+role-type resolution. Fail-closed: rows exist + store not in rows →
+empty list / deny. Red tests first (2 new):
+- `list_workspaces_staff_respects_user_store_access_out_of_scope_store_denied`
+- `verify_instance_access_staff_respects_user_store_access_out_of_scope_denied`
+
+**Commits:** 8ca5af04 (round-1 TDD commit).
+**Test counts:** oz-core workspaces 61→63; desktop-client workspaces 14
+still green; clippy -D warnings clean; cargo fmt clean.
+
+## 2026-09-03 — TDD round 2: WorkspaceHome role-matrix gap pinning (ui)
+
+**Problem:** The role-gating change (37b7530c, f93879b7) shipped tests
+for owner/staff/auditor edges but the WorkspaceHome matrix had untested
+cells: manager + Add-card-hidden-with-workspaces, manager + Tools shown,
+admin Tools shown, admin empty-state Add card, auditor Tools hidden,
+staff Add-card-hidden-with-workspaces. Nothing pinned the manager/admin
+half of the rule table, so a regression there would pass CI silently.
+
+**Solution:** Added mockAdminUser() and 6 matrix tests pinning every
+untested role × state cell. All passed on first run (behavior was
+already correct) — these are regression pins, not Red→Green fixes.
+
+**Commits:** bd54fd31 (round-2 TDD commit).
+**Test counts:** WorkspaceHome.test.tsx 36→42; i18n 20; a11y 1 — all
+green. tsc + eslint clean.
+**Note:** staff.ftl had concurrent uncommitted edits mid-round (bare
+`{value}` in a comment tripped the bare-placeholder scan once); resolved
+by the concurrent author — not my scope, left untouched.
+
+## 2026-09-03 — TDD round 3: staff entitlement composition pin + IPC tier-filter leak (oz-core, desktop-client)
+
+**Problem:** Two more gaps from the role-gating audit.
+
+1. oz-core `list_workspaces_with_entitlement` (ADR #5 tier filter) with
+   the new staff fallback path was never tested together — a Free-tier
+   staff user explicitly assigned kds + store-pos should see only
+   store-pos. Regression pin; green on first run (composition correct).
+2. REAL fail-open: `list_workspaces_for_store_scoped` (the terminal-
+   management listing, used by TerminalManagementScreen) called
+   `store.list_workspaces(...)` with NO subscription entitlement filter,
+   while its sibling `list_workspaces_scoped` used
+   `list_workspaces_with_entitlement(...)`. A Free-tier session could
+   enumerate tier-disallowed workspace types (kds/warehouse) through the
+   terminal screen — the exact C2.2/ADR #5 gate the picker enforces.
+
+**Solution:**
+- New oz-core pin: `list_workspaces_with_entitlement_staff_filters_by_tier_after_assignment`.
+- Red first: `list_workspaces_for_store_scoped_filters_by_tier_entitlement`
+  failed showing the kds leak. Green: the command now loads the tenant
+  subscription from the GLOBAL DB (clock-rollback validated, Free
+  fallback) and calls `list_workspaces_with_entitlement`, mirroring
+  `list_workspaces_scoped`.
+
+**Commits:** d67b3f6a (round-3 TDD commit).
+**Test counts:** oz-core workspaces 63→64; desktop-client workspaces
+14→15; fmt + clippy clean.
+**Follow-up (resolved):** audited the remaining `store.list_workspaces(`
+call sites. The only other one is the pre-session picker
+(`workspaces.rs:138`), which feeds the home-screen Workspaces cards —
+kept role-only by explicit design decision (user spec: "for this area we
+only need user role"). Tier filtering remains on the post-login surfaces
+(scoped listing, terminal-management listing, creation quota), all
+verified.
+
+## 2026-09-03 — TDD round 4: session creation bypasses tier entitlement (desktop + tablet auth)
+
+**Problem:** `create_session` validated role access
+(`verify_instance_access`) but never checked the tenant subscription
+(ADR #5). The default tenant is Free (allows only store-pos /
+restaurant-pos / admin) yet a session into `default-kds` succeeded: a
+downgraded tenant could keep opening sessions in workspace types their
+subscription no longer covers, even though every post-login listing
+hides those types. Home-screen cards are role-gated by design, so the
+session boundary is the last line of defense — it was open.
+
+**Solution:** Red first — `create_session_denies_tier_disallowed_workspace_type`
+(desktop + tablet parity) confirmed the kds session was created. Green:
+both `create_session` commands now load `TenantSubscription` from the
+global DB (clock-rollback validated, Free fallback) and fail closed with
+`AppError::Invalid` when `allows_workspace_type` is false. Existing
+tests all use Free-allowed types (restaurant-pos), so no breakage.
+
+**Commits:** 8d12dc6b (round-4 TDD commit).
+**Test counts:** desktop auth 43→44 (incl. security integration);
+tablet auth 15→16; fmt clean.
+**Note:** mirroring the tablet `create_session` (no picker-ticket arg)
+kept the two clients' entitlement behavior identical — verified by the
+parity test.
+
+## 2026-09-03 — TDD round 5: POS-instance quota counts non-POS types (oz-core, topology)
+
+**Problem:** `max_pos_instances` is documented as "Maximum POS register
+instances per store" (subscription.rs:146-148), but both quota gates
+counted **every** active workspace type:
+
+1. `Store::enforce_instance_quota` (workspaces_lifecycle.rs) — used by
+   `create_workspace_instance_scoped`
+2. `apply_topology_diff`'s inline quota check (topology/commands.rs)
+
+Both used `count_active_instances(store_id)`, which sums kds, warehouse,
+inventory and admin instances too. A store with 0 POS registers but 1
+legacy kds instance reported `current=1 >= limit=1` and denied creating
+the FIRST register — a tier-downgraded tenant (or any store with a
+non-POS instance) could never add a register their subscription allows.
+
+**Solution:** Red first — `enforce_instance_quota_non_pos_types_do_not_inflate_pos_count`
+failed showing the kds inflation (`SubscriptionLimitExceeded("...already
+has 1")`). Green: added `Store::count_active_pos_instances` (filters
+`type_key IN ('store-pos','restaurant-pos')`, same archived/suspended
+exclusion) and switched both quota gates to it. `auto_recover_instances`
+was left as-is (restores any suspended type, not a creation gate).
+
+**Commits:** 4a90b7a5 (round-5 TDD commit).
+**Test counts:** oz-core workspaces 64→65; desktop topology 330 still
+green; clippy -D warnings clean; fmt clean.
+**Follow-up:** consider whether `auto_recover_instances` should also
+count POS-only — it uses `max_pos_instances` as the restore budget but
+counts all types; behavior is intentional (restore any suspended
+workspace), so left untouched.
+
+## 2026-09-03 — TDD round 6: create_session trusts tampered subscription without signature verification (desktop + tablet auth)
+
+**Problem:** `create_session` (round-4 fix) loaded the tenant subscription
+and checked `allows_workspace_type` but never called
+`sub.verify_signature()`. Meanwhile `create_staff_scoped`, workspace
+creation, history, inventory, store profiles, and topology Apply all
+verify the RSA signature before trusting the row's tier/allowed-types.
+A tampered `tenant_subscription` row (tier_key → pro, allowed_types_json
+→ +kds, signature → invalid base64) silently opened a kds session — the
+signature is the only thing binding the offline DB row to the license
+server's grant.
+
+**Solution:** Red first — `create_session_rejects_tampered_subscription_signature`
+(desktop + tablet parity) confirmed the forged pro row opened a kds
+session. Green: both `create_session` commands now call
+`sub.verify_signature()?` after loading, matching the other 13
+subscription-trusting call sites. The bootstrap fallback (`unwrap_or_else
+→ bootstrap_free()`) creates a row with `BOOTSTRAP_FREE` signature
+which passes verification in debug builds; in release builds the call
+site must not reach the fallback in production (a real subscription row
+is written by license activation).
+
+**Commits:** 0b530a9e (round-6 TDD commit).
+**Test counts:** desktop auth 44→45 (incl. security integration);
+tablet auth 16→17; fmt clean.
+**Follow-up:** the listing paths (`list_workspaces_scoped`,
+`list_workspaces_for_store_scoped`) also load the subscription without
+`verify_signature()` — a tampered row would show tier-disallowed types
+in the listing, though session creation into them is now blocked.
+Consider adding signature verification there for complete defense-in-depth.
+
+## 2026-09-03 — TDD round 7: listing paths trust tampered subscription without signature verification (desktop workspaces)
+
+**Problem:** Round 6 closed the session-creation path but the listing
+paths (`list_workspaces_scoped`, `list_workspaces_for_store_scoped`)
+still loaded the subscription without `verify_signature()`. A tampered
+`tenant_subscription` row (forged pro tier + kds, invalid signature)
+would show tier-disallowed types in the home-screen listing and
+terminal-management screen, though session creation into them was now
+blocked. Defense-in-depth gap: the listing is the UI gate — users see
+cards they can't open, which is both confusing and inconsistent with
+the other 14 subscription-trusting call sites.
+
+**Solution:** Red first — `list_workspaces_scoped_rejects_tampered_subscription_signature`
+confirmed the forged pro row listed store-pos. Green: both listing
+commands now call `sub.verify_signature()?` after loading, matching
+create_session (round 6) and the other subscription-trusting commands.
+
+**Commits:** fd43ea1c (round-7 TDD commit).
+**Test counts:** desktop auth 45; desktop workspaces 15→16; fmt clean.
+**Scope:** tablet client has no scoped listing commands — no fix needed.
+**Note:** round-6 commit needed `--no-verify` (user-approved): the
+pre-commit i18n gate tripped on a concurrent agent's uncommitted
+LocalApiSection.tsx (missing settings-local-api-rotate* keys in both
+FTL bundles) — not my scope, left untouched.
+
+## 2026-09-03 — TDD round 8: manager STAFF_UPDATE positive path pin (desktop-client)
+
+**Problem:** The Manager preset grants STAFF_UPDATE (rbac_presets.rs:56),
+and the role hierarchy allows editing non-owner staff members. Every
+existing test of the manager role asserts a *denial* (can't promote to
+owner, can't self-promote, last-owner lock, self-deactivation). The
+positive path — a manager successfully updating a staff member's
+display name — was never exercised, so a regression (e.g. a change that
+removes STAFF_UPDATE from the Manager preset) would pass CI silently.
+
+**Solution:** `update_staff_scoped_allows_manager_updating_staff` seeds a
+manager user + a cashier user, then updates the cashier's display_name.
+All assertions pass on first run (behavior is already correct) — this
+is a regression pin.
+
+**Commits:** e9c57015 (round-8 TDD commit).
+**Test counts:** desktop staff 45→46; fmt clean.
+
 ## 2026-08-29 — Gap analysis round 2: renew-badge thresholds + checkout feedback states (website AccountView)
 
 **Problem:** The systematic branch audit (objective item 1) found 3 more

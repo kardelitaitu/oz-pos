@@ -87,9 +87,76 @@ describe('admin-utils svgChart', () => {
   it('wide variant stretches the canvas so text is not upscaled', () => {
     const data = Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, '0')}`, idr: (i + 1) * 100 }));
     const svg = utils.svgChart('rev', data, ['idr'], { area: true, wide: true });
-    expect(svg).toContain('viewBox="0 0 1280 220"');
+    expect(svg).toContain('viewBox="0 0 1280 230"');
     // A label under every point on the wide canvas (12 months → 12 x-labels).
     expect(svg.match(/text-anchor="middle"/g)?.length).toBe(12);
+  });
+
+  it('sourceKey: renders a solid path when all months are verified', () => {
+    const data = [
+      { month: '2026-01', idr: 100, source: 'paddle_webhook' },
+      { month: '2026-02', idr: 200, source: 'midtrans_webhook' },
+    ];
+    const svg = utils.svgChart('id', data, ['idr'], { area: true, sourceKey: 'source' });
+    // No dasharray attribute on the solid segments.
+    expect(svg).not.toContain('stroke-dasharray');
+    // Area fill present (both segments are non-estimate).
+    expect(svg).toContain('opacity=".1"');
+  });
+
+  it('sourceKey: dashes estimate months and omits their area fill', () => {
+    const data = [
+      { month: '2026-01', idr: 100, source: 'paddle_webhook' },
+      { month: '2026-02', idr: 200, source: 'estimate' },
+      { month: '2026-03', idr: 300, source: 'paddle_webhook' },
+    ];
+    const svg = utils.svgChart('id', data, ['idr'], { area: true, sourceKey: 'source' });
+    // The estimate month segment should have a dashed stroke.
+    expect(svg).toContain('stroke-dasharray="5 4"');
+    // Area fill should still be present (the two solid segments).
+    expect(svg).toContain('opacity=".1"');
+  });
+
+  it('sourceKey: falls back to estimate when sourceKey is missing on a row', () => {
+    const data = [
+      { month: '2026-01', idr: 100, source: 'paddle_webhook' },
+      { month: '2026-02', idr: 200 }, // no source → treated as estimate
+    ];
+    const svg = utils.svgChart('id', data, ['idr'], { area: true, sourceKey: 'source' });
+    expect(svg).toContain('stroke-dasharray="5 4"');
+  });
+});
+
+describe('admin-utils fmtMonthTick (year-boundary x-labels)', () => {
+  it('keeps plain month labels within a single year', () => {
+    expect(utils.fmtMonthTick('2026-03', '2026')).toEqual({ label: '03', year: '2026' });
+    expect(utils.fmtMonthTick('2026-11', '2026')).toEqual({ label: '11', year: '2026' });
+  });
+
+  it('adds a year suffix when the year changes (Dec → Jan)', () => {
+    // Previous emitted tick was Dec 2025; the next is Jan 2026.
+    const jan = utils.fmtMonthTick('2026-01', '2025');
+    expect(jan).toEqual({ label: '01/26', year: '2026' });
+  });
+
+  it('adds a year suffix on the first emitted tick (no prior year)', () => {
+    expect(utils.fmtMonthTick('2025-12', '')).toEqual({ label: '12/25', year: '2025' });
+  });
+
+  it('keeps the year across the first tick until a boundary', () => {
+    // Simulate a 13-month window: first tick Nov 2025, then Dec 2025
+    // (same year), then Jan 2026 (boundary).
+    const nov = utils.fmtMonthTick('2025-11', '');
+    const dec = utils.fmtMonthTick('2025-12', nov.year);
+    const jan = utils.fmtMonthTick('2026-01', dec.year);
+    expect(nov.label).toBe('11/25');
+    expect(dec.label).toBe('12');
+    expect(jan.label).toBe('01/26');
+  });
+
+  it('survives rows without a month (B5-style)', () => {
+    expect(utils.fmtMonthTick(null, '2026')).toEqual({ label: '', year: '2026' });
+    expect(utils.fmtMonthTick(undefined, '2026')).toEqual({ label: '', year: '2026' });
   });
 });
 
@@ -123,6 +190,24 @@ describe('admin-utils svgDonut', () => {
     const { legend } = utils.svgDonut('id', data, 'tier', 'count');
     expect(legend).not.toContain('<b>bad</b>');
     expect(legend).toContain('&lt;b&gt;bad&lt;/b&gt;');
+  });
+
+  it('renders the total count in the center of the donut', () => {
+    const data = [
+      { tier: 'plus', count: 3 },
+      { tier: 'pro', count: 1 },
+    ];
+    const { svg } = utils.svgDonut('id', data, 'tier', 'count');
+    // Total = 4; center text should render "4" (toLocaleString form).
+    expect(svg).toContain('>4<');
+    // The text element sits inside the SVG at the center.
+    expect(svg).toContain('text-anchor="middle"');
+    expect(svg).toContain('font-size="17"');
+  });
+
+  it('shows a single entry count for 100% donuts', () => {
+    const { svg } = utils.svgDonut('id', [{ tier: 'free', count: 5 }], 'tier', 'count');
+    expect(svg).toContain('>5<');
   });
 });
 
@@ -415,9 +500,9 @@ describe('admin-utils svgBarChart (B3: churn chart read the wrong field)', () =>
 
   it('scales bars by the requested valueKey, not a hardcoded field', () => {
     const svg = utils.svgBarChart('churn', churnData, { valueKey: 'churn', color: 'var(--bad)' });
-    // max=10 → full height 140; 5 → half height 70.
-    expect(svg).toContain('height="140"');
-    expect(svg).toContain('height="70"');
+    // max=10 → full height 141; 5 → half height 70.5.
+    expect(svg).toContain('height="141"');
+    expect(svg).toContain('height="70.5"');
     expect(svg).not.toContain('NaN');
   });
 
@@ -426,8 +511,8 @@ describe('admin-utils svgBarChart (B3: churn chart read the wrong field)', () =>
       { month: '2026-01', count: 4 },
       { month: '2026-02', count: 8 },
     ], { color: 'var(--accent)' });
-    expect(svg).toContain('height="140"');
-    expect(svg).toContain('height="70"');
+    expect(svg).toContain('height="141"');
+    expect(svg).toContain('height="70.5"');
   });
 
   it('renders the empty state instead of Infinity geometry for zero rows', () => {
@@ -445,11 +530,64 @@ describe('admin-utils svgBarChart (B3: churn chart read the wrong field)', () =>
     const data = Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, '0')}`, churn: i + 1 }));
     const narrow = utils.svgBarChart('c', data, { valueKey: 'churn' });
     const wide = utils.svgBarChart('c', data, { valueKey: 'churn', wide: true });
-    expect(narrow).toContain('viewBox="0 0 620 180"');
-    expect(wide).toContain('viewBox="0 0 1280 220"');
+    expect(narrow).toContain('viewBox="0 0 620 200"');
+    expect(wide).toContain('viewBox="0 0 1280 230"');
     expect(wide).not.toContain('max-height');
-    // Max bar still reaches the same plot height (160) in both canvases.
-    expect(wide).toContain('height="160"');
+    // Max bar still reaches the same plot height (161) in both canvases.
+    expect(wide).toContain('height="161"');
+  });
+});
+
+describe('admin-utils svgStackedBars (provider revenue mix)', () => {  it('returns empty state for empty or missing data', () => {
+    expect(utils.svgStackedBars('x', [], { stack: [{ key: 'a', color: 'red' }] })).toContain('chart-empty');
+    expect(utils.svgStackedBars('x', null, { stack: [{ key: 'a', color: 'red' }] })).toContain('chart-empty');
+    expect(utils.svgStackedBars('x', undefined, { stack: [{ key: 'a', color: 'red' }] })).toContain('chart-empty');
+  });
+
+  it('returns empty state when no stack segments are defined', () => {
+    expect(utils.svgStackedBars('x', [{ month: '2026-01', a: 10 }], {})).toContain('chart-empty');
+  });
+
+  it('stacks two segments per month and renders the total label', () => {
+    const data = [
+      { month: '2026-01', paddleIdr: 60000, midtransIdr: 40000 }, // total 100000
+      { month: '2026-02', paddleIdr: 30000, midtransIdr: 20000 }, // total 50000
+    ];
+    const svg = utils.svgStackedBars('mix', data, {
+      stack: [
+        { key: 'paddleIdr', color: 'var(--primary)' },
+        { key: 'midtransIdr', color: 'var(--success)' },
+      ],
+    });
+    // Two months → two month labels
+    expect(svg.match(/text-anchor="middle" fill="var\(--muted\)"/g)?.length).toBe(2);
+    // Total labels: month 1 = 100k, month 2 = 50k
+    expect(svg).toContain('100000');
+    expect(svg).toContain('50000');
+  });
+
+  it('skips the total label for zero-total (estimate) months', () => {
+    const data = [
+      { month: '2026-01', paddleIdr: 60000, midtransIdr: 40000 },
+      { month: '2026-02', paddleIdr: 0, midtransIdr: 0 }, // estimate
+    ];
+    const svg = utils.svgStackedBars('mix', data, {
+      stack: [{ key: 'paddleIdr', color: 'var(--primary)' }, { key: 'midtransIdr', color: 'var(--success)' }],
+    });
+    // Only one total label for the non-zero month; the estimate month has no
+    // value label but still gets a month x-label.
+    expect(svg.match(/font-weight="600"/g)?.length).toBe(1);
+    expect(svg.match(/02/)).toBeTruthy();
+  });
+
+  it('renders both color segments in the correct order', () => {
+    const data = [{ month: '2026-01', paddleIdr: 60000, midtransIdr: 40000 }];
+    const svg = utils.svgStackedBars('mix', data, {
+      stack: [{ key: 'paddleIdr', color: 'red' }, { key: 'midtransIdr', color: 'blue' }],
+    });
+    // Both rects with their respective fill colors
+    expect(svg.match(/fill="red"/)).toBeTruthy();
+    expect(svg.match(/fill="blue"/)).toBeTruthy();
   });
 });
 
@@ -510,6 +648,77 @@ describe('admin-utils normalizeStats (B6: partial payload killed the dashboard)'
     expect(m.kpis.mrrUsd).toBe(0);
     expect(m.kpis.totalUsers).toBe(0);
     expect(m.kpis.arpuUsd).toBe(12.5);
+  });
+
+  it('coerces the provider monthly-gross kpis (provider-verified revenue)', () => {
+    // monthlyGrossUsd/Idr come from the revenue_events webhook ledger; a
+    // partial payload must never render "Rp NaN" in the hero card.
+    const m = utils.normalizeStats({
+      kpis: { monthlyGrossUsd: null, monthlyGrossIdr: undefined, grossSource: 'estimate' },
+    });
+    expect(m.kpis.monthlyGrossUsd).toBe(0);
+    expect(m.kpis.monthlyGrossIdr).toBe(0);
+    // grossSource is a string, passed through untouched.
+    expect(m.kpis.grossSource).toBe('estimate');
+  });
+
+  it('coerces the refund kpis (revenue_adjustments ledger)', () => {
+    const m = utils.normalizeStats({
+      kpis: { monthlyRefundUsd: null, monthlyRefundIdr: '160000', lifetimeRefundUsd: 25.5, lifetimeRefundIdr: undefined },
+    });
+    expect(m.kpis.monthlyRefundUsd).toBe(0);
+    expect(m.kpis.monthlyRefundIdr).toBe(160000);
+    expect(m.kpis.lifetimeRefundUsd).toBe(25.5);
+    expect(m.kpis.lifetimeRefundIdr).toBe(0);
+  });
+
+  it('keeps provider-verified per-month trend values and source labels', () => {
+    const src = {
+      revenueTrend: [
+        { month: '2026-01', usd: 10, idr: 160000, source: 'paddle_webhook' },
+        { month: '2026-02', usd: 9.3, idr: 149000, source: 'midtrans_webhook' },
+        { month: '2026-03', usd: 5, source: 'estimate' },
+      ],
+    };
+    const m = utils.normalizeStats(src);
+    expect(m.revenueTrend).toEqual(src.revenueTrend);
+    expect(m.revenueTrend[0].idr).toBe(160000);
+    expect(m.revenueTrend[1].source).toBe('midtrans_webhook');
+    // Estimate months may have no idr from the server — renderer derives it.
+    expect(m.revenueTrend[2].idr).toBeUndefined();
+  });
+
+  it('passes through needsAttention array from the server', () => {
+    const m = utils.normalizeStats({
+      needsAttention: [
+        { type: 'grace_period', email: 'a@b.com', tier: 'pro', detail: 'payment failed', at: '2026-09-15' },
+      ],
+    });
+    expect(m.needsAttention).toHaveLength(1);
+    expect(m.needsAttention[0].type).toBe('grace_period');
+  });
+
+  it('passes through recentRevenueEvents feed rows (currency-clean amounts)', () => {
+    const m = utils.normalizeStats({
+      recentRevenueEvents: [
+        { email: 'x@y.com', provider: 'paddle', tier: 'pro', amountUsd: 42.5, amountIdr: 680000, created: '2026-09-01T08:00:00Z' },
+      ],
+    });
+    expect(m.recentRevenueEvents).toHaveLength(1);
+    expect(m.recentRevenueEvents[0].provider).toBe('paddle');
+    expect(m.recentRevenueEvents[0].amountIdr).toBe(680000);
+  });
+
+  it('passes through trialFunnel array (trials vs paid per month)', () => {
+    const m = utils.normalizeStats({
+      trialFunnel: [
+        { month: '2026-09', trials: 10, paid: 3 },
+        { month: '2026-10', trials: 0, paid: 0 },
+      ],
+    });
+    expect(m.trialFunnel).toHaveLength(2);
+    expect(m.trialFunnel[0].trials).toBe(10);
+    expect(m.trialFunnel[0].paid).toBe(3);
   });
 
   it('tolerates non-object input entirely', () => {
@@ -1040,9 +1249,11 @@ describe('admin-utils phone chart variants (mobile 1:1 canvases)', () => {
     expect(svg).toMatch(/d="M \d/);
   });
 
-  it('svgChart wide canvas is unchanged (1280×220)', () => {
+  it('svgChart wide canvas is 1280×230 with readable font sizes', () => {
     const svg = utils.svgChart('rev', months, ['idr'], { wide: true });
-    expect(svg).toContain('viewBox="0 0 1280 220"');
+    expect(svg).toContain('viewBox="0 0 1280 230"');
+    expect(svg).toContain('font-size="13"');
+    expect(svg).toContain('font-size="12"');
   });
 
   it('svgBarChart phone canvas is ~350×200 with 11px values', () => {
@@ -1502,5 +1713,128 @@ describe('admin-utils tableCard malformed input (B41: B36 class in the table bui
     // Non-array rows entirely → empty-state, no throw.
     expect(() => utils.tableCard('T', ['A'], { not: 'rows' } as any)).not.toThrow();
     expect(() => utils.tableCard('T', null as any, [['a']])).not.toThrow();
+  });
+});
+
+describe('admin-utils chart tooltips (#9: chartTipText / nearestChartIndex / bindChartTooltip)', () => {
+  it('chartTipText shows the month and each series value', () => {
+    const text = utils.chartTipText({ month: '2026-09', idr: 68000000 }, [{ key: 'idr', label: 'Gross' }], (v: number) => 'Rp' + (v / 1000000).toFixed(1) + 'jt');
+    expect(text).toContain('2026');
+    expect(text).toContain('Gross: Rp68.0jt');
+  });
+
+  it('chartTipText skips non-finite series values', () => {
+    const text = utils.chartTipText({ month: '2026-01', a: 5, b: 'nope' }, [{ key: 'a', label: 'A' }, { key: 'b', label: 'B' }]);
+    expect(text).toContain('A: 5');
+    expect(text).not.toContain('B');
+  });
+
+  it('chartTipText handles missing row/month safely', () => {
+    expect(utils.chartTipText(null, [{ key: 'a', label: 'A' }])).toBe('');
+    expect(utils.chartTipText({}, [{ key: 'a', label: 'A' }])).toBe('');
+  });
+
+  it('nearestChartIndex clamps to valid indices', () => {
+    expect(utils.nearestChartIndex(0, 12)).toBe(0);
+    expect(utils.nearestChartIndex(1, 12)).toBe(11);
+    expect(utils.nearestChartIndex(-5, 12)).toBe(0);
+    expect(utils.nearestChartIndex(99, 12)).toBe(11);
+    expect(utils.nearestChartIndex(0.5, 2)).toBe(1);
+    expect(utils.nearestChartIndex(0.4, 2)).toBe(0);
+    expect(utils.nearestChartIndex(0.9, 1)).toBe(0);
+  });
+
+  it('bindChartTooltip attaches a hidden tip and shows it on mousemove', () => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'chart-svg');
+    const card = document.createElement('div');
+    card.className = 'chart-card';
+    card.appendChild(svg);
+    document.body.appendChild(card);
+    // jsdom returns a zero rect; the binder treats width===0 as "no chart
+    // yet", so stub a real-ish rect to exercise the show path.
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 100, right: 200, bottom: 100, x: 0, y: 0 } as DOMRect);
+    try {
+      utils.bindChartTooltip(svg, [{ month: '2026-01', count: 3 }, { month: '2026-02', count: 5 }], [{ key: 'count', label: 'N' }]);
+      const tip = card.querySelector('.chart-tip');
+      expect(tip).not.toBeNull();
+      expect((tip as HTMLElement).style.display).toBe('none');
+      // Hover at x=100 of 200 → ratio 0.5 → index 1 ('N: 5').
+      svg.dispatchEvent(new MouseEvent('mousemove', { clientX: 100, clientY: 10 }));
+      expect((tip as HTMLElement).textContent).toContain('N: 5');
+      expect((tip as HTMLElement).style.display).toBe('block');
+      svg.dispatchEvent(new MouseEvent('mouseleave'));
+      expect((tip as HTMLElement).style.display).toBe('none');
+    } finally {
+      document.body.removeChild(card);
+    }
+  });
+
+  // Regression (#10 tooltip geometry): on a 12-month bar chart the last bar
+  // (current month) sits at x=585 of a 620-unit viewBox (slots start at x=10,
+  // width (620-20)/12=50). The old linear-ratio mapping snapped that cursor
+  // position to index 10 — the PREVIOUS month. The slot-based mapping must
+  // return index 11 for the current month, and index 0 at the first bar.
+  it('bar-chart tooltip maps the current-month slot to the last index (not the previous month)', () => {
+    const months = Array.from({ length: 12 }, (_, i) => `2026-${String(i + 1).padStart(2, '0')}`);
+    const rows = months.map((month, i) => ({ month, count: i + 1 }));
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'chart-svg');
+    svg.setAttribute('viewBox', '0 0 620 200');
+    const card = document.createElement('div');
+    card.className = 'chart-card';
+    card.appendChild(svg);
+    document.body.appendChild(card);
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 620, height: 200, right: 620, bottom: 200, x: 0, y: 0 } as DOMRect);
+    try {
+      utils.bindChartTooltip(svg, rows, [{ key: 'count', label: 'N' }]);
+      const tip = card.querySelector('.chart-tip') as HTMLElement;
+      // Last bar center: 10 + 11.5*50 = 585 → current month (index 11).
+      svg.dispatchEvent(new MouseEvent('mousemove', { clientX: 585, clientY: 10 }));
+      expect(tip.textContent).toContain('Dec 2026');
+      // First bar center: 10 + 0.5*50 = 35 → January (index 0).
+      svg.dispatchEvent(new MouseEvent('mousemove', { clientX: 35, clientY: 10 }));
+      expect(tip.textContent).toContain('Jan 2026');
+      // Mid-slot boundary test: x=410 is inside slot 8 (10+8*50=410) → September.
+      svg.dispatchEvent(new MouseEvent('mousemove', { clientX: 410, clientY: 10 }));
+      expect(tip.textContent).toContain('Sep 2026');
+    } finally {
+      document.body.removeChild(card);
+    }
+  });
+
+  // Line-chart geometry: points sit at px + (i/(n-1))*pw with px=40, pw=560
+  // for the narrow 600-unit canvas. The old linear ratio also skewed line
+  // charts; the kind:'line' branch maps by point position instead.
+  it('line-chart tooltip snaps to the nearest point by viewBox geometry', () => {
+    const rows = [
+      { month: '2026-01', idr: 10 },
+      { month: '2026-02', idr: 20 },
+      { month: '2026-03', idr: 30 },
+      { month: '2026-04', idr: 40 },
+    ];
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'chart-svg');
+    svg.setAttribute('viewBox', '0 0 600 200');
+    const card = document.createElement('div');
+    card.className = 'chart-card';
+    card.appendChild(svg);
+    document.body.appendChild(card);
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 200, right: 600, bottom: 200, x: 0, y: 0 } as DOMRect);
+    try {
+      utils.bindChartTooltip(svg, rows, [{ key: 'idr', label: 'Gross' }], undefined, 'line');
+      const tip = card.querySelector('.chart-tip') as HTMLElement;
+      // Last point: px + 3*(560/3) = 600 → April (index 3).
+      svg.dispatchEvent(new MouseEvent('mousemove', { clientX: 600, clientY: 10 }));
+      expect(tip.textContent).toContain('Apr 2026');
+      // First point: x=40 → January.
+      svg.dispatchEvent(new MouseEvent('mousemove', { clientX: 40, clientY: 10 }));
+      expect(tip.textContent).toContain('Jan 2026');
+      // Mid-chart: x=340 → between points 1 (226) and 2 (413), closer to 2.
+      svg.dispatchEvent(new MouseEvent('mousemove', { clientX: 340, clientY: 10 }));
+      expect(tip.textContent).toContain('Mar 2026');
+    } finally {
+      document.body.removeChild(card);
+    }
   });
 });

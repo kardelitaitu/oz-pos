@@ -130,7 +130,7 @@ function withStrictCSP(resp: Response): Response {
     "script-src 'self' https://static.cloudflareinsights.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "img-src 'self' data:",
-    "font-src 'self' https://fonts.gstatic.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
     "connect-src 'self' https://ozpos.my.id https://*.code.run https://*.ozpos.my.id https://open.er-api.com",
     "object-src 'none'",
     "base-uri 'self'",
@@ -149,6 +149,39 @@ function withStrictCSP(resp: Response): Response {
   // SPA HTML is auth-gated — never cache it at the edge so a deploy (or a
   // session state change) is reflected immediately (M6).
   headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  return new Response(resp.body, { status: resp.status, headers });
+}
+
+/**
+ * Serve static assets from the ASSETS binding with optimized caching.
+ *
+ * Cache strategy (Lighthouse "use efficient cache lifetimes"):
+ *   - /_astro/*: content-hashed filenames → immutable, 1-year cache.
+ *     Without this, the Worker's default (no header) lets Cloudflare
+ *     apply its own ~4h TTL, triggering a Lighthouse warning.
+ *   - Everything else: must-revalidate (default) — HTML pages and
+ *     unfingerprinted assets must reflect deploys immediately.
+ *
+ * HTML is passed through untouched: stylesheets are inlined at build
+ * time (astro.config.mjs `inlineStylesheets: 'always'`), so there is
+ * no render-blocking external CSS and no need for the media="print"
+ * deferral hack — which caused a flash of unstyled content on mobile
+ * reloads and was removed (see git history, 3b505842).
+ */
+async function serveStatic(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const resp = await env.ASSETS.fetch(request);
+
+  // Copy original headers into a plain object we can pass to the Response
+  // constructor. Using resp.headers directly sometimes fails in Workers
+  // because the Headers object is tied to the original body stream.
+  const headers: Record<string, string> = {};
+  resp.headers.forEach((v, k) => { headers[k] = v; });
+
+  if (url.pathname.startsWith('/_astro/')) {
+    headers['cache-control'] = 'public, max-age=31536000, immutable';
+  }
+
   return new Response(resp.body, { status: resp.status, headers });
 }
 
@@ -809,6 +842,6 @@ export default {
 
     // Everything else: serve the static site (the assets binding honors
     // public/_headers and public/_redirects).
-    return env.ASSETS.fetch(request);
+    return serveStatic(request, env);
   },
 };

@@ -1,6 +1,6 @@
 # Agents Configuration & Rules
 
-<!-- Audit stamp: 2026-08-31 · DSH · status: ACCURATE · version lock: 0.0.34 · 6 pre-commit gates · conventional commits enforced -->
+<!-- Audit stamp: 2026-08-31 · DSH · status: ACCURATE · version lock: 0.0.35 · 6 pre-commit gates · conventional commits enforced -->
 
 ## 🚨 Critical Agent Directives (MUST FOLLOW)
 
@@ -9,7 +9,7 @@
 | **Branching** | **NEVER create new branches. NEVER switch branches.** | Always work directly on the currently active branch unless specifically requested by the user. |
 | **Commits** | **ALWAYS commit with format `<type>(<area>): <description>`.** | Must follow conventional commits. Make local commits after each logical task. |
 | **Pushing** | **NEVER run `git push` without an explicit direct order.** | Even after completing all checks, wait for the user to explicitly say "push". |
-| **Version Lock** | **Version is locked at `0.0.34`. NEVER modify version numbers.** | Do not bump version in `Cargo.toml`, `package.json`, `tauri.conf.json`, etc. |
+| **Version Lock** | **Version is locked at `0.0.35`. NEVER modify version numbers.** | Do not bump version in `Cargo.toml`, `package.json`, `tauri.conf.json`, etc. |
 | **File Paths** | **ALWAYS use forward slashes (`/`) in path arguments on Windows.** | Avoid path escaping bugs. **Never anchor to a hardcoded checkout** (e.g. `C:/My Script/oz-pos/`) — resolve the repo root with `git rev-parse --show-toplevel`, or script-relative with `$PSScriptRoot`/`__file__`/`import.meta.url`, so tools work in any worktree of the multi-root layout (`<base>/main` bare + `<base>/<release>` + `<base>/worktrees/*`). |
 | **File Reading** | **ALWAYS read files in small chunks (≤ 500 lines).** | Preserves context window and prevents output truncation. |
 | **Discovery** | **ALWAYS use `codebase-memory-mcp` first for code exploration.** | Graph discovery saves context tokens and surfaces call chains faster. |
@@ -24,15 +24,45 @@
 git config core.hooksPath .githooks   # enable pre-commit hook (fmt + i18n + bundle-parity + FTL dedupe + column types + PG drift)
 ```
 
-The `.githooks/pre-commit` hook runs six gates automatically before every commit (~1–3s total):
+The `.githooks/pre-commit` hook runs six gates automatically before every commit (~5–7s total; the i18n gate alone is ~4s):
 1. **`cargo fmt --all`** — auto-formats staged Rust files and re-stages them.
-2. **`i18n lint`** — runs `scripts/lint-i18n.sh` (validates Fluent `.id.ftl` vs `.ftl` bundles).
-3. **`Bundle parity: staged files only`** — runs `scripts/verify-bundle-parity.py --staged-only` on staged `ui/src/features/**` files; fails if an `<Localized id>` key is missing from `.ftl`.
+2. **`i18n lint`** — runs `scripts/lint-i18n.sh`, fail-closed on three categories: `.id.ftl` siblings byte-identical to their English source, duplicate Fluent keys silently dropped at bundle join, and literal key references resolving in neither locale.
+3. **`Bundle parity: staged files only`** — runs `scripts/verify-bundle-parity.py --staged-only --include-getstring --include-nav-keys --include-key-fields --include-dynamic-literals --include-id-maps --check-domain-pairs` over staged files in `features`, `components`, `frontend`, `contexts`, `hooks` and `platform`; fails if any of the **eight checked surfaces** references a key missing from `.ftl` or `.id.ftl`. Before the Fluent page audit this walked only literal `<Localized id>` under `ui/src/features/**`, and skipped every shared-chrome and context file it was handed — so 14 broken keys shipped while it reported clean.
 4. **`FTL dedupe dry-run`** — runs `scripts/dedupe-ftl.py --dry-run` to detect duplicate Fluent keys before push.
 5. **`Migration column-type lint`** — runs `scripts/verify-migration-column-types.py --staged-only` when `crates/oz-core/migrations/*.sql` is staged; exact-decimal columns must be fixed-point integers (`*_minor`/`*_millionths`), new floats need a justified whitelist entry.
 6. **`PG schema drift guard`** — runs `scripts/generate-pg-migration.py --check` when any migration, the registry, or the generator is staged; `20260813_init.pg.sql` is generated, never hand-edited (see [`docs/records/sqlite-pg-roles.md`](./docs/records/sqlite-pg-roles.md)).
 
-> For full repository verification mirroring the entire CI matrix, see [`scripts/check.sh`](./scripts/check.sh).
+> **What CI actually runs.** `.github/workflows/dev-ci.yml` ("Dev CI") is the **only live workflow** — every other file in that directory is `.bak` and GitHub never executes it (`ci.yml.bak`, `nightly.yml.bak`, `release.yml.bak`, `e2e-pr.yml.bak`, `security.yml.bak`, `android.yml.bak`, `ios.yml.bak`, `deploy.yml.bak`, `website.yml.bak`, `docker-*.yml.bak`), per `23c96330`. Its jobs are `website`, `cargo-check`, `cargo-nextest`, `ui-test`, `i18n`, and `northflank-deploy` (which `needs` all five). So **E2E, a11y, release, security and nightly suites are NOT enforced in CI** — a green Dev CI run is not proof those passed. `scripts/check.sh` is the local full-matrix equivalent; run it before declaring a change verified.
+>
+> The `i18n` job was restored by the Fluent page audit after `ci.yml` was retired without a replacement. Note that the pre-commit hook is **opt-in per developer**: `core.hooksPath` is set by `scripts/setup-dev.ps1` and is not versioned, so a fresh clone that skips setup has no local gate — CI is the backstop.
+
+---
+
+## 🔑 Global Environment Variables (`OZPOS_*`)
+
+The developer machine's API keys are stored as **user-scope Windows environment variables** with an `OZPOS_` prefix (persisted in `HKCU\Environment`; they survive reboots and are available in every **new** PowerShell session — the session that set them must be reopened). Source of truth: the gitignored `.env` at the repo root.
+
+```powershell
+$env:OZPOS_CLOUDFLARE_API_TOKEN        # Cloudflare Workers deploy token
+$env:OZPOS_CLOUDFLARE_ACCOUNT_ID       # Cloudflare account id
+$env:OZPOS_CLOUDFLARE_ACCESS_KEY       # R2 access key id
+$env:OZPOS_CLOUDFLARE_SECRET_ACCESS_KEY# R2 secret access key
+$env:OZPOS_CLOUDFLARE_S3_ENDPOINT      # R2 S3 endpoint
+$env:OZPOS_NORTHFLANK_API_TOKEN        # Northflank deploy token
+$env:OZPOS_OZ_ADMIN_KEY                # admin dashboard API key
+$env:OZPOS_OZ_API_SECRET               # JWT signing secret
+$env:OZPOS_OZ_ENFORCE_PLANS            # plan gating flag
+$env:OZPOS_OZ_LICENSE_PRIVATE_KEY      # RSA license signing key (PEM, multiline)
+```
+
+- Use them in commands instead of hardcoding secrets, e.g. the website deploy:
+  ```powershell
+  $env:CLOUDFLARE_API_TOKEN=$env:OZPOS_CLOUDFLARE_API_TOKEN
+  $env:CLOUDFLARE_ACCOUNT_ID=$env:OZPOS_CLOUDFLARE_ACCOUNT_ID
+  npm run deploy   # from website/
+  ```
+- Update `.env` → variables by re-running the save step (same names/prefix); never commit `.env`.
+- ⚠️ These are plaintext in the user registry — local-dev convenience only, not a secrets manager.
 
 ---
 

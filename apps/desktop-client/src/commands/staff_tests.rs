@@ -1396,3 +1396,52 @@ fn bootstrap_owner_session_matches_user() {
     assert_eq!(result.session.role_id, role.id);
     assert_eq!(result.session.role_name, role.name);
 }
+
+#[tokio::test]
+async fn update_staff_scoped_allows_manager_updating_staff() {
+    // STAFF-02 positive path: the Manager preset grants STAFF_UPDATE.
+    // A manager editing a staff member's display name must succeed
+    // (the role hierarchy allows it — target is not Owner, not self).
+    let conn = oz_core::migrations::fresh_db();
+    let store = Store::new(&conn);
+    store.seed_default_roles().unwrap();
+    conn.execute_batch(
+        "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+            ('role-lite', 'Lite', 'Limited', '[\"sales:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+         INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+            ('user-manager', 'manager', 'hash', 'Manager', 'role-manager', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
+            ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-lite', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+    )
+    .unwrap();
+    let state = scoped_state_with_token(
+        conn,
+        "manager-token",
+        "user-manager",
+        "role-manager",
+        "store-a",
+    );
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = update_staff_scoped(
+        "manager-token".into(),
+        UpdateStaffScopedArgs {
+            id: "user-cashier".into(),
+            username: "cashier".into(),
+            display_name: "Updated Cashier".into(),
+            role_id: "role-lite".into(),
+            is_active: true,
+            pin: None,
+            profile: None,
+            assignment: None,
+        },
+        app.state(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(result.username, "cashier");
+    assert_eq!(result.display_name, "Updated Cashier");
+    assert_eq!(result.role_id, "role-lite");
+}

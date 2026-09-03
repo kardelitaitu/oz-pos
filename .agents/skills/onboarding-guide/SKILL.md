@@ -3,6 +3,8 @@ name: onboarding-guide
 description: Meta-skill that routes tasks to the right OZ-POS skill. Use when starting a new task and unsure which specialized skill applies. Read this first when joining the project or picking up an unfamiliar area.
 ---
 
+<!-- Audit stamp: 2026-09-03 · DSH · status: ACCURATE (rev 2 — pre-commit gate count corrected: the hook now runs six gates (cargo fmt, i18n lint, bundle parity, FTL dedupe, migration column-type lint, PG schema drift guard) plus LF normalization and a conditional Go gate for apps/license-server; verified against .githooks/pre-commit itself) · verified this pass: the oz-lua, oz-payment, oz-security and oz-reporting crate READMEs, crates/oz-core/src/db/reports.rs, platform/sync, apps/cloud-server, scripts/test-tdd.sh, .agents/skills/skill-drift-guard/scripts/detect.sh all exist · prior: 2026-08-31 docs-auditor rev (obsolete-defer section rewritten; EdcTerminal/mlua/per-domain api fixes; embedded-hal removed) -->
+
 <!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (obsolete-defer + convention refs repaired) · FIXED 31-08: 'Skills to defer (no code yet)' was obsolete — oz-lua/oz-payment/oz-security/cloud-sync/oz-reporting all ship code now; rewritten to 'Areas with code but no dedicated skill yet' pointing at each crate README; nonexistent PaymentTerminal trait -> EdcTerminal (hal-drivers); rlua -> mlua; pos.ts -> per-domain ui/src/api/<feature>.ts (router + workflow); device list NFC -> real (customer display, weight scale, EDC); embedded-hal -> async-trait · verified accurate: exit-animation-pattern skill exists, scripts verify-bundle-parity.py + dedupe-ftl.py + lint-i18n.sh + check.sh exist, .githooks/pre-commit 4-gate description matches -->
 
 # OZ-POS Onboarding Guide
@@ -15,14 +17,14 @@ OZ-POS is a Rust + Tauri v2 POS framework. The codebase is organized into clear 
 
 ## First-time setup
 
-Before you read the skill router below, enable the project's pre-commit hook so the 4 i18n + format gates fire on every commit. Without this setup, the hooks are silently bypassed at commit time. CI's `scripts/lint-i18n.sh` runs the bundle-parity check too, but only as an informational stderr surface — it never fails-closed in CI. **Pre-commit is currently the only fail-closed path for bundle-parity regressions.**
+Before you read the skill router below, enable the project's pre-commit hook so its gates fire on every commit. Without this setup, the hooks are silently bypassed at commit time. CI's `scripts/lint-i18n.sh` runs the bundle-parity check too, but only as an informational stderr surface — it never fails-closed in CI. **Pre-commit is currently the only fail-closed path for bundle-parity regressions.**
 
 ```bash
 git config core.hooksPath .githooks
 chmod +x .githooks/pre-commit
 ```
 
-Once enabled, verify with `git config --get core.hooksPath` (output should be the path you set; empty result means the commands above didn't take). `.githooks/pre-commit` then runs four gates before every commit (~1s): cargo fmt + i18n lint (`scripts/lint-i18n.sh`) + bundle parity: staged files only (`scripts/verify-bundle-parity.py --staged-only …`) + FTL dedupe dry-run (`scripts/dedupe-ftl.py --dry-run`).
+Once enabled, verify with `git config --get core.hooksPath` (output should be the path you set; empty result means the commands above didn't take). `.githooks/pre-commit` then runs before every commit: **six core gates** — cargo fmt (re-stages formatted `.rs`) + LF line-ending normalization + i18n lint (`scripts/lint-i18n.sh`) + bundle parity: staged files only (`scripts/verify-bundle-parity.py --staged-only …`) + FTL dedupe dry-run (`scripts/dedupe-ftl.py --dry-run`) + migration column-type lint (`scripts/verify-migration-column-types.py --staged-only`, when migrations are staged) + PG schema drift guard (`scripts/generate-pg-migration.py --check`, when any migration file, the migration registry, or the generator script is staged) — **plus** a conditional Go gate (gofmt re-stage + `go vet ./...`) that fires only when `apps/license-server/*.go` files are staged.
 
 For comprehensive local validation that mirrors the entire CI matrix (not just the pre-commit subset), run `bash scripts/check.sh`. For the rationale, see [`AGENTS.md`](../../AGENTS.md) Quick Setup.
 
@@ -71,7 +73,7 @@ If your task touches more than one layer, read each relevant skill in the order 
 
 These crates now ship real code (they were "pre-code" when this guide was first written). There is still no dedicated skill for each, so read **`rust-backend`** plus the crate's own `README.md` for conventions:
 
-- **`oz-lua` scripting** — `mlua` runtime; discount/tax/validation rules. See `crates/oz-lua/README.md`.
+- **`oz-lua` scripting** — `mlua` runtime; discount/tax/validation rules. See the oz-lua crate README (`crates/oz-lua/README.md`).
 - **`oz-payment` processors** — Stripe, Square, QRIS, Paddle, mock. Card-present terminals are the `oz-hal` **`EdcTerminal`** trait (see `hal-drivers`). See `crates/oz-payment/README.md`.
 - **`oz-security`** — encryption, PAN masking, platform keychains. See `crates/oz-security/README.md`.
 - **Cloud sync** — `platform/sync` + `apps/cloud-server` (PostgreSQL). See `ARCHITECTURE.md`.
@@ -161,4 +163,4 @@ If this passes locally, the PR is ready.
 
 ---
 
-> last audited 31-08-26 by docs-auditor
+> last audited 03-09-26 by DSH

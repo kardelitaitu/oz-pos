@@ -110,3 +110,8 @@ suppliers-field-address = Address
 suppliers-field-tax-id = Tax ID
 suppliers-field-payment-terms = Payment Terms
 suppliers-field-notes = Notes
+
+# Save-handler validation for the supplier form. Key names match the
+# l10n.getString() call sites in SuppliersScreen verbatim.
+supplier-name-required = Supplier name is required
+supplier-code-required = Supplier code is required

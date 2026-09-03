@@ -6,6 +6,7 @@ import UpdateBanner from './UpdateBanner';
 import StoreSwitcher from '@/components/StoreSwitcher';
 import StockAlertBell from '@/components/StockAlertBell';
 import { useBrand } from '@/contexts/BrandContext';
+import { requiredLocalized } from '@/frontend/shared';
 import StatusBar from './StatusBar';
 
 import { getNavItems, SECTION_LABELS, type SectionName } from '@/platform/ui/menu-registry';
@@ -137,7 +138,7 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
         href="#app-main-content"
         className="skip-to-content"
       >
-        {l10n.getString('a11y-skip-to-content') ?? 'Skip to main content'}
+        {requiredLocalized(l10n, 'a11y-skip-to-content')}
       </a>
       {/* ── Body (sidebar + content) ──────────────────── */}
       <div className="app-layout-body">

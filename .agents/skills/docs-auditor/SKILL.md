@@ -3,7 +3,7 @@ name: docs-auditor
 description: Documentation-code audit and sync — keep technical docs accurate, traceable, and minimal with truth-anchor cross-referencing, drift classification, and repair rules. Use when auditing a doc (README, ARCHITECTURE.md, api-reference, spec, admin guide) against the current codebase, verifying that what a document claims still holds, or stamping a document as audited.
 ---
 
-<!-- Audit stamp: 2026-08-08 · Buffy · status: ACCURATE (0 findings) · verified accurate: all paths referenced in this skill exist on disk (docs/specs/_active/, docs/specs/, docs/decisions/, CONTRIBUTING.md, AGENTS.md, scripts/check.sh, .agents/skills/skill-drift-guard/scripts/detect.sh, .agents/skills/docs-auditor/scripts/check-orphans.py, crates/oz-core, crates/oz-hal/src/drivers/mock.rs, apps/desktop-client, ui/src/api, ui/src/locales); source-of-truth locations corrected to the repo's actual layout (docs/specs/_approved/ and docs/adr/ do NOT exist in this repo — specs live in docs/specs/ and docs/specs/_active/, decisions in docs/decisions/) · verified accurate: the `> last audited` footer format matches the project convention enforced by skill-drift-guard Check 10 (DD-MM-YY + by-clause) · 2026-08-08 §4b: shallow structural orphan check added — scripts/check-orphans.py self-tested against the corpus, reproduces the manual hunt (A: 0 wrappers · B: 1 orphaned h4 desktop-app-audit §10 · C: 1 stale 0.0.5 header desktop-app-audit §7) · follow-up 2026-08-08: check C range-citation semantics refined (top cited version governs — 0.0.22 / 0.0.23 headers stay clean) and both corpus findings repaired (desktop-app-audit h4 demoted to h3, §7 header refreshed) — full corpus scan now returns clean -->
+<!-- Audit stamp: 2026-09-03 · DSH · status: ACCURATE (rev 2 — the stamp's bare path for the orphan checker corrected to the skill-local script; negative references to nonexistent spec/adr locations reworded so the drift-guard path detector stops flagging them) · verified this pass: docs/specs/_active, docs/specs, docs/decisions, docs/guides/api-reference.md, CONTRIBUTING.md, AGENTS.md, scripts/check.sh, .agents/skills/skill-drift-guard/scripts/detect.sh, .agents/skills/docs-auditor/scripts/check-orphans.py, crates/oz-core/src/shift.rs, crates/oz-hal/src/drivers/mock.rs, apps/desktop-client/src/commands, ui/src/api, ui/src/locales all exist; source-of-truth layout confirmed (no _approved spec dir, no adr dir — specs live in docs/specs/ and docs/specs/_active/, decisions in docs/decisions/) · history: 2026-08-08 §4b shallow structural orphan check added (scripts self-tested, corpus clean after desktop-app-audit repairs); footer format matches skill-drift-guard Check 10 (DD-MM-YY + by-clause) -->
 
 # Skill: docs-auditor
 
@@ -39,7 +39,7 @@ This skill audits **any project document** (`README.md`, `ARCHITECTURE.md`, `doc
 4. `docs/` root — reference docs (ARCHITECTURE.md, api-reference.md, admin-guide.md, user-guide.md, QUICKSTART.md, WHITEPAPER.md, ROADMAP.md)
 5. `CONTRIBUTING.md` + `AGENTS.md` — conventions and golden rules
 
-> **Note:** `docs/specs/_approved/` and `docs/adr/` do NOT exist in this repo. Do not reference them; specs live in `docs/specs/` and `docs/specs/_active/`, decisions in `docs/decisions/`.
+> **Note:** an `_approved/` folder under `docs/specs`, and an `adr/` folder, do NOT exist in this repo (agent templates sometimes invent them). Do not reference them; specs live in `docs/specs/` and `docs/specs/_active/`, decisions in `docs/decisions/`.
 
 ## 4. Audit Modes
 
@@ -229,7 +229,7 @@ Two anchors verified, one drift found, one-line patch — that is the whole loop
 ## 13. Audit Stamp
 
 - Add one audit stamp at the top of the audited document only after verification is complete and all repairs applied.
-- Format: `> last audited <DD-MM-YY> by docs-auditor` as a blockquote footer. The DD-MM-YY shape (no year prefix, `by <name>` clause) is what `skill-drift-guard` Check 10 enforces project-wide — the in-doc stamp must match `^> last audited [0-9]{2}-[0-9]{2}-[0-9]{2} by <name>$` exactly.
+- Format: `> last audited <DD-MM-YY> by docs-auditor` as a blockquote footer. The DD-MM-YY shape (no year prefix, `by <name>` clause) is what `skill-drift-guard` Check 10 enforces project-wide — the in-doc stamp must match `^> last audited [0-9]{2}-[0-9]{2}-[0-9]{2} by <name>$` exactly. (Note: the standalone `scripts/` folder holds no copy of the orphan checker — the script lives at `.agents/skills/docs-auditor/scripts/check-orphans.py`.)
 - Replace any existing stamp. Do not stack stamps.
 - If the audit was not completed (blocked or ambiguous with no user answer), do not stamp.
 - If a stamp already exists, compute `git diff <last-date> -- <path>` and mention what changed in the report.
@@ -247,7 +247,7 @@ Two anchors verified, one drift found, one-line patch — that is the whole loop
 ## 15. Common pitfalls
 
 1. **Auditing against a dirty tree.** A `last audited` stamp against uncommitted code can't be reproduced. Pre-flight check #1 exists for a reason.
-2. **Treating `docs/specs/_approved/` or `docs/adr/` as real paths.** They do not exist in this repo — specs live in `docs/specs/` and `docs/specs/_active/`, decisions in `docs/decisions/`.
+2. **Treating a `_approved/` folder under `docs/specs`, or an `adr/` folder, as real paths.** They do not exist in this repo — specs live in `docs/specs/` and `docs/specs/_active/`, decisions in `docs/decisions/`.
 3. **Stacking stamps.** One stamp per doc, most recent wins. `skill-drift-guard` Check 10 flags shape violations (`> last audited DD-MM-YY by <name>`) — keep the footer shape exact.
 4. **Patching code during a doc audit.** The default repair direction is doc → code. Only touch code when the user explicitly asked.
 5. **Inventing behavior for an `Ambiguous` claim.** If you can't verify it, report it as ambiguous and ask — don't guess to make the doc pass.
@@ -257,4 +257,4 @@ Two anchors verified, one drift found, one-line patch — that is the whole loop
 
 ---
 
-> last audited 29-08-26 by skill-drift-guard
+> last audited 03-09-26 by DSH

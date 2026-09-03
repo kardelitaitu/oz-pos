@@ -205,6 +205,7 @@ fn insufficient_scope() -> Response {
 ///   (method, path) against [`READ_KEY_MAP`]; if found, assert
 ///   `has_permission(key)`; if denied → 403 `insufficient_scope`.
 /// - Routes not in the map (sync, public, write-only) → pass through.
+#[allow(clippy::result_large_err)]
 pub async fn read_gate_middleware(req: Request, next: Next) -> Result<Response, Response> {
     // Claims inserted by auth_middleware — must be ordered after it.
     let Some(claims) = req.extensions().get::<ApiTokenClaims>() else {

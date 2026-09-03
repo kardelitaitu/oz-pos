@@ -193,6 +193,12 @@ locale-id = Bahasa Indonesia
 
 # Accessibility
 a11y-skip-to-content = Skip to main content
+# Shared right-click menu (frontend/shared/ContextMenu.tsx), rendered by 14
+# surfaces. Its labels are resolved with requiredLocalized(), so a missing key
+# here shows the key rather than silently reverting to English.
+ctx-menu-aria = Context menu
+ctx-menu-copy = Copy
+ctx-menu-paste = Paste
 
 # Navigation section labels
 nav-section-operations = Operations
@@ -219,6 +225,7 @@ nav-exchange-rates = Exchange Rates
 nav-categories = Categories
 nav-customers = Customers
 nav-loyalty = Loyalty
+nav-gift-cards = Gift Cards
 nav-staff = Staff
 nav-terminals = Terminals
 nav-stores = Stores
@@ -234,6 +241,7 @@ nav-dashboard-report = Dashboard
 nav-analytics = Staff Analytics
 nav-sales-report = Sales Report
 nav-inventory-report = Inventory Report
+nav-menu-engineering = Menu Engineering
 nav-design-system = Design System
 nav-tooltip-preview = Tooltip Preview
 nav-kiosk = Kiosk
@@ -242,6 +250,7 @@ nav-promotions = Promotions
 nav-suppliers = Suppliers
 nav-purchase-orders = Purchase Orders
 nav-stock-transfers = Stock Transfers
+nav-stock-counts = Stock Counts
 nav-custom-report = Custom Report
 nav-pos = POS
 app-sidebar-subtitle = Point of Sale
@@ -265,6 +274,8 @@ workspace-home-coming-soon = Coming soon
 workspace-card-active-aria = Active workspace
 workspace-home-empty = No workspaces available
 workspace-home-empty-desc = You don't have access to any workspaces yet. Contact an administrator.
+workspace-home-staff-empty = No workspaces available
+workspace-home-staff-empty-desc = Contact Administrator
 workspace-card-open-aria = Open { $name }
 workspace-card-no-access-aria = { $name } — not available for your role
 workspace-card-no-access-badge = Not available
@@ -298,7 +309,7 @@ staff-login-license-inactive = License inactive
 statusbar-conflict-count = { $count } sync conflict(s) resolved
 # SYNC-12: StatusBar visible labels + ARIA (localized at the render boundary)
 statusbar-app-status-aria = Application status
-statusbar-version = v0.0.34
+statusbar-version = v0.0.35
 statusbar-sync-name = Sync
 statusbar-gateway-name = Stripe
 statusbar-license = Proprietary License
@@ -350,6 +361,12 @@ auth-phone-label = Phone Number
 auth-phone-placeholder = 08123456789
 auth-license-label = License Key
 auth-license-placeholder = OZ-PRO-XXXX-XXXX-XXXX
+# Accessible names for the icon-only clear (×) buttons on each field of the
+# license activation form. Resolved via l10n.getString() at the render
+# boundary, so a missing key here leaves the button unnamed, not English.
+auth-clear-email = Clear email address
+auth-clear-phone = Clear phone number
+auth-clear-key = Clear license key
 auth-activate-button = Activate License
 auth-activating = Activating...
 auth-activation-success = License activated successfully!
@@ -463,8 +480,6 @@ workspace-home-features-title = Features
 workspace-home-features-desc = Toggle feature availability
 workspace-home-data-management-title = Data
 workspace-home-data-management-desc = Back up, export, and import data
-workspace-home-kds-title = Kitchen Display
-workspace-home-kds-desc = Open the kitchen display screen
 workspace-home-workspaces-section = Workspaces
 workspace-home-tools-section = Tools
 workspace-home-add-workspace = Add Workspace
@@ -511,6 +526,7 @@ warehouse-adjust-reason-label = Reason
 warehouse-adjust-reason-placeholder = e.g. stock count, damage, return
 warehouse-adjust-confirm = Confirm
 warehouse-adjust-cancel = Cancel
+warehouse-mode-tabs-aria = Warehouse mode
 
 # ── Warehouse POS console (v2) ────────────────────────────────
 warehouse-mode-receive = Receive

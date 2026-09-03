@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/pocketbase/pocketbase/core"
 )
 
 // ── B25: FX negative cache ───────────────────────────────────────────
@@ -113,3 +115,119 @@ func TestAdminStatsB32_TopSubsRenewalIsCleanDate(t *testing.T) {
 // so amount_usd already includes Midtrans IDR revenue. Adding idr/fx
 // double-counts every payment. Hypothesis dropped, merge reverted.
 // Lesson: check the WRITER's data model before "fixing" a reader.
+
+// ── #4 needsAttention panel ──────────────────────────────────────────
+func TestAdminStats_NeedsAttention(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+	t.Setenv("OZ_ADMIN_KEY", "secret-admin-key")
+
+	tenantID, _ := seedDashboardTenant(t, app, "attention@test.com")
+	// The seed created an ACTIVE pro subscription. Flip it to grace_period
+	// so the needs-attention scan finds it.
+	subs, _ := app.FindRecordsByFilter("subscriptions", "tenant_id = {:tid}", "", 1, 0, map[string]any{"tid": tenantID})
+	if len(subs) == 0 {
+		t.Fatal("expected the seeded subscription")
+	}
+	sub := subs[0]
+	sub.Set("status", "grace_period")
+	sub.Set("grace_until", time.Now().Add(7*24*time.Hour).Format(time.RFC3339))
+	sub.Set("expires_at", time.Now().Add(-1*24*time.Hour).Format(time.RFC3339))
+	if err := app.Save(sub); err != nil {
+		t.Fatalf("flip to grace_period: %v", err)
+	}
+
+	rec := doJSON(mux, http.MethodGet, "/api/v1/admin/stats", "Bearer secret-admin-key", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var body struct {
+		NeedsAttention []struct {
+			Type  string `json:"type"`
+			Email string `json:"email"`
+			Tier  string `json:"tier"`
+		} `json:"needsAttention"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	var found bool
+	for _, item := range body.NeedsAttention {
+		if item.Type == "grace_period" && item.Email == "attention@test.com" && item.Tier == "pro" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected a grace_period needs-attention item for attention@test.com, got %+v", body.NeedsAttention)
+	}
+}
+
+// ── #6 trial→paid funnel test ────────────────────────────────────────
+
+func TestAdminStats_TrialFunnel(t *testing.T) {
+	resetProviderRevenueCache()
+	resetRateLimiters()
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+	t.Setenv("OZ_ADMIN_KEY", "secret-admin-key")
+
+	tenantID, _ := seedDashboardTenant(t, app, "funnel@test.com")
+
+	// Seed a trial_registration row.
+	col, _ := app.FindCollectionByNameOrId("trial_registrations")
+	trial := core.NewRecord(col)
+	trial.Set("hardware_fingerprint", "fp-funnel-001")
+	trial.Set("first_seen_at", time.Now().UTC().Format(time.RFC3339))
+	trial.Set("trial_expires_at", time.Now().UTC().Add(7*24*time.Hour).Format(time.RFC3339))
+	trial.Set("platform", "windows")
+	trial.Set("app_version", "0.0.35")
+	if err := app.Save(trial); err != nil {
+		t.Fatalf("save trial registration: %v", err)
+	}
+
+	// The seeded subscription from seedDashboardTenant is active with tier_key=pro.
+	// Set payment_provider to paddle so it counts as a paid conversion.
+	subs, _ := app.FindRecordsByFilter("subscriptions", "tenant_id = {:tid}", "", 1, 0, map[string]any{"tid": tenantID})
+	if len(subs) > 0 {
+		subs[0].Set("payment_provider", "paddle")
+		subs[0].Set("starts_at", time.Now().UTC().Format(time.RFC3339))
+		if err := app.Save(subs[0]); err != nil {
+			t.Fatalf("set payment_provider: %v", err)
+		}
+	}
+
+	rec := doJSON(mux, http.MethodGet, "/api/v1/admin/stats", "Bearer secret-admin-key", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var body struct {
+		TrialFunnel []struct {
+			Month  string `json:"month"`
+			Trials int    `json:"trials"`
+			Paid   int    `json:"paid"`
+		} `json:"trialFunnel"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	if len(body.TrialFunnel) != 12 {
+		t.Fatalf("expected 12 funnel months, got %d", len(body.TrialFunnel))
+	}
+	curKey := time.Now().UTC().Format("2006-01")
+	var found bool
+	for _, f := range body.TrialFunnel {
+		if f.Month == curKey {
+			found = true
+			if f.Trials < 1 {
+				t.Errorf("current month trials = %d, want >= 1", f.Trials)
+			}
+			if f.Paid < 1 {
+				t.Errorf("current month paid = %d, want >= 1", f.Paid)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("current month %q not found in funnel", curKey)
+	}
+}

@@ -57,7 +57,10 @@ type ViewMode = 'daily' | 'weekly' | 'monthly';
 
 // FTL ids for weekday labels (day-sunday … day-saturday in reports.ftl),
 // indexed by the heatmap's day_of_week column (0 = Sunday).
-const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+// Exported so dynamicFluentFamilies.test.ts can pin the `day-${dayKey}`
+// family against both bundles: the id is built by interpolation, so the
+// static parity gate cannot see the reference and cannot catch a rename.
+export const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 type RevenueRow = DailyRevenueRow | WeeklyRevenueRow | MonthlyRevenueRow;
 

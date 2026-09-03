@@ -159,6 +159,18 @@ pub async fn create_backup(state: State<'_, AppState>) -> Result<BackupResult, A
     })
 }
 
+/// Map settings rows to export JSON, dropping keys that must never
+/// leave the backend in a portable package (review MED-2): credential
+/// secrets and manager-owned `local_api.*` keys. An exported-then-
+/// restored backup carrying `local_api.secret` would hand two installs
+/// the same signing secret, breaking the per-install property.
+fn exportable_settings_rows(rows: Vec<(String, String)>) -> Vec<serde_json::Value> {
+    rows.into_iter()
+        .filter(|(key, _)| !crate::commands::settings::is_non_exportable_key(key))
+        .map(|(key, value)| serde_json::json!({ "key": key, "value": value }))
+        .collect()
+}
+
 #[tauri::command]
 /// Export data.
 pub async fn export_data(
@@ -236,11 +248,7 @@ pub async fn export_data(
 
     let settings = if wants("settings") {
         let rows = Settings::load_all(&conn)?;
-        Some(
-            rows.into_iter()
-                .map(|(key, value)| serde_json::json!({ "key": key, "value": value }))
-                .collect(),
-        )
+        Some(exportable_settings_rows(rows))
     } else {
         None
     };
@@ -517,6 +525,15 @@ pub async fn import_data(
             if let Some(key) = val.get("key").and_then(|v| v.as_str())
                 && let Some(value) = val.get("value").and_then(|v| v.as_str())
             {
+                // Symmetric with the export redaction above: secret and
+                // manager-owned keys never travel in portable packages.
+                // An older export that still carries them must not
+                // silently swap this install's signing secret or flip
+                // its persisted Local API intent behind the manager's
+                // back (review MED-2).
+                if crate::commands::settings::is_non_exportable_key(key) {
+                    continue;
+                }
                 let _ = Settings::set(&tx, key, value);
                 settings_imported += 1;
             }

@@ -8,9 +8,15 @@ package main
 //
 // Auth: adminAuth (OZ_ADMIN_KEY bearer or admin tenant session)
 //
-// MRR is computed from active subscriptions × tier price map (not from
-// transaction amounts — Paddle/Midtrans revenue data lands later). The FX
-// rate for USD→IDR is fetched from open.er-api.com with a 1-hour cache.
+// Income/gross figures (monthlyGross*, lifetimeUsd/Idr, revenueTrend) come
+// from the revenue_events ledger — written ONLY by signature-verified
+// Paddle/Midtrans webhooks (see provider_revenue.go) — so admin DB edits
+// (tier overrides, renews, grants) can never move the money numbers. MRR is
+// computed from active subscriptions × tier price map and is always labeled
+// a subscription estimate, distinct from (and never recycled into) the
+// provider-verified gross. The FX rate for USD→IDR is fetched from
+// open.er-api.com with a 1-hour cache (5-minute cache for the revenue
+// snapshot).
 
 import (
 	"encoding/json"
@@ -151,35 +157,38 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 
 		fxRate, fxUpdatedAt, fxLive := getFxRate()
 
-		// ── Real revenue from revenue_events (Phase D) ───────────
-		// Sum recorded payments (Paddle USD + Midtrans IDR) into a
-		// per-month USD/IDR map, plus lifetime totals. Falls back to the
-		// price-map estimate below when no events exist yet.
-		realByMonth := make(map[string]struct{ usd, idr float64 })
-		lifetimeUsd, lifetimeIdr := 0.0, 0.0
-		revEvents, _ := app.FindRecordsByFilter("revenue_events",
-			"id != ''", "-created", 0, 0)
-		for _, re := range revEvents {
-			usd := re.GetFloat("amount_usd")
-			idr := float64(re.GetInt("amount_idr"))
-			created := re.GetDateTime("created").Time()
-			key := fmt.Sprintf("%d-%02d", created.Year(), created.Month())
-			b := realByMonth[key]
-			b.usd += usd
-			b.idr += idr
-			realByMonth[key] = b
-			lifetimeUsd += usd
-			lifetimeIdr += idr
+		// ── Provider-verified revenue (income/gross source of truth) ──
+		// Income/gross figures come from revenue_events — the append-only
+		// ledger written ONLY by signature-verified Paddle/Midtrans webhooks
+		// (see provider_revenue.go).  Admin DB edits (tier overrides, renew,
+		// grants, subscription rows) cannot move these numbers: they never
+		// touch revenue_events.  The price-map estimate below survives only
+		// as a clearly-labeled fallback for months with no provider events.
+		// ?refresh=1 bypasses the 5-minute cache to show the latest data.
+		if e.Request.URL.Query().Get("refresh") == "1" {
+			resetProviderRevenueCache()
 		}
+		rev := getProviderRevenue(app)
+		realByMonth := rev.ByMonth
+		lifetimeUsd, lifetimeIdr := rev.LifetimeUsd, rev.LifetimeIdr
 
 		// ── Time series (12 months) ─────────────────────────────────
 		now := time.Now()
 		type monthBucket struct {
-			Month string  `json:"month"`
-			Usd   float64 `json:"usd"`
-			Idr   float64 `json:"idr"`
-			Count int     `json:"count"`
-			Churn int     `json:"churn"`
+			Month       string  `json:"month"`
+			Usd         float64 `json:"usd"`
+			Idr         float64 `json:"idr"`
+			PaddleUsd   float64 `json:"paddleUsd,omitempty"`
+			PaddleIdr   float64 `json:"paddleIdr,omitempty"`
+			MidtransUsd float64 `json:"midtransUsd,omitempty"`
+			MidtransIdr float64 `json:"midtransIdr,omitempty"`
+			RefundUsd   float64 `json:"refundUsd,omitempty"`
+			RefundIdr   float64 `json:"refundIdr,omitempty"`
+			Trials      int     `json:"trials,omitempty"`
+			Paid        int     `json:"paid,omitempty"`
+			Count       int     `json:"count"`
+			Churn       int     `json:"churn"`
+			Source      string  `json:"source,omitempty"`
 		}
 		// Build 12-month window.
 		buckets := make([]monthBucket, 12)
@@ -191,14 +200,16 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 			buckets[i] = monthBucket{Month: key}
 		}
 
-		// Revenue trend: group active subscriptions by starts_at month,
-		// sum tier prices.
+		// Revenue trend: provider-verified revenue_events only (no
+		// subscription-price projection — see the trend build below).
 		// Subscriber growth: cumulative count over time.
 		// Signups: group tenants.created by month.
 		// Churn: group expired/revoked subscriptions by expires_at month.
 
-		// Scan active subscriptions (MRR contribution per month).
-		revenueByMonth := make(map[string]float64)
+		// Scan subscriptions for subscriber growth + churn.  Revenue is NOT
+		// derived here — the price-map estimate that used to be recycled
+		// into the money chart was removed so manual DB tier overrides can
+		// never move gross income (no webhook payment = no revenue).
 		subGrowthByMonth := make(map[string]int)
 		churnByMonth := make(map[string]int)
 
@@ -207,14 +218,10 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 			"tier_key != 'free'",
 			"-created", 0, 0)
 		for _, sub := range allSubs {
-			tier := sub.GetString("tier_key")
-			price := TierPriceUSD[tier]
-
-			// Active: add to revenue + growth.
+			// Active: add to subscriber growth.
 			if sub.GetString("status") == "active" {
 				startsAt := sub.GetDateTime("starts_at").Time()
 				key := fmt.Sprintf("%d-%02d", startsAt.Year(), startsAt.Month())
-				revenueByMonth[key] += price
 				subGrowthByMonth[key]++
 			}
 
@@ -229,24 +236,50 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		// Build revenue trend, subscriber growth, churn arrays.
-		// Revenue uses REAL revenue_events when present for a month,
-		// else the price-map estimate (fallback for months without
-		// recorded transactions, e.g. new installs).
+		// Revenue trend uses the provider-verified revenue_events ledger
+		// ONLY: months without webhook-verified payments are 0.  No
+		// subscription/price-map projection is ever recycled into the
+		// money chart — a manual DB tier override (free→plus) creates a
+		// subscription row but no webhook payment, so it must not move
+		// the trend. MRR is reported separately and labeled.
 		revenueTrend := make([]monthBucket, 0, 12)
 		subGrowth := make([]monthBucket, 0, 12)
 		churnArr := make([]monthBucket, 0, 12)
 		cumulative := 0
 		for _, key := range bucketKeys {
-			rev := revenueByMonth[key]
-			// NOTE (bug hunt r6): amount_usd already contains FX-converted
-			// IDR-native events (revenue_events.go writes both currencies
-			// of every payment) — do NOT add idr/fx here, that double-counts.
-			if real, ok := realByMonth[key]; ok && (real.usd > 0 || real.idr > 0) {
-				rev = real.usd
+			if m, ok := realByMonth[key]; ok && m.Count > 0 && (m.Usd > 0 || m.Idr > 0) {
+				// Provider-verified webhook revenue (refunds included when
+				// revenue_adjustments rows exist for the month).
+				revenueTrend = append(revenueTrend, monthBucket{
+					Month:       key,
+					Usd:         math.Round(m.Usd*100) / 100,
+					Idr:         math.Round(m.Idr),
+					PaddleUsd:   math.Round(m.PaddleUsd*100) / 100,
+					PaddleIdr:   math.Round(m.PaddleIdr),
+					MidtransUsd: math.Round(m.MidtransUsd*100) / 100,
+					MidtransIdr: math.Round(m.MidtransIdr),
+					RefundUsd:   math.Round(m.RefundUsd*100) / 100,
+					RefundIdr:   math.Round(m.RefundIdr),
+					Count:       m.Count,
+					Source:      providerRevenueSource(m),
+				})
+			} else if m, ok := realByMonth[key]; ok && (m.RefundUsd > 0 || m.RefundIdr > 0) {
+				// A month with refunds but no recorded gross (edge case:
+				// claw-back arrived without a matching revenue_events row) —
+				// still surface the refund so it is never silently dropped.
+				revenueTrend = append(revenueTrend, monthBucket{
+					Month:     key,
+					RefundUsd: math.Round(m.RefundUsd*100) / 100,
+					RefundIdr: math.Round(m.RefundIdr),
+					Source:    "provider",
+				})
+			} else {
+				// No provider-verified income this month — explicit zero.
+				revenueTrend = append(revenueTrend, monthBucket{
+					Month:  key,
+					Source: "estimate",
+				})
 			}
-			revenueTrend = append(revenueTrend, monthBucket{
-				Month: key, Usd: math.Round(rev*100) / 100, Idr: math.Round(rev*fxRate*100) / 100,
-			})
 			cumulative += subGrowthByMonth[key]
 			subGrowth = append(subGrowth, monthBucket{
 				Month: key, Count: cumulative,
@@ -396,32 +429,254 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
+		// ── Current month provider gross (income/gross source of truth) ─
+		curKey := fmt.Sprintf("%d-%02d", now.Year(), now.Month())
+		monthlyGrossUsd, monthlyGrossIdr := 0.0, 0.0
+		monthlyPaddleUsd, monthlyPaddleIdr := 0.0, 0.0
+		monthlyMidUsd, monthlyMidIdr := 0.0, 0.0
+		monthlyRefundUsd, monthlyRefundIdr := 0.0, 0.0
+		grossSource := "estimate"
+		if cm, ok := realByMonth[curKey]; ok && cm.Count > 0 && (cm.Usd > 0 || cm.Idr > 0) {
+			monthlyGrossUsd = math.Round(cm.Usd*100) / 100
+			monthlyGrossIdr = math.Round(cm.Idr)
+			monthlyPaddleUsd = math.Round(cm.PaddleUsd*100) / 100
+			monthlyPaddleIdr = math.Round(cm.PaddleIdr)
+			monthlyMidUsd = math.Round(cm.MidtransUsd*100) / 100
+			monthlyMidIdr = math.Round(cm.MidtransIdr)
+			monthlyRefundUsd = math.Round(cm.RefundUsd*100) / 100
+			monthlyRefundIdr = math.Round(cm.RefundIdr)
+			grossSource = providerRevenueSource(cm)
+		} else if cm, ok := realByMonth[curKey]; ok && (cm.RefundUsd > 0 || cm.RefundIdr > 0) {
+			// Refund-only month (no gross): still surface the claw-back.
+			monthlyRefundUsd = math.Round(cm.RefundUsd*100) / 100
+			monthlyRefundIdr = math.Round(cm.RefundIdr)
+			grossSource = "provider"
+		} else {
+			// No provider-verified revenue events this month — the gross
+			// must be zero.  MRR (computed from active subscriptions × tier
+			// price) is a subscription projection, not received income, and
+			// must never be recycled into monthlyGross where it would
+			// falsely report a manual DB tier override as revenue.
+			grossSource = "estimate"
+		}
+
+		// ── Needs-attention items (alert panel) ──────────────────────
+		// Three actionable conditions for the operator, in priority order:
+		// 1) grace_period subscriptions (payment failed / past due),
+		// 2) expired subscriptions whose license key is still active
+		//    (un-revoked key — someone keeps using a dead plan),
+		// 3) refunds/chargebacks in the last 30 days.
+		type attentionItem struct {
+			Type   string `json:"type"` // grace_period | expired_active | refund
+			Email  string `json:"email"`
+			Tier   string `json:"tier,omitempty"`
+			Detail string `json:"detail"`
+			At     string `json:"at"` // date the condition was noticed
+		}
+		needsAttention := make([]attentionItem, 0)
+
+		// 1. Grace-period subscriptions (payment failed).
+		graceSubs, _ := app.FindRecordsByFilter("subscriptions",
+			"status = 'grace_period' && tier_key != 'free'",
+			"-updated", 20, 0)
+		for _, gs := range graceSubs {
+			tenantID := gs.GetString("tenant_id")
+			tenant, err := app.FindRecordById("tenants", tenantID)
+			if err != nil {
+				continue
+			}
+			graceUntil := gs.GetDateTime("grace_until").Time()
+			at := ""
+			if !graceUntil.IsZero() {
+				at = graceUntil.Format("2006-01-02")
+			}
+			needsAttention = append(needsAttention, attentionItem{
+				Type:   "grace_period",
+				Email:  tenant.GetString("email"),
+				Tier:   gs.GetString("tier_key"),
+				Detail: "payment failed — grace until " + at,
+				At:     at,
+			})
+		}
+
+		// 2. Expired subscriptions with still-active license keys.
+		expiredWithKey := 0
+		expiredSubs, _ := app.FindRecordsByFilter("subscriptions",
+			"status = 'expired' && tier_key != 'free'",
+			"-expires_at", 30, 0)
+		for _, es := range expiredSubs {
+			if len(needsAttention) >= 20 {
+				break
+			}
+			subID := es.Id
+			// Find an active license key bound to this subscription.
+			key, err := app.FindFirstRecordByFilter("license_keys",
+				"status = 'active' && (paddle_sub_id = {:sid} || midtrans_sub_id = {:sid})",
+				map[string]any{"sid": subID})
+			if err != nil || key == nil {
+				continue
+			}
+			expiredWithKey++
+			tenant, terr := app.FindRecordById("tenants", es.GetString("tenant_id"))
+			if terr != nil {
+				continue
+			}
+			needsAttention = append(needsAttention, attentionItem{
+				Type:   "expired_active",
+				Email:  tenant.GetString("email"),
+				Tier:   es.GetString("tier_key"),
+				Detail: "expired but key " + key.GetString("key") + " still active",
+				At:     es.GetDateTime("expires_at").Time().Format("2006-01-02"),
+			})
+		}
+
+		// 3. Recent refunds (last 30 days) from the adjustment ledger.
+		refundCutoff := now.AddDate(0, 0, -30).Format(time.RFC3339)
+		adjSubs, _ := app.FindRecordsByFilter("revenue_adjustments",
+			"created >= {:cutoff}",
+			"-created", 10, 0,
+			map[string]any{"cutoff": refundCutoff})
+		for _, ar := range adjSubs {
+			tenantID := ar.GetString("tenant_id")
+			email := ""
+			if tenantID != "" {
+				if tenant, err := app.FindRecordById("tenants", tenantID); err == nil {
+					email = tenant.GetString("email")
+				}
+			}
+			kind := ar.GetString("kind")
+			if kind == "" {
+				kind = "adjustment"
+			}
+			needsAttention = append(needsAttention, attentionItem{
+				Type:   "refund",
+				Email:  email,
+				Detail: kind + " — Rp " + fmt.Sprintf("%d", ar.GetInt("amount_idr")),
+				At:     ar.GetDateTime("created").Time().Format("2006-01-02"),
+			})
+		}
+
+		// ── Trial→paid funnel (#6) ───────────────────────────────────
+		// Per month: trial registrations started (first_seen_at) vs paid
+		// conversions (subscriptions with tier != free and webhook-verified
+		// payment_provider).  The conversion rate = paid / trials.
+		trialsByMonth := make(map[string]int)
+		trialRecs, _ := app.FindRecordsByFilter("trial_registrations",
+			"id != ''", "", 0, 0)
+		for _, tr := range trialRecs {
+			firstSeen := tr.GetDateTime("first_seen_at").Time()
+			if firstSeen.IsZero() {
+				continue
+			}
+			key := fmt.Sprintf("%d-%02d", firstSeen.Year(), firstSeen.Month())
+			trialsByMonth[key]++
+		}
+		paidByMonth := make(map[string]int)
+		paidSubs, _ := app.FindRecordsByFilter("subscriptions",
+			"tier_key != 'free'", "-starts_at", 0, 0)
+		for _, sub := range paidSubs {
+			pp := sub.GetString("payment_provider")
+			if pp != "paddle" && pp != "midtrans" {
+				continue
+			}
+			startsAt := sub.GetDateTime("starts_at").Time()
+			if startsAt.IsZero() {
+				continue
+			}
+			key := fmt.Sprintf("%d-%02d", startsAt.Year(), startsAt.Month())
+			paidByMonth[key]++
+		}
+		funnelArr := make([]monthBucket, 0, 12)
+		for _, key := range bucketKeys {
+			funnelArr = append(funnelArr, monthBucket{
+				Month:  key,
+				Trials: trialsByMonth[key],
+				Paid:   paidByMonth[key],
+			})
+		}
+		// ── Recent revenue events feed (#5) ──────────────────────────
+		// The last N webhook-verified charges (revenue_events ledger) with
+		// the paying tenant's email, so the operator sees money arriving in
+		// near-real-time. Refunds live in a separate ledger and surface via
+		// needsAttention, not here — this feed is income only.
+		type revenueFeedRow struct {
+			Email     string  `json:"email"`
+			Provider  string  `json:"provider"`
+			Tier      string  `json:"tier"`
+			AmountUsd float64 `json:"amountUsd"`
+			AmountIdr int64   `json:"amountIdr"`
+			Created   string  `json:"created"`
+		}
+		recentRevenueEvents := make([]revenueFeedRow, 0, 8)
+		feedEvents, _ := app.FindRecordsByFilter("revenue_events",
+			"id != ''", "-created", 8, 0)
+		for _, fe := range feedEvents {
+			email := ""
+			tenantID := fe.GetString("tenant_id")
+			if tenantID != "" {
+				if tenant, err := app.FindRecordById("tenants", tenantID); err == nil {
+					email = tenant.GetString("email")
+				}
+			}
+			created := fe.GetDateTime("created").Time()
+			recentRevenueEvents = append(recentRevenueEvents, revenueFeedRow{
+				Email:     email,
+				Provider:  fe.GetString("provider"),
+				Tier:      fe.GetString("tier_key"),
+				AmountUsd: math.Round(fe.GetFloat("amount_usd")*100) / 100,
+				AmountIdr: int64(fe.GetInt("amount_idr")),
+				Created:   created.Format(time.RFC3339),
+			})
+		}
+
 		// ── Response ────────────────────────────────────────────────
 		return e.JSON(http.StatusOK, map[string]any{
 			"kpis": map[string]any{
-				"totalUsers":       totalUsers,
-				"activeUsers":      activeUsers,
-				"totalSubscribers": totalSubscribers,
-				"mrrUsd":           math.Round(mrrUsd*100) / 100,
-				"mrrIdr":           math.Round(mrrUsd * fxRate),
-				"lifetimeUsd":      math.Round(lifetimeUsd*100) / 100,
-				"lifetimeIdr":      math.Round(lifetimeIdr),
-				"arpuUsd":          arpuUsd,
-				"activeDevices":    activeDevices,
-				"trialToPaidRate":  trialToPaidRate,
-				"fxRate":           fxRate,
-				"fxLive":           fxLive,
-				"fxUpdatedAt":      fxUpdatedAt.Format(time.RFC3339),
+				"totalUsers":          totalUsers,
+				"activeUsers":         activeUsers,
+				"totalSubscribers":    totalSubscribers,
+				"mrrUsd":              math.Round(mrrUsd*100) / 100,
+				"mrrIdr":              math.Round(mrrUsd * fxRate),
+				"monthlyGrossUsd":     monthlyGrossUsd,
+				"monthlyGrossIdr":     monthlyGrossIdr,
+				"monthlyRefundUsd":    monthlyRefundUsd,
+				"monthlyRefundIdr":    monthlyRefundIdr,
+				"monthlyPaddleUsd":    monthlyPaddleUsd,
+				"monthlyPaddleIdr":    monthlyPaddleIdr,
+				"monthlyMidtransUsd":  monthlyMidUsd,
+				"monthlyMidtransIdr":  monthlyMidIdr,
+				"grossSource":         grossSource,
+				"lifetimeUsd":         math.Round(lifetimeUsd*100) / 100,
+				"lifetimeIdr":         math.Round(lifetimeIdr),
+				"lifetimeRefundUsd":   math.Round(rev.LifetimeRefundUsd*100) / 100,
+				"lifetimeRefundIdr":   math.Round(rev.LifetimeRefundIdr),
+				"lifetimePaddleUsd":   math.Round(rev.LifetimePaddleUsd*100) / 100,
+				"lifetimePaddleIdr":   math.Round(rev.LifetimePaddleIdr),
+				"lifetimeMidtransUsd": math.Round(rev.LifetimeMidUsd*100) / 100,
+				"lifetimeMidtransIdr": math.Round(rev.LifetimeMidIdr),
+				"arpuUsd":             arpuUsd,
+				"activeDevices":       activeDevices,
+				"trialToPaidRate":     trialToPaidRate,
+				"fxRate":              fxRate,
+				"fxLive":              fxLive,
+				"fxUpdatedAt":         fxUpdatedAt.Format(time.RFC3339),
+				// When the revenue snapshot was last refreshed (provider
+				// ledger cache TTL). Lets the hero show how fresh the
+				// income/gross figures are.
+				"revenueCachedAt": rev.UpdatedAt.Format(time.RFC3339),
 			},
-			"revenueTrend":     revenueTrend,
-			"subscriberGrowth": subGrowth,
-			"signupsPerMonth":  signupsArr,
-			"churnPerMonth":    churnArr,
-			"tierDistribution": tierDist,
-			"providerSplit":    providerSplit,
-			"topSubscribers":   topSubs,
-			"recentSignups":    recentSignups,
-			"expiringSoon":     expiringSoon,
+			"revenueTrend":        revenueTrend,
+			"subscriberGrowth":    subGrowth,
+			"signupsPerMonth":     signupsArr,
+			"churnPerMonth":       churnArr,
+			"tierDistribution":    tierDist,
+			"providerSplit":       providerSplit,
+			"topSubscribers":      topSubs,
+			"recentSignups":       recentSignups,
+			"expiringSoon":        expiringSoon,
+			"needsAttention":      needsAttention,
+			"recentRevenueEvents": recentRevenueEvents,
+			"trialFunnel":         funnelArr,
 		})
 	}
 }

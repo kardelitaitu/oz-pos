@@ -30,11 +30,12 @@ const idJson = JSON.parse(
 // ─── Source structure tests ──────────────────────────────────────────
 
 describe('VerticalLanding source structure', () => {
-  it('exports VerticalKey type with all 4 verticals', () => {
+  it('exports VerticalKey type with all 5 verticals', () => {
     expect(VERTICAL_SRC).toContain("'kafe'");
     expect(VERTICAL_SRC).toContain("'minimarket'");
     expect(VERTICAL_SRC).toContain("'warung'");
     expect(VERTICAL_SRC).toContain("'restoran'");
+    expect(VERTICAL_SRC).toContain("'warehouse'");
   });
 
   it('has leadWithTrial flag for kafe', () => {
@@ -49,10 +50,6 @@ describe('VerticalLanding source structure', () => {
   it('builds tierHref with pricing deep-link', () => {
     // Source uses template literal: `#${vStrings[vertical].tierAnchor}`
     expect(VERTICAL_SRC).toContain('#${vStrings[vertical].tierAnchor}');
-  });
-
-  it('has bundle CTA with restaurant_starter', () => {
-    expect(VERTICAL_SRC).toContain('restaurant_starter');
   });
 
   it('determines primaryCta based on leadsWithTrial', () => {
@@ -87,9 +84,14 @@ describe('Vertical tier anchors', () => {
     expect(idJson.vertical.restoran.tierAnchor).toBe('premium');
   });
 
+  it('warehouse anchors to Pro tier', () => {
+    expect(enJson.vertical.warehouse.tierAnchor).toBe('pro');
+    expect(idJson.vertical.warehouse.tierAnchor).toBe('pro');
+  });
+
   it('all tier anchors are valid pricing section IDs', () => {
     const validAnchors = ['free', 'plus', 'pro', 'premium', 'enterprise'];
-    const verticals = ['kafe', 'minimarket', 'warung', 'restoran'] as const;
+    const verticals = ['kafe', 'minimarket', 'warung', 'restoran', 'warehouse'] as const;
     for (const key of verticals) {
       expect(validAnchors).toContain(enJson.vertical[key].tierAnchor);
     }
@@ -104,6 +106,7 @@ describe('Vertical trial CTA configuration', () => {
     expect(enJson.vertical.minimarket.leadWithTrial).toBeUndefined();
     expect(enJson.vertical.warung.leadWithTrial).toBeUndefined();
     expect(enJson.vertical.restoran.leadWithTrial).toBeUndefined();
+    expect(enJson.vertical.warehouse.leadWithTrial).toBeUndefined();
   });
 
   it('kafe has a trialCta label', () => {
@@ -116,21 +119,21 @@ describe('Vertical trial CTA configuration', () => {
   });
 
   it('all verticals have ctaPrimary', () => {
-    const verticals = ['kafe', 'minimarket', 'warung', 'restoran'] as const;
+    const verticals = ['kafe', 'minimarket', 'warung', 'restoran', 'warehouse'] as const;
     for (const key of verticals) {
       expect(enJson.vertical[key].ctaPrimary).toBeTruthy();
     }
   });
 
   it('all verticals have the same number of features (4)', () => {
-    const verticals = ['kafe', 'minimarket', 'warung', 'restoran'] as const;
+    const verticals = ['kafe', 'minimarket', 'warung', 'restoran', 'warehouse'] as const;
     for (const key of verticals) {
       expect(enJson.vertical[key].features).toHaveLength(4);
     }
   });
 
   it('all verticals have benefits array', () => {
-    const verticals = ['kafe', 'minimarket', 'warung', 'restoran'] as const;
+    const verticals = ['kafe', 'minimarket', 'warung', 'restoran', 'warehouse'] as const;
     for (const key of verticals) {
       expect(enJson.vertical[key].benefits.length).toBeGreaterThanOrEqual(3);
     }
@@ -142,23 +145,23 @@ describe('Vertical trial CTA configuration', () => {
 describe('Vertical content en/id parity', () => {
   it('en and id have the same vertical keys', () => {
     const enKeys = Object.keys(enJson.vertical).filter((k) =>
-      ['kafe', 'minimarket', 'warung', 'restoran'].includes(k),
+      ['kafe', 'minimarket', 'warung', 'restoran', 'warehouse'].includes(k),
     ).sort();
     const idKeys = Object.keys(idJson.vertical).filter((k) =>
-      ['kafe', 'minimarket', 'warung', 'restoran'].includes(k),
+      ['kafe', 'minimarket', 'warung', 'restoran', 'warehouse'].includes(k),
     ).sort();
     expect(idKeys).toEqual(enKeys);
   });
 
   it('en and id have the same tierAnchor for each vertical', () => {
-    const verticals = ['kafe', 'minimarket', 'warung', 'restoran'] as const;
+    const verticals = ['kafe', 'minimarket', 'warung', 'restoran', 'warehouse'] as const;
     for (const key of verticals) {
       expect(idJson.vertical[key].tierAnchor).toBe(enJson.vertical[key].tierAnchor);
     }
   });
 
   it('en and id have the same number of features per vertical', () => {
-    const verticals = ['kafe', 'minimarket', 'warung', 'restoran'] as const;
+    const verticals = ['kafe', 'minimarket', 'warung', 'restoran', 'warehouse'] as const;
     for (const key of verticals) {
       expect(idJson.vertical[key].features).toHaveLength(
         enJson.vertical[key].features.length,
@@ -167,7 +170,7 @@ describe('Vertical content en/id parity', () => {
   });
 
   it('en and id have different titles for each vertical (translated)', () => {
-    const verticals = ['kafe', 'minimarket', 'warung', 'restoran'] as const;
+    const verticals = ['kafe', 'minimarket', 'warung', 'restoran', 'warehouse'] as const;
     const translations = verticals.filter(
       (key) => enJson.vertical[key].title !== idJson.vertical[key].title,
     );

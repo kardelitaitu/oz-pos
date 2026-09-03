@@ -295,19 +295,6 @@ const TOOLS: ToolItem[] = [
       </svg>
     ),
   },
-  {
-    id: 'kds',
-    route: 'kds',
-    labelKey: 'workspace-home-kds-title',
-    descKey: 'workspace-home-kds-desc',
-    minRole: 'staff',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
-        <rect x="2" y="4" width="20" height="12" rx="2" />
-        <path d="M12 16v4M8 20h8" />
-      </svg>
-    ),
-  },
 ];
 
 // ── Icons ─────────────────────────────────────────────────────────
@@ -562,11 +549,14 @@ export default function WorkspaceHome() {
 
   const roleLevel = ROLE_HIERARCHY[roleName] ?? 0;
 
-  const isAdminOrOwner =
-    roleName === 'owner' ||
-    roleName === 'role-owner' ||
-    roleName === 'admin' ||
-    roleName === 'role-admin';
+  /** Staff badge/shortcut role — checkout-only, never manages workspaces. */
+  const isStaffRole =
+    roleName === 'staff' || roleName === 'role-staff';
+
+  /** Management roles (owner/admin/manager) may add workspaces — but only
+   *  when no workspace is available yet (per the home-screen rules). Staff
+   *  never sees the Add card, even on an empty list. */
+  const canAddWorkspace = roleLevel >= (ROLE_HIERARCHY['manager'] ?? 0) && sortedWorkspaces.length === 0;
 
   const canAccessTool = useCallback(
     (minRole: ToolItem['minRole']): boolean => roleLevel >= (ROLE_HIERARCHY[minRole] ?? 0),
@@ -584,9 +574,16 @@ export default function WorkspaceHome() {
     [caps],
   );
 
+  // Only owner/admin/manager roles see the Tools section at all — staff and
+  // auditor operate the assigned workspaces below, never the admin tools.
+  const canSeeTools = roleLevel >= (ROLE_HIERARCHY['manager'] ?? 0);
+
   const visibleTools = useMemo(
-    () => TOOLS.filter((t) => canAccessTool(t.minRole) && capAllowed(t)),
-    [canAccessTool, capAllowed],
+    () =>
+      TOOLS.filter(
+        (t) => canSeeTools && canAccessTool(t.minRole) && capAllowed(t),
+      ),
+    [canSeeTools, canAccessTool, capAllowed],
   );
 
   // ── Shortcut navigation to tools (switches to admin workspace) ──
@@ -837,7 +834,7 @@ export default function WorkspaceHome() {
               </button>
             </div>
           ) : sortedWorkspaces.length === 0 ? (
-            isAdminOrOwner ? (
+            canAddWorkspace ? (
               <div className="workspace-home-content">
                 <div className="workspace-section">
                   <div className="workspace-section-header">
@@ -878,6 +875,26 @@ export default function WorkspaceHome() {
                     </button>
                   </div>
                 </div>
+              </div>
+            ) : isStaffRole ? (
+              // A staff user with no assigned workspace has nothing to do
+              // on this screen — they cannot open the admin tools (staff
+              // never sees the Tools section) or add workspaces, so a
+              // centered notice is the only content they need.
+              <div className="workspace-empty" data-testid="workspace-empty-staff">
+                <div className="workspace-empty-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                </div>
+                <p className="workspace-empty-title">
+                  <Localized id="workspace-home-staff-empty"><span>No workspaces available</span></Localized>
+                </p>
+                <p className="workspace-empty-desc">
+                  <Localized id="workspace-home-staff-empty-desc"><span>Contact Administrator</span></Localized>
+                </p>
               </div>
             ) : (
             <div className="workspace-empty">
@@ -1002,39 +1019,9 @@ export default function WorkspaceHome() {
                     );
                   })}
 
-                  {/* ── Add workspace card (owner/admin only) ───── */}
-                  {isAdminOrOwner && (
-                    <button
-                      type="button"
-                      className="workspace-card workspace-card--add"
-                      data-testid="workspace-card-add"
-                      onClick={() => handleShortcutNav('settings/topology')}
-                      aria-label={l10n.getString('workspace-home-add-workspace-aria')}
-                    >
-                      <div className="workspace-card-row">
-                        <div className="workspace-card-icon">
-                          <div className="workspace-card-icon-inner">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="24" height="24" aria-hidden="true">
-                              <line x1="12" y1="5" x2="12" y2="19" />
-                              <line x1="5" y1="12" x2="19" y2="12" />
-                            </svg>
-                          </div>
-                        </div>
-                        <div className="workspace-card-body">
-                          <div className="workspace-card-title">
-                            <h2 className="workspace-card-name">
-                              <Localized id="workspace-home-add-workspace"><span>Add Workspace</span></Localized>
-                            </h2>
-                          </div>
-                          <div className="workspace-card-text">
-                            <p className="workspace-card-desc">
-                              <Localized id="workspace-home-add-workspace-desc"><span>Configure workspaces in the topology editor</span></Localized>
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  )}
+                  {/* ── Add workspace card is not shown when workspaces
+                     exist — per the home-screen rules, owner/admin/manager
+                     see it only on the empty state, and staff never sees it. */}
                 </div>
               </div>
 

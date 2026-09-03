@@ -1,3 +1,10 @@
+/* Self-hosted variable fonts (fontsource). Same family names as before
+   ('Inter', 'JetBrains Mono'), so the token stacks below keep resolving.
+   Serving from our own origin removes the render-blocking third-party
+   fonts.googleapis.com CSS + fonts.gstatic.com hops from the LCP chain. */
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
+
 @import "tailwindcss";
 
 /* ── OZ-POS Design Language Tokens ─────────────────────────────
@@ -105,6 +112,14 @@
 }
 
 /* ── Base typography (design language) ────────────────────────── */
+html,
+body {
+  /* Hero-carousel slides park beyond the viewport edges between
+     transitions (translateX(±100vw)); html+body need the clip so the
+     parked windows never create a horizontal scrollbar. */
+  overflow-x: hidden;
+}
+
 body {
   font-family: var(--font);
   font-size: 16px;

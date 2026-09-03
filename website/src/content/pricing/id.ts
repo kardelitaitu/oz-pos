@@ -26,7 +26,7 @@ export const pricing: PricingTier[] = [
     name: 'Gratis',
     currency: 'IDR',
     description: 'Gratis selamanya — jalankan satu toko, sepenuhnya offline.',
-    cta: 'Unduh Gratis',
+    cta: 'Unduh',
     prices: {
       monthly: { price: 'Rp 0', period: 'gratis selamanya' },
       yearly: { price: 'Rp 0', period: 'gratis selamanya' },
@@ -36,7 +36,7 @@ export const pricing: PricingTier[] = [
       { label: '1 register', included: true },
       { label: '1 gudang', included: true },
       { label: 'Riwayat penjualan 3 bulan', included: true },
-      { label: 'Pembayaran QRIS', included: false },
+      { label: 'Pembayaran QRIS', included: true },
       { label: 'Sinkron cloud', included: false },
     ],
   },
@@ -46,7 +46,7 @@ export const pricing: PricingTier[] = [
     name: 'Plus',
     currency: 'IDR',
     description: 'Paket awal untuk toko tunggal yang siap berkembang.',
-    cta: 'Pilih Plus',
+    cta: 'Berlangganan',
     prices: {
       monthly: { price: 'Rp 49.000', period: '/m', priceId: 'pro_01m1amcb41qkbr7zzd1kxa3qnd' },
       yearly: { price: 'Rp 500.000', period: '/y', priceId: 'pro_01m1amdj2swb3q21r2mwcy3krh' },
@@ -75,7 +75,7 @@ export const pricing: PricingTier[] = [
     name: 'Pro',
     currency: 'IDR',
     description: 'Untuk bisnis berkembang — analitik, Display Dapur, dan multi-terminal.',
-    cta: 'Pilih Pro',
+    cta: 'Berlangganan',
     highlight: true,
     prices: {
       monthly: {
@@ -104,7 +104,7 @@ export const pricing: PricingTier[] = [
     name: 'Premium',
     currency: 'IDR',
     description: 'Untuk jaringan multi-toko — whitelabel, loyalitas, dan otomatisasi.',
-    cta: 'Pilih Premium',
+    cta: 'Berlangganan',
     prices: {
       monthly: { price: 'Rp 399.000', period: '/m', priceId: 'pro_01m1amema8yj6w5mfm8wx8jwhm' },
       yearly: { price: 'Rp 3.999.000', period: '/y', priceId: 'pro_01m1amf0vpbyfndg5rkvxvyqj4' },
@@ -149,7 +149,7 @@ export const featureRows: FeatureRow[] = [
   { label: 'Max produk/menu', values: { free: 200, plus: 500, pro: 1000, premium: 10000, enterprise: 'Tanpa batas' } },
   { label: 'Staf pengguna', values: { free: 1, plus: 5, pro: 20, premium: 50, enterprise: 'Tanpa batas' } },
   { label: 'Riwayat penjualan', values: { free: '3 bulan', plus: '1 tahun', pro: '5 tahun', premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
-  { label: 'Pembayaran QRIS', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
+  { label: 'Pembayaran QRIS', values: { free: true, plus: true, pro: true, premium: true, enterprise: true } },
   { label: 'Kartu Stripe', values: { free: false, plus: false, pro: true, premium: true, enterprise: true } },
   { label: 'Sinkron cloud', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
   { label: 'Dasbor Penjualan Harian', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },

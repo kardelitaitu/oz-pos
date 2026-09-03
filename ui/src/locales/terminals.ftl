@@ -19,6 +19,10 @@ terminal-device-id-placeholder =
     .placeholder = e.g. hostname or MAC address
 terminal-secret-label = Optional shared secret for sync authentication
 terminal-metadata-label = Optional JSON metadata
+# Save-handler validation. Key names match the l10n.getString() call sites
+# in TerminalManagementScreen verbatim.
+terminal-error-name-required = Terminal name is required
+terminal-error-device-id-required = Device ID is required
 terminal-is-active = Active
 terminal-is-inactive = Inactive
 terminal-status = Status
@@ -79,6 +83,10 @@ terminal-binding-primary = (Primary)
 terminal-binding-update = Update Binding
 terminal-binding-bind = Bind Terminal
 terminal-binding-clear = Clear Binding
+# Failure copy for the three binding mutations, shown in the binding panel.
+terminal-error-binding-load = Failed to load the terminal binding.
+terminal-error-binding-save = Failed to save the terminal binding.
+terminal-error-binding-clear = Failed to clear the terminal binding.
 
 # Feature override counts
 terminal-overrides-count = { $count ->

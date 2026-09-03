@@ -65,16 +65,17 @@
     // response landing after the user switched tabs overwrote the tenants/
     // health view. Same last-click-wins pattern as renderTenants (B15).
     const dashboardGuard = createSeqGuard();
-    async function renderDashboard(background) {
+    async function renderDashboard(background, forceRefresh) {
       // Build into a detached fragment and swap only when fully rendered —
       // a background refresh never flashes a skeleton over the live view.
       const c = el('div');
       const seq = dashboardGuard.next();
 
       // Load real stats; on failure show an error state (no MOCK fallback).
+      // ?refresh=1 bypasses the 5-minute provider-revenue cache on the server.
       let stats = null;
       let loadError = null;
-      try { stats = await api('/api/v1/admin/stats'); } catch (err) { loadError = err; }
+      try { stats = await api('/api/v1/admin/stats' + (forceRefresh ? '?refresh=1' : '')); } catch (err) { loadError = err; }
       // A newer render superseded this one while we awaited — drop out.
       if (!dashboardGuard.isCurrent(seq)) { return; }
       if (!stats) {
@@ -108,9 +109,13 @@
         if (fx.live) { fxRate = fx.rate; fxLive = true; fxUpdatedAt = fx.updatedAt; }
         else { fxLive = false; }
       }
-      // Convert all revenue data to IDR.
-      m.revenueTrend.forEach(d => d.idr = Math.round(d.usd * fxRate));
-      const mrrIdr = Math.round(m.kpis.mrrUsd * fxRate);
+      // Convert all revenue data to IDR — but keep the server's
+      // provider-verified per-month idr when present (revenue_events
+      // ledger writes BOTH currencies at webhook time; re-deriving idr
+      // from usd×fx would double-convert Midtrans IDR and drift with the
+      // live rate). Fall back to usd×fx only when the server sent no idr
+      // (older server build / estimate months).
+      m.revenueTrend.forEach(d => { if (!(d.idr > 0)) d.idr = Math.round((d.usd || 0) * fxRate); });
 
       c.innerHTML = '';
 
@@ -132,11 +137,57 @@
       c.appendChild(head);
 
       // --- Hero: the ONE brand-colored highlight card per view
-      //     (design-language → Cards → Highlight) — revenue is the hero. ---
+      //     (design-language → Cards → Highlight) — revenue is the hero.
+      //     Value = provider-verified monthly gross (revenue_events ledger
+      //     from Paddle/Midtrans webhooks); the source chip tells the
+      //     operator whether it is real money or a subscription estimate.
+      // Source chip: provider-verified webhook gross vs subscription
+      // estimate.  An older server build sends neither grossSource nor
+      // monthlyGrossUsd — that must read as "estimate", never as verified
+      // money.
+      const heroIsEstimate = m.kpis.grossSource === 'estimate' || !m.kpis.grossSource || !(m.kpis.monthlyGrossUsd > 0);
+      const heroSrc = heroIsEstimate ? t('common.estimate') : t('common.providerVerified');
+      // Hero value: provider-verified monthly gross ONLY.  When the server
+      // sends no verified gross (monthlyGrossIdr 0 / grossSource estimate)
+      // the hero must show 0 — a manual DB tier override (free→plus) creates
+      // a subscription row but NO webhook payment, and the MRR projection
+      // must not be recycled into the gross number.  MRR is always shown
+      // separately in the hero sub-line.
+      const heroIdr = m.kpis.monthlyGrossIdr > 0 ? m.kpis.monthlyGrossIdr : 0;
       const hero = el('div', 'hero-card');
-      hero.appendChild(el('div', 'hero-label', t('kpi.monthlyGrossIdr')));
-      hero.appendChild(el('div', 'hero-value', fmtIdr(mrrIdr)));
-      hero.appendChild(el('div', 'hero-sub', `≈ $${m.kpis.mrrUsd} × ${fxRate.toLocaleString()} · ${t('kpi.mrr')} ${fmtUsd(m.kpis.mrrUsd)} · ${t('kpi.arpu')} ${fmtUsd(m.kpis.arpuUsd)}`));
+      // Label: include the current month so the operator knows what period
+      // the gross covers, and a refresh button.
+      const heroLabelRow = el('div', 'hero-label-row');
+      const heroLabel = el('span', 'hero-label', t('kpi.monthlyGrossIdr') + ' · ' + new Date().toLocaleString('en', { month: 'short', year: 'numeric' }));
+      const refreshBtn = el('button', 'hero-refresh');
+      refreshBtn.type = 'button';
+      refreshBtn.textContent = '↻';
+      refreshBtn.title = t('common.refresh');
+      refreshBtn.addEventListener('click', function () { renderDashboard(false, true); });
+      heroLabelRow.appendChild(heroLabel);
+      heroLabelRow.appendChild(refreshBtn);
+      hero.appendChild(heroLabelRow);
+      hero.appendChild(el('div', 'hero-value', fmtIdr(heroIdr)));
+      const heroChip = el('span', 'hero-chip', heroSrc);
+      heroChip.style.cssText = 'font-size:.72rem;opacity:.75;font-weight:600;letter-spacing:.03em;text-transform:uppercase';
+      const heroSub = el('div', 'hero-sub');
+      heroSub.appendChild(heroChip);
+      // Net keepable: gross minus refunds this month (when refunds exist).
+      const monthRefund = m.kpis.monthlyRefundIdr > 0 ? m.kpis.monthlyRefundIdr : 0;
+      heroSub.appendChild(document.createTextNode(` · ${t('kpi.mrr')} ${fmtUsd(m.kpis.mrrUsd)} (${t('common.estimate')}) · ${t('kpi.arpu')} ${fmtUsd(m.kpis.arpuUsd)}`));
+      if (monthRefund > 0) {
+        const refundChip = el('span', 'hero-chip', '−' + t('common.refunds') + ' ' + fmtIdr(monthRefund));
+        refundChip.style.cssText = 'font-size:.72rem;opacity:.9;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--bad)';
+        heroSub.appendChild(refundChip);
+      }
+      // Last-refreshed timestamp (provider ledger cache time, not fetch time).
+      if (m.kpis.revenueCachedAt) {
+        const fresht = new Date(m.kpis.revenueCachedAt);
+        if (!isNaN(fresht.getTime())) {
+          heroSub.appendChild(el('span', 'small', ' · ' + t('common.refreshedAt') + ' ' + fresht.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })));
+        }
+      }
+      hero.appendChild(heroSub);
       c.appendChild(hero);
 
       // --- Stats row: tinted stat cards (spec: tinted bg + 20% border +
@@ -154,13 +205,47 @@
       // Chart canvas variant: the 1280-wide "wide" canvases are 1:1 on a
       // desktop full-row card but downscale chart text to ~3px on a phone
       // card. The phone variant renders ~1:1 (labels at true size).
-      const cv = window.matchMedia && window.matchMedia('(max-width: 640px)').matches ? { phone: true } : { wide: true };
+      // Half-width cards (2-column grid, ~620px) MUST use the narrow 600px
+      // viewBox instead of wide — otherwise the 1280 viewBox gets downscaled
+      // 0.48× and 9px text becomes ~4.3px.
+      const cvPhone = window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+      const fullCv = cvPhone ? { phone: true } : { wide: true };
+      const halfCv = cvPhone ? { phone: true } : {}; // narrow (600px) — proportional to half-column
 
       // Revenue trend (spans the full row — the hero chart)
       const revCard = el('div', 'chart-card chart-card--wide');
       revCard.appendChild(el('h3', null, t('chart.revenueTrendIdr')));
-      revCard.innerHTML += svgChart('rev', m.revenueTrend, ['idr'], Object.assign({ area: true, fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt' }, cv));
+      // Subtitle: how many months have provider-verified data vs estimate.
+      const verifiedCount = m.revenueTrend.filter(function (d) { return d.source !== 'estimate'; }).length;
+      if (verifiedCount > 0) revCard.appendChild(el('p', 'chart-sub', verifiedCount + ' of ' + m.revenueTrend.length + ' ' + t('chart.monthsVerified')));
+      revCard.innerHTML += svgChart('rev', m.revenueTrend, ['idr'], Object.assign({ area: true, sourceKey: 'source', fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt' }, fullCv));
       chartGrid.appendChild(revCard);
+      // Hover tooltip: month + exact gross (IDR) value under the cursor.
+      bindChartTooltip(revCard.querySelector('.chart-svg'), m.revenueTrend, [{ key: 'idr', label: t('kpi.monthlyGrossIdr') }], v => fmtIdr(Math.round(v)), 'line');
+
+      // Provider revenue mix (stacked bars — recommendation #2): each month
+      // shows the Paddle (IDR, write-time converted) + Midtrans (native IDR)
+      // portions stacked, so the provider mix of gross is visible at a
+      // glance instead of a single mixed-currency total. Estimate months
+      // (no provider events) render an empty slot, matching the dashed
+      // segment on the trend line.
+      const mixCard = el('div', 'chart-card chart-card--wide');
+      const mixHead = el('div', 'chart-head');
+      mixHead.appendChild(el('h3', null, t('chart.revenueByProvider')));
+      mixHead.appendChild(el('span', 'chart-legend', '<span class="sw sw--paddle"></span>Paddle <span class="sw sw--midtrans"></span>Midtrans'));
+      mixCard.appendChild(mixHead);
+      mixCard.innerHTML += svgStackedBars('mix', m.revenueTrend, Object.assign({
+        stack: [
+          { key: 'paddleIdr', color: 'var(--primary)' },
+          { key: 'midtransIdr', color: 'var(--success)' },
+        ],
+        fmt: v => 'Rp' + (v/1000000).toFixed(1) + 'jt',
+      }, fullCv));
+      chartGrid.appendChild(mixCard);
+      bindChartTooltip(mixCard.querySelector('.chart-svg'), m.revenueTrend, [
+        { key: 'paddleIdr', label: 'Paddle' },
+        { key: 'midtransIdr', label: 'Midtrans' },
+      ], v => 'Rp' + (v/1000000).toFixed(1) + 'jt');
 
       // Tier distribution (donut)
       const tierCard = el('div', 'chart-card');
@@ -194,14 +279,16 @@
       // Subscriber growth
       const subCard = el('div', 'chart-card');
       subCard.appendChild(el('h3', null, t('chart.subscriberGrowth')));
-      subCard.innerHTML += svgChart('subs', m.subscriberGrowth, ['count'], Object.assign({ area: true }, cv));
+      subCard.innerHTML += svgChart('subs', m.subscriberGrowth, ['count'], Object.assign({ area: true }, halfCv));
       chartGrid2.appendChild(subCard);
+      bindChartTooltip(subCard.querySelector('.chart-svg'), m.subscriberGrowth, [{ key: 'count', label: t('kpi.totalSubscribers') }], undefined, 'line');
 
       // Signups per month (bar chart — extracted to admin-utils.svgBarChart)
       const signupCard = el('div', 'chart-card');
       signupCard.appendChild(el('h3', null, t('chart.signupsPerMonth')));
-      signupCard.innerHTML += svgBarChart('signups', m.signupsPerMonth, Object.assign({ valueKey: 'count', color: 'var(--accent)' }, cv));
+      signupCard.innerHTML += svgBarChart('signups', m.signupsPerMonth, Object.assign({ valueKey: 'count', color: 'var(--accent)' }, halfCv));
       chartGrid2.appendChild(signupCard);
+      bindChartTooltip(signupCard.querySelector('.chart-svg'), m.signupsPerMonth, [{ key: 'count', label: t('chart.signupsPerMonth') }]);
 
       // Churn per month — B3 fix: the server's churnPerMonth rows carry the
       // number in `churn` (count is Go's zero value), so the old inline code
@@ -210,8 +297,32 @@
       // bars read better with room.
       const churnCard = el('div', 'chart-card chart-card--wide');
       churnCard.appendChild(el('h3', null, t('chart.churnCanceled')));
-      churnCard.innerHTML += svgBarChart('churn', m.churnPerMonth, Object.assign({ valueKey: 'churn', color: 'var(--bad)' }, cv));
+      churnCard.innerHTML += svgBarChart('churn', m.churnPerMonth, Object.assign({ valueKey: 'churn', color: 'var(--bad)' }, fullCv));
       chartGrid2.appendChild(churnCard);
+      bindChartTooltip(churnCard.querySelector('.chart-svg'), m.churnPerMonth, [{ key: 'churn', label: t('chart.churnCanceled') }]);
+
+      // Trial→paid funnel (#6): stacked bars showing paid conversions (green)
+      // within each month's total trials (total bar height = trials started).
+      if (m.trialFunnel && m.trialFunnel.length > 0) {
+        const funnelData = m.trialFunnel.map(function (d) { return { month: d.month, paid: d.paid, notConverted: Math.max(0, d.trials - d.paid) }; });
+        const totalTrials = funnelData.reduce(function (s, d) { return s + d.paid + d.notConverted; }, 0);
+        if (totalTrials > 0) {
+          const funnelCard = el('div', 'chart-card chart-card--wide');
+          funnelCard.appendChild(el('h3', null, t('chart.trialFunnel')));
+          funnelCard.innerHTML += svgStackedBars('funnel', funnelData, Object.assign({
+            stack: [
+              { key: 'paid', color: 'var(--success)' },
+              { key: 'notConverted', color: 'var(--tint-warning-bg)' },
+            ],
+            fmt: function (v) { return String(v); },
+          }, fullCv));
+          chartGrid2.appendChild(funnelCard);
+          bindChartTooltip(funnelCard.querySelector('.chart-svg'), m.trialFunnel, [
+            { key: 'trials', label: 'Trials' },
+            { key: 'paid', label: 'Paid' },
+          ]);
+        }
+      }
 
       c.appendChild(chartGrid2);
 
@@ -220,6 +331,18 @@
       if (m.topSubscribers && m.topSubscribers.length > 0) {
         c.appendChild(tableCard(t('table.topSubscribers'), [t('th.email'),t('th.tier'),t('kpi.mrr'),t('th.renewal'),t('th.provider')], m.topSubscribers.map(d => [d.email, d.tier, fmtUsd(d.mrrUsd), d.renewal, d.provider])));
       }
+      // Recent revenue events (#5): the last webhook-verified charges, most
+      // recent first — the operator sees money arriving near-real-time.
+      if (m.recentRevenueEvents && m.recentRevenueEvents.length > 0) {
+        const fmtTime = (iso) => {
+          const d = new Date(iso);
+          if (isNaN(d.getTime())) return iso || '';
+          return d.toLocaleString('en', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+        };
+        c.appendChild(tableCard(t('table.recentRevenueEvents'),
+          [t('th.email'), t('th.provider'), t('th.tier'), t('th.amount'), t('th.when')],
+          m.recentRevenueEvents.map(d => [d.email || '—', d.provider || '—', d.tier || '—', fmtIdr(d.amountIdr), fmtTime(d.created)])));
+      }
       // Recent signups
       if (m.recentSignups && m.recentSignups.length > 0) {
         c.appendChild(tableCard(t('table.recentSignups'), [t('th.email'),t('th.created'),t('th.emailVerified'),t('th.tier')], m.recentSignups.map(d => [d.email, d.created, d.verified ? '✓' : '○', d.tier])));
@@ -227,6 +350,26 @@
       // Expiring soon
       if (m.expiringSoon && m.expiringSoon.length > 0) {
         c.appendChild(tableCard(t('table.expiringSoon'), [t('th.email'),t('th.tier'),t('th.expires'),t('th.daysLeft')], m.expiringSoon.map(d => [d.email, d.tier, d.expiresAt, String(d.daysLeft)])));
+      }
+      // Needs attention (#4): surfaced ABOVE the revenue hero so the
+      // operator sees action items before the numbers. Grace-period
+      // subscriptions, expired-but-active keys, and recent refunds.
+      if (m.needsAttention && m.needsAttention.length > 0) {
+        const attCard = el('div', 'card alert-card');
+        attCard.appendChild(el('h2', null, t('alert.title')));
+        const attList = el('ul', 'alert-list');
+        m.needsAttention.forEach(item => {
+          const li = el('li', 'alert-item alert-item--' + item.type);
+          const cls = item.type === 'refund' ? 'alert-badge alert-badge--bad' : (item.type === 'expired_active' ? 'alert-badge alert-badge--warn' : 'alert-badge alert-badge--warn');
+          li.appendChild(el('span', cls, t('alert.' + item.type)));
+          li.appendChild(el('span', 'alert-email', item.email || '—'));
+          li.appendChild(el('span', 'alert-detail', item.detail || ''));
+          if (item.tier) li.appendChild(el('span', 'alert-tier', item.tier));
+          if (item.at) li.appendChild(el('span', 'alert-at', item.at));
+          attList.appendChild(li);
+        });
+        attCard.appendChild(attList);
+        c.insertBefore(attCard, c.firstChild);
       }
       setTabContent('dashboard', c);
     }

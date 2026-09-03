@@ -357,6 +357,102 @@ async fn create_session_allows_real_owner() {
     assert_eq!(state.session_store.read().unwrap().len(), 1);
 }
 
+#[tokio::test]
+async fn create_session_denies_tier_disallowed_workspace_type() {
+    // ADR #5: the tenant subscription gates which workspace types a
+    // session may open. The default tenant is on the Free tier, which
+    // allows only store-pos / restaurant-pos / admin — `kds` is NOT
+    // entitled. Even though the owner role can access the kds instance
+    // (verify_instance_access), opening a session into it must fail
+    // closed: a downgraded tenant must not keep working in workspace
+    // types their subscription no longer covers.
+    let conn = migrations::fresh_db();
+    seed_owner(&conn);
+    let app = tauri::test::mock_builder()
+        .manage(AppState::for_test_with_conn(conn))
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = create_session(
+        CreateSessionArgs {
+            user_id: "user-owner".into(),
+            role_id: "role-owner".into(),
+            store_id: "default".into(),
+            instance_id: "default-kds".into(),
+            type_key: "kds".into(),
+            terminal_id: "terminal-1".into(),
+            picker_ticket: test_picker_ticket("user-owner"),
+        },
+        app.state(),
+    )
+    .await;
+
+    let err = result.expect_err("Free tier must not open a kds session");
+    match err {
+        AppError::Invalid(msg) => {
+            assert!(
+                msg.contains("not entitled") || msg.contains("subscription"),
+                "error must name the tier gate, got: {msg}"
+            );
+        }
+        other => panic!("expected AppError::Invalid, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn create_session_rejects_tampered_subscription_signature() {
+    // Parity with create_staff_scoped (and every other subscription-
+    // trusting command): the tenant_subscription row's RSA signature must
+    // be verified before its tier/allowed-types are honored. A tampered
+    // row (tier_key -> pro, allowed_types_json -> +kds) with an invalid
+    // signature must fail closed — not silently open a kds session.
+    let conn = migrations::fresh_db();
+    // Replace the bootstrap Free row with a forged higher-tier row whose
+    // signature is NOT the debug-only BOOTSTRAP_FREE sentinel.
+    conn.execute(
+        "UPDATE tenant_subscription
+         SET tier_key = 'pro',
+             allowed_types_json = '[\"store-pos\",\"restaurant-pos\",\"admin\",\"kds\"]',
+             signature = 'TAMPERED_SIGNATURE'
+         WHERE tenant_id = 'default'",
+        [],
+    )
+    .unwrap();
+    seed_owner(&conn);
+    let app = tauri::test::mock_builder()
+        .manage(AppState::for_test_with_conn(conn))
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = create_session(
+        CreateSessionArgs {
+            user_id: "user-owner".into(),
+            role_id: "role-owner".into(),
+            store_id: "default".into(),
+            instance_id: "default-kds".into(),
+            type_key: "kds".into(),
+            terminal_id: "terminal-1".into(),
+            picker_ticket: test_picker_ticket("user-owner"),
+        },
+        app.state(),
+    )
+    .await;
+
+    let err = result.expect_err("tampered subscription must not open a kds session");
+    match err {
+        AppError::Invalid(msg) => {
+            assert!(
+                msg.contains("signature")
+                    || msg.contains("subscription")
+                    || msg.contains("entitled"),
+                "error must name the signature/tier gate, got: {msg}"
+            );
+        }
+        AppError::Core { .. } => {}
+        other => panic!("expected AppError::Invalid/Core, got {other:?}"),
+    }
+}
+
 // ── refresh_picker_ticket ───────────────────────────────────────────
 
 #[tokio::test]

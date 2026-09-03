@@ -52,6 +52,38 @@ silently drop coverage. The count is documented as approximate (it
 uses a permissive regex to avoid false negatives) so reviewers know
 not to take it as a precise surface-area metric.
 
+SCOPE EXTENSION (rev 2, Fluent page audit)
+==========================================
+
+The rev-1 surface (literal `<Localized id="...">` under
+`ui/src/features/**`) was proven insufficient: an audit of all 41
+registered pages + 8 gate screens found 14 keys that ship broken today
+while `verify-bundle-parity.py` reported `0 missing key(s)`:
+
+  * 11 `l10n.getString('key')` call sites whose key exists in NO bundle
+    (`getString` returns null → React renders nothing → validation
+    errors and ARIA names silently vanish), and
+  * 3 `registerNavItem({ i18nKey: 'nav-…' })` values with no bundle
+    entry (`AppLayout` falls back to the raw English `label`, so
+    Indonesian users see English sidebar entries).
+
+Three new opt-in surfaces close that gap. They are OFF by default so
+the existing pre-commit contract is unchanged:
+
+  --include-getstring   literal `getString('k')` and
+                        `requiredLocalized(l10n, 'k')` sites
+  --include-nav-keys    `registerNavItem({ i18nKey: 'k' })` plus every
+                        string value in `SECTION_LABELS`
+  --scan-dirs A,B,...   comma-separated dirs under `ui/src`
+                        (default: `features`)
+  --full-census         implies all of the above over
+                        features, components, frontend, contexts,
+                        hooks, platform
+
+Template-literal `getString(\`prefix-${x}\`)` sites cannot be resolved
+statically; like programmatic `<Localized id={expr}>` openings they are
+counted and reported so coverage loss stays visible.
+
 USAGE
 =====
 
@@ -59,6 +91,7 @@ USAGE
     python3 scripts/verify-bundle-parity.py --verbose                          # list every <Localized id>, even OK ones
     python3 scripts/verify-bundle-parity.py --report-only                      # always exit 0 (ergonomic for human reports)
     python3 scripts/verify-bundle-parity.py --staged-only PATH …               # scan only the given files; intended for the pre-commit hook; exit 1 when a key is missing AND at least 1 eligible file was scanned, else exit 0
+    python3 scripts/verify-bundle-parity.py --full-census --report-only        # whole-ui census: Localized + getString + nav keys
 
 EXIT CODES
 ==========
@@ -86,10 +119,15 @@ LIMITATIONS
     detect *new* missing keys (those introduced by this commit
     alone), diff HEAD vs. staged content separately; out of scope
     here.
-  * Only resolves LITERAL `<Localized id="...">` references. Sites that
-    pass id via template literal (`id={`prefix-${kind}`}`) or a JS
-    variable (`id={SOME_KEY}`) cannot be statically checked; they are
-    surfaced as "untracked" sites so the contributor knows about them.
+  * Only resolves LITERAL key references. Sites that pass id via
+    template literal (`id={`prefix-${kind}`}`,
+    `getString(`inv-log-type-${tx.type}`)`) or a JS variable
+    (`id={SOME_KEY}`) cannot be statically checked; they are surfaced
+    as "untracked" sites so the contributor knows about them.
+  * The rev-2 surfaces (`getString`, `requiredLocalized`, `i18nKey`,
+    `SECTION_LABELS`) are opt-in. Until the repo is clean under
+    `--full-census`, the pre-commit hook and CI keep running the rev-1
+    default so no existing contract changes.
   * Does not validate message `attrs={{...}}` attribute keys against
     `.attr = ...` definitions in the FTL. That is a smaller class of
     bug (placeholder / aria-label mismatches) and is out of scope here.
@@ -97,9 +135,11 @@ LIMITATIONS
     distinguished from regular message keys — both are reported under
     "missing key in .ftl/.id.ftl". Terms are rare in this repo.
   * The untracked count uses a permissive regex (`<Localized\b[^>]*>`)
-    that ALSO matches JSX-shaped substrings inside string literals,
-    comments, and helper constants. The report explicitly calls this
-    an upper-bound estimate, not a precise metric.
+    that ALSO matches JSX-shaped substrings inside string literals.
+    Comments are blanked before matching (block comments and whole-line
+    `//` comments), so quoted example syntax in prose no longer inflates
+    the number. It remains an upper-bound estimate, not a precise
+    metric.
 """
 
 import argparse
@@ -108,8 +148,21 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-FEATURE_DIR = ROOT / "ui" / "src" / "features"
-LOCALE_DIR = ROOT / "ui" / "src" / "locales"
+UI_SRC_DIR = ROOT / "ui" / "src"
+FEATURE_DIR = UI_SRC_DIR / "features"
+LOCALE_DIR = UI_SRC_DIR / "locales"
+
+# rev 2: which ui/src subdirectories are walked. `features` alone
+# reproduces the rev-1 contract exactly.
+DEFAULT_SCAN_DIRS: tuple[str, ...] = ("features",)
+CENSUS_SCAN_DIRS: tuple[str, ...] = (
+    "features",
+    "components",
+    "frontend",
+    "contexts",
+    "hooks",
+    "platform",
+)
 
 # Matcher for each literal `<Localized id="...">` site. Multi-line via
 # DOTALL so the `[^>]*?` between tag-name and `id` attribute crosses
@@ -126,6 +179,119 @@ LOCALIZED_ID_PATTERN = re.compile(
 # would also match.
 LOCALIZED_OPEN_PATTERN = re.compile(r"<Localized\b[^>]*>", flags=re.DOTALL)
 
+# ── rev 2 surfaces ───────────────────────────────────────────────────
+# `l10n.getString('key')` / `getString("key")` — the imperative lookup
+# path. A miss returns null, which React renders as nothing: the copy
+# simply disappears instead of warning.
+GETSTRING_ID_PATTERN = re.compile(
+    r"\.getString\(\s*(['\"])(?P<id>[^'\"]+)\1", flags=re.DOTALL
+)
+# `requiredLocalized(l10n, 'key')` — the project's fallback-to-id helper.
+REQUIRED_LOCALIZED_ID_PATTERN = re.compile(
+    r"\brequiredLocalized\(\s*[A-Za-z0-9_.]+\s*,\s*(['\"])(?P<id>[^'\"]+)\1",
+    flags=re.DOTALL,
+)
+# `registerNavItem({ …, i18nKey: 'nav-…', … })` — sidebar labels. A miss
+# makes AppLayout fall back to the raw English `label`.
+NAV_I18NKEY_PATTERN = re.compile(
+    r"\bi18nKey\s*:\s*(['\"])(?P<id>[^'\"]+)\1", flags=re.DOTALL
+)
+# The SECTION_LABELS record in platform/ui/menu-registry: every value is
+# a Fluent key used as a sidebar group heading.
+SECTION_LABELS_PATTERN = re.compile(
+    r"\bSECTION_LABELS\s*:\s*Record<[^>]*>\s*=\s*\{(?P<body>.*?)\}",
+    flags=re.DOTALL,
+)
+SECTION_LABEL_VALUE_PATTERN = re.compile(r":\s*(['\"])(?P<v>[^'\"]+)\1")
+# Fluent ids stored in an object-literal field and looked up later:
+#   { key: 'revenue', titleKey: 'analytics-card-revenue', … }   → getString(card.titleKey)
+#   { key: 'dinein',  labelId: 'kds-settings-color-dinein', … } → <Localized id={labelId}>
+# The lookup site passes a *variable*, so neither GETSTRING_ID_PATTERN nor
+# the <Localized> walker can resolve it, and the literal itself sits in a
+# plain object with no call syntax to anchor on. This is the third dynamic
+# class, and by count the largest: AnalyticsScreen alone stores 36.
+# The field list is evidence-based, not guessed: a survey of every
+# `*Key:`/`*Id:` object-literal field holding a kebab-case value found these
+# carrying Fluent ids. portId / fromPortId / toPortId are topology PORT
+# identifiers (`location-in`, `operation-out`) and sectionId feeds a
+# template-built id rather than naming one directly — all four are
+# deliberately EXCLUDED, because treating them as message ids would demand
+# keys that must never exist.
+KEY_FIELD_ID_PATTERN = re.compile(
+    r"\b(?P<field>titleKey|descKey|labelId|nameKey|ariaKey|placeholderKey"
+    r"|labelKey|descriptionKey|messageId|fluentKey|okKey"
+    r"|rightLabelId|rightAriaLabelId|typeLabelId|sectionI18nKey)"
+    r"\s*:\s*(['\"])(?P<id>[A-Za-z0-9][A-Za-z0-9._-]*)\2"
+)
+# <Localized id={...}> where the id is an EXPRESSION rather than a literal.
+# Most of these are literals in disguise: a ternary of two keys
+#
+#     id={loading ? 'shared-loading' : 'audit-log-load-more'}
+#
+# has no ambiguity about which ids it can resolve to at runtime, so both are
+# checkable. The Fluent page audit surveyed all 98 such sites and found 39
+# ternaries carrying 80 key-shaped string literals between them -- checkable
+# coverage that the rev-1/rev-2 walker simply counted as "untracked".
+LOCALIZED_ID_EXPR_PATTERN = re.compile(r"<Localized\b[^>]*?\bid=\{", re.DOTALL)
+# Repo Fluent ids are kebab-case with at least one hyphen. Requiring a hyphen
+# keeps ordinary words inside an expression ('add', 'enabled') from being
+# mistaken for message ids.
+KEY_SHAPED_LITERAL = re.compile(
+    r"['\"]([a-z][a-z0-9]*(?:-[a-z0-9]+)+)['\"]"
+)
+# A quoted string being *compared* is not an id being *used*:
+#
+#     id={activeWorkspace === 'restaurant-pos' ? 'pos-cart-panel-title-order'
+#                                              : 'pos-cart-panel-title'}
+#
+# Without this, 'restaurant-pos' — a workspace type discriminator — is
+# reported as a missing message id. Blanked in place rather than removed so
+# the offsets of the surviving literals stay valid for line attribution.
+COMPARISON_OPERAND = re.compile(
+    r"(?:===|!==|==|!=|<=|>=|<|>)\s*['\"][^'\"]*['\"]"
+    r"|['\"][^'\"]*['\"]\s*(?:===|!==|==|!=|<=|>=|<|>)"
+    r"|\bcase\s+['\"][^'\"]*['\"]"
+)
+
+
+def _blank_in_place(text: str, pattern: re.Pattern) -> str:
+    """Overwrite every match with spaces, preserving length and newlines."""
+    if not text:
+        return text
+    chars = list(text)
+    for m in pattern.finditer(text):
+        for i in range(m.start(), m.end()):
+            if chars[i] != "\n":
+                chars[i] = " "
+    return "".join(chars)
+# Dynamic getString — unresolvable, but its volume must stay visible.
+GETSTRING_TEMPLATE_PATTERN = re.compile(r"\.getString\(\s*`")
+
+# ── comment suppression ──────────────────────────────────────────────
+# Prose in comments routinely quotes real lookup syntax (`// wrote
+# l10n.getString('key') || 'English'` in requiredLocalized.ts is a
+# documented example, not a call site). Without suppression the census
+# reports phantom missing keys. Only BLOCK comments and WHOLE-LINE `//`
+# comments are blanked: a mid-line `//` is far more likely to be part of
+# a URL string literal than a comment, and dropping it would hide real
+# keys — a false negative, which is worse for a fail-closed gate.
+BLOCK_COMMENT_PATTERN = re.compile(r"/\*.*?\*/", flags=re.DOTALL)
+FULL_LINE_COMMENT_PATTERN = re.compile(r"^[ \t]*//[^\n]*", flags=re.MULTILINE)
+
+
+def _blank(match: re.Match) -> str:
+    """Replace a comment with same-length whitespace (newlines kept).
+
+    Preserving byte offsets means every reported line number still
+    points at the real source line.
+    """
+    return "".join(ch if ch == "\n" else " " for ch in match.group(0))
+
+
+def strip_comments(text: str) -> str:
+    text = BLOCK_COMMENT_PATTERN.sub(_blank, text)
+    return FULL_LINE_COMMENT_PATTERN.sub(_blank, text)
+
 # Match a top-level Fluent key OR term OR `#` comment at column 0.
 # DEFINITION IS VERBATIM WITH `scripts/dedupe-ftl.py` so a key accepted
 # as "exists" by dedupe is accepted identically here. Cross-reference,
@@ -133,18 +299,92 @@ LOCALIZED_OPEN_PATTERN = re.compile(r"<Localized\b[^>]*>", flags=re.DOTALL)
 KEY_PATTERN = re.compile(r"^([-a-zA-Z][a-zA-Z0-9_-]*)\s*=")
 
 DESCRIPTION = (
-    "Verify that every <Localized id=\"...\"> reference in React "
-    "components has a matching key in both the en .ftl and the id "
-    ".id.ftl locale bundles. Catches missing-translation regressions "
-    "before they ship. See the module docstring for the algorithm "
-    "and rationale."
+    "Verify that every literal Fluent key reference in React components "
+    "— <Localized id=\"...\"> by default, plus optionally getString(), "
+    "requiredLocalized(), registerNavItem i18nKey and SECTION_LABELS — "
+    "has a matching key in both the en .ftl and the id .id.ftl locale "
+    "bundles. Catches missing-translation regressions before they ship. "
+    "See the module docstring for the algorithm and rationale."
 )
+
+
+# Object literals that map a domain value to a Fluent message id, e.g.
+#
+#     const ACTION_FLUENT_IDS: Record<string, string> = { login: 'audit-action-login', ... }
+#     <Localized id={ACTION_FLUENT_IDS[entry.action] ?? ACTION_FALLBACK_ID}>
+#
+# The subscript is dynamic, but the map's VALUES are literal ids, so they are
+# every bit as checkable as a `titleKey:` field — and the existing key-field
+# surface misses them entirely, because their field names are `login`, `void`,
+# `refund` rather than something ending in Key/Id. The name test is deliberately
+# narrow: a survey found exactly 8 such maps (67 ids) and no false positives.
+ID_MAP_NAME = re.compile(
+    r"(?:FLUENT_IDS|L10N_KEYS|L10N_IDS|STATUS_LABEL_IDS|_IDS$|Ids$|Keys$)"
+)
+ID_MAP_DECL = re.compile(
+    r"\b(?:const|let)\s+(?P<name>\w+)\b[^=;]{0,120}?=\s*\{(?P<body>[^{}]*)\}",
+    re.DOTALL,
+)
+ID_MAP_ENTRY = re.compile(
+    r"\s*:\s*(?P<q>['\"])(?P<v>[A-Za-z0-9][A-Za-z0-9._-]*)(?P=q)"
+)
+
+
+def extract_id_map_values(text: str) -> list[tuple[str, int]]:
+    """Every key-shaped string value inside an id-map object literal."""
+    found: list[tuple[str, int]] = []
+    for m in ID_MAP_DECL.finditer(text):
+        if not ID_MAP_NAME.search(m.group("name")):
+            continue
+        body_start = m.start("body")
+        for e in ID_MAP_ENTRY.finditer(m.group("body")):
+            v = e.group("v")
+            if KEY_SHAPED_LITERAL.fullmatch(f"'{v}'"):
+                found.append((v, text.count("\n", 0, body_start + e.start()) + 1))
+    return found
+
+
+def _balanced_brace(text: str, open_idx: int) -> tuple[str, int]:
+    """Return (expression, index-of-closing-brace) for the `{` at open_idx."""
+    depth = 0
+    for i in range(open_idx, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_idx + 1 : i], i
+    return text[open_idx + 1 :], len(text)
+
+
+def extract_dynamic_id_literals(text: str) -> list[tuple[str, int]]:
+    """Key-shaped string literals inside <Localized id={...}> expressions.
+
+    `text` must already have had comments blanked, so a quoted key in a
+    comment cannot be mistaken for a live site.
+    """
+    found: list[tuple[str, int]] = []
+    for match in LOCALIZED_ID_EXPR_PATTERN.finditer(text):
+        brace = match.end() - 1
+        expr, _end = _balanced_brace(text, brace)
+        expr = _blank_in_place(expr, COMPARISON_OPERAND)
+        for lit in KEY_SHAPED_LITERAL.finditer(expr):
+            # Absolute offset = just past '{' plus the match offset within
+            # the expression; +1 because text.count() is a prefix count.
+            found.append(
+                (lit.group(1), text.count("\n", 0, brace + 1 + lit.start()) + 1)
+            )
+    return found
 
 
 def extract_ids_from_source(
     path: Path,
 ) -> tuple[list[tuple[str, int]], int]:
     """Return ([(id, line_number), ...], untracked_count) for one file.
+
+    Kept as the rev-1 `<Localized id="...">`-only entry point so the
+    default scan path is provably unchanged; `extract_sites_from_source`
+    is the generalised form used when rev-2 surfaces are enabled.
 
     `line_number` is the 1-based line of the `id="..."` attribute,
     NOT the `<Localized>` opening — for multi-line JSX sites that
@@ -157,7 +397,7 @@ def extract_ids_from_source(
     from literal id to variable visibly drops coverage rather than
     doing so silently.
     """
-    text = path.read_text(encoding="utf-8")
+    text = strip_comments(path.read_text(encoding="utf-8"))
     results: list[tuple[str, int]] = []
     open_count = sum(1 for _ in LOCALIZED_OPEN_PATTERN.finditer(text))
     literal_count = 0
@@ -181,6 +421,73 @@ def extract_ids_from_source(
     return results, open_count - literal_count
 
 
+# Human-facing label for each reportable key surface.
+KIND_LABELS = {
+    "localized": "<Localized id>",
+    "getstring": "getString()",
+    "required": "requiredLocalized()",
+    "navkey": "nav i18nKey",
+    "section": "SECTION_LABELS",
+    "keyfield": "key-field literal",
+    "dynliteral": "<Localized id={expr}>",
+    "idmap": "id-map value",
+}
+
+
+def extract_sites_from_source(
+    path: Path,
+    kinds: set[str],
+) -> tuple[list[tuple[str, str, int]], int, int]:
+    """Return ([(kind, id, line)], untracked_localized, dynamic_getstring).
+
+    `kinds` selects which surfaces to read; see KIND_LABELS. Line
+    numbers always point at the literal itself, never at the enclosing
+    call, so `[file:line]` in the report is directly clickable.
+    """
+    text = strip_comments(path.read_text(encoding="utf-8"))
+    sites: list[tuple[str, str, int]] = []
+
+    untracked_localized = 0
+    if "localized" in kinds:
+        ids, untracked_localized = extract_ids_from_source(path)
+        sites.extend(("localized", id_, line) for id_, line in ids)
+
+    dynamic_getstring = 0
+    if "getstring" in kinds:
+        for pattern in (GETSTRING_ID_PATTERN, REQUIRED_LOCALIZED_ID_PATTERN):
+            for match in pattern.finditer(text):
+                line = text.count("\n", 0, match.start("id")) + 1
+                kind = "getstring" if pattern is GETSTRING_ID_PATTERN else "required"
+                sites.append((kind, match.group("id"), line))
+        dynamic_getstring = sum(1 for _ in GETSTRING_TEMPLATE_PATTERN.finditer(text))
+
+    if "navkey" in kinds:
+        for match in NAV_I18NKEY_PATTERN.finditer(text):
+            line = text.count("\n", 0, match.start("id")) + 1
+            sites.append(("navkey", match.group("id"), line))
+        for block in SECTION_LABELS_PATTERN.finditer(text):
+            body = block.group("body")
+            offset = block.start("body")
+            for value in SECTION_LABEL_VALUE_PATTERN.finditer(body):
+                line = text.count("\n", 0, offset + value.start("v")) + 1
+                sites.append(("section", value.group("v"), line))
+
+    if "keyfield" in kinds:
+        for match in KEY_FIELD_ID_PATTERN.finditer(text):
+            line = text.count("\n", 0, match.start("id")) + 1
+            sites.append(("keyfield", match.group("id"), line))
+
+    if "dynliteral" in kinds:
+        for id_, line in extract_dynamic_id_literals(text):
+            sites.append(("dynliteral", id_, line))
+
+    if "idmap" in kinds:
+        for id_, line in extract_id_map_values(text):
+            sites.append(("idmap", id_, line))
+
+    return sites, untracked_localized, dynamic_getstring
+
+
 def parse_ftl_keys(path: Path) -> set[str]:
     """Return the set of distinct keys defined in one .ftl file.
 
@@ -194,6 +501,15 @@ def parse_ftl_keys(path: Path) -> set[str]:
         if m:
             keys.add(m.group(1))
     return keys
+
+
+def _is_descendant(path: Path, directory: Path) -> bool:
+    """True when `path` lives under `directory` (either may be relative)."""
+    try:
+        path.relative_to(directory)
+    except ValueError:
+        return False
+    return True
 
 
 def main() -> int:
@@ -226,6 +542,61 @@ def main() -> int:
              "undefined key.",
     )
     parser.add_argument(
+        "--include-getstring",
+        action="store_true",
+        help="Also check literal getString('k') and requiredLocalized(l10n, 'k') "
+             "key references (rev-2 surface; off by default).",
+    )
+    parser.add_argument(
+        "--include-nav-keys",
+        action="store_true",
+        help="Also check registerNavItem({ i18nKey }) values and every "
+             "SECTION_LABELS value (rev-2 surface; off by default).",
+    )
+    parser.add_argument(
+        "--include-key-fields",
+        action="store_true",
+        help="Also check Fluent ids stored in object-literal fields "
+             "(titleKey/descKey/labelId/…) and resolved through a variable "
+             "(rev-3 surface; off by default).",
+    )
+    parser.add_argument(
+        "--include-id-maps",
+        action="store_true",
+        help="Also check the literal message-id values held by id-map object "
+             "literals such as ACTION_FLUENT_IDS, which back "
+             "<Localized id={MAP[key]}> sites. Rev-4 surface; off by default.",
+    )
+    parser.add_argument(
+        "--include-dynamic-literals",
+        action="store_true",
+        help="Also check key-shaped string literals that appear inside "
+             "<Localized id={...}> expressions (ternaries and inline maps "
+             "whose possible ids are statically known). Rev-3 surface; "
+             "off by default.",
+    )
+    parser.add_argument(
+        "--check-domain-pairs",
+        action="store_true",
+        help="Fail when a key's .id.ftl twin is declared in a DIFFERENT "
+             "domain file than its .ftl original. Resolves at runtime "
+             "(bundles are concatenated), so this is layout hygiene, not "
+             "a rendering bug (rev-3 surface; off by default).",
+    )
+    parser.add_argument(
+        "--scan-dirs",
+        default=None,
+        help="Comma-separated directories under ui/src to walk "
+             f"(default: {','.join(DEFAULT_SCAN_DIRS)}).",
+    )
+    parser.add_argument(
+        "--full-census",
+        action="store_true",
+        help="Shorthand for --include-getstring --include-nav-keys "
+             "--include-key-fields "
+             f"--scan-dirs {','.join(CENSUS_SCAN_DIRS)}.",
+    )
+    parser.add_argument(
         "paths",
         nargs="*",
         help="Files to scan under --staged-only. Repo-relative paths "
@@ -234,8 +605,42 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if not FEATURE_DIR.is_dir():
-        print(f"error: features dir not found: {FEATURE_DIR}", file=sys.stderr)
+    if args.full_census:
+        args.include_getstring = True
+        args.include_nav_keys = True
+        args.include_key_fields = True
+        args.include_dynamic_literals = True
+        args.include_id_maps = True
+        args.check_domain_pairs = True
+        args.scan_dirs = ",".join(CENSUS_SCAN_DIRS)
+
+    kinds: set[str] = {"localized"}
+    if args.include_getstring:
+        kinds |= {"getstring", "required"}
+    if args.include_nav_keys:
+        kinds |= {"navkey", "section"}
+    if args.include_key_fields:
+        kinds |= {"keyfield"}
+    if args.include_dynamic_literals:
+        kinds |= {"dynliteral"}
+    if args.include_id_maps:
+        kinds |= {"idmap"}
+
+    dir_names = (
+        DEFAULT_SCAN_DIRS
+        if not args.scan_dirs
+        else tuple(d.strip() for d in args.scan_dirs.split(",") if d.strip())
+    )
+    scan_dirs: list[Path] = []
+    for name in dir_names:
+        candidate = UI_SRC_DIR / name
+        if not candidate.is_dir():
+            print(f"error: scan dir not found: {candidate}", file=sys.stderr)
+            return 2
+        scan_dirs.append(candidate)
+
+    if not UI_SRC_DIR.is_dir():
+        print(f"error: ui src dir not found: {UI_SRC_DIR}", file=sys.stderr)
         return 2
     if not LOCALE_DIR.is_dir():
         print(f"error: locales dir not found: {LOCALE_DIR}", file=sys.stderr)
@@ -252,19 +657,45 @@ def main() -> int:
     for path in id_files:
         id_keys.update(parse_ftl_keys(path))
 
-    # Walk components, collect all <Localized id> sites with attribution.
-    # Also accumulate untracked (programmatic-id) site count per file
-    # so a future refactor that moves a static id to a runtime
-    # expression visibly drops coverage rather than silently doing so.
-    sites: list[tuple[str, str, int]] = []
+    # ── domain-pair locality ─────────────────────────────────────────
+    # Every .ftl is concatenated into ONE bundle per locale at build time,
+    # so a key whose English twin lives in reports.ftl and whose Indonesian
+    # twin lives in sales.id.ftl RESOLVES at runtime: the missing-key check
+    # below stays green while the file layout lies. A translator looking for
+    # "Laporan Penjualan" beside "Sales Report" would never find it, and a
+    # domain rename silently strands half a pair.
+    #
+    # The Fluent page audit found 16 such split pairs (all sales-report-*)
+    # and moved them; this check keeps the class from regrowing.
+    split_pairs: list[tuple[str, str, str]] = []
+    if args.check_domain_pairs:
+        id_domain: dict[str, str] = {}
+        for path in id_files:
+            domain = path.name[: -len(".id.ftl")]
+            for key in parse_ftl_keys(path):
+                id_domain.setdefault(key, domain)
+        for path in en_files:
+            domain = path.name[: -len(".ftl")]
+            for key in sorted(parse_ftl_keys(path)):
+                holder = id_domain.get(key)
+                if holder is not None and holder != domain:
+                    split_pairs.append((domain, key, holder))
+
+    # Walk components, collect every enabled key surface with
+    # attribution as (kind, key, file, line). Also accumulate the
+    # untracked (programmatic-id) and dynamic-template counts per file so
+    # a future refactor that moves a static id to a runtime expression
+    # visibly drops coverage rather than silently doing so.
+    sites: list[tuple[str, str, str, int]] = []
     untracked_total = 0
+    dynamic_getstring_total = 0
 
     # --staged-only: scan only the files passed positionally; intended
     # for the pre-commit hook. Each positional is treated as a repo-
-    # relative path. Files outside FEATURE_DIR are warned + skipped
-    # (the script's job is feature-component checks; locale-side files
-    # or non-JSX files aren't regression territory). Nonexistent paths
-    # are warned + skipped (handles deletes + race conditions). If
+    # relative path. Files outside the selected scan dirs are warned +
+    # skipped (the script's job is component key checks; locale-side
+    # files or non-JSX files aren't regression territory). Nonexistent
+    # paths are warned + skipped (handles deletes + race conditions). If
     # every path was filtered out, exit 0 loudly; otherwise proceed
     # with the eligible subset under the same strict-mode semantics
     # as the default scan.
@@ -278,16 +709,10 @@ def main() -> int:
                     file=sys.stderr,
                 )
                 continue
-            try:
-                # The following line is intentional: we test path
-                # membership in FEATURE_DIR via relative_to() which
-                # raises ValueError for non-descendants. The result is
-                # discarded — only the side-effect is needed.
-                _ = path.relative_to(FEATURE_DIR)
-            except ValueError:
+            if not any(_is_descendant(path, d) for d in scan_dirs):
                 print(
                     f"warning: --staged-only path outside "
-                    f"{FEATURE_DIR}, skipping: {raw}",
+                    f"{', '.join(str(d) for d in scan_dirs)}, skipping: {raw}",
                     file=sys.stderr,
                 )
                 continue
@@ -296,8 +721,8 @@ def main() -> int:
             print(
                 f"verify-bundle-parity: --staged-only received "
                 f"{len(args.paths)} path(s) but none are eligible "
-                f"(in {FEATURE_DIR}); nothing to verify. Returning 0 "
-                f"informational.",
+                f"(in {', '.join(str(d) for d in scan_dirs)}); nothing to "
+                f"verify. Returning 0 informational.",
                 file=sys.stderr,
             )
             print("verify-bundle-parity: 0 missing key(s).")
@@ -305,93 +730,122 @@ def main() -> int:
         source_files = sorted(staged)
     else:
         source_files = sorted(
-            list(FEATURE_DIR.rglob("*.tsx")) + list(FEATURE_DIR.rglob("*.ts"))
+            {
+                p
+                for d in scan_dirs
+                for p in list(d.rglob("*.tsx")) + list(d.rglob("*.ts"))
+            }
         )
     for path in source_files:
-        extracted, untracked = extract_ids_from_source(path)
+        extracted, untracked, dynamic_gs = extract_sites_from_source(path, kinds)
         untracked_total += untracked
+        dynamic_getstring_total += dynamic_gs
         relpath = path.relative_to(ROOT).as_posix()
-        for id_, line in extracted:
-            sites.append((id_, relpath, line))
+        for kind, id_, line in extracted:
+            sites.append((kind, id_, relpath, line))
 
-    # Categorize.
-    missing_in_en: list[tuple[str, str, int]] = []
-    missing_in_id: list[tuple[str, str, int]] = []
-    missing_in_both: list[tuple[str, str, int]] = []
-    seen_ids = {id_ for id_, _, _ in sites}
+    # Categorize. A site is (surface-kind, key, file, line) so the report
+    # can attribute a miss to the lookup path that produced it — a
+    # `<Localized id>` miss and a `getString` miss fail very differently
+    # at runtime (fallback children vs. rendered nothing).
+    missing_in_en: list[tuple[str, str, str, int]] = []
+    missing_in_id: list[tuple[str, str, str, int]] = []
+    missing_in_both: list[tuple[str, str, str, int]] = []
+    seen_ids = {id_ for _, id_, _, _ in sites}
 
-    for id_, relpath, line in sites:
+    for kind, id_, relpath, line in sites:
         in_en = id_ in en_keys
         in_id = id_ in id_keys
         if not in_en and not in_id:
-            missing_in_both.append((id_, relpath, line))
+            missing_in_both.append((kind, id_, relpath, line))
         elif not in_en:
-            missing_in_en.append((id_, relpath, line))
+            missing_in_en.append((kind, id_, relpath, line))
         elif not in_id:
-            missing_in_id.append((id_, relpath, line))
+            missing_in_id.append((kind, id_, relpath, line))
 
-    unique_missing_en = sorted({id_ for id_, _, _ in missing_in_en})
-    unique_missing_id = sorted({id_ for id_, _, _ in missing_in_id})
-    unique_missing_both = sorted({id_ for id_, _, _ in missing_in_both})
+    def _unique(bucket: list[tuple[str, str, str, int]]) -> list[tuple[str, str]]:
+        return sorted({(id_, kind) for kind, id_, _, _ in bucket})
+
+    unique_missing_en = _unique(missing_in_en)
+    unique_missing_id = _unique(missing_in_id)
+    unique_missing_both = _unique(missing_in_both)
 
     # ---- Report ----
     print(
-        f"verify-bundle-parity: scanned {len(source_files)} feature file(s), "
-        f"{len(sites)} <Localized id> site(s), {len(seen_ids)} unique id(s), "
-        f"{untracked_total} untracked opening(s) (programmatic id={...})."
+        f"verify-bundle-parity: scanned {len(source_files)} file(s) in "
+        f"[{', '.join(d.name for d in scan_dirs)}], "
+        f"{len(sites)} key site(s) across {len(kinds)} surface(s), "
+        f"{len(seen_ids)} unique key(s), "
+        f"{untracked_total} untracked <Localized> opening(s) "
+        f"(programmatic id={{...}}), "
+        f"{dynamic_getstring_total} dynamic getString(`…`) site(s)."
+    )
+    print(
+        "  surfaces checked: "
+        + ", ".join(KIND_LABELS[k] for k in sorted(kinds))
     )
     print(f"  en bundle: {len(en_keys)} distinct key(s) across {len(en_files)} file(s)")
     print(f"  id bundle: {len(id_keys)} distinct key(s) across {len(id_files)} file(s)")
     print()
 
-    if untracked_total > 0:
+    if untracked_total > 0 or dynamic_getstring_total > 0:
+        # Report recovered coverage alongside the gap. Saying "neither is
+        # statically checkable" while silently checking 80 literals from
+        # ternary ids would understate the gate — and a report that
+        # misdescribes its own coverage is the failure mode this whole
+        # audit started from.
+        recovered = sum(1 for s in sites if s[0] == "dynliteral")
+        recovered_note = (
+            f" {recovered} key-shaped literal(s) were recovered from those "
+            f"expressions and ARE checked; the remainder is not resolvable "
+            f"statically."
+            if recovered
+            else " neither is statically checkable."
+        )
         print(
             f"  note: {untracked_total} <Localized> opening(s) used a programmatic "
-            f"id={{...}} expression rather than a string literal; not statically "
-            f"checkable. Approximate upper-bound: also matches string literals "
-            f"and comments that contain JSX-shaped openers."
+            f"id={{...}} expression and {dynamic_getstring_total} getString() call(s) "
+            f"used a template literal." + recovered_note
+            + f" Approximate upper-bound: also matches string literals that contain "
+            f"JSX-shaped openers (comments are blanked before matching)."
         )
         print()
+
+    missing_ids = (
+        {id_ for id_, _ in unique_missing_en}
+        | {id_ for id_, _ in unique_missing_id}
+        | {id_ for id_, _ in unique_missing_both}
+    )
 
     if args.verbose:
         print("  ok (in both bundles):")
-        for id_ in sorted(seen_ids - set(unique_missing_en) - set(unique_missing_id) - set(unique_missing_both)):
-            occurrences = [
-                (relpath, line) for sid, relpath, line in sites if sid == id_
-            ]
-            for relpath, line in occurrences:
-                print(f"    [{relpath}:{line}] {id_}")
+        for id_ in sorted(seen_ids - missing_ids):
+            for kind, sid, relpath, line in sites:
+                if sid == id_:
+                    print(f"    [{relpath}:{line}] {id_}  ({KIND_LABELS[kind]})")
         print()
 
-    if missing_in_both:
-        print(
-            f"  missing in BOTH en .ftl AND id .id.ftl "
-            f"({len(unique_missing_both)} unique):"
-        )
-        for id_ in unique_missing_both:
-            for relpath, line in [
-                (r, l) for sid, r, l in missing_in_both if sid == id_
-            ]:
-                print(f"    [{relpath}:{line}] {id_}")
+    def _report_bucket(
+        bucket: list[tuple[str, str, str, int]],
+        label: str,
+        unique: list[tuple[str, str]],
+    ) -> None:
+        if not bucket:
+            return
+        print(f"  missing {label} ({len(unique)} unique):")
+        for id_, kind in unique:
+            for k, sid, relpath, line in bucket:
+                if sid == id_ and k == kind:
+                    print(f"    [{relpath}:{line}] {id_}  ({KIND_LABELS[kind]})")
         print()
 
-    if missing_in_en:
-        print(f"  missing in en .ftl only ({len(unique_missing_en)} unique):")
-        for id_ in unique_missing_en:
-            for relpath, line in [
-                (r, l) for sid, r, l in missing_in_en if sid == id_
-            ]:
-                print(f"    [{relpath}:{line}] {id_}")
-        print()
-
-    if missing_in_id:
-        print(f"  missing in id .id.ftl only ({len(unique_missing_id)} unique):")
-        for id_ in unique_missing_id:
-            for relpath, line in [
-                (r, l) for sid, r, l in missing_in_id if sid == id_
-            ]:
-                print(f"    [{relpath}:{line}] {id_}")
-        print()
+    _report_bucket(
+        missing_in_both,
+        "in BOTH en .ftl AND id .id.ftl",
+        unique_missing_both,
+    )
+    _report_bucket(missing_in_en, "in en .ftl only", unique_missing_en)
+    _report_bucket(missing_in_id, "in id .id.ftl only", unique_missing_id)
 
     # Emit ONE unambiguous sentinel line as the LAST stdout line in
     # both clean and missing modes. Lint-i18n.sh and CI greps on the
@@ -400,17 +854,22 @@ def main() -> int:
     # the sentinel is the ONLY thing the lint depends on; the body
     # of the report (bucket names, file:line entries) can grow
     # freely without breaking the gate.
-    total_missing = (
-        len(unique_missing_en)
-        + len(unique_missing_id)
-        + len(unique_missing_both)
-    )
+    # Locality findings print BEFORE the sentinel: lint-i18n.sh greps the
+    # LAST stdout line, so nothing may follow it.
+    if split_pairs:
+        print(f"  split en/id pairs ({len(split_pairs)} unique):")
+        for domain, key, holder in sorted(split_pairs):
+            print(f"    {domain}.ftl + {holder}.id.ftl  ->  {key}")
+        print()
+
+    total_missing = len(missing_ids)
     print(f"verify-bundle-parity: {total_missing} missing key(s).")
     # Default + --dry-run both fail-closed so CI/pre-commit block
     # the regression. --report-only succeeds regardless so human
     # readers can audit at their leisure; a clean report (0 missing)
     # also returns 0 so it is never a gate failure.
-    return 0 if (args.report_only or total_missing == 0) else 1
+    clean = total_missing == 0 and not split_pairs
+    return 0 if (args.report_only or clean) else 1
 
 
 if __name__ == "__main__":

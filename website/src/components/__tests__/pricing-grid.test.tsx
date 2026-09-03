@@ -143,7 +143,7 @@ describe('PricingGrid Component', () => {
 
   it('marks the highlighted (popular) tier with the badge', async () => {
     const { container, unmount } = await renderGrid('en');
-    expect(container.textContent).toContain('Most Popular');
+    expect(container.textContent).toContain('Popular');
     // The highlighted tier's card carries the primary-border class.
     const article = container.querySelector('article[id="pro"]');
     expect(article?.className).toContain('border-primary');

@@ -1,7 +1,7 @@
 /*
 last audited DD-MM-YY by DSH-Agent
 crate: oz-api | status: SAFE | lint: CLEAN
-findings: 0 unsafe blocks. 2 production .expect() calls in tokens.rs — both "HMAC accepts any key length" with fixed-size key input (documented-invariant, same pattern as oz-crypto). Doc-comment example in lib.rs also uses expect in a //! block (not production code). Security headers, CORS fail-closed, production-secret validation (API-1). Clean server scaffold.
+findings: 0 unsafe blocks. 2 production panic-on-invariant calls in tokens.rs — both "HMAC accepts any key length" with fixed-size key input (documented-invariant, same pattern as oz-crypto). Doc-comment example in lib.rs also uses a panic-on-invariant call in a //! block (not production code). Security headers, CORS fail-closed, production-secret validation (API-1). Clean server scaffold.
 next: none | perf: N/A
 */
 
@@ -35,7 +35,12 @@ next: none | perf: N/A
 //!   -H "Authorization: Bearer <token>"
 //! ```
 
+// The shared OpenAPI document (`spec.rs`) is one deeply-nested `json!`
+// literal — same requirement as `apps/cloud-server` (main.rs).
+#![recursion_limit = "512"]
+
 /// JWT auth middleware and token generation.
+pub mod api_audit;
 pub mod auth;
 /// Postgres data layer for the REST handlers (Phase 1.2).
 pub mod pg;
@@ -43,11 +48,14 @@ pub mod pg;
 pub mod read_tiers;
 /// Axum route handlers (health, tokens, products, categories, sales).
 pub mod routes;
+/// Shared OpenAPI 3.1 document (`x-oz-scope`-tagged) served by the cloud
+/// server and the desktop local API.
+pub mod spec;
 
 use std::sync::Arc;
 
 use axum::{
-    Router,
+    Json, Router,
     http::HeaderValue,
     middleware,
     routing::{get, patch, post, put},
@@ -80,6 +88,15 @@ pub struct AppState {
     /// JWT signing secret for token generation.
     /// Falls back to a dev default when empty.
     pub api_secret: String,
+
+    /// Whether `POST /api/v1/tokens` accepts the terminal
+    /// client-credentials path (`client_id` + `client_secret` against
+    /// `sync_terminals`). Cloud: true. The desktop local API sets it
+    /// false — device credentials are provisioned for the cloud fleet,
+    /// and a secret that ever lands in the served DB (restore, scripted
+    /// registration) must not silently become a local-API credential
+    /// the operator never minted (review MED-5).
+    pub allow_terminal_credentials: bool,
 
     /// Database path (default: `oz-pos.db`).
     pub db_path: String,
@@ -146,7 +163,11 @@ pub fn parse_cors_origins(env: Option<String>) -> Vec<String> {
             .collect(),
         None => DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
     };
-    origins.dedup();
+    // Full dedup preserving first-seen order — `Vec::dedup` only
+    // collapses ADJACENT runs, so "a,b,a" used to keep both `a`s
+    // despite the doc promising a de-duplicated list.
+    let mut seen = std::collections::HashSet::new();
+    origins.retain(|o| seen.insert(o.clone()));
     origins
 }
 
@@ -218,6 +239,7 @@ impl AppState {
             pg: None,
             admin_key: None,
             api_secret: String::new(),
+            allow_terminal_credentials: true,
             db_path: ":memory:".into(),
             port: 3099,
             cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
@@ -240,7 +262,31 @@ impl AppState {
 /// - `GET /api/v1/products/:sku`
 /// - `GET /api/v1/categories`
 pub fn router(state: AppState) -> Router {
+    router_with_openapi(state, None, None)
+}
+
+/// [`router`] with an optional pre-built OpenAPI document served
+/// publicly at `GET /api/openapi.json`, and an optional write-audit
+/// sink (desktop local API; see [`api_audit`]).
+///
+/// The document is a value (not a builder closure) because the desktop
+/// local API computes it once at bind time — it needs the actual bound
+/// port for `servers[0].url`. Registering it here rather than at the
+/// call site keeps the route INSIDE the CORS / security-headers / trace
+/// layer scope that wraps every other route (review MED-4: a route
+/// appended to the returned `Router<()>` escapes all three).
+pub fn router_with_openapi(
+    state: AppState,
+    openapi_json: Option<serde_json::Value>,
+    audit: Option<std::sync::Arc<dyn api_audit::AuditSink>>,
+) -> Router {
     let cors = build_cors(&state.cors_origins);
+    // Slim middleware state: one Arc clone per protected request instead
+    // of a full AppState clone (the original moves into `.with_state`
+    // at the end).
+    let auth_state = auth::AuthState {
+        secret: Arc::new(state.api_secret.clone()),
+    };
 
     let public = Router::new()
         .route("/api/v1/health", get(routes::health::health))
@@ -257,6 +303,16 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/settings",
             get(routes::settings::get_settings_handler).put(routes::settings::put_settings_handler),
         );
+    let public = match openapi_json {
+        Some(spec) => public.route(
+            "/api/openapi.json",
+            get(move || {
+                let spec = spec.clone();
+                async move { Json(spec) }
+            }),
+        ),
+        None => public,
+    };
 
     let protected = Router::new()
         .route(
@@ -315,8 +371,23 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/images/{hash16}", get(routes::images::get_image))
         // Read-tier gate runs INSIDE auth (auth inserts claims first, then
         // this gates GETs against them) — spec 0047 F3.
-        .layer(middleware::from_fn(read_tiers::read_gate_middleware))
-        .layer(middleware::from_fn(auth::auth_middleware));
+        .layer(middleware::from_fn(read_tiers::read_gate_middleware));
+
+    // Write-audit runs INSIDE auth (added before the auth layer, so auth
+    // stays outermost and 401s never reach it) and needs the validated
+    // claims from request extensions.
+    let protected = match audit {
+        Some(sink) => protected.layer(middleware::from_fn_with_state(
+            sink,
+            api_audit::audit_middleware,
+        )),
+        None => protected,
+    };
+
+    let protected = protected.layer(middleware::from_fn_with_state(
+        auth_state,
+        auth::auth_middleware_with_state,
+    ));
 
     Router::new()
         .merge(public)
@@ -393,6 +464,7 @@ pub async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         pg: None,
         admin_key,
         api_secret: api_secret_env.unwrap_or_default(),
+        allow_terminal_credentials: true,
         db_path: db_path.clone(),
         port: std::env::var("OZ_API_PORT")
             .ok()

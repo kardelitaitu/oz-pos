@@ -787,6 +787,7 @@ const SECRET_KEY_DENY_LIST: &[&str] = &[
     "pg_sync.password",
     "rate_sync.api_key",
     "lan_server.psk",
+    "local_api.secret",
     "smtp_config",
     "license.api_key",
     "license.payload",
@@ -850,6 +851,18 @@ pub async fn gateway_status(
 /// the raw `get_setting` IPC surface.
 fn is_secret_key(key: &str) -> bool {
     SECRET_KEY_DENY_LIST.contains(&key)
+}
+
+/// Returns `true` if a key must never leave the backend through a
+/// bulk surface: the deny-listed credential secrets, or keys owned by
+/// a dedicated lifecycle manager (`local_api.*` — writing/restoring
+/// those through the generic path desyncs the manager, see
+/// [`is_managed_key`]). Used by the data export (review MED-2: the
+/// export carried `local_api.secret`, so an exported-then-restored
+/// backup would give two installs the same signing secret, breaking
+/// the per-install property).
+pub(crate) fn is_non_exportable_key(key: &str) -> bool {
+    is_secret_key(key) || is_managed_key(key)
 }
 /// **Deprecated — use `set_setting_scoped` (ADR #7).**
 ///
@@ -968,6 +981,30 @@ pub async fn set_setting_scoped(
     Ok(())
 }
 
+/// Keys owned by a dedicated lifecycle manager and therefore rejected
+/// by the raw settings writers. `local_api.*` is managed exclusively by
+/// the Local API commands (`commands/local_api.rs`): writing
+/// `local_api.enabled` through the generic path would persist an intent
+/// the server never acts on (fail-open disable), and writing
+/// `local_api.secret` would silently invalidate every minted token.
+/// `lan_server.*` is the same class (PSK + bind + enabled owned by the
+/// LAN server module); no UI surface writes those through the generic
+/// path, so widening the guard closes the pre-existing hole without
+/// breaking any caller.
+fn managed_key_owner(key: &str) -> Option<&'static str> {
+    if key.starts_with("local_api.") {
+        Some("Local API")
+    } else if key.starts_with("lan_server.") {
+        Some("LAN server")
+    } else {
+        None
+    }
+}
+
+fn is_managed_key(key: &str) -> bool {
+    managed_key_owner(key).is_some()
+}
+
 /// Business logic for `set_setting` (extracted for testing).
 /// Uses `set_tracked` so every settings change writes a delta record
 /// (ADR #22).
@@ -977,6 +1014,11 @@ fn run_set_setting(
     value: &str,
     terminal_id: &str,
 ) -> Result<(), AppError> {
+    if let Some(owner) = managed_key_owner(key) {
+        return Err(AppError::Invalid(format!(
+            "{key} is managed by the {owner} controls — use those"
+        )));
+    }
     Ok(Settings::set_tracked(conn, key, value, terminal_id)?)
 }
 
@@ -1013,6 +1055,16 @@ pub async fn set_settings_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+
+    // Managed keys are rejected batch-wide before any write so the
+    // all-or-nothing transaction semantics hold (same guard as
+    // `run_set_setting`; the batch loop below bypasses it by design).
+    if let Some(key) = entries.keys().find(|k| is_managed_key(k)) {
+        let owner = managed_key_owner(key).unwrap_or("a dedicated");
+        return Err(AppError::Invalid(format!(
+            "{key} is managed by the {owner} controls — use those"
+        )));
+    }
 
     let terminal_id = state
         .terminal_id

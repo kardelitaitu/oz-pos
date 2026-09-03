@@ -195,7 +195,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
               <Localized id={loadError}>
                 <p>Failed to load variants</p>
               </Localized>
-              <Button variant="secondary" onClick={load}>Retry</Button>
+              <Button variant="secondary" onClick={load}>{requiredLocalized(l10n, 'variant-mgmt-error-retry')}</Button>
             </div>
           ) : loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }} aria-hidden="true">

@@ -54,7 +54,7 @@ staff-login-license-inactive = Lisensi tidak aktif
 statusbar-conflict-count = { $count } konflik sinkronisasi terselesaikan
 # SYNC-12: StatusBar visible labels + ARIA (localized at the render boundary)
 statusbar-app-status-aria = Status aplikasi
-statusbar-version = v0.0.34
+statusbar-version = v0.0.35
 statusbar-sync-name = Sinkronisasi
 statusbar-gateway-name = Stripe
 statusbar-license = Lisensi Proprietary
@@ -165,6 +165,10 @@ update-banner-rollback-aria = Unduh versi sebelumnya dari GitHub
 
 # Accessibility
 a11y-skip-to-content = Lewati ke konten utama
+# Shared right-click menu (see shared.ftl).
+ctx-menu-aria = Menu konteks
+ctx-menu-copy = Salin
+ctx-menu-paste = Tempel
 
 # Navigation section labels
 nav-section-operations = Operasional
@@ -188,6 +192,7 @@ nav-eod-report = Laporan Akhir Hari
 nav-tax-rates = Tarif Pajak
 nav-exchange-rates = Nilai Tukar
 nav-loyalty = Loyalitas
+nav-gift-cards = Kartu Hadiah
 nav-terminals = Terminal
 nav-stores = Toko
 nav-features = Fitur
@@ -200,6 +205,7 @@ nav-dashboard-report = Dasbor
 nav-analytics = Analitik Staf
 nav-sales-report = Laporan Penjualan
 nav-inventory-report = Laporan Stok
+nav-menu-engineering = Rekayasa Menu
 nav-design-system = Sistem Desain
 nav-kiosk = Kiosk
 nav-tables = Meja
@@ -208,6 +214,7 @@ nav-tooltip-preview = Pratinjau Tooltip
 nav-suppliers = Pemasok
 nav-purchase-orders = Pesanan Pembelian
 nav-stock-transfers = Transfer Stok
+nav-stock-counts = Stok Opname
 nav-stock = Stok
 nav-sidebar-collapse = Tutup sidebar
 nav-sidebar-expand = Buka sidebar
@@ -295,6 +302,8 @@ workspace-home-coming-soon = Segera hadir
 workspace-card-active-aria = Ruang kerja aktif
 workspace-home-empty = Tidak ada ruang kerja tersedia
 workspace-home-empty-desc = Anda belum memiliki akses ke ruang kerja apa pun. Hubungi administrator.
+workspace-home-staff-empty = Tidak ada ruang kerja tersedia
+workspace-home-staff-empty-desc = Hubungi Administrator
 workspace-home-logout = Keluar
 workspace-home-logout-confirm-title = Keluar?
 workspace-home-logout-confirm-desc = Anda akan kembali ke layar masuk. Semua pekerjaan yang belum disimpan akan hilang.
@@ -322,6 +331,11 @@ auth-phone-label = Nomor Telepon
 auth-phone-placeholder = 08123456789
 auth-license-label = Kunci Lisensi
 auth-license-placeholder = OZ-PRO-XXXX-XXXX-XXXX
+# Accessible names for the icon-only clear (×) buttons on each field of the
+# license activation form (see shared.ftl).
+auth-clear-email = Hapus alamat email
+auth-clear-phone = Hapus nomor telepon
+auth-clear-key = Hapus kunci lisensi
 auth-activate-button = Aktifkan Lisensi
 auth-activating = Mengaktifkan...
 auth-activation-success = Lisensi berhasil diaktifkan!
@@ -460,8 +474,6 @@ workspace-home-features-title = Fitur
 workspace-home-features-desc = Aktifkan atau nonaktifkan fitur
 workspace-home-data-management-title = Data
 workspace-home-data-management-desc = Cadangkan, ekspor, dan impor data
-workspace-home-kds-title = Tampilan Dapur
-workspace-home-kds-desc = Buka layar tampilan dapur
 workspace-home-workspaces-section = Workspace
 workspace-home-tools-section = Alat
 workspace-home-add-workspace = Tambah Workspace
@@ -508,6 +520,7 @@ warehouse-adjust-reason-label = Alasan
 warehouse-adjust-reason-placeholder = contoh: hitung stok, kerusakan, pengembalian
 warehouse-adjust-confirm = Konfirmasi
 warehouse-adjust-cancel = Batal
+warehouse-mode-tabs-aria = Mode gudang
 
 # ── Warehouse POS console (v2) ────────────────────────────────
 warehouse-mode-receive = Terima

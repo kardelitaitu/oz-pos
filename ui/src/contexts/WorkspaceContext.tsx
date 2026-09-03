@@ -20,6 +20,8 @@ import {
 import { createSession, destroySession, refreshPickerTicket } from "@/api/staff";
 import { getDeviceId } from "@/api/system";
 import { useAuth } from "@/contexts/AuthContext";
+import { requiredLocalized } from "@/frontend/shared";
+import { useLocalization } from "@fluent/react";
 
 
 
@@ -100,6 +102,9 @@ const DEFAULT_STORE_ID = "default";
  */
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { session, pickerTicket, updatePickerTicket } = useAuth();
+  // Localized copy for the error state. WorkspaceProvider mounts inside
+  // LocaleProvider (see contexts/AppProviders.tsx), so l10n is available.
+  const { l10n } = useLocalization();
   const updatePickerTicketFn = updatePickerTicket ?? (() => {});
   // Standalone state — not derived from activeInstance, so it works
   // even before availableWorkspaces is loaded (no race condition).
@@ -205,12 +210,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           );
           setAvailableWorkspaces([]);
           setError(
-            "Failed to load workspaces from server.",
+            requiredLocalized(l10n, 'workspace-home-error-desc'),
           );
         }
       }
     },
-    [pickerTicket],
+    [pickerTicket, l10n],
   );
 
   // ADR #4 Phase 2b: Switch to a different store.

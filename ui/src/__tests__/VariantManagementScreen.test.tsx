@@ -37,6 +37,7 @@ vi.mock('@fluent/react', () => ({
           'variant-mgmt-btn-cancel': 'Cancel',
           'variant-mgmt-add-variant': 'Add Variant',
           'variant-mgmt-loading': 'Loading variants…',
+          'variant-mgmt-error-retry': 'Retry',
           'variant-mgmt-empty': 'No variants yet.',
           'variant-mgmt-empty-cta': 'Add a variant',
           'variant-mgmt-edit': 'Edit',

@@ -6,6 +6,7 @@ import { useBrand } from '@/contexts/BrandContext';
 import StatusBar from '@/components/StatusBar';
 import { useToast } from '@/frontend/shared/Toast';
 import { Localized } from '@/frontend/shared/Localized';
+import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
 import { convertFileSrc } from '@/api/tauri';
 import './StaffLoginScreen.css';
@@ -592,11 +593,14 @@ export default function StaffLoginScreen() {
       {/* ── Footer: version + copyright + sync status ────── */}
       <div className="staff-login-footer">
         <div className="staff-login-footer-left">
-          <span className="staff-login-footer-version">v0.0.34</span>
+          <span className="staff-login-footer-version">v0.0.35</span>
           <span className="staff-login-footer-copyright">&copy; OZ-POS. All rights reserved.</span>
           {lastLogin && (
-            <span className="staff-login-last-login" title="Last login timestamp for this device">
-              Last login: {lastLogin}
+            <span
+              className="staff-login-last-login"
+              title={requiredLocalized(l10n, 'staff-login-last-login-title')}
+            >
+              {requiredLocalized(l10n, 'staff-login-last-login', { time: lastLogin })}
             </span>
           )}
         </div>

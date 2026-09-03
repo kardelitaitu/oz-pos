@@ -434,12 +434,12 @@ export default function OfflineQueueScreen() {
             <table className="offline-queue-table" aria-hidden="true">
               <thead>
                 <tr>
-                  <th>Action</th>
-                  <th>Status</th>
-                  <th>Retries</th>
-                  <th>Last Error</th>
-                  <th>Created</th>
-                  <th>Synced At</th>
+                  <Localized id="offline-queue-action"><th>Action</th></Localized>
+                  <Localized id="offline-queue-status"><th>Status</th></Localized>
+                  <Localized id="offline-queue-retries"><th>Retries</th></Localized>
+                  <Localized id="offline-queue-last-error"><th>Last Error</th></Localized>
+                  <Localized id="offline-queue-created"><th>Created</th></Localized>
+                  <Localized id="offline-queue-synced-at"><th>Synced At</th></Localized>
                   <th aria-label={l10n.getString('offline-queue-table-actions')}> </th>
                 </tr>
               </thead>

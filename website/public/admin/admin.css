@@ -169,18 +169,19 @@ body {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
   font-weight: 700;
   font-size: 15px;
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
-.brand-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--primary);
-  box-shadow: 0 0 0 3px var(--tint-primary-bg);
+.brand-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+.brand-text {
+  margin-left: 10px;
 }
 
 /* ── Nav — iOS segmented slider (3 segments, raised active) ────────── */
@@ -518,11 +519,18 @@ select.input {
 /* ── Hero — the ONE brand-colored highlight card per view ──────────
    Spec "Highlight" card: primary fill, white text, shadow-md, r-lg.
    One per screen; revenue is the hero of a revenue dashboard.        */
+/* ── Hero card — revenue highlight, quiet surface + blue accent ──
+   Redesign (hero v2): the full-width solid blue block read as a wall
+   of colour; the hero is now a neutral card like the stats, with its
+   emphasis carried by a 4px solid primary top-border and a primary-
+   colored value. One accent line + blue number instead of full blue.  */
 .hero-card {
-  background: var(--primary);
-  color: var(--text-on-color);
+  background: var(--bg-surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--primary);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
   padding: 1.5rem;
 }
 .hero-label {
@@ -530,22 +538,46 @@ select.input {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .08em;
-  opacity: .7;
+  color: var(--text-muted);
   margin-bottom: .5rem;
 }
+.hero-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.hero-label-row .hero-label { margin-bottom: 0; }
+.hero-refresh {
+  background: var(--ghost-bg);
+  color: var(--text);
+  border: 0;
+  border-radius: var(--r-sm);
+  width: 28px;
+  height: 28px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .15s ease;
+}
+.hero-refresh:hover { background: var(--ghost-bg-hover); }
 .hero-value {
   font-size: 30px;
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.1;
+  color: var(--primary);
   font-variant-numeric: tabular-nums;
 }
-.hero-sub { font-size: 12px; opacity: .85; margin-top: .5rem; }
+.hero-sub { font-size: 12px; color: var(--text-muted); margin-top: .5rem; }
 
-/* ── Stat cards — spec "Card Colour Variants": 8–10% tinted bg + ────
-   20% border, hero 24px/800 number in the semantic colour, small
-   label. Used sparingly (4 stats; a full row of colored cards would
-   read as decoration).                                                */
+/* ── Stat cards — neutral surface, semantic accent on the sub-line ──
+   Redesign (stat-grid v2): a full row of four tinted cards read as
+   decoration, so the cards are now quiet — white surface + hairline
+   border + soft shadow, dark 26px/800 number, uppercase muted label.
+   The semantic colour appears ONLY on the delta/sub line and a small
+   accent dot, keeping the hero the single solid-colour moment.          */
 .stat-grid {
   display: grid;
   gap: 1rem;
@@ -553,31 +585,52 @@ select.input {
   margin-top: 1.25rem;
 }
 .stat {
-  border: 1px solid transparent;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: var(--r-md);
-  padding: 1.25rem 1rem;
-  text-align: center;
+  box-shadow: var(--shadow-sm);
+  padding: 1.15rem 1.25rem;
   min-width: 0;
 }
 .stat-value {
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.15;
+  color: var(--text);
   font-variant-numeric: tabular-nums;
 }
-.stat-label { font-size: 11px; font-weight: 600; margin-top: 4px; }
-.stat-sub { font-size: 11px; margin-top: 2px; color: var(--text-muted); }
-.stat--primary { background: var(--tint-primary-bg); border-color: var(--tint-primary-border); }
-.stat--primary .stat-value, .stat--primary .stat-label { color: var(--primary); }
-.stat--success { background: var(--tint-success-bg); border-color: var(--tint-success-border); }
-.stat--success .stat-value, .stat--success .stat-label { color: var(--success); }
-.stat--warning { background: var(--tint-warning-bg); border-color: var(--tint-warning-border); }
-.stat--warning .stat-value, .stat--warning .stat-label { color: var(--warning); }
-.stat--danger { background: var(--tint-danger-bg); border-color: var(--tint-danger-border); }
-.stat--danger .stat-value, .stat--danger .stat-label { color: var(--danger); }
-.stat--info { background: var(--tint-info-bg); border-color: var(--tint-info-border); }
-.stat--info .stat-value, .stat--info .stat-label { color: var(--info); }
+.stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-muted);
+  margin-bottom: .35rem;
+}
+.stat-sub {
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: .25rem;
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+}
+/* Accent dot + coloured sub-line — the ONLY semantic colour on the
+   card; the number and label stay neutral. */
+.stat-sub::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.stat--primary .stat-sub { color: var(--primary); }
+.stat--success .stat-sub { color: var(--success); }
+.stat--warning .stat-sub { color: var(--warning); }
+.stat--danger .stat-sub { color: var(--danger); }
+.stat--info .stat-sub { color: var(--info); }
 
 /* ── Section titles — quiet uppercase kickers between dashboard bands */
 .section-title {
@@ -601,7 +654,68 @@ select.input {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  position: relative; /* anchor for hover tooltip */
 }
+.chart-tip {
+  position: absolute;
+  z-index: 30;
+  pointer-events: none;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-md);
+  padding: .45rem .65rem;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+}
+/* #4 needs-attention alert panel */
+.alert-card {
+  border-left: 4px solid var(--warning);
+  margin-bottom: 1.25rem;
+}
+.alert-card h2 {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 .5rem;
+}
+.alert-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+}
+.alert-item {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.alert-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: .15rem .45rem;
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
+}
+.alert-badge--warn { background: var(--tint-warning-bg); color: var(--warning); }
+.alert-badge--bad { background: var(--tint-bad-bg, rgba(239,68,68,.15)); color: var(--bad); }
+.alert-email { font-weight: 600; }
+.alert-detail { color: var(--text-muted); }
+.alert-tier {
+  font-size: 10px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 0 .35rem;
+}
+.alert-at { color: var(--text-muted); margin-left: auto; }
 .chart-card h3 {
   font-size: 13px;
   font-weight: 700;
@@ -609,6 +723,38 @@ select.input {
   text-transform: none;
   color: var(--text);
   margin: 0 0 1rem;
+  flex-shrink: 0;
+}
+.chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-shrink: 0;
+  margin-bottom: .5rem;
+}
+.chart-head h3 { margin: 0; }
+.chart-legend {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  white-space: nowrap;
+}
+.chart-legend .sw {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: .25rem;
+}
+.chart-legend .sw--paddle { background: var(--primary); }
+.chart-legend .sw--midtrans { background: var(--success); }
+.chart-card .chart-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: -0.75rem 0 1rem;
   flex-shrink: 0;
 }
 .chart-card .chart-svg, .chart-card svg { display: block; width: 100%; flex: 1; min-height: 180px; }

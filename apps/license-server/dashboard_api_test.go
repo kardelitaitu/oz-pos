@@ -22,6 +22,7 @@ import (
 func dashboardMux(t *testing.T) (*tests.TestApp, http.Handler) {
 	t.Helper()
 	resetRateLimiters()
+	resetProviderRevenueCache()
 	app, se := setupDirectApp(t)
 	mux, err := se.Router.BuildMux()
 	if err != nil {

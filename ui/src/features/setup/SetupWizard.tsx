@@ -640,11 +640,11 @@ function StepFeatures({
       <div className="setup-features" role="group" aria-label={l10n.getString('setup-features-group-aria', { title: localizedTitle })}>
           {features.map((f) => {
             const isOn = !!enabled[f.key];
-            // Prefer the -label key; fall back to the plain key via
-            // requiredLocalized. A bare requiredLocalized('-label') would
-            // render raw message ids for the ~15 features whose -label key
-            // is missing from the id bundle (id has only 12 of 27).
-            const label = l10n.getString(`setup-feature-${f.key}-label`) ?? requiredLocalized(l10n, `setup-feature-${f.key}`);
+            // All 27 setup-feature-*-label keys resolve in both bundles,
+            // so the plain-key fallback this line chained through was dead
+            // code behind a stale comment claiming the id bundle had only
+            // 12 of 27. setupWizardFeatureLabels.test.ts now asserts that.
+            const label = requiredLocalized(l10n, `setup-feature-${f.key}-label`);
             return (
               <label
                 key={f.key}
@@ -666,7 +666,7 @@ function StepFeatures({
                       type="checkbox"
                       checked={isOn}
                       onChange={() => onToggle(f.key)}
-                      aria-label={`Toggle ${f.label}`}
+                      aria-label={requiredLocalized(l10n, 'setup-feature-toggle-aria', { name: label })}
                     />
                   </Localized>
                   <span className="toggle-track">

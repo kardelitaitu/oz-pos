@@ -4,6 +4,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use http_body_util::BodyExt;
+use std::collections::{BTreeMap, BTreeSet};
 use tower::ServiceExt;
 
 fn test_app() -> axum::Router {
@@ -180,6 +181,21 @@ async fn openapi_json_documents_all_paths() {
     assert!(
         paths.contains_key("/api/v1/images/{hash16}"),
         "missing images by hash"
+    );
+    // Router→spec drift class (2026-09-03): these were live-but-undocumented.
+    assert!(paths.contains_key("/api/v1/settings"), "missing settings");
+    assert!(
+        paths.contains_key("/api/sync/snapshot"),
+        "missing sync snapshot"
+    );
+    assert!(
+        paths.contains_key("/api/openapi.json"),
+        "missing openapi.json self-documentation"
+    );
+    assert!(paths.contains_key("/api/docs"), "missing swagger docs page");
+    assert!(
+        paths.contains_key("/api/docs/scalar"),
+        "missing scalar docs page"
     );
 }
 
@@ -399,6 +415,212 @@ fn concrete_url(template: &str) -> String {
         .replace("{hash16}", "aaaaaaaaaaaaaaaa")
 }
 
+// ── Drift guard — router→spec coverage (reverse direction) ──────────
+
+/// HTTP method verbs recognized inside a `.route()` method-router expr.
+const ROUTE_VERBS: [&str; 8] = [
+    "get", "post", "put", "patch", "delete", "head", "options", "trace",
+];
+
+/// Parse `.route("<path>", <expr>)` registrations out of the router
+/// source files.
+///
+/// axum 0.8 removed `Router::into_iter()` — the introspection that
+/// spec 0047's reverse walk assumed (its ground-truth table still claims
+/// axum 0.7.9; the lockfile has since moved to 0.8.9, where `Router`
+/// offers no enumeration API at all). The version-stable equivalent is a
+/// compile-time source scan: `include_str!` every file that registers
+/// routes on the merged cloud router and extract the literals. Any new
+/// `.route()` registration missing from the OpenAPI spec turns
+/// [`every_registered_route_is_documented`] red — the drift class that
+/// let `/api/v1/settings` and `/api/sync/snapshot` go undocumented.
+///
+/// Known limitation: the scan is raw text, so a `.route("...")` literal
+/// inside a comment is also picked up — a false positive that fails
+/// loudly and is trivially reworded, the safe direction for a guard.
+fn source_registered_routes() -> BTreeMap<String, BTreeSet<String>> {
+    let sources: &[&str] = &[
+        include_str!("../../../crates/oz-api/src/lib.rs"),
+        include_str!("main.rs"),
+        include_str!("sync_api.rs"),
+        include_str!("webhooks.rs"),
+        include_str!("outbound_webhooks.rs"),
+    ];
+    let mut routes: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for &src in sources {
+        let mut from = 0usize;
+        while let Some(rel) = src[from..].find(".route(") {
+            let mut pos = from + rel + ".route(".len();
+            from = pos; // continuation default if this site does not parse
+            // first argument: whitespace, then a plain string literal
+            let Some((path, after)) = read_str_lit(src, pos) else {
+                continue;
+            };
+            pos = after;
+            // comma separating the two args
+            let Some(comma) = src[pos..].find(',') else {
+                continue;
+            };
+            pos += comma + 1;
+            // method-router expr runs to the `)` closing `.route(`
+            let Some(expr_end) = match_paren(src, pos) else {
+                continue;
+            };
+            let expr = &src[pos..expr_end];
+            from = expr_end + 1;
+            let methods = routes.entry(path).or_default();
+            for verb in ROUTE_VERBS {
+                if contains_verb_call(expr, verb) {
+                    methods.insert(verb.to_owned());
+                }
+            }
+            // `any(...)` registers every verb
+            if contains_verb_call(expr, "any") {
+                for verb in ROUTE_VERBS {
+                    methods.insert(verb.to_owned());
+                }
+            }
+        }
+    }
+    routes
+}
+
+/// Read a `"`-delimited literal (no escapes expected in route paths)
+/// starting at or after `pos`. Returns the value and the index after the
+/// closing quote.
+fn read_str_lit(src: &str, pos: usize) -> Option<(String, usize)> {
+    let bytes = src.as_bytes();
+    let mut i = pos;
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if bytes.get(i) != Some(&b'"') {
+        return None;
+    }
+    i += 1;
+    let start = i;
+    while i < bytes.len() && bytes[i] != b'"' {
+        if bytes[i] == b'\\' {
+            return None; // escaped literals are not expected here
+        }
+        i += 1;
+    }
+    if i >= bytes.len() {
+        return None;
+    }
+    Some((src[start..i].to_owned(), i + 1))
+}
+
+/// Given an index inside `.route(`'s argument list (one paren already
+/// open), find the byte index of the `)` that closes it.
+fn match_paren(src: &str, from: usize) -> Option<usize> {
+    let bytes = src.as_bytes();
+    let mut depth = 1usize;
+    let mut in_str = false;
+    let mut i = from;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' => in_str = !in_str,
+            b'(' if !in_str => depth += 1,
+            b')' if !in_str => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+/// True if `expr` contains `<verb>(` with a word boundary before it
+/// (so `get_settings_handler` never matches `get`).
+fn contains_verb_call(expr: &str, verb: &str) -> bool {
+    let mut from = 0usize;
+    while let Some(rel) = expr[from..].find(verb) {
+        let at = from + rel;
+        let before_ok = at == 0
+            || !matches!(
+                expr.as_bytes()[at - 1],
+                b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_'
+            );
+        if before_ok && expr[at + verb.len()..].starts_with('(') {
+            return true;
+        }
+        from = at + verb.len();
+    }
+    false
+}
+
+/// Reverse direction of [`every_spec_path_method_is_alive`]: the route
+/// set registered in the router sources and the path set documented in
+/// the spec must be EQUAL — both paths and per-path methods. Historically
+/// the guard was one-directional and `/api/v1/settings` +
+/// `/api/sync/snapshot` drifted live-but-undocumented (found 2026-09-03
+/// while writing `docs/guides/EXTENDING.md`); this test closes that
+/// class. Set equality (not just containment) also self-verifies the
+/// source parser: a path the scan silently misses breaks the equality
+/// from the spec side, so a broken parser cannot pass vacuously.
+#[test]
+fn every_registered_route_is_documented() {
+    let spec = openapi_spec();
+    let paths = spec["paths"].as_object().unwrap();
+
+    let registered = source_registered_routes();
+    // Sanity floor: the merged cloud router registers 35 paths today; a
+    // wholesale parser failure must fail loudly even before the walk.
+    assert!(
+        registered.len() >= 30,
+        "source scan found only {} registered paths — parser broken?",
+        registered.len()
+    );
+
+    let spec_paths: BTreeSet<&String> = paths.keys().collect();
+    let registered_paths: BTreeSet<&String> = registered.keys().collect();
+
+    let mut violations = Vec::new();
+    for path in registered_paths.difference(&spec_paths) {
+        violations.push(format!(
+            "{path} is registered in the router sources but missing from the spec"
+        ));
+    }
+    for path in spec_paths.difference(&registered_paths) {
+        violations.push(format!(
+            "{path} is declared in the spec but registered in no scanned router source \
+             (new route file? add it to source_registered_routes, or remove the path)"
+        ));
+    }
+
+    // Method level: registered verbs must equal declared verbs.
+    for (path, methods) in &registered {
+        let Some(entry) = paths.get(path.as_str()) else {
+            continue; // path-level violation already recorded above
+        };
+        let declared: BTreeSet<String> = ROUTE_VERBS
+            .iter()
+            .filter(|v| entry.get(**v).is_some())
+            .map(|v| (*v).to_string())
+            .collect();
+        for verb in methods.difference(&declared) {
+            violations.push(format!("{verb} {path} is registered but not documented"));
+        }
+        for verb in declared.difference(methods) {
+            violations.push(format!(
+                "{verb} {path} is documented but not registered in the scanned sources"
+            ));
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "Router↔spec drift — {} violation(s):\n{}",
+        violations.len(),
+        violations.join("\n")
+    );
+}
+
 /// Every operation in the spec must declare `security: [{bearerAuth: []}]`
 /// unless the path is on the explicit public allowlist.  A new endpoint
 /// silently missing the security block becomes a red test (spec 0047 §3
@@ -423,6 +645,8 @@ fn security_coverage_walk_every_operation() {
             // bearerAuth; they are public in the JWT sense.
             || path == "/api/v1/terminals"
             || path == "/api/v1/tenants/{tenant_id}/plan"
+            || path == "/api/v1/settings"
+            || path == "/api/webhooks"
             || path.starts_with("/api/webhooks/")
     }
 
@@ -458,8 +682,98 @@ fn security_coverage_walk_every_operation() {
     );
 }
 
-// ── Drift-guard assertion 4 (spec 0047 §3) — READ_KEY_MAP coverage ──
+// ── Scope tagging (x-oz-scope) ───────────────────────────────────────
 
+/// Every operation in the merged document must carry `x-oz-scope`, and
+/// the scope must match the path family: the shared `/api/v1/*` surface
+/// and the self-documenting `/api/openapi.json` are `"both"`; host
+/// health/metrics, sync, webhooks, and the docs UI pages are `"cloud"`.
+/// This is the contract scripts use to decide whether an endpoint
+/// exists on their desktop local API.
+#[test]
+fn every_operation_carries_correct_scope() {
+    let spec = openapi_spec();
+    let paths = spec["paths"].as_object().unwrap();
+
+    fn expected_scope(path: &str) -> &'static str {
+        if path.starts_with("/api/sync/")
+            || path == "/api/webhooks"
+            || path.starts_with("/api/webhooks/")
+            || path == "/health"
+            || path == "/api/health"
+            || path == "/metrics"
+            || path == "/api/docs"
+            || path == "/api/docs/scalar"
+        {
+            "cloud"
+        } else {
+            "both"
+        }
+    }
+
+    let mut violations = Vec::new();
+    let mut seen = 0usize;
+    for (path, item) in paths {
+        for (verb, operation) in item.as_object().unwrap() {
+            if !oz_api::spec::is_operation_key(verb) {
+                continue;
+            }
+            seen += 1;
+            let want = expected_scope(path);
+            let got = operation.get("x-oz-scope").and_then(|v| v.as_str());
+            if got != Some(want) {
+                violations.push(format!(
+                    "{verb} {path}: x-oz-scope={got:?}, expected \"{want}\""
+                ));
+            }
+        }
+    }
+    assert!(seen >= 35, "only {seen} operations walked — broken?");
+    assert!(
+        violations.is_empty(),
+        "Scope drift — {} violation(s):\n{}",
+        violations.len(),
+        violations.join("\n")
+    );
+}
+
+/// The merged document must not lose schemas the cloud paths reference —
+/// guards the base/cloud schema split against accidental deletion.
+#[test]
+fn every_merged_ref_resolves() {
+    fn collect(v: &Value, out: &mut Vec<String>) {
+        match v {
+            Value::Object(map) => {
+                for c in map.values() {
+                    collect(c, out);
+                }
+            }
+            Value::Array(arr) => {
+                for c in arr {
+                    collect(c, out);
+                }
+            }
+            Value::String(s) if s.starts_with("#/components/") => {
+                out.push(s.clone());
+            }
+            _ => {}
+        }
+    }
+    let spec = openapi_spec();
+    let mut refs = Vec::new();
+    collect(&spec, &mut refs);
+    assert!(!refs.is_empty());
+    for pointer in &refs {
+        let mut cur = &spec;
+        for seg in pointer.trim_start_matches("#/").split('/') {
+            cur = cur
+                .get(seg)
+                .unwrap_or_else(|| panic!("dangling $ref {pointer} in merged spec"));
+        }
+    }
+}
+
+// ── Drift-guard assertion 4 (spec 0047 §3) — READ_KEY_MAP coverage ──
 /// Every protected GET operation in the spec must have a corresponding
 /// entry in `oz_api::read_tiers::READ_KEY_MAP`.  Public/health/docs and
 /// sync routes are excluded (they keep their own gating).

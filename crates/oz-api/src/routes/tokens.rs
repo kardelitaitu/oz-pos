@@ -171,6 +171,17 @@ pub async fn create_token_handler(
     if let (Some(client_id), Some(client_secret)) =
         (body.client_id.as_deref(), body.client_secret.as_deref())
     {
+        // Embedder opt-out (review MED-5): the desktop local API sets
+        // `allow_terminal_credentials = false` — device credentials are
+        // a cloud-fleet provisioning concept and must not become a
+        // local credential the operator never minted.
+        if !state.allow_terminal_credentials {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "terminal_credentials_disabled"})),
+            )
+                .into_response();
+        }
         let verified = if let Some(pool) = &state.pg {
             crate::pg::verify_terminal_credentials(pool, client_id, client_secret)
                 .await

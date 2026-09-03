@@ -75,16 +75,28 @@ func (s *midtransDedupStore) seen(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now()
+	wasSeen := false
 	if exp, ok := s.events[id]; ok && now.Before(exp) {
-		return true
+		wasSeen = true
 	}
 	for oldID, exp := range s.events {
 		if !now.Before(exp) {
 			delete(s.events, oldID)
 		}
 	}
-	s.events[id] = now.Add(midtransDedupTTL)
-	return false
+	if !wasSeen {
+		s.events[id] = now.Add(midtransDedupTTL)
+	}
+	return wasSeen
+}
+
+// remember records id unconditionally (used after the dedup gate, so a
+// refund notification that reuses the transaction_id never re-enters the
+// success path's dedup window as a false duplicate).
+func (s *midtransDedupStore) remember(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.events[id] = time.Now().Add(midtransDedupTTL)
 }
 
 // resetMidtransDedup clears the dedup map (test hook, mirroring
@@ -118,6 +130,7 @@ type midtransNotification struct {
 	StatusCode        string `json:"status_code"`
 	FraudStatus       string `json:"fraud_status"`
 	GrossAmount       string `json:"gross_amount"`
+	RefundAmount      string `json:"refund_amount"`
 	PaymentType       string `json:"payment_type"`
 	SignatureKey      string `json:"signature_key"`
 	SettlementTime    string `json:"settlement_time"`
@@ -319,15 +332,17 @@ func handleMidtransWebhook(app core.App) func(e *core.RequestEvent) error {
 			log.Printf("midtrans webhook: invalid signature (transaction=%s order=%s)", n.TransactionID, n.OrderID)
 			return e.JSON(http.StatusUnauthorized, map[string]any{"error": "invalid signature"})
 		}
-		// Replay protection: a duplicated notification (Midtrans retry) is
-		// a no-op.
-		if midtransDedup.seen(n.TransactionID) {
-			log.Printf("midtrans webhook: duplicate transaction_id=%s ignored", n.TransactionID)
-			return e.JSON(http.StatusOK, map[string]any{"status": "duplicate"})
-		}
-
+		// Replay protection: only deduplicate SUCCESSFUL charge notifications
+		// (settlement / capture).  Refund / cancel / expire / deny
+		// notifications reuse the same transaction_id but carry a different
+		// status, so they must NOT be treated as duplicates.
 		switch {
 		case midtransChargeSucceeded(n):
+			if midtransDedup.seen(n.TransactionID) {
+				log.Printf("midtrans webhook: duplicate transaction_id=%s ignored", n.TransactionID)
+				return e.JSON(http.StatusOK, map[string]any{"status": "duplicate"})
+			}
+			midtransDedup.remember(n.TransactionID)
 			if err := midtransProvision(app, n); err != nil {
 				log.Printf("midtrans webhook: provisioning failed for transaction=%s: %v", n.TransactionID, err)
 				return e.JSON(http.StatusInternalServerError, map[string]any{
@@ -345,6 +360,10 @@ func handleMidtransWebhook(app core.App) func(e *core.RequestEvent) error {
 					"error": "update failed",
 				})
 			}
+			// Revenue adjustment (best-effort): a refund / partial refund
+			// reduces the keepable gross — record it so the dashboard can
+			// show the operator how much was clawed back.
+			midtransCaptureAdjustment(app, n)
 			return e.JSON(http.StatusOK, map[string]any{"status": "ok"})
 
 		default:
@@ -609,6 +628,63 @@ func midtransCaptureRevenue(app core.App, n midtransNotification) {
 		NativeAmountMinor: amountIDRMinor,
 		NativeCurrency:    "IDR",
 		SubscriptionID:    n.SubscriptionID,
+		Notes:             notes,
+	})
+}
+
+// midtransCaptureAdjustment records a Midtrans refund / partial refund as
+// a revenue_adjustments row (Phase D of the revenue pipeline). Best-effort:
+// failures are logged, never returned (the webhook already 200'd). Only
+// genuine claw-backs count — cancel/expire/deny notifications move the
+// subscription to grace but never charged, so they must NOT be recorded as
+// adjustments.
+func midtransCaptureAdjustment(app core.App, n midtransNotification) {
+	kind := ""
+	switch n.TransactionStatus {
+	case "refund":
+		kind = "refund"
+	case "partial_refund":
+		kind = "partial_refund"
+	default:
+		return // not a claw-back
+	}
+	// Refund amount: prefer the notification's refund_amount when present,
+	// else the full gross (full refunds don't always carry a separate
+	// field). A partial refund without a refund_amount can't be quantified
+	// honestly — skip it instead of overstating the claw-back.
+	amountStr := strings.TrimSpace(n.RefundAmount)
+	if amountStr == "" && kind == "partial_refund" {
+		log.Printf("midtrans adjustment: partial_refund without refund_amount (transaction=%s) — skipping", n.TransactionID)
+		return
+	}
+	if amountStr == "" {
+		amountStr = n.GrossAmount
+	}
+	amountIDRMinor := parseMidtransGrossAmountMinor(amountStr)
+	if amountIDRMinor <= 0 {
+		return
+	}
+	tenantID := ""
+	email := strings.TrimSpace(n.CustomField2)
+	if email != "" {
+		if tenant, err := app.FindFirstRecordByData("tenants", "email", email); err == nil && tenant != nil {
+			tenantID = tenant.Id
+		}
+	}
+	notes := "payment_type=" + n.PaymentType
+	if n.OrderID != "" {
+		notes += " order_id=" + n.OrderID
+	}
+	if n.SubscriptionID != "" {
+		notes += " subscription_id=" + n.SubscriptionID
+	}
+	saveRevenueAdjustment(app, revenueAdjustment{
+		Provider:          "midtrans",
+		EventID:           midtransAdjustmentEventID(kind, n.TransactionID),
+		TenantID:          tenantID,
+		Kind:              kind,
+		NativeAmountMinor: amountIDRMinor,
+		NativeCurrency:    "IDR",
 		Notes:             notes,
 	})
 }

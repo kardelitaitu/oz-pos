@@ -3,6 +3,8 @@ name: pr-repair
 description: Systematic workflow for diagnosing, reproducing, repairing, and verifying failed tests and CI checks on a GitHub pull request in OZ-POS. Covers gh CLI diagnosis, scoped reproduction (Rust, UI, E2E, gates, drift scripts), repair patterns, and verification protocols.
 ---
 
+<!-- Audit stamp: 2026-09-03 · DSH · status: ACCURATE (rev 2 — version lock corrected 0.0.31 → 0.0.35; poll-pr-checks.ps1 corrected to the real scripts/poll-pr-checks.sh (no .ps1 exists); the Fluent bundle-path wording corrected to the per-feature English/.id.ftl layout; touch-target rule aligned with the design language 48px floor; illustrative Fluent ids reworded so the drift-guard Fluent check stays clean; reset-dev-pg.ps1 mention removed — only the .sh exists; vitest repro switched to npm run test -- filter) · verified this pass: scripts/poll-pr-checks.sh, scripts/reset-dev-pg.sh, scripts/diagnose-pr.py, scripts/verify-ci-docs-drift.py, scripts/verify-architecture-boundaries.py, scripts/verify-no-hardcoded-money-format.py, scripts/test-tdd.sh, crates/oz-api/src/pg_tests.rs, apps/cloud-server/src/db_tests.rs exist; ui npm scripts e2e:api / e2e:ui / typecheck / lint / test confirmed in ui/package.json -->
+
 # PR Repair — Fixing Failed Tests and CI Checks on Pull Requests
 
 This skill defines the standardized, disciplined workflow for diagnosing, reproducing, fixing, and verifying failed tests or failing CI checks on a GitHub pull request in the OZ-POS repository.
@@ -25,12 +27,12 @@ This skill defines the standardized, disciplined workflow for diagnosing, reprod
 | 1 | **Evidence first — diagnose before touching code.** | Never guess why a CI check failed. Use `gh pr checks` and `gh run view --log-failed` to extract the exact failure trace. |
 | 2 | **Reproduce locally in isolation.** | Reproduce the failing test or check locally using the smallest possible command before writing fixes. |
 | 3 | **Minimal surgical fixes.** | Address the root cause. Never delete assertions, skip tests, widen tolerances, or suppress linters unless the test was demonstrably testing an obsolete specification. |
-| 4 | **Maintain architectural standards.** | Money values stay in `i64` minor units (`Money`), database writes in `rusqlite` transactions, UI text in `@fluent/react` (`<Localized id="...">`), and Tauri IPC routed through `ui/src/api/`. |
-| 5 | **Version is locked at `0.0.31`.** | Never modify the version number in `Cargo.toml`, `package.json`, or any manifest. |
+| 4 | **Maintain architectural standards.** | Money values stay in `i64` minor units (`Money`), database writes in `rusqlite` transactions, UI text in `@fluent/react` via `<Localized>`, and Tauri IPC routed through `ui/src/api/`. |
+| 5 | **Version is locked at `0.0.35`.** | Never modify the version number in `Cargo.toml`, `package.json`, or any manifest. |
 | 6 | **Scope verification to the affected area.** | Run targeted tests during iteration. Full `scripts/check.sh` is reserved for final pre-push or explicit requests. |
 | 7 | **Never kill running background processes.** | Do not kill `.exe` or background services that may belong to other agents or active dev servers. |
 | 8 | **Never `git push` without an explicit direct command.** | Always stop at local commit. Even after full verification, ask or wait for the user to explicitly tell you to push. |
-| 9 | **Catch early, repair instantly — 30s fail-fast polling.** | The CI matrix contains 38+ jobs taking 15–25 minutes. Never run bare `gh pr checks --watch` which hangs until all checks finish. Instead, poll every 30s with fail-fast early exit (`gh pr checks <PR> --watch --fail-fast -i 30` or `pwsh scripts/poll-pr-checks.ps1`). As soon as 1 or 2 fast checks fail, catch them immediately and start repairing without waiting for the rest. |
+| 9 | **Catch early, repair instantly — 30s fail-fast polling.** | The CI matrix contains 38+ jobs taking 15–25 minutes. Never run bare `gh pr checks --watch` which hangs until all checks finish. Instead, poll every 30s with fail-fast early exit (`gh pr checks <PR> --watch --fail-fast -i 30` or `bash scripts/poll-pr-checks.sh`). As soon as 1 or 2 fast checks fail, catch them immediately and start repairing without waiting for the rest. |
 
 ---
 
@@ -82,8 +84,7 @@ git pull origin $(git branch --show-current)
 gh pr checks <PR_NUMBER> --watch --fail-fast -i 30
 
 # Option B: Dedicated repo polling script (prints progress and halts on early failure):
-pwsh scripts/poll-pr-checks.ps1 -Pr <PR_NUMBER> -Interval 30
-# (or on bash: ./scripts/poll-pr-checks.sh <PR_NUMBER> 30)
+bash scripts/poll-pr-checks.sh <PR_NUMBER> 30
 
 # Option C: Non-blocking instant snapshot:
 gh pr checks <PR_NUMBER>
@@ -128,7 +129,6 @@ When PG tests like `crates/oz-api/src/pg_tests.rs` or `apps/cloud-server/src/db_
 ```powershell
 # Reset dev PostgreSQL schema drift
 bash scripts/reset-dev-pg.sh
-# (or on Windows PowerShell directly: .\scripts\reset-dev-pg.ps1)
 
 # Re-run the failing test
 cargo test -p oz-api --test pg_tests
@@ -146,10 +146,10 @@ cargo clippy -p <crate_name> --all-targets --all-features -- -D warnings
 #### 4. UI Unit Tests (Vitest)
 ```powershell
 cd ui
-# Run a specific test file
-npx vitest run src/__tests__/<test_file>.test.tsx
+# Run a specific test file by name filter (matches ui/src/__tests__/<name>.test.tsx)
+npm run test -- <test_name_fragment>
 
-# Or run tests on changed files
+# Or run the full unit suite
 npm run test
 ```
 
@@ -173,7 +173,7 @@ npm run e2e:ui
 
 #### 7. Localization & Fluent Bundle Parity
 ```powershell
-# Verify Fluent key parity between en.ftl and id.ftl
+# Verify Fluent key parity between the English .ftl and .id.ftl bundles under ui/src/locales/
 bash scripts/lint-i18n.sh
 
 # Check duplicate FTL keys
@@ -214,12 +214,12 @@ Classify the root cause and apply the appropriate repair:
 - **Repair:** Execute `bash scripts/reset-dev-pg.sh` and ensure migrations in `20260813_init.pg.sql` or subsequent migration files match test expectations.
 
 #### Scenario D: Missing or Unsynced Fluent Localization
-- **Symptom:** `<Localized id="foo_bar">` added in React JSX, but missing in `ui/src/locales/en.ftl` or `ui/src/locales/id.ftl`.
-- **Repair:** Add the key and corresponding translated string to **both** `en.ftl` and `id.ftl`.
+- **Symptom:** a `<Localized>` key added in React JSX is missing from the matching `ui/src/locales/<feature>.ftl` (English) or `<feature>.id.ftl` (Indonesian) bundle — e.g. `sales.ftl` for a sales-surface key.
+- **Repair:** Add the key and corresponding translated string to **both** the English and the `.id.ftl` bundle.
 
 #### Scenario E: UI Accessibility (`aria-*`) or Touch Target Failure
-- **Symptom:** Component fails ESLint `jsx-a11y` or touch target minimum size (44x44px for tablet).
-- **Repair:** Add proper `aria-label`, `role`, or ensure button dimensions meet tablet POS criteria.
+- **Symptom:** Component fails ESLint `jsx-a11y` or the touch-target minimum size (48px floor for finger-tapped actions per the design language; 34px only in mouse/toolbar contexts).
+- **Repair:** Add proper `aria-label`, `role`, or ensure button dimensions meet the design language's size ladder (48/42/34px).
 
 ---
 
@@ -272,7 +272,7 @@ python scripts/diagnose-pr.py <PR_NUMBER>
 | `PG Integration / pg_tests` | `Db("db error")` drift | `bash scripts/reset-dev-pg.sh && cargo test -p oz-api --test pg_tests` |
 | `Rust Lint / cargo fmt` | Formatting discrepancy | `cargo fmt --all` |
 | `Rust Lint / clippy` | Compiler/clippy warning | `cargo clippy -p <crate> --all-targets --all-features -- -D warnings` |
-| `UI Test / vitest` | Component/unit test failure | `cd ui && npx vitest run src/__tests__/<test_file>` |
+| `UI Test / vitest` | Component/unit test failure | `cd ui && npm run test -- <test_name_fragment>` |
 | `UI Lint / tsc` | TypeScript type error | `cd ui && npm run typecheck` |
 | `UI Lint / eslint` | Lint or a11y violation | `cd ui && npm run lint` |
 | `E2E Playwright` | Browser flow timeout or diff | `cd ui && npm run e2e:ui` |
@@ -280,4 +280,4 @@ python scripts/diagnose-pr.py <PR_NUMBER>
 | `CI Docs Drift` | Undocumented script or workflow | `python scripts/verify-ci-docs-drift.py` |
 | `Skill Drift Tests` | Stale audit date or broken ref | `bash .agents/skills/skill-drift-guard/scripts/detect.sh` |
 
-> last audited 29-08-26 by skill-drift-guard
+> last audited 03-09-26 by DSH

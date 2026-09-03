@@ -47,6 +47,7 @@ fn test_app_seeded() -> Router {
         pg: None,
         admin_key: None,
         api_secret: String::new(),
+        allow_terminal_credentials: true,
         db_path: ":memory:".into(),
         port: 3099,
         cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
@@ -683,6 +684,7 @@ fn test_app_with_roles() -> Router {
         pg: None,
         admin_key: None,
         api_secret: String::new(),
+        allow_terminal_credentials: true,
         db_path: ":memory:".into(),
         port: 3099,
         cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
@@ -1066,6 +1068,16 @@ fn parse_cors_origins_blank_denies_all() {
     assert!(parse_cors_origins(Some(" ".into())).is_empty());
 }
 
+#[test]
+fn parse_cors_origins_dedups_non_adjacent_preserving_order() {
+    // "a,b,a" used to keep both `a`s — Vec::dedup only collapses
+    // adjacent runs, despite the doc promising a de-duplicated list.
+    assert_eq!(
+        parse_cors_origins(Some("https://a.com,https://b.com,https://a.com".into())),
+        vec!["https://a.com".to_string(), "https://b.com".to_string()],
+    );
+}
+
 #[tokio::test]
 async fn cors_allowed_origin_is_echoed() {
     let req = Request::builder()
@@ -1407,4 +1419,56 @@ async fn write_routes_accept_admin_key_when_configured() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::CREATED);
+}
+
+// ── router_with_openapi (review MED-4 regression) ────────────────
+
+#[tokio::test]
+async fn docs_route_is_served_inside_the_outer_layers() {
+    let state = AppState::test(fresh_conn());
+    let app = router_with_openapi(
+        state,
+        Some(serde_json::json!({"openapi": "3.1.0", "x-test": true})),
+        None,
+    );
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/openapi.json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    // The route must sit INSIDE the security-headers layer — it did not
+    // when the desktop appended it to the returned Router<()> (MED-4).
+    assert_eq!(
+        resp.headers()
+            .get("x-content-type-options")
+            .and_then(|v| v.to_str().ok()),
+        Some("nosniff"),
+        "docs route must carry the security headers every other route gets"
+    );
+    let body = body_json(resp).await;
+    assert_eq!(body["x-test"], serde_json::json!(true));
+}
+
+#[tokio::test]
+async fn plain_router_does_not_serve_the_docs_route() {
+    let app = test_app();
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/openapi.json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    // The document is only served when explicitly injected. Unknown
+    // paths hit the protected group's auth-layered fallback (axum's
+    // `.layer` wraps the not-found service too) — 401 without a bearer,
+    // never a 200 with a spec body.
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }

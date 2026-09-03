@@ -7,6 +7,7 @@ import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { l10nErrorMessage } from '@/utils/app-error';
+import { transactionTypeLabel } from './transactionTypeLabel';
 import {
   startInventoryShift,
   endInventoryShift,
@@ -220,7 +221,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
                 shiftSummaryTxs.map(tx => (
                   <li key={tx.id} className="summary-item">
                     <span className="summary-item-type">
-                      {l10n.getString(`inv-log-type-${tx.type}`) ?? tx.type.replace('-', ' ')}
+                      {transactionTypeLabel(l10n, tx.type)}
                     </span>
                     <span>{new Date(tx.created_at).toLocaleTimeString(numLocale)}</span>
                   </li>

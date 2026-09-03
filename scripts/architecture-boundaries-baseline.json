@@ -41,25 +41,7 @@
     {
       "rule": "core-upward-dependency",
       "path": "crates/oz-core/Cargo.toml",
-      "target": "modules-reporting",
-      "reason": "Existing oz-core upward dependency documented in the Phase 1 architecture baseline.",
-      "owner": "OZ-POS maintainers",
-      "introduced": "2026-08-06",
-      "expires": "2026-11-06"
-    },
-    {
-      "rule": "core-upward-dependency",
-      "path": "crates/oz-core/Cargo.toml",
       "target": "modules-sales",
-      "reason": "Existing oz-core upward dependency documented in the Phase 1 architecture baseline.",
-      "owner": "OZ-POS maintainers",
-      "introduced": "2026-08-06",
-      "expires": "2026-11-06"
-    },
-    {
-      "rule": "core-upward-dependency",
-      "path": "crates/oz-core/Cargo.toml",
-      "target": "modules-settings",
       "reason": "Existing oz-core upward dependency documented in the Phase 1 architecture baseline.",
       "owner": "OZ-POS maintainers",
       "introduced": "2026-08-06",

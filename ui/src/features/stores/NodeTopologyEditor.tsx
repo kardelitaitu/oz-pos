@@ -413,7 +413,7 @@ function BranchLocationFields({ nodeId, sessionToken, l10n, beginInspectorEdit }
     return (
       <div className="inspector-section">
         <h4 className="inspector-section-title"><Localized id="topology-inspector-section-location">Branch Location</Localized></h4>
-        <span className="inspector-type-label">Loading…</span>
+        <Localized id="shared-loading"><span className="inspector-type-label">Loading…</span></Localized>
       </div>
     );
   }

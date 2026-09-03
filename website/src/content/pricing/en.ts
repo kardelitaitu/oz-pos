@@ -21,7 +21,7 @@ export const pricing: PricingTier[] = [
     name: 'Free',
     currency: 'USD',
     description: 'Free forever — run one store, fully offline.',
-    cta: 'Download free',
+    cta: 'Download',
     prices: {
       monthly: { price: '$0', period: 'free forever' },
       yearly: { price: '$0', period: 'free forever' },
@@ -31,7 +31,7 @@ export const pricing: PricingTier[] = [
       { label: '1 register', included: true },
       { label: '1 warehouse', included: true },
       { label: '3-month sales history', included: true },
-      { label: 'QRIS payments', included: false },
+      { label: 'QRIS payments', included: true },
       { label: 'Cloud sync', included: false },
     ],
   },
@@ -41,7 +41,7 @@ export const pricing: PricingTier[] = [
     name: 'Plus',
     currency: 'USD',
     description: 'The entry plan for single-store shops ready to grow.',
-    cta: 'Choose Plus',
+    cta: 'Subscribe',
     prices: {
       monthly: { price: '$4.99', period: '/month', priceId: 'pro_01m1amcb41qkbr7zzd1kxa3qnd' },
       yearly: { price: '$49.99', period: '/year', priceId: 'pro_01m1amdj2swb3q21r2mwcy3krh' },
@@ -70,7 +70,7 @@ export const pricing: PricingTier[] = [
     name: 'Pro',
     currency: 'USD',
     description: 'For growing businesses — analytics, Kitchen Display, and multi-terminal.',
-    cta: 'Choose Pro',
+    cta: 'Subscribe',
     highlight: true,
     prices: {
       monthly: {
@@ -99,7 +99,7 @@ export const pricing: PricingTier[] = [
     name: 'Premium',
     currency: 'USD',
     description: 'For multi-store chains — whitelabel, loyalty, and automation.',
-    cta: 'Choose Premium',
+    cta: 'Subscribe',
     prices: {
       monthly: { price: '$39.99', period: '/month', priceId: 'pro_01m1amema8yj6w5mfm8wx8jwhm' },
       yearly: { price: '$399.99', period: '/year', priceId: 'pro_01m1amf0vpbyfndg5rkvxvyqj4' },
@@ -144,7 +144,7 @@ export const featureRows: FeatureRow[] = [
   { label: 'Max products/menu', values: { free: 200, plus: 500, pro: 1000, premium: 10000, enterprise: 'Unlimited' } },
   { label: 'Staff users', values: { free: 1, plus: 5, pro: 20, premium: 50, enterprise: 'Unlimited' } },
   { label: 'Sales history', values: { free: '3 months', plus: '1 year', pro: '5 years', premium: 'Unlimited', enterprise: 'Unlimited' } },
-  { label: 'QRIS payments', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
+  { label: 'QRIS payments', values: { free: true, plus: true, pro: true, premium: true, enterprise: true } },
   { label: 'Stripe cards', values: { free: false, plus: false, pro: true, premium: true, enterprise: true } },
   { label: 'Cloud sync', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
   { label: 'Daily Sales Dashboard', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },

@@ -184,3 +184,24 @@ dashboard-export-col-orders = Pesanan
 # Sales report — REP-04 refund netting
 sales-report-total-refunds = Refund:
 sales-report-total-net-revenue = Pendapatan Bersih:
+
+# ── Sales Report screen (features/reports/SalesReportScreen.tsx) ──
+# Moved from sales.id.ftl by the Fluent page audit: the English twins for
+# these live in reports.ftl, so the pair was split across two domains. It
+# resolved at runtime only because every .ftl is concatenated per locale.
+sales-report-title = Laporan Penjualan
+sales-report-daily = Harian
+sales-report-weekly = Mingguan
+sales-report-monthly = Bulanan
+sales-report-revenue-chart = Pendapatan
+sales-report-category-breakdown = Per Kategori
+sales-report-hourly-heatmap = Jam Tersibuk
+sales-report-top-products = Produk Terlaris
+sales-report-start-date = Tanggal Mulai
+sales-report-end-date = Tanggal Akhir
+sales-report-total-revenue = Total Pendapatan
+sales-report-total-orders = Total Pesanan
+sales-report-total-gross-profit = Laba Kotor:
+sales-report-export-csv = Ekspor CSV
+sales-report-revenue-label = Pendapatan
+sales-report-rank = #

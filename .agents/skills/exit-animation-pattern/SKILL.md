@@ -3,7 +3,7 @@ name: exit-animation-pattern
 description: OZ-POS convention for symmetric CSS entry/exit animations + the React state machine that gates a dismiss through the CSS animation duration. Applies to pills, badges, banners, modals, and any in-flight overlay whose dismissal currently snaps to unmount. Use when adding a smooth fade-out sibling to an existing entry animation, or when reviewing a polish commit for the four required components.
 ---
 
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings — convention skill) · reference files verified: ui/src/features/sales/PosScreen.tsx, ui/src/features/sales/CartPanel.css, ui/src/utils/animation.ts (animDuration at line 25); the CSS mirror + --exiting + animDuration + id-set-compare pattern matches the shipped undo-bar + CartLineItem implementations · 31-08 by docs-auditor: FIXED 5 broken relative links — the three ui-file links were `../../ui/…` (one level short of repo root from `.agents/skills/<id>/`; now `../../../ui/…`) and the two sibling-skill links used `./` (now `../`) · (file also carries its own 'last audited 19-07-26 by skill-drift-guard' line in a different convention) -->
+<!-- Audit stamp: 2026-09-03 · DSH · status: ACCURATE (rev 2 — surface-classification row cited nonexistent commit 8d2c67b for payment-modal--exit symmetry; corrected to d6f3ae97, verified present in PaymentModal.css with mirrored slide-up keyframes) · verified this pass: ui/src/utils/animation.ts animDuration(ms) returns 0 under prefers-reduced-motion; commits fcf1d07 (undo-pill), 3dd919d (cousin-pos), 1fcb1dec (cousin-surfaces) all resolve; CSS classes pos-cart-undo-bar, pos-cart-line-wrap--exiting, pos-hold-modal, pos-close-shift-modal, pos-cart-hold-badge, pos-shift-error, payment-modal--exit all present under ui/src; relative links to ui files (../../../ui/…) and sibling skills (../) resolve · history: 31-08 docs-auditor fixed 5 broken relative links (three ui-file links ../../ui/… → ../../../ui/…, two sibling-skill links ./ → ../) -->
 
 # Exit-Animation Pattern
 
@@ -294,7 +294,7 @@ git show fcf1d07 -- ui/src/features/sales/PosScreen.tsx ui/src/features/sales/Ca
 | Banner notifications (`.pos-shift-error`) | YES (instant disappear on X click) | **YES** |
 | Animated success confirmations (price-flip on shift close) | n/a — only appear, never disappear | NO |
 | `pos-cart-line-wrap--exiting` (existing on `<CartLineItem>`) | already uses `exiting` + timer pattern | follow this skill's rules 1–3 and 6 |
-| `payment-modal--exit` (already shipping) | symmetric with `--enter` since commit `8d2c67b` | reference for modal-scale variant |
+| `payment-modal--exit` (already shipping) | symmetric with `--enter` since commit `d6f3ae97` | reference for modal-scale variant |
 
 Future work that introduces dismissals with no entry (rare) does **not** need this pattern — just snap unmount.
 
@@ -336,4 +336,4 @@ When the next polish pass lands, the contributor should be able to point at this
 5. **In-flight async dismiss handlers.** If the dismiss triggers an IPC call (`holdCart`, `pay` etc.), the in-flight promise may still resolve after the element unmounts. The IPC wrappers under `@/api/*` already handle this — don't add an additional guard inside the pattern.
 6. **React strict-mode double-mount.** React 18 strict mode mounts components twice in dev. Without unmount cleanup, the first timer survives the second mount and you see duplicate unmounts in dev only. Always clear on unmount.
 
-> last audited 31-08-26 by docs-auditor
+> last audited 03-09-26 by DSH

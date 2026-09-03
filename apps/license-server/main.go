@@ -54,6 +54,8 @@ var requiredCollections = []string{
 	"trial_registrations",
 	"trial_claims",
 	"trial_email_log",
+	"revenue_events",
+	"revenue_adjustments",
 }
 
 // privateKey is the RSA-2048 private key loaded from the

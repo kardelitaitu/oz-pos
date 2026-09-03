@@ -17,6 +17,9 @@ terminal-device-id-placeholder =
     .placeholder = mis. nama host atau alamat MAC
 terminal-secret-label = Rahasia bersama opsional untuk otentikasi sinkronisasi
 terminal-metadata-label = Metadata JSON opsional
+# Save-handler validation (see terminals.ftl).
+terminal-error-name-required = Nama terminal wajib diisi
+terminal-error-device-id-required = ID perangkat wajib diisi
 terminal-is-active = Aktif
 terminal-is-inactive = Tidak Aktif
 terminal-status = Status
@@ -77,6 +80,10 @@ terminal-binding-primary = (Utama)
 terminal-binding-update = Perbarui Pengikatan
 terminal-binding-bind = Ikat Terminal
 terminal-binding-clear = Hapus Pengikatan
+# Failure copy for the three binding mutations (see terminals.ftl).
+terminal-error-binding-load = Gagal memuat pengikatan terminal.
+terminal-error-binding-save = Gagal menyimpan pengikatan terminal.
+terminal-error-binding-clear = Gagal menghapus pengikatan terminal.
 
 # Feature override counts
 terminal-overrides-count = { $count ->

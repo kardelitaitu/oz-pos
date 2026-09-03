@@ -538,6 +538,44 @@ fn enforce_instance_quota_allows_type_but_fails_on_count() {
 }
 
 #[test]
+fn enforce_instance_quota_non_pos_types_do_not_inflate_pos_count() {
+    // A store with 0 POS instances (store-pos/restaurant-pos) but 1 non-POS
+    // instance (kds) should still allow creating 1 POS instance on Free tier
+    // (max_pos_instances = 1). The quota must count only POS-class types,
+    // not every workspace type — otherwise a legacy kds/warehouse inflates
+    // the register count and blocks legitimate POS creation.
+    let (store, _) = fresh();
+    let free = sub_for_tier(SubscriptionTier::Free);
+    // Use a fresh store with only a kds instance (no POS instances).
+    let store_id = "quota-test";
+    store
+        .conn
+        .execute(
+            "INSERT OR IGNORE INTO store_profiles (id, name) VALUES ('quota-test', 'Quota Test')",
+            [],
+        )
+        .unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO workspace_instances (id, type_key, store_id, name, status, created_at, updated_at)
+             VALUES ('quota-kds', 'kds', 'quota-test', 'KDS', 'active', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+    // count_active_instances returns 1 (the kds instance).
+    assert_eq!(store.count_active_instances(store_id).unwrap(), 1);
+    // Creating a store-pos should succeed: no POS instances exist yet,
+    // and the Free tier allows 1. But count_active_instances counts all
+    // types, so current=1 >= limit=1 → currently fails.
+    let result = store.enforce_instance_quota(&free, "store-pos", store_id);
+    assert!(
+        result.is_ok(),
+        "non-POS instances must not count toward the POS-instance limit, got {result:?}"
+    );
+}
+
+#[test]
 fn enforce_instance_quota_bundle_plus_allows_kds() {
     let (store, _) = fresh();
     // A fresh store id has zero active instances, so the type check is
@@ -1272,4 +1310,326 @@ fn verify_instance_access_multi_store_owner_limited_to_assigned_stores() {
         !ok_store_b,
         "multi-store owner must not open a session in an unassigned store"
     );
+}
+
+// ── Staff role bypass removal (home-screen role gating) ──────────
+
+#[test]
+fn list_workspaces_staff_without_assignments_returns_empty() {
+    // role-staff is no longer in the owner bypass — without explicit
+    // user_workspace_instances or role_workspace_types rows the
+    // listing must return empty (whereas before the change it returned
+    // all 5 instances in the store).
+    let (store, _) = fresh();
+    let dto = store
+        .list_workspaces("role-staff", None, "default")
+        .unwrap();
+    assert!(
+        dto.is_empty(),
+        "staff with no assignment must not see any workspaces, got {dto:?}"
+    );
+}
+
+#[test]
+fn list_workspaces_staff_sees_only_explicitly_assigned_instances() {
+    let (store, user_id) = fresh();
+    // Give the user explicit assignment to kds and admin.
+    store
+        .set_user_workspace_instances(&user_id, ["default-kds", "default-admin"], None)
+        .unwrap();
+    let dto = store
+        .list_workspaces("role-staff", Some(&user_id), "default")
+        .unwrap();
+    assert_eq!(dto.len(), 2);
+    assert!(dto.iter().any(|w| w.type_key == "kds"));
+    assert!(dto.iter().any(|w| w.type_key == "admin"));
+    // Must NOT see the other instances (restaurant-pos, store-pos, warehouse).
+    assert!(!dto.iter().any(|w| w.type_key == "restaurant-pos"));
+    assert!(!dto.iter().any(|w| w.type_key == "store-pos"));
+    assert!(!dto.iter().any(|w| w.type_key == "warehouse"));
+}
+
+#[test]
+fn list_workspaces_staff_falls_back_to_role_workspace_types() {
+    let (store, _) = fresh();
+    // role_workspace_types.role_id is an FK to roles(id) — seed the
+    // built-in roles so the role-staff row can reference it.
+    store.seed_default_roles().unwrap();
+    // Seed a role_workspace_types row for role-staff → store-pos.
+    store
+        .conn
+        .execute(
+            "INSERT INTO role_workspace_types (role_id, type_key) VALUES ('role-staff', 'store-pos')",
+            [],
+        )
+        .unwrap();
+    let dto = store
+        .list_workspaces("role-staff", None, "default")
+        .unwrap();
+    assert_eq!(dto.len(), 1);
+    assert_eq!(dto[0].type_key, "store-pos");
+}
+
+#[test]
+fn verify_instance_access_staff_denies_unassigned_instance() {
+    let (store, _) = fresh();
+    store.seed_default_roles().unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-staff', 'staff', 'hash', 'Staff', 'role-staff', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+
+    // No explicit assignment, no role_workspace_types → deny.
+    let denied = store
+        .verify_instance_access(
+            "role-staff",
+            "user-staff",
+            "default-restaurant-pos",
+            "default",
+        )
+        .unwrap();
+    assert!(
+        !denied,
+        "staff without assignment must be denied any instance"
+    );
+
+    // Explicit assignment → allow.
+    store
+        .set_user_workspace_instances("user-staff", ["default-restaurant-pos"], None)
+        .unwrap();
+    let allowed = store
+        .verify_instance_access(
+            "role-staff",
+            "user-staff",
+            "default-restaurant-pos",
+            "default",
+        )
+        .unwrap();
+    assert!(allowed, "staff with explicit assignment must be allowed");
+}
+
+#[test]
+fn verify_instance_access_staff_falls_back_to_role_workspace_types() {
+    let (store, _) = fresh();
+    store.seed_default_roles().unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-staff', 'staff', 'hash', 'Staff', 'role-staff', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+
+    // No assignment, no role_workspace_types → deny.
+    let denied = store
+        .verify_instance_access(
+            "role-staff",
+            "user-staff",
+            "default-restaurant-pos",
+            "default",
+        )
+        .unwrap();
+    assert!(
+        !denied,
+        "staff without any role_workspace_types must be denied"
+    );
+
+    // Seed role_workspace_types for staff → kds.
+    store
+        .conn
+        .execute(
+            "INSERT INTO role_workspace_types (role_id, type_key) VALUES ('role-staff', 'kds')",
+            [],
+        )
+        .unwrap();
+
+    // KDS is now allowed via the role_workspace_types fallback.
+    let allowed_kds = store
+        .verify_instance_access("role-staff", "user-staff", "default-kds", "default")
+        .unwrap();
+    assert!(
+        allowed_kds,
+        "staff with role_workspace_types must be allowed for kds"
+    );
+
+    // Restaurant-pos is NOT in role_workspace_types → still denied.
+    let denied_restaurant = store
+        .verify_instance_access(
+            "role-staff",
+            "user-staff",
+            "default-restaurant-pos",
+            "default",
+        )
+        .unwrap();
+    assert!(
+        !denied_restaurant,
+        "staff without role_workspace_types for restaurant-pos must be denied"
+    );
+}
+
+#[test]
+fn list_workspaces_staff_respects_user_store_access_out_of_scope_store_denied() {
+    let (store, _) = fresh();
+    store.seed_default_roles().unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-staff', 'staff', 'hash', 'Staff', 'role-staff', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+    // Staff role gets store-pos via role_workspace_types.
+    store
+        .conn
+        .execute(
+            "INSERT INTO role_workspace_types (role_id, type_key) VALUES ('role-staff', 'store-pos')",
+            [],
+        )
+        .unwrap();
+    // A second store with a store-pos instance the staff role type-matches.
+    store
+        .conn
+        .execute(
+            "INSERT INTO store_profiles (id, name, address, currency, timezone)
+             VALUES ('store-b', 'Store B', '456 Elm', 'IDR', 'Asia/Jakarta')",
+            [],
+        )
+        .unwrap();
+    store
+        .create_workspace_instance(
+            "store-b-store-pos",
+            "store-pos",
+            "store-b",
+            "Store B POS",
+            "",
+            None,
+        )
+        .unwrap();
+    // Multi-store mode: staff is only granted access to the default store.
+    store
+        .conn
+        .execute(
+            "INSERT INTO user_store_access (user_id, store_id, access_level)
+             VALUES ('user-staff', 'default', 'staff')",
+            [],
+        )
+        .unwrap();
+
+    // In-scope store lists normally.
+    let in_scope = store
+        .list_workspaces("role-staff", Some("user-staff"), "default")
+        .unwrap();
+    assert!(!in_scope.is_empty(), "staff must see its assigned store");
+
+    // Out-of-scope store must be denied — empty list, not a leak.
+    let out_of_scope = store
+        .list_workspaces("role-staff", Some("user-staff"), "store-b")
+        .unwrap();
+    assert!(
+        out_of_scope.is_empty(),
+        "staff without user_store_access on store-b must not enumerate it, got {out_of_scope:?}"
+    );
+}
+
+#[test]
+fn verify_instance_access_staff_respects_user_store_access_out_of_scope_denied() {
+    let (store, _) = fresh();
+    store.seed_default_roles().unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-staff', 'staff', 'hash', 'Staff', 'role-staff', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO role_workspace_types (role_id, type_key) VALUES ('role-staff', 'store-pos')",
+            [],
+        )
+        .unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO store_profiles (id, name, address, currency, timezone)
+             VALUES ('store-b', 'Store B', '456 Elm', 'IDR', 'Asia/Jakarta')",
+            [],
+        )
+        .unwrap();
+    store
+        .create_workspace_instance(
+            "store-b-store-pos",
+            "store-pos",
+            "store-b",
+            "Store B POS",
+            "",
+            None,
+        )
+        .unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO user_store_access (user_id, store_id, access_level)
+             VALUES ('user-staff', 'default', 'staff')",
+            [],
+        )
+        .unwrap();
+
+    // In-scope store instance verifies.
+    let in_scope = store
+        .verify_instance_access("role-staff", "user-staff", "default-store-pos", "default")
+        .unwrap();
+    assert!(in_scope, "staff must open a session in its assigned store");
+
+    // Out-of-scope store instance is denied even though the role type-matches.
+    let out_of_scope = store
+        .verify_instance_access("role-staff", "user-staff", "store-b-store-pos", "store-b")
+        .unwrap();
+    assert!(
+        !out_of_scope,
+        "staff must not open a session in an unassigned store"
+    );
+}
+
+#[test]
+fn list_workspaces_with_entitlement_staff_filters_by_tier_after_assignment() {
+    // Free tier allows restaurant-pos, store-pos, admin — but NOT kds.
+    // A staff user explicitly assigned kds + store-pos must see only
+    // store-pos after entitlement filtering (kds pruned by tier).
+    let (store, _user_id) = fresh();
+    store.seed_default_roles().unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-staff', 'staff', 'hash', 'Staff', 'role-staff', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+    store
+        .set_user_workspace_instances("user-staff", ["default-kds", "default-store-pos"], None)
+        .unwrap();
+    let free = sub_for_tier(SubscriptionTier::Free);
+    let dto = store
+        .list_workspaces_with_entitlement("role-staff", Some("user-staff"), "default", &free)
+        .unwrap();
+    // kds is NOT allowed by Free tier → must be filtered out.
+    assert!(
+        !dto.iter().any(|w| w.type_key == "kds"),
+        "Free tier staff must not see kds, got {dto:?}"
+    );
+    // store-pos IS allowed by Free tier → must remain.
+    assert!(
+        dto.iter().any(|w| w.type_key == "store-pos"),
+        "Free tier staff must still see store-pos, got {dto:?}"
+    );
+    assert_eq!(dto.len(), 1, "expected only store-pos, got {dto:?}");
 }

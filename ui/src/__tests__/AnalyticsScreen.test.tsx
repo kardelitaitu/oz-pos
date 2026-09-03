@@ -260,6 +260,13 @@ import { getNavItems, clearNavItems } from '@/platform/ui/menu-registry';
 describe('AnalyticsScreen layout shell', () => {
   beforeEach(() => {
     mockGoToPicker.mockReset();
+    // These three are created with a non-empty default implementation, and the
+    // empty-states test overrides that default unconditionally rather than for
+    // one call. mockReset restores the vi.fn(impl) original, which keeps the
+    // override from leaking into the tests that assert on the seeded rows.
+    mockGetLowStockAlerts.mockReset();
+    mockGetTopProducts.mockReset();
+    mockGetHourlyHeatmap.mockReset();
     localStorage.clear();
     // The analytics cache is a module-level singleton — wipe it so each
     // test starts from a cold cache (otherwise the daily/retail query
@@ -1334,9 +1341,17 @@ describe('AnalyticsScreen layout shell', () => {
 
   it('shows empty states when a card has no data', async () => {
     vi.useFakeTimers();
-    mockGetLowStockAlerts.mockResolvedValueOnce([]);
-    mockGetTopProducts.mockResolvedValueOnce([]);
-    mockGetHourlyHeatmap.mockResolvedValueOnce([]);
+    // mockResolvedValue, not ...Once: the screen can fetch a card more than once
+    // per mount. The "today" anchor in AnalyticsScreen.tsx falls back to a local
+    // `new Date()` when the store has no timezone, so on a UTC host (CI) it
+    // resolves to a different day than on this machine's UTC+7, the derived
+    // range changes, and a second fetch fires. With ...Once that second call
+    // fell through to the non-empty default at the top of this file, so the
+    // empty state never rendered and this test failed only in CI. The intent is
+    // "this card has no data at all", which is what an unconditional stub says.
+    mockGetLowStockAlerts.mockResolvedValue([]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
     await flushRecalc();
 

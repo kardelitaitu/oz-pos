@@ -38,6 +38,21 @@
   function fmtIdr(val) { return 'Rp ' + Math.round(val).toLocaleString('id-ID'); }
   function fmtUsd(val) { return '$' + Number(val).toFixed(2); }
 
+  // fmtMonthTick returns the x-axis month tick label for a "YYYY-MM"
+  // bucket string. When the year differs from prevYear (or prevYear is
+  // empty — the first emitted tick), the label carries a year suffix so
+  // a Dec→Jan boundary is unambiguous (e.g. "12" then "01/26"). Pure:
+  // no state; the caller tracks the last emitted year.
+  function fmtMonthTick(monthStr, prevYear) {
+    if (!monthStr) return { label: '', year: prevYear };
+    var mm = String(monthStr).slice(5);
+    var yyyy = String(monthStr).slice(0, 4);
+    if (yyyy && yyyy !== prevYear) {
+      return { label: mm + '/' + yyyy.slice(2), year: yyyy };
+    }
+    return { label: mm, year: prevYear };
+  }
+
   // statusLabel maps the server's status enum to a human label (B16).
   // Unknown values fall back to the raw string — never to a missing-key
   // placeholder, so a new server-side status still shows something real.
@@ -94,13 +109,15 @@
     // viewBox font sizes are true rendered sizes (no downscaling).
     var phone = !wide && !!(opts && opts.phone);
     var w = wide ? 1280 : (phone ? 350 : 600);
-    var h = wide ? 220 : (phone ? 230 : 180);
-    var px = wide ? 56 : 40;
+    var h = wide ? 230 : (phone ? 230 : 200);
+    // Y-axis gutter: wide leaves room for the "Rp999.9jt" style labels
+    // (~58px at 13px font); narrow/phone only draw short integer counts.
+    var px = wide ? 72 : (phone ? 52 : 40);
     var py = wide ? 24 : 20;
     // Wide adds right padding so the last point's centered label stays
     // inside the viewBox; narrow keeps its exact legacy geometry.
     var pw = wide ? w - px - 24 : (phone ? w - px - 8 : w - px);
-    var ph = wide ? h - py - 36 : (phone ? h - py - 30 : h - py - 20);
+    var ph = wide ? h - py - 40 : (phone ? h - py - 30 : h - py - 30);
     var max = Math.max.apply(null, vals);
     var min = 0;
     var rng = max - min || 1;
@@ -116,33 +133,73 @@
       grid += '<line x1="' + px + '" y1="' + y(gv) + '" x2="' + w + '" y2="' + y(gv) + '" stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
     }
     var paths = '', fills = '';
+    // sourceKey in opts splits the path into segments by consecutive
+    // source values — estimate months use a dashed line and no area fill,
+    // so the operator can see which months are real vs projected.
+    var sourceKey = opts && opts.sourceKey;
     series.forEach(function (s) {
-      var pts = data.map(function (d, i) { return x(i) + ',' + y(Number(d[s]) || 0); }).join(' L ');
-      paths += '<path d="M ' + pts + '" stroke="' + (colors[s] || 'var(--primary)') + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" class="chart-line" vector-effect="non-scaling-stroke"/>';
-      if (opts && opts.area) {
-        // B42: the area path was missing its leading "M" — an invalid
-        // d= meant the browser dropped the whole element, so the 10%
-        // area shading under the line silently never rendered.
-        var base = 'M ' + x(0) + ',' + (py + ph) + ' L ' + pts + ' L ' + x(data.length - 1) + ',' + (py + ph) + ' Z';
-        fills += '<path d="' + base + '" fill="' + (colors[s] || 'var(--primary)') + '" opacity=".1"/>';
+      if (sourceKey) {
+        // Build segments of consecutive source values.
+        var segments = [];
+        var cur = null;
+        data.forEach(function (d, i) {
+          var src = String(d[sourceKey] || 'estimate');
+          var val = Number(d[s]) || 0;
+          var pt = x(i) + ',' + y(val);
+          if (cur && cur.source === src) {
+            cur.pts.push(pt);
+          } else {
+            if (cur) segments.push(cur);
+            cur = { source: src, pts: [pt] };
+          }
+        });
+        if (cur) segments.push(cur);
+        segments.forEach(function (seg) {
+          var isEst = seg.source === 'estimate';
+          var d = 'M ' + seg.pts.join(' L ');
+          paths += '<path d="' + d + '" stroke="' + (colors[s] || 'var(--primary)') + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" class="chart-line" vector-effect="non-scaling-stroke"' + (isEst ? ' stroke-dasharray="5 4"' : '') + '/>';
+          if (opts && opts.area && !isEst) {
+            // Points are "x,y" strings — parseFloat yields the x coordinate
+            // (avoids a literal split(',') which the i18n audit regex would
+            // misread as a t(',') call).
+            var firstX = parseFloat(seg.pts[0]);
+            var lastX = parseFloat(seg.pts[seg.pts.length - 1]);
+            fills += '<path d="M ' + firstX + ',' + (py + ph) + ' L ' + seg.pts.join(' L ') + ' L ' + lastX + ',' + (py + ph) + ' Z" fill="' + (colors[s] || 'var(--primary)') + '" opacity=".1"/>';
+          }
+        });
+      } else {
+        var pts = data.map(function (d, i) { return x(i) + ',' + y(Number(d[s]) || 0); }).join(' L ');
+        paths += '<path d="M ' + pts + '" stroke="' + (colors[s] || 'var(--primary)') + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" class="chart-line" vector-effect="non-scaling-stroke"/>';
+        if (opts && opts.area) {
+          // B42: the area path was missing its leading "M" — an invalid
+          // d= meant the browser dropped the whole element, so the 10%
+          // area shading under the line silently never rendered.
+          var base = 'M ' + x(0) + ',' + (py + ph) + ' L ' + pts + ' L ' + x(data.length - 1) + ',' + (py + ph) + ' Z';
+          fills += '<path d="' + base + '" fill="' + (colors[s] || 'var(--primary)') + '" opacity=".1"/>';
+        }
       }
     });
     var yLabels = '';
     for (var i = 0; i <= 4; i++) {
       var v = min + (rng / 4) * i;
-      var fs = phone ? 11 : 10;
-      yLabels += '<text x="' + (px - 5) + '" y="' + (y(v) + 3) + '" text-anchor="end" fill="var(--muted)" font-size="' + fs + '">' + (opts && opts.fmt ? opts.fmt(v) : Math.round(v)) + '</text>';
+      var fs = wide ? 13 : (phone ? 11 : 12);
+      yLabels += '<text x="' + (px - 6) + '" y="' + (y(v) + 4) + '" text-anchor="end" fill="var(--muted)" font-size="' + fs + '">' + (opts && opts.fmt ? opts.fmt(v) : Math.round(v)) + '</text>';
     }
     var xLabels = '';
     // Wide canvas fits a label under every point; narrow keeps the
     // every-other-point legacy density; phone uses every third point
     // so labels never collide at true size.
     var step = wide ? 1 : (phone ? 3 : 2);
+    var lastYear = '';
     data.forEach(function (d, i) {
       if (i % step === 0 || i === data.length - 1) {
         // B5 fix: the M1 guard protected values but not labels — a row
         // without month threw on .slice and killed the whole dashboard.
-        xLabels += '<text x="' + x(i) + '" y="' + (py + ph + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="' + (phone ? 10 : 9) + '">' + escapeHtml(d.month ? String(d.month).slice(5) : '') + '</text>';
+        // fmtMonthTick adds a year suffix at Dec→Jan boundaries (e.g.
+        // "12" then "01/26") so the same month in two years is legible.
+        var tick = fmtMonthTick(d.month, lastYear);
+        lastYear = tick.year;
+        xLabels += '<text x="' + x(i) + '" y="' + (py + ph + 18) + '" text-anchor="middle" fill="var(--muted)" font-size="' + (wide ? 12 : (phone ? 10 : 11)) + '">' + escapeHtml(tick.label) + '</text>';
       }
     });
     return '<svg viewBox="0 0 ' + w + ' ' + h + '" class="chart-svg">' + grid + fills + paths + yLabels + xLabels + '</svg>';
@@ -199,7 +256,14 @@
     });
     // Pie geometry + a surface-colored center disc = donut ring. The disc
     // is a <circle>, not an arc, so the per-slice arc contract holds.
-    return { svg: '<svg viewBox="0 0 160 160">' + slices + '<circle cx="' + cx + '" cy="' + cy + '" r="34" fill="var(--bg-surface)"/></svg>', legend: legend };
+    // The center carries the total count so the hole is not dead space.
+    return {
+      svg: '<svg viewBox="0 0 160 160">' + slices +
+        '<circle cx="' + cx + '" cy="' + cy + '" r="34" fill="var(--bg-surface)"/>' +
+        '<text x="' + cx + '" y="' + (cy + 2) + '" text-anchor="middle" dominant-baseline="central" fill="var(--text)" font-size="17" font-weight="700">' + Math.round(total).toLocaleString('en-US') + '</text>' +
+        '</svg>',
+      legend: legend,
+    };
   }
 
   // kpiC builds a KPI stat card (label + value + optional sub + icon).
@@ -219,17 +283,17 @@
     return s;
   }
 
-  // statC builds the design-language tinted stat card ("Card Colour
-  // Variants"): 8–10% semantic background + 20% border, hero 24px/800
-  // number in the semantic colour, small label beneath — "one number, one
-  // semantic colour, one label". variant: primary|success|warning|danger|info;
-  // unknown variants fall back to primary so a typo can never render
-  // an unstyled card.
+  // statC builds a stat card ("one number, one semantic accent, one
+  // label"). Cards are neutral surfaces (white + hairline border); the
+  // semantic colour is reserved for the sub-line/delta so a full row of
+  // coloured fills never competes with the hero. variant:
+  // primary|success|warning|danger|info; unknown variants fall back to
+  // primary so a typo can never render an unstyled card.
   function statC(label, value, sub, variant) {
     var v = ['primary', 'success', 'warning', 'danger', 'info'].indexOf(variant) !== -1 ? variant : 'primary';
     var card = el('div', 'stat stat--' + v);
-    card.appendChild(el('div', 'stat-value', value));
     card.appendChild(el('div', 'stat-label', label));
+    card.appendChild(el('div', 'stat-value', value));
     if (sub) card.appendChild(el('div', 'stat-sub', sub));
     return card;
   }
@@ -398,13 +462,16 @@
     // opts.phone: ~350-unit canvas rendered ~1:1 on a phone card.
     var phone = !wide && !!(opts && opts.phone);
     var w = wide ? 1280 : (phone ? 350 : 620);
-    var h = wide ? 220 : (phone ? 200 : 180);
-    var baseline = wide ? 190 : (phone ? 160 : 150);
-    var topPad = wide ? 30 : (phone ? 26 : 10);
+    var h = wide ? 230 : (phone ? 200 : 200);
+    var baseline = wide ? 195 : (phone ? 160 : 165);
+    // Top padding must clear the tallest bar's value label (12-13px glyphs
+    // sit above the bar top) — 10px clipped the label on the max bar.
+    var topPad = wide ? 34 : (phone ? 30 : 24);
     var plotH = baseline - topPad;
     var maxS = Math.max.apply(null, data.map(function (d) { return Number(d[valueKey]) || 0; }));
     var barW = (w - 20) / data.length;
     var bars = '<line x1="10" y1="' + baseline + '" x2="' + (w - 10) + '" y2="' + baseline + '" stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+    var lastYear = '';
     data.forEach(function (d, i) {
       var v = Number(d[valueKey]) || 0;
       var bh = maxS > 0 ? (v / maxS) * plotH : 0;
@@ -413,12 +480,189 @@
       // drawn width and center it in the slot so bars stay elegant.
       var bw = Math.min(barW * 0.7, 48);
       var cx = bx + barW / 2;
-      var vfs = phone ? 11 : 10, lfs = phone ? 10 : 9;
+      var vfs = wide ? 13 : (phone ? 11 : 12), lfs = wide ? 12 : (phone ? 10 : 11);
+      var tick = fmtMonthTick(d.month, lastYear);
+      lastYear = tick.year;
       bars += '<rect x="' + (cx - bw / 2) + '" y="' + (baseline - bh) + '" width="' + bw + '" height="' + bh + '" rx="4" fill="' + (opts && opts.color || 'var(--primary)') + '"/>' +
-        '<text x="' + cx + '" y="' + (baseline - bh - 6) + '" text-anchor="middle" fill="var(--text)" font-size="' + vfs + '" font-weight="600">' + v + '</text>' +
-        '<text x="' + cx + '" y="' + (baseline + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="' + lfs + '">' + escapeHtml(d.month ? d.month.slice(5) : '') + '</text>';
+        '<text x="' + cx + '" y="' + (baseline - bh - 8) + '" text-anchor="middle" fill="var(--text)" font-size="' + vfs + '" font-weight="600">' + v + '</text>' +
+        '<text x="' + cx + '" y="' + (baseline + 18) + '" text-anchor="middle" fill="var(--muted)" font-size="' + lfs + '">' + escapeHtml(tick.label) + '</text>';
     });
     return '<svg viewBox="0 0 ' + w + ' ' + h + '"' + ((wide || phone) ? '' : ' style="max-height:180px"') + ' class="chart-svg">' + bars + '</svg>';
+  }
+
+  // svgStackedBars renders a stacked bar chart for the per-provider revenue
+  // mix (provider revenue split, recommendation #2).  Each data row carries
+  // one numeric key per stack segment (e.g. paddleIdr, midtransIdr); segments
+  // are stacked from the baseline up, and the total is labeled above each
+  // bar.  Pure: returns an SVG string; empty/non-object rows degrade to the
+  // chart-empty state like the other chart helpers.
+  //
+  // opts.stack: [{ key, color, label }] — segment order (bottom → top).
+  // opts.fmt:   value formatter for the total label (optional).
+  // opts.wide/opts.phone: same canvas sizing as svgBarChart.
+  function svgStackedBars(_id, data, opts) {
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      return '<div class="chart-empty">No data</div>';
+    }
+    data = data.filter(function (d) { return d && typeof d === 'object'; });
+    var stack = (opts && opts.stack) || [];
+    if (stack.length === 0) {
+      return '<div class="chart-empty">No data</div>';
+    }
+    // Totals per row; drop rows with no positive total.
+    var totals = data.map(function (d) {
+      var t = 0;
+      stack.forEach(function (s) { t += Number(d[s.key]) || 0; });
+      return t;
+    });
+    var wide = !!(opts && opts.wide);
+    var phone = !wide && !!(opts && opts.phone);
+    var w = wide ? 1280 : (phone ? 350 : 620);
+    var h = wide ? 230 : (phone ? 200 : 200);
+    var baseline = wide ? 195 : (phone ? 160 : 165);
+    var topPad = wide ? 34 : (phone ? 30 : 24);
+    var plotH = baseline - topPad;
+    var maxT = Math.max.apply(null, totals.filter(function (n) { return Number.isFinite(n); }));
+    if (!(maxT > 0)) {
+      return '<div class="chart-empty">No data</div>';
+    }
+    var barW = (w - 20) / data.length;
+    var out = '<line x1="10" y1="' + baseline + '" x2="' + (w - 10) + '" y2="' + baseline + '" stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+    var vfs = wide ? 13 : (phone ? 11 : 12), lfs = wide ? 12 : (phone ? 10 : 11);
+    var lastYear = '';
+    data.forEach(function (d, i) {
+      var total = totals[i];
+      var bx = 10 + i * barW;
+      var bw = Math.min(barW * 0.7, 48);
+      var cx = bx + barW / 2;
+      var yCursor = baseline;
+      stack.forEach(function (s) {
+        var v = Number(d[s.key]) || 0;
+        var bh = maxT > 0 ? (v / maxT) * plotH : 0;
+        if (bh <= 0) return;
+        yCursor -= bh;
+        out += '<rect x="' + (cx - bw / 2) + '" y="' + yCursor + '" width="' + bw + '" height="' + bh + '" rx="2" fill="' + (s.color || 'var(--primary)') + '"/>';
+      });
+      if (total > 0) {
+        out += '<text x="' + cx + '" y="' + (yCursor - 8) + '" text-anchor="middle" fill="var(--text)" font-size="' + vfs + '" font-weight="600">' + (opts && opts.fmt ? opts.fmt(total) : Math.round(total)) + '</text>';
+      }
+      var tick = fmtMonthTick(d.month, lastYear);
+      lastYear = tick.year;
+      out += '<text x="' + cx + '" y="' + (baseline + 18) + '" text-anchor="middle" fill="var(--muted)" font-size="' + lfs + '">' + escapeHtml(tick.label) + '</text>';
+    });
+    return '<svg viewBox="0 0 ' + w + ' ' + h + '"' + ((wide || phone) ? '' : ' style="max-height:180px"') + ' class="chart-svg">' + out + '</svg>';
+  }
+
+  // ── Chart hover tooltips (#9) ───────────────────────────────────
+  // The SVG charts are hand-rolled strings; hovering reads the exact
+  // value under the cursor. Pure text builder + nearest-index math are
+  // unit-testable; bindChartTooltip wires them to a live SVG element.
+
+  // chartMonthLabel formats a "YYYY-MM" bucket for tooltip display.
+  function chartMonthLabel(monthStr) {
+    if (!monthStr) return '';
+    var d = new Date(String(monthStr) + '-01T00:00:00Z');
+    return isNaN(d.getTime()) ? monthStr : d.toLocaleDateString('en', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+  }
+
+  // chartTipText builds the tooltip text for one data row. series is
+  // [{ key, label }]; fmt optionally formats each numeric value.
+  // Pure — no DOM.
+  function chartTipText(row, series, fmt) {
+    if (!row || typeof row !== 'object' || !series || !series.length) return '';
+    var month = chartMonthLabel(row.month);
+    var parts = [];
+    series.forEach(function (s) {
+      var v = Number(row[s.key]);
+      if (!Number.isFinite(v)) return;
+      parts.push(s.label + ': ' + (fmt ? fmt(v) : String(Math.round(v))));
+    });
+    return (month ? month + ' — ' : '') + parts.join(' · ');
+  }
+
+  // nearestChartIndex maps a hover x-ratio (0..1, cursor position within
+  // the SVG's rendered width) to the nearest data index.
+  function nearestChartIndex(ratio, count) {
+    if (!(count > 1)) return 0;
+    var r = Math.max(0, Math.min(1, ratio));
+    return Math.min(count - 1, Math.max(0, Math.round(r * (count - 1))));
+  }
+
+  // bindChartTooltip attaches hover tooltips to a rendered .chart-svg.
+  // rows is the data array aligned with the x-axis; series + fmt define
+  // what each tooltip shows. Renders one absolutely-positioned tip inside
+  // the chart card (which must be position:relative — see .chart-card).
+  // kind: 'bar' (default, svgBarChart / svgStackedBars) or 'line' (svgChart).
+  function bindChartTooltip(svgEl, rows, series, fmt, kind) {
+    if (!svgEl || !rows || !rows.length || !series || !series.length) return;
+    // Selector kept in a variable so the i18n audit regex (which scans for
+    // t('...') substrings) does not misread closest('.chart-card') as a
+    // translation key lookup.
+    var cardSel = '.chart-card';
+    var card = svgEl.closest ? svgEl.closest(cardSel) : svgEl.parentNode;
+    if (!card) card = svgEl.parentNode;
+    var tip = el('div', 'chart-tip');
+    tip.setAttribute('role', 'tooltip');
+    tip.style.display = 'none';
+    card.appendChild(tip);
+
+    // Pre-parse the SVG viewBox to get the logical coordinate width.
+    // The viewBox is "0 0 w h" — we only need w. The separator is kept in a
+    // variable so the i18n audit regex (which scans for t('...') calls) does
+    // not misread the word "split" + (' ') as a translation key lookup.
+    var spaceSep = ' ';
+    var vbAttr = (svgEl.getAttribute('viewBox') || '').split(spaceSep);
+    var vbW = parseFloat(vbAttr[2]) || 0;
+    // If no viewBox (e.g. test stubs), fall back to CSS-pixel width so the
+    // ratio conversion still works as a fallback (the old behaviour).
+    kind = kind || 'bar';
+
+    function place(ev) {
+      var rect = svgEl.getBoundingClientRect();
+      if (!rect || rect.width === 0) return;
+      var cssX = ev.clientX - rect.left; // CSS px from left edge
+      var n = rows.length;
+      var idx;
+
+      if (kind === 'line' && vbW > 0) {
+        // Line chart: points at px + (i/(n-1))*pw.
+        // Derive px/pw from the viewBox width (matching svgChart hardcoded values).
+        var px, pw;
+        if (vbW === 600) { px = 40;  pw = 560; }          // narrow
+        else if (vbW === 350) { px = 52; pw = 290; }       // phone
+        else if (vbW === 1280) { px = 72; pw = 1184; }     // wide
+        else { px = 40; pw = vbW - 40; }                   // fallback
+        var vbX = (cssX / rect.width) * vbW;
+        if (n > 1) {
+          var step = pw / (n - 1);
+          idx = Math.round((vbX - px) / step);
+        } else {
+          idx = 0;
+        }
+      } else {
+        // Bar chart (default): slots of (vbW-20)/n width, starting at x=10.
+        // svgBarChart / svgStackedBars share this geometry.
+        var w = vbW > 0 ? vbW : rect.width; // fallback: CSS pixels
+        var slotW = (w - 20) / n;
+        var x0 = vbW > 0 ? (cssX / rect.width) * vbW : cssX;
+        if (slotW > 0) {
+          idx = Math.floor((x0 - 10) / slotW);
+        } else {
+          idx = 0;
+        }
+      }
+      idx = Math.min(n - 1, Math.max(0, idx));
+      var row = rows[idx] || {};
+      tip.textContent = chartTipText(row, series, fmt);
+      tip.style.display = 'block';
+      var x = ev.clientX - rect.left + 12;
+      var maxX = rect.width - tip.offsetWidth - 4;
+      tip.style.left = Math.max(0, Math.min(x, maxX)) + 'px';
+      tip.style.top = Math.max(0, ev.clientY - rect.top - tip.offsetHeight - 12) + 'px';
+    }
+    function hide() { tip.style.display = 'none'; }
+    svgEl.addEventListener('mousemove', place);
+    svgEl.addEventListener('mouseleave', hide);
   }
 
   // timeoutSignal builds an AbortSignal for a request, degrading to NO
@@ -1012,15 +1256,53 @@
   }
 
   /**
+   * Response shapes for the admin stats payload.
+   *
+   * These mirror the server's response literally — the source of truth is
+   * `handleAdminStats` in apps/license-server/admin_stats.go, which builds
+   * the `kpis` map and the twelve arrays in one `e.JSON(...)` call. When a
+   * field is added there, `normalizeStats` already passes it through (it
+   * copies every key of the incoming kpis object), so only this declaration
+   * goes stale — which is exactly how the admin analytics features shipped
+   * with `astro check` failing on properties that existed at runtime and on
+   * the wire.
+   *
    * @typedef {Object} AdminKpis
-   * @property {number} mrrUsd
    * @property {number} totalUsers
-   * @property {number} arpuUsd
-   * @property {number} fxRate
    * @property {number} activeUsers
    * @property {number} totalSubscribers
    * @property {number} activeDevices
+   * @property {number} arpuUsd
    * @property {number} trialToPaidRate
+   * @property {number} fxRate
+   * ── Monthly income, gross and refunds, per currency ──
+   * @property {number} mrrUsd
+   * @property {number} mrrIdr
+   * @property {number} monthlyGrossUsd
+   * @property {number} monthlyGrossIdr
+   * @property {number} monthlyRefundUsd
+   * @property {number} monthlyRefundIdr
+   * @property {number} monthlyPaddleUsd
+   * @property {number} monthlyPaddleIdr
+   * @property {number} monthlyMidtransUsd
+   * @property {number} monthlyMidtransIdr
+   * ── Lifetime totals ──
+   * @property {number} lifetimeUsd
+   * @property {number} lifetimeIdr
+   * @property {number} lifetimeRefundUsd
+   * @property {number} lifetimeRefundIdr
+   * @property {number} lifetimePaddleUsd
+   * @property {number} lifetimePaddleIdr
+   * @property {number} lifetimeMidtransUsd
+   * @property {number} lifetimeMidtransIdr
+   * ── Provenance and freshness: deliberately excluded from
+   * normalizeStats' coercion list so they pass through untouched ──
+   * @property {string} grossSource - "provider" when backed by the payment
+   * ledger, "estimate" when derived from FX-converted MRR.
+   * @property {boolean} fxLive
+   * @property {string} fxUpdatedAt - RFC3339
+   * @property {string} revenueCachedAt - RFC3339, when the provider ledger
+   * snapshot was refreshed.
    */
 
   /**
@@ -1034,6 +1316,9 @@
    * @property {Array} topSubscribers
    * @property {Array} recentSignups
    * @property {Array} expiringSoon
+   * @property {Array} needsAttention
+   * @property {Array} recentRevenueEvents
+   * @property {Array} trialFunnel
    * @property {AdminKpis} kpis
    */
 
@@ -1061,7 +1346,11 @@
     // (boolean) intentionally pass through.
     ['totalUsers', 'activeUsers', 'totalSubscribers', 'activeDevices',
       'mrrUsd', 'mrrIdr', 'lifetimeUsd', 'lifetimeIdr', 'arpuUsd',
-      'trialToPaidRate', 'fxRate']
+      'trialToPaidRate', 'fxRate', 'monthlyGrossUsd', 'monthlyGrossIdr',
+      'monthlyPaddleUsd', 'monthlyPaddleIdr', 'monthlyMidtransUsd', 'monthlyMidtransIdr',
+      'monthlyRefundUsd', 'monthlyRefundIdr',
+      'lifetimePaddleUsd', 'lifetimePaddleIdr', 'lifetimeMidtransUsd', 'lifetimeMidtransIdr',
+      'lifetimeRefundUsd', 'lifetimeRefundIdr']
       .forEach(function (key) { kpis[key] = num(k[key]); });
     return {
       revenueTrend: arr(m.revenueTrend),
@@ -1073,6 +1362,9 @@
       topSubscribers: arr(m.topSubscribers),
       recentSignups: arr(m.recentSignups),
       expiringSoon: arr(m.expiringSoon),
+      needsAttention: arr(m.needsAttention),
+      recentRevenueEvents: arr(m.recentRevenueEvents),
+      trialFunnel: arr(m.trialFunnel),
       kpis: kpis,
     };
   }
@@ -1101,6 +1393,11 @@
     'section.revenue': 'Revenue',
     'section.growth': 'Growth',
     'common.active': 'active',
+    'common.refresh': 'Refresh',
+    'common.refreshedAt': 'updated',
+    'common.refunds': 'refunds',
+    'common.estimate': 'estimate',
+    'common.providerVerified': 'Paddle/Midtrans webhooks',
     'kpi.totalUsers': 'Total Users',
     'kpi.totalSubscribers': 'Total Subscribers',
     'kpi.mrr': 'MRR',
@@ -1109,14 +1406,22 @@
     'kpi.activeTerminals': 'Active Terminals',
     'kpi.trialToPaid': 'Trial → Paid',
     'chart.revenueTrendIdr': 'Revenue Trend (IDR)',
+    'chart.revenueByProvider': 'Revenue by Provider (IDR)',
+    'chart.monthsVerified': 'months verified (rest estimated)',
     'chart.subscriberGrowth': 'Subscriber Growth',
     'chart.tierDistribution': 'Tier Distribution',
     'chart.paymentProvider': 'Payment Provider',
     'chart.signupsPerMonth': 'Signups per Month',
     'chart.churnCanceled': 'Churn / Canceled',
+    'chart.trialFunnel': 'Trial → Paid Funnel',
     'table.topSubscribers': 'Top Subscribers',
     'table.recentSignups': 'Recent Signups',
+    'table.recentRevenueEvents': 'Recent Revenue Events',
     'table.expiringSoon': 'Expiring Soon (within 30 days)',
+    'alert.title': 'Needs Attention',
+    'alert.grace_period': 'Grace period',
+    'alert.expired_active': 'Expired key active',
+    'alert.refund': 'Refund',
     'table.tenants': 'Tenants',
     'table.noData': 'No data.',
     'table.noTenantsMatch': 'No tenants match.',
@@ -1126,6 +1431,8 @@
     'th.renewal': 'Renewal',
     'th.provider': 'Provider',
     'th.status': 'Status',
+    'th.amount': 'Amount',
+    'th.when': 'When',
     'th.daysLeft': 'Days Left',
     'th.created': 'Created',
     'th.expires': 'Expires',
@@ -1349,6 +1656,7 @@
     escapeHtml: escapeHtml,
     fmtIdr: fmtIdr,
     fmtUsd: fmtUsd,
+    fmtMonthTick: fmtMonthTick,
     statusPill: statusPill,
     svgChart: svgChart,
     svgDonut: svgDonut,
@@ -1359,6 +1667,11 @@
     tenantDetailRows: tenantDetailRows,
     revokeConfirmModal: revokeConfirmModal,
     svgBarChart: svgBarChart,
+    svgStackedBars: svgStackedBars,
+    chartTipText: chartTipText,
+    nearestChartIndex: nearestChartIndex,
+    bindChartTooltip: bindChartTooltip,
+    chartMonthLabel: chartMonthLabel,
     normalizeStats: normalizeStats,
     startLockoutCountdown: startLockoutCountdown,
     startCountdown: startCountdown,

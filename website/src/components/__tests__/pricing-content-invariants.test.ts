@@ -107,6 +107,30 @@ describe('tier shape invariants', () => {
       expect(highlighted[0].tierKey).toBe('pro');
     }
   });
+
+  it('free plan includes QRIS payments but no cloud sync (both card and comparison table)', () => {
+    // The home page Free card and the full pricing comparison table must
+    // agree: Free = QRIS at the counter (no extra hardware) but data stays
+    // local — cloud sync is a paid-tier differentiator. Drift between the
+    // tier.features list and featureRows previously showed ✓ on the home
+    // card while the table said ✗ (and vice versa), contradicting itself.
+    const LABEL_EN = { card: 'QRIS payments', table: 'QRIS payments' };
+    const LABEL_ID = { card: 'Pembayaran QRIS', table: 'Pembayaran QRIS' };
+    for (const locale of LOCALES) {
+      const pricing = locale === 'en' ? enPricing : idPricing;
+      const rows = featureRowsFor(locale);
+      const labels = locale === 'en' ? LABEL_EN : LABEL_ID;
+      const free = pricing.find((t) => t.tierKey === 'free')!;
+      const qris = free.features.find((f) => f.label === labels.card)!;
+      const cloud = free.features.find((f) => f.label === (locale === 'en' ? 'Cloud sync' : 'Sinkron cloud'))!;
+      expect(qris.included, `${locale} free card QRIS`).toBe(true);
+      expect(cloud.included, `${locale} free card cloud sync`).toBe(false);
+      const qrisRow = rows.find((r) => r.label === labels.table)!;
+      const cloudRow = rows.find((r) => r.label === (locale === 'en' ? 'Cloud sync' : 'Sinkron cloud'))!;
+      expect(qrisRow.values.free, `${locale} free table QRIS`).toBe(true);
+      expect(cloudRow.values.free, `${locale} free table cloud sync`).toBe(false);
+    }
+  });
 });
 
 describe('locale parity invariants', () => {

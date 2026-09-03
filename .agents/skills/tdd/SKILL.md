@@ -3,6 +3,8 @@ name: tdd
 description: Test-driven development workflow for OZ-POS — the 7-phase loop (Analyze → Find Weaknesses → Red/Green/Refactor → Verify → Journal → Update Docs → Commit), the fast TDD loop tooling (scripts/test-tdd.sh, [profile.tdd], nextest), and per-layer testing conventions. Use when fixing a bug, adding a feature test-first, or running a TDD cycle in any oz-* crate, platform/*, modules/*, app, or ui/.
 ---
 
+<!-- Audit stamp: 2026-09-03 · DSH · status: ACCURATE (rev 2 — Rust test convention corrected in Phase 3 and the per-layer table: unit tests live in sibling *_tests.rs files wired via #[cfg(test)] #[path = ...] mod tests (never inline in the production file — AGENTS.md rule); UI bundle names corrected en.ftl/id.ftl → per-feature <feature>.ftl/<feature>.id.ftl; push rule softened to match AGENTS.md (never push without an explicit direct user order — not "refuse even then"); 'audit/ numbered findings' reference removed (no such dir); pre-commit gate list updated to the six core gates + Go gate) · verified this pass: [profile.tdd] in workspace Cargo.toml, scripts/{test-tdd,test-changed,test-ui-changed,wtree-guard}.sh + scan-unwrap-panic.py, docs/guides/{api-reference,user-guide}.md, JOURNAL.md all exist -->
+
 # TDD Workflow — Test-Driven Development for OZ-POS
 
 TDD is the default way to change code in this repo: it makes bugs reproducible before they are fixed, keeps every fix attached to a regression test, and produces small, reviewable, well-documented commits.
@@ -31,7 +33,7 @@ Not for: pure docs, dependency bumps, or mechanical renames with no behavior cha
 | 5 | **Verify only the area you changed during the loop.** | Area-scoped tests (`test-tdd.sh` / `test-changed.sh` / `test-ui-changed.sh`) catch regressions fast. Full `check.sh` is reserved for pre-push or explicit request. |
 | 6 | **Journal, docs, and commit while context is fresh.** | The 20-minute-old-you knows why the code is the way it is. Record it before it evaporates. |
 | 7 | **Never kill running processes — other agents work in the same tree.** | Do not stop any `.exe` or running process; another agent or the user may still need it. |
-| 8 | **Never `git push` — under any circumstances.** | This skill ends at commit. Even if the user explicitly asks you to push, refuse and hand control back. |
+| 8 | **Never `git push` without an explicit, direct user order.** | This skill ends at commit. Even after everything is green, stop and let the user say "push" (AGENTS.md). |
 
 ---
 
@@ -53,7 +55,7 @@ Spot concrete problems with evidence.
 |---|---|
 | Failing tests | `cargo nextest run -p <crate>` / `npm run test` failures — flaky, skipped, or wrong |
 | Logs | `tracing` error/warn lines, panic traces, sync daemon errors |
-| Audit docs | `audit/` numbered findings and `JOURNAL.md` entries |
+| Audit docs | numbered findings in docs/records/ and `JOURNAL.md` entries |
 | Code review | A prior review flagged this path; the review comment is evidence |
 | `scripts/scan-unwrap-panic.py` | Production `unwrap()`/`expect()` without `// SAFETY:` / `// INVARIANT:` |
 | `cargo clippy -D warnings` | Warnings are bugs-in-waiting |
@@ -67,7 +69,7 @@ The core cycle. Use the fast loop (below) so each iteration is seconds, not minu
 **Red — write the failing test.**
 
 - Prefer the smallest possible failing test that still expresses the desired behavior. One assertion is usually enough for the first Red.
-- Rust: add a `#[cfg(test)] mod tests` block (or extend the existing one) at the bottom of the module file.
+- Rust: add the failing test to the module's sibling `*_tests.rs` (e.g. `sales.rs` → `sales_tests.rs`, wired via `#[cfg(test)] #[path = "sales_tests.rs"] mod tests;` — never inline in the production file).
 - UI: add a test in `ui/src/__tests__/` for the component/hook you're changing.
 - Run it and confirm it fails **for the right reason** — the assertion, not a compile error.
 - Test the *behavior*, not the implementation: assert on return values, DB state, rendered output, or emitted events — not on which private function got called.
@@ -135,8 +137,8 @@ Small, focused, well-described — while context is fresh.
 - Branch naming: `feat/<name>`, `fix/<name>`, `test/<name>`, `refactor/<name>`, `docs/<name>`, `chore/<name>`.
 - Conventional Commits: `fix(sync): quarantine poison remote items after retry budget` — summary ≤ 72 chars, imperative mood, body explains *why*.
 - One behavior per commit. The commit is the unit of review and bisect.
-- The `.githooks/pre-commit` hook (fmt + i18n lint + bundle parity + FTL dedupe) runs automatically if `core.hooksPath` is set — don't bypass with `--no-verify`; fix the issue instead.
-- **ABSOLUTE: never run `git push`.** Not on explicit request, not in a follow-up, not as part of any workflow in this skill. `git push` is out of scope forever — the commit is the end of the line, and the human pushes (or asks another tool to push).
+- The `.githooks/pre-commit` hook (cargo fmt re-stage, LF normalization, i18n lint, staged bundle parity, FTL dedupe, migration column-type lint, PG drift guard — plus a Go gate when license-server files are staged) runs automatically if `core.hooksPath` is set — don't bypass with `--no-verify`; fix the issue instead.
+- **Never run `git push` without an explicit, direct user order.** The default end state is a local commit plus a report; the human pushes.
 
 ---
 
@@ -214,10 +216,10 @@ npm run check:all            # lint → typecheck → test → i18n → E2E (Doc
 
 | Layer | Test location | Conventions |
 |---|---|---|
-| Rust crate (`oz-*`, `platform/*`, `modules/*`) | `#[cfg(test)] mod tests` at the bottom of each module | Every new module needs ≥ 1 unit test (AGENTS.md). Tests may use `unwrap()`/`expect()` freely. DB tests use transactions and assert atomicity (rollback on error). |
+| Rust crate (`oz-*`, `platform/*`, `modules/*`) | sibling `*_tests.rs` per module, wired via `#[cfg(test)] #[path = ...] mod tests;` | Every new module needs ≥ 1 unit test (AGENTS.md). Tests never live inline in production files. Tests may use `unwrap()`/`expect()` freely. DB tests use transactions and assert atomicity (rollback on error). |
 | HAL driver | `crates/oz-hal/src/drivers/mock.rs` | Every driver needs a **mandatory mock** for testing (CI fails without it). |
-| Tauri command | unit tests in the command module + IPC contract tests in `ui/src/__tests__/api-*-contract.test.ts` | `invoke` calls go through `ui/src/api/`; contract tests pin the wire shape. |
-| React component/hook | `ui/src/__tests__/` | One test file per component/hook. Use `@fluent/react` `Localized` ids that exist in both `en.ftl` and `id.ftl` bundles (bundle-parity gate fails otherwise). |
+| Tauri command | sibling `*_tests.rs` in the commands module + IPC contract tests in `ui/src/__tests__/` (the `api-*-contract.test.ts` files) | `invoke` calls go through `ui/src/api/`; contract tests pin the wire shape. |
+| React component/hook | `ui/src/__tests__/` | One test file per component/hook. Use `<Localized>` ids that exist in both the English `.ftl` and the `.id.ftl` bundle for the feature (bundle-parity gate fails otherwise). |
 | Money logic | anywhere in `oz-core`/`foundation` | Assert on `minor_units: i64`, never `f32`/`f64`. Test `checked_add`/`from_major` overflow and currency-mismatch paths. |
 
 ---
@@ -235,7 +237,7 @@ npm run check:all            # lint → typecheck → test → i18n → E2E (Doc
 9. **Committing a file you verified "a few minutes ago".** `git commit -- <path>` commits the working-tree version of that path, so another agent's in-flight edits ride along — a shared `*_tests.rs` is the usual casualty, and it turns HEAD red without any error from git. Run `wtree-guard check` (or at minimum re-run that path's tests) *immediately* before committing, and fix forward rather than amending a commit someone may already be based on.
 10. **Believing a stale binary.** PowerShell's `Copy-Item` preserves the *source* file's mtime, so a restored file can appear older than the artifact built from the wrong content — cargo then re-runs the stale binary and a working fix looks broken. Touch `LastWriteTime` after any restore. Related: when comparing two states of the tree, hold scope constant — an isolated test run and a full-package run are different experiments (package tests share process state).
 11. **Declaring code untestable because it needs infrastructure.** A rule buried in a spawned thread or behind a feature flag is usually a pure decision wrapped in I/O — extract the decision, put it *outside* the cfg gate, and it becomes testable in the default build. Check what CI actually compiles (`nextest --workspace --all-features`) before assuming a path never runs.
-12. **Pushing.** `git push` is never part of this skill's workflow — not on user request, not when "everything is green". Commit locally, report, stop. The human pushes.
+12. **Pushing.** `git push` is never part of this skill's workflow — the default end state is a local commit plus a report, even when everything is green. Push only when the user gives an explicit, direct order (AGENTS.md), and stop at commit otherwise.
 
 ---
 
@@ -250,4 +252,4 @@ npm run check:all            # lint → typecheck → test → i18n → E2E (Doc
 
 ---
 
-> last audited 29-08-26 by skill-drift-guard
+> last audited 03-09-26 by DSH

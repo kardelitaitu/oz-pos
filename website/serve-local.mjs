@@ -4,7 +4,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PORT = 4321;
+// PORT env override lets a second instance run alongside a dev server
+// (e.g. PORT=4322 node serve-local.mjs) for header/asset verification.
+const PORT = Number(process.env.PORT) || 4321;
 const DIST = path.join(__dirname, 'dist');
 
 const MIME = {
@@ -24,9 +26,31 @@ const MIME = {
   '.txt': 'text/plain',
 };
 
+// Cache-Control mirror of public/_headers so local Lighthouse runs see the
+// same cache lifetimes production serves (Workers static assets honors
+// _headers; this dev server does not).
+const CACHE_POLICY = [
+  { match: (p) => p.startsWith('/_astro/') || p.startsWith('/videos/'), cache: 'public, max-age=31536000, immutable' },
+  { match: (p) => p.startsWith('/admin/'), cache: 'no-store, max-age=0' },
+  { match: (p) => p === '/og-image.png' || p === '/favicon.svg', cache: 'public, max-age=604800' },
+];
+const cacheControlFor = (urlPath) =>
+  CACHE_POLICY.find((r) => r.match(urlPath))?.cache ?? 'public, max-age=0, must-revalidate';
+
 const server = http.createServer((req, res) => {
   try {
     let urlPath = decodeURIComponent(new URL(req.url, `http://localhost:${PORT}`).pathname);
+    
+    // Intercept runtime config endpoint (handled by Cloudflare Worker in production)
+    if (urlPath === '/__oz/runtime-config.js') {
+      res.writeHead(200, {
+        'Content-Type': 'application/javascript; charset=utf-8',
+        'Cache-Control': 'no-store',
+      });
+      res.end('window.__OZ_CONFIG__ = { licenseApiUrl: "http://localhost:8080", contactEndpoint: "/api/contact" };');
+      return;
+    }
+
     if (urlPath === '/' || urlPath === '') {
       urlPath = '/en/';
     }
@@ -46,11 +70,12 @@ const server = http.createServer((req, res) => {
       const ext = path.extname(filePath).toLowerCase();
       res.writeHead(200, {
         'Content-Type': MIME[ext] || 'application/octet-stream',
+        'Cache-Control': cacheControlFor(urlPath),
         'Access-Control-Allow-Origin': '*',
       });
       fs.createReadStream(filePath).pipe(res);
     } else {
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.writeHead(404, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' });
       res.end('404 Not Found');
     }
   } catch (err) {

@@ -18,6 +18,13 @@ restaurant-menu-loading = Memuat menu…
 restaurant-menu-empty = Menu kosong
 restaurant-size-label = Ukuran
 restaurant-sort-label = Urutkan
+# "Manual" and "A–Z" are intentionally identical to English — both are used
+# as-is in Indonesian. Only the two translated words here are real translation
+# work; do not "fix" the identical pair.
+restaurant-sort-manual = Manual
+restaurant-sort-a-z = A–Z
+restaurant-sort-date = Berdasarkan Tanggal
+restaurant-sort-popularity = Popularitas
 restaurant-card-add = Tambah
 restaurant-card-unavailable = Tidak tersedia
 restaurant-context-color-label = Warna
@@ -88,6 +95,7 @@ product-mgmt-error-invalid-stock = Stok harus berupa bilangan bulat non-negatif
 product-mgmt-modal-add-title = Tambah Produk
 product-mgmt-modal-edit-title = Ubah Produk
 product-mgmt-modal-close = Tutup
+product-mgmt-field-name-required = Nama *
 product-mgmt-field-sku-required = SKU *
 product-mgmt-field-price = Harga (unit minor)
 product-mgmt-field-currency = Mata Uang
@@ -162,6 +170,7 @@ variant-mgmt-field-barcode = Barcode
 variant-mgmt-field-sort-order = Urutan
 variant-mgmt-field-active = Aktif
 variant-mgmt-btn-cancel = Batal
+variant-mgmt-error-retry = Coba lagi
 variant-mgmt-btn-create = Buat
 variant-mgmt-btn-update = Perbarui
 variant-mgmt-overlay-aria = Varian untuk { $name }

@@ -1,14 +1,19 @@
 # oz-api
 
-<!-- Audit stamp: 2026-08-29 · docs-auditor · status: ACCURATE (route table repaired) · F1: route table was missing 7 endpoints (terminals, tenant plan, settings, tax-rates, users, me/plan) and GET on products; all now present · verified accurate: oz_api::serve() exists, default port 3099 via OZ_API_PORT, all routes present (health/tokens public, rest JWT), Swagger/OpenAPI correctly absent here (lives in cloud-server) -->
+<!-- Audit stamp: 2026-09-03 · DSH · status: ACCURATE (route table re-repaired + auth column corrected; local-API note refreshed same day) · F1: table was again missing 10 routes (exchange-rates ×5, images ×5) · F2: auth column was wrong — tokens/terminals/plan/settings are admin-key-gated (X-Admin-Key when OZ_ADMIN_KEY set; open in dev), settings gated inside the handler despite public-router placement; master-data writes (products POST, stock PATCH, tax-rates POST, exchange-rates POST/DELETE, users POST) additionally require the admin key and reject terminal-scoped tokens (D1) · verified accurate: oz_api::serve() exists, default port 3099 via OZ_API_PORT · NOTE: this crate now OWNS the OpenAPI document (`spec/` module — `mod.rs` + `paths.rs` + `schemas.rs`, `x-oz-scope`-tagged) — cloud-server merges its cloud-only paths on top and adds the Swagger/Scalar UI pages; the desktop app embeds router() on 127.0.0.1 behind Settings → Local API (per-install secret via auth_middleware_with_state) and serves the base document at /api/openapi.json; tablet not wired — see docs/guides/EXTENDING.md §2.1 -->
 
-REST API server for OZ-POS. Runs an axum HTTP server alongside the Tauri front-end for third-party scripts, kitchen displays, and inventory scanners.
+REST API server for OZ-POS. An axum HTTP API for third-party scripts, kitchen displays, and inventory scanners. Mounted by `apps/cloud-server`, and embedded loopback-only by the desktop app (`apps/desktop-client/src/local_api.rs`, off by default — see [EXTENDING guide](../../docs/guides/EXTENDING.md) §2.2).
 
 ## Quick start
 
 ```rust
-// Background task in apps/desktop-client/src/main.rs
+// Standalone (binds 0.0.0.0, env-configured):
 oz_api::serve().await?;
+
+// Embedded on loopback (what the desktop app does — never serve()):
+let app = oz_api::router(app_state); // AppState carries db + api_secret
+let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
+axum::serve(listener, app).await?;
 ```
 
 Listens on `OZ_API_PORT` (default `3099`). DB path from `OZ_DB_PATH` (default `oz-pos.db`).
@@ -18,22 +23,38 @@ Listens on `OZ_API_PORT` (default `3099`). DB path from `OZ_DB_PATH` (default `o
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/api/v1/health` | No | Health check |
-| POST | `/api/v1/tokens` | No | Create API token |
-| POST | `/api/v1/terminals` | No | Register terminal |
-| PUT | `/api/v1/tenants/{tenant_id}/plan` | No | Set tenant plan |
-| GET | `/api/v1/settings` | No | Get settings |
-| PUT | `/api/v1/settings` | No | Update settings |
+| POST | `/api/v1/tokens` | Admin¹ | Mint JWT (admin-key path or terminal client-credentials path) |
+| POST | `/api/v1/terminals` | Admin¹ | Register terminal; returns `device_secret` once, re-register rotates |
+| PUT | `/api/v1/tenants/{tenant_id}/plan` | Admin¹ | Set tenant plan |
+| GET | `/api/v1/settings` | Admin¹ | Read tenant effective settings (SMTP / report schedule) |
+| PUT | `/api/v1/settings` | Admin¹ | Update tenant scoped settings |
 | GET | `/api/v1/products` | JWT | List products |
-| POST | `/api/v1/products` | JWT | Create product |
+| POST | `/api/v1/products` | JWT + Admin² | Create product |
 | GET | `/api/v1/products/{sku}` | JWT | Get product by SKU |
-| PATCH | `/api/v1/products/{sku}/stock` | JWT | Adjust stock |
+| PATCH | `/api/v1/products/{sku}/stock` | JWT + Admin² | Adjust stock (signed delta) |
 | GET | `/api/v1/categories` | JWT | List categories |
-| POST | `/api/v1/tax-rates` | JWT | Create tax rate |
+| POST | `/api/v1/tax-rates` | JWT + Admin² | Create tax rate |
+| GET | `/api/v1/exchange-rates` | JWT | Full rate history |
+| POST | `/api/v1/exchange-rates` | JWT + Admin² | Create rate (6-decimal fixed point) |
+| GET | `/api/v1/exchange-rates/latest` | JWT | Newest rate per pair |
+| GET | `/api/v1/exchange-rates/latest/{from}/{to}` | JWT | Newest rate for one pair |
+| DELETE | `/api/v1/exchange-rates/{id}` | JWT + Admin² | Delete rate |
 | GET | `/api/v1/tenants/me/plan` | JWT | Get my plan |
-| POST | `/api/v1/users` | JWT | Create user |
+| POST | `/api/v1/users` | JWT + Admin² | Create user |
 | POST | `/api/v1/sales` | JWT | Create sale |
 | GET | `/api/v1/sales/{id}` | JWT | Get sale |
 | PATCH | `/api/v1/sales/{id}/status` | JWT | Update sale status |
+| PUT | `/api/v1/images` | JWT | Store one WebP (≤ 32 KB, content-addressed) |
+| POST | `/api/v1/images` | JWT | Batch store (≤ 16 files / 512 KB, length-prefixed frames) |
+| GET | `/api/v1/images:pack` | JWT | Fetch ≤ 64 files as binary frames |
+| GET | `/api/v1/images:missing` | JWT | Missing-hash set difference |
+| GET | `/api/v1/images/{hash16}` | JWT | Immutable WebP bytes |
+
+¹ `X-Admin-Key` header required when the server has an admin key configured (`OZ_ADMIN_KEY` on the cloud server; the per-install secret on the desktop local API); open in dev mode.
+² Operator write tier (D1): admin key **and** a non-terminal token — device credentials
+must never mutate master data. Sales writes are exempt (terminals sell).
+GETs on JWT routes are additionally gated by read-tier permissions (spec 0047).
+Full contract, auth model, and recipes: [docs/guides/EXTENDING.md](../../docs/guides/EXTENDING.md).
 
 ```bash
 # Generate token
@@ -50,4 +71,8 @@ curl http://localhost:3099/api/v1/products \
 
 `AppState` wraps SQLite in `Arc<Mutex<Connection>>`. CORS uses a configurable origin allowlist (`OZ_CORS_ORIGINS`, default `DEFAULT_CORS_ORIGINS`; `"*"` is an explicit dev opt-in, otherwise fail-closed). All JWT-protected routes return 401 without a valid token.
 
-> last audited 29-08-26 by docs-auditor
+## OpenAPI document (`spec/`)
+
+This crate owns the machine-readable contract: `spec::base_spec()` builds the OpenAPI 3.1 document for every route above (all operations tagged `x-oz-scope: "both"`), and `spec::local_spec(port)` adds the loopback server info the desktop app serves at `GET /api/openapi.json`. `apps/cloud-server/src/openapi.rs` merges its cloud-only paths (`x-oz-scope: "cloud"`: sync, webhooks, docs UI, host health/metrics) on top. Drift is policed by the cloud-server guard tests in both directions, including `$ref` resolution across the split.
+
+> last audited 03-09-26 by DSH

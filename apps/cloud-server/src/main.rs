@@ -34,6 +34,7 @@ mod email_pg;
 mod image_gc;
 mod metrics;
 mod openapi;
+mod outbound_webhooks;
 mod outbox;
 mod prune;
 mod rate_limit;
@@ -294,7 +295,12 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             // ADR #43 D7: outbox drainer for async email/webhook delivery.
             // The report sender now enqueues into the outbox; this task
             // drains pending entries and sends with retry/backoff.
-            outbox::start_drainer_sqlite(conn.clone(), &crate::email::deliver_outbox_entry);
+            // Outbound webhooks (2026-09-03) share the same pipeline via
+            // the `webhook` topic — dispatch routes by topic.
+            outbox::start_drainer_sqlite(
+                conn.clone(),
+                &crate::outbound_webhooks::deliver_outbox_entry_sqlite,
+            );
 
             // P8-1: Per-tenant rate limiter state + background cleanup.
             // ADR #43 D4: prefer the shared Redis token bucket when a
@@ -343,6 +349,13 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             // Phase 1.5: scheduled report sender on Postgres (the SQLite
             // loop reads the same settings/analytics surface via rusqlite).
             email_pg::start_report_sender_loop_pg(pg_pool.clone());
+
+            // Outbound webhooks: the PG outbox drainer (previously built
+            // but unwired — email never uses the outbox on this branch).
+            outbox::start_drainer_pg(
+                pg_pool.clone(),
+                &crate::outbound_webhooks::deliver_outbox_entry_pg,
+            );
 
             let app = build_router(state, rate_limiter, &config, Some(pg_pool.clone()));
             serve(app, config).await?;
@@ -603,6 +616,7 @@ pub fn build_router(
         // when configured; open in dev mode when unset.
         admin_key: config.admin_key.clone(),
         api_secret: config.api_secret.clone().unwrap_or_default(),
+        allow_terminal_credentials: true,
         db_path: config.db_path.clone(),
         port: config.port,
         cors_origins: cors_origins.clone(),
@@ -628,6 +642,14 @@ pub fn build_router(
 
     // Build the webhook router (unauthenticated — HMAC signature verification).
     let webhook_router = webhooks::webhooks_router(state.clone());
+
+    // Outbound webhook endpoint registry (admin-key gated). Built from a
+    // clone BEFORE SyncState::from consumes the state.
+    let outbound_router = outbound_webhooks::outbound_router(outbound_webhooks::OutboundState {
+        db: state.db.clone(),
+        pg: state.pg.clone(),
+        admin_key: config.admin_key.clone(),
+    });
 
     // P-2: Per-route-group concurrency limits prevent sync bursts
     // from starving the product/sales/health API routes.
@@ -661,6 +683,7 @@ pub fn build_router(
         .merge(api_router)
         .merge(sync_router)
         .merge(webhook_router)
+        .merge(outbound_router)
         .layer(axum::middleware::from_fn_with_state(
             config.sync_redirect_url.clone(),
             redirect::redirect_middleware,

@@ -220,7 +220,7 @@ export default function RetailCartPanel({
                                     role="option"
                                     aria-selected={!line.courseId}
                                   >
-                                    None
+                                    {requiredLocalized(l10n, 'retail-course-none')}
                                   </button>
                                   {COURSES.map((c) => (
                                     <button

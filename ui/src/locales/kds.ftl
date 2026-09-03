@@ -245,3 +245,25 @@ kds-settings-reset-colours = Reset colours
 # ── Card Animations ──
 kds-settings-card-animations = Card animations
 kds-settings-card-animations-caption = Spawn and reorder effects
+
+# ── Hamburger panel: section headings, icon-only controls, colour pickers ──
+# Recovered by the Fluent page audit. These were hardcoded English strings in
+# KdsHamburgerPanel.tsx, which the rev-1 parity gate could not see because it
+# only walked <Localized id="..."> under ui/src/features/**.
+kds-panel-section-display = Display
+kds-panel-section-behaviour = Behaviour
+kds-theme-dark-aria = Dark theme
+kds-theme-light-aria = Light theme
+kds-zoom-out-aria = Zoom out
+kds-zoom-in-aria = Zoom in
+kds-zoom-reset-title = Reset to 100%
+kds-zoom-reset-aria = Reset zoom to 100%
+kds-cols-decrease-aria = Fewer columns
+kds-cols-increase-aria = More columns
+kds-cols-reset-title = Reset to auto
+kds-cols-reset-aria = Reset columns to auto
+kds-cols-auto = Auto
+# Accessible name for a colour row's native picker: the localized row label
+# plus this suffix. The previous code interpolated the raw key id, so a screen
+# reader announced "kds-settings-color-dinein colour picker".
+kds-color-picker-aria = { $name } colour picker

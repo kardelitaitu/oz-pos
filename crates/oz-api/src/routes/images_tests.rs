@@ -24,6 +24,7 @@ fn temp_image_dir() -> (AppState, std::path::PathBuf) {
         pg: None,
         admin_key: None,
         api_secret: "test-secret".into(),
+        allow_terminal_credentials: true,
         db_path: ":memory:".into(),
         port: 3099,
         cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
@@ -38,18 +39,13 @@ fn cleanup(dir: &std::path::Path) {
 }
 
 /// Generate a test JWT for the given tenant_id, signed with the same
-/// resolved secret the auth middleware uses.
-fn test_token(_state: &AppState, tenant_id: &str) -> String {
+/// secret the stateful auth middleware validates against
+/// (`AppState::api_secret`).
+fn test_token(state: &AppState, tenant_id: &str) -> String {
     use crate::auth::create_token;
-    use crate::auth::signing_secret_for_tests;
-    create_token(
-        "test",
-        Some(1),
-        Some(tenant_id),
-        Some(&signing_secret_for_tests()),
-    )
-    .unwrap()
-    .token
+    create_token("test", Some(1), Some(tenant_id), Some(&state.api_secret))
+        .unwrap()
+        .token
 }
 
 fn make_webp_body() -> Vec<u8> {

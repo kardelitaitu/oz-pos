@@ -5,6 +5,25 @@
   "nav": {
     "home": "Beranda",
     "features": "Fitur",
+    "solutions": "Solusi",
+    "solutionsByIndustry": "Berdasarkan Industri",
+    "solutionsBySystem": "Sistem & Inti",
+    "solutionRestaurants": "Restoran",
+    "solutionRestaurantsDesc": "Manajemen meja, tagihan & dining",
+    "solutionCafes": "Kafe & Kopi",
+    "solutionCafesDesc": "Kasir cepat & tiket pesanan barista",
+    "solutionRetail": "Ritel & Minimarket",
+    "solutionRetailDesc": "Scan barcode cepat & mesin kasir",
+    "solutionWarung": "Warung & Kios",
+    "solutionWarungDesc": "POS offline ringan & hemat biaya",
+    "solutionKitchens": "Kitchen Display (KDS)",
+    "solutionKitchensDesc": "Antrean & routing tiket dapur live",
+    "solutionWarehouses": "Gudang & Stok",
+    "solutionWarehousesDesc": "Transfer stok & inventaris multi-cabang",
+    "solutionAudits": "Audit & Keamanan",
+    "solutionAuditsDesc": "Jurnal transaksi rusqlite anti-manipulasi",
+    "solutionLogging": "Logging & Telemetri",
+    "solutionLoggingDesc": "Laporan crash lokal & jejak aktivitas",
     "pricing": "Harga",
     "download": "Unduh",
     "docs": "Dokumentasi",
@@ -101,10 +120,22 @@
     "title": "Fitur Kelas Enterprise, Tanpa Biaya Enterprise",
     "subtitle": "Sistem POS kelas korporasi yang dapat diakses siapa saja. Tetap jualan saat internet mati dengan inti offline-first ultra-ringan, tanpa biaya per-fitur tersembunyi.",
     "ctaPrimary": "Unduh Gratis",
-    "ctaSecondary": "Lihat Harga"
+    "ctaSecondary": "Lihat Harga",
+    "carousel": {
+      "restaurant": "Restoran",
+      "retail": "Ritel",
+      "kitchen": "Dapur",
+      "warehouse": "Gudang",
+      "topology": "Topologi",
+      "restaurantDesc": "Pesan, bayar, dan kelola meja",
+      "retailDesc": "Kasir cepat dengan pencarian produk dan scan barcode",
+      "kitchenDesc": "Antrean pesanan KDS untuk dapur",
+      "warehouseDesc": "Stok, transfer antar gudang, dan PO",
+      "topologyDesc": "Editor visual untuk toko, terminal, dan gudang",
+      "screenshotComingSoon": "Tangkapan layar segera hadir"
+    }
   },
   "techStack": {
-    "title": "Dibangun di atas teknologi modern",
     "subtitle": "Fondasi open-source yang andal, pembayaran teruji, dan alat keamanan tingkat pertama."
   },
   "features": {
@@ -151,7 +182,7 @@
     "comparisonTitle": "OZ-POS vs POS Cloud Konvensional",
     "comparisonSubtitle": "Lihat mengapa arsitektur offline-first dan paket all-inclusive membuat OZ-POS unggul jauh.",
     "comparisonOzPos": "OZ-POS",
-    "comparisonOthers": "POS Cloud Konvensional",
+    "comparisonOthers": "POS Lainnya",
     "comparisonHeaderFeature": "Fitur & Kapabilitas",
     "comparisonRows": [
       {
@@ -198,10 +229,6 @@
       }
     ]
   },
-  "screenshots": {
-    "title": "Satu ruang kerja, semua stasiun",
-    "caption": "Desktop dan tablet — inti offline-first yang sama, layar yang dirancang khusus."
-  },
   "pricingPreview": {
     "title": "Harga sederhana",
     "subtitle": "Mulai gratis selamanya. Tingkatkan saat Anda siap.",
@@ -209,7 +236,7 @@
   },
   "ctaBanner": {
     "title": "Mulai gratis hari ini",
-    "subtitle": "Tanpa kartu kredit, tanpa pendaftaran. Unduh dan langsung berjualan.",
+    "subtitle": "Tanpa kartu kredit. Unduh dan langsung berjualan.",
     "cta": "Unduh OZ-POS"
   },
   "pricingPage": {
@@ -219,7 +246,7 @@
     "trust2": "Batalkan kapan saja",
     "note": "Lisensi satu kali (perpetual) belum tersedia — lihat peta jalan.",
     "comparison": "Perbandingan fitur antar paket",
-    "mostPopular": "⭐ Paling Populer",
+    "mostPopular": "Populer",
     "billing": {
       "label": "Periode penagihan",
       "monthly": "Bulanan",
@@ -230,14 +257,14 @@
   },
   "download": {
     "title": "Unduh OZ-POS",
-    "subtitle": "Versi 0.0.34 — gratis selamanya, tanpa pendaftaran.",
+    "subtitle": "Versi 0.0.35 — gratis selamanya, tanpa pendaftaran.",
     "version": "Versi saat ini",
-    "versionValue": "0.0.34",
+    "versionValue": "0.0.35",
     "platformsTitle": "Pilih platform Anda",
     "requirementsTitle": "Persyaratan sistem",
     "requirements": [
       "Windows 10 / 11 (64-bit) — tersedia sekarang",
-      "macOS 10.13 atau lebih baru — segera hadir",
+      "macOS 12+ — segera hadir",
       "Linux (x86_64, glibc 2.31+) — segera hadir",
       "Android 7.0 Nougat atau lebih baru — segera hadir",
       "iOS 14.0 atau lebih baru — segera hadir",
@@ -389,7 +416,7 @@
     "quickSearch": "Pencarian Cepat"
   },
   "checkout": {
-    "signInToSubscribe": "Masuk untuk berlangganan",
+    "signInToSubscribe": "Berlangganan",
     "error": "Tidak dapat memulai checkout. Silakan coba lagi.",
     "unavailable": "Paket ini belum bisa dibeli online — hubungi sales@ozpos.my.id untuk berlangganan."
   },
@@ -555,6 +582,36 @@
         "Perputaran meja lebih cepat dengan dapur yang tetap sinkron.",
         "Loyalitas bawaan yang meningkatkan kunjungan berulang.",
         "Pembayaran native QRIS yang sudah dipakai pelanggan Anda."
+      ]
+    },
+    "warehouse": {
+      "label": "Gudang & Stok",
+      "title": "Sinkronisasi Multi-Gudang & Manajemen Stok",
+      "tagline": "Manajemen gudang murni, transfer stok, pelacakan barcode, dan sinkronisasi multi-fasilitas — tanpa beban sistem POS.",
+      "tierAnchor": "pro",
+      "ctaPrimary": "Lihat paket Pro",
+      "features": [
+        {
+          "title": "Sinkronisasi Multi-Fasilitas",
+          "description": "Hubungkan pusat logistik, gudang transit, dan depo regional dalam satu topologi live."
+        },
+        {
+          "title": "Transfer & Manifest Masuk",
+          "description": "Buat order transfer, kirim batch manifest, dan verifikasi stok masuk dengan pemindaian barcode."
+        },
+        {
+          "title": "Gudang Pihak Ketiga (3PL)",
+          "description": "Workspace inventaris khusus untuk penyedia logistik yang menyimpan dan memilih stok atas nama klien."
+        },
+        {
+          "title": "Inti Offline-First",
+          "description": "Lakukan stok opname, audit, dan penerimaan tanpa internet — tidak ada data hilang saat jaringan mati."
+        }
+      ],
+      "benefits": [
+        "Mode pergudangan khusus untuk pusat pemenuhan pesanan dan depo stok.",
+        "Jejak audit lengkap untuk setiap penyesuaian rak, pengiriman, dan penerimaan.",
+        "Keandalan SQLite lokal — tetap scan palet meski di gudang berdinding baja tanpa sinyal."
       ]
     }
   },

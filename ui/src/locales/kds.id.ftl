@@ -248,4 +248,20 @@ kds-settings-reset-colours = Atur ulang warna
 kds-settings-card-animations = Animasi kartu
 kds-settings-card-animations-caption = Efek muncul dan susun ulang
 
+# ── Hamburger panel (lihat kds.ftl) ──
+kds-panel-section-display = Tampilan
+kds-panel-section-behaviour = Perilaku
+kds-theme-dark-aria = Tema gelap
+kds-theme-light-aria = Tema terang
+kds-zoom-out-aria = Perkecil
+kds-zoom-in-aria = Perbesar
+kds-zoom-reset-title = Setel ulang ke 100%
+kds-zoom-reset-aria = Setel ulang zoom ke 100%
+kds-cols-decrease-aria = Lebih sedikit kolom
+kds-cols-increase-aria = Lebih banyak kolom
+kds-cols-reset-title = Setel ulang ke otomatis
+kds-cols-reset-aria = Setel ulang kolom ke otomatis
+kds-cols-auto = Otomatis
+kds-color-picker-aria = Pemilih warna { $name }
+
 # ── Kiosk (remaining) ──

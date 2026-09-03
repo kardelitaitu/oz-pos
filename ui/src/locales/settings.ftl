@@ -18,6 +18,11 @@ setup-progress-aria = Setup progress
 setup-preset-question = What kind of store are you running?
 setup-preset-desc = Choose a preset to get started quickly, or customise every feature later.
 setup-preset-group-aria = Store preset
+# Accessible name for a feature toggle row. The code used to write
+# `Toggle ${f.label}`, which concatenated the English word "Toggle" with the
+# *unlocalized* array entry, so a screen reader announced "Toggle Inventory
+# Tracking" to an Indonesian user even though the visible label was correct.
+setup-feature-toggle-aria = Toggle { $name }
 
 setup-preset-simple-retail = Simple Retail
 setup-preset-simple-retail-desc = Barcode scan, cart, cash/card/QR, staff PIN, receipt printer
@@ -848,3 +853,41 @@ addon-storage-name = Extra Cloud Storage
 addon-storage-desc = Increase your cloud sync storage quota for larger product catalogs and longer history.
 addon-hal-name = Custom HAL Drivers
 addon-hal-desc = Load and use custom hardware abstraction layer drivers for specialized POS peripherals.
+
+// ── Local API (Settings → Local API) ──────────────────────────────
+settings-nav-local-api = Local API
+settings-section-local-api = Local API
+settings-local-api-intro = Run your own scripts against this register over HTTP. The server listens only on this machine (127.0.0.1) and is off by default.
+settings-local-api-enabled = Enable Local API
+settings-local-api-port = Port
+settings-local-api-port-apply = Apply
+settings-local-api-port-invalid = Port must be between 1024 and 65535.
+settings-local-api-port-applied = Port updated.
+settings-local-api-port-failed = Could not change the port.
+settings-local-api-store = Served store
+settings-local-api-store-primary = primary
+settings-local-api-store-hint = Scripts see exactly one store's data. Switching restarts the server against the selected store's database.
+settings-local-api-store-changed = Now serving the selected store.
+settings-local-api-store-failed = Could not switch the served store.
+settings-local-api-start-failed = Could not start the local API server.
+settings-local-api-toggle-failed = Could not change the Local API setting.
+settings-local-api-stopped = The local API is stopped. Enable it to start a server on this machine; scripts then use the base URL shown here.
+settings-local-api-token-label = Script name
+settings-local-api-token-label-placeholder =
+    .placeholder = my-integration
+settings-local-api-generate = Generate Token
+settings-local-api-token = API token
+settings-local-api-token-hint = The token grants read access to all local data for 30 days. Master-data writes additionally require the operator key — see docs/guides/EXTENDING.md.
+settings-local-api-token-expires = Expires { $expires }
+settings-local-api-copy-url = Copy URL
+settings-local-api-copy-token = Copy
+settings-local-api-url-copied = Base URL copied.
+settings-local-api-token-copied = Token copied.
+settings-local-api-copy-failed = Copy failed — select the text manually.
+settings-local-api-mint-failed = Could not generate a token.
+settings-local-api-rotate = Rotate secret
+settings-local-api-rotate-warning = Rotating invalidates every minted token immediately and changes the operator key. Scripts will need freshly minted tokens.
+settings-local-api-rotate-confirm = Confirm rotate
+settings-local-api-rotate-cancel = Cancel
+settings-local-api-rotate-done = Signing secret rotated — mint a new token for your scripts.
+settings-local-api-rotate-failed = Could not rotate the signing secret.

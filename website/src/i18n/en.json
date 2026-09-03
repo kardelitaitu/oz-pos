@@ -5,6 +5,25 @@
   "nav": {
     "home": "Home",
     "features": "Features",
+    "solutions": "Solutions",
+    "solutionsByIndustry": "By Industry",
+    "solutionsBySystem": "System & Core",
+    "solutionRestaurants": "Restaurants",
+    "solutionRestaurantsDesc": "Table management, bills & dining",
+    "solutionCafes": "Cafes & Coffee",
+    "solutionCafesDesc": "Fast counter POS & barista tickets",
+    "solutionRetail": "Retail & Stores",
+    "solutionRetailDesc": "Fast barcode scan & cash register",
+    "solutionWarung": "Warung & Kiosks",
+    "solutionWarungDesc": "Compact lightweight offline POS",
+    "solutionKitchens": "Kitchen Display (KDS)",
+    "solutionKitchensDesc": "Live kitchen order ticket routing",
+    "solutionWarehouses": "Warehouses & Stock",
+    "solutionWarehousesDesc": "Inventory transfers & multi-branch",
+    "solutionAudits": "Audits & Security",
+    "solutionAuditsDesc": "Tamper-evident rusqlite journal",
+    "solutionLogging": "Logging & Telemetry",
+    "solutionLoggingDesc": "Local crash reports & activity trail",
     "pricing": "Pricing",
     "download": "Download",
     "docs": "Docs",
@@ -101,10 +120,22 @@
     "title": "Enterprise-Grade POS, Without the Enterprise Price",
     "subtitle": "Corporate-grade POS accessible to everyone. Keep selling through outages with a blazing-fast offline-first core, with zero hidden per-feature fees.",
     "ctaPrimary": "Download free",
-    "ctaSecondary": "See Pricing"
+    "ctaSecondary": "See Pricing",
+    "carousel": {
+      "restaurant": "Restaurant",
+      "retail": "Retail",
+      "kitchen": "Kitchen",
+      "warehouse": "Warehouse",
+      "topology": "Topology",
+      "restaurantDesc": "Order, pay, and manage tables",
+      "retailDesc": "Ring up sales with product search and barcode scan",
+      "kitchenDesc": "KDS order queue for the kitchen line",
+      "warehouseDesc": "Stock, transfers, and purchase orders",
+      "topologyDesc": "Visual editor for stores, terminals, and warehouses",
+      "screenshotComingSoon": "Screenshot coming soon"
+    }
   },
   "techStack": {
-    "title": "Built on a modern tech stack",
     "subtitle": "Reliable open-source foundations, battle-tested payments, and security-first tooling."
   },
   "features": {
@@ -151,7 +182,7 @@
     "comparisonTitle": "OZ-POS vs Conventional Cloud POS",
     "comparisonSubtitle": "See why true offline-first architecture and transparent all-inclusive features set OZ-POS apart.",
     "comparisonOzPos": "OZ-POS",
-    "comparisonOthers": "Conventional Cloud POS",
+    "comparisonOthers": "Other POS",
     "comparisonHeaderFeature": "Features & Capabilities",
     "comparisonRows": [
       {
@@ -198,10 +229,6 @@
       }
     ]
   },
-  "screenshots": {
-    "title": "One workspace, every station",
-    "caption": "Desktop and tablet — the same offline-first core, purpose-built screens."
-  },
   "pricingPreview": {
     "title": "Simple pricing",
     "subtitle": "Start free forever. Upgrade when you're ready.",
@@ -209,7 +236,7 @@
   },
   "ctaBanner": {
     "title": "Start free today",
-    "subtitle": "No credit card, no signup. Download and sell.",
+    "subtitle": "No credit card required. Download and sell.",
     "cta": "Download OZ-POS"
   },
   "pricingPage": {
@@ -219,7 +246,7 @@
     "trust2": "Cancel anytime",
     "note": "One-time (perpetual) licensing is not available yet — see the roadmap.",
     "comparison": "Feature comparison across plans",
-    "mostPopular": "⭐ Most Popular",
+    "mostPopular": "Popular",
     "billing": {
       "label": "Billing period",
       "monthly": "Monthly",
@@ -230,14 +257,14 @@
   },
   "download": {
     "title": "Download OZ-POS",
-    "subtitle": "Version 0.0.34 — free forever, no signup required.",
+    "subtitle": "Version 0.0.35 — free forever, no signup required.",
     "version": "Current version",
-    "versionValue": "0.0.34",
+    "versionValue": "0.0.35",
     "platformsTitle": "Choose your platform",
     "requirementsTitle": "System requirements",
     "requirements": [
       "Windows 10 / 11 (64-bit) — available now",
-      "macOS 10.13 or newer — coming soon",
+      "macOS 12+ — coming soon",
       "Linux (x86_64, glibc 2.31+) — coming soon",
       "Android 7.0 Nougat or newer — coming soon",
       "iOS 14.0 or newer — coming soon",
@@ -389,7 +416,7 @@
     "quickSearch": "Quick Search"
   },
   "checkout": {
-    "signInToSubscribe": "Sign in to subscribe",
+    "signInToSubscribe": "Subscribe",
     "error": "Couldn't start the checkout. Please try again.",
     "unavailable": "This plan isn't available to purchase online yet — contact sales@ozpos.my.id to subscribe."
   },
@@ -555,6 +582,36 @@
         "Faster table turns with a kitchen that stays in sync.",
         "Built-in loyalty that increases repeat visits.",
         "QRIS-native payments your customers already use."
+      ]
+    },
+    "warehouse": {
+      "label": "Warehouses & Stock",
+      "title": "Multi-Warehouse Sync & Stock Management",
+      "tagline": "Pure warehousing, stock transfers, barcode tracking, and multi-facility sync — without POS overhead.",
+      "tierAnchor": "pro",
+      "ctaPrimary": "See the Pro plan",
+      "features": [
+        {
+          "title": "Multi-Facility Sync",
+          "description": "Connect central hubs, transit depots, and regional distribution centers in one live topology."
+        },
+        {
+          "title": "Transfers & Inbound Manifests",
+          "description": "Issue transfer orders, dispatch manifest batches, and verify received stock with barcode scan verification."
+        },
+        {
+          "title": "3rd-Party Warehousing (3PL)",
+          "description": "Dedicated stock workspaces for logistics providers storing and picking inventory on behalf of clients."
+        },
+        {
+          "title": "Offline-First Core",
+          "description": "Perform stocktakes, audits, and manifests without internet — zero dropped records during network blackouts."
+        }
+      ],
+      "benefits": [
+        "Dedicated warehousing mode for fulfillment centers and stock depots.",
+        "Full audit trail for every bin adjustment, dispatch, and receipt.",
+        "Local SQLite reliability — keep scanning pallets even in steel warehouses with dead zones."
       ]
     }
   },

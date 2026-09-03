@@ -33,6 +33,10 @@ mod image_push;
 /// to all connected terminals in the same store. Terminal identification
 /// happens at startup via device_id lookup (see state.rs).
 pub mod lan_server;
+/// Loopback local REST API server (embedded `oz-api` router) — lets
+/// merchants run their own scripts against this register. Off by
+/// default; enabled via Settings → Local API.
+pub mod local_api;
 /// Global application state (DB, kernel, sync daemon, registry).
 pub mod state;
 
@@ -444,6 +448,63 @@ pub fn run() {
                 }
             }
 
+            // ── Local REST API server (loopback, default off) ─────────
+            // Auto-start when the merchant enabled it in Settings
+            // (`local_api.enabled = "1"`). A bind failure (port taken)
+            // is logged and skipped — the Settings toggle retries on
+            // demand. Loopback-only: LAN exposure is out of scope for
+            // this surface (docs/guides/EXTENDING.md §10).
+            {
+                let enabled_at_boot = {
+                    let state = app.state::<AppState>();
+                    let db_guard = state.db.blocking_lock();
+                    crate::local_api::is_enabled(&db_guard)
+                };
+                if enabled_at_boot {
+                    let app_handle = app.handle().clone();
+                    platform_startup::spawn_daemon("local API server", async move {
+                        let state = app_handle.state::<AppState>();
+                        // Serialize with the Settings toggles (review
+                        // HIGH-2) and re-read the setting UNDER the op
+                        // lock: a disable that landed while we queued
+                        // must win, and a concurrent enable that already
+                        // bound must not be raced.
+                        let _op = state.local_api_op.lock().await;
+                        if state.local_api.lock().await.is_some() {
+                            return; // the toggle path won the race
+                        }
+                        let still_enabled = {
+                            let db = state.db.lock().await;
+                            crate::local_api::is_enabled(&db)
+                        };
+                        if !still_enabled {
+                            return; // disabled while we queued for the lock
+                        }
+                        let image_dir = match app_handle.path().app_cache_dir() {
+                            Ok(dir) => dir.join("images"),
+                            Err(e) => {
+                                tracing::warn!(
+                                    error = %e,
+                                    "local API auto-start: cannot resolve app cache dir"
+                                );
+                                return;
+                            }
+                        };
+                        // Same code path as the Settings toggle (secret
+                        // generation, store resolution, bind, slot
+                        // store) — no parallel logic to drift apart.
+                        if let Err(e) =
+                            crate::commands::local_api::start_and_store(&state, image_dir, 0).await
+                        {
+                            tracing::warn!(
+                                error = %e,
+                                "local API auto-start failed — enable it again in Settings"
+                            );
+                        }
+                    });
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -477,6 +538,12 @@ pub fn run() {
             commands::loyalty::update_loyalty_tier_scoped,
             commands::loyalty::get_points_value_scoped,
             commands::loyalty::get_or_create_loyalty_account_scoped,
+            commands::local_api::local_api_status_scoped,
+            commands::local_api::local_api_set_enabled_scoped,
+            commands::local_api::local_api_set_port_scoped,
+            commands::local_api::local_api_set_store_scoped,
+            commands::local_api::local_api_rotate_secret_scoped,
+            commands::local_api::local_api_mint_token_scoped,
             commands::data::get_backup_status,
             commands::data::get_backup_status_scoped,
             commands::data::create_backup,

@@ -30,12 +30,12 @@ const path = !rawPath || rawPath.replace(/^\/+/, '').startsWith('404') ? '/' : r
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!-- Runtime backend URL: served by the Worker from [vars] so a backend
          move needs no rebuild (see worker.ts); absent locally → falls back
-         to the build-time PUBLIC_LICENSE_API_URL. -->
-    <script is:inline src="/__oz/runtime-config.js"></script>
-    <!-- Inter variable font (design language primary typeface) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" />
+         to the build-time PUBLIC_LICENSE_API_URL. Deferred: it only feeds
+         hydration-time config reads, so it must not sit in the critical
+         path ahead of the LCP resources. -->
+    <script is:inline src="/__oz/runtime-config.js" defer></script>
+    <!-- Inter + JetBrains Mono are self-hosted (fontsource, bundled into
+         global.css) — no third-party font origin, no blocking font CSS. -->
 <!-- Apply the stored theme before first paint and on SPA swaps. -->
     <script is:inline>
       (() => {
@@ -50,6 +50,10 @@ const path = !rawPath || rawPath.replace(/^\/+/, '').startsWith('404') ? '/' : r
     <meta name="description" content={desc} />
     <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
     <link rel="sitemap" href="/sitemap-index.xml" />
+    <!-- Preconnect: Cloudflare Web Analytics beacon (auto-injected by the edge).
+         Establishes TLS + DNS early so the RUM request at ~300ms doesn't
+         block the critical path while waiting for a cold connection. -->
+    <link rel="preconnect" href="https://static.cloudflareinsights.com" crossorigin />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     {locales.map((code) => (
       <link rel="alternate" hreflang={code} href={getAbsoluteLocaleUrl(code, path)} />

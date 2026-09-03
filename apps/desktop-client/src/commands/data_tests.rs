@@ -1,5 +1,21 @@
 use super::*;
 
+// ── Settings export redaction (review MED-2) ────────────────────────
+
+#[test]
+fn export_drops_secret_and_managed_keys() {
+    let rows = vec![
+        ("store.name".into(), "Toko OZ".into()),
+        ("local_api.secret".into(), "deadbeef".into()),
+        ("local_api.enabled".into(), "1".into()),
+        ("smtp_config".into(), r#"{"password":"hunter2"}"#.into()),
+        ("lan_server.psk".into(), "psk".into()),
+    ];
+    let out = exportable_settings_rows(rows);
+    let keys: Vec<&str> = out.iter().map(|v| v["key"].as_str().unwrap()).collect();
+    assert_eq!(keys, ["store.name"], "only portable keys may be exported");
+}
+
 // ── BackupStatus ────────────────────────────────────────────────────
 
 #[test]

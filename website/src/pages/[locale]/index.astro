@@ -22,10 +22,6 @@ const features = (dict(locale).features as { items: { title: string; description
 const pricing = pricingFor(locale).slice(0, 3); // free, plus, pro
 const download = getRelativeLocaleUrl(locale, 'download');
 const pricingHref = getRelativeLocaleUrl(locale, 'pricing');
-// Vertical entry points (subscription-tiers.md §5) — customers identify as
-// cafe owners / minimarket operators / warung owners, not tier names.
-const verticalKeys = ['kafe', 'minimarket', 'warung', 'restoran'] as const;
-const verticals = dict(locale).vertical as Record<(typeof verticalKeys)[number], { label: string }>;
 // Tech-stack logos shown after the features grid.
 // Tech-stack logos shown after the features grid.
 // Tightened aspect ratios (width/height) and optical heights so all logos
@@ -42,22 +38,6 @@ const techStack = [
 
 <Base title={pageTitle}>
   <Hero />
-
-  <!-- For your business (vertical entry points) -->
-  <section class="mx-auto max-w-6xl px-4 pb-4" aria-label={t(locale, 'vertical.otherTitle')}>
-    <div class="flex flex-wrap items-center justify-center gap-3">
-      {
-        verticalKeys.map((key) => (
-          <a
-            href={getRelativeLocaleUrl(locale, `untuk-${key}`)}
-            class="rounded-full border border-ink/10 px-4 py-2 text-sm text-muted transition hover:border-accent hover:text-ink"
-          >
-            {verticals[key].label}
-          </a>
-        ))
-      }
-    </div>
-  </section>
 
   <!-- Features -->
   <section data-reveal class="mx-auto max-w-6xl px-4 py-16" aria-label={t(locale, 'features.title')}>
@@ -77,10 +57,18 @@ const techStack = [
     </div>
 
     <!-- Tech stack logos inside features area -->
-    <div class="mt-12" data-i18n-key={t(locale, 'techStack.title')}>
-      <h3 class="text-center text-lg font-semibold">{t(locale, 'techStack.title')}</h3>
-      <p class="mt-1 text-center text-sm text-muted">{t(locale, 'techStack.subtitle')}</p>
-      <div class="mt-6 flex flex-wrap items-center justify-center gap-x-12 gap-y-6">
+    <div class="mt-12">
+      <p class="text-center text-sm text-muted">{t(locale, 'techStack.subtitle')}</p>
+      <!-- Locked to 6x1 at lg and up, 3x2 below. The breakpoint is arithmetic,
+           not taste: each logo's width is height * ratio from `techStack`
+           above, so the six sum to 621px and need 821px with 2.5rem gaps. The
+           section is max-w-6xl minus px-4, giving 992px at lg (fits) but only
+           736px at md (overflows by 85px) — hence lg, not md.
+           Tracks are max-content rather than grid-cols-6 because PostgreSQL is
+           180px wide while six equal columns of the 1120px container are 153px
+           each, which would squeeze it; max-content sizes each column to its
+           own logo and lg:justify-center centres the group. -->
+      <div class="mt-6 grid grid-cols-3 items-center justify-items-center gap-x-6 gap-y-6 lg:grid-cols-[repeat(6,max-content)] lg:justify-center lg:gap-x-10">
         {techStack.map((logo) => (
           <span
             class="opacity-70 transition-opacity duration-200 hover:opacity-100 flex-shrink-0"
@@ -104,82 +92,6 @@ const techStack = [
             role="img"
           />
         ))}
-      </div>
-    </div>
-  </section>
-
-  <!-- Screenshot mock (placeholder until real product shots) -->
-  <section data-reveal class="mx-auto max-w-6xl px-4 py-8" aria-label={t(locale, 'screenshots.title')}>
-    <div class="text-center">
-      <h2 class="text-3xl font-bold">{t(locale, 'screenshots.title')}</h2>
-      <p class="mt-2 text-muted">{t(locale, 'screenshots.caption')}</p>
-    </div>
-    <div
-      class="mt-10 overflow-hidden rounded-xl border border-ink/10 bg-gradient-to-br from-[#f5f5f5] via-[#f0f0f0] to-[#e8e8e8] shadow-2xl shadow-black/40"
-      aria-hidden="true"
-    >
-      <!-- Window chrome -->
-      <div class="flex items-center gap-1.5 border-b border-ink/10 bg-white/60 px-4 py-3">
-        <span class="h-3 w-3 rounded-full bg-blue-500"></span>
-        <span class="h-3 w-3 rounded-full bg-ink/15"></span>
-        <span class="h-3 w-3 rounded-full bg-ink/15"></span>
-        <span class="ml-4 rounded-md bg-white/70 px-3 py-1 text-[10px] text-muted">Kategori · Menu · Pesanan</span>
-      </div>
-      <div class="grid grid-cols-5 gap-4 p-6">
-        <!-- Product grid -->
-        <div class="col-span-3 space-y-3">
-          <div class="grid grid-cols-2 gap-3">
-            {[
-              ['Kopi Tubruk', '18.000'],
-              ['Nasi Goreng', '25.000'],
-              ['Es Teh Manis', '8.000'],
-              ['Mie Goreng', '23.000'],
-            ].map(([name, price]) => (
-              <div class="rounded-lg border border-ink/8 bg-white/80 p-4 shadow-sm">
-                <p class="text-xs font-medium text-ink/90">{name}</p>
-                <p class="mt-1 text-[10px] text-accent">Rp {price}</p>
-              </div>
-            ))}
-          </div>
-          <div class="flex gap-3">
-            {['Kopi', 'Makanan', 'Minuman', 'Camilan'].map((cat, i) => (
-              <span
-                class:list={[
-                  'rounded-full px-3 py-1 text-[10px] font-medium',
-                  i === 0 ? 'bg-accent/25 text-accent border border-accent/30' : 'bg-white/60 text-ink/60 border border-ink/8',
-                ]}
-              >
-                {cat}
-              </span>
-            ))}
-          </div>
-        </div>
-        <!-- Cart -->
-        <div class="col-span-2 space-y-3 rounded-lg border border-white/40 bg-white/35 p-4 backdrop-blur-sm">
-          <div class="flex justify-between text-[10px] text-ink/70">
-            <span>Pesanan #1042</span>
-            <span>Kasir: Dewi</span>
-          </div>
-          <div class="space-y-2 border-b border-ink/10 pb-3">
-            {[
-              ['Kopi Tubruk ×2', '36.000'],
-              ['Nasi Goreng ×1', '25.000'],
-              ['Es Teh Manis ×1', '8.000'],
-            ].map(([item, price]) => (
-              <div class="flex justify-between text-[11px]">
-                <span class="text-ink/85">{item}</span>
-                <span class="text-ink/60">Rp {price}</span>
-              </div>
-            ))}
-          </div>
-          <div class="flex justify-between text-sm font-semibold">
-            <span class="text-ink/90">Total</span>
-            <span class="text-accent">Rp 69.000</span>
-          </div>
-          <div class="mt-1 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 py-3 text-center text-xs font-bold text-white shadow-md">
-            Bayar · QRIS
-          </div>
-        </div>
       </div>
     </div>
   </section>

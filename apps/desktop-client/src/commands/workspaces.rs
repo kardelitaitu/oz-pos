@@ -210,6 +210,11 @@ pub async fn list_workspaces_scoped(
             tracing::warn!("no subscription found for tenant 'default', defaulting to Free tier");
             TenantSubscription::bootstrap_free()
         });
+        // Verify the RSA signature before honoring the row's tier/allowed-
+        // types — a tampered row (forged tier, invalid signature) must fail
+        // closed, matching create_session (round 6) and the other 13
+        // subscription-trusting call sites.
+        sub.verify_signature()?;
         let assignment = Store::new(&global_db).assignment_for_user(&session.user_id)?;
         (sub, assignment)
     };
@@ -562,9 +567,25 @@ pub async fn list_workspaces_for_store_scoped(
     // The user's assignment lives in the GLOBAL identity DB (ADR #35 D5 / spec
     // 0048) — load it before opening the requested store so the listing can be
     // scope-filtered below.
-    let assignment = {
+    // ADR #5: the tenant subscription is also loaded from the GLOBAL DB first
+    // (with clock-rollback validation) so this listing applies the same tier
+    // entitlement filter as `list_workspaces_scoped` — a Free-tier session must
+    // not enumerate tier-disallowed workspace types (e.g. kds) through the
+    // terminal-management screen.
+    let (assignment, sub) = {
         let global_db = state.db.lock().await;
-        Store::new(&global_db).assignment_for_user(&session.user_id)?
+        TenantSubscription::validate_clock_rollback(&global_db)?;
+        let sub = TenantSubscription::load(&global_db, "default")?.unwrap_or_else(|| {
+            tracing::warn!("no subscription found for tenant 'default', defaulting to Free tier");
+            TenantSubscription::bootstrap_free()
+        });
+        // Verify the RSA signature before honoring the row's tier/allowed-
+        // types — a tampered row (forged tier, invalid signature) must fail
+        // closed, matching create_session (round 6) and the other 13
+        // subscription-trusting call sites.
+        sub.verify_signature()?;
+        let assignment = Store::new(&global_db).assignment_for_user(&session.user_id)?;
+        (assignment, sub)
     };
     let conn = state
         .db_manager
@@ -574,7 +595,12 @@ pub async fn list_workspaces_for_store_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    let rows = store.list_workspaces(&session.role_id, Some(&session.user_id), &store_id)?;
+    let rows = store.list_workspaces_with_entitlement(
+        &session.role_id,
+        Some(&session.user_id),
+        &store_id,
+        &sub,
+    )?;
     drop(db);
     // Scope-filter through the user's assignment: a scoped member listing an
     // explicitly named store outside their branch scope, or a workspace type

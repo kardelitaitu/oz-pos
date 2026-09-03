@@ -4,6 +4,7 @@ import { useOptionalTheme } from '@/frontend/shell/ThemeProvider';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { DisplayDensity, KdsSettings } from '@/features/kds/KdsSettingsPanel';
 import { useKdsCardColors } from '@/features/kds/KdsCardColorsContext';
+import { requiredLocalized } from '@/frontend/shared';
 
 interface KdsHamburgerPanelProps {
   settings: KdsSettings;
@@ -93,7 +94,7 @@ export function KdsHamburgerPanel({
         ref={btnRef}
         className="kds-btn kds-btn--icon"
         onClick={() => setOpen((p) => !p)}
-        aria-label={l10n.getString('kds-settings-aria') ?? 'Settings'}
+        aria-label={requiredLocalized(l10n, 'kds-settings-aria')}
         aria-haspopup="true"
         aria-expanded={open}
         data-testid="kds-topbar-settings"
@@ -109,12 +110,12 @@ export function KdsHamburgerPanel({
           className="kds-hamburger-panel"
           role="dialog"
           aria-modal="true"
-          aria-label={l10n.getString('kds-settings-aria') ?? 'Settings'}
+          aria-label={requiredLocalized(l10n, 'kds-settings-aria')}
         >
           <div className="kds-panel-body">
             {/* ── Display ──────────────────────────────────── */}
             <div className="kds-panel-section">
-              <h3>Display</h3>
+              <Localized id="kds-panel-section-display"><h3>Display</h3></Localized>
               <div className="kds-setting-card">
                 {themeCtx && (
                   <div className="kds-setting-row">
@@ -122,15 +123,15 @@ export function KdsHamburgerPanel({
                     <button
                       className="kds-theme-toggle"
                       onClick={() => themeCtx.setTheme(themeCtx.theme === 'dark' ? 'light' : 'dark')}
-                      title={l10n.getString('kds-settings-theme-toggle-aria') ?? 'Toggle light/dark'}
-                      aria-label={l10n.getString('kds-settings-theme-toggle-aria') ?? 'Toggle light or dark theme'}
+                      title={requiredLocalized(l10n, 'kds-settings-theme-toggle-aria')}
+                      aria-label={requiredLocalized(l10n, 'kds-settings-theme-toggle-aria')}
                       data-testid="kds-settings-theme-toggle"
                     >
                       <span className="kds-theme-indicator" style={{ width: themeCtx.theme === 'dark' ? '33px' : '33px', left: themeCtx.theme === 'dark' ? '3px' : '36px' }} />
-                      <span className={`kds-theme-option${themeCtx.theme === 'dark' ? ' on' : ''}`} aria-label="Dark theme">
+                      <span className={`kds-theme-option${themeCtx.theme === 'dark' ? ' on' : ''}`} aria-label={requiredLocalized(l10n, 'kds-theme-dark-aria')}>
                         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z" /></svg>
                       </span>
-                      <span className={`kds-theme-option${themeCtx.theme === 'light' ? ' on' : ''}`} aria-label="Light theme">
+                      <span className={`kds-theme-option${themeCtx.theme === 'light' ? ' on' : ''}`} aria-label={requiredLocalized(l10n, 'kds-theme-light-aria')}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></svg>
                       </span>
                     </button>
@@ -141,9 +142,9 @@ export function KdsHamburgerPanel({
                   <div className="kds-setting-row">
                     <span className="kds-setting-label"><Localized id="kds-settings-display-scale">Display scale</Localized></span>
                     <div className="kds-zoom-row">
-                      <button className="kds-btn kds-btn--muted kds-zoom-btn" onClick={() => onChangePageZoom(Math.max(50, pageZoom - 10))} aria-label="Zoom out" data-testid="kds-settings-zoom-out">−</button>
-                      <button className="kds-btn kds-btn--muted kds-zoom-value" onClick={() => onChangePageZoom(100)} title="Reset to 100%" aria-label="Reset zoom to 100%" data-testid="kds-settings-zoom-value">{pageZoom}%</button>
-                      <button className="kds-btn kds-btn--muted kds-zoom-btn" onClick={() => onChangePageZoom(Math.min(200, pageZoom + 10))} aria-label="Zoom in" data-testid="kds-settings-zoom-in">+</button>
+                      <button className="kds-btn kds-btn--muted kds-zoom-btn" onClick={() => onChangePageZoom(Math.max(50, pageZoom - 10))} aria-label={requiredLocalized(l10n, 'kds-zoom-out-aria')} data-testid="kds-settings-zoom-out">−</button>
+                      <button className="kds-btn kds-btn--muted kds-zoom-value" onClick={() => onChangePageZoom(100)} title={requiredLocalized(l10n, 'kds-zoom-reset-title')} aria-label={requiredLocalized(l10n, 'kds-zoom-reset-aria')} data-testid="kds-settings-zoom-value">{pageZoom}%</button>
+                      <button className="kds-btn kds-btn--muted kds-zoom-btn" onClick={() => onChangePageZoom(Math.min(200, pageZoom + 10))} aria-label={requiredLocalized(l10n, 'kds-zoom-in-aria')} data-testid="kds-settings-zoom-in">+</button>
                     </div>
                   </div>
                 )}
@@ -151,9 +152,9 @@ export function KdsHamburgerPanel({
                   <div className="kds-setting-row">
                     <span className="kds-setting-label"><Localized id="kds-settings-columns">Columns</Localized></span>
                     <div className="kds-zoom-row">
-                      <button className="kds-btn kds-btn--muted kds-zoom-btn" onClick={() => onChangeColumns(Math.max(1, columns - 1))} aria-label="Fewer columns" data-testid="kds-settings-cols-out">−</button>
-                      <button className="kds-btn kds-btn--muted kds-zoom-value" onClick={() => onChangeColumns(0)} title="Reset to auto" aria-label="Reset columns to auto" data-testid="kds-settings-cols-value">{columns === 0 ? 'Auto' : columns}</button>
-                      <button className="kds-btn kds-btn--muted kds-zoom-btn" onClick={() => onChangeColumns(columns + 1)} aria-label="More columns" data-testid="kds-settings-cols-in">+</button>
+                      <button className="kds-btn kds-btn--muted kds-zoom-btn" onClick={() => onChangeColumns(Math.max(1, columns - 1))} aria-label={requiredLocalized(l10n, 'kds-cols-decrease-aria')} data-testid="kds-settings-cols-out">−</button>
+                      <button className="kds-btn kds-btn--muted kds-zoom-value" onClick={() => onChangeColumns(0)} title={requiredLocalized(l10n, 'kds-cols-reset-title')} aria-label={requiredLocalized(l10n, 'kds-cols-reset-aria')} data-testid="kds-settings-cols-value">{columns === 0 ? requiredLocalized(l10n, 'kds-cols-auto') : columns}</button>
+                      <button className="kds-btn kds-btn--muted kds-zoom-btn" onClick={() => onChangeColumns(columns + 1)} aria-label={requiredLocalized(l10n, 'kds-cols-increase-aria')} data-testid="kds-settings-cols-in">+</button>
                     </div>
                   </div>
                 )}
@@ -183,7 +184,7 @@ export function KdsHamburgerPanel({
                     role="switch"
                     aria-checked={showOrderId}
                     onClick={() => onToggleOrderId(!showOrderId)}
-                    aria-label={l10n.getString('kds-layout-order-id') ?? 'Order ID'}
+                    aria-label={requiredLocalized(l10n, 'kds-layout-order-id')}
                   />
                 </div>
 
@@ -197,7 +198,7 @@ export function KdsHamburgerPanel({
                     role="switch"
                     aria-checked={showTableNumber}
                     onClick={() => onToggleTableNumber(!showTableNumber)}
-                    aria-label={l10n.getString('kds-layout-table-number') ?? 'Table Number'}
+                    aria-label={requiredLocalized(l10n, 'kds-layout-table-number')}
                   />
                 </div>
               </div>
@@ -226,7 +227,7 @@ export function KdsHamburgerPanel({
                         className="kds-native"
                         value={cardColors[key]}
                         onChange={(e) => updateColor(key, e.target.value)}
-                        aria-label={`${labelId} colour picker`}
+                        aria-label={requiredLocalized(l10n, 'kds-color-picker-aria', { name: requiredLocalized(l10n, labelId) })}
                         data-testid={`kds-settings-colors-native-${key}`}
                       />
                       <input
@@ -254,7 +255,7 @@ export function KdsHamburgerPanel({
 
             {/* ── Behaviour ──────────────────────────────── */}
             <div className="kds-panel-section">
-              <h3>Behaviour</h3>
+              <Localized id="kds-panel-section-behaviour"><h3>Behaviour</h3></Localized>
               <div className="kds-setting-card">
                 <div className="kds-setting-row">
                   <div className="kds-setting-text">
@@ -266,7 +267,7 @@ export function KdsHamburgerPanel({
                     role="switch"
                     aria-checked={settings.soundEnabled}
                     onClick={() => onChangeSound(!settings.soundEnabled)}
-                    aria-label={l10n.getString('kds-settings-sound') ?? 'Sound'}
+                    aria-label={requiredLocalized(l10n, 'kds-settings-sound')}
                   />
                 </div>
 
@@ -280,7 +281,7 @@ export function KdsHamburgerPanel({
                     role="switch"
                     aria-checked={settings.autoAcknowledge}
                     onClick={() => onChangeAutoAcknowledge(!settings.autoAcknowledge)}
-                    aria-label={l10n.getString('kds-settings-auto-ack') ?? 'Auto-acknowledge'}
+                    aria-label={requiredLocalized(l10n, 'kds-settings-auto-ack')}
                   />
                 </div>
 
@@ -295,7 +296,7 @@ export function KdsHamburgerPanel({
                       role="switch"
                       aria-checked={cardAnimations}
                       onClick={() => onChangeCardAnimations(!cardAnimations)}
-                      aria-label={l10n.getString('kds-settings-card-animations') ?? 'Card animations'}
+                      aria-label={requiredLocalized(l10n, 'kds-settings-card-animations')}
                       data-testid="kds-settings-anim-toggle"
                     />
                   </div>
@@ -312,7 +313,7 @@ export function KdsHamburgerPanel({
                     step={1}
                     value={settings.yellowThresholdMin}
                     onChange={(e) => onChangeYellowThreshold(Number(e.target.value))}
-                    aria-label={l10n.getString('kds-settings-yellow-aria') ?? 'Yellow threshold minutes'}
+                    aria-label={requiredLocalized(l10n, 'kds-settings-yellow-aria')}
                   />
                 </div>
 
@@ -326,7 +327,7 @@ export function KdsHamburgerPanel({
                     step={1}
                     value={settings.redThresholdMin}
                     onChange={(e) => onChangeRedThreshold(Number(e.target.value))}
-                    aria-label={l10n.getString('kds-settings-red-aria') ?? 'Red threshold minutes'}
+                    aria-label={requiredLocalized(l10n, 'kds-settings-red-aria')}
                   />
                 </div>
               </div>
