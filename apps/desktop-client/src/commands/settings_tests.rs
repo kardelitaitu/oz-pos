@@ -516,3 +516,40 @@ fn hw_orphan_keys_match_platform_core_constants() {
     assert_eq!(expected[3], "scanner.device_id");
     assert_eq!(expected[4], "scanner.input_mode");
 }
+
+// ── Managed-key write guard (review MED-1) ─────────────────────
+
+#[test]
+fn run_set_setting_rejects_local_api_keys() {
+    let conn = fresh_conn();
+    for key in ["local_api.enabled", "local_api.port", "local_api.secret"] {
+        let err = run_set_setting(&conn, key, "1", "t-1").unwrap_err();
+        assert!(
+            matches!(&err, AppError::Invalid(m) if m.contains("Local API controls")),
+            "{key} must be rejected from the raw settings writer: {err:?}"
+        );
+        // And nothing was persisted.
+        assert!(
+            Settings::get(&conn, key).unwrap().is_none(),
+            "{key} must not reach the settings table"
+        );
+    }
+}
+
+#[test]
+fn run_set_setting_allows_unmanaged_keys() {
+    let conn = fresh_conn();
+    run_set_setting(&conn, "sync.enabled", "1", "t-1").unwrap();
+    // Prefix lookalikes are NOT managed keys.
+    run_set_setting(&conn, "local_api_x.enabled", "1", "t-1").unwrap();
+    run_set_setting(&conn, "my_local_api.enabled", "1", "t-1").unwrap();
+}
+
+#[test]
+fn is_managed_key_prefix_semantics() {
+    assert!(is_managed_key("local_api.enabled"));
+    assert!(is_managed_key("local_api.")); // even the bare prefix is owned
+    assert!(!is_managed_key("local_api"));
+    assert!(!is_managed_key("lan_server.psk")); // separate follow-up, not silently widened
+    assert!(!is_managed_key("sync.auth_token"));
+}

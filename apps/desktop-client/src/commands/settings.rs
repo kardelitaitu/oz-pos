@@ -969,6 +969,16 @@ pub async fn set_setting_scoped(
     Ok(())
 }
 
+/// Keys owned by a dedicated lifecycle manager and therefore rejected
+/// by the raw settings writers. `local_api.*` is managed exclusively by
+/// the Local API commands (`commands/local_api.rs`): writing
+/// `local_api.enabled` through the generic path would persist an intent
+/// the server never acts on (fail-open disable), and writing
+/// `local_api.secret` would silently invalidate every minted token.
+fn is_managed_key(key: &str) -> bool {
+    key.starts_with("local_api.")
+}
+
 /// Business logic for `set_setting` (extracted for testing).
 /// Uses `set_tracked` so every settings change writes a delta record
 /// (ADR #22).
@@ -978,6 +988,11 @@ fn run_set_setting(
     value: &str,
     terminal_id: &str,
 ) -> Result<(), AppError> {
+    if is_managed_key(key) {
+        return Err(AppError::Invalid(format!(
+            "{key} is managed by the Local API controls — use those"
+        )));
+    }
     Ok(Settings::set_tracked(conn, key, value, terminal_id)?)
 }
 
@@ -1014,6 +1029,15 @@ pub async fn set_settings_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+
+    // Managed keys are rejected batch-wide before any write so the
+    // all-or-nothing transaction semantics hold (same guard as
+    // `run_set_setting`; the batch loop below bypasses it by design).
+    if let Some(key) = entries.keys().find(|k| is_managed_key(k)) {
+        return Err(AppError::Invalid(format!(
+            "{key} is managed by the Local API controls — use those"
+        )));
+    }
 
     let terminal_id = state
         .terminal_id
