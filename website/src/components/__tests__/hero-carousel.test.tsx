@@ -153,28 +153,40 @@ describe('HeroCarousel', () => {
     await unmount();
   });
 
-  it('pauses auto-advance on hover and resumes after leave', async () => {
+  it('pauses auto-advance only when hovering the pill bar, not the stage', async () => {
     const { container, unmount } = await renderCarousel();
     const buttons = pillButtons(container);
     const stage = container.querySelector('[role="group"]') as HTMLElement;
+    // The pill bar is the flex sibling directly after the stage.
+    const pillBar = stage.nextElementSibling as HTMLElement;
 
-    // React normalizes onMouseEnter/onMouseLeave from native mouseover/out.
+    // Hovering the STAGE (the big mockup) must NOT pause auto-slide —
+    // a resting cursor on the hero would otherwise stall it forever.
     await act(async () => {
       stage.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-    });
-    // No advance while paused.
-    await act(async () => {
-      vi.advanceTimersByTime(3 * 5000);
-    });
-    expect(buttons[0].getAttribute('aria-current')).toBe('true');
-
-    await act(async () => {
-      stage.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: null }));
     });
     await act(async () => {
       vi.advanceTimersByTime(5000);
     });
     expect(buttons[1].getAttribute('aria-current')).toBe('true');
+
+    // Hovering the PILL BAR does pause it.
+    await act(async () => {
+      pillBar.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(3 * 5000);
+    });
+    expect(buttons[1].getAttribute('aria-current')).toBe('true');
+
+    // Leaving the pill bar resumes.
+    await act(async () => {
+      pillBar.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: null }));
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(buttons[2].getAttribute('aria-current')).toBe('true');
     await unmount();
   });
 

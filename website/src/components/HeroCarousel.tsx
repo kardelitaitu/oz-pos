@@ -127,7 +127,9 @@ export default function HeroCarousel({ labels, descriptions, comingSoon }: Props
   return (
     <div className="flex flex-wrap items-center justify-center gap-12">
       {/* Stage — the positioning container (no overflow-hidden, so slides
-          entering from off-screen are visible as they sweep across the page). */}
+          entering from off-screen are visible as they sweep across the page).
+          NOTE: no hover-pause here — the stage is huge and a resting cursor
+          would stall auto-slide forever. Pause lives on the pill bar only. */}
       <div
         ref={stageRef}
         role="group"
@@ -135,10 +137,6 @@ export default function HeroCarousel({ labels, descriptions, comingSoon }: Props
         aria-label="OZ-POS app screenshots"
         className="relative w-full max-w-[1280px]"
         style={{ aspectRatio: '1280 / 720' }}
-        onMouseEnter={handlePauseIn}
-        onMouseLeave={handlePauseOut}
-        onFocusCapture={handlePauseIn}
-        onBlurCapture={handlePauseOut}
       >
         {SLIDE_IDS.map((id, i) => {
           const isActive = i === index;
@@ -180,8 +178,14 @@ export default function HeroCarousel({ labels, descriptions, comingSoon }: Props
         })}
       </div>
 
-      {/* Pill slider — outside the mockup, centered beneath it. */}
-      <div className="relative flex rounded-full bg-black/35 p-1 backdrop-blur-sm">
+      {/* Pill slider — outside the mockup, centered beneath it.
+          Hovering the controls pauses auto-slide so a user aiming at a
+          pill isn't raced by the timer; leaving resumes. */}
+      <div
+        className="relative flex rounded-full bg-black/35 p-1 backdrop-blur-sm"
+        onMouseEnter={handlePauseIn}
+        onMouseLeave={handlePauseOut}
+      >
         <div
           className="absolute inset-y-1 left-1 rounded-full bg-white/90 shadow-sm"
           style={highlightStyle}
