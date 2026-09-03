@@ -19,9 +19,29 @@ empty list / deny. Red tests first (2 new):
 - `list_workspaces_staff_respects_user_store_access_out_of_scope_store_denied`
 - `verify_instance_access_staff_respects_user_store_access_out_of_scope_denied`
 
-**Commits:** pending (round-1 TDD commit).
+**Commits:** 8ca5af04 (round-1 TDD commit).
 **Test counts:** oz-core workspaces 61→63; desktop-client workspaces 14
 still green; clippy -D warnings clean; cargo fmt clean.
+
+## 2026-09-03 — TDD round 2: WorkspaceHome role-matrix gap pinning (ui)
+
+**Problem:** The role-gating change (37b7530c, f93879b7) shipped tests
+for owner/staff/auditor edges but the WorkspaceHome matrix had untested
+cells: manager + Add-card-hidden-with-workspaces, manager + Tools shown,
+admin Tools shown, admin empty-state Add card, auditor Tools hidden,
+staff Add-card-hidden-with-workspaces. Nothing pinned the manager/admin
+half of the rule table, so a regression there would pass CI silently.
+
+**Solution:** Added mockAdminUser() and 6 matrix tests pinning every
+untested role × state cell. All passed on first run (behavior was
+already correct) — these are regression pins, not Red→Green fixes.
+
+**Commits:** pending (round-2 TDD commit).
+**Test counts:** WorkspaceHome.test.tsx 36→42; i18n 20; a11y 1 — all
+green. tsc + eslint clean.
+**Note:** staff.ftl had concurrent uncommitted edits mid-round (bare
+`{value}` in a comment tripped the bare-placeholder scan once); resolved
+by the concurrent author — not my scope, left untouched.
 
 ## 2026-08-29 — Gap analysis round 2: renew-badge thresholds + checkout feedback states (website AccountView)
 

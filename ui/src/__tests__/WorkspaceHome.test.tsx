@@ -140,6 +140,24 @@ function mockManagerUser() {
   });
 }
 
+function mockAdminUser() {
+  mockAuthSession.mockReturnValue({
+    session: {
+      user_id: 'user-5',
+      display_name: 'Admin One',
+      role_name: 'admin',
+      role_id: 'role-admin',
+    },
+    loading: false,
+    error: null,
+    login: vi.fn(),
+    logout: vi.fn(),
+    clearError: vi.fn(),
+    isManager: true,
+    isOwner: false,
+  });
+}
+
 function mockEmptyWorkspaces() {
   mockWorkspaceValue.mockReturnValue({
     availableWorkspaces: [],
@@ -656,6 +674,125 @@ describe('WorkspaceHome', () => {
       });
       expect(screen.queryByText('Tools')).not.toBeInTheDocument();
       expect(screen.queryAllByTestId('workspace-tool-card').length).toBe(0);
+    });
+
+    it('hides Tools section for auditor', async () => {
+      mockAuditorUser();
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+        lastWorkspace: null,
+      });
+
+      await renderWithFluent(<WorkspaceHome />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
+      });
+      expect(screen.queryByText('Tools')).not.toBeInTheDocument();
+      expect(screen.queryAllByTestId('workspace-tool-card').length).toBe(0);
+    });
+
+    it('hides Add Workspace card when workspaces exist (manager)', async () => {
+      mockManagerUser();
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+        lastWorkspace: null,
+      });
+
+      await renderWithFluent(<WorkspaceHome />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
+      });
+      expect(screen.queryByTestId('workspace-card-add')).not.toBeInTheDocument();
+    });
+
+    it('shows Tools section for manager', async () => {
+      mockManagerUser();
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+        lastWorkspace: null,
+      });
+
+      await renderWithFluent(<WorkspaceHome />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
+      });
+      expect(screen.getByText('Tools')).toBeInTheDocument();
+      expect(screen.getAllByTestId('workspace-tool-card').length).toBeGreaterThan(0);
+    });
+
+    it('shows Tools section for admin', async () => {
+      mockAdminUser();
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+        lastWorkspace: null,
+      });
+
+      await renderWithFluent(<WorkspaceHome />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
+      });
+      expect(screen.getByText('Tools')).toBeInTheDocument();
+      expect(screen.getAllByTestId('workspace-tool-card').length).toBeGreaterThan(0);
+    });
+
+    it('shows Add Workspace card for admin when no workspaces exist', async () => {
+      mockAdminUser();
+      mockEmptyWorkspaces();
+
+      await renderWithFluent(<WorkspaceHome />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('workspace-card-add')).toBeInTheDocument();
+      });
+    });
+
+    it('never shows Add Workspace card for staff even when workspaces exist', async () => {
+      mockStaffUser();
+      mockWorkspaceValue.mockReturnValue({
+        availableWorkspaces: sampleWorkspaces,
+        loading: false,
+        error: null,
+        retry: vi.fn(),
+        setActiveWorkspace: mockSetActiveWorkspace,
+        activeWorkspace: null,
+        workspaceScreens: [],
+        lastWorkspace: null,
+      });
+
+      await renderWithFluent(<WorkspaceHome />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
+      });
+      expect(screen.queryByTestId('workspace-card-add')).not.toBeInTheDocument();
     });
   });
 
