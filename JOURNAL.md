@@ -182,13 +182,31 @@ confirmed the forged pro row listed store-pos. Green: both listing
 commands now call `sub.verify_signature()?` after loading, matching
 create_session (round 6) and the other subscription-trusting commands.
 
-**Commits:** pending (round-7 TDD commit).
+**Commits:** fd43ea1c (round-7 TDD commit).
 **Test counts:** desktop auth 45; desktop workspaces 15→16; fmt clean.
 **Scope:** tablet client has no scoped listing commands — no fix needed.
 **Note:** round-6 commit needed `--no-verify` (user-approved): the
 pre-commit i18n gate tripped on a concurrent agent's uncommitted
 LocalApiSection.tsx (missing settings-local-api-rotate* keys in both
 FTL bundles) — not my scope, left untouched.
+
+## 2026-09-03 — TDD round 8: manager STAFF_UPDATE positive path pin (desktop-client)
+
+**Problem:** The Manager preset grants STAFF_UPDATE (rbac_presets.rs:56),
+and the role hierarchy allows editing non-owner staff members. Every
+existing test of the manager role asserts a *denial* (can't promote to
+owner, can't self-promote, last-owner lock, self-deactivation). The
+positive path — a manager successfully updating a staff member's
+display name — was never exercised, so a regression (e.g. a change that
+removes STAFF_UPDATE from the Manager preset) would pass CI silently.
+
+**Solution:** `update_staff_scoped_allows_manager_updating_staff` seeds a
+manager user + a cashier user, then updates the cashier's display_name.
+All assertions pass on first run (behavior is already correct) — this
+is a regression pin.
+
+**Commits:** pending (round-8 TDD commit).
+**Test counts:** desktop staff 45→46; fmt clean.
 
 ## 2026-08-29 — Gap analysis round 2: renew-badge thresholds + checkout feedback states (website AccountView)
 
