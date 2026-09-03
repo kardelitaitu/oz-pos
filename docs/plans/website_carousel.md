@@ -138,11 +138,10 @@ Acceptance per clip: duration `00:00:10.00`, 15 fps, no audio stream, within the
 
 ## 8. Caching
 
-Merge into `website/public/_headers`:
+**Already in place:** `website/public/_headers` carries the immutable
+`/videos/*` rule (added with the site-wide cache-lifetime fix — see the
+`/_astro/*`, `/admin/*`, `/og-image.png`, `/favicon.svg` rules in the same
+file). Nothing further to do here.
 
-```
-/videos/*
-  Cache-Control: public, max-age=31536000, immutable
-```
-
-Bump the filename (or a `?v=` query) if a clip is ever re-encoded after deploy.
+If a clip is ever re-encoded after deploy, bump the filename (or a `?v=`
+query) — a year-long immutable TTL means browsers will not re-check.
