@@ -40,37 +40,18 @@ export default function HeroCarousel({ labels, descriptions, comingSoon }: Props
   const [index, setIndex] = useState(0);
   const [transitionMs, setTransitionMs] = useState(AUTO_MS);
   const [paused, setPaused] = useState(false);
-  const [reduceMotion, setReduceMotion] = useState(false);
   const [tick, setTick] = useState(0);
   const stageRef = useRef<HTMLDivElement>(null);
 
-  // ── Detect reduced motion + visibility changes ─────────────────────
+  // ── Auto-advance timer ─────────────────────────────────────────────
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const onMq = () => setReduceMotion(mq.matches);
-    onMq();
-    mq.addEventListener('change', onMq);
-
-    const onVis = () => setPaused(document.hidden);
-    document.addEventListener('visibilitychange', onVis);
-
-    return () => {
-      mq.removeEventListener('change', onMq);
-      document.removeEventListener('visibilitychange', onVis);
-    };
-  }, []);
-
-  // ── Auto-advance interval ──────────────────────────────────────────
-  useEffect(() => {
-    if (reduceMotion || paused) return;
+    if (paused) return;
     const id = setInterval(() => {
       setTransitionMs(AUTO_MS);
       setIndex((i) => (i + 1) % N);
     }, DWELL_MS);
     return () => clearInterval(id);
-  }, [reduceMotion, paused, index, tick]);
+  }, [paused, index, tick]);
 
   // ── Manual jump to a specific slide ─────────────────────────────────
   const goTo = (i: number) => {
@@ -82,19 +63,19 @@ export default function HeroCarousel({ labels, descriptions, comingSoon }: Props
     setIndex(i);
   };
 
-  // ── Pause on hover / focus (WCAG 2.2.2) ────────────────────────────
+  // ── Pause on hover (WCAG 2.2.2) ────────────────────────────────────
   const handlePauseIn = () => setPaused(true);
   const handlePauseOut = () => setPaused(false);
 
   const trackStyle: React.CSSProperties = {
     transform: `translateX(-${index * 100}%)`,
-    transition: reduceMotion ? 'none' : `transform ${transitionMs}ms cubic-bezier(0.2, 0, 0, 1)`,
+    transition: `transform ${transitionMs}ms cubic-bezier(0.2, 0, 0, 1)`,
   };
 
   const highlightStyle: React.CSSProperties = {
     width: `calc((100% - ${2 * 4}px) / ${N})`,
     transform: `translateX(${index * 100}%)`,
-    transition: reduceMotion ? 'none' : 'transform 300ms cubic-bezier(0.2, 0, 0, 1)',
+    transition: 'transform 300ms cubic-bezier(0.2, 0, 0, 1)',
   };
 
   return (
