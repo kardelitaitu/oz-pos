@@ -67,12 +67,6 @@ export default function HeroCarousel({ labels, descriptions, comingSoon }: Props
     transition: `transform ${transitionMs}ms cubic-bezier(0.2, 0, 0, 1)`,
   };
 
-  const highlightStyle: React.CSSProperties = {
-    width: `calc((100% - ${2 * 4}px) / ${N})`,
-    transform: `translateX(${index * 100}%)`,
-    transition: 'transform 300ms cubic-bezier(0.2, 0, 0, 1)',
-  };
-
   return (
     <div className="flex flex-wrap items-center justify-center gap-12">
       {/* Stage — overflow-hidden container hosting the horizontal track */}
@@ -102,34 +96,31 @@ export default function HeroCarousel({ labels, descriptions, comingSoon }: Props
         </div>
       </div>
 
-      {/* Pill slider — outside the mockup, centered beneath it.
-          Hovering the controls pauses auto-slide so a user aiming at a
-          pill isn't raced by the timer; leaving resumes. */}
+      {/* Pill slider — outside the mockup, styled consistently with the vertical entry pills below */}
       <div
-        className="relative flex rounded-full bg-black/35 p-1 backdrop-blur-sm"
+        className="flex flex-wrap items-center justify-center gap-2"
         onMouseEnter={handlePauseIn}
         onMouseLeave={handlePauseOut}
       >
-        <div
-          className="absolute inset-y-1 left-1 rounded-full bg-white/90 shadow-sm"
-          style={highlightStyle}
-          aria-hidden="true"
-        />
-        {SLIDE_IDS.map((id, i) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => goTo(i)}
-            aria-current={i === index ? 'true' : undefined}
-            aria-label={labels[id]}
-            className="relative z-10 flex-1 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-200"
-            style={{
-              color: i === index ? '#0f172a' : 'rgba(255,255,255,0.85)',
-            }}
-          >
-            {labels[id]}
-          </button>
-        ))}
+        {SLIDE_IDS.map((id, i) => {
+          const isActive = i === index;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => goTo(i)}
+              aria-current={isActive ? 'true' : undefined}
+              aria-label={labels[id]}
+              className={`rounded-full px-4 py-2 text-sm font-medium transition duration-200 border ${
+                isActive
+                  ? 'border-primary bg-primary text-white shadow-sm'
+                  : 'border-ink/10 bg-surface/60 text-muted hover:border-primary/40 hover:text-ink hover:bg-surface'
+              }`}
+            >
+              {labels[id]}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

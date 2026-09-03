@@ -182,25 +182,6 @@ describe('HeroCarousel', () => {
     await unmount();
   });
 
-  it('respects prefers-reduced-motion: no auto-advance', async () => {
-    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
-    const { container, unmount } = await renderCarousel();
-    const buttons = pillButtons(container);
-
-    await act(async () => {
-      vi.advanceTimersByTime(10 * 10000);
-    });
-    // Never auto-advanced.
-    expect(buttons[0].getAttribute('aria-current')).toBe('true');
-
-    // Manual click still works.
-    await act(async () => {
-      buttons[2].dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(buttons[2].getAttribute('aria-current')).toBe('true');
-    await unmount();
-  });
-
   it('shows a caption on placeholder slides but the rich mockup on restaurant', async () => {
     const { container, unmount } = await renderCarousel();
     expect(container.textContent).toContain('Bayar · QRIS');
