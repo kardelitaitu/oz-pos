@@ -54,7 +54,20 @@ export { monthCalendarGrid } from './analytics-data';
 // so the two buttons rendered identical data. A short custom range still
 // auto-buckets as daily (see bucketGranularity), but the selector no longer
 // offers daily as a global view.
-const GRANULARITIES: Granularity[] = ['weekly', 'monthly', 'yearly', 'custom'];
+/**
+ * The granularities the selector actually renders — the domain for the
+ * `analytics-granularity-${g}` template-built message ids.
+ *
+ * Exported so `dynamicFluentFamilies.test.ts` can assert every one resolves
+ * in BOTH bundles. Note this is deliberately narrower than the `Granularity`
+ * union, which also admits `'daily'`: that value reaches
+ * `rangeForGranularity()` and the query cache but no selector button, so
+ * `analytics-granularity-daily` does not exist. Adding `'daily'` to this
+ * array without adding the key would render a blank button label — a
+ * template-built id is invisible to scripts/verify-bundle-parity.py, so this
+ * array plus that test is the only guard.
+ */
+export const GRANULARITIES: Granularity[] = ['weekly', 'monthly', 'yearly', 'custom'];
 
 const ZOOM_MIN = 0.6;
 const ZOOM_MAX = 1.6;
