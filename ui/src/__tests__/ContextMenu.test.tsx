@@ -1,8 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
-import { screen, render } from '@testing-library/react';
+import { screen, render as rtlRender } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ContextMenu } from '@/frontend/shared/ContextMenu';
+import { withFluent } from '@/locales/test-utils';
 import { createRef } from 'react';
+import type { ReactElement } from 'react';
+
+// ContextMenu resolves its labels and its aria-label through Fluent, so
+// every mount needs a LocalizationProvider. `withFluent` auto-loads
+// shared.ftl, where the ctx-menu-* keys live.
+function render(ui: ReactElement) {
+  return rtlRender(withFluent(ui));
+}
 
 function createMenu(overrides: Partial<{ x: number; y: number; target: HTMLInputElement | HTMLTextAreaElement }> = {}) {
   return {

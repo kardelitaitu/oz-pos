@@ -10,6 +10,7 @@ import {
 } from '@/contexts/WorkspaceContext';
 import type { LoginSessionDto, CreateSessionResult } from '@/api/staff';
 import type { WorkspaceDto } from '@/api/workspaces';
+import { withFluent } from '@/locales/test-utils';
 
 // ── Opt out of the global WorkspaceContext stub ──────────────────────
 // The setupFile installs a safe-default mock for useWorkspace and
@@ -143,11 +144,14 @@ function renderWorkspaceHook(
   // With no session there is no login → no picker ticket either (audit-open-findings).
   pickerTicket: string | null = session ? DEFAULT_TICKET : null,
 ) {
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <MockAuthProvider session={session} pickerTicket={pickerTicket}>
-      <WorkspaceProvider>{children}</WorkspaceProvider>
-    </MockAuthProvider>
-  );
+  // WorkspaceProvider localizes its error state, so the real provider
+  // needs a Fluent ancestor (shared.ftl carries workspace-home-error-desc).
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    withFluent(
+      <MockAuthProvider session={session} pickerTicket={pickerTicket}>
+        <WorkspaceProvider>{children}</WorkspaceProvider>
+      </MockAuthProvider>,
+    );
   return renderHook(
     () => ({ workspace: useWorkspace(), scope: useWorkspaceScope() }),
     { wrapper },
@@ -480,8 +484,12 @@ describe('WorkspaceContext', () => {
       await waitForLoaded(result);
 
       expect(result.current.workspace.availableWorkspaces).toEqual([]);
+      // The provider no longer holds hardcoded English: this copy resolves
+      // through Fluent from shared.ftl `workspace-home-error-desc`, which the
+      // withFluent wrapper loads. Asserting the resolved text keeps the test
+      // honest about the key actually existing.
       expect(result.current.workspace.error).toBe(
-        'Failed to load workspaces from server.',
+        'Could not load your workspaces. Check your connection and try again.',
       );
     });
   });
