@@ -420,7 +420,7 @@
     "quickSearch": "Quick Search"
   },
   "checkout": {
-    "signInToSubscribe": "Sign in to subscribe",
+    "signInToSubscribe": "Subscribe",
     "error": "Couldn't start the checkout. Please try again.",
     "unavailable": "This plan isn't available to purchase online yet — contact sales@ozpos.my.id to subscribe."
   },

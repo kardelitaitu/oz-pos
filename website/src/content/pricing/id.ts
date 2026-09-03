@@ -26,7 +26,7 @@ export const pricing: PricingTier[] = [
     name: 'Gratis',
     currency: 'IDR',
     description: 'Gratis selamanya — jalankan satu toko, sepenuhnya offline.',
-    cta: 'Unduh Gratis',
+    cta: 'Unduh',
     prices: {
       monthly: { price: 'Rp 0', period: 'gratis selamanya' },
       yearly: { price: 'Rp 0', period: 'gratis selamanya' },
@@ -46,7 +46,7 @@ export const pricing: PricingTier[] = [
     name: 'Plus',
     currency: 'IDR',
     description: 'Paket awal untuk toko tunggal yang siap berkembang.',
-    cta: 'Pilih Plus',
+    cta: 'Berlangganan',
     prices: {
       monthly: { price: 'Rp 49.000', period: '/m', priceId: 'pro_01m1amcb41qkbr7zzd1kxa3qnd' },
       yearly: { price: 'Rp 500.000', period: '/y', priceId: 'pro_01m1amdj2swb3q21r2mwcy3krh' },
@@ -75,7 +75,7 @@ export const pricing: PricingTier[] = [
     name: 'Pro',
     currency: 'IDR',
     description: 'Untuk bisnis berkembang — analitik, Display Dapur, dan multi-terminal.',
-    cta: 'Pilih Pro',
+    cta: 'Berlangganan',
     highlight: true,
     prices: {
       monthly: {
@@ -104,7 +104,7 @@ export const pricing: PricingTier[] = [
     name: 'Premium',
     currency: 'IDR',
     description: 'Untuk jaringan multi-toko — whitelabel, loyalitas, dan otomatisasi.',
-    cta: 'Pilih Premium',
+    cta: 'Berlangganan',
     prices: {
       monthly: { price: 'Rp 399.000', period: '/m', priceId: 'pro_01m1amema8yj6w5mfm8wx8jwhm' },
       yearly: { price: 'Rp 3.999.000', period: '/y', priceId: 'pro_01m1amf0vpbyfndg5rkvxvyqj4' },

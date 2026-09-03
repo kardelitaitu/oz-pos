@@ -21,7 +21,7 @@ export const pricing: PricingTier[] = [
     name: 'Free',
     currency: 'USD',
     description: 'Free forever — run one store, fully offline.',
-    cta: 'Download free',
+    cta: 'Download',
     prices: {
       monthly: { price: '$0', period: 'free forever' },
       yearly: { price: '$0', period: 'free forever' },
@@ -41,7 +41,7 @@ export const pricing: PricingTier[] = [
     name: 'Plus',
     currency: 'USD',
     description: 'The entry plan for single-store shops ready to grow.',
-    cta: 'Choose Plus',
+    cta: 'Subscribe',
     prices: {
       monthly: { price: '$4.99', period: '/month', priceId: 'pro_01m1amcb41qkbr7zzd1kxa3qnd' },
       yearly: { price: '$49.99', period: '/year', priceId: 'pro_01m1amdj2swb3q21r2mwcy3krh' },
@@ -70,7 +70,7 @@ export const pricing: PricingTier[] = [
     name: 'Pro',
     currency: 'USD',
     description: 'For growing businesses — analytics, Kitchen Display, and multi-terminal.',
-    cta: 'Choose Pro',
+    cta: 'Subscribe',
     highlight: true,
     prices: {
       monthly: {
@@ -99,7 +99,7 @@ export const pricing: PricingTier[] = [
     name: 'Premium',
     currency: 'USD',
     description: 'For multi-store chains — whitelabel, loyalty, and automation.',
-    cta: 'Choose Premium',
+    cta: 'Subscribe',
     prices: {
       monthly: { price: '$39.99', period: '/month', priceId: 'pro_01m1amema8yj6w5mfm8wx8jwhm' },
       yearly: { price: '$399.99', period: '/year', priceId: 'pro_01m1amf0vpbyfndg5rkvxvyqj4' },

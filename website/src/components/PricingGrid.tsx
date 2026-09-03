@@ -175,14 +175,14 @@ export default function PricingGrid({ tiers, locale, downloadHref, contactHref }
                 {isFree ? (
                   <a
                     href={downloadHref}
-                    className="block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:opacity-90"
+                    className="block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white whitespace-nowrap transition hover:opacity-90"
                   >
                     {tier.cta}
                   </a>
                 ) : isEnterprise ? (
                   <a
                     href={contactHref}
-                    className="block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:opacity-90"
+                    className="block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white whitespace-nowrap transition hover:opacity-90"
                   >
                     {tier.cta}
                   </a>
