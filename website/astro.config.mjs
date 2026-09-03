@@ -13,6 +13,15 @@ import rehypeMermaid from 'rehype-mermaid';
 // Canonical, og:url, sitemap, and hreflang all derive from `site`.
 export default defineConfig({
   site: 'https://ozpos.my.id',
+  // Inline global.css into every page's <head> instead of emitting a
+  // render-blocking <link rel="stylesheet">. A worker-side hack that
+  // deferred the link (media="print" onload swap) caused a flash of
+  // UNSTYLED content on mobile reloads (giant nav icons + UA-default
+  // purple visited-link colors for a split second) — see git history,
+  // 3b505842 (reverted). Inlining removes the external request entirely:
+  // nothing render-blocking, no FOUC, no worker rewrite. Cost: each HTML
+  // page grows ~14 KB gzip; acceptable for a static marketing site.
+  build: { inlineStylesheets: 'always' },
   integrations: [
     react(),
     sitemap({

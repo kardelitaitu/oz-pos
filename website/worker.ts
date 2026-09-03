@@ -153,8 +153,7 @@ function withStrictCSP(resp: Response): Response {
 }
 
 /**
- * Serve static assets from the ASSETS binding with optimized caching
- * and non-render-blocking CSS.
+ * Serve static assets from the ASSETS binding with optimized caching.
  *
  * Cache strategy (Lighthouse "use efficient cache lifetimes"):
  *   - /_astro/*: content-hashed filenames → immutable, 1-year cache.
@@ -163,12 +162,11 @@ function withStrictCSP(resp: Response): Response {
  *   - Everything else: must-revalidate (default) — HTML pages and
  *     unfingerprinted assets must reflect deploys immediately.
  *
- * CSS deferral (Lighthouse "render-blocking resources"):
- *   Astro emits `<link rel="stylesheet">` which blocks rendering.
- *   We rewrite it to `media="print" onload="this.media='all'"` so
- *   the browser paints immediately with fallback styles and swaps in
- *   the real CSS once loaded. The `onload` handler ensures no FOUC:
- *   the CSSOM is built before the first meaningful paint.
+ * HTML is passed through untouched: stylesheets are inlined at build
+ * time (astro.config.mjs `inlineStylesheets: 'always'`), so there is
+ * no render-blocking external CSS and no need for the media="print"
+ * deferral hack — which caused a flash of unstyled content on mobile
+ * reloads and was removed (see git history, 3b505842).
  */
 async function serveStatic(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -180,29 +178,11 @@ async function serveStatic(request: Request, env: Env): Promise<Response> {
   const headers: Record<string, string> = {};
   resp.headers.forEach((v, k) => { headers[k] = v; });
 
-  const isAstro = url.pathname.startsWith('/_astro/');
-
-  // ── Cache headers for content-hashed assets ──────────────────────
-  if (isAstro) {
+  if (url.pathname.startsWith('/_astro/')) {
     headers['cache-control'] = 'public, max-age=31536000, immutable';
   }
 
-  // Only rewrite HTML pages for CSS deferral.
-  const ct = headers['content-type'] ?? '';
-  if (!ct.includes('text/html') || url.pathname === '/__oz/runtime-config.js') {
-    return new Response(resp.body, { status: resp.status, headers });
-  }
-
-  // ── Defer render-blocking CSS ────────────────────────────────────
-  const body = await resp.text();
-  // Rewrite <link rel="stylesheet" ...> to load non-render-blocking.
-  // Pattern: match the global.css link that Astro injects from the layout import.
-  const deferred = body.replace(
-    /(<link\s+rel="stylesheet"\s+href="\/_astro\/global[^"]*"[^>]*)(\/?>)/,
-    '$1 media="print" onload="this.media=&apos;all&apos;"$2',
-  );
-
-  return new Response(deferred, { status: resp.status, headers });
+  return new Response(resp.body, { status: resp.status, headers });
 }
 
 export default {
