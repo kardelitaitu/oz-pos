@@ -22,10 +22,6 @@ const features = (dict(locale).features as { items: { title: string; description
 const pricing = pricingFor(locale).slice(0, 3); // free, plus, pro
 const download = getRelativeLocaleUrl(locale, 'download');
 const pricingHref = getRelativeLocaleUrl(locale, 'pricing');
-// Vertical entry points (subscription-tiers.md §5) — customers identify as
-// cafe owners / minimarket operators / warung owners, not tier names.
-const verticalKeys = ['kafe', 'minimarket', 'warung', 'restoran'] as const;
-const verticals = dict(locale).vertical as Record<(typeof verticalKeys)[number], { label: string }>;
 // Tech-stack logos shown after the features grid.
 // Tech-stack logos shown after the features grid.
 // Tightened aspect ratios (width/height) and optical heights so all logos
@@ -42,22 +38,6 @@ const techStack = [
 
 <Base title={pageTitle}>
   <Hero />
-
-  <!-- For your business (vertical entry points) -->
-  <section class="mx-auto max-w-6xl px-4 pb-4" aria-label={t(locale, 'vertical.otherTitle')}>
-    <div class="flex flex-wrap items-center justify-center gap-3">
-      {
-        verticalKeys.map((key) => (
-          <a
-            href={getRelativeLocaleUrl(locale, `untuk-${key}`)}
-            class="rounded-full border border-ink/10 px-4 py-2 text-sm text-muted transition hover:border-accent hover:text-ink"
-          >
-            {verticals[key].label}
-          </a>
-        ))
-      }
-    </div>
-  </section>
 
   <!-- Features -->
   <section data-reveal class="mx-auto max-w-6xl px-4 py-16" aria-label={t(locale, 'features.title')}>

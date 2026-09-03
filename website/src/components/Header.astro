@@ -25,14 +25,202 @@ const login = getRelativeLocaleUrl(locale, 'login');
       <span class="text-primary">OZ</span>-POS
     </a>
     <nav class="hidden items-center gap-6 md:flex" aria-label={t(locale, 'nav.mainNav')}>
-      {
-        nav.map((item) => (
-          <a href={item.href} class="nav-link relative text-sm text-muted transition-colors duration-200 hover:text-ink">
-            {item.label}
-            <span class="nav-underline absolute -bottom-1 left-0 h-0.5 w-0 bg-primary rounded-full transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)]"></span>
-          </a>
-        ))
-      }
+      <a href={getRelativeLocaleUrl(locale, '/')} class="nav-link relative text-sm text-muted transition-colors duration-200 hover:text-ink">
+        {t(locale, 'nav.home')}
+        <span class="nav-underline absolute -bottom-1 left-0 h-0.5 w-0 bg-primary rounded-full transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)]"></span>
+      </a>
+
+      <a href={getRelativeLocaleUrl(locale, 'features')} class="nav-link relative text-sm text-muted transition-colors duration-200 hover:text-ink">
+        {t(locale, 'nav.features')}
+        <span class="nav-underline absolute -bottom-1 left-0 h-0.5 w-0 bg-primary rounded-full transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)]"></span>
+      </a>
+
+      {/* Solutions dropdown */}
+      <div class="group relative">
+        <button
+          type="button"
+          class="nav-link flex items-center gap-1 text-sm text-muted transition-colors duration-200 group-hover:text-ink focus:outline-none"
+          aria-expanded="false"
+          aria-haspopup="true"
+        >
+          <span>{t(locale, 'nav.solutions')}</span>
+          <svg
+            class="h-4 w-4 transition-transform duration-200 group-hover:rotate-180"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+              clip-rule="evenodd"
+            />
+          </svg>
+        </button>
+
+        {/* Dropdown panel */}
+        <div class="invisible absolute left-1/2 top-full z-50 mt-2 w-[520px] -translate-x-1/2 opacity-0 transition-all duration-200 ease-out group-hover:visible group-hover:opacity-100">
+          <div class="rounded-2xl border border-ink/10 bg-surface p-5 shadow-2xl backdrop-blur-lg">
+            <div class="grid grid-cols-2 gap-6">
+              {/* Column 1: By Industry */}
+              <div>
+                <p class="text-xs font-bold uppercase tracking-wider text-muted/80 mb-3 px-2">
+                  {t(locale, 'nav.solutionsByIndustry')}
+                </p>
+                <div class="space-y-1">
+                  <a
+                    href={getRelativeLocaleUrl(locale, 'untuk-restoran')}
+                    class="group/item flex items-start gap-3 rounded-xl p-2 transition hover:bg-ink/5"
+                  >
+                    <span class="mt-0.5 text-lg">🍽️</span>
+                    <div>
+                      <p class="text-sm font-semibold text-ink group-hover/item:text-primary transition-colors">
+                        {t(locale, 'nav.solutionRestaurants')}
+                      </p>
+                      <p class="text-xs text-muted leading-snug">
+                        {t(locale, 'nav.solutionRestaurantsDesc')}
+                      </p>
+                    </div>
+                  </a>
+
+                  <a
+                    href={getRelativeLocaleUrl(locale, 'untuk-kafe')}
+                    class="group/item flex items-start gap-3 rounded-xl p-2 transition hover:bg-ink/5"
+                  >
+                    <span class="mt-0.5 text-lg">☕</span>
+                    <div>
+                      <p class="text-sm font-semibold text-ink group-hover/item:text-primary transition-colors">
+                        {t(locale, 'nav.solutionCafes')}
+                      </p>
+                      <p class="text-xs text-muted leading-snug">
+                        {t(locale, 'nav.solutionCafesDesc')}
+                      </p>
+                    </div>
+                  </a>
+
+                  <a
+                    href={getRelativeLocaleUrl(locale, 'untuk-minimarket')}
+                    class="group/item flex items-start gap-3 rounded-xl p-2 transition hover:bg-ink/5"
+                  >
+                    <span class="mt-0.5 text-lg">🏷️</span>
+                    <div>
+                      <p class="text-sm font-semibold text-ink group-hover/item:text-primary transition-colors">
+                        {t(locale, 'nav.solutionRetail')}
+                      </p>
+                      <p class="text-xs text-muted leading-snug">
+                        {t(locale, 'nav.solutionRetailDesc')}
+                      </p>
+                    </div>
+                  </a>
+
+                  <a
+                    href={getRelativeLocaleUrl(locale, 'untuk-warung')}
+                    class="group/item flex items-start gap-3 rounded-xl p-2 transition hover:bg-ink/5"
+                  >
+                    <span class="mt-0.5 text-lg">🏪</span>
+                    <div>
+                      <p class="text-sm font-semibold text-ink group-hover/item:text-primary transition-colors">
+                        {t(locale, 'nav.solutionWarung')}
+                      </p>
+                      <p class="text-xs text-muted leading-snug">
+                        {t(locale, 'nav.solutionWarungDesc')}
+                      </p>
+                    </div>
+                  </a>
+                </div>
+              </div>
+
+              {/* Column 2: System & Core */}
+              <div>
+                <p class="text-xs font-bold uppercase tracking-wider text-muted/80 mb-3 px-2">
+                  {t(locale, 'nav.solutionsBySystem')}
+                </p>
+                <div class="space-y-1">
+                  <a
+                    href={getRelativeLocaleUrl(locale, 'docs/inventory')}
+                    class="group/item flex items-start gap-3 rounded-xl p-2 transition hover:bg-ink/5"
+                  >
+                    <span class="mt-0.5 text-lg">🍳</span>
+                    <div>
+                      <p class="text-sm font-semibold text-ink group-hover/item:text-primary transition-colors">
+                        {t(locale, 'nav.solutionKitchens')}
+                      </p>
+                      <p class="text-xs text-muted leading-snug">
+                        {t(locale, 'nav.solutionKitchensDesc')}
+                      </p>
+                    </div>
+                  </a>
+
+                  <a
+                    href={getRelativeLocaleUrl(locale, 'docs/inventory')}
+                    class="group/item flex items-start gap-3 rounded-xl p-2 transition hover:bg-ink/5"
+                  >
+                    <span class="mt-0.5 text-lg">📦</span>
+                    <div>
+                      <p class="text-sm font-semibold text-ink group-hover/item:text-primary transition-colors">
+                        {t(locale, 'nav.solutionWarehouses')}
+                      </p>
+                      <p class="text-xs text-muted leading-snug">
+                        {t(locale, 'nav.solutionWarehousesDesc')}
+                      </p>
+                    </div>
+                  </a>
+
+                  <a
+                    href={getRelativeLocaleUrl(locale, 'docs/shifts')}
+                    class="group/item flex items-start gap-3 rounded-xl p-2 transition hover:bg-ink/5"
+                  >
+                    <span class="mt-0.5 text-lg">🔒</span>
+                    <div>
+                      <p class="text-sm font-semibold text-ink group-hover/item:text-primary transition-colors">
+                        {t(locale, 'nav.solutionAudits')}
+                      </p>
+                      <p class="text-xs text-muted leading-snug">
+                        {t(locale, 'nav.solutionAuditsDesc')}
+                      </p>
+                    </div>
+                  </a>
+
+                  <a
+                    href={getRelativeLocaleUrl(locale, 'docs/cloud-sync')}
+                    class="group/item flex items-start gap-3 rounded-xl p-2 transition hover:bg-ink/5"
+                  >
+                    <span class="mt-0.5 text-lg">📊</span>
+                    <div>
+                      <p class="text-sm font-semibold text-ink group-hover/item:text-primary transition-colors">
+                        {t(locale, 'nav.solutionLogging')}
+                      </p>
+                      <p class="text-xs text-muted leading-snug">
+                        {t(locale, 'nav.solutionLoggingDesc')}
+                      </p>
+                    </div>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <a href={getRelativeLocaleUrl(locale, 'pricing')} class="nav-link relative text-sm text-muted transition-colors duration-200 hover:text-ink">
+        {t(locale, 'nav.pricing')}
+        <span class="nav-underline absolute -bottom-1 left-0 h-0.5 w-0 bg-primary rounded-full transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)]"></span>
+      </a>
+
+      <a href={getRelativeLocaleUrl(locale, 'download')} class="nav-link relative text-sm text-muted transition-colors duration-200 hover:text-ink">
+        {t(locale, 'nav.download')}
+        <span class="nav-underline absolute -bottom-1 left-0 h-0.5 w-0 bg-primary rounded-full transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)]"></span>
+      </a>
+
+      <a href={getRelativeLocaleUrl(locale, 'support')} class="nav-link relative text-sm text-muted transition-colors duration-200 hover:text-ink">
+        {t(locale, 'nav.support')}
+        <span class="nav-underline absolute -bottom-1 left-0 h-0.5 w-0 bg-primary rounded-full transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)]"></span>
+      </a>
+
+      <a href={getRelativeLocaleUrl(locale, 'docs')} class="nav-link relative text-sm text-muted transition-colors duration-200 hover:text-ink">
+        {t(locale, 'nav.docs')}
+        <span class="nav-underline absolute -bottom-1 left-0 h-0.5 w-0 bg-primary rounded-full transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)]"></span>
+      </a>
     </nav>
     <div class="flex items-center gap-2.5">
       {isDocs && <SearchTrigger client:load locale={locale} />}
@@ -59,26 +247,103 @@ const login = getRelativeLocaleUrl(locale, 'login');
           </svg>
         </summary>
         <nav
-          class="absolute right-0 top-12 w-56 rounded-xl border border-ink/10 bg-surface p-2 shadow-xl"
+          class="absolute right-0 top-12 w-64 max-h-[80vh] overflow-y-auto rounded-xl border border-ink/10 bg-surface p-3 shadow-xl"
           aria-label={t(locale, 'nav.menu')}
         >
-          {
-            nav.map((item) => (
+          <a
+            href={getRelativeLocaleUrl(locale, '/')}
+            class="block rounded-md px-3 py-2 text-sm text-muted transition hover:bg-ink/5 hover:text-ink"
+          >
+            {t(locale, 'nav.home')}
+          </a>
+
+          <a
+            href={getRelativeLocaleUrl(locale, 'features')}
+            class="block rounded-md px-3 py-2 text-sm text-muted transition hover:bg-ink/5 hover:text-ink"
+          >
+            {t(locale, 'nav.features')}
+          </a>
+
+          {/* Mobile Solutions Section */}
+          <div class="my-2 border-t border-b border-ink/10 py-2">
+            <p class="px-3 text-xs font-bold uppercase tracking-wider text-muted/70">
+              {t(locale, 'nav.solutions')}
+            </p>
+            <div class="mt-1 space-y-0.5">
               <a
-                href={item.href}
-                class="block rounded-md px-3 py-2 text-sm text-muted transition hover:bg-ink/5 hover:text-ink"
+                href={getRelativeLocaleUrl(locale, 'untuk-restoran')}
+                class="block rounded-md px-3 py-1.5 text-xs text-muted transition hover:bg-ink/5 hover:text-ink"
               >
-                {item.label}
+                🍽️ {t(locale, 'nav.solutionRestaurants')}
               </a>
-            ))
-          }
+              <a
+                href={getRelativeLocaleUrl(locale, 'untuk-kafe')}
+                class="block rounded-md px-3 py-1.5 text-xs text-muted transition hover:bg-ink/5 hover:text-ink"
+              >
+                ☕ {t(locale, 'nav.solutionCafes')}
+              </a>
+              <a
+                href={getRelativeLocaleUrl(locale, 'untuk-minimarket')}
+                class="block rounded-md px-3 py-1.5 text-xs text-muted transition hover:bg-ink/5 hover:text-ink"
+              >
+                🏷️ {t(locale, 'nav.solutionRetail')}
+              </a>
+              <a
+                href={getRelativeLocaleUrl(locale, 'untuk-warung')}
+                class="block rounded-md px-3 py-1.5 text-xs text-muted transition hover:bg-ink/5 hover:text-ink"
+              >
+                🏪 {t(locale, 'nav.solutionWarung')}
+              </a>
+              <a
+                href={getRelativeLocaleUrl(locale, 'docs/inventory')}
+                class="block rounded-md px-3 py-1.5 text-xs text-muted transition hover:bg-ink/5 hover:text-ink"
+              >
+                📦 {t(locale, 'nav.solutionWarehouses')}
+              </a>
+              <a
+                href={getRelativeLocaleUrl(locale, 'docs/shifts')}
+                class="block rounded-md px-3 py-1.5 text-xs text-muted transition hover:bg-ink/5 hover:text-ink"
+              >
+                🔒 {t(locale, 'nav.solutionAudits')}
+              </a>
+            </div>
+          </div>
+
+          <a
+            href={getRelativeLocaleUrl(locale, 'pricing')}
+            class="block rounded-md px-3 py-2 text-sm text-muted transition hover:bg-ink/5 hover:text-ink"
+          >
+            {t(locale, 'nav.pricing')}
+          </a>
+
+          <a
+            href={getRelativeLocaleUrl(locale, 'download')}
+            class="block rounded-md px-3 py-2 text-sm text-muted transition hover:bg-ink/5 hover:text-ink"
+          >
+            {t(locale, 'nav.download')}
+          </a>
+
+          <a
+            href={getRelativeLocaleUrl(locale, 'support')}
+            class="block rounded-md px-3 py-2 text-sm text-muted transition hover:bg-ink/5 hover:text-ink"
+          >
+            {t(locale, 'nav.support')}
+          </a>
+
+          <a
+            href={getRelativeLocaleUrl(locale, 'docs')}
+            class="block rounded-md px-3 py-2 text-sm text-muted transition hover:bg-ink/5 hover:text-ink"
+          >
+            {t(locale, 'nav.docs')}
+          </a>
+
           <a
             href={login}
             data-auth-nav
             data-locale={locale}
             data-login-text={t(locale, 'nav.login')}
             data-account-text={t(locale, 'nav.account')}
-            class="mt-1 block rounded-md bg-primary px-3 py-2 text-center text-sm font-semibold text-white transition hover:bg-primary-hover"
+            class="mt-2 block rounded-md bg-primary px-3 py-2 text-center text-sm font-semibold text-white transition hover:bg-primary-hover"
           >
             {t(locale, 'nav.login')}
           </a>
