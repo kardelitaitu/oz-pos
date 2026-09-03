@@ -388,13 +388,19 @@ pub async fn create_session(
     // may open. Role access (above) and tier entitlement are orthogonal —
     // an owner whose subscription no longer covers the type (e.g. kds after
     // a downgrade) must fail closed here, not after the session exists.
+    // The signature is verified before the row's tier/allowed-types are
+    // honored, matching create_staff_scoped and every other subscription-
+    // trusting command: a tampered row (forged tier, invalid RSA signature)
+    // must fail closed, not silently widen session access.
     let sub = {
         let db = state.db.lock().await;
         TenantSubscription::validate_clock_rollback(&db)?;
-        TenantSubscription::load(&db, "default")?.unwrap_or_else(|| {
+        let sub = TenantSubscription::load(&db, "default")?.unwrap_or_else(|| {
             tracing::warn!("no subscription found for tenant 'default', defaulting to Free tier");
             TenantSubscription::bootstrap_free()
-        })
+        });
+        sub.verify_signature()?;
+        sub
     };
     if !sub.allows_workspace_type(&args.type_key) {
         tracing::warn!(

@@ -306,3 +306,53 @@ async fn create_session_denies_tier_disallowed_workspace_type() {
         other => panic!("expected AppError::Invalid, got {other:?}"),
     }
 }
+
+#[tokio::test]
+async fn create_session_rejects_tampered_subscription_signature() {
+    // Parity with the desktop client and create_staff_scoped: the
+    // tenant_subscription row's RSA signature must be verified before its
+    // tier/allowed-types are honored. A tampered row (forged pro tier with
+    // kds allowed, invalid signature) must fail closed.
+    let conn = migrations::fresh_db();
+    conn.execute(
+        "UPDATE tenant_subscription
+         SET tier_key = 'pro',
+             allowed_types_json = '[\"store-pos\",\"restaurant-pos\",\"admin\",\"kds\"]',
+             signature = 'TAMPERED_SIGNATURE'
+         WHERE tenant_id = 'default'",
+        [],
+    )
+    .unwrap();
+    seed_owner(&conn);
+    let app = tauri::test::mock_builder()
+        .manage(AppState::for_test_with_conn(conn))
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = create_session(
+        CreateSessionArgs {
+            user_id: "user-owner".into(),
+            role_id: "role-owner".into(),
+            store_id: "default".into(),
+            instance_id: "default-kds".into(),
+            type_key: "kds".into(),
+            terminal_id: "terminal-1".into(),
+        },
+        app.state(),
+    )
+    .await;
+
+    let err = result.expect_err("tampered subscription must not open a kds session");
+    match err {
+        AppError::Invalid(msg) => {
+            assert!(
+                msg.contains("signature")
+                    || msg.contains("subscription")
+                    || msg.contains("entitled"),
+                "error must name the signature/tier gate, got: {msg}"
+            );
+        }
+        AppError::Core { .. } => {}
+        other => panic!("expected AppError::Invalid/Core, got {other:?}"),
+    }
+}

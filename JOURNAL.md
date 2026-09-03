@@ -126,13 +126,44 @@ has 1")`). Green: added `Store::count_active_pos_instances` (filters
 exclusion) and switched both quota gates to it. `auto_recover_instances`
 was left as-is (restores any suspended type, not a creation gate).
 
-**Commits:** pending (round-5 TDD commit).
+**Commits:** 4a90b7a5 (round-5 TDD commit).
 **Test counts:** oz-core workspaces 64→65; desktop topology 330 still
 green; clippy -D warnings clean; fmt clean.
 **Follow-up:** consider whether `auto_recover_instances` should also
 count POS-only — it uses `max_pos_instances` as the restore budget but
 counts all types; behavior is intentional (restore any suspended
 workspace), so left untouched.
+
+## 2026-09-03 — TDD round 6: create_session trusts tampered subscription without signature verification (desktop + tablet auth)
+
+**Problem:** `create_session` (round-4 fix) loaded the tenant subscription
+and checked `allows_workspace_type` but never called
+`sub.verify_signature()`. Meanwhile `create_staff_scoped`, workspace
+creation, history, inventory, store profiles, and topology Apply all
+verify the RSA signature before trusting the row's tier/allowed-types.
+A tampered `tenant_subscription` row (tier_key → pro, allowed_types_json
+→ +kds, signature → invalid base64) silently opened a kds session — the
+signature is the only thing binding the offline DB row to the license
+server's grant.
+
+**Solution:** Red first — `create_session_rejects_tampered_subscription_signature`
+(desktop + tablet parity) confirmed the forged pro row opened a kds
+session. Green: both `create_session` commands now call
+`sub.verify_signature()?` after loading, matching the other 13
+subscription-trusting call sites. The bootstrap fallback (`unwrap_or_else
+→ bootstrap_free()`) creates a row with `BOOTSTRAP_FREE` signature
+which passes verification in debug builds; in release builds the call
+site must not reach the fallback in production (a real subscription row
+is written by license activation).
+
+**Commits:** pending (round-6 TDD commit).
+**Test counts:** desktop auth 44→45 (incl. security integration);
+tablet auth 16→17; fmt clean.
+**Follow-up:** the listing paths (`list_workspaces_scoped`,
+`list_workspaces_for_store_scoped`) also load the subscription without
+`verify_signature()` — a tampered row would show tier-disallowed types
+in the listing, though session creation into them is now blocked.
+Consider adding signature verification there for complete defense-in-depth.
 
 ## 2026-08-29 — Gap analysis round 2: renew-badge thresholds + checkout feedback states (website AccountView)
 
