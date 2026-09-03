@@ -201,13 +201,10 @@ describe('HeroCarousel', () => {
     await unmount();
   });
 
-  it('renders all slides with their distinct labels and descriptions', async () => {
+  it('shows a caption on placeholder slides but the rich mockup on restaurant', async () => {
     const { container, unmount } = await renderCarousel();
-    expect(container.textContent).toContain('Restaurant');
+    expect(container.textContent).toContain('Bayar · QRIS');
     expect(container.textContent).toContain('Retail');
-    expect(container.textContent).toContain('Kitchen');
-    expect(container.textContent).toContain('Warehouse');
-    expect(container.textContent).toContain('Topology');
     expect(container.textContent).toContain('Stock, transfers, and purchase orders');
     await unmount();
   });

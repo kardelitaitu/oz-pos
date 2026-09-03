@@ -19,19 +19,14 @@ const AUTO_MS = 700;
 const MANUAL_MS = 400;
 const N = SLIDE_IDS.length;
 
-/** Clean, distinct content for each slide to visually confirm sliding. */
-function slideContent(id: SlideId, label: string, desc: string): ReactNode {
+/** Slide-presentational content. Slide 1 keeps the rich HTML mockup; the rest are placeholders. */
+function slideContent(id: SlideId, label: string, desc: string, comingSoon: string): ReactNode {
+  if (id === 'restaurant') return <RestaurantMockup />;
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-4 p-8 text-center bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-900 dark:to-slate-800">
-      <div className="text-6xl font-extrabold text-blue-600 dark:text-blue-400">
-        {id === 'restaurant' && '☕ 1'}
-        {id === 'retail' && '🏷️ 2'}
-        {id === 'kitchen' && '🍳 3'}
-        {id === 'warehouse' && '📦 4'}
-        {id === 'topology' && '🌐 5'}
-      </div>
-      <h2 className="text-3xl font-bold text-slate-900 dark:text-white">{label}</h2>
-      <p className="max-w-md text-base text-slate-600 dark:text-slate-300">{desc}</p>
+    <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+      <p className="text-lg font-semibold text-ink/70">{label}</p>
+      <p className="max-w-sm px-6 text-sm text-muted">{desc}</p>
+      <p className="mt-2 text-[11px] uppercase tracking-widest text-muted/60">{comingSoon}</p>
     </div>
   );
 }
@@ -100,7 +95,7 @@ export default function HeroCarousel({ labels, descriptions, comingSoon }: Props
                 className="h-full w-full shrink-0"
                 aria-hidden={!isActive}
               >
-                <SlideWindow title={`OZ-POS — ${labels[id]}`} content={slideContent(id, labels[id], descriptions[id])} />
+                <SlideWindow title={`OZ-POS — ${labels[id]}`} content={slideContent(id, labels[id], descriptions[id], comingSoon)} />
               </div>
             );
           })}
