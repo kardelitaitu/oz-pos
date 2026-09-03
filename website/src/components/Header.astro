@@ -270,8 +270,16 @@ const login = getRelativeLocaleUrl(locale, 'login');
         <span class="nav-underline absolute -bottom-1 left-0 h-0.5 w-0 bg-primary rounded-full transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)]"></span>
       </a>
     </nav>
+    <!-- The search trigger only exists on docs pages, but its slot is always
+         rendered: without the spacer the whole cluster (theme toggle, locale
+         switcher, login button) visibly shifts sideways when you navigate
+         between docs and the rest of the site. h-9 w-9 matches the trigger
+         button exactly — and matches ThemeToggle, which is the same box — so
+         the reserved area is the same width as the real thing. SearchModal
+         portals to document.body and returns null while closed, so the
+         trigger's only layout footprint really is that 36px square. -->
     <div class="flex items-center gap-2.5">
-      {isDocs && <SearchTrigger client:load locale={locale} />}
+      {isDocs ? <SearchTrigger client:load locale={locale} /> : <span class="h-9 w-9" aria-hidden="true"></span>}
       <ThemeToggle />
       <LocaleSwitcher />
       <a
