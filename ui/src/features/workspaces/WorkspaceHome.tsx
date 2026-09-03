@@ -295,19 +295,6 @@ const TOOLS: ToolItem[] = [
       </svg>
     ),
   },
-  {
-    id: 'kds',
-    route: 'kds',
-    labelKey: 'workspace-home-kds-title',
-    descKey: 'workspace-home-kds-desc',
-    minRole: 'staff',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
-        <rect x="2" y="4" width="20" height="12" rx="2" />
-        <path d="M12 16v4M8 20h8" />
-      </svg>
-    ),
-  },
 ];
 
 // ── Icons ─────────────────────────────────────────────────────────

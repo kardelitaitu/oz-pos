@@ -193,6 +193,12 @@ locale-id = Bahasa Indonesia
 
 # Accessibility
 a11y-skip-to-content = Skip to main content
+# Shared right-click menu (frontend/shared/ContextMenu.tsx), rendered by 14
+# surfaces. Its labels are resolved with requiredLocalized(), so a missing key
+# here shows the key rather than silently reverting to English.
+ctx-menu-aria = Context menu
+ctx-menu-copy = Copy
+ctx-menu-paste = Paste
 
 # Navigation section labels
 nav-section-operations = Operations
@@ -474,8 +480,6 @@ workspace-home-features-title = Features
 workspace-home-features-desc = Toggle feature availability
 workspace-home-data-management-title = Data
 workspace-home-data-management-desc = Back up, export, and import data
-workspace-home-kds-title = Kitchen Display
-workspace-home-kds-desc = Open the kitchen display screen
 workspace-home-workspaces-section = Workspaces
 workspace-home-tools-section = Tools
 workspace-home-add-workspace = Add Workspace

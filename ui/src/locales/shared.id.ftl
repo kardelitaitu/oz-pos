@@ -165,6 +165,10 @@ update-banner-rollback-aria = Unduh versi sebelumnya dari GitHub
 
 # Accessibility
 a11y-skip-to-content = Lewati ke konten utama
+# Shared right-click menu (see shared.ftl).
+ctx-menu-aria = Menu konteks
+ctx-menu-copy = Salin
+ctx-menu-paste = Tempel
 
 # Navigation section labels
 nav-section-operations = Operasional
@@ -470,8 +474,6 @@ workspace-home-features-title = Fitur
 workspace-home-features-desc = Aktifkan atau nonaktifkan fitur
 workspace-home-data-management-title = Data
 workspace-home-data-management-desc = Cadangkan, ekspor, dan impor data
-workspace-home-kds-title = Tampilan Dapur
-workspace-home-kds-desc = Buka layar tampilan dapur
 workspace-home-workspaces-section = Workspace
 workspace-home-tools-section = Alat
 workspace-home-add-workspace = Tambah Workspace
