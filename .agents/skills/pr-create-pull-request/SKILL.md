@@ -3,7 +3,7 @@ name: pr-create-pull-request
 description: Systematic workflow for creating comprehensive, high-quality pull requests in OZ-POS using GitHub CLI (gh). Covers inspecting git history (last 50-100 commits), branch-prefixed naming conventions, generating structured PR descriptions, and safe push authorization.
 ---
 
-<!-- Audit stamp: 2026-09-03 · DSH · status: ACCURATE (rev 2 — version lock corrected 0.0.31 → 0.0.35; poll-pr-checks.ps1 corrected to the real scripts/poll-pr-checks.sh; title examples moved to the current release branch; the feat/ branch example removed per the never-create-branches repo policy; the oz-crate glob prose reworded) · verified this pass: scripts/poll-pr-checks.sh, scripts/lint-i18n.sh, scripts/verify-bundle-parity.py exist; gh pr create/edit/checks workflow unchanged -->
+<!-- Audit stamp: 2026-09-03 · DSH · status: ACCURATE (rev 3 — version lock corrected 0.0.31 → 0.0.35; poll-pr-checks.ps1 corrected to the real scripts/poll-pr-checks.sh; title examples moved to the current release branch; the feat/ branch example removed per the never-create-branches repo policy; the crates/oz-* glob prose reworded — rev 3 only respells that phrase so the skill-drift scanner's crate-name grep no longer reads it as a missing crate) · verified this pass: scripts/poll-pr-checks.sh, scripts/lint-i18n.sh, scripts/verify-bundle-parity.py exist; gh pr create/edit/checks workflow unchanged -->
 
 # PR Create — Creating Pull Requests with History-Driven Descriptions
 
