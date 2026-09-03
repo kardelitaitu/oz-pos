@@ -604,3 +604,111 @@ tier badge, input examples (`e.g. 50000`, `pcs / kg / box` ×2, `A-01` ×2), and
 
 12 commits, one per phase, all six pre-commit gates green on each. Nothing
 pushed.
+
+---
+
+## Follow-up rounds (post-audit)
+
+The audit's closing report claimed the gate was fail-closed "in both the hook
+and CI". That was derived from a sentence in `AGENTS.md` without reading the
+workflow, and it was wrong. Three follow-up items were agreed from the wreckage.
+
+### F1 — CI restoration and the docs that lied (`7ff75b5c`, `8ed8194b`)
+
+`23c96330` ("backup full workflows to .bak and introduce streamlined Quick Dev
+CI") retired `ci.yml`, which held the `i18n quality gate` step, and `dev-ci.yml`
+never replaced it. So twelve commits of gate work were enforced only for
+developers who ran `setup-dev.ps1` and did not pass `--no-verify` — and
+`core.hooksPath` is local config, not versioned, meaning **a fresh clone had no
+i18n gate at all**.
+
+Added an `i18n` job to `dev-ci.yml` and wired it into `northflank-deploy`'s
+`needs`. This is a deliberate trade, not an obvious win: a locale typo can now
+hold a backend deploy. A non-blocking job would have been decoration.
+
+Then discovered the repo already had a mechanism for exactly this class of
+drift, and it was red: `scripts/gates.json` is the single source of truth for
+gate vocabulary, `verify-ci-docs-drift.py` derives a docs check from it, and
+`gates.json` still pointed `i18n-lint` at the dead `ci.yml`. The drift gate
+**exits 1 with 78 items and runs only in `check.sh` and two `.bak` workflows** —
+which is precisely how `AGENTS.md` came to advertise a CI job that did not
+exist. Repointing `i18n-lint` and `ftl-dedupe` took it 79 → 78; the other 78 are
+other gates' dead references and were left as I18N-05.
+
+Docs corrected where they had drifted: gate-3 scope, the "~1–3s total" claim
+(`lint-i18n.sh` alone measures 4.1s), `lint-i18n.sh`'s header citing
+`ci.yml`/`release.yml`, `AGENTS.md`'s "mirrors the entire CI matrix" pointer, and
+a comment in `i18nBundle.test.tsx` that still told readers the `[i18n]` warning
+gate was "loud, not blocking".
+
+### F2 — Rescued artifacts (`026d4ff6`)
+
+This journal moved out of `%TEMP%` and into the repo. Four throwaway scripts
+promoted to `scripts/`, each rewritten script-relative because
+`scan_fluent.py` had a hardcoded checkout path — the exact thing `AGENTS.md`
+forbids. Two bugs found during promotion, both mine, both instructive:
+
+* The rewrite made `ROOT` and `OUT` both read `argv[1]`, so passing an output
+  directory caused the scanner to scan *that directory* and report **0 source
+  files**. A silent false-clean, the same shape as the original defect.
+* `OUT` defaulted to cwd and dropped two files into the repo root.
+
+Caught by running the promoted tools from a subdirectory, not by reading them.
+
+### F3 — The 98 dynamic sites (`92999384`, `30311341`, `fd6bc85c`, `3697f784`)
+
+Rather than hand-enumerate, surveyed the shapes first. Most were literals in
+disguise. Three surfaces added, taking the gate from 1 to **eight** and the
+census from 4188 to 4434 checked key sites:
+
+| surface | ids recovered | what it catches |
+|---|---|---|
+| `--include-dynamic-literals` | 82 | ternaries like `id={closing ? 'a' : 'b'}` |
+| `--include-id-maps` | 67 | `id={ACTION_FLUENT_IDS[key] ?? fallback}` |
+| widened `KEY_FIELD_ID_PATTERN` | +179 sites | `labelKey`, `messageId`, `fluentKey`, … |
+
+Real defects found:
+
+* **`pos-close-shift-confirm`, `pos-close-shift-closing`,
+  `pos-open-shift-opening`** existed in `sales.id.ftl` but never in `sales.ftl`.
+* **All four `restaurant-sort-*` ids were missing from both bundles.** The
+  buttons looked fine in English because each has a hardcoded fallback child, so
+  the only symptom was Indonesian users reading English sort labels in an
+  otherwise-localised menu.
+
+Things that went wrong and were caught:
+
+* The ternary extractor flagged `restaurant-pos` — a workspace-type
+  discriminator in the *condition*, not an id. Comparison and `case` operands
+  are now blanked in place, preserving offsets for line attribution.
+* A regex assumed `day-*` used `mon`/`tue` abbreviations and reported seven
+  phantom gaps; the real domain is full weekday names, abbreviated at the call
+  site by `charAt`/`slice`. The second phantom,
+  `restaurant-sort-restaurant-menu-hamburger-aria`, came from the same
+  "nearby literals" heuristic. Both discarded in favour of reading the source.
+* The id-map checker's `` backreference pointed at the double-quote
+  *alternative* group instead of the opening quote, so every single-quoted value
+  failed to match and it reported **"0 id-map(s) inspected"** — a clean result
+  produced by an extractor that matched nothing. The most dangerous kind of
+  green. Caught because an empty result looked wrong, not because anything
+  failed.
+
+**A broad `return '<kebab-case>'` surface was measured and rejected.** 27 such
+literals exist; 21 resolve as ids and 6 must not — `status-pending`,
+`status-synced` and `status-failed` are CSS class names returned by
+`statusClass()` two functions above `statusLabel()`, and `branch-location` is a
+topology port key. Adding the rule would have manufactured junk translations to
+satisfy a lint bucket. Same reasoning excludes `portId`/`fromPortId`/`toPortId`
+and `sectionId` from the key-field list.
+
+`DAY_KEYS` and `SORT_MODES` are now exported so the test enumerates the live
+domain instead of a copy, and `SortMode` is derived from `SORT_MODES` so a fifth
+sort mode cannot be added without the test failing. Cost: 2 more
+`react-refresh/only-export-components` warnings (65 → 67, eslint still exits 0),
+matching the pre-existing `AnalyticsScreen` precedent set for the same reason.
+
+### Standing lesson
+
+Every defect in this thread was found by a tool that could not see it, and every
+false alarm was produced by a tool that saw too much. The fix in both cases was
+the same: run the checker, then go read the source it pointed at.
