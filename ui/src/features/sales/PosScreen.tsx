@@ -2024,7 +2024,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                 }}
                 disabled={openingBill}
               >
-                Cancel
+                {requiredLocalized(l10n, 'pos-hold-cancel')}
               </button>
               <button
                 type="button"

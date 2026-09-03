@@ -360,9 +360,9 @@ export default function WarehouseCountFlow({ sessionToken, locationId, onComplet
                   value={countType}
                   onChange={(e) => setCountType(e.target.value as CountType)}
                 >
-                  <option value="full">Full</option>
-                  <option value="cyclic">Cyclic</option>
-                  <option value="spot">Spot</option>
+                  <option value="full">{requiredLocalized(l10n, 'sc-type-full')}</option>
+                  <option value="cyclic">{requiredLocalized(l10n, 'sc-type-cyclic')}</option>
+                  <option value="spot">{requiredLocalized(l10n, 'sc-type-spot')}</option>
                 </select>
               </label>
               <label className="warehouse-count-type-label">

@@ -164,6 +164,7 @@ variant-mgmt-field-barcode = Barcode
 variant-mgmt-field-sort-order = Sort order
 variant-mgmt-field-active = Active
 variant-mgmt-btn-cancel = Cancel
+variant-mgmt-error-retry = Retry
 variant-mgmt-btn-create = Create
 variant-mgmt-btn-update = Update
 variant-mgmt-overlay-aria = Variants for { $name }

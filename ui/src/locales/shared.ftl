@@ -526,6 +526,7 @@ warehouse-adjust-reason-label = Reason
 warehouse-adjust-reason-placeholder = e.g. stock count, damage, return
 warehouse-adjust-confirm = Confirm
 warehouse-adjust-cancel = Cancel
+warehouse-mode-tabs-aria = Warehouse mode
 
 # ── Warehouse POS console (v2) ────────────────────────────────
 warehouse-mode-receive = Receive

@@ -1,5 +1,6 @@
 import { Localized } from '@fluent/react';
 import type { ReactLocalization } from '@fluent/react';
+import { requiredLocalized } from '@/frontend/shared';
 import { Card } from '@/components/Card';
 import SettingsSelect from '../SettingsSelect';
 import type { ReceiptSettingsDto } from '@/api/settings';
@@ -35,7 +36,7 @@ export default function ReceiptSection({
           </label>
           <span className="settings-field-input-wrap">
             <label className="settings-toggle" htmlFor="receipt-show-currency">
-              <span className="sr-only">Toggle</span>
+              <span className="sr-only">{requiredLocalized(l10n, 'toggle')}</span>
               <span className="settings-toggle-switch">
                 <input
                   id="receipt-show-currency"
@@ -85,7 +86,7 @@ export default function ReceiptSection({
           </label>
           <span className="settings-field-input-wrap">
             <label className="settings-toggle" htmlFor="receipt-show-tax">
-              <span className="sr-only">Toggle</span>
+              <span className="sr-only">{requiredLocalized(l10n, 'toggle')}</span>
               <span className="settings-toggle-switch">
                 <input
                   id="receipt-show-tax"
@@ -153,7 +154,7 @@ export default function ReceiptSection({
           </label>
           <span className="settings-field-input-wrap">
             <label className="settings-toggle" htmlFor="receipt-show-table-number">
-              <span className="sr-only">Toggle</span>
+              <span className="sr-only">{requiredLocalized(l10n, 'toggle')}</span>
               <span className="settings-toggle-switch">
                 <input
                   id="receipt-show-table-number"

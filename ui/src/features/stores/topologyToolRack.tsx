@@ -1,4 +1,5 @@
 import { Localized, useLocalization } from '@fluent/react';
+import { requiredLocalized } from '@/frontend/shared';
 import {
   StoreIcon,
   WarehouseIcon,
@@ -117,7 +118,7 @@ export function TopologyToolRack({
         <div className="rack-panel" role="group" aria-label={l10n.getString(`topology-rack-${rackPanel}-title`)}>
           <div className="rack-panel-header">
             <h3 className="rack-panel-title"><Localized id={`topology-rack-${rackPanel}-title`}>{rackPanel}</Localized></h3>
-            <button type="button" className="rack-panel-close" onClick={onClosePanel} aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
+            <button type="button" className="rack-panel-close" onClick={onClosePanel} aria-label={requiredLocalized(l10n, 'close-aria')}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
           </div>
           {rackPanel === 'add' && (
             <div className="rack-panel-body">
@@ -137,7 +138,7 @@ export function TopologyToolRack({
             <div className="rack-panel-body">
               {canDelete ? (
                 <button type="button" className="tool-card" onClick={onDeleteSelected}><span className="tool-card-icon" style={{ color: 'var(--color-danger)' }}><TrashIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-delete-selected">Delete Selected Element</Localized></strong></div></button>
-              ) : <p className="rack-panel-empty">Select a node or wire to delete</p>}
+              ) : <Localized id="topology-rack-delete-empty"><p className="rack-panel-empty">Select a node or wire to delete</p></Localized>}
               {canUndo && <button type="button" className="tool-card" onClick={onUndo}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-undo">Undo (Ctrl+Z)</Localized></strong></div></button>}
               {canRedo && <button type="button" className="tool-card" onClick={onRedo}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-redo">Redo (Ctrl+Y)</Localized></strong></div></button>}
             </div>
@@ -153,8 +154,8 @@ export function TopologyToolRack({
           )}
           {rackPanel === 'share' && (
             <div className="rack-panel-body">
-              <button type="button" className="tool-card" onClick={onExport}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-export">Export</Localized></strong><span>Download as JSON</span></div></button>
-              <button type="button" className="tool-card" onClick={onImport}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-import">Import</Localized></strong><span>Load from JSON file</span></div></button>
+              <button type="button" className="tool-card" onClick={onExport}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-export">Export</Localized></strong><Localized id="topology-export-desc"><span>Download as JSON</span></Localized></div></button>
+              <button type="button" className="tool-card" onClick={onImport}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-import">Import</Localized></strong><Localized id="topology-import-desc"><span>Load from JSON file</span></Localized></div></button>
               <div className="rack-panel-divider" />
               <button type="button" className="tool-card" onClick={onToggleTemplateSave}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-save-template">Save template</Localized></strong></div></button>
               {templateSaveOpen && (
@@ -164,7 +165,7 @@ export function TopologyToolRack({
               {templatesOpen && (
                 <div className="rack-template-list" role="group">
                   {savedTemplates.length === 0 ? <p className="rack-panel-empty"><Localized id="topology-no-templates">No saved templates</Localized></p> : (
-                    <ul className="rack-template-items">{savedTemplates.map((name) => (<li key={name} className="rack-template-item"><span className="rack-template-name">{name}</span><div className="rack-template-actions"><button type="button" onClick={() => onLoadTemplate(name)}>Load</button><button type="button" onClick={() => onDeleteTemplate(name)}>Delete</button></div></li>))}</ul>
+                    <ul className="rack-template-items">{savedTemplates.map((name) => (<li key={name} className="rack-template-item"><span className="rack-template-name">{name}</span><div className="rack-template-actions"><button type="button" onClick={() => onLoadTemplate(name)}><Localized id="topology-template-load">Load</Localized></button><button type="button" onClick={() => onDeleteTemplate(name)}><Localized id="topology-template-delete">Delete</Localized></button></div></li>))}</ul>
                   )}
                 </div>
               )}

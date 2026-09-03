@@ -141,6 +141,7 @@ staff-assignment-all-workspaces-short = Semua
 # ── Fast User Switching (ADR #6) ──────────────────────────────────────────
 
 staff-login-close-aria = Tutup
+staff-login-last-login-title = Waktu login terakhir pada perangkat ini
 staff-login-next-aria = Lanjut
 
 fastpin-switch-user = Ganti Pengguna

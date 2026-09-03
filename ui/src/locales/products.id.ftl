@@ -163,6 +163,7 @@ variant-mgmt-field-barcode = Barcode
 variant-mgmt-field-sort-order = Urutan
 variant-mgmt-field-active = Aktif
 variant-mgmt-btn-cancel = Batal
+variant-mgmt-error-retry = Coba lagi
 variant-mgmt-btn-create = Buat
 variant-mgmt-btn-update = Perbarui
 variant-mgmt-overlay-aria = Varian untuk { $name }

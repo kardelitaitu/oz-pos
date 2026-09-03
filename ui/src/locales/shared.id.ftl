@@ -520,6 +520,7 @@ warehouse-adjust-reason-label = Alasan
 warehouse-adjust-reason-placeholder = contoh: hitung stok, kerusakan, pengembalian
 warehouse-adjust-confirm = Konfirmasi
 warehouse-adjust-cancel = Batal
+warehouse-mode-tabs-aria = Mode gudang
 
 # ── Warehouse POS console (v2) ────────────────────────────────
 warehouse-mode-receive = Terima

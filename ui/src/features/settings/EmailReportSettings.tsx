@@ -340,7 +340,7 @@ export default function EmailReportSettings() {
           </span>
           <span className="settings-field-input-wrap">
             <label className="settings-toggle" htmlFor="settings-email-use-tls">
-              <span className="sr-only">Toggle</span>
+              <span className="sr-only">{requiredLocalized(l10n, 'toggle')}</span>
               <span className="settings-toggle-switch">
                 <input
                   id="settings-email-use-tls"
@@ -441,7 +441,7 @@ export default function EmailReportSettings() {
             </span>
             <span className="settings-field-input-wrap">
               <label className="settings-toggle" htmlFor="settings-schedule-enabled">
-                <span className="sr-only">Toggle</span>
+                <span className="sr-only">{requiredLocalized(l10n, 'toggle')}</span>
                 <span className="settings-toggle-switch">
                   <input
                     id="settings-schedule-enabled"

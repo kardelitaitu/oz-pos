@@ -381,7 +381,7 @@ export default function WarehouseConsole() {
       </div>
 
       {/* ── Mode tabs ── */}
-      <div className="warehouse-mode-tabs" role="tablist" aria-label="Warehouse mode">
+      <div className="warehouse-mode-tabs" role="tablist" aria-label={requiredLocalized(l10n, 'warehouse-mode-tabs-aria')}>
         {(['receive', 'send', 'count', 'stock'] as WarehouseMode[]).map((m) => (
           <button
             key={m}

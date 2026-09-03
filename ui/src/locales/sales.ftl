@@ -873,6 +873,7 @@ retail-edit-field-low-stock = Low Stock Threshold
 retail-edit-field-high-stock = High Stock Threshold
 retail-edit-save = Save Changes
 retail-edit-cancel = Cancel
+retail-course-none = None
 retail-edit-btn-aria = Edit product { $name }
 
 # ── Add Category / Add Product Modals ──

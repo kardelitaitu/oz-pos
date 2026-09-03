@@ -818,6 +818,7 @@ retail-edit-field-low-stock = Ambang Stok Menipis
 retail-edit-field-high-stock = Ambang Stok Tinggi
 retail-edit-save = Simpan Perubahan
 retail-edit-cancel = Batal
+retail-course-none = Tidak ada
 retail-edit-btn-aria = Edit produk { $name }
 
 # ── Add Category / Add Product Modals ──

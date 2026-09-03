@@ -13,7 +13,7 @@ import { Button } from '@/components/Button';
 import { useAppZoom } from '@/contexts/ZoomContext';
 import type { ZoomLevel } from '@/contexts/ZoomContext';
 import { useHardwareAccel } from '@/contexts/HardwareAccelContext';
-import { useToast, useContextMenu, ContextMenu, ConfirmDialog } from '@/frontend/shared';
+import { useToast, useContextMenu, ContextMenu, ConfirmDialog, requiredLocalized } from '@/frontend/shared';
 import SettingsSelect from './SettingsSelect';
 import './AppearanceSettings.css';
 
@@ -317,7 +317,7 @@ export function AppearanceSettings({
         </label>
         <span className="settings-field-input-wrap">
           <label className="settings-toggle" htmlFor="hw-accel-checkbox">
-            <span className="sr-only">Toggle</span>
+            <span className="sr-only">{requiredLocalized(l10n, 'toggle')}</span>
             <span className="settings-toggle-switch">
               <Localized id="appearance-hw-accel-aria" attrs={{ 'aria-label': true }}>
                 <input
