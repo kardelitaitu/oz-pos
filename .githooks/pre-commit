@@ -154,7 +154,7 @@ if [ -f scripts/verify-bundle-parity.py ]; then
     # || true: swallow grep no-match (e.g. no .tsx/.ts staged) + mask any upstream pipe failure.
     if [ "${#STAGED_FILES[@]}" -gt 0 ]; then
         if ! "$PYTHON" scripts/verify-bundle-parity.py --staged-only \
-                --include-getstring --include-nav-keys \
+                --include-getstring --include-nav-keys --include-key-fields \
                 --scan-dirs features,components,frontend,contexts,hooks,platform \
                 "${STAGED_FILES[@]}"; then
             printf '%s\n' "error: bundle parity — staged files reference keys missing from one or both .ftl bundles. See verify-bundle-parity.py output above." >&2

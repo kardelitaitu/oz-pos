@@ -666,7 +666,7 @@ function StepFeatures({
                       type="checkbox"
                       checked={isOn}
                       onChange={() => onToggle(f.key)}
-                      aria-label={`Toggle ${f.label}`}
+                      aria-label={requiredLocalized(l10n, 'setup-feature-toggle-aria', { name: label })}
                     />
                   </Localized>
                   <span className="toggle-track">

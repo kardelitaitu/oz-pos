@@ -59,6 +59,7 @@ setup-progress-aria = Kemajuan setup
 setup-preset-question = Toko seperti apa yang Anda jalankan?
 setup-preset-desc = Pilih preset untuk memulai dengan cepat, atau sesuaikan setiap fitur nanti.
 setup-preset-group-aria = Preset toko
+setup-feature-toggle-aria = Alihkan { $name }
 setup-preset-simple-retail = Ritel Sederhana
 setup-preset-simple-retail-desc = Pindai barcode, keranjang, tunai/kartu/QR, PIN staf, printer nota
 setup-preset-restaurant = Restoran

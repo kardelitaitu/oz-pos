@@ -203,6 +203,17 @@ SECTION_LABELS_PATTERN = re.compile(
     flags=re.DOTALL,
 )
 SECTION_LABEL_VALUE_PATTERN = re.compile(r":\s*(['\"])(?P<v>[^'\"]+)\1")
+# Fluent ids stored in an object-literal field and looked up later:
+#   { key: 'revenue', titleKey: 'analytics-card-revenue', … }   → getString(card.titleKey)
+#   { key: 'dinein',  labelId: 'kds-settings-color-dinein', … } → <Localized id={labelId}>
+# The lookup site passes a *variable*, so neither GETSTRING_ID_PATTERN nor
+# the <Localized> walker can resolve it, and the literal itself sits in a
+# plain object with no call syntax to anchor on. This is the third dynamic
+# class, and by count the largest: AnalyticsScreen alone stores 36.
+KEY_FIELD_ID_PATTERN = re.compile(
+    r"\b(?P<field>titleKey|descKey|labelId|nameKey|ariaKey|placeholderKey)"
+    r"\s*:\s*(['\"])(?P<id>[A-Za-z0-9][A-Za-z0-9._-]*)\2"
+)
 # Dynamic getString — unresolvable, but its volume must stay visible.
 GETSTRING_TEMPLATE_PATTERN = re.compile(r"\.getString\(\s*`")
 
@@ -298,6 +309,7 @@ KIND_LABELS = {
     "required": "requiredLocalized()",
     "navkey": "nav i18nKey",
     "section": "SECTION_LABELS",
+    "keyfield": "key-field literal",
 }
 
 
@@ -338,6 +350,11 @@ def extract_sites_from_source(
             for value in SECTION_LABEL_VALUE_PATTERN.finditer(body):
                 line = text.count("\n", 0, offset + value.start("v")) + 1
                 sites.append(("section", value.group("v"), line))
+
+    if "keyfield" in kinds:
+        for match in KEY_FIELD_ID_PATTERN.finditer(text):
+            line = text.count("\n", 0, match.start("id")) + 1
+            sites.append(("keyfield", match.group("id"), line))
 
     return sites, untracked_localized, dynamic_getstring
 
@@ -408,6 +425,13 @@ def main() -> int:
              "SECTION_LABELS value (rev-2 surface; off by default).",
     )
     parser.add_argument(
+        "--include-key-fields",
+        action="store_true",
+        help="Also check Fluent ids stored in object-literal fields "
+             "(titleKey/descKey/labelId/…) and resolved through a variable "
+             "(rev-3 surface; off by default).",
+    )
+    parser.add_argument(
         "--scan-dirs",
         default=None,
         help="Comma-separated directories under ui/src to walk "
@@ -417,6 +441,7 @@ def main() -> int:
         "--full-census",
         action="store_true",
         help="Shorthand for --include-getstring --include-nav-keys "
+             "--include-key-fields "
              f"--scan-dirs {','.join(CENSUS_SCAN_DIRS)}.",
     )
     parser.add_argument(
@@ -431,6 +456,7 @@ def main() -> int:
     if args.full_census:
         args.include_getstring = True
         args.include_nav_keys = True
+        args.include_key_fields = True
         args.scan_dirs = ",".join(CENSUS_SCAN_DIRS)
 
     kinds: set[str] = {"localized"}
@@ -438,6 +464,8 @@ def main() -> int:
         kinds |= {"getstring", "required"}
     if args.include_nav_keys:
         kinds |= {"navkey", "section"}
+    if args.include_key_fields:
+        kinds |= {"keyfield"}
 
     dir_names = (
         DEFAULT_SCAN_DIRS

@@ -18,6 +18,11 @@ setup-progress-aria = Setup progress
 setup-preset-question = What kind of store are you running?
 setup-preset-desc = Choose a preset to get started quickly, or customise every feature later.
 setup-preset-group-aria = Store preset
+# Accessible name for a feature toggle row. The code used to write
+# `Toggle ${f.label}`, which concatenated the English word "Toggle" with the
+# *unlocalized* array entry, so a screen reader announced "Toggle Inventory
+# Tracking" to an Indonesian user even though the visible label was correct.
+setup-feature-toggle-aria = Toggle { $name }
 
 setup-preset-simple-retail = Simple Retail
 setup-preset-simple-retail-desc = Barcode scan, cart, cash/card/QR, staff PIN, receipt printer
