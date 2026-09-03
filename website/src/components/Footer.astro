@@ -1,30 +1,17 @@
 ---
 import { getRelativeLocaleUrl } from 'astro:i18n';
-import { t, dict } from '../i18n';
+import { t } from '../i18n';
 
 const locale = Astro.currentLocale ?? 'en';
 const year = new Date().getFullYear();
-// Vertical entry points (subscription-tiers.md §5).
-const verticalList = [
-  { key: 'restoran', href: 'restaurant' },
-  { key: 'kafe', href: 'cafe' },
-  { key: 'minimarket', href: 'minimarket' },
-  { key: 'warung', href: 'warung' },
-  { key: 'warehouse', href: 'warehouse' },
-] as const;
-const verticals = dict(locale).vertical as Record<string, { label: string }>;
 ---
 
 <footer class="border-t border-ink/5 bg-surface/40">
   <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-4 py-8 sm:flex-row">
-    <div class="flex flex-wrap items-center gap-4">
-      <p class="text-xs text-muted">
-        © {year} OZ-POS. {t(locale, 'footer.rights')}
-      </p>
-      <!-- Social links — same treatment as Discord: muted → brand color on
-           hover, monochrome currentColor glyphs. Hrefs are the platforms'
-           general web URLs until real profiles exist. -->
-      <div class="flex items-center gap-3">
+    <!-- Left: Social icons on top of Copyright -->
+    <div class="flex flex-col items-center sm:items-start gap-2.5 text-center sm:text-left">
+      <!-- Social links — muted → brand color on hover, monochrome currentColor glyphs -->
+      <div class="flex items-center gap-3.5">
         <a
           href="https://discord.gg/NdWDgEzNxx"
           target="_blank"
@@ -81,18 +68,13 @@ const verticals = dict(locale).vertical as Record<string, { label: string }>;
           </svg>
         </a>
       </div>
+      <p class="text-xs text-muted">
+        © {year} OZ-POS. {t(locale, 'footer.rights')}
+      </p>
     </div>
-    <nav class="flex flex-wrap justify-center gap-4 text-xs text-muted" aria-label={t(locale, 'footer.business')}>
-      {
-        verticalList.map(({ key, href }) => (
-          <a href={getRelativeLocaleUrl(locale, href)} class="footer-link relative transition-colors duration-200 hover:text-ink">
-            {verticals[key]?.label}
-            <span class="footer-underline absolute -bottom-0.5 left-0 h-px w-0 bg-primary transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)]"></span>
-          </a>
-        ))
-      }
-    </nav>
-    <nav class="flex gap-4 text-xs text-muted" aria-label={t(locale, 'footer.legal')}>
+
+    <!-- Right: Legal Links -->
+    <nav class="flex items-center gap-6 text-xs text-muted" aria-label={t(locale, 'footer.legal')}>
       <a href={getRelativeLocaleUrl(locale, 'legal/privacy')} class="footer-link relative transition-colors duration-200 hover:text-ink">
         {t(locale, 'footer.privacy')}
         <span class="footer-underline absolute -bottom-0.5 left-0 h-px w-0 bg-primary transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)]"></span>

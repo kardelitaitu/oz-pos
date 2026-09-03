@@ -22,26 +22,14 @@ const FOOTER_SRC = readFileSync(
 // ─── Link structure tests ────────────────────────────────────────────
 
 describe('Footer link structure', () => {
-  it('defines all 5 vertical entries in the source', () => {
-    const verticalKeys = ['kafe', 'minimarket', 'warung', 'restoran', 'warehouse'];
-    for (const key of verticalKeys) {
-      expect(FOOTER_SRC).toContain(`'${key}'`);
-    }
-  });
-
   it('renders 2 legal links (privacy and terms)', () => {
     expect(FOOTER_SRC).toContain("'legal/privacy'");
     expect(FOOTER_SRC).toContain("'legal/terms'");
   });
 
   it('uses getRelativeLocaleUrl for navigation links', () => {
-    // Vertical links use 1 getRelativeLocaleUrl inside .map(), legal has 2
     const matches = FOOTER_SRC.match(/getRelativeLocaleUrl\(/g);
-    expect(matches).toHaveLength(3);
-  });
-
-  it('has aria-label on the business verticals nav', () => {
-    expect(FOOTER_SRC).toContain("aria-label={t(locale, 'footer.business')}");
+    expect(matches).toHaveLength(2);
   });
 
   it('has aria-label on the legal nav', () => {
@@ -49,9 +37,8 @@ describe('Footer link structure', () => {
   });
 
   it('has footer-link class on navigation links', () => {
-    // 1 template for verticals + 2 static for legal = 3 occurrences
     const footerLinkMatches = FOOTER_SRC.match(/class="footer-link/g);
-    expect(footerLinkMatches).toHaveLength(3);
+    expect(footerLinkMatches).toHaveLength(2);
   });
 });
 
