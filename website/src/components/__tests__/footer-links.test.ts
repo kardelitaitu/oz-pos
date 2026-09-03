@@ -162,4 +162,40 @@ describe('Footer copyright', () => {
     expect(FOOTER_SRC).toContain('discord.gg');
     expect(FOOTER_SRC).toContain('aria-label="Discord"');
   });
+
+  it('has X, Instagram, Facebook, and Telegram social links', () => {
+    // General platform web URLs — real profiles not created yet.
+    expect(FOOTER_SRC).toContain('https://x.com');
+    expect(FOOTER_SRC).toContain('aria-label="X (Twitter)"');
+    expect(FOOTER_SRC).toContain('https://www.instagram.com');
+    expect(FOOTER_SRC).toContain('aria-label="Instagram"');
+    expect(FOOTER_SRC).toContain('https://www.facebook.com');
+    expect(FOOTER_SRC).toContain('aria-label="Facebook"');
+    expect(FOOTER_SRC).toContain('https://telegram.org');
+    expect(FOOTER_SRC).toContain('aria-label="Telegram"');
+  });
+
+  it('all social links open safely in a new tab', () => {
+    // Every social anchor carries target=_blank + rel=noopener noreferrer.
+    const socials = ['Discord', 'X (Twitter)', 'Instagram', 'Facebook', 'Telegram'];
+    for (const label of socials) {
+      const anchorMatch = FOOTER_SRC.match(
+        new RegExp(`href="[^"]*"\\s+target="_blank"\\s+rel="noopener noreferrer"[^>]*aria-label="${label.replace(/[()]/g, '\\$&')}"`),
+      );
+      expect(anchorMatch, `missing safe-anchor attrs on ${label}`).not.toBeNull();
+    }
+  });
+
+  it('social links use brand-color hover tints', () => {
+    // Same effect as Discord: muted gray -> brand color on hover.
+    const tints = [
+      ['Discord', '#5865F2'],
+      ['Instagram', '#E4405F'],
+      ['Facebook', '#1877F2'],
+      ['Telegram', '#229ED9'],
+    ] as const;
+    for (const [, color] of tints) {
+      expect(FOOTER_SRC).toContain(`hover:text-[${color}]`);
+    }
+  });
 });
