@@ -35,6 +35,10 @@ next: none | perf: N/A
 //!   -H "Authorization: Bearer <token>"
 //! ```
 
+// The shared OpenAPI document (`spec.rs`) is one deeply-nested `json!`
+// literal — same requirement as `apps/cloud-server` (main.rs).
+#![recursion_limit = "512"]
+
 /// JWT auth middleware and token generation.
 pub mod auth;
 /// Postgres data layer for the REST handlers (Phase 1.2).
@@ -43,6 +47,9 @@ pub mod pg;
 pub mod read_tiers;
 /// Axum route handlers (health, tokens, products, categories, sales).
 pub mod routes;
+/// Shared OpenAPI 3.1 document (`x-oz-scope`-tagged) served by the cloud
+/// server and the desktop local API.
+pub mod spec;
 
 use std::sync::Arc;
 
