@@ -161,12 +161,11 @@ body {
   margin-bottom: 1.5rem;
 }
 
-.logo-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--primary);
-  box-shadow: 0 0 0 3px rgba(20, 126, 251, .12);
+.logo-img {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  flex-shrink: 0;
 }
 
 h1 {
