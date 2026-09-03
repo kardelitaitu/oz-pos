@@ -86,3 +86,161 @@ async fn mint_uses_persisted_secret_stably() {
         );
     }
 }
+
+// ── Lifecycle helpers (run_* bodies, review LOW-7) ─────────────────
+
+/// State wired for real start/stop cycles: fresh global DB (port
+/// pre-persisted on the raw connection before wrapping — no lock needed,
+/// `blocking_lock` would panic inside the test runtime), isolated store
+/// dir, and a probe-bound free port.
+fn lifecycle_state() -> (AppState, std::path::PathBuf, u16) {
+    let tmp = std::env::temp_dir().join(format!("oz-local-api-life-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    let probe = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = probe.local_addr().unwrap().port();
+    drop(probe);
+    let conn = oz_core::migrations::fresh_db();
+    oz_core::Settings::set(&conn, local_api::SETTINGS_PORT, &port.to_string()).unwrap();
+    let mut state = AppState::for_test_with_conn(conn);
+    state.db_manager =
+        platform_core::StoreDatabaseManager::new(tmp.clone(), oz_core::migrations::ALL);
+    (state, tmp.join("images"), port)
+}
+
+#[tokio::test]
+async fn enable_disable_cycle_binds_serves_and_persists() {
+    let (state, image_dir, port) = lifecycle_state();
+    let s = run_set_enabled(&state, image_dir.clone(), true)
+        .await
+        .unwrap();
+    assert!(s.enabled && s.running);
+    assert_eq!(
+        s.base_url.as_deref(),
+        Some(format!("http://127.0.0.1:{port}/api/v1").as_str())
+    );
+
+    // The server answers on the configured port.
+    let health = reqwest::get(format!("http://127.0.0.1:{port}/api/v1/health")).await;
+    assert!(health.is_ok(), "loopback server must accept connections");
+
+    let s = run_set_enabled(&state, image_dir.clone(), false)
+        .await
+        .unwrap();
+    assert!(!s.running);
+    assert!(!s.enabled);
+    {
+        let db = state.db.lock().await;
+        assert_eq!(
+            oz_core::Settings::get(&db, local_api::SETTINGS_ENABLED).unwrap(),
+            Some("0".into())
+        );
+    }
+    let _ = std::fs::remove_dir_all(image_dir.parent().unwrap());
+}
+
+#[tokio::test]
+async fn enable_is_idempotent_while_running() {
+    let (state, image_dir, port) = lifecycle_state();
+    let first = run_set_enabled(&state, image_dir.clone(), true)
+        .await
+        .unwrap();
+    let second = run_set_enabled(&state, image_dir.clone(), true)
+        .await
+        .unwrap();
+    assert_eq!(first.base_url, second.base_url);
+    assert_eq!(
+        second.base_url,
+        Some(format!("http://127.0.0.1:{port}/api/v1"))
+    );
+    let _ = std::fs::remove_dir_all(image_dir.parent().unwrap());
+}
+
+#[tokio::test]
+async fn enable_with_taken_port_errors_and_stays_off() {
+    let (state, image_dir, port) = lifecycle_state();
+    // Occupy the configured port before the enable attempt.
+    let squatter = std::net::TcpListener::bind(("127.0.0.1", port)).unwrap();
+    let err = run_set_enabled(&state, image_dir.clone(), true).await;
+    assert!(err.is_err(), "bind conflict must surface as Err");
+    let s = build_status(&state).await.unwrap();
+    assert!(
+        !s.running && !s.enabled,
+        "failed enable must not persist on"
+    );
+    drop(squatter);
+    let _ = std::fs::remove_dir_all(image_dir.parent().unwrap());
+}
+
+#[tokio::test]
+async fn set_port_restarts_running_server_on_new_port() {
+    let (state, image_dir, old_port) = lifecycle_state();
+    run_set_enabled(&state, image_dir.clone(), true)
+        .await
+        .unwrap();
+    let probe = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let new_port = probe.local_addr().unwrap().port();
+    drop(probe);
+
+    let s = run_set_port(&state, image_dir.clone(), new_port)
+        .await
+        .unwrap();
+    assert!(s.running);
+    assert_eq!(s.port, new_port);
+    assert_eq!(
+        s.base_url,
+        Some(format!("http://127.0.0.1:{new_port}/api/v1"))
+    );
+    // Old port is gone, new port answers.
+    assert!(
+        reqwest::get(format!("http://127.0.0.1:{old_port}/api/v1/health"))
+            .await
+            .is_err()
+    );
+    assert!(
+        reqwest::get(format!("http://127.0.0.1:{new_port}/api/v1/health"))
+            .await
+            .is_ok()
+    );
+
+    // Out-of-range rejected without touching the running server.
+    let err = run_set_port(&state, image_dir.clone(), 80)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, AppError::Invalid(_)));
+    assert!(build_status(&state).await.unwrap().running);
+    let _ = std::fs::remove_dir_all(image_dir.parent().unwrap());
+}
+
+#[tokio::test]
+async fn rotate_secret_swaps_key_and_keeps_server_up() {
+    let (state, image_dir, port) = lifecycle_state();
+    run_set_enabled(&state, image_dir.clone(), true)
+        .await
+        .unwrap();
+    let old_secret = {
+        let db = state.db.lock().await;
+        local_api::load_or_create_secret(&db).unwrap()
+    };
+
+    let s = run_rotate_secret(&state, image_dir.clone()).await.unwrap();
+    assert!(
+        s.running,
+        "rotation must keep the server up on the same port"
+    );
+    assert_eq!(s.base_url, Some(format!("http://127.0.0.1:{port}/api/v1")));
+
+    let new_secret = {
+        let db = state.db.lock().await;
+        local_api::load_or_create_secret(&db).unwrap()
+    };
+    assert_ne!(old_secret, new_secret);
+    // A token minted with the old key no longer validates against the
+    // rotated persisted secret (the running server now uses the new one).
+    let stale = local_api::mint_token(&old_secret, "stale", Some(1)).unwrap();
+    assert!(
+        oz_api::auth::validate_token_with_secret(&stale.token, Some(&new_secret))
+            .await
+            .is_err()
+    );
+    let _ = std::fs::remove_dir_all(image_dir.parent().unwrap());
+}

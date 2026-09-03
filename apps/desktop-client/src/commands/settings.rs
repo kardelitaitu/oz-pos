@@ -987,8 +987,22 @@ pub async fn set_setting_scoped(
 /// `local_api.enabled` through the generic path would persist an intent
 /// the server never acts on (fail-open disable), and writing
 /// `local_api.secret` would silently invalidate every minted token.
+/// `lan_server.*` is the same class (PSK + bind + enabled owned by the
+/// LAN server module); no UI surface writes those through the generic
+/// path, so widening the guard closes the pre-existing hole without
+/// breaking any caller.
+fn managed_key_owner(key: &str) -> Option<&'static str> {
+    if key.starts_with("local_api.") {
+        Some("Local API")
+    } else if key.starts_with("lan_server.") {
+        Some("LAN server")
+    } else {
+        None
+    }
+}
+
 fn is_managed_key(key: &str) -> bool {
-    key.starts_with("local_api.")
+    managed_key_owner(key).is_some()
 }
 
 /// Business logic for `set_setting` (extracted for testing).
@@ -1000,9 +1014,9 @@ fn run_set_setting(
     value: &str,
     terminal_id: &str,
 ) -> Result<(), AppError> {
-    if is_managed_key(key) {
+    if let Some(owner) = managed_key_owner(key) {
         return Err(AppError::Invalid(format!(
-            "{key} is managed by the Local API controls — use those"
+            "{key} is managed by the {owner} controls — use those"
         )));
     }
     Ok(Settings::set_tracked(conn, key, value, terminal_id)?)
@@ -1046,8 +1060,9 @@ pub async fn set_settings_scoped(
     // all-or-nothing transaction semantics hold (same guard as
     // `run_set_setting`; the batch loop below bypasses it by design).
     if let Some(key) = entries.keys().find(|k| is_managed_key(k)) {
+        let owner = managed_key_owner(key).unwrap_or("a dedicated");
         return Err(AppError::Invalid(format!(
-            "{key} is managed by the Local API controls — use those"
+            "{key} is managed by the {owner} controls — use those"
         )));
     }
 

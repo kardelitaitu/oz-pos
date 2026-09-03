@@ -35,7 +35,7 @@ fn is_enabled_requires_explicit_one() {
 fn secret_is_generated_once_and_stable() {
     let conn = oz_core::migrations::fresh_db();
     let first = load_or_create_secret(&conn).unwrap();
-    assert_eq!(first.len(), 64, "two simple UUIDs = 64 hex chars");
+    assert_eq!(first.len(), 64, "32 CSPRNG bytes as hex");
     assert!(first.bytes().all(|b| b.is_ascii_hexdigit()));
     let second = load_or_create_secret(&conn).unwrap();
     assert_eq!(first, second, "second load must not rotate the secret");
@@ -215,6 +215,24 @@ async fn server_serves_health_protected_routes_and_stops() {
         .await
         .unwrap();
     assert_eq!(mint.status(), reqwest::StatusCode::OK);
+
+    // Terminal client-credentials minting is OFF on the local surface
+    // (review MED-5) — even with a valid admin key, the embedder opted
+    // out unconditionally.
+    let device = reqwest::Client::new()
+        .post(format!("{base}/api/v1/tokens"))
+        .header("X-Admin-Key", &secret)
+        .json(&serde_json::json!({
+            "label": "kds-1", "client_id": "kds-1", "client_secret": "whatever"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(device.status(), reqwest::StatusCode::BAD_REQUEST);
+    assert_eq!(
+        device.json::<serde_json::Value>().await.unwrap()["error"].as_str(),
+        Some("terminal_credentials_disabled")
+    );
 
     // Stop → the listener socket dies with the task.
     handle.stop();

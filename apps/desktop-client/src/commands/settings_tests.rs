@@ -386,7 +386,9 @@ fn get_setting_redacts_secret_keys() {
     // Write secret values via Settings directly (bypassing get_setting).
     run_set_setting(&conn, "sync_api_key", "secret-key", "t").unwrap();
     run_set_setting(&conn, "pg_sync.password", "db-pass", "t").unwrap();
-    run_set_setting(&conn, "lan_server.psk", "psk-val", "t").unwrap();
+    // lan_server.* is manager-owned: the guarded writer rejects it (see
+    // run_set_setting_rejects_lan_server_keys), so seed it raw.
+    Settings::set(&conn, "lan_server.psk", "psk-val").unwrap();
     run_set_setting(&conn, "smtp_config", "smtp-secret", "t").unwrap();
     run_set_setting(&conn, "license.api_key", "lic-key", "t").unwrap();
     run_set_setting(&conn, "stripe.api_key", "sk_test_stripe", "t").unwrap();
@@ -550,6 +552,17 @@ fn is_managed_key_prefix_semantics() {
     assert!(is_managed_key("local_api.enabled"));
     assert!(is_managed_key("local_api.")); // even the bare prefix is owned
     assert!(!is_managed_key("local_api"));
-    assert!(!is_managed_key("lan_server.psk")); // separate follow-up, not silently widened
+    assert!(is_managed_key("lan_server.psk")); // same class, same guard
+    assert!(is_managed_key("lan_server.enabled"));
     assert!(!is_managed_key("sync.auth_token"));
+}
+
+#[test]
+fn run_set_setting_rejects_lan_server_keys() {
+    let conn = fresh_conn();
+    let err = run_set_setting(&conn, "lan_server.enabled", "1", "t-1").unwrap_err();
+    assert!(
+        matches!(&err, AppError::Invalid(m) if m.contains("LAN server controls")),
+        "lan_server.* must name its owning controls: {err:?}"
+    );
 }

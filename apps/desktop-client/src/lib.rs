@@ -473,30 +473,13 @@ pub fn run() {
                         if state.local_api.lock().await.is_some() {
                             return; // the toggle path won the race
                         }
-                        let plan = {
+                        let still_enabled = {
                             let db = state.db.lock().await;
-                            if !crate::local_api::is_enabled(&db) {
-                                None // disabled while we queued for the lock
-                            } else {
-                                match crate::local_api::load_or_create_secret(&db) {
-                                    Ok(secret) => Some((
-                                        crate::local_api::resolve_port(&db),
-                                        secret,
-                                        crate::local_api::primary_store_id(&db),
-                                    )),
-                                    Err(e) => {
-                                        tracing::warn!(
-                                            error = %e,
-                                            "local API auto-start: secret unavailable"
-                                        );
-                                        None
-                                    }
-                                }
-                            }
+                            crate::local_api::is_enabled(&db)
                         };
-                        let Some((port, secret, store_id)) = plan else {
-                            return;
-                        };
+                        if !still_enabled {
+                            return; // disabled while we queued for the lock
+                        }
                         let image_dir = match app_handle.path().app_cache_dir() {
                             Ok(dir) => dir.join("images"),
                             Err(e) => {
@@ -507,32 +490,16 @@ pub fn run() {
                                 return;
                             }
                         };
-                        let (api_db, api_db_path) =
-                            match crate::local_api::open_api_store_connection(
-                                &state.db_manager,
-                                &store_id,
-                            ) {
-                                Ok(pair) => pair,
-                                Err(e) => {
-                                    tracing::warn!(
-                                        error = %e,
-                                        "local API auto-start: cannot open store database"
-                                    );
-                                    return;
-                                }
-                            };
-                        match crate::local_api::start(api_db, api_db_path, image_dir, secret, port)
-                            .await
+                        // Same code path as the Settings toggle (secret
+                        // generation, store resolution, bind, slot
+                        // store) — no parallel logic to drift apart.
+                        if let Err(e) =
+                            crate::commands::local_api::start_and_store(&state, image_dir, 0).await
                         {
-                            Ok(handle) => {
-                                *state.local_api.lock().await = Some(handle);
-                            }
-                            Err(e) => {
-                                tracing::warn!(
-                                    error = %e,
-                                    "local API auto-start failed — enable it again in Settings"
-                                );
-                            }
+                            tracing::warn!(
+                                error = %e,
+                                "local API auto-start failed — enable it again in Settings"
+                            );
                         }
                     });
                 }

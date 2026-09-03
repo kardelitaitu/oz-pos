@@ -143,15 +143,15 @@ pub fn resolve_port(conn: &Connection) -> u16 {
 }
 
 /// Generate a fresh per-install secret value (NOT persisted here).
-/// Two UUID v7s (simple form) give 64 hex chars — ~148 random bits
-/// plus timestamps; adequate for a loopback-only signing key, and a
-/// pure-`rand` upgrade is tracked as a review follow-up.
+/// 32 CSPRNG bytes as 64 lowercase hex chars — the same strength
+/// guidance as a cloud `OZ_API_SECRET` (review LOW-4: replaced a
+/// two-UUIDv7 construction whose 48-bit timestamps shave no entropy
+/// but add structure for no benefit).
 fn new_secret() -> String {
-    format!(
-        "{}{}",
-        uuid::Uuid::now_v7().simple(),
-        uuid::Uuid::now_v7().simple()
-    )
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// Load the per-install secret, generating and persisting one on first
@@ -239,6 +239,10 @@ pub async fn start(
         api_secret: secret,
         db_path: db_path.display().to_string(),
         port: bound_port,
+        // Device credentials are a cloud-fleet provisioning concept; a
+        // terminal secret must not become a local-API credential the
+        // operator never minted (review MED-5).
+        allow_terminal_credentials: false,
         // Fail-closed: no browser origin may call the local API. Local
         // scripts (curl/Python/Node) do not send CORS preflights.
         cors_origins: Vec::new(),
