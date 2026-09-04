@@ -253,6 +253,7 @@
   transition: left 0.28s cubic-bezier(0.33, 1, 0.68, 1), width 0.28s cubic-bezier(0.33, 1, 0.68, 1);
   pointer-events: none;
   transform-origin: center;
+  will-change: left, width, transform;
 }
 
 .kds-tab {

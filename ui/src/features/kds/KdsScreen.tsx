@@ -101,6 +101,8 @@ export default function KdsScreen() {
   const tabsTrackRef = useRef<HTMLDivElement>(null);
   const tabOpenRef = useRef<HTMLButtonElement>(null);
   const tabCompletedRef = useRef<HTMLButtonElement>(null);
+  const tabIndicatorRef = useRef<HTMLSpanElement>(null);
+  const isTabMountedRef = useRef(false);
   const [tabIndicator, setTabIndicator] = useState<{ left: number; width: number }>({ left: 3, width: 0 });
   // Filter dropdown — view mode (All / Prepared) matching the prototype filter.
   const [filterMode, setFilterMode] = useState<'all' | 'prepared'>('all');
@@ -467,6 +469,25 @@ export default function KdsScreen() {
   // Open/Completed tab indicator: measure the active tab button inside
   // the track and slide the blue pill to it (prototype .kds-tab-indicator).
   useEffect(() => {
+    const tab = activeTab === 'open' ? tabOpenRef.current : tabCompletedRef.current;
+    if (!tab) return;
+    setTabIndicator({
+      left: tab.offsetLeft,
+      width: tab.offsetWidth,
+    });
+    if (isTabMountedRef.current && tabIndicatorRef.current && typeof tabIndicatorRef.current.animate === 'function') {
+      /* 2-axis motion: squeeze (narrow+short) mid-flight → overshoot on landing → settle */
+      tabIndicatorRef.current.animate([
+        { transform: 'scale(1, 1)' },
+        { transform: 'scale(0.82, 0.85)', offset: 0.45 },
+        { transform: 'scale(1.08, 1.18)', offset: 0.85 },
+        { transform: 'scale(1, 1)' },
+      ], { duration: 340, easing: 'ease-in-out' });
+    }
+    isTabMountedRef.current = true;
+  }, [activeTab]);
+
+  useEffect(() => {
     const updateIndicator = () => {
       const tab = activeTab === 'open' ? tabOpenRef.current : tabCompletedRef.current;
       if (!tab) return;
@@ -475,7 +496,6 @@ export default function KdsScreen() {
         width: tab.offsetWidth,
       });
     };
-    updateIndicator();
     window.addEventListener('resize', updateIndicator);
     return () => window.removeEventListener('resize', updateIndicator);
   }, [activeTab, orders.length]);
@@ -714,7 +734,11 @@ export default function KdsScreen() {
 
         {/* Open/Completed tabs — prototype .kds-tabs */}
         <div className="kds-tabs" ref={tabsTrackRef} role="tablist" aria-label={requiredLocalized(l10n, 'kds-tablist-aria')}>
-          <span className="kds-tab-indicator" style={{ left: tabIndicator.left, width: tabIndicator.width }} />
+          <span
+            ref={tabIndicatorRef}
+            className="kds-tab-indicator"
+            style={{ left: tabIndicator.left, width: tabIndicator.width }}
+          />
           <button
             ref={tabOpenRef}
             className={`kds-tab${activeTab === 'open' ? ' active' : ''}`}
