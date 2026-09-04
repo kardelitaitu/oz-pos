@@ -144,7 +144,7 @@ export default function KdsScreen() {
   // stores on a shared terminal never leaks orders or queued mutations.
   const {
     online, pendingQueueLength, deadLetterLength,
-    wrapFetch, wrapUpdate, retryPending, clearDeadLetter,
+    wrapFetch, wrapUpdate, retryPending, clearDeadLetter, requeueDeadLetter,
     forceRetryCounter, storageUnavailable,
   } = useKdsOffline(workspaceScope?.storeId);
 
@@ -950,9 +950,10 @@ export default function KdsScreen() {
           <button
             className="kds-offline-retry-btn"
             onClick={() => {
-              // Re-queue dead-letter actions: clear the dead list so the next
-              // fetch/retry cycle picks up the operator intent; then flush.
-              clearDeadLetter();
+              // OFF-05: requeue the dead-lettered actions into the pending
+              // queue (preserving operator intent), then flush the queue.
+              // The dismiss (×) button is the explicit "discard" path.
+              requeueDeadLetter();
               retryPending(async (action) => {
                 try {
                   await updateKdsStatusScoped(sessionToken, action.orderId, action.targetStatus);
