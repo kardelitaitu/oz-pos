@@ -87,6 +87,7 @@ RELEASE_CHECKLIST = ROOT / "docs" / "releases" / "checklist.md"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 GATES_MANIFEST = ROOT / "scripts" / "gates.json"
 CHECK_SH = ROOT / "scripts" / "check.sh"
+PRE_COMMIT_HOOK = ROOT / ".githooks" / "pre-commit"
 CHECK_UI = ROOT / "scripts" / "check-ui.mjs"
 
 # Docs headings this checker parses. "Job Matrix" was literally
@@ -247,6 +248,73 @@ def doc_section(lines: list[str], title: str) -> list[str]:
         if in_section:
             out.append(line)
     return out
+
+
+def hook_step_orphans(gates: list[dict]) -> list[str]:
+    """Pre-commit steps whose tooling is unreachable from any gates.json record.
+
+    This closes a blind spot rather than a data error. Every other check in this file
+    iterates the gates that ARE in the manifest, so a gate with no record at all is
+    invisible to it -- it cannot be reported as "required but not enforced", because
+    the checker never learns to ask. That is how `verify-bundle-parity.py` (hook step
+    4, the step whose own docs record 14 broken keys shipping while it reported
+    clean) and both migration gates sat for a full release cycle with coverage in
+    exactly one place: the opt-in hook, on a machine that ran setup-dev.ps1.
+
+    The join is a two-hop chain rather than a filename search, because gate records
+    never contain script names -- they hold runner labels and CI step titles. So:
+    gate -> its `runners` labels -> the `step "<label>" "<cmd>"` line in check.sh ->
+    the scripts that command invokes. Every hop is data already in the repo, and the
+    middle hop is exactly the indirection gates.json exists to describe.
+
+    Matching is on filenames rather than fuzzy name similarity because gate IDs are
+    concepts ("i18n-lint") and hook headers are prose ("i18n lint"); joining those
+    by eye would invent links the manifest never claimed, which is the failure this
+    whole family of checks was built to stop.
+    """
+    if not (PRE_COMMIT_HOOK.is_file() and CHECK_SH.is_file()):
+        return []
+    hook = PRE_COMMIT_HOOK.read_text(encoding="utf-8", errors="replace")
+    check = CHECK_SH.read_text(encoding="utf-8", errors="replace")
+
+    # label -> scripts that label's command invokes
+    label_scripts: dict[str, set[str]] = {}
+    # Leading whitespace allowed: several steps are declared inside an `if` block
+    # (the ftl-dedupe one is, at an indent of 4), and anchoring on column 0 made
+    # those labels unresolvable -- which reported a fully-wired gate as an orphan.
+    for m in re.finditer(r'^\s*step\s+"([^"]+)"\s+"([^"]+)"', check, re.M):
+        label, cmd = m.group(1), m.group(2)
+        label_scripts.setdefault(label, set()).update(
+            re.findall(r"scripts/([A-Za-z0-9_.-]+\.(?:py|sh|mjs))", cmd))
+
+    reachable: set[str] = set()
+    for g in gates:
+        runners = g.get("runners") or {}
+        if isinstance(runners, dict):
+            for labels in runners.values():
+                items = labels if isinstance(labels, list) else [labels]
+                for lb in items:
+                    reachable |= label_scripts.get(str(lb), set())
+        # A gate may also name its tooling directly; honour that if it ever does.
+        reachable |= set(re.findall(
+            r"([A-Za-z0-9_.-]+\.(?:py|sh|mjs))", json.dumps(g)))
+
+    orphans: list[str] = []
+    headers = re.findall(r"^# ── (.+?) ─", hook, re.M)
+    for name in headers:
+        start = hook.index(f"# ── {name} ─")
+        nxt = [hook.index(f"# ── {x} ─") for x in headers
+               if hook.index(f"# ── {x} ─") > start]
+        body = hook[start: min(nxt) if nxt else len(hook)]
+        # Only scripts under scripts/ that the step actually invokes. `cargo fmt`
+        # and bare `go vet` have no script to name, and the EOL step is inline shell
+        # in the hook itself -- requiring a manifest entry for those would demand a
+        # record for something that is not a check with an identity.
+        scripts = sorted(set(re.findall(
+            r"scripts/([A-Za-z0-9_.-]+\.(?:py|sh|mjs))", body)))
+        if scripts and not any(s in reachable for s in scripts):
+            orphans.append(f"{name}  (invokes {', '.join(scripts)})")
+    return orphans
 
 
 def looks_like_actions_workflow(path: Path) -> tuple[bool, str]:
@@ -682,6 +750,8 @@ def main() -> int:
     undocumented_live = sorted(
         live_files - inventory_files - {n for n, _ in misplaced}
     )
+    # Hook steps with no manifest record at all -- the blind spot, not a lie.
+    orphans = hook_step_orphans(gates)
 
     # ── 3. Gate vocabulary: manifest → runners ──────────────────────
     sh_gates = check_sh_gates(CHECK_SH) if CHECK_SH.is_file() else set()
@@ -940,6 +1010,18 @@ def main() -> int:
         )
         print("    " + ", ".join(sorted(retired_gates)))
         print()
+    if orphans:
+        print(
+            f"  PRE-COMMIT STEPS WITH NO gates.json RECORD — {len(orphans)}:\n"
+            "    gates.json is the declared source of truth for gate names, and this\n"
+            "    checker only polices gates it can see. A step absent from the\n"
+            "    manifest is therefore unreportable by design -- which is how\n"
+            "    bundle-parity ran for a release cycle with no record, no CI job and\n"
+            "    no check.sh step while this file printed 0 drift."
+        )
+        for o in orphans:
+            print(f"    {o}")
+        print()
     if misplaced:
         print(
             f"  NON-ACTIONS CONFIGS IN .github/workflows/ — {len(misplaced)}:\n"
@@ -1016,6 +1098,10 @@ def main() -> int:
         # informational: GitHub shows it as an errored workflow, and the existing
         # "undocumented live workflow" line would misreport it as a docs gap.
         + len(misplaced)
+        # Blocking: an unrecorded step is the one defect this checker could not
+        # previously express at all, so leaving it informational would restore the
+        # blind spot under a heading that says "informational".
+        + len(orphans)
         # Escalated from informational to blocking. It was informational while it
         # compared against ci.yml's jobs, i.e. while it could never find anything;
         # pointed at the live workflows it immediately found four undocumented
