@@ -52,7 +52,11 @@
 | `ci-docs-drift` | ✅ Required | dev-ci.yml | step `bash scripts/test-ci-routing.sh` — the router decides whether every other job runs, so this one blocks |
 | `website` | ✅ Required | dev-ci.yml | `cd website && npm ci && npm run check && npm test && npm run build` |
 | `cargo-nextest` | ✅ Required | dev-ci.yml | `cargo nextest run --workspace --all-features` — **no `--exclude`**, so this is broader than check.sh's equivalent, which drops `oz-pos-app` |
-| `static-gates` | ✅ Required | dev-ci.yml | seven checks that previously had no CI runner at all: architecture boundaries, no-hardcoded-money-format, windows-config, skill-drift, unified-healthcheck, panic inventory, and Go fmt/vet/test. Each verified green locally before being wired in. |
+| `static-gates` | ✅ Required | dev-ci.yml | eight checks that previously had no CI runner at all: architecture boundaries, no-hardcoded-money-format, windows-config, skill-drift, unified-healthcheck, panic inventory, release workflow validation (+ `--self-test`), and Go fmt/vet/test. Each verified green locally before being wired in. |
+| `release-readiness` | ✅ Required | dev-ci.yml | `node scripts/check-release-version.mjs --self-test` then `node scripts/check-updater-compat.mjs` — proves the updater signing chain emits signatures the real Tauri client verifier accepts. Path-gated on `changes.outputs.release`; the harness needs a cold cargo build. |
+| `release-validate` | ✅ Required | release.yml | tag push only: `check-release-version.mjs <tag>` (tag ↔ version ↔ changelog), its `--self-test`, and the updater compat check. |
+| `release-build` | ✅ Required | release.yml | matrix `desktop-linux` / `desktop-windows` / `desktop-macos`: nextest, `cargo tauri build`, bundle-existence gate, Windows asInvoker manifest check, optional SignPath/Authenticode with a loud unsigned fallback. |
+| `release-publish` | ✅ Required | release.yml | signed `latest.json`+`beta.json`, signature verification against the committed pubkey, SHA-256 inventory, draft release, provenance attestation, then publish. Hard-fails without `UPDATER_PRIVATE_KEY`. |
 | `northflank-deploy` | ✅ Required | dev-ci.yml | Backend deploy to Northflank; `needs` every other live job except the advisory `ci-docs-drift`. Runs on push to `main`/`release` or `workflow_dispatch`. |
 | `lighthouse` | ⚠️ Advisory | ci.yml | Lighthouse a11y audit (continue-on-error) |
 | `docker` | ✅ Required | ci.yml | Build + Trivy scan + Compose smoke |
@@ -128,15 +132,15 @@
 > CI. GitHub never executes a `.bak` file, so a row marked 🔴 contributes nothing
 > to a merge decision regardless of what its Purpose column says. The Trigger and
 > Purpose columns are retained as the historical record of what each workflow
-> *used* to do — several are candidates for restoration (see R36-11 for
-> `release.yml`, whose absence means tagging `v*` builds no artifacts).
+> *used* to do — several are candidates for restoration. `release.yml` was
+> restored desktop-only in 0.0.36 (R36-11); the rest remain retired.
 
 | Workflow | Status | Trigger | Purpose |
 |----------|--------|---------|---------|
-| `dev-ci.yml` | 🟢 **LIVE** | PR to main, dispatch | The only workflow GitHub executes. Jobs: `changes`, `website`, `cargo-check`, `cargo-nextest`, `ui-test`, `i18n`, `ci-docs-drift`, `static-gates`, `northflank-deploy`. **No build or artifact step** — it does not produce release assets (see R36-11). |
+| `dev-ci.yml` | 🟢 **LIVE** | PR to main, dispatch | Per-PR validation. Jobs: `changes`, `website`, `cargo-check`, `cargo-nextest`, `ui-test`, `i18n`, `ci-docs-drift`, `static-gates`, `release-readiness`, `northflank-deploy`. **No build or artifact step** — it validates the release toolchain but does not produce release assets; that is `release.yml`. |
+| `release.yml` | 🟢 **LIVE** (restored, desktop-only) | tag push (v*) | Builds the three Tauri desktop installers, generates the signed `latest.json`/`beta.json` updater manifests, checksums, attests provenance, and publishes a GitHub Release. Restored in 0.0.36 after `23c96330` renamed it to `.bak` with no replacement. **Docker matrix targets were dropped** — backend images are built by Northflank via `dev-ci.yml#northflank-deploy`. Mobile remains retired (`android.yml`, `ios.yml`). |
 | `ci.yml` | 🔴 retired `.bak` | push/PR to main | Primary CI pipeline (lint, test, build, scan) |
 | `nightly.yml` | 🔴 retired `.bak` | schedule (daily) + dispatch | Nightly Rust/doc/UI/E2E + flaky detection |
-| `release.yml` | 🔴 retired `.bak` | tag push (v*) | Release build, sign, attest, publish — **nothing replaces this; see R36-11** |
 | `security.yml` | 🔴 retired `.bak` | schedule (weekly) + dispatch | Cargo audit/deny + container scan |
 | `android.yml` | 🔴 retired `.bak` | push/PR to main | Android build |
 | `ios.yml` | 🔴 retired `.bak` | push/PR to main | iOS build |

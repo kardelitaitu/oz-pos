@@ -1,32 +1,44 @@
 # Release Checklist — OZ-POS
 
-<!-- Audit stamp: 2026-09-04 · DSH · status: STALE-BY-INFRA-CHANGE (re-audited) · supersedes the 2026-08-31 docs-auditor stamp, whose central claim was false: it asserted "all CI job names exist in workflows (rust-fmt/rust-clippy/rust-test-fast/ui-lint/ui-typecheck/ui-test/release-validate)" — six of those seven are ci.yml/release.yml job names, and 23c96330 retired both to .bak on 2026-09-02. Only ui-test survives, and it survives as a different job with different steps. Re-verified this pass: the five scripts the old stamp listed ARE all present (lint-i18n.sh, check-release-version.mjs, bump-version.ps1, generate-latest-json.mjs, verify-updater-signature.mjs); [profile.ci] IS at .config/nextest.toml:26; the latest.json/beta.json updater endpoints ARE in apps/desktop-client/tauri.conf.json:69-70. But UPDATER_PRIVATE_KEY now exists only in release.yml.bak, and every workflow with a tags: trigger is .bak (release, android, ios, ci, nightly, e2e-pr) while the sole live dev-ci.yml has no build or artifact step — so tagging v* triggers nothing. The Pre-Release job list and the release-validate step have been rewritten to what runs; a 🛑 block now states which steps must be done by hand. Size targets (<100MB/<50MB/<5MB) and smoke-test steps remain operational, not code-falsifiable -->
+<!-- Audit stamp: 2026-09-04 · DSH · status: ACCURATE · version lock: 0.0.36 · supersedes the same-day STALE-BY-INFRA-CHANGE stamp, whose central claim had become false in the other direction: it asserted "the release pipeline is not currently running" and "tagging v* triggers nothing", which was true when written and is not any more -- release.yml was restored desktop-only under R36-11. Re-verified this pass against the workflows rather than against prose: dev-ci.yml has exactly the 10 jobs listed in the Pre-Release item, release.yml has exactly release-validate/release-build/release-publish, the five scripts the pipeline calls all exist (check-release-version.mjs, check-updater-compat.mjs, generate-latest-json.mjs, verify-updater-signature.mjs, verify-windows-config.py), and plugins.updater.pubkey IS present in tauri.conf.json. The two caveats in the warning block are code-falsifiable and are now guarded by scripts/verify-release-workflow.py; mobile automation is NOT, and remains stated as manual. Size targets (<100MB/<50MB/<5MB) and smoke-test steps remain operational, not code-falsifiable -->
 
 > Follow these steps in order for every release. Mark each item as completed.
 
-> ## 🛑 The release pipeline is not currently running
+> ## ⚠️ The release pipeline is desktop-only
 >
-> **Every workflow with a `tags:` trigger is `.bak`** — `release.yml`,
-> `android.yml`, `ios.yml`, `ci.yml`, `nightly.yml`, `e2e-pr.yml` — retired by
-> `23c96330` on 2026-09-02. GitHub never executes a `.bak` file. The only live
-> workflow is `dev-ci.yml`, and it contains **no build or artifact steps**.
->
-> Concretely, as of this writing:
+> `release.yml` was renamed to `release.yml.bak` by `23c96330` on 2026-09-02 with
+> an empty commit message and nothing replaced it, so for a whole release cycle
+> pushing a `v*` tag triggered no workflow at all. It was **restored in 0.0.36 as
+> a desktop-only pipeline** (R36-11): three Tauri targets, signed updater
+> manifests, checksums, provenance, GitHub Release.
 >
 > | Checklist step | What actually happens |
 > |---|---|
-> | `git tag -a vX.Y.Z` + push | **triggers nothing** |
-> | `release-validate` job | does not exist in any live workflow |
-> | Desktop installers built + attached | **nothing builds them** |
-> | Mobile APK/AAB + IPA via tag workflows | those workflows are `.bak` |
-> | `latest.json` / `beta.json` in the release | nothing generates or uploads them |
+> | `git tag -a vX.Y.Z` + push | runs `release.yml`: `release-validate` → `release-build` → `release-publish` |
+> | Desktop installers built + attached | ✅ Linux (AppImage/deb), Windows (NSIS/MSI), macOS (dmg) |
+> | `latest.json` / `beta.json` | ✅ generated, signed, verified against the committed pubkey |
+> | SHA-256 + provenance attestation | ✅ over every released asset |
+> | **Mobile APK/AAB + IPA** | 🔴 **still `.bak`** — must be produced by hand |
+> | **Container images at release time** | 🔴 dropped from this workflow; backend images are built by Northflank on deploy |
 >
-> **Everything from "## Build Verification" onward must be done by hand** until
-> the release workflow is restored — tracked as **R36-11** in
-> [`docs/plans/0.0.36-backlog.md`](../plans/0.0.36-backlog.md). Do not mark those
-> boxes on the assumption CI produced the artifacts; check the release's asset
-> list. See [`first-release-runbook.md`](./first-release-runbook.md) for the
-> manual route, which is stamped `STALE-BY-INFRA-CHANGE` for the same reason.
+> **Two things to check before trusting a release:**
+>
+> 1. **`UPDATER_PRIVATE_KEY` must be configured as a repository secret.** Without
+>    it `release-publish` hard-fails rather than shipping an unsigned manifest —
+>    that is deliberate, and the static gate
+>    (`scripts/verify-release-workflow.py`) exists partly to stop anyone making
+>    it optional again.
+> 2. **Windows installers are UNSIGNED unless `UPDATER_CERT` or SignPath is
+>    configured.** The build emits a `::warning::` and a no-op signCommand; it
+>    does not fail. Check the release page for a publisher, not just for assets.
+>
+> The build/sign/publish path itself **cannot be verified without a real tag
+> push**, so treat the first release after any change to this file as a dry run.
+> What *is* verified automatically, on every change to the release toolchain or
+> the updater pubkey, is `dev-ci.yml#release-readiness` — it proves the
+> signatures this pipeline emits are accepted by the real Tauri client verifier
+> and that a tampered installer is rejected. That check previously ran nowhere.
+
 
 ## Pre-Release
 
@@ -34,10 +46,14 @@
       `website`, `cargo-check` (fmt → check → clippy), `cargo-nextest`,
       `ui-test` (typecheck → lint → vitest → tz-invariance), `i18n`,
       `ci-docs-drift`, `static-gates` (architecture boundaries, money format,
-      windows config, skill drift, healthcheck, panic inventory, Go
-      fmt/vet/test), `northflank-deploy`. This is the **entire** live CI
-      surface; see the warning block above before assuming anything else is
-      gated. `verify-ci-docs-drift.py` checks this list against the workflow.
+      windows config, skill drift, healthcheck, panic inventory, release
+      workflow validation, Go fmt/vet/test), `release-readiness` (updater
+      signing chain), `northflank-deploy`.
+      `release.yml` is live again as of 0.0.36 (desktop-only): `release-validate`
+      → `release-build` → `release-publish`. It runs on a `v*` tag, not on a PR,
+      so nothing here proves it works — see its header comment for what is and is
+      not verified. `verify-ci-docs-drift.py` checks this list against the
+      workflows.
 - [ ] `cargo nextest run --workspace --all-features --profile ci` passes locally
 - [ ] `cd ui && npm run typecheck && npm run lint && npm run test` passes locally
 - [ ] `bash scripts/lint-i18n.sh` clean (no duplicate FTL keys, no verbatim ID bundles)

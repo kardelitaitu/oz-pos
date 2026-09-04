@@ -19,7 +19,7 @@
 set -uo pipefail
 
 WF=".github/workflows/dev-ci.yml"
-KEYS="rust ui i18n website docs"
+KEYS="rust ui i18n website docs release"
 
 [ -f "$WF" ] || { echo "FATAL: $WF not found (run from repo root)"; exit 1; }
 
@@ -103,25 +103,38 @@ echo
 
 # Each bucket must fire ALONE -- a router that over-triggers wastes exactly the
 # runner minutes this mechanism exists to save.
-check "rust crate"          "rust=true ui=false i18n=false website=false docs=false" "crates/oz-core/src/db.rs"
-check "rust lockfile"       "rust=true ui=false i18n=false website=false docs=false" "Cargo.lock"
-check "ui tsx"              "rust=false ui=true i18n=true website=false docs=false"  "ui/src/features/reports/DashboardScreen.tsx"
-check "ui lockfile"         "rust=false ui=true i18n=false website=false docs=false" "ui/package-lock.json"
-check "ftl bundle"          "rust=false ui=true i18n=true website=false docs=false"  "ui/src/locales/en/reports.ftl"
-check "website only"        "rust=false ui=false i18n=false website=true docs=false" "website/src/pages/index.astro"
-check "i18n script"         "rust=false ui=false i18n=true website=false docs=false" "scripts/verify-bundle-parity.py"
+check "rust crate"          "rust=true ui=false i18n=false website=false docs=false release=false" "crates/oz-core/src/db.rs"
+check "rust lockfile"       "rust=true ui=false i18n=false website=false docs=false release=false" "Cargo.lock"
+check "ui tsx"              "rust=false ui=true i18n=true website=false docs=false release=false"  "ui/src/features/reports/DashboardScreen.tsx"
+check "ui lockfile"         "rust=false ui=true i18n=false website=false docs=false release=false" "ui/package-lock.json"
+check "ftl bundle"          "rust=false ui=true i18n=true website=false docs=false release=false"  "ui/src/locales/en/reports.ftl"
+check "website only"        "rust=false ui=false i18n=false website=true docs=false release=false" "website/src/pages/index.astro"
+check "i18n script"         "rust=false ui=false i18n=true website=false docs=false release=false" "scripts/verify-bundle-parity.py"
 # Docs must route to the drift checker: a docs-only PR is precisely the change
 # that can make CI docs lie, and before this output existed it ran nothing.
-check "docs only"           "rust=false ui=false i18n=false website=false docs=true" "docs/operations/ci-pipeline.md"
-check "release doc"         "rust=false ui=false i18n=false website=false docs=true" "docs/releases/checklist.md"
-check "gate manifest"       "rust=false ui=false i18n=false website=false docs=true" "scripts/gates.json"
-check "drift checker"       "rust=false ui=false i18n=false website=false docs=true" "scripts/verify-ci-docs-drift.py"
+check "docs only"           "rust=false ui=false i18n=false website=false docs=true release=false" "docs/operations/ci-pipeline.md"
+# docs/releases/ matches BOTH rules. Pinned deliberately: it is the one path that
+# legitimately belongs to two buckets, and a router that made them mutually
+# exclusive would silently stop checking release docs for drift.
+check "release doc (both)"  "rust=false ui=false i18n=false website=false docs=true release=true"  "docs/releases/checklist.md"
+check "gate manifest"       "rust=false ui=false i18n=false website=false docs=true release=false" "scripts/gates.json"
+check "drift checker"       "rust=false ui=false i18n=false website=false docs=true release=false" "scripts/verify-ci-docs-drift.py"
+# Release toolchain. Each of these can break a shipped auto-update while every
+# other CI job stays green, which is the whole reason this bucket exists.
+check "updater compat"      "rust=false ui=false i18n=false website=false docs=false release=true" "scripts/check-updater-compat.mjs"
+check "release version gate" "rust=false ui=false i18n=false website=false docs=false release=true" "scripts/check-release-version.mjs"
+check "manifest generator"  "rust=false ui=false i18n=false website=false docs=false release=true" "scripts/generate-latest-json.mjs"
+# The tauri.conf.json pubkey: rotate or typo it and every client rejects the
+# signature. It also matches the `rust` rule via apps/desktop-client/, so both
+# must be true -- a single-bucket assertion here would be wrong.
+check "tauri updater pubkey" "rust=true ui=false i18n=false website=false docs=false release=true" "apps/desktop-client/tauri.conf.json"
+check "release workflow"    "rust=false ui=false i18n=false website=false docs=true release=true"  ".github/workflows/release.yml"
 # The workflow gating everything must never be able to route itself away.
-check "this workflow"       "rust=true ui=true i18n=true website=true docs=true"     ".github/workflows/dev-ci.yml"
-check "mixed rust+website"  "rust=true ui=false i18n=false website=true docs=false"  "$(printf 'crates/oz-api/src/lib.rs\nwebsite/src/site.css')"
-check "unrelated file"      "rust=false ui=false i18n=false website=false docs=false" "README.md"
+check "this workflow"       "rust=true ui=true i18n=true website=true docs=true release=true"     ".github/workflows/dev-ci.yml"
+check "mixed rust+website"  "rust=true ui=false i18n=false website=true docs=false release=false"  "$(printf 'crates/oz-api/src/lib.rs\nwebsite/src/site.css')"
+check "unrelated file"      "rust=false ui=false i18n=false website=false docs=false release=false" "README.md"
 # Non-PR events must always run the full matrix.
-check "dispatch event"      "rust=true ui=true i18n=true website=true docs=true"     "README.md" "workflow_dispatch"
+check "dispatch event"      "rust=true ui=true i18n=true website=true docs=true release=true"     "README.md" "workflow_dispatch"
 
 echo
 echo "$pass/$((pass+fail)) routing cases correct"

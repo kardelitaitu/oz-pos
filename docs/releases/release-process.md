@@ -1,6 +1,6 @@
 # Release Process — OZ-POS
 
-<!-- Audit stamp: 2026-09-04 · DSH · status: STALE-BY-INFRA-CHANGE (re-audited) · supersedes the 2026-08-31 docs-auditor stamp. Re-verified TRUE this pass: all five referenced scripts exist (bump-version.ps1, release.sh, check-release-version.mjs, check.sh, dev-code-sign.ps1); all four referenced docs exist (first-release-runbook.md, signpath-onboarding.md, checklist.md, mobile-checklist.md); "SIGNPATH_* secrets/vars (9 refs)" is exact — 9 lines in the workflow carry SIGNPATH_. Corrected: (a) `.github/workflows/release.yml` is now `release.yml.bak`, retired by 23c96330 on 2026-09-02, so "present" is technically true but the file is inert and GitHub executes none of it — step 3 rewritten to say tagging v* triggers nothing; (b) the SignPath action anchor moved from :296 to :300 (L296 is now a `continue-on-error` comment); the action itself is unchanged and still SHA-pinned `signpath/github-action-submit-signing-request@c92b9587…` with a `# v2` trailing comment, so "@v2" was accurate. Scope: file/action references verified; procedural steps not executed -->
+<!-- Audit stamp: 2026-09-04 · DSH · status: ACCURATE · version lock: 0.0.36 · supersedes the same-day STALE-BY-INFRA-CHANGE stamp. Its central claim ("as of 2026-09-02 this triggers nothing") was accurate when written and was overtaken by R36-11: release.yml is live again, desktop-only. Step 3 rewritten to describe what the restored pipeline actually does, including the two failure modes that are easy to miss -- a missing UPDATER_PRIVATE_KEY hard-fails by design, and unsigned Windows installers only WARN. Mobile (android.yml/ios.yml) and release-time Docker images remain unautomated and are called out as such rather than implied -->
 
 This document captures the operational runbook for shipping a release of
 OZ-POS. It exists because the updater pubkey is a security-critical value
@@ -26,17 +26,39 @@ that operators must know how to rotate safely (audit finding **L-4**).
    three release scripts carry `--self-test` mode and are re-validated on
    every local pre-CI gate run via `scripts/check.sh` (release version
    gate / updater manifest generator / updater signature verifier).
-3. **Tag and push** — `git tag -a vX.Y.Z && git push origin vX.Y.Z`.
-   ⚠️ **As of 2026-09-02 this triggers nothing.** The tag-triggered
-   `.github/workflows/release.yml` that used to run the same version gate and
-   then build **real Tauri installers** (`cargo tauri build`): AppImage + deb
-   (Linux), NSIS + MSI (Windows, code-signed when `UPDATER_CERT` or the SignPath
-   route is configured), and DMG (macOS) — was retired to `release.yml.bak` by
-   `23c96330`, and GitHub never executes a `.bak` file. The only live workflow,
-   `dev-ci.yml`, has no build or artifact step. Everything this step used to
-   automate must be done by hand until the workflow is restored (R36-11).
-   Verify the version gate locally first:
-   `node scripts/check-release-version.mjs vX.Y.Z`.
+ 3. **Tag and push** — `git tag -a vX.Y.Z && git push origin vX.Y.Z`.
+    ✅ **As of 0.0.36 this runs `release.yml` again** (desktop-only). It had been
+    retired to `release.yml.bak` by `23c96330` on 2026-09-02 with an empty commit
+    message and nothing replaced it, so for a full release cycle tagging produced
+    nothing at all. Restored, it runs `release-validate` → `release-build` →
+    `release-publish`: the version gate, then **real Tauri installers**
+    (`cargo tauri build`) — AppImage + deb (Linux), NSIS + MSI (Windows,
+    code-signed when `UPDATER_CERT` or the SignPath route is configured), and DMG
+    (macOS) — then signed `latest.json`/`beta.json`, SHA-256 checksums, provenance
+    attestation, and a draft release published only after the asset inventory gate
+    passes.
+
+    Two caveats that are easy to get wrong:
+      * **`UPDATER_PRIVATE_KEY` must be set as a repository secret.** Without it
+        `release-publish` hard-fails rather than shipping an unsigned manifest.
+        That is deliberate, and `scripts/verify-release-workflow.py` guards it.
+      * **Windows installers are UNSIGNED unless `UPDATER_CERT` or SignPath is
+        configured**, and the build only emits a warning. Check the release page
+        for a real publisher, not just for attached assets.
+
+    **Mobile is still not automated** — `android.yml` and `ios.yml` remain `.bak`,
+    so APK/AAB and IPA still need the manual route below. The release-time Docker
+    images were dropped when `release.yml` was restored: backend images are built
+    by Northflank (`dev-ci.yml#northflank-deploy`), and an inventory gate
+    demanding a `.tar` that no job produces would fail every release.
+
+    The build/sign/publish path cannot be verified without a real tag push, so
+    treat the first release after any change to this workflow as a dry run. What
+    IS verified automatically on every change to the release toolchain or the
+    updater pubkey is `dev-ci.yml#release-readiness`, which proves the signatures
+    this pipeline emits are accepted by the real Tauri client verifier.
+    Verify the version gate locally first:
+    `node scripts/check-release-version.mjs vX.Y.Z`.
 
    **Windows code signing — the free routes (see the first-release runbook §6):**
 

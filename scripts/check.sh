@@ -272,6 +272,20 @@ step "ci routing test" "bash scripts/test-ci-routing.sh" bash scripts/test-ci-ro
 
 step "ci docs drift" "python3 scripts/verify-ci-docs-drift.py" python3 scripts/verify-ci-docs-drift.py
 
+# ── Release workflow validation (R36-11) ──────────────────────────────────
+# release.yml was renamed to .bak by 23c96330 with an empty commit message and
+# nothing replaced it, so tagging produced no installers for a release cycle.
+# A workflow that never runs cannot report its own breakage, so this checks
+# statically what needs no tag, no key material and no macOS/Windows runner:
+# action pins, referenced paths, docker residue, an inventory gate demanding an
+# artifact no matrix entry builds, and that a missing UPDATER_PRIVATE_KEY still
+# hard-fails rather than publishing an unsigned manifest every client rejects.
+# --self-test mutates eight of those guarantees and requires each to be caught,
+# so a regression cannot silently turn the gate into a no-op.
+# Gate: scripts/gates.json -> "release-workflow".
+step "release workflow validation" "python3 scripts/verify-release-workflow.py" python3 scripts/verify-release-workflow.py
+step "release workflow self-test" "python3 scripts/verify-release-workflow.py --self-test" python3 scripts/verify-release-workflow.py --self-test
+
 # ── Docker build smoke test (optional: --docker-dry-run) ──────────────────
 if [ "${1:-}" = "--docker-dry-run" ]; then
     if command -v docker &>/dev/null; then

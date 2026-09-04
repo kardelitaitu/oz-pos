@@ -319,6 +319,21 @@
       "label": "Nightly benchmarks",
       "status": "retired",
       "_note": "nightly.yml is .bak."
+    },
+    {
+      "id": "release-workflow",
+      "label": "Release workflow validation",
+      "status": "required",
+      "_note": "R36-11. release.yml was renamed to release.yml.bak by 23c96330 with an empty commit message and nothing replaced it, so pushing a v* tag produced no installers for a whole release cycle. A workflow that never runs cannot report its own breakage, so this validates statically what needs no tag, key material, or macOS/Windows runner: action pins, referenced paths, docker residue left by the desktop-only restore, an inventory gate demanding an artifact no matrix entry builds, and that a missing UPDATER_PRIVATE_KEY still hard-fails rather than publishing an unsigned manifest every client rejects. Ships with --self-test (8 mutations) so a regression cannot silently turn it into a no-op.",
+      "runners": { "check.sh": ["release workflow validation"] },
+      "ci": { "workflow": "dev-ci.yml", "job": "static-gates" }
+    },
+    {
+      "id": "release-readiness",
+      "label": "Release readiness",
+      "status": "required",
+      "_note": "Runs scripts/check-updater-compat.mjs, which builds a Rust harness pinned to the minisign-verify version the real Tauri updater client uses and proves that signatures from generate-latest-json.mjs VERIFY, that a tampered installer is REJECTED, and that the pubkey committed in tauri.conf.json parses. Before this it ran ONLY inside release.yml.bak, i.e. nowhere at all -- so the signing chain could have rotted silently alongside the retired workflow and the first symptom would be customers unable to auto-update. Path-gated on the release toolchain and the updater pubkey because the harness needs a cold cargo build. No `runners` key: that field names LOCAL entry points, and this one needs a cargo build, so it is CI-only.",
+      "ci": { "workflow": "dev-ci.yml", "job": "release-readiness" }
     }
   ]
 }
