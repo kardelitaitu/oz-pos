@@ -1127,14 +1127,15 @@ fn complete_sale_to_kds_multi_zone_creates_one_order_per_zone() {
     assert_eq!(zones, vec![Some("bar".into()), Some("grill".into())]);
 }
 
-/// RED: the multi-zone fanout must be ATOMIC. If one zone's order insert
-/// fails (e.g. a concurrent terminal already completed this sale, so the
-/// (sale, zone) pair exists), NO new tickets may be created — today the
-/// loop commits each zone in its own transaction, so the earlier zones'
-/// tickets survive the error, leaving a partial set on the kitchen
-/// display.
+/// Idempotent fanout on retry: a retried checkout (double-tapped pay,
+/// transient error between ticket creation and finalize) must NOT hit
+/// UNIQUE(sale_id, kitchen_zone) as an error — for zoned sales that error
+/// was swallowed at checkout (leaving NO ticket), and for unzoned sales
+/// SQLite's NULL-distinct UNIQUE silently created duplicate tickets.
+/// Instead: existing zones are skipped, missing zones are completed, and
+/// a fully-replayed fanout returns the existing tickets unchanged.
 #[test]
-fn complete_sale_to_kds_fanout_is_atomic_on_partial_failure() {
+fn complete_sale_to_kds_fanout_is_idempotent_on_retry() {
     let conn = fresh();
     let s = store(&conn);
 
@@ -1150,10 +1151,7 @@ fn complete_sale_to_kds_fanout_is_atomic_on_partial_failure() {
     s.create_sale(&sale).unwrap();
 
     // Simulate a concurrent terminal that already created the GRILL zone
-    // ticket for this sale (partial completion / double-complete). Zones
-    // are processed in sorted order (bar before grill), so the fanout
-    // commits the BAR ticket first, then hits the grill conflict — the
-    // non-atomic loop leaves the bar ticket behind on error.
+    // ticket for this sale (partial completion / double-complete).
     s.create_kds_order(CreateKdsOrderInput {
         sale_id: sale.id.clone(),
         store_id: None,
@@ -1166,20 +1164,35 @@ fn complete_sale_to_kds_fanout_is_atomic_on_partial_failure() {
     })
     .unwrap();
 
-    let err = s.complete_sale_to_kds(&sale.id, None).unwrap_err();
-    assert!(
-        matches!(err, CoreError::Validation { .. }) || matches!(err, CoreError::Db(_)),
-        "duplicate zone must error, got: {err:?}"
+    // Retried fanout: skips grill (already exists), completes bar, and
+    // must not duplicate or error.
+    let created = s.complete_sale_to_kds(&sale.id, None).unwrap();
+    assert_eq!(
+        created.len(),
+        1,
+        "only the missing bar ticket may be created, got: {created:?}"
     );
+    assert_eq!(created[0].kitchen_zone.as_deref(), Some("bar"));
 
-    // Atomicity: the failed fanout must NOT have created the bar ticket.
     let orders = s.get_kds_orders_by_sale(&sale.id).unwrap();
     assert_eq!(
         orders.len(),
-        1,
-        "only the pre-existing grill ticket may exist; the failed fanout must leave no partial tickets, got: {orders:?}"
+        2,
+        "final state is the union of existing + new tickets, got: {orders:?}"
     );
-    assert_eq!(orders[0].kitchen_zone.as_deref(), Some("grill"));
+    let mut zones: Vec<_> = orders
+        .iter()
+        .filter_map(|o| o.kitchen_zone.clone())
+        .collect();
+    zones.sort();
+    assert_eq!(zones, vec!["bar".to_string(), "grill".to_string()]);
+
+    // A fully-replayed fanout (every zone already ticketed) is a no-op
+    // returning the existing tickets — never duplicates.
+    let replay = s.complete_sale_to_kds(&sale.id, None).unwrap();
+    assert_eq!(replay.len(), 2);
+    let orders_after = s.get_kds_orders_by_sale(&sale.id).unwrap();
+    assert_eq!(orders_after.len(), 2, "no duplicate tickets after replay");
 }
 
 fn seed_product_with_zone(conn: &Connection, sku: &str, name: &str, zone: &str) {
@@ -2942,4 +2955,242 @@ fn e2e_enrollment_flow_register_validate_route_ack() {
     // 14. Cleanup old orders — this order is recent, should not be deleted.
     let deleted = s.cleanup_old_kds_orders(30).unwrap();
     assert_eq!(deleted, 0);
+}
+
+// ── S3: sale-lifecycle ↔ KDS ticket reconciliation ─────────────────
+
+fn make_active_sale(s: &Store<'_>, sale_id: &str) {
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let test_sale = Sale {
+        id: sale_id.to_owned(),
+        status: crate::SaleStatus::Active,
+        total: price(0),
+        currency: usd(),
+        line_count: 0,
+        payment_method: None,
+        tendered_minor: None,
+        discount_percent: 0,
+        discount_label: None,
+        user_id: None,
+        created_at: now.clone(),
+        updated_at: now,
+        subtotal: price(0),
+        tax_total: price(0),
+        customer_id: None,
+        base_currency: None,
+        base_total_minor: None,
+        tender_rate_millionths: None,
+        tip_minor: 0,
+        service_charge_minor: 0,
+        lines: vec![],
+        version: 1,
+    };
+    s.create_sale(&test_sale).unwrap();
+}
+
+fn make_kds_order(s: &Store<'_>, sale_id: &str, zone: Option<&str>) -> crate::KdsOrder {
+    s.create_kds_order(CreateKdsOrderInput {
+        sale_id: sale_id.to_owned(),
+        store_id: None,
+        items_summary: "Burger x1".into(),
+        item_count: 1,
+        kitchen_zone: zone.map(|z| z.to_owned()),
+        notes: String::new(),
+        table_number: None,
+        priority: false,
+    })
+    .unwrap()
+}
+
+/// F10: replaying the CURRENT state must be a true no-op — the workflow
+/// timestamp (started_at) and prep timer must not be overwritten by a
+/// duplicate offline replay or a re-fired auto-acknowledge.
+#[test]
+fn update_kds_status_same_state_replay_preserves_started_at() {
+    let conn = fresh();
+    let s = store(&conn);
+    make_active_sale(&s, "sale-noop");
+    let order = make_kds_order(&s, "sale-noop", Some("grill"));
+
+    let preparing = s.update_kds_status(&order.id, "preparing").unwrap();
+    let started = preparing.started_at.clone().expect("started_at set");
+
+    let replay = s.update_kds_status(&order.id, "preparing").unwrap();
+    assert_eq!(replay.status, "preparing");
+    assert_eq!(
+        replay.started_at.as_deref(),
+        Some(started.as_str()),
+        "same-state replay must not overwrite started_at"
+    );
+}
+
+/// F5: replacing an order's items mid-preparation must carry the matched
+/// item's workflow state onto the new rows (FIFO by (sku, course)), not
+/// reset the kitchen's progress to 'pending'. Unmatched new items start
+/// pending.
+#[test]
+fn update_kds_order_items_replacement_preserves_item_status() {
+    let conn = fresh();
+    let s = store(&conn);
+    make_active_sale(&s, "sale-edit");
+    let order = make_kds_order(&s, "sale-edit", None);
+
+    let initial = s
+        .create_kds_line_items(
+            &order.id,
+            &[
+                CreateKdsLineItemInput {
+                    sku: "BURGER".into(),
+                    display_name: "Burger".into(),
+                    qty: 1,
+                    course: Some("main".into()),
+                    modifiers: vec![],
+                },
+                CreateKdsLineItemInput {
+                    sku: "FRIES".into(),
+                    display_name: "Fries".into(),
+                    qty: 1,
+                    course: Some("side".into()),
+                    modifiers: vec![],
+                },
+            ],
+        )
+        .unwrap();
+
+    // Kitchen starts the burger.
+    let burger = &initial[0];
+    assert_eq!(burger.sku, "BURGER");
+    let started_line = s
+        .update_kds_line_item_status(&burger.id, "preparing")
+        .unwrap();
+    let started_at = started_line.started_at.clone().expect("started_at set");
+
+    // FOH edits the order: same burger + fries, plus a new coke.
+    s.update_kds_order_items(crate::UpdateKdsOrderItemsInput {
+        id: order.id.clone(),
+        items_summary: String::new(),
+        item_count: 0,
+        line_items: Some(vec![
+            CreateKdsLineItemInput {
+                sku: "BURGER".into(),
+                display_name: "Burger".into(),
+                qty: 1,
+                course: Some("main".into()),
+                modifiers: vec![],
+            },
+            CreateKdsLineItemInput {
+                sku: "FRIES".into(),
+                display_name: "Fries".into(),
+                qty: 1,
+                course: Some("side".into()),
+                modifiers: vec![],
+            },
+            CreateKdsLineItemInput {
+                sku: "COKE".into(),
+                display_name: "Coke".into(),
+                qty: 1,
+                course: Some("beverage".into()),
+                modifiers: vec![],
+            },
+        ]),
+    })
+    .unwrap();
+
+    let lines = s.get_kds_order_lines(&order.id).unwrap();
+    assert_eq!(lines.len(), 3);
+    let by_sku: std::collections::HashMap<&str, &crate::KdsLineItem> =
+        lines.iter().map(|l| (l.sku.as_str(), l)).collect();
+    let burger = by_sku.get("BURGER").unwrap();
+    assert_eq!(burger.item_status, "preparing", "burger keeps its progress");
+    assert_eq!(
+        burger.started_at.as_deref(),
+        Some(started_at.as_str()),
+        "burger keeps its started_at"
+    );
+    assert_eq!(by_sku.get("FRIES").unwrap().item_status, "pending");
+    assert_eq!(
+        by_sku.get("COKE").unwrap().item_status,
+        "pending",
+        "new items start pending"
+    );
+}
+
+/// S3: cancelling a sale's tickets is active-only — served food is history
+/// and already-cancelled tickets are terminal; lines follow their parent.
+#[test]
+fn cancel_kds_orders_for_sale_cancels_only_active_tickets() {
+    let conn = fresh();
+    let s = store(&conn);
+    make_active_sale(&s, "sale-cancel");
+    let pending = make_kds_order(&s, "sale-cancel", Some("grill"));
+    let served = make_kds_order(&s, "sale-cancel", Some("bar"));
+    let already = make_kds_order(&s, "sale-cancel", None);
+
+    s.update_kds_status(&served.id, "preparing").unwrap();
+    s.update_kds_status(&served.id, "ready").unwrap();
+    s.update_kds_status(&served.id, "served").unwrap();
+    s.update_kds_status(&already.id, "cancelled").unwrap();
+
+    // Lines on the pending ticket must follow it to 'cancelled'.
+    s.create_kds_line_items(
+        &pending.id,
+        &[CreateKdsLineItemInput {
+            sku: "BURGER".into(),
+            display_name: "Burger".into(),
+            qty: 1,
+            course: Some("main".into()),
+            modifiers: vec![],
+        }],
+    )
+    .unwrap();
+
+    let tx = conn.unchecked_transaction().unwrap();
+    let cancelled = s
+        .cancel_kds_orders_for_sale_in_tx(&tx, "sale-cancel")
+        .unwrap();
+    tx.commit().unwrap();
+
+    assert_eq!(
+        cancelled, 1,
+        "only the active (pending) ticket is cancelled"
+    );
+    assert_eq!(
+        s.get_kds_order(&pending.id).unwrap().unwrap().status,
+        "cancelled"
+    );
+    assert_eq!(
+        s.get_kds_order(&served.id).unwrap().unwrap().status,
+        "served"
+    );
+    assert_eq!(
+        s.get_kds_order(&already.id).unwrap().unwrap().status,
+        "cancelled"
+    );
+    let pending_lines = s.get_kds_order_lines(&pending.id).unwrap();
+    assert!(
+        pending_lines.iter().all(|l| l.item_status == "cancelled"),
+        "lines of a cancelled ticket follow to 'cancelled'"
+    );
+}
+
+/// S3: voiding a sale must pull its active tickets off the board, in the
+/// same transaction as the void itself.
+#[test]
+fn void_sale_cancels_kds_tickets_for_the_sale() {
+    let conn = fresh();
+    let s = store(&conn);
+    make_active_sale(&s, "sale-void");
+    let ticket = make_kds_order(&s, "sale-void", Some("grill"));
+    s.update_kds_status(&ticket.id, "preparing").unwrap();
+
+    let voided = s
+        .void_sale("sale-void", "manager-1", "customer left")
+        .unwrap();
+    assert_eq!(voided.status, crate::SaleStatus::Voided);
+
+    let after = s.get_kds_order(&ticket.id).unwrap().unwrap();
+    assert_eq!(
+        after.status, "cancelled",
+        "voided sale's active ticket must be cancelled"
+    );
 }

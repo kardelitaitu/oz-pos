@@ -171,28 +171,37 @@ const SCREENS: ScreenEntry[] = [
   {
     name: 'KdsScreen',
     tsx: 'kds/KdsScreen.tsx',
-    css: ['kds/KdsScreen.css'],
+    css: ['kds/KdsScreen.css', 'kds/KdsCompletedView.css'],
     dynamicClassPrefixes: [
       'kds-column--',
       'kds-ticket',
       'kds-workspace',
       'kds-history-card-status--',
-      // `status status--${order.status}` in KdsTicketCard.
+      'kds-shortcut-',
+      'kds-shortcuts-',
       'status--',
+      'active-',
+      'kds-main-pane--',
     ],
-    externalClasses: ['kds-empty'],
+    externalClasses: [
+      'kds-empty',
+      'no-anim',
+      'leaving',
+      'kds-moving',
+    ],
     knownDynamicFragments: [
-      // Comparison values inside className ternaries, not CSS classes:
-      // `activeTab === 'completed'`, `themeCtx.theme === 'dark' | 'light'`.
       'completed',
       'dark',
       'light',
+      'dinein',
+      'takeaway',
+      'active-',
+      // `kds--${settings.density}` conditional density class.
+      'compact',
+      // Global screen-reader-only utility (frontend/themes/components.css),
+      // outside this screen's scanned stylesheet list.
+      'sr-only',
     ],
-    // These siblings render into the same stylesheet: the masonry board, the
-    // ticket card, the Completed tab, the hamburger panel, and the footer
-    // status bar. `KdsHistoryPanel.tsx` used to be listed here but was
-    // deleted in the Phase 6 cleanup (fece7524), which broke this suite at
-    // collection time — the whole file threw ENOENT before any test ran.
     additionalTsx: [
       'kds/KdsLayoutMasonry.tsx',
       'kds/components/KdsTicketCard.tsx',

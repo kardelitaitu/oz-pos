@@ -171,6 +171,10 @@ if command -v npm &>/dev/null && [ -f ui/package-lock.json ]; then
     step "ui lint" "cd ui; npm run lint" npm run lint
     step "ui typecheck" "cd ui; npm run typecheck" npm run typecheck
     step "ui test" "cd ui; npm run test" npm run test
+    # R36-01: the suite above runs in this machine's zone, so a host-local date
+    # anchor can pass here and fail on a UTC CI runner. Re-runs the analytics
+    # anchor test under four zones and requires identical results.
+    step "analytics tz invariance" "python3 scripts/check-tz-invariance.py" python3 ../scripts/check-tz-invariance.py
     # AUDIT-27 CI-06: A11y regression suite (advisory, mirrors CI's
     # continue-on-error since known product-level a11y bugs are tracked
     # but not yet fixed). Never fails the gate — reports status only.
@@ -218,6 +222,10 @@ else
     echo -e "${YELLOW}⚠ Website checks skipped (npm not found or website/package-lock.json missing)${NC}"
 fi
 
+# Asset hygiene is stdlib-only, so it runs even when npm is unavailable above.
+# Gate: scripts/gates.json → "website-assets".
+step "website assets" "python3 scripts/verify-website-assets.py" python3 scripts/verify-website-assets.py
+
 # ── Plugin guide / API parity (PLG-10 tail; Rust-side, always runs) ─────
 step "plugin-guide parity" "python3 scripts/verify-plugin-guide-parity.py" python3 scripts/verify-plugin-guide-parity.py
 
@@ -255,7 +263,82 @@ step "healthcheck script test" "sh apps/unified/test-healthcheck.sh" sh apps/uni
 # `ci-docs-drift` CI job; a named-but-missing job, a drifted
 # check.sh/check:all gate, or a status that contradicts a workflow
 # fails the gate.
+# The router decides whether every other job runs, so it gets a regression test:
+# scripts/test-ci-routing.sh extracts the Route shell body from dev-ci.yml and
+# runs it against 15 synthetic diffs. c5ec6381 shipped the router with no
+# committed test while the release notes claimed one existed.
+# Gate: scripts/gates.json -> "ci-routing-test".
+step "ci routing test" "bash scripts/test-ci-routing.sh" bash scripts/test-ci-routing.sh
+
 step "ci docs drift" "python3 scripts/verify-ci-docs-drift.py" python3 scripts/verify-ci-docs-drift.py
+
+# ── Document uniqueness (R36-14) ────────────────────────────────────────────
+# f3d9cca6 moved the repo-root subscription-tiers.md into docs/records/ without
+# noticing docs/guides/ already had a copy from 28147fe4 -- leaving two tracked
+# files, both stamped "single source of truth" for pricing, whose entitlement
+# tables disagree. Nothing detected it, because no gate compared documents to
+# each other. This one does, and it is scoped to docs/ with conventional names
+# (README/SKILL/AGENTS) excluded, so it does not cry wolf on normal structure.
+# Carries a pair-specific baseline for the one known finding, so a NEW duplicate
+# still fails. --self-test proves the detector fires and stays quiet correctly.
+# Gate: scripts/gates.json -> "doc-uniqueness".
+step "doc uniqueness" "python3 scripts/verify-doc-uniqueness.py" python3 scripts/verify-doc-uniqueness.py
+step "doc uniqueness self-test" "python3 scripts/verify-doc-uniqueness.py --self-test" python3 scripts/verify-doc-uniqueness.py --self-test
+
+# ── Pre-commit EOL net (R36-15) ────────────────────────────────────────────
+# The hook's line-ending step filtered on `git check-attr text` alone, which is
+# wrong twice over: it ignored `*.bat text eol=crlf` and stripped CRLF from the
+# working tree (phantom-dirty `git status`), and `text=auto` reports "auto" for
+# binaries, so a staged PNG had its signature's 0D 0A deleted and the mangled
+# blob re-staged. Both are silent data corruption behind a green hook. The test
+# extracts the live guard from .githooks/pre-commit rather than copying it, so it
+# cannot drift from the thing it polices.
+# Gate: scripts/gates.json -> "eol-guard".
+step "eol guard" "bash scripts/test-eol-guard.sh" bash scripts/test-eol-guard.sh
+
+# ── AGENTS.md mirror truthfulness ──────────────────────────────────────────
+# Three copies of the agent rules exist and `bump-version.ps1` syncs only their
+# version lines. Twice in 0.0.36 a mirror stated something the repo contradicted:
+# `.agents/AGENTS.md` said Go had no CI backstop after dev-ci.yml#static-gates
+# started running it, and root AGENTS.md said dev-ci runs on push when it has no
+# push trigger. A mirror that governs work under `.agents/` and tells agents their
+# changes are unguarded is not a cosmetic problem. Ground truth is read from the
+# hook, the workflows and Cargo.toml, never asserted -- so adding a gate or
+# bumping the version updates the expectation without editing this script.
+# --self-test mutates each mirror and requires a named finding, and reports a
+# mutation that changes nothing as WRONG rather than passing because its fixture
+# no longer applies.
+# Gate: scripts/gates.json -> "agents-mirrors".
+step "agents mirrors" "python3 scripts/verify-agents-mirrors.py" python3 scripts/verify-agents-mirrors.py
+step "agents mirrors self-test" "python3 scripts/verify-agents-mirrors.py --self-test" python3 scripts/verify-agents-mirrors.py --self-test
+
+# ── Conventional-commit subjects ───────────────────────────────────────────
+# .githooks/commit-msg enforces the subject format locally, but core.hooksPath is
+# set by setup-dev.ps1 and is not versioned, so a clone that skips setup has no
+# subject gate. The hook's own header names four commits on this range whose
+# entire message is a pasted `git status --porcelain` block -- those are why the
+# hook exists, and they are exactly what this finds. The rule (type list, regex,
+# and the Merge/Revert/fixup/squash/amend exemptions) is EXTRACTED from the hook
+# at run time, so local and CI cannot disagree about what is legal.
+# Commits older than the hook's introduction are skipped, derived from
+# `git log --diff-filter=A` on the hook rather than a hardcoded sha.
+# Gate: scripts/gates.json -> "commit-subjects".
+step "commit subjects" "python3 scripts/verify-commit-subjects.py --range main..HEAD" python3 scripts/verify-commit-subjects.py --range main..HEAD
+step "commit subjects self-test" "python3 scripts/verify-commit-subjects.py --self-test" python3 scripts/verify-commit-subjects.py --self-test
+
+# ── Release workflow validation (R36-11) ──────────────────────────────────
+# release.yml was renamed to .bak by 23c96330 with an empty commit message and
+# nothing replaced it, so tagging produced no installers for a release cycle.
+# A workflow that never runs cannot report its own breakage, so this checks
+# statically what needs no tag, no key material and no macOS/Windows runner:
+# action pins, referenced paths, docker residue, an inventory gate demanding an
+# artifact no matrix entry builds, and that a missing UPDATER_PRIVATE_KEY still
+# hard-fails rather than publishing an unsigned manifest every client rejects.
+# --self-test mutates eight of those guarantees and requires each to be caught,
+# so a regression cannot silently turn the gate into a no-op.
+# Gate: scripts/gates.json -> "release-workflow".
+step "release workflow validation" "python3 scripts/verify-release-workflow.py" python3 scripts/verify-release-workflow.py
+step "release workflow self-test" "python3 scripts/verify-release-workflow.py --self-test" python3 scripts/verify-release-workflow.py --self-test
 
 # ── Docker build smoke test (optional: --docker-dry-run) ──────────────────
 if [ "${1:-}" = "--docker-dry-run" ]; then

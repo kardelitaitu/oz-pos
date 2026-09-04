@@ -27,8 +27,8 @@ const activeIndex = locales.indexOf(locale);
         href={getRelativeLocaleUrl(code, target)}
         aria-current={locale === code ? 'page' : undefined}
         class:list={[
-          'relative z-10 flex-1 min-w-[40px] px-3 py-[5px] rounded-lg text-[13px] font-semibold transition-opacity duration-200 text-center',
-          locale === code ? 'text-white opacity-100' : 'text-muted opacity-50 hover:opacity-100',
+          'relative z-10 flex-1 min-w-[40px] px-3 py-[5px] rounded-lg text-[13px] font-semibold transition-colors duration-200 text-center',
+          locale === code ? 'text-white' : 'text-[#606470] hover:text-ink',
         ]}
         data-index={i}
       >

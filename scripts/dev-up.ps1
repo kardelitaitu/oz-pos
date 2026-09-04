@@ -114,14 +114,14 @@ Write-Host ""
 Write-Host "╔══════════════════════════════════════════════════════════╗" -ForegroundColor Green
 Write-Host "║  OZ-POS Backend — Ready                                  ║" -ForegroundColor Green
 Write-Host "╠══════════════════════════════════════════════════════════╣" -ForegroundColor Green
-Write-Host "║  Cloud Server:    http://localhost:$apiPort/api/health        ║" -ForegroundColor Green
+Write-Host "║  Cloud Server:    http://localhost:$apiPort/api/health       ║" -ForegroundColor Green
 Write-Host "║  License Server:  http://localhost:8080/api/health       ║" -ForegroundColor Green
 Write-Host "║  Redis:           localhost:6379                         ║" -ForegroundColor Green
 if ($Pg) {
   Write-Host "║  PostgreSQL:      localhost:5432 (ozpos/ozpos)           ║" -ForegroundColor Green
 }
 Write-Host "╠══════════════════════════════════════════════════════════╣" -ForegroundColor Green
-Write-Host "║  Start desktop app: .\start-desktop.bat                  ║" -ForegroundColor Green
-Write-Host "║  Stop services:    .\scripts\dev-up.ps1 -Down             ║" -ForegroundColor Green
+Write-Host "║  Start desktop app: .\scripts\start-desktop.bat          ║" -ForegroundColor Green
+Write-Host "║  Stop services:    .\scripts\dev-up.ps1 -Down            ║" -ForegroundColor Green
 Write-Host "║  View logs:        docker compose logs -f                ║" -ForegroundColor Green
 Write-Host "╚══════════════════════════════════════════════════════════╝" -ForegroundColor Green

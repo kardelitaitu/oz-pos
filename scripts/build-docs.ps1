@@ -12,7 +12,7 @@
 # unless they carry a UTF-8 BOM, so non-ASCII characters (em-dashes, check
 # marks, arrows) corrupt string literals and break parsing.
 #
-# See documentation.md at the repo root for the plan behind this layout.
+# See docs/plans/documentation-portal-plan.md for the plan behind this layout.
 [CmdletBinding()]
 param(
     [switch]$Open = $true,

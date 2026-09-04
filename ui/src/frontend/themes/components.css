@@ -721,6 +721,8 @@
   align-items: center;
   justify-content: center;
   background: var(--color-pos-modal-overlay);
+  backdrop-filter: var(--modal-backdrop-blur, blur(2px));
+  -webkit-backdrop-filter: var(--modal-backdrop-blur, blur(2px));
   animation: modal-fade-in var(--duration-300) var(--ease-out);
 }
 
@@ -1344,15 +1346,87 @@
   margin-top: var(--space-2);
 }
 
+/* ── App boot splash (React stage) ───────────────────────────────
+   Two-stage loading screen: the static stage lives inline in
+   index.html / index.tablet.html (visible before any JS), and this
+   React stage renders the identical visual while AppShell's boot
+   gate (license + setup restore) resolves. Keep the static copies
+   synchronized. */
+.app-splash {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  color: var(--color-fg-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+}
+.app-splash__logo {
+  width: 72px;
+  height: 72px;
+}
+.app-splash__spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--color-primary-soft);
+  border-top-color: var(--color-primary);
+  border-radius: var(--radius-full);
+}
+.app-splash__label {
+  font-size: var(--text-sm);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .app-splash__spinner {
+    animation: app-splash-spin var(--duration-600) var(--ease-linear) infinite;
+  }
+}
+@keyframes app-splash-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ── Lazy chunk Suspense fallback (PERF-01) ────────────────────── */
 .lazy-boundary {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--space-3);
   min-height: 200px;
   color: var(--color-fg-secondary);
   font-family: var(--font-sans);
   font-size: var(--text-base);
+}
+.lazy-boundary__spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--color-primary-soft);
+  border-top-color: var(--color-primary);
+  border-radius: var(--radius-full);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .lazy-boundary__spinner {
+    animation: app-splash-spin var(--duration-600) var(--ease-linear) infinite;
+  }
+}
+
+/* ── Shell-level fallbacks fill + center their stage ────────────────
+   Embedded uses (widget cards, modal placeholders) keep the 200px
+   block, but the shell renders LazyBoundary directly under #root and
+   stage containers for route chunks. Without these rules the fallback
+   stacks a 200px spinner block at the top (e.g. F5 → login chunk). */
+#root > .lazy-boundary,
+.workspace-fullscreen > .lazy-boundary,
+.workspace-home-wrapper > .lazy-boundary {
+  min-height: 100dvh;
+}
+.kds-workspace > .lazy-boundary {
+  flex: 1; /* fill the flex-column stage below the KDS header */
+}
+.tablet-shell .app-content-inner > .lazy-boundary {
+  min-height: calc(100dvh - var(--tablet-bottom-nav-height, 64px));
 }
 
 /* Screen reader only utility (globally accessible) */

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef, lazy } from 'react';
-import { Localized } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useOrientation } from '@/hooks/useOrientation';
@@ -9,6 +8,7 @@ import { useFeatures } from '@/hooks/useFeatures';
 import { getPage, isPageAccessible } from '@/platform/ui/page-registry';
 import PermissionDenied from '@/components/PermissionDenied';
 import { LazyBoundary } from '@/components/LazyBoundary';
+import { AppBootSplash } from '@/components/AppBootSplash';
 import type { WizardState } from '@/features/setup/SetupWizard';
 
 // ── PERF-01: workspace/flow screens load on demand ────────────────
@@ -116,21 +116,9 @@ export default function TabletAppShell() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="tablet-shell"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '100dvh',
-          color: 'var(--color-fg-secondary)',
-          fontFamily: 'var(--font-sans)',
-          fontSize: 'var(--text-base)',
-        }}
-      >
-        <Localized id="shared-loading">Loading&hellip;</Localized>
-      </div>
-    );
+    // Branded boot splash (stage 2) — mirrors the desktop shell gate
+    // and the static stage-1 splash from index.tablet.html.
+    return <AppBootSplash />;
   }
 
   if (!session) {

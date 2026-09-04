@@ -145,6 +145,14 @@ Update-File "ui/package-lock.json" "`"version`": `"$currentVersion`"," "`"versio
 # instead of hardcoded version strings, so they are automatically correct once
 # Cargo.toml is bumped above. No per-file updates needed.
 
+# The license-server is Go, so it has no CARGO_PKG_VERSION equivalent and its
+# admin health endpoint reports a literal. It was missed by this script for a
+# whole release cycle: admin_dashboard.go said 0.0.34 while the repo moved to
+# 0.0.36, and the test that claims to be "the bump reminder" asserted the const
+# equals itself, so it stayed green. Bumped here AND pinned against Cargo.toml
+# by TestAdminHealthB31, which is the check that actually can fail.
+Update-File "apps/license-server/admin_dashboard.go" "const adminDashboardVersion = `"$currentVersion`"" "const adminDashboardVersion = `"$TargetVersion`""
+
 Update-File "ui/src/features/auth/LicenseActivationScreen.tsx" ("useState<string>('{0}')" -f $currentVersion) ("useState<string>('{0}')" -f $TargetVersion)
 Update-File "ui/src/features/auth/StaffLoginScreen.tsx" "v$currentVersion" "v$TargetVersion"
 Update-File "ui/src/features/auth/__tests__/LicenseActivationScreen.test.tsx" "Version $currentVersion" "Version $TargetVersion"

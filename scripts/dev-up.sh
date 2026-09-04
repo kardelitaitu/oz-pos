@@ -137,7 +137,7 @@ if $PG_MODE; then
   echo "║  PostgreSQL:      localhost:5432 (ozpos/ozpos)           ║"
 fi
 echo "╠══════════════════════════════════════════════════════════╣"
-echo "║  Start desktop app: ./start-desktop.bat (or cargo run)   ║"
+echo "║  Start desktop app: scripts/start-desktop.bat (cargo run)║"
 echo "║  Stop services:    bash scripts/dev-up.sh --down         ║"
 echo "║  View logs:        docker compose logs -f                ║"
 echo "╚══════════════════════════════════════════════════════════╝"

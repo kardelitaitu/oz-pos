@@ -1,0 +1,508 @@
+#!/usr/bin/env python3
+r"""
+scripts/verify-agents-mirrors.py — Keep the three AGENTS.md mirrors telling the truth.
+
+WHY THIS EXISTS
+===============
+
+There are three copies of the agent rules: root `AGENTS.md`, `.agents/AGENTS.md`,
+`.prime/AGENTS.md`. `.agents/AGENTS.md` documents the hazard itself:
+
+  "scripts/bump-version.ps1 updates the *version* lines in these mirrors but
+   nothing updates the *gate* list ... which is how all three drifted to different
+   counts."
+
+Counts drifting is cosmetic. **Claims going false is not.** Twice in 0.0.36 a
+mirror stated something the repo contradicted:
+
+  * `.agents/AGENTS.md` said "Steps 6, 7 and 8 have no CI backstop" after
+    `13f2a1dc` put Go into `dev-ci.yml#static-gates`. An agent reading the mirror
+    that governs work under `.agents/` would believe Go changes are unguarded.
+  * root `AGENTS.md` said dev-ci "runs on every PR and push". It has no `push`
+    trigger at all, so pushing a branch runs nothing.
+
+Both were corrected by hand. This script is what stops the third occurrence.
+
+GROUND TRUTH IS READ, NEVER ASSERTED
+====================================
+
+Nothing here hardcodes a version, a gate count, a step number, or which step is
+Go. All of it comes from the repo:
+
+  version        root Cargo.toml `[workspace.package] version`
+  gate count     `^# ── <name> ─` section headers in .githooks/pre-commit
+  which step is Go   the ordinal of the section whose text mentions `gofmt`
+  what CI runs   job names in .github/workflows/*.yml (not *.yml.bak)
+  CI triggers    the `on:` block of each live workflow
+
+So bumping the version, adding a gate, or restoring a job updates the expectations
+automatically -- and a mirror that does not follow is a finding.
+
+WHAT IT CHECKS
+==============
+
+  1. GATE COUNT -- a mirror claiming N steps against a hook with M sections.
+  2. FALSE CI COVERAGE CLAIM -- a mirror listing step K as "no CI backstop" /
+     "local-only" when a live workflow actually runs it. This is the check that
+     catches the bug class that motivated the script.
+  3. MISSING COVERAGE CLAIM -- a mirror asserting CI runs something no live
+     workflow runs (the inverse lie).
+  4. COMMIT TYPES -- the documented `<type>` list must equal what
+     .githooks/commit-msg actually accepts. A mirror omitting a valid type
+     forbids work the gate allows.
+  5. VERSION LOCK -- every mirror must carry the current version.
+  6. TRIGGER CLAIM -- a mirror saying CI runs on push must match the workflows.
+
+Usage:
+    python3 scripts/verify-agents-mirrors.py
+    python3 scripts/verify-agents-mirrors.py --self-test
+"""
+
+from __future__ import annotations
+
+import io
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+if hasattr(sys.stdout, "buffer"):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")  # type: ignore[attr-defined]
+
+DEFAULT_ROOT = Path(__file__).resolve().parent.parent
+
+MIRRORS = ["AGENTS.md", ".agents/AGENTS.md", ".prime/AGENTS.md"]
+
+WORD_NUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+            "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11,
+            "twelve": 12}
+
+
+def read(root: Path, rel: str) -> str:
+    p = root / rel
+    return io.open(p, encoding="utf-8", errors="replace").read() if p.is_file() else ""
+
+
+# ── Ground truth ────────────────────────────────────────────────────────────
+
+def current_version(root: Path) -> str:
+    """The workspace version from Cargo.toml -- not a literal in this file."""
+    m = re.search(r"^\[workspace\.package\][\s\S]*?^version\s*=\s*\"([^\"]+)\"",
+                  read(root, "Cargo.toml"), re.M)
+    if not m:
+        raise SystemExit("cannot determine the current version from Cargo.toml")
+    return m.group(1)
+
+
+def hook_steps(root: Path) -> list[tuple[int, str]]:
+    """(ordinal, section name) for each gate section in .githooks/pre-commit.
+
+    The section headers are the hook's own table of contents; the mirrors describe
+    them one by one, so this is the right thing to count.
+    """
+    hook = read(root, ".githooks/pre-commit")
+    return [(i + 1, name.strip())
+            for i, name in enumerate(re.findall(r"^# ── (.+?) ─", hook, re.M))]
+
+
+def live_workflows(root: Path) -> dict[str, str]:
+    """name -> text, for workflows GitHub actually executes (.bak is retired)."""
+    d = root / ".github" / "workflows"
+    return {p.name: io.open(p, encoding="utf-8", errors="replace").read()
+            for p in sorted(d.glob("*.yml"))}
+
+
+def workflow_jobs(text: str) -> list[str]:
+    """Top-level job keys under `jobs:` (2-space indent)."""
+    try:
+        jstart = re.search(r"^jobs:\s*$", text, re.M).end()  # type: ignore[union-attr]
+    except AttributeError:
+        return []
+    return re.findall(r"^  ([a-zA-Z0-9_-]+):\s*$", text[jstart:], re.M)
+
+
+def triggers_of(text: str) -> list[str]:
+    """Event names in the `on:` block."""
+    m = re.search(r"^(?:on|True):\s*$((?:^[ \t]+\S.*\n?)+)", text, re.M)
+    if not m:
+        m2 = re.search(r"^(?:on|True):\s*(\[[^\]]*\])", text, re.M)
+        if m2:
+            return re.findall(r"[\w_]+", m2.group(1))
+        return []
+    body = m.group(1)
+    # Only the immediate children (4 or 2 spaces), not nested `on:` keys.
+    return re.findall(r"^[ \t]{2,4}([a-z_]+):?", body, re.M)
+
+
+def accepted_commit_types(root: Path) -> set[str]:
+    """What .githooks/commit-msg actually allows.
+
+    The hook declares `TYPES='feat|fix|docs|...'` as a shell variable used in the
+    subject regex. An earlier version of this function looked for a
+    parenthesised alternation and found nothing, returning the empty set -- which
+    made `documented - accepted` equal the ENTIRE documented list and report that
+    every mirror "documents commit types the gate rejects". A check whose ground
+    truth silently resolves to nothing does not fail; it lies. Hence the explicit
+    guard below rather than a permissive default.
+    """
+    hook = read(root, ".githooks/commit-msg")
+    m = re.search(r"^TYPES=['\"]([a-z|]+)['\"]", hook, re.M)
+    if m:
+        return set(m.group(1).split("|")) - {""}
+    # Fall back to the alternation inside the subject regex, if that is how it
+    # is written.
+    for m in re.finditer(r"\((feat\|[a-z|]+)\)", hook):
+        return set(m.group(1).split("|")) - {""}
+    raise SystemExit(
+        "cannot determine the accepted commit types from .githooks/commit-msg -- "
+        "refusing to run the type check against an empty set")
+
+
+# ── Mirror claims ───────────────────────────────────────────────────────────
+
+def claimed_step_count(text: str) -> int | None:
+    m = re.search(r"runs \*\*(?:(\d+)|(one|two|three|four|five|six|seven|eight|"
+                  r"nine|ten|eleven|twelve))[\s-]*(?:\w+\s+)?steps?\*\*", text)
+    if not m:
+        return None
+    return int(m.group(1)) if m.group(1) else WORD_NUM[m.group(2)]
+
+
+NUM_STEP_RE = re.compile(
+    r"Steps?\s+((?:\d+\s*(?:,|and)?\s*)+)\s+(?:are\s+local-only|have\s+no\s+CI\s+backstop)",
+    re.I)
+
+
+def steps_claimed_local_only(text: str) -> set[int]:
+    """Step numbers a mirror says CI does NOT cover."""
+    out: set[int] = set()
+    for m in NUM_STEP_RE.finditer(text):
+        out |= {int(n) for n in re.findall(r"\d+", m.group(1))}
+    return out
+
+
+# `.prime/AGENTS.md` states the same lie without step numbers: "there is **no** CI
+# job for migration column types, PG schema drift, or Go". A numeric-only regex
+# cannot see it, and that phrasing is what a reader of .prime actually follows, so
+# matching numbers alone would leave the motivating bug class uncaught in one of
+# the three files it exists to police.
+NAMED_LOCAL_RE = re.compile(
+    r"(?:there is|there are)\s+\**no\**\s+CI\s+(?:job|gate|backstop|step)s?\s+(?:for|that)"
+    r"\s+([^.\n]+)", re.I)
+
+
+def named_local_claims(text: str) -> list[str]:
+    """Phrases a mirror says have no CI job, split into individual items.
+
+    "migration column types, PG schema drift, or Go" -> three lowercase items, so
+    each can be matched against a gate's own tooling independently. Splitting on
+    the comma AND a trailing "or" handles both the Oxford and the plain form.
+    """
+    out: list[str] = []
+    for m in NAMED_LOCAL_RE.finditer(text):
+        body = m.group(1)
+        body = re.sub(r"\*+", "", body)
+        body = re.sub(r"\s+\bor\s+", ", ", body)
+        for it in body.split(","):
+            it = it.strip(" .;:").lower()
+            if it:
+                out.append(it)
+    return out
+
+
+def documented_commit_types(text: str) -> set[str]:
+    """The `<type>` list a mirror documents, from the bullet block under
+    "`<type>` must be one of"."""
+    i = text.find("must be one of")
+    if i < 0:
+        return set()
+    block = text[i:i + 2000]
+    return set(re.findall(r"^\s*-\s+`([a-z-]+)`", block, re.M))
+
+
+# ── The check ───────────────────────────────────────────────────────────────
+
+def scan(root: Path) -> list[str]:
+    problems: list[str] = []
+    version = current_version(root)
+    steps = hook_steps(root)
+    n_steps = len(steps)
+    wfs = live_workflows(root)
+    all_ci_text = "\n".join(wfs.values())
+    types = accepted_commit_types(root)
+
+    # Which ordinals are genuinely covered by a live workflow? Determined by
+    # matching each step's own tooling against the workflow text, so "which
+    # number is Go" is never hardcoded.
+    def step_tools(name: str) -> list[str]:
+        hook = read(root, ".githooks/pre-commit")
+        # The section body: from this header to the next.
+        pat = re.compile(r"^# ── " + re.escape(name) + r" ─.*?(?=^# ── |\Z)",
+                         re.M | re.S)
+        m = pat.search(hook)
+        body = m.group(0) if m else name
+        # Script names and well-known tools mentioned in the section.
+        toks = set(re.findall(r"scripts/([\w.-]+\.(?:py|sh|mjs))", body))
+        toks |= {t for t in ("gofmt", "go vet", "go test", "cargo fmt",
+                             "clippy", "dedupe-ftl", "lint-i18n",
+                             "verify-bundle-parity",
+                             "verify-migration-column-types",
+                             "generate-pg-migration") if t in body}
+        return sorted(t for t in toks if t)
+
+    covered: dict[int, list[str]] = {}
+    for ordinal, name in steps:
+        tools = step_tools(name)
+        hits = [t for t in tools if t in all_ci_text]
+        if hits:
+            covered[ordinal] = hits
+
+    for rel in MIRRORS:
+        text = read(root, rel)
+        if not text:
+            problems.append(f"{rel}: missing")
+            continue
+
+        claimed = claimed_step_count(text)
+        if claimed is None:
+            problems.append(f"{rel}: does not state how many pre-commit steps it runs")
+        elif claimed != n_steps:
+            problems.append(
+                f"{rel}: claims {claimed} pre-commit steps; "
+                f".githooks/pre-commit has {n_steps} gate sections")
+
+        # (2) FALSE COVERAGE CLAIM -- the motivating bug.
+        for k in sorted(steps_claimed_local_only(text)):
+            if k in covered:
+                problems.append(
+                    f"{rel}: says step {k} has no CI backstop, but "
+                    f"{', '.join(covered[k])} runs in a live workflow "
+                    f"(step {k} is \"{dict(steps)[k]}\")")
+
+        # (2b) The same lie phrased as prose naming the gates instead of their
+        # ordinals. Matched by keyword against each step's own section text, so
+        # no phrase-to-step mapping is hardcoded here.
+        for phrase in named_local_claims(text):
+            for ordinal, name in steps:
+                # Flag a step the mirror calls uncovered that IS covered. The
+                # first draft had this inverted (`if ordinal in covered:
+                # continue`), which then indexed covered[ordinal] on a key known
+                # to be absent -- a KeyError that, had the fallback been quieter,
+                # would have looked like a passing check.
+                if ordinal not in covered:
+                    continue
+                # Distinctive words from the step's own section header. The
+                # quantifier must allow 2-character tokens: the first version
+                # used {2,} after the leading letter, i.e. 3+ characters total,
+                # which silently dropped "Go" -- so step 8's keys became
+                # ['apps','license','server'], none of which appear in the phrase
+                # "go", and the exact lie this check exists to catch went
+                # unreported while the scan still exited 0.
+                keys = [w.lower() for w in re.findall(r"[A-Za-z][\w-]+", name)
+                        if w.lower() not in ("gate", "lint", "guard", "staged",
+                                             "only", "dry", "run", "normalization")]
+                if any(re.search(r"\b" + re.escape(kw) + r"\b", phrase) for kw in keys):
+                    problems.append(
+                        f"{rel}: says there is no CI job for \"{phrase}\", but "
+                        f"step {ordinal} (\"{name}\") is covered by "
+                        f"{', '.join(covered[ordinal])} in a live workflow")
+                    break
+
+        # (5) version lock. The three mirrors phrase this differently:
+        #   root/.agents : "Version is locked at `0.0.36`"
+        #   .prime       : "Version is locked at the current release (`0.0.36`)"
+        # A regex demanding the version immediately after "locked at" reported
+        # .prime as unversioned when it carries the lock in its own words.
+        if not re.search(r"locked at[^\n]{0,40}[\(`]" + re.escape(version) + r"[\)`]",
+                         text):
+            problems.append(f"{rel}: does not carry the current version lock ({version})")
+
+        # (4) commit types
+        doc = documented_commit_types(text)
+        if doc:
+            missing = types - doc
+            extra = doc - types
+            if missing:
+                problems.append(
+                    f"{rel}: omits commit type(s) the gate accepts: {sorted(missing)}")
+            if extra:
+                problems.append(
+                    f"{rel}: documents commit type(s) the gate rejects: {sorted(extra)}")
+
+        # (6) trigger claims
+        says_push = bool(re.search(r"(?:CI|dev-ci)[^\n]{0,80}\bruns on[^\n]{0,40}push",
+                                   text, re.I))
+        any_push = any("push" in triggers_of(t) for t in wfs.values())
+        if says_push and not any_push:
+            problems.append(
+                f"{rel}: claims CI runs on push, but no live workflow has a push trigger")
+
+    # (3) MISSING COVERAGE: a mirror asserting CI runs a job that does not exist.
+    for rel in MIRRORS:
+        text = read(root, rel)
+        real_jobs = {j for t in wfs.values() for j in workflow_jobs(t)}
+        for job in set(re.findall(r"(?:dev-ci\.yml|workflows/[\w.]+)#([\w-]+)", text)):
+            if job not in real_jobs:
+                problems.append(f"{rel}: cites workflow job #{job}, which no live workflow defines")
+
+    return problems
+
+
+def report(root: Path) -> int:
+    version = current_version(root)
+    steps = hook_steps(root)
+    wfs = live_workflows(root)
+    print("  GROUND TRUTH (read from the repo, not asserted):")
+    print(f"    version from Cargo.toml   : {version}")
+    print(f"    pre-commit gate sections  : {len(steps)}")
+    for ordinal, name in steps:
+        print(f"      step {ordinal:<2} {name}")
+    print(f"    live workflows            : {', '.join(wfs) or '(none)'}")
+    print(f"    commit types accepted     : {sorted(accepted_commit_types(root))}")
+    print()
+    problems = scan(root)
+    if problems:
+        print(f"  {len(problems)} problem(s):")
+        for p in problems:
+            print(f"    - {p}")
+        return 1
+    print("  all three mirrors agree with the repo")
+    return 0
+
+
+# ── Self-test: mutate a copy and prove each check fires ─────────────────────
+
+MUTATIONS = [
+    ("false CI-coverage claim restored",
+     lambda t: t.replace("Steps 6 and 7 are local-only",
+                         "Steps 6, 7 and 8 have no CI backstop", 1),
+     "no CI backstop"),
+    ("gate count off by one",
+     lambda t: t.replace("runs **eight steps**", "runs **six steps**", 1),
+     "pre-commit steps"),
+    ("version lock removed",
+     lambda t: re.sub(r"locked at `[\d.]+`", "locked at `0.0.1`", t),
+     "version lock"),
+    ("commit type dropped from the list",
+     lambda t: re.sub(r"^\s*-\s+`style`[^\n]*\n", "", t, count=1, flags=re.M),
+     "omits commit type"),
+    ("phantom CI job cited",
+     lambda t: t.replace("dev-ci.yml#static-gates", "dev-ci.yml#go-job", 1),
+     "#go-job"),
+    ("push trigger claimed",
+     lambda t: t.replace("Two workflows are live",
+                         "Dev CI runs on push to main. Two workflows are live", 1),
+     "runs on push"),
+]
+
+# `.prime/AGENTS.md` is a role brief, not a full rules mirror. It phrases the same
+# facts differently ("locked at the current release (`0.0.36`)", "there is **no**
+# CI job for migration column types or PG schema drift") and deliberately carries
+# no commit-type list. Reusing the root mutations against it produced four
+# "changed nothing" results -- which is the vacuous-mutation guard doing its job,
+# not a checker gap. So each mirror gets its own table, and anything genuinely not
+# applicable is recorded with a reason rather than silently skipped.
+MUTATIONS_BY_MIRROR: dict[str, list] = {
+    ".prime/AGENTS.md": [
+        ("false CI-coverage claim restored",
+         lambda t: t.replace(
+             "there is **no** CI job for migration column types or PG schema drift",
+             "there is **no** CI job for migration column types, PG schema drift, or Go",
+             1),
+         "no CI job"),
+        ("gate count off by one",
+         lambda t: t.replace("runs **eight steps**", "runs **five steps**", 1),
+         "pre-commit steps"),
+        ("version lock removed",
+         lambda t: t.replace("locked at the current release (`0.0.36`)",
+                             "locked at the current release (`0.0.1`)", 1),
+         "version lock"),
+        ("phantom CI job cited",
+         lambda t: t.replace("dev-ci.yml#static-gates", "dev-ci.yml#go-job", 1),
+         "#go-job"),
+        ("push trigger claimed",
+         lambda t: t.replace("has **no `push` trigger at all**",
+                             "runs on push to main", 1),
+         "push trigger"),
+        # Not applicable, deliberately. .prime carries no `<type>` list, so the
+        # commit-type check has nothing to mutate. Recorded so the omission is a
+        # decision someone can revisit rather than a hole.
+        ("commit type dropped from the list", None,
+         ".prime documents no commit-type list"),
+    ],
+}
+
+
+def make_fixture(src: Path, dst: Path) -> None:
+    """Copy ONLY the files scan() reads.
+
+    The first version ran a whole-repo `copytree` per mutation: slow, and it
+    collided with itself on Windows temp paths. scan() reads a handful of files;
+    copying exactly those keeps the self-test in milliseconds and stays honest,
+    because the ground truth still comes from the real hook, workflows and
+    Cargo.toml rather than a hand-written stub that could drift from them.
+    """
+    needed = ["Cargo.toml", ".githooks/pre-commit", ".githooks/commit-msg"]
+    wfdir = src / ".github" / "workflows"
+    if wfdir.is_dir():
+        needed += [f".github/workflows/{p.name}" for p in sorted(wfdir.glob("*.yml"))]
+    needed += MIRRORS
+    for rel in needed:
+        s = src / rel
+        if not s.is_file():
+            continue
+        d = dst / rel
+        d.parent.mkdir(parents=True, exist_ok=True)
+        io.open(d, "w", encoding="utf-8", newline="\n").write(
+            io.open(s, encoding="utf-8", errors="replace").read())
+
+
+def self_test() -> int:
+    import shutil
+    import tempfile
+
+    src = DEFAULT_ROOT
+    bad = 0
+    for rel in MIRRORS:
+        text = read(src, rel)
+        if not text:
+            print(f"  SKIP  {rel}: not present")
+            continue
+        for desc, mutate, needle in MUTATIONS_BY_MIRROR.get(rel, MUTATIONS):
+            if mutate is None:
+                # An explicitly not-applicable case. Printed, not skipped, so a
+                # future reader sees the coverage was considered and bounded.
+                print(f"  N/A     {rel:20s} {desc} -- {needle}")
+                continue
+            mutated = mutate(text)
+            if mutated == text:
+                print(f"  WRONG {rel}: mutation '{desc}' changed nothing -- the "
+                      f"test would pass vacuously")
+                bad += 1
+                continue
+            with tempfile.TemporaryDirectory() as td:
+                tmp = Path(td)
+                make_fixture(src, tmp)
+                io.open(tmp / rel, "w", encoding="utf-8", newline="\n").write(mutated)
+                try:
+                    probs = scan(tmp)
+                except SystemExit as e:
+                    print(f"  WRONG {rel}: '{desc}' crashed the checker: {e}")
+                    bad += 1
+                    continue
+                hit = [p for p in probs if needle in p and rel in p]
+                if hit:
+                    print(f"  CAUGHT  {rel:20s} {desc}")
+                else:
+                    print(f"  MISSED  {rel:20s} {desc} (looking for {needle!r}; "
+                          f"{len(probs)} findings: {[p[:58] for p in probs[:3]]})")
+                    bad += 1
+    print(f"\n  {'self-test: all mutations caught' if not bad else f'{bad} gap(s)'}")
+    return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    if "--self-test" in sys.argv[1:]:
+        sys.exit(self_test())
+    sys.exit(report(Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else DEFAULT_ROOT))

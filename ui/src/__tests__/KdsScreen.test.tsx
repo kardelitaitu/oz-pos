@@ -3,12 +3,39 @@ import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
+import { HardwareAccelProvider } from '@/contexts/HardwareAccelContext';
 import KdsScreen from '@/features/kds/KdsScreen';
 import kdsFtl from '@/locales/kds.ftl?raw';
 import type { KdsOrder } from '@/api/kds';
 
-// Shared mutable state for KDS preferences across test renders
-const testKdsState = { kdsZone: '' };
+// ── Zone-preference store (ZONE-TESTS) ──────────────────────────────
+// The real useKdsPreferences persists and notifies; this store mirrors
+// that contract so zone clicks re-render the screen NATURALLY instead of
+// relying on manual rerender() calls (the old approach crashed the
+// worker with an unbounded re-render loop).
+const { kdsZoneStore } = vi.hoisted(() => {
+  const state = { current: '' };
+  const listeners = new Set<() => void>();
+  return {
+    kdsZoneStore: {
+      get: () => state.current,
+      subscribe: (cb: () => void) => {
+        listeners.add(cb);
+        return () => {
+          listeners.delete(cb);
+        };
+      },
+      set: (zone: string) => {
+        if (state.current === zone) return;
+        state.current = zone;
+        for (const l of listeners) l();
+      },
+      reset: () => {
+        state.current = '';
+      },
+    },
+  };
+});
 
 const { mockGetKdsQueue, mockUpdateKdsStatus, mockListKdsOrdersScoped, mockGetKdsOrderLines, mockUpdateKdsOrderItems, mockListProducts, mockUseTicketSla, mockPlayAlert, mockSpeak, mockUseWorkspaceScope } = vi.hoisted(() => ({
   mockGetKdsQueue: vi.fn(),
@@ -27,25 +54,34 @@ const { mockGetKdsQueue, mockUpdateKdsStatus, mockListKdsOrdersScoped, mockGetKd
   mockUseWorkspaceScope: vi.fn<() => { storeId: string; instanceId: string; typeKey: string } | null>(() => null),
 }));
 
-vi.mock('@/features/kds/hooks/useKdsPreferences', () => ({
-  useKdsPreferences: () => ({
-    prefs: {
-      layout: 'kanban',
-      showOrderId: true,
-      showTableNumber: true,
-      kdsZone: testKdsState.kdsZone,
-      autoAcknowledge: false,
-      acknowledgeDelayMin: 2,
+vi.mock('@/features/kds/hooks/useKdsPreferences', async () => {
+  const { useSyncExternalStore } = await import('react');
+  return {
+    useKdsPreferences: () => {
+      // Subscribing via useSyncExternalStore makes a zone click re-render
+      // the screen naturally — the same contract the real hook provides
+      // (persist + notify), which manual rerender() could never emulate.
+      const kdsZone = useSyncExternalStore(kdsZoneStore.subscribe, kdsZoneStore.get);
+      return {
+        prefs: {
+          layout: 'kanban',
+          showOrderId: true,
+          showTableNumber: true,
+          kdsZone,
+          autoAcknowledge: false,
+          acknowledgeDelayMin: 2,
+        },
+        setLayout: vi.fn(),
+        setShowOrderId: vi.fn(),
+        setShowTableNumber: vi.fn(),
+        setKdsZone: (zone: string) => kdsZoneStore.set(zone),
+        setAutoAcknowledge: vi.fn(),
+        setAcknowledgeDelay: vi.fn(),
+        loading: false,
+      };
     },
-    setLayout: vi.fn(),
-    setShowOrderId: vi.fn(),
-    setShowTableNumber: vi.fn(),
-    setKdsZone: (zone: string) => { testKdsState.kdsZone = zone; },
-    setAutoAcknowledge: vi.fn(),
-    setAcknowledgeDelay: vi.fn(),
-    loading: false,
-  }),
-}));
+  };
+});
 
 vi.mock('@/api/kds', () => ({
   getKdsQueue: async (_userId: string, _kdsZone?: string) => {
@@ -125,7 +161,9 @@ const l10n = new ReactLocalization([bundle]);
 function renderScreen() {
   return render(
     <LocalizationProvider l10n={l10n}>
-      <KdsScreen />
+      <HardwareAccelProvider>
+        <KdsScreen />
+      </HardwareAccelProvider>
     </LocalizationProvider>,
   );
 }
@@ -156,7 +194,7 @@ describe('KdsScreen', () => {
   beforeEach(() => {
     mockGetKdsQueue.mockResolvedValue([]);
     mockSpeak.mockClear();
-    testKdsState.kdsZone = ''; // Reset zone state between tests
+    kdsZoneStore.reset(); // Reset zone state between tests
   });
 
   it('renders the KDS region with aria-label', async () => {
@@ -585,11 +623,23 @@ describe('KdsScreen', () => {
   //   });
   // });
 
-  it('activates clicked zone chip - skipped due to test infrastructure issue with re-renders', () => {
-    // This test triggers worker crash due to infinite re-render loop when zone state changes.
-    // The component works correctly in the actual app - the issue is test mock not properly
-    // simulating React state updates. Skipping to unblock CI.
-    expect(true).toBe(true);
+  it('activates clicked zone chip', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101, kitchen_zone: 'Grill' }),
+      makeOrder({ id: 'o-2', status: 'pending', display_number: 102, kitchen_zone: 'Fry' }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    // Click the "Grill" zone chip — the subscribed prefs store re-renders
+    // the screen naturally (same persist+notify contract as the real hook).
+    await userEvent.click(screen.getByText('Grill'));
+
+    // Grill chip becomes active and All chip becomes inactive.
+    await waitFor(() => {
+      expect(screen.getByText('Grill').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(true);
+      expect(screen.getByText('All').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(false);
+    });
   });
 
   //   it('resets to All zone when All chip is clicked', async () => {
@@ -733,6 +783,40 @@ describe('KdsScreen', () => {
     // Completed view should render (prototype bucket columns)
     await waitFor(() => {
       expect(document.querySelector('.kds-main.completed-view')).not.toBeNull();
+    });
+  });
+
+  it('switches between Open and Completed tabs on horizontal swipe gestures', async () => {
+    mockGetKdsQueue.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      expect(document.querySelector('.kds-main-viewport')).not.toBeNull();
+    });
+
+    const viewport = document.querySelector('.kds-main-viewport') as HTMLElement;
+
+    // Swipe left (from Open to Completed)
+    fireEvent.touchStart(viewport, {
+      touches: [{ clientX: 300, clientY: 100 }],
+    });
+    fireEvent.touchEnd(viewport, {
+      changedTouches: [{ clientX: 100, clientY: 100 }],
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector('.kds-main.completed-view')).not.toBeNull();
+    });
+
+    // Swipe right (from Completed back to Open)
+    fireEvent.touchStart(viewport, {
+      touches: [{ clientX: 100, clientY: 100 }],
+    });
+    fireEvent.touchEnd(viewport, {
+      changedTouches: [{ clientX: 300, clientY: 100 }],
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector('.kds-main:not(.completed-view)')).not.toBeNull();
     });
   });
 
@@ -943,8 +1027,12 @@ describe('KdsScreen', () => {
     expect(shakeCard?.classList.contains('kds-ticket--selected')).toBe(true);
   });
 
-  it('hides the filter dropdown when switching to the Completed tab', async () => {
+  it('supports filtering on the Completed tab by order type (All / Dine in / Takeaway)', async () => {
     mockGetKdsQueue.mockResolvedValue([]);
+    mockListKdsOrdersScoped.mockResolvedValue([
+      makeOrder({ id: 'done-1', status: 'served', display_number: 101, table_number: 'T4' }),
+      makeOrder({ id: 'done-2', status: 'served', display_number: 102, table_number: null }),
+    ]);
     renderScreen();
     await waitFor(() => {
       expect(screen.getByTestId('kds-topbar-filter')).toBeDefined();
@@ -953,13 +1041,28 @@ describe('KdsScreen', () => {
     // Switch to Completed tab
     await userEvent.click(screen.getByTestId('kds-tab-completed'));
     await waitFor(() => {
-      expect(screen.queryByTestId('kds-topbar-filter')).toBeNull();
+      expect(screen.getByTestId('kds-topbar-filter')).toBeDefined();
     });
 
-    // Switch back to Open tab
-    await userEvent.click(screen.getByTestId('kds-tab-open'));
+    // Open filter dropdown on Completed tab
+    await userEvent.click(screen.getByTestId('kds-topbar-filter'));
+    expect(screen.getByTestId('kds-filter-completed-all')).toBeDefined();
+    expect(screen.getByTestId('kds-filter-completed-dinein')).toBeDefined();
+    expect(screen.getByTestId('kds-filter-completed-takeaway')).toBeDefined();
+
+    // Select Dine in mode
+    await userEvent.click(screen.getByTestId('kds-filter-completed-dinein'));
     await waitFor(() => {
-      expect(screen.getByTestId('kds-topbar-filter')).toBeDefined();
+      expect(screen.getByText('#101')).toBeDefined();
+      expect(screen.queryByText('#102')).toBeNull();
+    });
+
+    // Select Takeaway mode
+    await userEvent.click(screen.getByTestId('kds-topbar-filter'));
+    await userEvent.click(screen.getByTestId('kds-filter-completed-takeaway'));
+    await waitFor(() => {
+      expect(screen.getByText('#102')).toBeDefined();
+      expect(screen.queryByText('#101')).toBeNull();
     });
   });
 
@@ -1044,6 +1147,34 @@ describe('KdsScreen', () => {
     // Changing the native picker updates the hex field.
     fireEvent.change(native, { target: { value: '#ff00aa' } });
     expect(hex.value).toBe('#ff00aa');
+  });
+
+  it('renders and toggles hardware acceleration switch in the hamburger panel', async () => {
+    mockGetKdsQueue.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('kds-topbar-settings')).not.toBeNull();
+    });
+
+    // Open hamburger panel
+    await userEvent.click(screen.getByTestId('kds-topbar-settings'));
+    await waitFor(() => {
+      expect(document.querySelector('.kds-hamburger-panel')).not.toBeNull();
+    });
+
+    const toggle = screen.getByTestId('kds-settings-hw-accel-toggle');
+    expect(toggle).not.toBeNull();
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+
+    // Click toggle to disable
+    await userEvent.click(toggle);
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(document.documentElement.getAttribute('data-hw-accel')).toBe('disabled');
+
+    // Click toggle to re-enable
+    await userEvent.click(toggle);
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    expect(document.documentElement.hasAttribute('data-hw-accel')).toBe(false);
   });
 
   // ── PERF-KDS-01: the realtime subscription / fetch loop ────────────

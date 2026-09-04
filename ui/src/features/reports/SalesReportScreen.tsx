@@ -1,6 +1,6 @@
-import { useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { requiredLocalized } from '@/frontend/shared';
-import { WorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   BarChart,
@@ -36,6 +36,8 @@ import {
   type CategoryTrendPoint,
   type CategoryForecastRow,
 } from '@/api/reports';
+import { getPrimaryStoreScoped } from '@/api/stores';
+import { isoDaysAgo, isoToday } from '@/features/analytics/analytics-data';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -86,26 +88,50 @@ function fmtCurrency(minor: number, currency: string, locale = 'en'): string {
   }
 }
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function monthAgo(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 30);
-  return d.toISOString().slice(0, 10);
-}
+// today() and monthAgo() used to live here. today() was
+// new Date().toISOString().slice(0,10) -- UTC, so host-independent, but blind to
+// the store's zone: a +07:00 store at 06:00 local is 23:00 UTC the previous day,
+// so "today" showed yesterday for the first seven hours of every business day.
+// monthAgo() was worse, mixing host-local setDate() with a UTC read-back (a
+// DST-only off-by-one; see R36-06's measurement). Both are replaced by
+// isoToday()/isoDaysAgo() from features/analytics/analytics-data, which anchor to
+// the primary store (REP-03) -- the same helpers R36-01/R36-05 converged on.
 
 /** Sales report screen — daily/weekly/monthly revenue charts, top products, hourly heatmap, and category breakdown with CSV export. */
 export default function SalesReportScreen() {
   const { l10n } = useLocalization();
   const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en';
-  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
+  // R36-07: read the token through the useWorkspace() hook rather than the
+// raw context object. The global test harness mocks the hook, not the
+// context, so the direct form silently yielded an empty token and skipped
+// every token-gated effect. AppProviders wraps the routed tree in the
+// provider, so the hook's throw-outside-provider path is unreachable here.
+const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>('daily');
-  const [startDate, setStartDate] = useState(monthAgo());
-  const [endDate, setEndDate] = useState(today());
+  // REP-03/R36-06: the default window anchors to the PRIMARY STORE's calendar
+  // day. Until the profile loads (or if the fetch fails) the anchor is
+  // FALLBACK_STORE_TZ (UTC, the schema's column default), never the host.
+  const [storeTz, setStoreTz] = useState<string | null>(null);
+  const rangeTouched = useRef(false);
+  const [startDate, setStartDate] = useState(isoDaysAgo(30));
+  const [endDate, setEndDate] = useState(isoToday());
+  useEffect(() => {
+    if (!sessionToken) return;
+    let alive = true;
+    getPrimaryStoreScoped(sessionToken)
+      .then((p) => { if (alive) setStoreTz(p?.timezone ?? null); })
+      .catch(() => { /* storeTz stays null -> the UTC fallback applies */ });
+    return () => { alive = false; };
+  }, [sessionToken]);
+  useEffect(() => {
+    // Re-seed the untouched defaults once the store's day is actually known.
+    if (!storeTz || rangeTouched.current) return;
+    setStartDate(isoDaysAgo(30, storeTz));
+    setEndDate(isoToday(storeTz));
+  }, [storeTz]);
 
   // REP-06: Request generation counter to ignore stale responses
   const fetchGenerationRef = useRef(0);
@@ -439,7 +465,7 @@ export default function SalesReportScreen() {
             id="start-date"
             type="date"
             value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
+            onChange={(e) => { rangeTouched.current = true; setStartDate(e.target.value); }}
             className="sales-report-input"
             aria-label={requiredLocalized(l10n, 'sales-report-start-aria')}
           />
@@ -451,7 +477,7 @@ export default function SalesReportScreen() {
             id="end-date"
             type="date"
             value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
+            onChange={(e) => { rangeTouched.current = true; setEndDate(e.target.value); }}
             className="sales-report-input"
             aria-label={requiredLocalized(l10n, 'sales-report-end-aria')}
           />

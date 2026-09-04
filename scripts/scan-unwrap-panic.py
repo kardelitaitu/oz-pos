@@ -51,15 +51,48 @@ MOD_TESTS_RE = re.compile(r"^\s*mod\s+(tests?)\b")
 INVARIANT_COMMENT_RE = re.compile(r"(INVARIANT|SAFETY|cannot fail|must not fail|impossible)")
 
 
-def strip_comment(line: str) -> str:
-    """Remove string literals and line comments crudely; good enough for gating."""
-    # Drop /* */ and // comments (naive but adequate for attribute scanning).
-    out = []
+def strip_comment(line: str, block_depth: int = 0) -> tuple[str, int]:
+    """Strip string-safe code from one line, returning (code, block_depth_after).
+
+    `block_depth` carries Rust block-comment state ACROSS lines, and starts at 0.
+    This is the fix for the audit-stamp false positives: the per-crate header is
+
+        1: /*
+        2: last audited ...
+        3: crate: oz-cli | status: SAFE | lint: CLEAN
+        4: findings: ... 0 unsafe blocks ... 4 production .unwrap() in seed_demo.rs ...
+        5: next: None ...
+        6: */
+
+    and the previous version handled `/*` by breaking out of the line, which is
+    only correct for a single-line `/* ... */`. Lines 2-5 carry no `/*` or `//`
+    marker at all, so they were returned verbatim and scanned as code -- meaning
+    a file whose stamp says "0 unsafe blocks" and "clean" FAILED the cleanliness
+    gate because of the sentence that says so. Six of the 18 findings were that.
+
+    Depth is counted rather than toggled because Rust block comments NEST:
+    `/* outer /* inner */ still comment */` is one comment, and a boolean would
+    resume scanning code in the middle of it.
+    """
+    out: list[str] = []
     i = 0
     n = len(line)
     in_str = False
     while i < n:
         c = line[i]
+        if block_depth > 0:
+            # Inside a comment: only `*/` and a nested `/*` matter. A `//` here
+            # is comment text, not a terminator, and a `"` is not a string.
+            if c == "/" and i + 1 < n and line[i + 1] == "*":
+                block_depth += 1
+                i += 2
+                continue
+            if c == "*" and i + 1 < n and line[i + 1] == "/":
+                block_depth -= 1
+                i += 2
+                continue
+            i += 1
+            continue
         if in_str:
             out.append(c)
             if c == '"' and (i == 0 or line[i - 1] != "\\"):
@@ -72,17 +105,84 @@ def strip_comment(line: str) -> str:
             i += 1
             continue
         if c == "/" and i + 1 < n and line[i + 1] == "/":
+            # Line comment (also covers `//!` and `///`): rest of line is prose.
             break
         if c == "/" and i + 1 < n and line[i + 1] == "*":
-            break
+            block_depth += 1
+            i += 2
+            continue
+        if c == "*" and i + 1 < n and line[i + 1] == "/":
+            # Stray `*/` outside a comment (e.g. the closing line of a block that
+            # started on a previous line when depth was mis-tracked). Swallow it
+            # rather than emitting `*` and `/` as code.
+            i += 2
+            continue
         out.append(c)
         i += 1
-    return "".join(out)
+    return "".join(out), block_depth
 
 
 def is_invariant_line(line: str) -> bool:
     """True if the line itself carries a documented-invariant comment."""
     return bool(INVARIANT_COMMENT_RE.search(line))
+
+
+def invariant_documented(lines: list[str], idx: int) -> bool:
+    """Does the code at `lines[idx]` carry a documented invariant?
+
+    Accepted forms: a marker on the same line, or in the contiguous run of `//`
+    comment lines directly above the STATEMENT the line belongs to.
+
+    Two relaxations over the old "same line or the one line above" rule, both
+    forced by real failures:
+
+    1. A comment BLOCK, not just one line. The old rule made the keyword have to
+       sit adjacent to the call, which is hostile to the multi-line explanation
+       that is actually worth writing; six legitimate comments here counted as
+       undocumented.
+    2. The block may sit above the start of a multi-line chain, not just above
+       the finding. Without this the gate FIGHTS `cargo fmt`: writing the chain
+       on one line to keep the marker adjacent gets rewrapped by fmt on the next
+       commit (the pre-commit hook runs `cargo fmt --all`), which moves
+       `.unwrap()` away from its comment and silently re-breaks the gate. A rule
+       the formatter can violate on its own is not a rule.
+
+    Blank lines are NOT skipped -- a comment separated from code by whitespace
+    may document something else entirely.
+    """
+    if is_invariant_line(lines[idx]):
+        return True
+
+    # Walk back to the start of the enclosing statement: the first preceding line
+    # that is indented LESS than the finding. Chain continuations are always
+    # deeper than the statement that opens them.
+    def indent_of(s: str) -> int:
+        return len(s) - len(s.lstrip())
+
+    start = idx
+    base = indent_of(lines[idx])
+    j = idx - 1
+    while j >= 0:
+        s = lines[j].strip()
+        if not s or s.startswith("//"):
+            break  # comment block or blank line: the statement starts after it
+        if indent_of(lines[j]) < base:
+            start = j
+            break
+        j -= 1
+    else:
+        start = 0
+
+    # Now walk back over the contiguous comment block above `start`.
+    k = start - 1
+    while k >= 0:
+        s = lines[k].strip()
+        if not s.startswith("//"):
+            break
+        if is_invariant_line(s):
+            return True
+        k -= 1
+    return False
 
 
 def scan_file(path: Path) -> list[dict]:
@@ -99,9 +199,11 @@ def scan_file(path: Path) -> list[dict]:
     pending_test_attr = False
     pending_mod_tests = False
     prev_line = ""
+    # Block-comment nesting carried from line to line. See strip_comment.
+    block_depth = 0
 
     for lineno, raw in enumerate(lines, start=1):
-        code = strip_comment(raw)
+        code, block_depth = strip_comment(raw, block_depth)
 
         # ── open new skip contexts ──────────────────────────────────────
         if not skip_stack:
@@ -161,7 +263,7 @@ def scan_file(path: Path) -> list[dict]:
                     "line": lineno,
                     "call": "unwrap",
                     "text": raw.strip(),
-                    "invariant": is_invariant_line(raw) or is_invariant_line(prev_line),
+                    "invariant": invariant_documented(lines, lineno - 1),
                 }
             )
         for m in EXPECT_RE.finditer(code):
@@ -171,7 +273,7 @@ def scan_file(path: Path) -> list[dict]:
                     "line": lineno,
                     "call": "expect",
                     "text": raw.strip(),
-                    "invariant": is_invariant_line(raw) or is_invariant_line(prev_line),
+                    "invariant": invariant_documented(lines, lineno - 1),
                 }
             )
         prev_line = raw

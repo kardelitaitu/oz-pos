@@ -115,7 +115,7 @@ bash scripts/check.sh          # mirrors CI (fmt, clippy, nextest, migrations, U
 ### Phase 5 — Journal
 
 Record the why, decisions, and remaining risks — while fresh.
-- JOURNAL.md (repo root): append a dated entry. Follow the existing format — ### <date> — <title>, then Problem: / Solution: / Commits: / test counts.
+- `docs/records/JOURNAL.md`: append a dated entry. Follow the existing format — ### <date> — <title>, then Problem: / Solution: / Commits: / test counts. (Was at the repo root until `f3d9cca6`; an agent following the old instruction creates a second journal at the root rather than appending to the real one.)
 - Note remaining risks and follow-ups explicitly — a known limitation written down is a future TDD slice.
 - Do not put CHANGELOG entries here (that belongs in Phase 6).
 

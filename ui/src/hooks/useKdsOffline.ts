@@ -138,6 +138,16 @@ export interface UseKdsOfflineReturn {
   /** OFF-05: discard the dead-letter list (operator acknowledges failures). */
   clearDeadLetter: () => void;
 
+  /**
+   * OFF-05: move every dead-lettered action back into the pending queue
+   * for a fresh bounded retry run and empty the dead-letter list.
+   *
+   * Returns the number of actions requeued. Unlike `clearDeadLetter`
+   * (which discards operator intent), the actions are preserved and will
+   * be replayed by the next `retryPending`/post-fetch flush.
+   */
+  requeueDeadLetter: () => number;
+
   /** Counter incremented on OS-level `online` event for fetch effect dependency. */
   forceRetryCounter: number;
 }
@@ -485,6 +495,33 @@ export function useKdsOffline(storeId?: string): UseKdsOfflineReturn {
     saveDeadLetter([]);
   }, [saveDeadLetter]);
 
+  // ── requeueDeadLetter ──────────────────────────────────────────────
+
+  const requeueDeadLetter = useCallback((): number => {
+    const dead = loadDeadLetter();
+    if (dead.length === 0) return 0;
+    // Re-arm each action for a fresh bounded retry run: reset the retry
+    // counter and backoff window (the operator explicitly asked for
+    // another attempt), and drop the dead-letter bookkeeping fields.
+    const requeued: PendingKdsAction[] = dead.map((a) => ({
+      id: a.id,
+      orderId: a.orderId,
+      targetStatus: a.targetStatus,
+      retryCount: 0,
+      createdAt: a.createdAt,
+      lastError: a.lastError,
+      ...(a.storeId ? { storeId: a.storeId } : {}),
+    }));
+    // Append to the pending queue (dedupe by action id in case the same
+    // order+status was also re-queued by a newer failure).
+    const queue = loadQueue();
+    const seen = new Set(requeued.map((a) => a.id));
+    const merged = [...queue.filter((a) => !seen.has(a.id)), ...requeued];
+    saveQueue(merged);
+    saveDeadLetter([]);
+    return requeued.length;
+  }, [loadDeadLetter, loadQueue, saveQueue, saveDeadLetter]);
+
   // ── Listen for OS-level online/offline events ──────────────────────
 
   useEffect(() => {
@@ -529,6 +566,7 @@ export function useKdsOffline(storeId?: string): UseKdsOfflineReturn {
     retryPending,
     clearPending,
     clearDeadLetter,
+    requeueDeadLetter,
     forceRetryCounter,
   };
 }

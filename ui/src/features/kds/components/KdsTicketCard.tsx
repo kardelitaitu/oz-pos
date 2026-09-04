@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, memo, useCallback, useMemo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
-import { useTicketSla } from '@/features/kds/hooks/useTicketSla';
+import { useTicketSla, type SlaThresholds } from '@/features/kds/hooks/useTicketSla';
 import { useSound } from '@/frontend/shared/useSound';
 import { requiredLocalized } from '@/frontend/shared';
 import { getKdsOrderLinesScoped, type KdsOrder, type KdsStatus, type KdsLineItem } from '@/api/kds';
@@ -30,6 +30,8 @@ export interface KdsTicketCardProps {
   onAddItems?: (orderId: string) => void;
   /** Whether this ticket just arrived (brief highlight animation). */
   isNew?: boolean;
+  /** SLA thresholds from the settings panel (defaults apply when omitted). */
+  slaThresholds?: SlaThresholds;
 }
 
 /** Fork-and-knife SVG for dine-in orders (matches prototype DINE_ICON). */
@@ -126,10 +128,10 @@ function nextActionKey(status: string): string | null {
 export const KdsTicketCard = memo(function KdsTicketCard({
   order, onAdvance, showOrderId = true, showTableNumber = true,
   selected = false, onSaveItems, sessionToken, onAdvanceItem, onAddItems,
-  isNew = false,
+  isNew = false, slaThresholds,
 }: KdsTicketCardProps) {
   const { l10n } = useLocalization();
-  const { level, urgent, display } = useTicketSla(order.received_at);
+  const { level, urgent, display } = useTicketSla(order.received_at, slaThresholds);
   const { playAlert } = useSound();
   const prevLevel = useRef<'green' | 'yellow' | 'red' | null>(null);
   const prevUrgent = useRef(false);
@@ -164,20 +166,30 @@ export const KdsTicketCard = memo(function KdsTicketCard({
   const [lineItems, setLineItems] = useState<KdsLineItem[] | null>(null);
   const [lineItemsLoading, setLineItemsLoading] = useState(false);
   const [fetchKey, setFetchKey] = useState(0);
+  // Sequence guard: two in-flight fetches (e.g. a summary-change refetch
+  // racing a fetchKey bump) can resolve out of order and pin stale items.
+  const loadSeqRef = useRef(0);
 
   useEffect(() => {
+    const seq = ++loadSeqRef.current;
     setLineItemsLoading(true);
 
     getKdsOrderLinesScoped(sessionToken, order.id)
       .then((items) => {
+        if (seq !== loadSeqRef.current) return;
         setLineItems(items);
         setLineItemsLoading(false);
       })
       .catch(() => {
         // Silently fall back to items_summary — the flat display works for all orders.
+        if (seq !== loadSeqRef.current) return;
         setLineItemsLoading(false);
       });
-  }, [sessionToken, order.id, fetchKey]);
+    // items_summary is the refetch trigger for external edits (e.g. an FOH
+    // product-picker merge): the board event replaces the order object, the
+    // changed summary re-fetches the structured lines so the course-grouped
+    // display never goes stale.
+  }, [sessionToken, order.id, order.items_summary, fetchKey]);
 
   // Group items by course for structured display.
   const courseGroups = lineItems && lineItems.length > 0
@@ -277,7 +289,11 @@ export const KdsTicketCard = memo(function KdsTicketCard({
         style={{ background: hdrBg, color: hdrText }}
         onClick={toggleCollapsed}
         aria-expanded={!collapsed}
-        aria-label={`${requiredLocalized(l10n, 'kds-toggle-card-aria', { number: order.display_number ?? 0 })}${collapsed ? ' — collapsed' : ''}`}
+        aria-label={requiredLocalized(
+          l10n,
+          collapsed ? 'kds-toggle-card-aria-collapsed' : 'kds-toggle-card-aria',
+          { number: order.display_number ?? 0 },
+        )}
         data-testid={`kds-order-card-${order.display_number ?? order.id}-header`}
       >
         <span className="kds-card-header-icon" aria-hidden="true">

@@ -2,11 +2,13 @@ import { useEffect, useState, useCallback, useMemo, useRef, Profiler } from 'rea
 import { Localized, useLocalization } from '@fluent/react';
 import { listen } from '@/api/tauri';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+import { useSwipe } from '@/hooks/useSwipe';
 import { useKdsOffline } from '@/hooks/useKdsOffline';
 import { useWorkspaceScope, useWorkspace } from '@/contexts/WorkspaceContext';
 import { getKdsQueueScoped, updateKdsStatusScoped, updateKdsOrderItemsScoped, updateKdsLineItemStatusScoped, getKdsOrderLinesScoped, type KdsOrder, type KdsStatus, type KdsLineItem, type CreateKdsLineItemInput } from '@/api/kds';
 import { useKdsPreferences } from '@/features/kds/hooks/useKdsPreferences';
 import { useNewTicketSound } from '@/features/kds/hooks/useNewTicketSound';
+import type { SlaThresholds } from '@/features/kds/hooks/useTicketSla';
 import { useSound } from '@/frontend/shared/useSound';
 import { requiredLocalized, LoadingStatus } from '@/frontend/shared';
 import { isEditableTarget } from '@/utils/isEditableTarget';
@@ -79,15 +81,9 @@ export interface KdsLayoutProps {
   onAddItems?: (orderId: string) => void;
   /** Set of order IDs that just arrived — used for brief highlight animation. */
   newOrderIds: ReadonlySet<string>;
+  /** SLA thresholds for the escalation colours (settings panel sliders). */
+  slaThresholds?: SlaThresholds;
 }
-
-/** Keyboard shortcut descriptions for the help popover. */
-const SHORTCUTS: { key: string; id: string }[] = [
-  { key: '1-9', id: 'kds-shortcut-select' },
-  { key: 'Space', id: 'kds-shortcut-advance' },
-  { key: '↑↓', id: 'kds-shortcut-navigate' },
-  { key: 'Esc', id: 'kds-shortcut-deselect' },
-];
 
 /** KDS (Kitchen Display System) screen — real-time order queue in a single masonry view, with Open/Completed tabs and per-user preferences. */
 export default function KdsScreen() {
@@ -100,22 +96,26 @@ export default function KdsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [settings, setSettings] = useState<KdsSettings>(DEFAULT_SETTINGS);
+  // H3: the offline banner's × previously cleared `error` (the other
+  // banner) — a no-op. This flag gates the offline banner and resets as
+  // soon as connectivity returns.
+  const [offlineDismissed, setOfflineDismissed] = useState(false);
   /** Open vs Completed view — the prototype's primary tab navigation. */
   const [activeTab, setActiveTab] = useState<'open' | 'completed'>('open');
   const [initialLoading, setInitialLoading] = useState(true);
-  const [showShortcuts, setShowShortcuts] = useState(false);
-  const shortcutsBtnRef = useRef<HTMLButtonElement>(null);
-  const shortcutsRef = useRef<HTMLDivElement>(null);
   // KEY-07: ARIA tabs pattern — zone chips get roving tabindex + arrow keys.
   const zoneTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   // Open/Completed tab indicator: measured from the track + active tab.
   const tabsTrackRef = useRef<HTMLDivElement>(null);
   const tabOpenRef = useRef<HTMLButtonElement>(null);
   const tabCompletedRef = useRef<HTMLButtonElement>(null);
+  const tabIndicatorRef = useRef<HTMLSpanElement>(null);
+  const isTabMountedRef = useRef(false);
   const [tabIndicator, setTabIndicator] = useState<{ left: number; width: number }>({ left: 3, width: 0 });
   // Filter dropdown — view mode (All / Prepared) matching the prototype filter.
   const [filterMode, setFilterMode] = useState<'all' | 'prepared'>('all');
   const [filterCats, setFilterCats] = useState<Set<string> | null>(null);
+  const [completedFilter, setCompletedFilter] = useState<'all' | 'dinein' | 'takeaway'>('all');
   const [showFilter, setShowFilter] = useState(false);
   const filterBtnRef = useRef<HTMLButtonElement>(null);
   const filterPanelRef = useRef<HTMLDivElement>(null);
@@ -123,12 +123,6 @@ export default function KdsScreen() {
   const [pickerOrderId, setPickerOrderId] = useState<string | null>(null);
   // KDS device enrollment modal state.
   const [showEnrollment, setShowEnrollment] = useState(false);
-  // Re-entry guard for the picker confirm: the merge is async and the modal
-  // stays open until it resolves, so a fast double-tap would fire the merge
-  // twice and duplicate the items on the ticket. Pinned by KdsScreen.test.tsx
-  // (deferred-promise double-tap). The state twin drives the modal's
-  // disabled Confirm for visual feedback; the ref keeps the guard immune to
-  // render timing between two rapid taps.
   const pickerSavingRef = useRef(false);
   const [pickerSaving, setPickerSaving] = useState(false);
   // Shift state — tracks whether the kitchen shift is active.
@@ -152,40 +146,32 @@ export default function KdsScreen() {
   const [newOrderIds, setNewOrderIds] = useState<Set<string>>(new Set());
   const arrivalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Close shortcuts popover on Escape or outside click.
-  useEffect(() => {
-    if (!showShortcuts) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowShortcuts(false);
-    };
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        shortcutsRef.current && !shortcutsRef.current.contains(e.target as Node) &&
-        shortcutsBtnRef.current && !shortcutsBtnRef.current.contains(e.target as Node)
-      ) {
-        setShowShortcuts(false);
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showShortcuts]);
-
   // 3b: Offline resilience — cache, retry queue, optimistic updates.
   // OFF-07: the hook namespaces all localStorage by store scope so switching
   // stores on a shared terminal never leaks orders or queued mutations.
   const {
     online, pendingQueueLength, deadLetterLength,
-    wrapFetch, wrapUpdate, retryPending, clearDeadLetter,
+    wrapFetch, wrapUpdate, retryPending, clearDeadLetter, requeueDeadLetter,
     forceRetryCounter, storageUnavailable,
   } = useKdsOffline(workspaceScope?.storeId);
 
   // P3-2: Chime when new tickets arrive (debounced to max 1 per 5s).
   useNewTicketSound(orders, settings.soundEnabled);
-  const { speak } = useSound();
+  const { speak, setSoundEnabled } = useSound();
+
+  // The KDS sound preference drives the GLOBAL mute: SLA escalation
+  // alerts (each card's own useSound instance) and TTS callouts route
+  // through separate hook instances that previously never saw this
+  // toggle, so a muted kitchen still got red-escalation sirens.
+  useEffect(() => {
+    setSoundEnabled(settings.soundEnabled);
+  }, [setSoundEnabled, settings.soundEnabled]);
+
+  // Re-show the offline banner after the next disconnection once
+  // connectivity is restored.
+  useEffect(() => {
+    if (online) setOfflineDismissed(false);
+  }, [online]);
 
   // PERF-KDS-01: the pending-queue length is only read inside the post-fetch
   // flush, never rendered from `fetchOrders`. Keeping it in a ref (instead of
@@ -362,9 +348,14 @@ export default function KdsScreen() {
     });
   }, [forceRetryCounter, fetchOrders]);
 
-  // 1c: Auto-acknowledge — when enabled, advance pending tickets to
+  // 1c: Auto-accept — when enabled, advance pending tickets to
   // preparing after acknowledgeDelayMin minutes without manual tap.
   // Must be placed AFTER advanceStatus declaration to avoid TDZ errors.
+  // An in-flight set guards against double-fire: this effect re-runs on
+  // every board refresh, and before the backend event replaces `orders`
+  // the same still-pending ticket would be advanced again (each duplicate
+  // replay used to overwrite the ticket's started_at on the backend).
+  const autoAckInFlightRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!prefs.autoAcknowledge || prefs.acknowledgeDelayMin <= 0) return;
 
@@ -374,13 +365,17 @@ export default function KdsScreen() {
     for (const order of orders) {
       if (order.status !== 'pending') continue;
       if (!order.received_at) continue;
+      if (autoAckInFlightRef.current.has(order.id)) continue;
 
       const receivedAt = new Date(order.received_at).getTime();
       if (isNaN(receivedAt)) continue;
 
       if (now - receivedAt >= delayMs) {
+        autoAckInFlightRef.current.add(order.id);
         // Fire-and-forget — advance silently without awaiting.
-        advanceStatus(order);
+        void advanceStatus(order).finally(() => {
+          autoAckInFlightRef.current.delete(order.id);
+        });
       }
     }
   }, [orders, prefs.autoAcknowledge, prefs.acknowledgeDelayMin, advanceStatus]);
@@ -407,6 +402,14 @@ export default function KdsScreen() {
     }
     return orders;
   }, [orders, filterMode, filterCats]);
+
+  // H3: the settings sliders are now wired — thresholds flow into every
+  // card's useTicketSla. Memoized so KdsTicketCard's memo still holds when
+  // unrelated state re-renders the screen.
+  const slaThresholds = useMemo<SlaThresholds>(() => ({
+    yellowAtSec: settings.yellowThresholdMin * 60,
+    redAtSec: settings.redThresholdMin * 60,
+  }), [settings.yellowThresholdMin, settings.redThresholdMin]);
 
   // Deselect if currently selected order is filtered out.
   useEffect(() => {
@@ -479,6 +482,19 @@ export default function KdsScreen() {
     onRefresh: fetchOrders,
   });
 
+  // Swipe gesture between Open and Completed tabs (Android launcher pager feel)
+  const swipeProps = useSwipe(
+    {
+      onSwipeLeft: () => {
+        if (activeTab === 'open') setActiveTab('completed');
+      },
+      onSwipeRight: () => {
+        if (activeTab === 'completed') setActiveTab('open');
+      },
+    },
+    { minDistance: 60, maxTimeMs: 400 },
+  );
+
   // KEY-07: ARIA tabs pattern — ArrowLeft/ArrowRight/Home/End move between the
   // zone chips (roving tabindex: the selected chip keeps tabIndex 0, others -1),
   // and the chip reached by arrow keys becomes the active zone filter.
@@ -506,14 +522,36 @@ export default function KdsScreen() {
   // Open/Completed tab indicator: measure the active tab button inside
   // the track and slide the blue pill to it (prototype .kds-tab-indicator).
   useEffect(() => {
-    const track = tabsTrackRef.current;
     const tab = activeTab === 'open' ? tabOpenRef.current : tabCompletedRef.current;
-    if (!track || !tab) return;
+    if (!tab) return;
     setTabIndicator({
-      left: tab.offsetLeft - track.offsetLeft,
+      left: tab.offsetLeft,
       width: tab.offsetWidth,
     });
+    if (isTabMountedRef.current && tabIndicatorRef.current && typeof tabIndicatorRef.current.animate === 'function') {
+      /* 2-axis motion: squeeze (narrow+short) mid-flight → overshoot on landing → settle */
+      tabIndicatorRef.current.animate([
+        { transform: 'scale(1, 1)' },
+        { transform: 'scale(0.82, 0.85)', offset: 0.45 },
+        { transform: 'scale(1.08, 1.18)', offset: 0.85 },
+        { transform: 'scale(1, 1)' },
+      ], { duration: 340, easing: 'ease-in-out' });
+    }
+    isTabMountedRef.current = true;
   }, [activeTab]);
+
+  useEffect(() => {
+    const updateIndicator = () => {
+      const tab = activeTab === 'open' ? tabOpenRef.current : tabCompletedRef.current;
+      if (!tab) return;
+      setTabIndicator({
+        left: tab.offsetLeft,
+        width: tab.offsetWidth,
+      });
+    };
+    window.addEventListener('resize', updateIndicator);
+    return () => window.removeEventListener('resize', updateIndicator);
+  }, [activeTab, orders.length]);
 
   // Filter dropdown: close on outside click and Escape.
   useEffect(() => {
@@ -589,11 +627,17 @@ export default function KdsScreen() {
     try {
       await updateKdsOrderItemsScoped(sessionToken, { id: orderId, items_summary: itemsSummary, item_count: itemCount });
     } catch (e) {
-      setError(String(e));
+      // Localized generic message in the role="alert" banner; raw detail to
+      // the console for diagnosis (unlocalized internal error text must not
+      // render to the operator).
+      console.error('updateKdsOrderItems failed', e);
+      setError(requiredLocalized(l10n, 'kds-error-update-failed'));
     }
-  }, [sessionToken]);
+  }, [sessionToken, l10n]);
 
-  const boardFiltered = filterMode === 'prepared' || (filterCats !== null && filterCats.size > 0);
+  const boardFiltered = activeTab === 'completed'
+    ? completedFilter !== 'all'
+    : (filterMode === 'prepared' || (filterCats !== null && filterCats.size > 0));
 
   // ── Initial loading skeleton ──────────────────────────────────
   const renderContent = () => {
@@ -620,25 +664,41 @@ export default function KdsScreen() {
         );
     }
 
-    if (activeTab === 'completed') {
-      return <KdsCompletedView onReopen={() => setActiveTab('open')} />;
-    }
-
     return (
-      <div className="kds-content-wrap" {...pullRefreshProps}>
-        <KdsLayoutMasonry
-          orders={filteredOrders}
-          filtered={boardFiltered}
-          onAdvance={advanceStatus}
-          showOrderId={prefs.showOrderId}
-          showTableNumber={prefs.showTableNumber}
-          selectedOrderId={selectedOrderId}
-          sessionToken={sessionToken}
-          onSaveItems={handleSaveItems}
-          onAdvanceItem={advanceItemStatus}
-          onAddItems={setPickerOrderId}
-          newOrderIds={newOrderIds}
-        />
+      <div className="kds-main-viewport" {...swipeProps}>
+        <div className={`kds-main-track active-${activeTab}`}>
+          <div
+            className="kds-main-pane kds-main-pane--open"
+            aria-hidden={activeTab !== 'open'}
+          >
+            <div className={`kds-content-wrap${settings.density === 'compact' ? ' kds--compact' : ''}`} {...pullRefreshProps}>
+              <KdsLayoutMasonry
+                orders={filteredOrders}
+                filtered={boardFiltered}
+                onAdvance={advanceStatus}
+                showOrderId={prefs.showOrderId}
+                showTableNumber={prefs.showTableNumber}
+                selectedOrderId={selectedOrderId}
+                sessionToken={sessionToken}
+                onSaveItems={handleSaveItems}
+                onAdvanceItem={advanceItemStatus}
+                onAddItems={setPickerOrderId}
+                newOrderIds={newOrderIds}
+                slaThresholds={slaThresholds}
+              />
+            </div>
+          </div>
+          <div
+            className="kds-main-pane kds-main-pane--completed"
+            aria-hidden={activeTab !== 'completed'}
+          >
+            <KdsCompletedView
+              onReopen={() => setActiveTab('open')}
+              completedFilter={completedFilter}
+              active={activeTab === 'completed'}
+            />
+          </div>
+        </div>
       </div>
     );
   };
@@ -651,114 +711,163 @@ export default function KdsScreen() {
       }
     }}>
     <div ref={kdsRef} className="kds" tabIndex={-1} role="region" aria-label={requiredLocalized(l10n, 'kds-screen-aria')}>
+      {/* A11Y: non-visual announcement of arriving tickets — the chime and
+          the 3s visual highlight are both invisible to screen reader users.
+          Polite so it never collides with the role="alert" banners below. */}
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="kds-new-orders-live">
+        {newOrderIds.size > 0 && (
+          <Localized id="kds-new-orders-announced" vars={{ count: newOrderIds.size }}>
+            {`${newOrderIds.size} new orders`}
+          </Localized>
+        )}
+      </div>
       <div className="kds-header">
         <div className="kds-header-left">
           <button
-            className="kds-back-btn"
+            type="button"
+            className="kds-btn kds-btn--icon kds-back-btn"
             onClick={goToWorkspacePicker}
             aria-label={requiredLocalized(l10n, 'kds-back-aria')}
+            title={requiredLocalized(l10n, 'kds-back-aria')}
             data-testid="kds-topbar-back"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 19l-7-7 7-7" /></svg>
           </button>
-          {/* Title and order count — expected by E2E tests (CSS contract) */}
-          <div className="kds-title-group">
-            <h1 className="kds-title">
-              <Localized id="kds-screen-title"><span>Kitchen Display</span></Localized>
-            </h1>
-            <span className="kds-order-count">
-              <Localized id="kds-order-count" vars={{ count: String(orders.length) }}>
-                <span>{orders.length} order{orders.length !== 1 ? 's' : ''}</span>
-              </Localized>
-            </span>
-          </div>
-          {/* Filter dropdown — All / Prepared view mode (hidden on Completed tab) */}
-          {activeTab !== 'completed' && (
-            <div className="kds-filter">
-              <button
-                ref={filterBtnRef}
-                className={`kds-btn kds-btn--filter${!boardFiltered ? ' kds-btn--filter--all' : ' kds-btn--filter--active'}${showFilter ? ' kds-btn--filter--open' : ''}`}
-                onClick={() => setShowFilter((p) => !p)}
-                onKeyDown={handleFilterBtnKeyDown}
-                aria-haspopup="listbox"
-                aria-expanded={showFilter}
-                data-testid="kds-topbar-filter"
+          {/* Filter dropdown — tab-aware (Open: All/Prepared/Cats, Completed: All/Dine in/Takeaway) */}
+          <div className="kds-filter">
+            <button
+              ref={filterBtnRef}
+              className={`kds-btn kds-btn--filter${!boardFiltered ? ' kds-btn--filter--all' : ' kds-btn--filter--active'}${showFilter ? ' kds-btn--filter--open' : ''}`}
+              onClick={() => setShowFilter((p) => !p)}
+              onKeyDown={handleFilterBtnKeyDown}
+              aria-haspopup="listbox"
+              aria-expanded={showFilter}
+              data-testid="kds-topbar-filter"
+            >
+              <span>
+                {activeTab === 'completed' ? (
+                  completedFilter === 'dinein' ? (
+                    <Localized id="kds-filter-dinein"><span>Dine in</span></Localized>
+                  ) : completedFilter === 'takeaway' ? (
+                    <Localized id="kds-filter-takeaway"><span>Takeaway</span></Localized>
+                  ) : (
+                    <Localized id="kds-filter-completed-all"><span>All</span></Localized>
+                  )
+                ) : filterMode === 'prepared' ? (
+                  <Localized id="kds-filter-prepared"><span>Prepared</span></Localized>
+                ) : filterCats && filterCats.size > 0 ? (
+                  filterCats.size === 1 ? (
+                    [...filterCats][0]
+                  ) : (
+                    requiredLocalized(l10n, 'kds-filter-selected', { count: filterCats.size })
+                  )
+                ) : (
+                  <Localized id="kds-filter-all"><span>All Categories</span></Localized>
+                )}
+              </span>
+              <span className="caret" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 9h12l-6 7z" /></svg>
+              </span>
+            </button>
+            {showFilter && (
+              <div
+                ref={filterPanelRef}
+                className="kds-filter-panel"
+                role="listbox"
+                tabIndex={-1}
+                aria-multiselectable={activeTab !== 'completed'}
+                aria-label={requiredLocalized(l10n, 'kds-filter-aria')}
+                onKeyDown={handleFilterPanelKeyDown}
               >
-                <span>
-                  {filterMode === 'prepared'
-                    ? requiredLocalized(l10n, 'kds-filter-prepared')
-                    : filterCats && filterCats.size > 0
-                      ? filterCats.size === 1
-                        ? [...filterCats][0]
-                        : requiredLocalized(l10n, 'kds-filter-selected', { count: String(filterCats.size) })
-                      : requiredLocalized(l10n, 'kds-filter-all')}
-                </span>
-                <span className="caret" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 9h12l-6 7z" /></svg>
-                </span>
-              </button>
-              {showFilter && (
-                <div
-                  ref={filterPanelRef}
-                  className="kds-filter-panel"
-                  role="listbox"
-                  tabIndex={-1}
-                  aria-multiselectable="true"
-                  aria-label={requiredLocalized(l10n, 'kds-filter-aria')}
-                  onKeyDown={handleFilterPanelKeyDown}
-                >
-                  <div className="kds-filter-modes">
+                {activeTab === 'completed' ? (
+                  <div className="kds-filter-modes no-sep">
                     <button
-                      className={`kds-filter-option${filterMode === 'all' && (!filterCats || filterCats.size === 0) ? ' checked' : ''}`}
+                      className={`kds-filter-option${completedFilter === 'all' ? ' checked' : ''}`}
                       role="option"
-                      aria-selected={filterMode === 'all' && (!filterCats || filterCats.size === 0)}
-                      onClick={() => { setFilterMode('all'); setFilterCats(null); setShowFilter(false); }}
-                      data-testid="kds-filter-mode-all"
+                      aria-selected={completedFilter === 'all'}
+                      onClick={() => { setCompletedFilter('all'); setShowFilter(false); }}
+                      data-testid="kds-filter-completed-all"
                     >
-                      <Localized id="kds-filter-all">All orders</Localized>
+                      <Localized id="kds-filter-completed-all">All</Localized>
                     </button>
                     <button
-                      className={`kds-filter-option${filterMode === 'prepared' ? ' checked' : ''}`}
+                      className={`kds-filter-option${completedFilter === 'dinein' ? ' checked' : ''}`}
                       role="option"
-                      aria-selected={filterMode === 'prepared'}
-                      onClick={() => { setFilterMode('prepared'); setFilterCats(null); setShowFilter(false); }}
-                      data-testid="kds-filter-mode-prepared"
+                      aria-selected={completedFilter === 'dinein'}
+                      onClick={() => { setCompletedFilter('dinein'); setShowFilter(false); }}
+                      data-testid="kds-filter-completed-dinein"
                     >
-                      <Localized id="kds-filter-prepared">Prepared</Localized>
+                      <Localized id="kds-filter-dinein">Dine in</Localized>
+                    </button>
+                    <button
+                      className={`kds-filter-option${completedFilter === 'takeaway' ? ' checked' : ''}`}
+                      role="option"
+                      aria-selected={completedFilter === 'takeaway'}
+                      onClick={() => { setCompletedFilter('takeaway'); setShowFilter(false); }}
+                      data-testid="kds-filter-completed-takeaway"
+                    >
+                      <Localized id="kds-filter-takeaway">Takeaway</Localized>
                     </button>
                   </div>
-                  {zones.length > 0 && (
-                    <div className="kds-filter-grid">
-                      {zones.map((zone) => (
-                        <button
-                          key={zone}
-                          className={`kds-filter-option${filterCats?.has(zone) ? ' checked' : ''}`}
-                          role="option"
-                          aria-selected={filterCats?.has(zone) ?? false}
-                          onClick={() => {
-                            setFilterMode('all');
-                            setFilterCats((prev) => {
-                              const next = new Set(prev ?? []);
-                              if (next.has(zone)) next.delete(zone); else next.add(zone);
-                              return next.size === 0 ? null : next;
-                            });
-                          }}
-                          data-testid={`kds-filter-zone-${zone}`}
-                        >
-                          <span>{zone}</span>
-                        </button>
-                      ))}
+                ) : (
+                  <>
+                    <div className="kds-filter-modes">
+                      <button
+                        className={`kds-filter-option${filterMode === 'all' && (!filterCats || filterCats.size === 0) ? ' checked' : ''}`}
+                        role="option"
+                        aria-selected={filterMode === 'all' && (!filterCats || filterCats.size === 0)}
+                        onClick={() => { setFilterMode('all'); setFilterCats(null); setShowFilter(false); }}
+                        data-testid="kds-filter-mode-all"
+                      >
+                        <Localized id="kds-filter-all">All orders</Localized>
+                      </button>
+                      <button
+                        className={`kds-filter-option${filterMode === 'prepared' ? ' checked' : ''}`}
+                        role="option"
+                        aria-selected={filterMode === 'prepared'}
+                        onClick={() => { setFilterMode('prepared'); setFilterCats(null); setShowFilter(false); }}
+                        data-testid="kds-filter-mode-prepared"
+                      >
+                        <Localized id="kds-filter-prepared">Prepared</Localized>
+                      </button>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+                    {zones.length > 0 && (
+                      <div className="kds-filter-grid">
+                        {zones.map((zone) => (
+                          <button
+                            key={zone}
+                            className={`kds-filter-option${filterCats?.has(zone) ? ' checked' : ''}`}
+                            role="option"
+                            aria-selected={filterCats?.has(zone) ?? false}
+                            onClick={() => {
+                              setFilterMode('all');
+                              setFilterCats((prev) => {
+                                const next = new Set(prev ?? []);
+                                if (next.has(zone)) next.delete(zone); else next.add(zone);
+                                return next.size === 0 ? null : next;
+                              });
+                            }}
+                            data-testid={`kds-filter-zone-${zone}`}
+                          >
+                            <span>{zone}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Open/Completed tabs — prototype .kds-tabs */}
         <div className="kds-tabs" ref={tabsTrackRef} role="tablist" aria-label={requiredLocalized(l10n, 'kds-tablist-aria')}>
-          <span className="kds-tab-indicator" style={{ left: tabIndicator.left, width: tabIndicator.width }} />
+          <span
+            ref={tabIndicatorRef}
+            className="kds-tab-indicator"
+            style={{ left: tabIndicator.left, width: tabIndicator.width }}
+          />
           <button
             ref={tabOpenRef}
             className={`kds-tab${activeTab === 'open' ? ' active' : ''}`}
@@ -803,49 +912,8 @@ export default function KdsScreen() {
             <span className={!inShift ? 'visible' : ''}><Localized id="kds-shift-start">Start Shift</Localized></span>
             <span className={inShift ? 'visible' : ''}><Localized id="kds-shift-end">End Shift</Localized></span>
           </button>
-          {/* Shortcut help button */}
-          <button
-            ref={shortcutsBtnRef}
-            className="kds-shortcuts-btn"
-            onClick={() => setShowShortcuts((p) => !p)}
-            aria-label={requiredLocalized(l10n, 'kds-shortcuts-aria')}
-            aria-expanded={showShortcuts}
-            aria-controls="kds-shortcuts-popover"
-            data-testid="kds-topbar-shortcuts"
-          >
-            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-            </svg>
-          </button>
-          {showShortcuts && (
-            <div
-              id="kds-shortcuts-popover"
-              ref={shortcutsRef}
-              className="kds-shortcuts-popover"
-              role="region"
-              aria-label={requiredLocalized(l10n, 'kds-shortcuts-label')}
-            >
-              {SHORTCUTS.map((s) => (
-                <div key={s.id} className="kds-shortcut-row">
-                  <kbd className="kds-shortcut-key">{s.key}</kbd>
-                  <span className="kds-shortcut-desc">{requiredLocalized(l10n, s.id)}</span>
-                </div>
-              ))}
-            </div>
-          )}
           {/* Device status indicator */}
-          <KdsDeviceStatusIndicator sessionToken={sessionToken} />
-          {/* Enroll new KDS device button */}
-          <button
-            className="kds-enroll-btn"
-            onClick={() => setShowEnrollment(true)}
-            aria-label={requiredLocalized(l10n, 'kds-enrollment-title')}
-            data-testid="kds-topbar-enroll"
-          >
-            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
-              <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-            </svg>
-          </button>
+          <KdsDeviceStatusIndicator sessionToken={sessionToken} onEnrollDevice={() => setShowEnrollment(true)} />
           {/* Hamburger settings panel — only when prefs loaded */}
           {!prefsLoading && (
             <KdsHamburgerPanel
@@ -934,14 +1002,15 @@ export default function KdsScreen() {
       {deadLetterLength > 0 && (
         <div className="kds-offline-banner kds-offline-banner--deadletter" role="alert">
           <span className="kds-offline-banner-text">
-            {requiredLocalized(l10n, 'kds-offline-dead-letter', { count: String(deadLetterLength) })}
+            {requiredLocalized(l10n, 'kds-offline-dead-letter', { count: deadLetterLength })}
           </span>
           <button
             className="kds-offline-retry-btn"
             onClick={() => {
-              // Re-queue dead-letter actions: clear the dead list so the next
-              // fetch/retry cycle picks up the operator intent; then flush.
-              clearDeadLetter();
+              // OFF-05: requeue the dead-lettered actions into the pending
+              // queue (preserving operator intent), then flush the queue.
+              // The dismiss (×) button is the explicit "discard" path.
+              requeueDeadLetter();
               retryPending(async (action) => {
                 try {
                   await updateKdsStatusScoped(sessionToken, action.orderId, action.targetStatus);
@@ -966,7 +1035,7 @@ export default function KdsScreen() {
       )}
 
       {/* 3b: Offline banner — shown when backend is unreachable or actions are queued */}
-      {!online && (
+      {!online && !offlineDismissed && (
         <div className="kds-offline-banner" role="alert">
           <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
             <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-.47.81c-.54.5-1.1 1.36-1.1 2.52V8l4.89-4.89c-.04-.26-.14-.52-.34-.73zM5.99 5.58l-2.84 2.84a1.532 1.532 0 000 2.16l7.29 7.29c.39.39 1.02.39 1.41 0l2.84-2.84-5.99-5.99-2.71-2.76v.3zm10.02 2.46l2.13 2.13a1.532 1.532 0 010 2.16l-2.13 2.13a.5.5 0 01-.71-.71l2.13-2.13a.532.532 0 000-.75l-2.13-2.13a.5.5 0 01.71-.71zm-5.02 5.32a1.25 1.25 0 110-2.5 1.25 1.25 0 010 2.5z" clipRule="evenodd" />
@@ -998,7 +1067,7 @@ export default function KdsScreen() {
           )}
           <button
             className="kds-offline-dismiss-btn"
-            onClick={() => setError(null)}
+            onClick={() => setOfflineDismissed(true)}
             aria-label={requiredLocalized(l10n, 'kds-offline-dismiss-aria')}
           >
             &times;
@@ -1055,7 +1124,8 @@ export default function KdsScreen() {
               line_items: mergedItems,
             });
           } catch (e) {
-            setError(String(e));
+            console.error('picker merge failed', e);
+            setError(requiredLocalized(l10n, 'kds-error-update-failed'));
           } finally {
             pickerSavingRef.current = false;
             setPickerSaving(false);

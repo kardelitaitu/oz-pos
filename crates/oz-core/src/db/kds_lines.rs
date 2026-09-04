@@ -79,6 +79,22 @@ impl Store<'_> {
             return Ok(vec![]);
         }
 
+        // Idempotent-replay guard: a retried checkout (double-tapped pay,
+        // transient error between ticket creation and finalize) must not
+        // violate UNIQUE(sale_id, kitchen_zone) — which for zoned sales
+        // surfaces as a swallowed checkout error, and for unzoned sales
+        // silently creates duplicate tickets (SQLite treats NULL zones as
+        // distinct in a UNIQUE index). Any zone that already has a ticket
+        // for this sale is skipped; when nothing new is created, the
+        // existing (non-cancelled) tickets are returned unchanged.
+        let existing_zones: std::collections::HashSet<Option<String>> = {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT kitchen_zone FROM kds_orders WHERE sale_id = ?1")?;
+            let rows = stmt.query_map(params![sale_id], |row| row.get::<_, Option<String>>(0))?;
+            rows.collect::<Result<std::collections::HashSet<_>, _>>()?
+        };
+
         // Group eligible lines by kitchen zone.
         let mut by_zone: std::collections::BTreeMap<Option<String>, Vec<&crate::SaleLine>> =
             std::collections::BTreeMap::new();
@@ -104,6 +120,15 @@ impl Store<'_> {
         };
 
         let mut orders = Vec::with_capacity(by_zone.len());
+        // Skip zones that already have a ticket for this sale.
+        by_zone.retain(|zone, _| !existing_zones.contains(zone));
+        if by_zone.is_empty() {
+            return self.get_kds_orders_by_sale(sale_id).map(|all| {
+                all.into_iter()
+                    .filter(|o| o.status != "cancelled")
+                    .collect()
+            });
+        }
         // One transaction for the WHOLE fanout: a failure on any zone
         // (duplicate sale/zone, line-item error) rolls back every ticket
         // created so far, so the kitchen never sees a partial set.

@@ -3,6 +3,7 @@ import { requiredLocalized, LoadingStatus } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { listKdsOrdersScoped, type KdsOrder } from '@/api/kds';
+import './KdsCompletedView.css';
 
 /** Time-bucket labels and their day-range condition. */
 const BUCKETS = [
@@ -39,18 +40,30 @@ function fmtDuration(from: string, to: string): string {
  *
  * Replaces KdsHistoryPanel in the Completed tab (Phase 5).
  */
-export function KdsCompletedView({ onReopen }: { onReopen?: (orderId: string) => void }) {
+export function KdsCompletedView({
+  onReopen,
+  completedFilter = 'all',
+  active = true,
+}: {
+  onReopen?: (orderId: string) => void;
+  completedFilter?: 'all' | 'dinein' | 'takeaway';
+  /** Whether the Completed tab is the visible pane — a stale-while-hidden
+   *  pane fetched only on mount and never refreshed for a whole shift. */
+  active?: boolean;
+}) {
   const { l10n } = useLocalization();
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchFailed, setFetchFailed] = useState(false);
   const [collapsedBuckets, setCollapsedBuckets] = useState<Set<string>>(new Set());
   const loadSeqRef = useRef(0);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     const seq = ++loadSeqRef.current;
     setLoading(true);
+    setFetchFailed(false);
     // Fetch served orders — the completed tab shows finished tickets.
     listKdsOrdersScoped(sessionToken, 'served')
       .then((result) => {
@@ -61,14 +74,35 @@ export function KdsCompletedView({ onReopen }: { onReopen?: (orderId: string) =>
       .catch(() => {
         if (seq !== loadSeqRef.current) return;
         setLoading(false);
+        // Surface a distinguishable error — an empty board used to be
+        // indistinguishable from "the fetch failed" (and from "no orders").
+        setFetchFailed(true);
       });
   }, [sessionToken]);
+
+  useEffect(() => {
+    // Refetch whenever the pane becomes visible: both panes stay mounted
+    // (aria-hidden toggle), so a mount-only fetch went stale all shift.
+    if (!active) return;
+    load();
+  }, [active, load]);
+
+  // Filter completed orders by order type (All / Dine in / Takeaway)
+  const filteredOrders = useMemo(() => {
+    if (completedFilter === 'dinein') {
+      return orders.filter((o) => !!o.table_number && o.table_number.trim() !== '');
+    }
+    if (completedFilter === 'takeaway') {
+      return orders.filter((o) => !o.table_number || o.table_number.trim() === '');
+    }
+    return orders;
+  }, [orders, completedFilter]);
 
   // Bucket the orders by completion time.
   const bucketed = useMemo(() => {
     const map = new Map<string, KdsOrder[]>();
     for (const b of BUCKETS) map.set(b.key, []);
-    for (const o of orders) {
+    for (const o of filteredOrders) {
       const ref = o.served_at || o.received_at;
       const offset = dayOffset(ref);
       for (const b of BUCKETS) {
@@ -79,7 +113,7 @@ export function KdsCompletedView({ onReopen }: { onReopen?: (orderId: string) =>
       }
     }
     return map;
-  }, [orders]);
+  }, [filteredOrders]);
 
   const toggleBucket = useCallback((key: string) => {
     setCollapsedBuckets((prev) => {
@@ -91,10 +125,30 @@ export function KdsCompletedView({ onReopen }: { onReopen?: (orderId: string) =>
 
   if (loading) {
     return (
-      <div className="kds-main completed-view" style={{ padding: 14 }}>
+      <div className="kds-main completed-view kds-completed-view--loading">
         <LoadingStatus label={requiredLocalized(l10n, 'kds-history-loading')}>
           <span className="kds-refresh-spinner" />
         </LoadingStatus>
+      </div>
+    );
+  }
+
+  if (fetchFailed) {
+    return (
+      <div className="kds-main completed-view" role="region" aria-label={requiredLocalized(l10n, 'kds-completed-aria')}>
+        <div className="kds-completed-error" role="alert">
+          <span>
+            <Localized id="kds-completed-load-failed">Failed to load completed orders</Localized>
+          </span>
+          <button
+            type="button"
+            className="kds-btn kds-btn--muted"
+            onClick={load}
+            aria-label={requiredLocalized(l10n, 'kds-completed-retry-aria')}
+          >
+            <Localized id="kds-offline-retry">Retry</Localized>
+          </button>
+        </div>
       </div>
     );
   }
@@ -122,15 +176,15 @@ export function KdsCompletedView({ onReopen }: { onReopen?: (orderId: string) =>
               </span>
             </button>
             {!collapsed && items.length === 0 && (
-              <p className="kds-empty" style={{ padding: '8px 10px', minHeight: 0, fontSize: 12 }}>
+              <p className="kds-empty kds-completed-view__empty">
                 <Localized id={`kds-completed-${key}-empty`}>No orders</Localized>
               </p>
             )}
             {!collapsed && items.map((order) => {
               const ref = order.served_at || order.received_at;
               return (
-                <div key={order.id} className="kds-ticket" style={{ cursor: 'default' }}>
-                  <div className="kds-card-header" style={{ cursor: 'default' }}>
+                <div key={order.id} className="kds-ticket kds-completed-ticket">
+                  <div className="kds-card-header kds-completed-ticket__header">
                     <span className="kds-card-header-left">
                       <span className="kds-card-header-row">
                         <span className="order-no">#{order.display_number}</span>
@@ -146,7 +200,7 @@ export function KdsCompletedView({ onReopen }: { onReopen?: (orderId: string) =>
                       </span>
                     </span>
                   </div>
-                  <div style={{ padding: '6px 13px', fontSize: 12, opacity: 0.6, color: 'var(--kds-text)' }}>
+                  <div className="kds-completed-ticket__summary">
                     {order.items_summary}
                   </div>
                   <div className="kds-card-footer">

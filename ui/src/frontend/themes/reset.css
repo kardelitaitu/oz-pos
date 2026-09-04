@@ -135,7 +135,7 @@ input:-webkit-autofill:active {
   outline-offset: 2px;
 }
 
-:focus-visible:not(:focus-visible) {
+:focus:not(:focus-visible) {
   outline: none;
 }
 

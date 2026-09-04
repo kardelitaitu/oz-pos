@@ -14,14 +14,26 @@ kds-item-status-ready = Ready
 kds-item-status-served = Served
 kds-item-status-cancelled = Cancelled
 kds-order-number = Order #
-kds-items = { $count } items
+kds-items =
+    { $count ->
+        [one] 1 item
+       *[other] { $count } items
+    }
 kds-notes = Notes
 kds-tap-to-advance = Tap to advance
 kds-tap-to-advance-label = Order { $number }, tap to advance
 kds-no-orders = No orders yet
 kds-no-orders-filtered = No orders in this status
-kds-order-count = { $count } orders
-kds-column-count = { $count } orders
+kds-order-count =
+    { $count ->
+        [one] 1 order
+       *[other] { $count } orders
+    }
+kds-column-count =
+    { $count ->
+        [one] 1 order
+       *[other] { $count } orders
+    }
 kds-time-ago-now = now
 kds-time-ago = { $minutes }m
 kds-urgent-badge = URGENT
@@ -86,6 +98,7 @@ kds-course-main = MAIN
 kds-course-side = SIDE
 kds-course-dessert = DESSERT
 kds-course-beverage = BEVERAGE
+kds-course-none = None
 kds-course-other = OTHER
 kds-course-loading = Loading items...
 kds-course-modifier-separator =: 
@@ -138,6 +151,8 @@ kds-shortcut-navigate = Navigate tickets
 kds-shortcut-deselect = Deselect / close
 kds-error-retry-aria = Retry
 kds-error-dismiss-aria = Dismiss
+kds-error-update-failed = Failed to update the order — try again
+kds-enrollment-failed = Device enrollment failed — check the connection and try again
 
 # ── KDS Device Enrollment ──
 kds-enrollment-title = Enroll KDS Device
@@ -168,6 +183,8 @@ kds-device-status-disconnected = Disconnected
 kds-device-status-stale = Stale
 kds-device-status-aria = KDS devices: { $connected } of { $total } connected
 kds-device-list-aria = KDS device list
+kds-device-enroll = Enroll device
+kds-device-enroll-aria = Open the KDS device enrollment dialog
 
 # ── Hamburger settings panel ──
 kds-settings-theme = Theme
@@ -188,12 +205,22 @@ kds-advance-start = Start
 kds-advance-ready = Mark Ready
 kds-advance-serve = Serve
 kds-toggle-card-aria = Toggle order { $number } details
+kds-toggle-card-aria-collapsed =
+    { kds-toggle-card-aria } (collapsed)
+kds-new-orders-announced =
+    { $count ->
+        [one] 1 new order
+       *[other] { $count } new orders
+    }
 
 # ── Topbar filter dropdown ──
 kds-filter-aria = Filter orders
-kds-filter-all = All orders
+kds-filter-all = All Categories
 kds-filter-prepared = Prepared
 kds-filter-selected = { $count } selected
+kds-filter-completed-all = All
+kds-filter-dinein = Dine in
+kds-filter-takeaway = Takeaway
 
 # ── Screen footer status bar ──
 kds-footer-aria = Terminal status
@@ -205,6 +232,8 @@ kds-footer-hours = { $count }h ago
 
 # ── Completed tab (bucket columns) ──
 kds-completed-aria = Completed orders
+kds-completed-load-failed = Failed to load completed orders
+kds-completed-retry-aria = Retry loading completed orders
 kds-completed-today = Today
 kds-completed-yesterday = Yesterday
 kds-completed-this-week = This Week
@@ -231,8 +260,8 @@ kds-confirm-ok = Confirm
 kds-settings-display-scale = Display scale
 kds-settings-columns = Columns
 
-# ── Card Colours ──
-kds-settings-card-colours = Card Colours
+# ── Colours ──
+kds-settings-card-colours = Colours
 kds-settings-color-dinein = Dine in
 kds-settings-color-takeaway = Takeaway
 kds-settings-color-rush = Rush
@@ -245,6 +274,10 @@ kds-settings-reset-colours = Reset colours
 # ── Card Animations ──
 kds-settings-card-animations = Card animations
 kds-settings-card-animations-caption = Spawn and reorder effects
+
+# ── Hardware Acceleration ──
+kds-settings-hw-accel = Hardware acceleration
+kds-settings-hw-accel-caption = Blur and GPU effects
 
 # ── Hamburger panel: section headings, icon-only controls, colour pickers ──
 # Recovered by the Fluent page audit. These were hardcoded English strings in

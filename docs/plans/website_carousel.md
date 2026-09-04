@@ -1,8 +1,19 @@
 # Website Hero Carousel — Video Format Plan
 
-> Status: **planned — pending video assets.** No code has been changed yet.
+> Status: **planned — blocked on two things, not one.** No code has been changed.
 > Scope: `website/src/components/HeroCarousel.tsx` + `website/public/videos/hero/`.
-> When the real slide videos are ready, follow §6 (encode) and §7 (integrate) in order.
+>
+> 1. **A decision from §7.0** — the video mounts *inside* `SlideWindow`'s
+>    `content` slot, whose box is ~1280×693, not the 1280×720 this plan encodes
+>    at. Pick A/B/C before recording; it changes the capture, not just the CSS.
+> 2. **The video assets themselves.**
+>
+> When both are settled, follow §6 (encode) and §7 (integrate) in order.
+>
+> Re-audited against the tree on 2026-09-04. §1 and §7.0 were corrected; §2–§6
+> and §8 were verified accurate (`DWELL_MS = 10000`, `aspectRatio: '1280 / 720'`,
+> `SLIDE_IDS` matching §5, the `/videos/*` immutable rule at `_headers:32`, and
+> `hero-carousel.test.tsx` existing).
 
 ## 1. Context
 
@@ -106,9 +117,51 @@ Acceptance per clip: duration `00:00:10.00`, 15 fps, no audio stream, within the
 
 ## 7. Integration into `HeroCarousel.tsx`
 
+### 7.0 Where the video actually mounts — read `SlideWindow` first
+
+Every slide renders inside `<SlideWindow title content>` (`HeroCarousel.tsx:92`).
+That component's own doc comment already settles the question the rest of §7
+assumed was open:
+
+> "Later the user drops a PNG of each app surface into the content area… **The
+> chrome (traffic lights + window title) is intentionally NOT part of the PNG —
+> it stays as live DOM** so it scales crisply at any hero width and keeps one
+> consistent look across every slide." — `mockups/SlideWindow.tsx:6-10`
+
+So the contract is settled, not an open decision:
+
+* The video goes in the **`content` slot**, inside the frame. It does **not**
+  replace `SlideWindow`.
+* Recordings must therefore be **chrome-free** — no OS title bar, no window
+  buttons in the footage. Capturing with the frame visible would double the
+  chrome and break the "one consistent look" property the comment names.
+
+**⚠️ This invalidates the §2/§5/§6 resolution numbers.** The content slot is
+`min-h-0 flex-1` (`SlideWindow.tsx:43`) sitting *below* a chrome bar of `px-4
+py-1.5` around 11px text plus a 1px border — roughly **27px**. The box a
+1280×720 clip drops into is therefore about **1280×693**, not 1280×720. Encode
+before resolving this and every clip letterboxes or crops ~3.75% vertically,
+which can clip the app's own menu bar.
+
+Three ways out — pick one **before recording**, because it changes the capture,
+not just the CSS:
+
+| Option | How | Cost |
+|---|---|---|
+| **A. Record at the true content box** | master at 1280×693 / 960×520 | odd dimensions; many capture tools won't offer them |
+| **B. `object-fit: cover`** | keep 1280×720, crop the overflow | loses ~13px top+bottom — footage must keep UI out of that band |
+| **C. `object-fit: contain` + frame gradient** | keep 1280×720, letterbox into `from-bg to-surface/30` | visible bars — though the frame already uses that gradient, so it reads as intentional |
+
+Recommendation: **B**, with recordings framed to keep the app's top bar clear of
+the crop band. It leaves §6's encode commands unchanged and costs under 4%.
+
+### 7.1 Steps
+
 1. **Lazy activation** — render the `<video>` only for the *active* slide
    (conditional render keyed by slide id) with `preload="none"`. Offscreen slides
    therefore cost **0 bytes**; at most one video is downloading at any time.
+   For `restaurant` the video replaces `<RestaurantMockup />` in the `content`
+   slot; for the other four it replaces the placeholder caption.
 2. **Loop alignment** — 10 s video ↔ `DWELL_MS = 10000`. On slide activation:
    `video.currentTime = 0; video.play()`. Show the poster until `canplay`.
 3. **Source selection** — `<source media="(min-width: 1024px)">` picks 720p;

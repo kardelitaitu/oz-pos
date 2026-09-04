@@ -55,3 +55,12 @@ export function useHardwareAccel() {
   }
   return context;
 }
+
+/**
+ * Access the hardware acceleration context safely outside a HardwareAccelProvider.
+ * Returns `null` when no HardwareAccelProvider wraps the calling tree.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useOptionalHardwareAccel(): HardwareAccelContextType | null {
+  return useContext(HardwareAccelContext) ?? null;
+}

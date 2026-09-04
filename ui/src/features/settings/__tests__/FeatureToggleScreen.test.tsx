@@ -1,6 +1,11 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {
+  assertAllInvokesHandled,
+  recordUnmatchedInvoke,
+  resetUnmatchedInvokes,
+} from '@/__tests__/test-utils/invokeCoverage';
 
 const { mockInvoke, mockAddToast } = vi.hoisted(() => ({
   mockInvoke: vi.fn(),
@@ -121,10 +126,12 @@ describe('FeatureToggleScreen', () => {
   beforeEach(() => {
     mockInvoke.mockReset();
     mockAddToast.mockClear();
+    resetUnmatchedInvokes();
   });
 
   afterEach(() => {
     cleanup();
+    assertAllInvokesHandled('FeatureToggleScreen');
   });
 
   it('shows loading skeleton on mount', () => {
@@ -241,7 +248,11 @@ describe('FeatureToggleScreen', () => {
         features.forEach((f) => { if (keys.includes(f.key)) f.enabled = enabled; });
         return Promise.resolve({ features: features.map((f) => ({ ...f })) });
       }
-      return Promise.reject(new Error('Unknown command'));
+      // These three are the deliberately-UNSCOPED feature commands (see the
+      // "genuinely global" category in scripts/verify-scoped-coverage.sh) --
+      // plain names are correct here, not a mock gap.
+      recordUnmatchedInvoke(cmd);
+      return Promise.reject(new Error(`Unknown command: ${cmd}`));
     });
     return features;
   }

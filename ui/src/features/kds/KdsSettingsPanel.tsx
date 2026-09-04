@@ -41,7 +41,7 @@ interface KdsSettingsPanelProps {
 
 /**
  * KdsSettingsPanel — gear icon button that opens a popover with KDS
- * settings: sound toggle, escalation thresholds, auto-acknowledge,
+ * settings: sound toggle, escalation thresholds, auto-accept,
  * and display density. Follows the same portal + close-on-escape +
  * click-outside pattern as KdsLayoutSwitcher.
  */
@@ -149,7 +149,7 @@ export function KdsSettingsPanel({
             />
           </div>
 
-          {/* Auto-acknowledge toggle */}
+          {/* Auto-accept toggle */}
           <label className="kds-settings-toggle" aria-label={requiredLocalized(l10n, 'kds-settings-auto-ack')}>
             <input
               type="checkbox"
@@ -157,7 +157,7 @@ export function KdsSettingsPanel({
               checked={settings.autoAcknowledge}
               onChange={(e) => onChangeAutoAcknowledge(e.target.checked)}
             />
-            <span className="kds-settings-toggle-label"><Localized id="kds-settings-auto-ack">Auto-acknowledge</Localized></span>
+            <span className="kds-settings-toggle-label"><Localized id="kds-settings-auto-ack">Auto-accept</Localized></span>
           </label>
 
           {/* Display density */}

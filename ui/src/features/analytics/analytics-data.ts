@@ -97,6 +97,53 @@ export function storeOffsetMs(tz: string | null | undefined): number {
 }
 
 /**
+ * Anchor used when the primary store's timezone is not (yet) known.
+ *
+ * Deliberately a fixed constant rather than the device's zone. A POS terminal
+ * usually sits in the store, so host-local *looks* harmless — but it makes the
+ * computed range depend on wherever the app happens to run, which is how the
+ * analytics date windows differed between a UTC CI runner and a UTC+7
+ * workstation on PR #95. Host-local also has no defined meaning for a headless
+ * or remote session.
+ *
+ * 'UTC' is not an invented policy: it is the schema's own default for this
+ * column — `timezone TEXT NOT NULL DEFAULT 'UTC'` in both
+ * crates/oz-core/migrations/20260813_init.sql:803 and the generated
+ * 20260813_init.pg.sql:199. Because the column is NOT NULL, a persisted store
+ * always has a zone; null here means the profile is still loading or the fetch
+ * failed. storeOffsetMs() parses only fixed ±HH:MM offsets and returns 0 for
+ * anything else, so 'UTC' resolves to offset 0 — the correct value, reached the
+ * same way the backend reaches it.
+ */
+export const FALLBACK_STORE_TZ = 'UTC';
+
+/**
+ * The store's current calendar day as `YYYY-MM-DD`.
+ *
+ * With no store zone, falls back to FALLBACK_STORE_TZ rather than the host, so
+ * the result depends only on the instant — never on where the app runs.
+ */
+export function isoToday(storeTz?: string | null): string {
+  // Offset-shifted instant read as a UTC calendar = the store's today.
+  return new Date(Date.now() + storeOffsetMs(storeTz ?? FALLBACK_STORE_TZ)).toISOString().slice(0, 10);
+}
+
+/**
+ * The store's calendar day `daysAgo` days back, as `YYYY-MM-DD`.
+ *
+ * Shared by AnalyticsScreen and reports/DashboardScreen so the two cannot drift
+ * apart on the REP-03 anchor rule. Like isoToday, the result depends only on the
+ * instant and the store offset — never on the host zone.
+ */
+export function isoDaysAgo(daysAgo: number, storeTz?: string | null): string {
+  return new Date(
+    Date.now() + storeOffsetMs(storeTz ?? FALLBACK_STORE_TZ) - daysAgo * 86_400_000,
+  )
+    .toISOString()
+    .slice(0, 10);
+}
+
+/**
  * The inclusive `[from, to]` window for a granularity. Daily/Weekly/
  * Monthly/Yearly are anchored at "now"; Custom uses the picked range.
  * When `storeTz` is provided (the primary store's `timezone`, REP-03) the

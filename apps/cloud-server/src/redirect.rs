@@ -56,15 +56,31 @@ pub async fn redirect_middleware(
             .status(StatusCode::MISDIRECTED_REQUEST)
             .header("Content-Type", "application/json")
             .body(Body::from(body))
-            .unwrap_or_else(|_| {
-                Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(Body::empty())
-                    .unwrap()
-            });
+            .unwrap_or_else(|_| internal_error_response());
     }
 
     next.run(req).await
+}
+
+/// 500 with an empty body, used only if building the 421 response above fails.
+///
+/// INVARIANT: this builder sets a status and an empty body and NO headers, and
+/// `http::response::Builder::body` errors only on an invalid header name or
+/// value -- so the unwrap below cannot fail. Extracted from the closure so this
+/// marker sits on the line adjacent to the call, which is what
+/// `scripts/scan-unwrap-panic.py` requires.
+///
+/// Worth noting: this line was invisible to that gate until R36-12. The
+/// `#[cfg(test)]` text inside this file's top-of-file audit stamp made the old
+/// scanner open a test-code skip context and stop checking the rest of the file,
+/// so a real production `.unwrap()` went unreported for its entire lifetime.
+fn internal_error_response() -> Response {
+    // INVARIANT: no headers are set, and `Builder::body` fails only on an
+    // invalid header name or value, so this chain cannot panic.
+    Response::builder()
+        .status(StatusCode::INTERNAL_SERVER_ERROR)
+        .body(Body::empty())
+        .unwrap()
 }
 
 #[cfg(test)]

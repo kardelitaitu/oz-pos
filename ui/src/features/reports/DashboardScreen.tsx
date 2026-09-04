@@ -30,6 +30,8 @@ import {
   type TopProductRow, type LowStockAlert, type CategoryBreakdownRow,
   type HourlyHeatmapRow,
 } from '@/api/reports';
+import { getPrimaryStoreScoped } from '@/api/stores';
+import { isoDaysAgo, isoToday } from '@/features/analytics/analytics-data';
 import './DashboardScreen.css';
 
 echarts.use([
@@ -40,13 +42,21 @@ echarts.use([
 
 // ── Date helpers ───────────────────────────────────────────────────
 
+// `today()` and `daysAgo()` used to live here, reading the DEVICE calendar
+// (isoDay(new Date())). They are replaced by isoToday()/isoDaysAgo() from
+// features/analytics/analytics-data, which anchor to the primary store's zone
+// (REP-03) — the same fix R36-01 made in AnalyticsScreen. This screen queries
+// store-scoped data via api/reports, so host-derived range boundaries were
+// wrong for any terminal not in the store's zone.
+//
+// isoDay/parseLocalDate/shiftDate stay: they do calendar arithmetic on
+// already-formatted YYYY-MM-DD strings, so the local Date is only a scratch
+// container and the result is zone-independent.
 function isoDay(d: Date): string {
   // Local calendar date — `toISOString()` is UTC and can return the
   // previous day for late-evening/early-morning local times.
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
-function today(): string { return isoDay(new Date()); }
-function daysAgo(n: number): string { const d = new Date(); d.setDate(d.getDate() - n); return isoDay(d); }
 
 /** Parse an ISO date into a local-midnight `Date` (never `new Date(str)`, which parses as UTC). */
 function parseLocalDate(s: string): Date {
@@ -121,10 +131,32 @@ export default function DashboardScreen() {
   const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
 
   const [granularity, setGranularity] = useState<Granularity>('daily');
-  const [fromDraft, setFromDraft] = useState(daysAgo(29));
-  const [toDraft, setToDraft] = useState(today());
-  const [from, setFrom] = useState(daysAgo(29));
-  const [to, setTo] = useState(today());
+  // REP-03: the default 30-day window anchors to the PRIMARY STORE's calendar
+  // day, not the device's. Until the profile loads (or if the fetch fails) the
+  // anchor is FALLBACK_STORE_TZ (UTC, the schema's column default) — see the
+  // comment on that constant in features/analytics/analytics-data.
+  const [storeTz, setStoreTz] = useState<string | null>(null);
+  const rangeTouched = useRef(false);
+  const [fromDraft, setFromDraft] = useState(isoDaysAgo(29));
+  const [toDraft, setToDraft] = useState(isoToday());
+  const [from, setFrom] = useState(isoDaysAgo(29));
+  const [to, setTo] = useState(isoToday());
+  useEffect(() => {
+    if (!sessionToken) return;
+    let alive = true;
+    getPrimaryStoreScoped(sessionToken)
+      .then((p) => { if (alive) setStoreTz(p?.timezone ?? null); })
+      .catch(() => { /* storeTz stays null -> the UTC fallback applies */ });
+    return () => { alive = false; };
+  }, [sessionToken]);
+  useEffect(() => {
+    // Re-seed the untouched defaults once the store's day is actually known.
+    if (!storeTz || rangeTouched.current) return;
+    setFromDraft(isoDaysAgo(29, storeTz));
+    setToDraft(isoToday(storeTz));
+    setFrom(isoDaysAgo(29, storeTz));
+    setTo(isoToday(storeTz));
+  }, [storeTz]);
   const [loading, setLoading] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -415,10 +447,10 @@ export default function DashboardScreen() {
         <div className="dashboard-controls">
           <div className="dashboard-date-row">
             <input type="date" className="dashboard-date-input" value={fromDraft} max={toDraft}
-              onChange={(e) => setFromDraft(e.target.value)} aria-label={l10n.getString('dashboard-filter-from')} />
+              onChange={(e) => { rangeTouched.current = true; setFromDraft(e.target.value); }} aria-label={l10n.getString('dashboard-filter-from')} />
             <span className="dashboard-date-sep">—</span>
             <input type="date" className="dashboard-date-input" value={toDraft} min={fromDraft}
-              onChange={(e) => setToDraft(e.target.value)} aria-label={l10n.getString('dashboard-filter-to')} />
+              onChange={(e) => { rangeTouched.current = true; setToDraft(e.target.value); }} aria-label={l10n.getString('dashboard-filter-to')} />
             <button type="button" className="dashboard-apply-btn" onClick={() => { setFrom(fromDraft); setTo(toDraft); }}
               aria-label={l10n.getString('dashboard-btn-apply')}>
               <Localized id="dashboard-btn-apply"><span>Apply</span></Localized>

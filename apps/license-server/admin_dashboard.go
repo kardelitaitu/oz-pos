@@ -33,9 +33,11 @@ import (
 // adminDashboardVersion is the version string reported by
 // GET /api/v1/admin/health. B31: it was a stale literal ("0.0.31") — the
 // health card lied about what was deployed. Keep in sync with the repo
-// version lock (AGENTS.md); the B31 test pins it so a future bump
-// without an update goes red instead of silently misreporting.
-const adminDashboardVersion = "0.0.34"
+// version lock (AGENTS.md); TestAdminHealthB31 now pins it against the
+// workspace Cargo.toml rather than against a copy of itself, so a bump that
+// misses this file goes red instead of silently misreporting.
+// scripts/bump-version.ps1 updates this line as part of a bump.
+const adminDashboardVersion = "0.0.36"
 
 // adminKeyOK validates the Authorization: Bearer <admin_key> header.
 // Reads the key from OZ_ADMIN_KEY env; a missing env or wrong key is 401.

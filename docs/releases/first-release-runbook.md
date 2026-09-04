@@ -1,5 +1,6 @@
 # First-Release Runbook — OZ-POS
 
+<!-- Audit stamp: 2026-09-04 · DSH · status: STALE-BY-INFRA-CHANGE (re-audited) · the 2026-08-31 docs-auditor stamp below was ACCURATE when written — release.yml/android.yml/ios.yml were live on that date — but 23c96330 retired all three to .bak two days later (2026-09-02) and nothing re-checked this file. Consequence: §0's pipeline does not run, §3 step 4's "triggers the whole pipeline" was false, and §4/§5 describe a draft that cannot be produced. Corrected in place: §0 banner, §3 rewritten with a $V parameter (it hardcoded 0.0.24/0.0.25, which bump-version.ps1 now rejects as a backwards bump) and the release.sh reality (local tag only — it builds and uploads nothing), §4/§5 preconditions, gh commands parameterized. Original stamp retained below for provenance. -->
 <!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (0 findings) · verified against HEAD: workflows release.yml/android.yml/ios.yml + jobs release-validate/release-build/release-publish present; scripts check-release-version.mjs, check-updater-compat.mjs, generate-latest-json.mjs exist; plugins.updater.pubkey in tauri.conf.json; concurrency groups release-/release-android-/release-ios-<ref> match; UPDATER_CERT_PASSWORD caveat confirmed (only in header comment release.yml:23, not consumed by any step); SignPath step continue-on-error:true confirmed (degrades to unsigned fallback) -->
 
 > **Purpose:** take a repository through its **first** real release, end to
@@ -11,6 +12,21 @@
 > `checklist.md` (per-release checklist), `mobile-checklist.md` (APK/IPA).
 
 ## 0. The pipeline at a glance
+
+> ### ⚠️ This pipeline is not currently live
+>
+> Everything in this table describes `release.yml`, `android.yml` and `ios.yml` —
+> all three were **retired to `.bak` on 2026-09-02** by `23c96330` ("backup full
+> workflows to .bak and introduce streamlined Quick Dev CI"). GitHub never
+> executes a `.bak` file, so **pushing a `v*` tag today triggers nothing**. The
+> only live workflow is `dev-ci.yml` (`pull_request` → `main` +
+> `workflow_dispatch`).
+>
+> The audit stamp above last re-checked this file on **2026-08-31**, when the
+> three workflows were still live — so it was accurate as written. It was
+> invalidated two days later by an infrastructure change that did not trigger a
+> re-audit. Read the table below as **the design to restore**, not the current
+> state; §3–§5 cannot be followed as written until it is.
 
 Pushing a `v*` tag triggers three workflows, all keyed to the tag by
 concurrency (`release-<tag>`, `release-android-<tag>`, `release-ios-<tag>` —
@@ -63,7 +79,8 @@ Local preflight of the key before tagging (fails fast on mismatch):
 SEED="<64-hex or base64 seed>"
 PUBKEY=$(node -e "const c=require('./apps/desktop-client/tauri.conf.json');process.stdout.write(c.plugins.updater.pubkey)")
 echo "dummy" > /tmp/dummy-installer.bin
-UPDATER_PRIVATE_KEY="$SEED" node scripts/generate-latest-json.mjs 0.0.24 preflight linux-x86_64 /tmp/dummy-installer.bin --verify-pubkey "$PUBKEY"
+# The version argument is arbitrary here — this step only exercises the keypair.
+UPDATER_PRIVATE_KEY="$SEED" node scripts/generate-latest-json.mjs 0.0.0-preflight preflight linux-x86_64 /tmp/dummy-installer.bin --verify-pubkey "$PUBKEY"
 ```
 
 **`UPDATER_CERT` (optional):** base64-encoded Windows code-signing PFX.
@@ -133,43 +150,83 @@ require human approval:
 
 ## 3. Cut the tag
 
-Version is locked at the current release (`0.0.24`) — only bump it when you
-mean to cut.
+> ### 🛑 Read this before following the steps below
+>
+> **Pushing a tag currently triggers no pipeline.** As of this writing the only
+> live workflow is `.github/workflows/dev-ci.yml`, which fires on
+> `pull_request` → `main` and `workflow_dispatch` — it has **no `push` trigger
+> and no `tags:` trigger at all**. The release pipeline that used to answer a
+> `v*` tag push was `release.yml` (`on: push: tags: ['v*']`), retired to
+> `release.yml.bak` by `23c96330`; GitHub never executes a `.bak` file. Eleven
+> workflows are in that state.
+>
+> `scripts/release.sh` does **not** fill the gap: it runs checks, writes the
+> changelog and creates a **local annotated tag** — it builds nothing, uploads
+> nothing, and opens no GitHub release (its own step 7 says the tag is not
+> pushed). So after step 4 below, **nothing happens on its own**. Producing
+> release artifacts means either restoring `release.yml` or building and
+> publishing by hand with `gh release create`.
+>
+> Earlier revisions of this runbook said step 4 "triggers the whole pipeline".
+> That was true before `23c96330` and is false now.
+
+Version is locked at the current release — **read it, don't assume it**:
+
+```bash
+python -c "import re,sys;print(re.search(r'(?m)^version\s*=\s*\"([^\"]+)\"',open('Cargo.toml').read()).group(1))"
+```
+
+Only bump when you mean to cut. `bump-version.ps1` **refuses to go backwards**,
+so a stale example version is not a cosmetic problem — it is a hard error.
+Substitute the next version for `V` throughout:
+
+```bash
+V=0.0.36   # the release being cut
+```
 
 1. **Bump versions** (Windows):
    ```powershell
-   powershell -File scripts/bump-version.ps1 0.0.25
+   powershell -File scripts/bump-version.ps1 $env:V
    ```
    Rewrites `Cargo.toml`, both `tauri.conf.json` files, `ui/package.json`,
-   and inserts the canonical `## [0.0.25]` heading into `CHANGELOG.md`.
+   the website package and i18n strings, the three `AGENTS.md` mirrors, and
+   inserts the canonical `## [$V]` heading into `CHANGELOG.md`. It then refreshes
+   all three lockfiles, sweeps for stale references to the old version, and runs
+   the AUDIT-28 gate — and **hard-fails if any pattern did not match**, so a
+   partial bump cannot pass silently.
 2. **Generate changelog + create tag:**
    ```bash
-   bash scripts/release.sh --dry-run 0.0.25   # preview only
-   bash scripts/release.sh 0.0.25             # writes docs/releases/CHANGELOG-0.0.25.md, refreshes heading, runs the version gate, creates the tag
+   bash scripts/release.sh --dry-run "$V"   # preview only
+   bash scripts/release.sh "$V"             # writes docs/releases/CHANGELOG-$V.md, refreshes heading, runs the version gate, creates the local tag
    ```
-   `release.sh` runs the AUDIT-28 version gate before tagging and creates the
-   local annotated tag **without pushing**.
 3. **Verify parity locally** (optional but cheap):
    ```bash
-   node scripts/check-release-version.mjs v0.0.25
+   node scripts/check-release-version.mjs "v$V"
    ```
    Compares the tag against `Cargo.toml`, `ui/package.json`, both
    `tauri.conf.json` files, and the `CHANGELOG.md` heading.
-4. **Push the tag** — this triggers the whole pipeline:
+4. **Push the tag:**
    ```bash
    git push origin main
-   git push origin v0.0.25
+   git push origin "v$V"
    ```
+   Remember the warning above: this publishes the ref, it does **not** build or
+   publish anything.
 
 ---
 
 ## 4. Cut the tag as a draft and inspect it
 
-**Current behavior:** `release-publish` creates the release as a **draft**
-(`softprops/action-gh-release`, `draft: true`) and then **automatically**
-flips it to published (`gh release edit "$TAG" --draft=false`) in the same
-job, after its inventory gate passes. There is **no built-in pause** between
-draft creation and publish. For the first release, use one of these:
+> **Precondition:** this section and §5 describe behaviour of `release.yml`,
+> which is retired to `.bak` (§0). Until it is restored there is no draft, no
+> artifacts, and nothing to inspect or verify — `scripts/release.sh` stops at a
+> local tag.
+
+**Behavior once `release.yml` is restored:** `release-publish` creates the
+release as a **draft** (`softprops/action-gh-release`, `draft: true`) and then
+**automatically** flips it to published (`gh release edit "$TAG" --draft=false`)
+in the same job, after its inventory gate passes. There is **no built-in pause**
+between draft creation and publish. For the first release, use one of these:
 
 ### Option A — hold the draft (recommended for the first release)
 
@@ -186,8 +243,8 @@ draft creation and publish. For the first release, use one of these:
    the **draft**, and stops.
 3. Inspect the draft:
    ```bash
-   gh release view v0.0.25
-   gh release download v0.0.25 -D /tmp/relcheck
+   gh release view v"$V"
+   gh release download v"$V" -D /tmp/relcheck
    cd /tmp/relcheck
    sha256sum -c SHA256SUMS.txt
    # verify every platform's installer against the signed manifest
@@ -203,7 +260,7 @@ draft creation and publish. For the first release, use one of these:
    APK/AAB/IPA (they attach to the draft via `gh release upload --clobber`).
 4. Publish when satisfied, then restore the workflow line:
    ```bash
-   gh release edit v0.0.25 --draft=false
+   gh release edit v"$V" --draft=false
    ```
 
 ### Option B — environment gate only
@@ -217,7 +274,7 @@ signing or publication, but you never see the draft itself.
 
 ## 5. Post-publish verification
 
-- [ ] `gh release view v0.0.25` shows the release as **Published** with every
+- [ ] `gh release view v"$V"` shows the release as **Published** with every
       expected asset attached.
 - [ ] Desktop updater endpoint resolves: `latest.json` (and `beta.json`) are
       attached and their signatures verify against the committed pubkey

@@ -42,14 +42,14 @@ interface PickedEntry {
   course: string | null;
 }
 
-/** Course display labels. */
-const COURSE_OPTIONS: { value: string | null; label: string }[] = [
-  { value: null, label: 'None' },
-  { value: 'appetizer', label: 'Appetizer' },
-  { value: 'main', label: 'Main' },
-  { value: 'side', label: 'Side' },
-  { value: 'dessert', label: 'Dessert' },
-  { value: 'beverage', label: 'Beverage' },
+/** Course display labels — Fluent ids, localized at render (kds-course-*). */
+const COURSE_OPTIONS: { value: string | null; labelId: string }[] = [
+  { value: null, labelId: 'kds-course-none' },
+  { value: 'appetizer', labelId: 'kds-course-appetizer' },
+  { value: 'main', labelId: 'kds-course-main' },
+  { value: 'side', labelId: 'kds-course-side' },
+  { value: 'dessert', labelId: 'kds-course-dessert' },
+  { value: 'beverage', labelId: 'kds-course-beverage' },
 ];
 
 /**
@@ -307,7 +307,7 @@ export const KdsProductPickerModal = memo(function KdsProductPickerModal({
                       >
                         {COURSE_OPTIONS.map((opt) => (
                           <option key={String(opt.value)} value={opt.value ?? ''}>
-                            {opt.label}
+                            {requiredLocalized(l10n, opt.labelId)}
                           </option>
                         ))}
                       </select>

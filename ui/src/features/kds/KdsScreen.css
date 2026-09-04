@@ -81,7 +81,7 @@
   --kds-switch-off: rgba(255, 255, 255, 0.12);
   /* Shadows */
   --kds-shadow-drop: 0 10px 30px rgba(0, 0, 0, 0.5);
-  --kds-shadow-modal: 0 20px 60px rgba(0, 0, 0, 0.5);
+  --kds-shadow-modal: 0 20px 40px -8px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
   --kds-shadow-chip: 0 1px 3px rgba(0, 0, 0, 0.3);
   --kds-shadow-sla-yellow: 0 0 8px rgba(245, 158, 11, 0.35);
   --kds-shadow-sla-red: 0 0 12px rgba(239, 68, 68, 0.5);
@@ -160,20 +160,21 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   background: transparent;
   color: var(--kds-text);
-  opacity: 0.7;
+  opacity: 0.85;
   border: none;
   border-radius: var(--kds-r-sm);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.15s, opacity 0.15s;
+  transition: background 0.15s, opacity 0.15s, color 0.15s;
 }
 .kds-back-btn:hover { background: var(--kds-bg-hover); opacity: 1; }
 .kds-back-btn:active { background: var(--kds-bg-active); transform: translateY(1px); }
+.kds-back-btn:focus-visible { outline: 2px solid var(--kds-accent); outline-offset: 1px; }
 .kds-back-btn svg { width: 18px; height: 18px; }
 [data-theme='light'] .kds-back-btn:hover { background: var(--kds-bg-hover); }
 
@@ -252,6 +253,7 @@
   transition: left 0.28s cubic-bezier(0.33, 1, 0.68, 1), width 0.28s cubic-bezier(0.33, 1, 0.68, 1);
   pointer-events: none;
   transform-origin: center;
+  will-change: left, width, transform;
 }
 
 .kds-tab {
@@ -338,14 +340,53 @@
   --btn-fg: var(--kds-text);
   --btn-hover: rgba(255, 255, 255, 0.08);
   --btn-active: rgba(255, 255, 255, 0.12);
+  transition: background 0.15s ease, color 0.15s ease, transform 0.06s ease;
 }
-.kds-btn--filter--all { background: var(--kds-accent); color: var(--kds-fg-inverse); opacity: 1; }
-.kds-btn--filter--all .caret { opacity: 0.7; }
-.kds-btn--filter--active { background: var(--kds-accent); color: var(--kds-fg-inverse); opacity: 1; }
-.kds-btn--filter--active .caret { opacity: 0.85; }
-.kds-btn--filter .caret { opacity: 0.5; display: inline-flex; align-items: center; transition: transform 0.2s; }
-.kds-btn--filter .caret svg { width: 18px; height: 18px; }
-.kds-btn--filter--open .caret { transform: rotate(180deg); }
+.kds-btn--filter:hover {
+  transform: none; /* Never scale text-bearing filter button on hover */
+}
+.kds-btn--filter:active {
+  transform: translateY(1px);
+}
+.kds-btn--filter--all,
+.kds-btn--filter--active {
+  background: var(--kds-accent);
+  color: var(--kds-fg-inverse);
+  opacity: 1;
+}
+.kds-btn--filter--all .caret,
+.kds-btn--filter--active .caret {
+  opacity: 0.85;
+}
+.kds-btn--filter--all:hover,
+.kds-btn--filter--active:hover {
+  background: var(--kds-accent-hover);
+  color: var(--kds-fg-inverse);
+  transform: none;
+}
+.kds-btn--filter--all:active,
+.kds-btn--filter--active:active {
+  background: var(--kds-accent-active);
+  color: var(--kds-fg-inverse);
+  transform: translateY(1px);
+}
+.kds-btn--filter .caret {
+  opacity: 0.7;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  transform-origin: 50% 50%;
+  transition: transform 0.2s cubic-bezier(0.33, 1, 0.68, 1);
+}
+.kds-btn--filter .caret svg {
+  width: 18px;
+  height: 18px;
+}
+.kds-btn--filter--open .caret {
+  transform: rotate(180deg);
+}
 
 /* --shift: blue rest; green hover starting; red hover stopping */
 .kds-btn--shift {
@@ -407,13 +448,16 @@
   white-space: nowrap;
 }
 .kds-filter-option:not(.checked):hover { background: var(--kds-bg-hover); }
-.kds-filter-option:focus-visible,
 .kds-filter-option:focus {
+  outline: none;
+}
+.kds-filter-option:focus-visible {
   outline: 2px solid var(--kds-accent);
   outline-offset: -1px;
 }
 .kds-filter-option.checked { background: var(--kds-accent); color: var(--kds-fg-inverse); opacity: 1; }
 .kds-filter-modes { display: flex; gap: 6px; margin-bottom: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--kds-border); }
+.kds-filter-modes.no-sep { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
 .kds-filter-grid { display: grid; grid-template-columns: repeat(3, max-content); gap: 6px; justify-content: start; }
 
 /* ── Hamburger settings panel (prototype .kds-hamburger-panel) ──────
@@ -423,7 +467,9 @@
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  width: 375px;
+  /* Default: single-column width; on wide screens the container query
+     expands the panel via min-width to fit two columns. */
+  width: max(375px, min(720px, calc(100vw - 24px)));
   max-width: calc(100vw - 24px);
   overflow: hidden;
   background: var(--kds-bg);
@@ -435,6 +481,11 @@
   box-shadow: var(--kds-shadow-drop);
   animation: kds-drop-in 0.18s ease-out;
   transform-origin: top right;
+  /* Container query anchor — measures the panel's own width, not the viewport. */
+  container-type: inline-size;
+  container-name: kds-panel;
+  /* Allow vertical scroll but capture horizontal swipe for dismiss gesture. */
+  touch-action: pan-y;
 }
 [data-theme='light'] .kds-hamburger-panel { --bg-surface: #ffffff; }
 
@@ -443,12 +494,14 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding: var(--space-3_5);
-  scrollbar-width: thin;
+  /* Completely hidden scrollbar — content still scrolls via touch/keyboard. */
+  scrollbar-width: none;
 }
+.kds-hamburger-panel ::-webkit-scrollbar { display: none; }
 .kds-panel-section { margin-bottom: var(--space-3_5); }
 .kds-panel-section:last-child { margin-bottom: 0; }
 .kds-panel-section h3 {
-  font-size: var(--text-sm);
+  font-size: var(--kds-font-xs);
   font-weight: 600;
   color: var(--kds-text);
   opacity: 0.5;
@@ -459,7 +512,7 @@
 .kds-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .kds-section-head h3 { margin-bottom: 0; }
 .kds-theme-tag {
-  font-size: var(--text-sm);
+  font-size: var(--kds-font-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -494,13 +547,28 @@
   right: 0;
   border-top: 1px solid var(--kds-border);
 }
-.kds-setting-label { font-size: var(--kds-font-md); font-weight: 500; color: var(--kds-text); opacity: 0.85; }
+.kds-setting-label { font-size: var(--kds-font-sm); font-weight: 500; color: var(--kds-text); opacity: 0.85; }
 .kds-setting-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.kds-setting-caption { font-size: var(--kds-font-sm); color: var(--kds-text); opacity: 0.45; }
+.kds-setting-caption { font-size: var(--kds-font-xs); color: var(--kds-text); opacity: 0.45; }
 .kds-panel-body button:focus-visible,
 .kds-hamburger-panel button:focus-visible {
   outline: 2px solid var(--kds-accent);
   outline-offset: 1px;
+}
+
+/* ── Container query: 2-column layout when the panel is wide enough ── */
+@container kds-panel (min-width: 700px) {
+  .kds-panel-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3_5);
+  }
+  /* Remove bottom margin between sections — the grid gap handles it. */
+  .kds-panel-section { margin-bottom: 0; }
+  /* Behaviour section spans both columns. */
+  .kds-panel-section--behaviour {
+    grid-column: 1 / -1;
+  }
 }
 
 /* Reusable switch — design-language settings-toggle-slider: 48×25, knob 20, bounce */
@@ -582,7 +650,7 @@
   padding: 0 var(--space-3_5);
   text-align: center;
   flex-shrink: 0;
-  font-size: var(--kds-font-md);
+  font-size: var(--kds-font-sm);
   font-weight: 500;
   color: var(--kds-text);
   opacity: 0.85;
@@ -592,10 +660,20 @@
 .kds-zoom-value:hover { opacity: 1; background: var(--kds-border); text-decoration: underline; text-underline-offset: 3px; }
 
 /* Card-colour accordion (in hamburger) */
-.kds-color-group { margin-bottom: var(--space-3); }
-.kds-color-group:last-child { margin-bottom: 0; }
-.kds-color-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.kds-color-head label { font-size: var(--kds-font-md); color: var(--kds-text); opacity: 0.85; flex: 1; min-width: 0; }
+.kds-color-group {
+  padding: var(--space-3) var(--space-3_5);
+  position: relative;
+}
+.kds-color-group + .kds-color-group::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: var(--space-3_5);
+  right: 0;
+  border-top: 1px solid var(--kds-border);
+}
+.kds-color-head { display: flex; align-items: center; gap: 8px; }
+.kds-color-head label { font-size: var(--kds-font-sm); color: var(--kds-text); opacity: 0.85; flex: 1; min-width: 0; }
 .kds-native {
   width: 36px;
   height: 36px;
@@ -629,19 +707,19 @@
   border-color: var(--kds-accent);
   opacity: 1;
 }
-.kds-reset-card { margin-top: var(--space-3_5); }
+.kds-reset-card { margin-top: var(--space-3); }
 .kds-reset-btn {
   width: 100%;
-  padding: var(--space-3) var(--space-3_5);
-  min-height: 44px;
+  padding: var(--space-2_5) var(--space-3_5);
+  min-height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   background: transparent;
   border: none;
   color: var(--color-danger);
-  font-size: var(--kds-font-md);
+  font-size: var(--kds-font-sm);
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
@@ -1606,6 +1684,68 @@
   flex-direction: column;
   overflow: hidden;
   position: relative;
+  height: 100%;
+}
+
+/* ── Main sliding viewport (Android launcher / pager tab transitions) ── */
+.kds-main-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  touch-action: pan-y pinch-zoom;
+  perspective: 1200px;
+}
+
+.kds-main-track {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  height: 100%;
+  gap: var(--space-6, 24px);
+  transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+
+.kds-main-track.active-open {
+  transform: translateX(0%);
+}
+
+.kds-main-track.active-completed {
+  transform: translateX(calc(-100% - var(--space-6, 24px)));
+}
+
+.kds-main-pane {
+  flex: 0 0 100%;
+  width: 100%;
+  min-width: 100%;
+  max-width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transform-origin: center center;
+  transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.36s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+}
+
+.kds-main-pane--open,
+.kds-main-pane--completed {
+  position: relative;
+}
+
+/* Android launcher depth effect: inactive pane scales down and fades out */
+.kds-main-pane[aria-hidden='true'] {
+  opacity: 0.3;
+  transform: scale(0.93);
+  pointer-events: none;
+}
+
+.kds-main-pane[aria-hidden='false'] {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
 }
 
 /* ── Main masonry view (prototype .kds-main + .kds-col) ───────────────
@@ -1819,52 +1959,6 @@
 .kds-offline-dismiss-btn:focus-visible {
   outline: 2px solid var(--kds-accent);
   outline-offset: 1px;
-}
-
-/* ── Header action buttons (shortcuts / enroll / device) ─────────── */
-.kds-shortcuts-btn,
-.kds-enroll-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  color: var(--kds-text);
-  opacity: 0.7;
-  background: transparent;
-  border: none;
-  border-radius: var(--kds-r-sm);
-  cursor: pointer;
-  transition: background var(--duration-100), color var(--duration-100), opacity var(--duration-100);
-}
-.kds-shortcuts-btn:hover,
-.kds-enroll-btn:hover {
-  background: var(--kds-bg-hover);
-  opacity: 1;
-}
-.kds-shortcuts-btn:focus-visible,
-.kds-enroll-btn:focus-visible {
-  outline: 2px solid var(--kds-accent);
-  outline-offset: 1px;
-}
-
-/* ── Shortcuts popover ──────────────────────────────────────────── */
-.kds-shortcuts-popover {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 16rem;
-  padding: var(--space-3);
-  background: var(--kds-bg-top);
-  border: 1px solid var(--kds-border-strong);
-  border-radius: var(--kds-r-md);
-  box-shadow: 0 8px 24px var(--kds-shadow);
-  animation: kds-drop-in 0.18s ease-out;
-  transform-origin: top right;
 }
 
 .kds-shortcut-row {
@@ -2099,9 +2193,16 @@
 /* ── Visible keyboard focus across the whole screen ───────────────── */
 .kds button:focus-visible,
 .kds [role='option']:focus-visible,
+.kds [role='tab']:focus-visible,
 .kds input:focus-visible {
   outline: 2px solid var(--kds-accent);
   outline-offset: 1px;
+}
+
+.kds button:focus:not(:focus-visible),
+.kds [role='option']:focus:not(:focus-visible),
+.kds [role='tab']:focus:not(:focus-visible) {
+  outline: none;
 }
 
 /* ── Modal (confirm / anchored force-finish) — Phase 3 ────────────── */
@@ -2113,6 +2214,8 @@
   align-items: center;
   justify-content: center;
   background: var(--kds-overlay);
+  backdrop-filter: var(--modal-backdrop-blur, blur(2px));
+  -webkit-backdrop-filter: var(--modal-backdrop-blur, blur(2px));
   animation: kds-drop-in 0.18s ease-out;
 }
 .kds-modal-backdrop[hidden] { display: none; }
@@ -2130,37 +2233,6 @@
 .kds-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .kds-modal-actions .kds-btn { min-height: 28px; }
 .kds-modal-actions .kds-btn.danger { --btn-bg: #ef4444; --btn-hover: #dc2626; --btn-active: #b91c1c; }
-
-/* ── Title group & Kanban column header (E2E CSS contract) ─────────── */
-.kds-title-group {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-left: var(--space-2);
-}
-
-.kds-title {
-  font-size: var(--text-lg);
-  font-weight: 700;
-  color: var(--kds-text);
-  margin: 0;
-  white-space: nowrap;
-}
-
-.kds-order-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 2rem;
-  height: 1.75rem;
-  padding: 0 var(--space-2);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--kds-fg-inverse);
-  background: var(--kds-accent);
-  border-radius: var(--kds-radius-switch);
-  white-space: nowrap;
-}
 
 .kds-column-header {
   display: flex;
@@ -2196,10 +2268,22 @@
   border-radius: var(--kds-radius-switch);
 }
 
-/* ── Reduced motion: disable decorative animations ────────────────────
-   Entrance/exit and slide effects are cut; functional feedback that
-   must communicate with reduced motion (urgent/rush blink, new-ticket
-   arrival pulse) intentionally keeps playing. */
+/* ── Reduced motion: in-app toggle (body.no-anim) overrides ── */
+body.no-anim .kds-card-spawn,
+body.no-anim .kds-card.leaving {
+  animation: none !important;
+}
+body.no-anim .kds-moving,
+body.no-anim .kds-main-track,
+body.no-anim .kds-main-pane,
+body.no-anim .kds-tab-indicator {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* ── Reduced motion: disable decorative modal and overlay animations ──
+   Entrance/exit and heavy decorative sweeps are cut; functional feedback
+   and core workspace tab navigation remain fluid unless suppressed in-app. */
 @media (prefers-reduced-motion: reduce) {
   .kds-filter-panel,
   .kds-hamburger-panel,
@@ -2210,10 +2294,43 @@
     animation: none !important;
     transition: none !important;
   }
-  .kds-tab-indicator,
   .kds-theme-indicator,
   .kds-card-collapsible,
   .kds-card-collapsible-inner {
     transition: none !important;
   }
+}
+
+/* ── H3: density selector — compact restages the board typography ─────
+   The Density control in the settings panel now drives this class via
+   .kds-content-wrap. "Comfortable" is the default rendering; compact
+   tightens card internals so more tickets fit on a small kitchen display.
+   Type scale drops one step and paddings shrink — deliberately NOT the
+   urgent/rush colour signalling, which must stay visible at any density. */
+.kds--compact .kds-ticket {
+  gap: var(--space-1);
+}
+
+.kds--compact .kds-card-header {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.kds--compact .kds-card-main {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.kds--compact .kds-card-footer {
+  padding: var(--space-1) var(--space-2);
+  gap: var(--space-1);
+}
+
+.kds--compact .kds-ticket-urgent-badge,
+.kds--compact .kds-ticket-rush-badge {
+  font-size: calc(var(--text-xs) * 0.9);
+}
+
+.kds--compact .kds-column-count {
+  font-size: var(--text-xs);
 }

@@ -12,7 +12,28 @@
  *   - Battery saving (GPU compositing uses more power)
  * ═══════════════════════════════════════════════════════════════════ */
 
-/* ── Modal overlay (components.css) ──────────────────── */
+/* ── Modal & popup overlays (components.css, KdsScreen.css, etc.) ──── */
+html[data-hw-accel="disabled"] .modal-overlay,
+html[data-hw-accel="disabled"] .kds-modal-backdrop,
+html[data-hw-accel="disabled"] .kds-enrollment-modal-backdrop,
+html[data-hw-accel="disabled"] .kds-product-picker-backdrop,
+html[data-hw-accel="disabled"] .kds-picker-overlay,
+html[data-hw-accel="disabled"] .gift-cards-modal-overlay,
+html[data-hw-accel="disabled"] .payment-modal-overlay,
+html[data-hw-accel="disabled"] .refund-modal-overlay,
+html[data-hw-accel="disabled"] .promotions-modal-overlay,
+html[data-hw-accel="disabled"] .price-override-modal-overlay,
+html[data-hw-accel="disabled"] .item-modifier-modal-overlay,
+html[data-hw-accel="disabled"] .stock-shortfall-modal-overlay,
+html[data-hw-accel="disabled"] .shift-management-modal-overlay,
+html[data-hw-accel="disabled"] .stock-transfers-modal-overlay,
+html[data-hw-accel="disabled"] .products-modal-overlay,
+html[data-hw-accel="disabled"] .promotion-modal-overlay,
+html[data-hw-accel="disabled"] .shift-bar-modal-overlay,
+html[data-hw-accel="disabled"] .settings-popup-overlay {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
 
 /* ── Workspace cards (WorkspaceHome.css) ─────────────── */
 html[data-hw-accel="disabled"] .workspace-card,

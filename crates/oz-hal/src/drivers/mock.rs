@@ -521,6 +521,11 @@ impl MockEdcTerminal {
     /// Force [`status`](Self::status) to report `Some(status)` regardless of
     /// arming; pass `None` to go back to the derived behaviour.
     pub fn set_status(&self, status: Option<TerminalStatus>) {
+        // INVARIANT: panics only on mutex poisoning, i.e. if another thread
+        // panicked while writing an `Option<TerminalStatus>`. Deliberate: this
+        // mock's lock semantics match the other `expect("mock poisoned")` sites
+        // here, and silently adopting `into_inner()` on a poisoned lock would be
+        // a behaviour change to a shipped driver.
         *self.forced_status.lock().expect("mock poisoned") = status;
     }
 
@@ -549,6 +554,8 @@ impl Default for MockEdcTerminal {
 #[async_trait]
 impl EdcTerminal for MockEdcTerminal {
     async fn status(&self) -> Result<TerminalStatus, HalError> {
+        // INVARIANT: poisoned-mutex panic only; see `set_status` for why this
+        // mock does not swallow it.
         if let Some(forced) = *self.forced_status.lock().expect("mock poisoned") {
             return Ok(forced);
         }

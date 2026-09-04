@@ -17,6 +17,7 @@ import { getPage, isPageAccessible } from '@/platform/ui/page-registry';
 import { recordMark } from '@/utils/perf-metrics';
 import PermissionDenied from '@/components/PermissionDenied';
 import { LazyBoundary } from '@/components/LazyBoundary';
+import { AppBootSplash } from '@/components/AppBootSplash';
 import type { WizardState } from '@/features/setup/SetupWizard';
 import type { WorkspaceType } from '@/features/settings/WorkspaceSettingsModal';
 import { getLicenseStatus } from '@/api/license';
@@ -367,21 +368,10 @@ export default function AppShell() {
   }
 
   if (loading) {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '100dvh',
-          color: 'var(--color-fg-secondary)',
-          fontFamily: 'var(--font-sans)',
-          fontSize: 'var(--text-base)',
-        }}
-      >
-        <Localized id="shared-loading">Loading&hellip;</Localized>
-      </div>
-    );
+    // Branded boot splash (stage 2) — visually continues the static
+    // stage-1 splash from index.html while the license + setup IPC
+    // round-trips resolve. Replaces the former bare-text gate.
+    return <AppBootSplash />;
   }
 
   if (!hasActiveLicense) {

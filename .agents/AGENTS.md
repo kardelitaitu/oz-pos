@@ -1,6 +1,6 @@
 # Agents Configuration & Rules
 
-<!-- Audit stamp: 2026-08-30 · Antigravity · status: ACCURATE · version lock: 0.0.35 · 4 pre-commit gates · conventional commits enforced -->
+<!-- Audit stamp: 2026-09-04 · DSH · status: ACCURATE · version lock: 0.0.36 · 8 pre-commit gates · conventional commits enforced -->
 
 ## 🚨 Critical Agent Directives (MUST FOLLOW)
 
@@ -9,7 +9,7 @@
 | **Branching** | **NEVER create new branches. NEVER switch branches.** | Always work directly on the currently active branch unless specifically requested by the user. |
 | **Commits** | **ALWAYS commit with format `<type>(<area>): <description>`.** | Must follow conventional commits. Make local commits after each logical task. |
 | **Pushing** | **NEVER run `git push` without an explicit direct order.** | Even after completing all checks, wait for the user to explicitly say "push". |
-| **Version Lock** | **Version is locked at `0.0.35`. NEVER modify version numbers.** | Do not bump version in `Cargo.toml`, `package.json`, `tauri.conf.json`, etc. |
+| **Version Lock** | **Version is locked at `0.0.36`. NEVER modify version numbers.** | Do not bump version in `Cargo.toml`, `package.json`, `tauri.conf.json`, etc. |
 | **File Paths** | **ALWAYS use forward slashes (`/`) in path arguments on Windows.** | Avoid path escaping bugs (e.g., use `C:/My Script/oz-pos/`). |
 | **File Reading** | **ALWAYS read files in small chunks (≤ 500 lines).** | Preserves context window and prevents output truncation. |
 | **Discovery** | **ALWAYS use `codebase-memory-mcp` first for code exploration.** | Graph discovery saves context tokens and surfaces call chains faster. |
@@ -21,16 +21,27 @@
 ## 🛠️ Quick Setup & Pre-Commit Gates
 
 ```bash
-git config core.hooksPath .githooks   # enable pre-commit hook (cargo fmt + i18n lint + bundle-parity + FTL dedupe)
+git config core.hooksPath .githooks   # enable pre-commit hook (fmt + EOL + i18n + bundle-parity + FTL dedupe + column types + PG drift + Go)
 ```
 
-The `.githooks/pre-commit` hook runs four gates automatically before every commit (~1s total):
-1. **`cargo fmt --all`** — auto-formats staged Rust files and re-stages them.
-2. **`i18n lint`** — runs `scripts/lint-i18n.sh` (validates Fluent `.id.ftl` vs `.ftl` bundles).
-3. **`Bundle parity: staged files only`** — runs `scripts/verify-bundle-parity.py --staged-only` on staged `ui/src/features/**` files; fails if an `<Localized id>` key is missing from `.ftl`.
-4. **`FTL dedupe dry-run`** — runs `scripts/dedupe-ftl.py --dry-run` to detect duplicate Fluent keys before push.
+The `.githooks/pre-commit` hook runs **eight steps** before every commit, in this order (~5–7s typical; the i18n gate alone is ~4s):
+1. **`cargo fmt --all`** — auto-formats Rust and re-stages what it changed.
+2. **Line-ending normalization** — strips CR from staged text files in the working tree and index, re-staging them so the committed blob is LF (backs `.gitattributes` `* text=auto eol=lf`). Skips files whose effective `eol` is `crlf` (`*.bat`/`*.cmd` — the working tree must stay CRLF for cmd.exe) and real binaries (`grep -qI`; `text=auto` reports "auto" for PNGs too, and stripping their CRs destroys the signature). Both exclusions were missing until 0.0.36; `scripts/test-eol-guard.sh` guards them.
+3. **`i18n lint`** — `scripts/lint-i18n.sh`; fail-closed on byte-identical `.id.ftl` siblings, duplicate Fluent keys dropped at bundle join, and literal keys resolving in neither locale.
+4. **`Bundle parity: staged files only`** — `scripts/verify-bundle-parity.py --staged-only` with `--include-getstring --include-nav-keys --include-key-fields --include-dynamic-literals --include-id-maps --check-domain-pairs`, over staged files in `features`, `components`, `frontend`, `contexts`, `hooks` and `platform`. Fails if any of the **eight checked surfaces** references a key missing from `.ftl`/`.id.ftl`.
+5. **`FTL dedupe dry-run`** — `scripts/dedupe-ftl.py --dry-run`.
+6. **`Migration column-type lint`** — `scripts/verify-migration-column-types.py --staged-only`, when `crates/oz-core/migrations/*.sql` is staged.
+7. **`PG schema drift guard`** — `scripts/generate-pg-migration.py --check`; `20260813_init.pg.sql` is generated, **never hand-edited**.
+8. **`Go gate`** — when `apps/license-server/*.go` is staged: `gofmt -w` + `go vet ./...`. Aborts if `go`/`gofmt` are missing.
 
-> For full repository verification mirroring the entire CI matrix, see [`scripts/check.sh`](./scripts/check.sh).
+> ⚠️ **Steps 6 and 7 are local-only.** They lived in `ci.yml`, retired to `.bak` (`23c96330`) and never restored in `dev-ci.yml`. Step 8 (Go) **is** now backed by CI: `dev-ci.yml#static-gates` runs `gofmt -l`, `go vet ./...` and `go test -short` on `apps/license-server` (added in 0.0.36, `13f2a1dc`). Note the CI gate is `gofmt -l` (report-only, fails on any unformatted file) while the hook runs `gofmt -w` and re-stages, so a commit made without `core.hooksPath` can be unformatted and CI will reject it rather than fix it. On a clone without `core.hooksPath` set, none of the eight run at commit time.
+>
+> **What CI actually runs.** Two workflows are live: `dev-ci.yml` (PR to `main` + `workflow_dispatch`) and `release.yml` (`v*` tags, restored desktop-only in 0.0.36). `dev-ci.yml` jobs: `changes`, `website`, `cargo-check` (fmt → check → clippy), `cargo-nextest`, `ui-test` (typecheck → lint → vitest → tz-invariance), `i18n`, `ci-docs-drift`, `static-gates`, `release-readiness`, `northflank-deploy`. CI's `cargo nextest run --workspace --all-features` carries **no `--exclude`**, so it tests app crates that `check.sh` skips. E2E, a11y, security and nightly are **not** enforced — a green Dev CI run is not proof those passed.
+
+
+> **Keeping this list honest:** `scripts/bump-version.ps1` updates the *version* lines in these mirrors but never did anything about the *gate* list — which is how all three drifted to different counts, and twice into claims the repo contradicts. `scripts/verify-agents-mirrors.py` now closes that: it reads the gate count from `.githooks/pre-commit`, the CI coverage from `.github/workflows/*.yml`, the accepted commit types from `.githooks/commit-msg` and the version from `Cargo.toml`, then fails if any mirror disagrees. It runs in `check.sh` and in `dev-ci.yml#ci-docs-drift`, so a stale mirror is a red build rather than a silent wrong belief. The hook is still the source of truth: `grep -n '^# ──' .githooks/pre-commit`.
+
+> For full repository verification mirroring the entire CI matrix, see [`scripts/check.sh`](../scripts/check.sh).
 
 ---
 
@@ -101,6 +112,8 @@ npm ci --no-audit --no-fund
 
 ### 4. Database & Hardware
 - **HAL Drivers:** Hardware drivers must have a mock implementation in `crates/oz-hal/src/drivers/mock.rs`.
+- **SQLite is the schema source of truth:** `crates/oz-core/migrations/*.sql` + the registry in `migrations.rs` (registry order is canonical). See [`docs/records/sqlite-pg-roles.md`](../docs/records/sqlite-pg-roles.md).
+- **`init.pg.sql` is generated, never hand-edited:** after any migration change run `python3 scripts/generate-pg-migration.py` and re-stage `crates/oz-core/migrations/20260813_init.pg.sql`. Pre-commit step 7 fails on drift — but note there is **no CI job for it any more** (it was retired with `ci.yml`), so the local hook is the only guard.
 - **PostgreSQL Drift:** When modifying Postgres schemas, run `bash scripts/reset-dev-pg.sh` to re-synchronize the shared dev container schema (`oz-pg-test-15432`).
 
 ---
@@ -127,6 +140,7 @@ Every commit message **MUST** strictly follow the conventional format:
   - `chore`: Maintenance, dependencies, configs
   - `test`: Adding or modifying tests
   - `refactor`: Code refactoring without functional changes
+  - `style`: Cosmetic changes that alter no runtime behaviour — `cargo fmt` wraps, CSS adjustments, copy edits. In established use (`130c7556`, `c3b7c72b`, `ad9c60e9`, `e0f2ca9b`, `04465711`, `2d517b55`, `7dde51c2`, `cfd0f183`); listed here so this mirror matches the set `.githooks/commit-msg` actually accepts.
   - `perf`: Performance improvements
   - `ci`: CI workflows, GitHub Actions, build scripts
   - `audit`: Code audit stamps and remediations

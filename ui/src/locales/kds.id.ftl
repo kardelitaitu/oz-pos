@@ -106,6 +106,7 @@ kds-course-main = UTAMA
 kds-course-side = PELENGKAP
 kds-course-dessert = PENCUCI MULUT
 kds-course-beverage = MINUMAN
+kds-course-none = Tanpa
 kds-course-other = LAINNYA
 kds-course-loading = Memuat item...
 kds-course-modifier-separator =: 
@@ -140,6 +141,8 @@ kds-shortcut-navigate = Navigasi tiket
 kds-shortcut-deselect = Batalkan pilihan / tutup
 kds-error-retry-aria = Coba Lagi
 kds-error-dismiss-aria = Tutup
+kds-error-update-failed = Gagal memperbarui pesanan — coba lagi
+kds-enrollment-failed = Pendaftaran perangkat gagal — periksa koneksi dan coba lagi
 
 # ── KDS Device Enrollment ──
 kds-enrollment-title = Daftarkan Perangkat KDS
@@ -170,6 +173,8 @@ kds-device-status-disconnected = Terputus
 kds-device-status-stale = Usang
 kds-device-status-aria = Perangkat KDS: { $connected } dari { $total } terhubung
 kds-device-list-aria = Daftar perangkat KDS
+kds-device-enroll = Daftarkan perangkat
+kds-device-enroll-aria = Buka dialog pendaftaran perangkat KDS
 
 # ── Hamburger settings panel ──
 kds-settings-theme = Tema
@@ -190,12 +195,18 @@ kds-advance-start = Mulai
 kds-advance-ready = Tandai Siap
 kds-advance-serve = Sajikan
 kds-toggle-card-aria = Buka/tutup detail pesanan { $number }
+kds-toggle-card-aria-collapsed =
+    { kds-toggle-card-aria } (tertutup)
+kds-new-orders-announced = { $count } pesanan baru
 
 # ── Topbar filter dropdown ──
 kds-filter-aria = Filter pesanan
-kds-filter-all = Semua pesanan
+kds-filter-all = Semua Kategori
 kds-filter-prepared = Siap
 kds-filter-selected = { $count } dipilih
+kds-filter-completed-all = Semua
+kds-filter-dinein = Makan di tempat
+kds-filter-takeaway = Bawa pulang
 
 # ── Screen footer status bar ──
 kds-footer-aria = Status terminal
@@ -207,6 +218,8 @@ kds-footer-hours = { $count }j yang lalu
 
 # ── Completed tab (bucket columns) ──
 kds-completed-aria = Pesanan selesai
+kds-completed-load-failed = Gagal memuat pesanan selesai
+kds-completed-retry-aria = Coba muat ulang pesanan selesai
 kds-completed-today = Hari Ini
 kds-completed-yesterday = Kemarin
 kds-completed-this-week = Minggu Ini
@@ -233,8 +246,8 @@ kds-confirm-ok = Konfirmasi
 kds-settings-display-scale = Skala tampilan
 kds-settings-columns = Kolom
 
-# ── Card Colours ──
-kds-settings-card-colours = Warna Kartu
+# ── Colours ──
+kds-settings-card-colours = Warna
 kds-settings-color-dinein = Makan di tempat
 kds-settings-color-takeaway = Bawa pulang
 kds-settings-color-rush = Mendesak
@@ -247,6 +260,10 @@ kds-settings-reset-colours = Atur ulang warna
 # ── Card Animations ──
 kds-settings-card-animations = Animasi kartu
 kds-settings-card-animations-caption = Efek muncul dan susun ulang
+
+# ── Hardware Acceleration ──
+kds-settings-hw-accel = Akselerasi perangkat keras
+kds-settings-hw-accel-caption = Efek blur dan GPU
 
 # ── Hamburger panel (lihat kds.ftl) ──
 kds-panel-section-display = Tampilan

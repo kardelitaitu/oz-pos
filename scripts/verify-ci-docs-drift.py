@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 r"""
 scripts/verify-ci-docs-drift.py — Catch CI documentation drift between
-docs/operations/ci-pipeline.md, the workflow definitions, and the local runners.
+docs/operations/ci-pipeline.md, docs/releases/checklist.md, the workflow
+definitions, and the local runners.
 
 WHY
 ===
@@ -13,6 +14,11 @@ what CI actually runs. Likewise, `scripts/check.sh` (repository gate)
 and `scripts/check-ui.mjs` (the `check:all` gate) are documented as
 sharing a common gate vocabulary — if one drifts, "all checks passed"
 means different things per entry point.
+
+`docs/releases/checklist.md` also enumerates the live `dev-ci.yml` jobs by hand,
+in the one place a release manager reads at ship time. It went stale the same
+week the checker was made blocking, which is the argument for checking it rather
+than trusting it.
 
 Since AUDIT-27 CI-08 the gate vocabulary + status live in a SINGLE
 source of truth: `scripts/gates.json`. This script derives everything
@@ -73,12 +79,34 @@ ROOT = Path(__file__).resolve().parent.parent
 # the old docs/ci-pipeline.md path made this gate exit 2 ("docs not found")
 # on every run after the doc was moved.
 DOCS = ROOT / "docs" / "operations" / "ci-pipeline.md"
+# The release checklist hand-maintains its own list of dev-ci.yml job names. That
+# list went stale the moment this session added `static-gates` -- the same drift
+# class this checker exists to catch, in the one document a release manager
+# actually reads at ship time, and outside this script's scope until now.
+RELEASE_CHECKLIST = ROOT / "docs" / "releases" / "checklist.md"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 GATES_MANIFEST = ROOT / "scripts" / "gates.json"
 CHECK_SH = ROOT / "scripts" / "check.sh"
 CHECK_UI = ROOT / "scripts" / "check-ui.mjs"
 
-VALID_STATUS = {"required", "advisory", "required-on-push"}
+# Docs headings this checker parses. "Job Matrix" was literally
+# "Job Matrix (ci.yml)", which stopped being true once ci.yml was retired: the
+# table now has to cover dev-ci.yml's live jobs as well, and a heading naming a
+# dead workflow is exactly how it ended up describing 11 retired jobs while
+# omitting every live one. Kept as constants because the doc heading and the
+# parser are a contract -- renaming one side without the other makes the checker
+# refuse to run (the good outcome), but it should be a single deliberate edit.
+MATRIX_SECTION = "Job Matrix"
+GATES_SECTION = "Pre-Merge Validation Gates"
+INVENTORY_SECTION = "Workflow inventory"
+
+VALID_STATUS = {"required", "advisory", "required-on-push", "retired"}
+# A `retired` gate asserts that the check enforces NOTHING today. It must carry
+# no `ci` block, because a status paired with a workflow pointer is a claim that
+# something runs, and that pairing is exactly the R36-10 lie: 13 gates were
+# marked `required` while naming a workflow GitHub never executes and having no
+# runner in check.sh or pre-push either. Retiring a gate should be expressible;
+# silently pointing at a dead file should not.
 
 # ── Docs parsing ──────────────────────────────────────────────────────
 # Backticked kebab-case token (job IDs / workflow filenames).
@@ -92,6 +120,10 @@ GATE_TABLE_ROW = re.compile(r"^\|\s*[^|]+\|\s*(.+?)\s*\|")
 # branch/path mentions), so combined rows like `android.yml` / `ios.yml`
 # are caught rather than requiring first-cell anchoring.
 WORKFLOW_TOKEN = re.compile(r"`([a-z0-9][a-z0-9-]*\.yml)`")
+# A retired workflow's inventory row must say so. Accept several phrasings so
+# the doc is not forced into one magic word, but require an explicit statement —
+# a row that merely omits the workflow from CI is the failure being guarded.
+RETIRED_MARKER = re.compile(r"retired|inert|not executed|no longer runs|\.bak\b", re.I)
 # Job Matrix table row: job ID (first cell) + Blocks marker (last cell).
 JOB_MATRIX_FULL_ROW = re.compile(r"^\|\s*`([a-z][a-z0-9-]*)`\s*\|.*\|\s*([^|]+?)\s*\|$")
 
@@ -357,14 +389,21 @@ def main() -> int:
     docs_lines = DOCS.read_text(encoding="utf-8").splitlines()
     workflow_files = sorted(WORKFLOWS_DIR.glob("*.yml"))
     workflows_by_name = {wf.name: wf for wf in workflow_files}
+    # Workflows that exist only as `<name>.yml.bak`. 23c96330 retired every
+    # non-dev CI workflow this way; GitHub never executes a .bak file, so a doc
+    # row naming one is recording history, not claiming current enforcement.
+    # Needed here because both the Job Matrix and the inventory use it.
+    retired_workflow_names = {
+        p.name[:-4] for p in WORKFLOWS_DIR.glob("*.yml.bak")
+    } - {wf.name for wf in workflow_files}
 
     # Fail-open protection: if a required section is renamed or emptied,
     # an empty parse result would make the gate vacuously PASS. Treat a
     # missing/empty required section as a structural error instead.
     required_sections = [
-        "Job Matrix (ci.yml)",
-        "Pre-Merge Validation Gates",
-        "Workflow inventory",
+        MATRIX_SECTION,
+        GATES_SECTION,
+        INVENTORY_SECTION,
     ]
     missing_sections = [
         title
@@ -380,23 +419,50 @@ def main() -> int:
         return 2
 
     # ── 1. Jobs: documented → workflows ─────────────────────────────
-    matrix_jobs = {
-        m.group(1)
-        for m in (JOB_MATRIX_ROW.match(line) for line in doc_section(docs_lines, "Job Matrix (ci.yml)"))
-        if m
-    }
+    matrix_lines = doc_section(docs_lines, MATRIX_SECTION)
+    matrix_jobs: set[str] = set()
+    # job id -> the workflow file its own row names, for rows that name one.
+    # Used to distinguish "this job is missing from a LIVE workflow" (a real
+    # error) from "this job lived in a workflow that was retired" (accurate
+    # history that the old code counted as drift).
+    matrix_job_workflow: dict[str, str] = {}
+    for line in matrix_lines:
+        m = JOB_MATRIX_ROW.match(line)
+        if not m:
+            continue
+        job = m.group(1)
+        matrix_jobs.add(job)
+        # The Workflow column is a bare `ci.yml`, not backticked, so
+        # WORKFLOW_TOKEN (which needs backticks) cannot see it. Split the row
+        # into cells and read column 3.
+        cells = [c.strip().strip("`") for c in line.strip().strip("|").split("|")]
+        if len(cells) > 2:
+            wm = re.fullmatch(r"([a-z0-9][a-z0-9-]*\.yml)", cells[2])
+            if wm:
+                matrix_job_workflow[job] = wm.group(1)
     if not matrix_jobs:
         print(
-            "error: Job Matrix (ci.yml) section contains no job rows",
+            "error: %s section contains no job rows" % MATRIX_SECTION,
             file=sys.stderr,
         )
         return 2
 
     gate_jobs: set[str] = set()
-    for line in doc_section(docs_lines, "Pre-Merge Validation Gates"):
+    # Same history-vs-enforcement distinction as the Job Matrix, but this table
+    # puts the workflow in parentheses inside the job cell: `rust-test`
+    # (nightly.yml). Without it, six accurately-documented nightly/website rows
+    # count as missing jobs.
+    gate_job_workflow: dict[str, str] = {}
+    for line in doc_section(docs_lines, GATES_SECTION):
         m = GATE_TABLE_ROW.match(line)
-        if m:
-            gate_jobs.update(KUBE_TOKEN.findall(m.group(1)))
+        if not m:
+            continue
+        cell = m.group(1)
+        gate_jobs.update(KUBE_TOKEN.findall(cell))
+        wm = re.search(r"\(([a-z0-9][a-z0-9-]*\.yml)\)", cell)
+        if wm:
+            for j in KUBE_TOKEN.findall(cell):
+                gate_job_workflow[j] = wm.group(1)
     if not gate_jobs:
         print(
             "error: Pre-Merge Validation Gates section contains no job rows",
@@ -407,7 +473,6 @@ def main() -> int:
     # Cache per-workflow job sets + raw text once (status checks loop over
     # every ci-mapped gate; re-parsing per gate would be redundant work).
     all_jobs: set[str] = set()
-    ci_jobs: set[str] = set()
     jobs_by_workflow: dict[str, set[str]] = {}
     wf_texts: dict[str, str] = {}
     for wf in workflow_files:
@@ -415,32 +480,78 @@ def main() -> int:
         jobs_by_workflow[wf.name] = jobs
         wf_texts[wf.name] = wf.read_text(encoding="utf-8")
         all_jobs |= jobs
-        if wf.name == "ci.yml":
-            ci_jobs = jobs
+        # No per-workflow special-casing: `ci_jobs` used to be captured here only
+        # when a file named ci.yml existed, and every consumer of it silently
+        # degraded to the empty set the day that file was retired.
 
-    missing_jobs = sorted((matrix_jobs | gate_jobs) - all_jobs)
+    # A matrix row whose own Workflow column names a retired file is recording
+    # history, not claiming the job runs. Only rows that name a LIVE workflow (or
+    # name none, which implies ci.yml by the section title) while the job is
+    # absent are real drift. gate_jobs are never exempted: gates.json describes
+    # what enforces merges TODAY, so a gate pointing at a retired workflow is the
+    # R36-10 lie and must keep counting.
+    retired_matrix_jobs = sorted(
+        j for j in (matrix_jobs | gate_jobs) - all_jobs
+        if (matrix_job_workflow.get(j) or gate_job_workflow.get(j))
+        in retired_workflow_names
+    )
+    missing_jobs = sorted(
+        (j for j in (matrix_jobs | gate_jobs) - all_jobs
+         if j not in retired_matrix_jobs)
+    )
     # Informational: the docs' Job Matrix catalogs ci.yml specifically, so
     # flag jobs ADDED to ci.yml that the docs don't mention (the fail
     # direction is docs-referenced-but-missing; this is the reverse).
-    undocumented = sorted(ci_jobs - (matrix_jobs | gate_jobs))
-    # Informational: a matrix job that only exists in another workflow
-    # (e.g. moved to nightly.yml) — the docs table is titled "(ci.yml)",
-    # so note it even though the job exists somewhere.
-    matrix_not_in_ci = sorted(matrix_jobs - ci_jobs)
+    # Fail-open fix: this used to be `ci_jobs - documented`, but ci_jobs is only
+    # populated when a file literally named ci.yml exists -- and it has not since
+    # 23c96330 retired it. So the check silently became "nothing is undocumented"
+    # and the static-gates job added in this same session passed through it
+    # unnoticed. Compare against every job in every LIVE workflow instead, which
+    # is the question actually worth asking: "does the docs table mention
+    # everything that gates a merge today?"
+    undocumented = sorted(all_jobs - (matrix_jobs | gate_jobs))
 
     # ── 2. Workflow inventory: named files exist ────────────────────
     # Extract every backticked `*.yml` token from the whole section so
     # combined rows like `android.yml` / `ios.yml` are also captured.
-    inventory_files = set(
-        WORKFLOW_TOKEN.findall("\n".join(doc_section(docs_lines, "Workflow inventory")))
-    )
+    inv_lines = doc_section(docs_lines, INVENTORY_SECTION)
+    inventory_files = set(WORKFLOW_TOKEN.findall("\n".join(inv_lines)))
     if not inventory_files:
         print(
             "error: Workflow inventory section contains no *.yml references",
             file=sys.stderr,
         )
         return 2
-    missing_files = sorted(f for f in inventory_files if not (WORKFLOWS_DIR / f).is_file())
+    live_files = {wf.name for wf in workflow_files}
+    # Retirement awareness. 23c96330 moved every non-dev CI workflow to
+    # `<name>.yml.bak`, which GitHub never executes. The previous code globbed
+    # only *.yml and then reported all 11 as "MISSING WORKFLOW FILES (inventory
+    # names nothing on disk)" — false as stated, since every one of them IS on
+    # disk. That mislabelling made the bucket look like doc rot when it was
+    # partly a tooling gap, and buried the real finding: the inventory described
+    # 11 dead workflows in present tense and omitted dev-ci.yml, the only live
+    # one. A name matching no file at all is still a genuine error.
+    retired_files = sorted(
+        f for f in inventory_files
+        if f not in live_files and (WORKFLOWS_DIR / f"{f}.bak").is_file()
+    )
+    missing_files = sorted(
+        f for f in inventory_files if f not in live_files and f not in retired_files
+    )
+    # A retired workflow must be LABELLED retired in its own row. Otherwise the
+    # table reads as present tense and misleads exactly as badly as omitting it,
+    # and the gate would pass on a doc that says "release.yml: tag push (v*)"
+    # while nothing builds a release.
+    unlabelled_retired = sorted(
+        f for f in retired_files
+        if not any(
+            RETIRED_MARKER.search(r)
+            for r in inv_lines
+            if r.lstrip().startswith("|") and f"`{f}`" in r
+        )
+    )
+    # Inverse gap: a workflow that RUNS but is absent from the inventory.
+    undocumented_live = sorted(live_files - inventory_files)
 
     # ── 3. Gate vocabulary: manifest → runners ──────────────────────
     sh_gates = check_sh_gates(CHECK_SH) if CHECK_SH.is_file() else set()
@@ -473,17 +584,35 @@ def main() -> int:
 
     # ── 4. Gate CI mapping + status: manifest → workflows ───────────
     status_problems: list[str] = []
+    retired_gates: list[str] = []
     for gate in gates:
         ci = gate.get("ci")
+        gid, status = gate["id"], gate["status"]
+        if status == "retired":
+            retired_gates.append(gid)
+            # A retired gate that still names a workflow is claiming enforcement
+            # while saying the opposite — refuse the combination rather than
+            # letting `retired` become a way to mute the checker.
+            if ci:
+                status_problems.append(
+                    f"manifest gate '{gid}': status 'retired' must not carry a ci "
+                    f"block (it names {ci.get('workflow')}#{ci.get('job')}); drop "
+                    f"the ci block and record where the check went in _note"
+                )
+            continue
         if not ci:
             continue
-        gid, status = gate["id"], gate["status"]
         wf_name = ci.get("workflow")
         job = ci.get("job")
         wf_path = workflows_by_name.get(wf_name)
         if wf_path is None:
+            hint = (
+                " — retire it (status: retired, no ci block) if the check no "
+                "longer runs, or point it at a live workflow if it does"
+            )
             status_problems.append(
-                f"manifest gate '{gid}': workflow file '{wf_name}' does not exist"
+                f"manifest gate '{gid}': status '{status}' but workflow file "
+                f"'{wf_name}' does not exist{hint}"
             )
             continue
         if job not in jobs_by_workflow.get(wf_name, set()):
@@ -530,7 +659,7 @@ def main() -> int:
     # every ci.yml-mapped gate so the docs status prose cannot drift
     # from the manifest the way the old hardcoded lists did.
     docs_status_problems: list[str] = []
-    for line in doc_section(docs_lines, "Job Matrix (ci.yml)"):
+    for line in doc_section(docs_lines, MATRIX_SECTION):
         m = JOB_MATRIX_FULL_ROW.match(line)
         if not m:
             continue
@@ -553,10 +682,67 @@ def main() -> int:
                     f"status is '{gate['status']}' (gate '{gate['id']}')"
                 )
 
+    # ── 6. Release checklist's live-job list ↔ dev-ci.yml ────────────
+    # The checklist is what someone reads at ship time, and it enumerates the
+    # live CI jobs by hand. It went stale the moment `static-gates` was added.
+    # Rather than delete the list (a release manager needs it inline), check it:
+    # every job named must exist in dev-ci.yml, and every dev-ci.yml job must be
+    # named. A backtick token is only treated as a job name if it is a real job
+    # in some live workflow OR appears inside the checklist's own "All CI jobs
+    # pass" item -- otherwise prose like `Cargo.toml` in the same file would be
+    # scanned as a job claim.
+    checklist_problems: list[str] = []
+    if RELEASE_CHECKLIST.is_file():
+        cl_lines = RELEASE_CHECKLIST.read_text(encoding="utf-8").splitlines()
+        # Grab the one bullet that enumerates the jobs, including its continuations.
+        bullet: list[str] = []
+        for k, line in enumerate(cl_lines):
+            if "All CI jobs pass" in line:
+                bullet = [line]
+                for nxt in cl_lines[k + 1:]:
+                    if nxt.strip().startswith(("-", "*", ">")) or nxt.strip() == "":
+                        break
+                    bullet.append(nxt)
+                break
+        if not bullet:
+            checklist_problems.append(
+                f"{RELEASE_CHECKLIST.name}: no 'All CI jobs pass' item found -- "
+                f"the live-job list was removed or reworded, so nothing checks it"
+            )
+        else:
+            text = "\n".join(bullet)
+            named = set(re.findall(r"`([a-z][a-z0-9-]*)`", text))
+            live_jobs = jobs_by_workflow.get("dev-ci.yml", set())
+            # Ignore tokens that are clearly not job claims.
+            # Ignore tokens that are step verbs or filenames in that bullet's
+            # prose, not job claims. `i18n` is deliberately NOT here: it is both
+            # an English abbreviation and a real job name, and excluding it made
+            # the check report a live job as missing.
+            named -= {"dev-ci.yml", "cargo", "ui", "npm", "vitest",
+                      "typecheck", "lint", "fmt", "check", "clippy", "tz-invariance"}
+            missing_from_checklist = sorted(live_jobs - named)
+            phantom = sorted(named - live_jobs - all_jobs)
+            if missing_from_checklist:
+                checklist_problems.append(
+                    f"{RELEASE_CHECKLIST.name} omits live dev-ci.yml job(s): "
+                    f"{', '.join(missing_from_checklist)}"
+                )
+            if phantom:
+                checklist_problems.append(
+                    f"{RELEASE_CHECKLIST.name} names job(s) that exist in no live "
+                    f"workflow: {', '.join(phantom)}"
+                )
+    else:
+        checklist_problems.append(f"release checklist not found: {RELEASE_CHECKLIST}")
+
     # ── Report ──────────────────────────────────────────────────────
-    manifest_counts: dict[str, int] = {"required": 0, "advisory": 0, "required-on-push": 0}
+    manifest_counts: dict[str, int] = {
+        "required": 0, "advisory": 0, "required-on-push": 0, "retired": 0,
+    }
     for g in gates:
-        manifest_counts[g["status"]] += 1
+        # .get-style accumulation: a status added to VALID_STATUS must not be
+        # able to crash the checker with a KeyError.
+        manifest_counts[g["status"]] = manifest_counts.get(g["status"], 0) + 1
 
     print(
         f"verify-ci-docs-drift: {len(workflow_files)} workflow file(s), "
@@ -567,7 +753,8 @@ def main() -> int:
         f"  gates.json: {len(gates)} gate(s) "
         f"({manifest_counts['required']} required, "
         f"{manifest_counts['advisory']} advisory, "
-        f"{manifest_counts['required-on-push']} required-on-push)."
+        f"{manifest_counts['required-on-push']} required-on-push, "
+        f"{manifest_counts['retired']} retired)."
     )
     print(
         f"  check.sh declares {len(sh_gates)} gate(s); check:all declares "
@@ -577,6 +764,7 @@ def main() -> int:
 
     if args.verbose and not (
         missing_jobs or missing_files or gate_problems or status_problems or docs_status_problems
+        or unlabelled_retired or undocumented_live
     ):
         print("  OK: every documented job/workflow exists; manifest gates match runners + workflows.")
         print()
@@ -586,10 +774,56 @@ def main() -> int:
         for job in missing_jobs:
             print(f"    {job}")
         print()
+    if retired_matrix_jobs:
+        print(
+            f"  note: {len(retired_matrix_jobs)} matrix job(s) name a retired "
+            f"workflow in their own row, so they document history rather than "
+            f"claiming enforcement (informational):"
+        )
+        print("    " + ", ".join(retired_matrix_jobs))
+        print()
     if missing_files:
-        print(f"  MISSING WORKFLOW FILES (inventory names nothing on disk) — {len(missing_files)}:")
+        print(f"  MISSING WORKFLOW FILES (named in the inventory, no file at all) — {len(missing_files)}:")
         for f in missing_files:
             print(f"    {f}")
+        print()
+    if unlabelled_retired:
+        print(
+            f"  UNLABELLED RETIRED WORKFLOWS (on disk only as .bak, but the "
+            f"inventory row does not say retired) — {len(unlabelled_retired)}:"
+        )
+        for f in unlabelled_retired:
+            print(f"    {f}  -> present tense in the docs reads as 'this still runs'")
+        print()
+    if checklist_problems:
+        print(
+            f"  RELEASE CHECKLIST JOB LIST (docs/releases/checklist.md disagrees "
+            f"with dev-ci.yml) — {len(checklist_problems)}:"
+        )
+        for p in checklist_problems:
+            print(f"    {p}")
+        print()
+    if retired_gates:
+        print(
+            f"  note: {len(retired_gates)} gate(s) are marked retired and claim "
+            f"no CI enforcement (informational):"
+        )
+        print("    " + ", ".join(sorted(retired_gates)))
+        print()
+    if undocumented_live:
+        print(
+            f"  UNDOCUMENTED LIVE WORKFLOWS (executed by GitHub, absent from the "
+            f"inventory) — {len(undocumented_live)}:"
+        )
+        for f in undocumented_live:
+            print(f"    {f}")
+        print()
+    if retired_files:
+        print(
+            f"  note: {len(retired_files)} inventoried workflow(s) exist only as "
+            f".bak and are labelled retired (informational):"
+        )
+        print(f"    {', '.join(retired_files)}")
         print()
     if gate_problems:
         print(f"  GATE VOCABULARY DRIFT — {len(gate_problems)}:")
@@ -611,18 +845,12 @@ def main() -> int:
         print()
     if undocumented:
         print(
-            f"  note: {len(undocumented)} ci.yml job(s) exist but are not "
-            f"referenced in docs/operations/ci-pipeline.md (informational):"
+            f"  UNDOCUMENTED LIVE JOBS (a live workflow runs this; the docs "
+            f"never mention it) — {len(undocumented)}:"
         )
-        print("    " + ", ".join(undocumented))
+        for j in undocumented:
+            print(f"    {j}")
         print()
-    if matrix_not_in_ci:
-        print(
-            f"  note: {len(matrix_not_in_ci)} matrix job(s) are not in "
-            f"ci.yml (titled 'Job Matrix (ci.yml)') — verify the docs table "
-            f"header matches where they live (informational):"
-        )
-        print("    " + ", ".join(matrix_not_in_ci))
         print()
     if sh_uncatalogued or ui_uncatalogued:
         extras = sh_uncatalogued + [f"[check:all] {x}" for x in ui_uncatalogued]
@@ -639,6 +867,15 @@ def main() -> int:
         + len(gate_problems)
         + len(status_problems)
         + len(docs_status_problems)
+        + len(unlabelled_retired)
+        + len(undocumented_live)
+        # Escalated from informational to blocking. It was informational while it
+        # compared against ci.yml's jobs, i.e. while it could never find anything;
+        # pointed at the live workflows it immediately found four undocumented
+        # jobs. A job that gates a merge but appears in no document is exactly the
+        # gap that let this whole class of lie accumulate.
+        + len(undocumented)
+        + len(checklist_problems)
     )
     print(f"verify-ci-docs-drift: {problems} drift item(s).")
     return 0 if (args.report_only or problems == 0) else 1

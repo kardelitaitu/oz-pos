@@ -30,9 +30,10 @@ import {
   buildHeatmapCells,
   heatPeak,
   heatmapGranularityForRange,
+  isoDaysAgo,
+  isoToday,
   loadHeatmapRows,
   rangeForGranularity,
-  storeOffsetMs,
   yearlyHeatmapColumns,
   type DailyRevenueRow,
   type HeatCell,
@@ -142,19 +143,6 @@ export const cardRange = (
   // custom span still queries the chosen dates).
   if (g === 'custom') return { from: customFrom, to: customTo };
   return rangeForGranularity(cardGranularity(card, g), customFrom, customTo, storeTz);
-}
-
-function isoToday(storeTz?: string | null): string {
-  if (!storeTz) return isoDay(new Date());
-  // Offset-shifted instant read as a UTC calendar = the store's today.
-  return new Date(Date.now() + storeOffsetMs(storeTz)).toISOString().slice(0, 10);
-}
-
-function isoDay(d: Date): string {
-  // Local calendar date — `toISOString()` is UTC and can return the
-  // previous day for late-evening/early-morning local times, which would
-  // make the custom-range default land on the wrong date.
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /** Number of days in the current month (28–31). */
@@ -358,7 +346,8 @@ export default function AnalyticsScreen() {
   // REP-03: derived windows anchor to the PRIMARY STORE's calendar day,
   // not the device's — a laptop in another region must still see "today"
   // as the store sees it. Until the profile loads (or if the fetch fails)
-  // the legacy device-local anchor applies.
+  // the anchor is FALLBACK_STORE_TZ in analytics-data (UTC, the schema's own
+  // column default), never the host zone — see the comment there.
   const [storeTz, setStoreTz] = useState<string | null>(null);
   const customTouched = useRef(false);
   useEffect(() => {
@@ -369,7 +358,7 @@ export default function AnalyticsScreen() {
         if (alive) setStoreTz(p?.timezone ?? null);
       })
       .catch(() => {
-        /* keep the device-local anchor — reports still bucket store-local */
+        /* storeTz stays null, so isoToday/isoDaysAgo use FALLBACK_STORE_TZ */
       });
     return () => {
       alive = false;
@@ -382,17 +371,6 @@ export default function AnalyticsScreen() {
     setCustomFrom(t);
     setCustomTo(t);
   }, [storeTz]);
-  /** Store-local calendar date `daysAgo` days back (REP-03). */
-  const storeDateStr = (daysAgo: number): string => {
-    if (!storeTz) {
-      const d = new Date();
-      d.setDate(d.getDate() - daysAgo);
-      return isoDay(d);
-    }
-    return new Date(Date.now() + storeOffsetMs(storeTz) - daysAgo * 86_400_000)
-      .toISOString()
-      .slice(0, 10);
-  };
   const [zoomLevel, setZoomLevel] = useState<number>(() => {
     const saved = Number(localStorage.getItem('oz-analytics-zoom'));
     return saved >= ZOOM_MIN && saved <= ZOOM_MAX ? saved : 1;
@@ -701,8 +679,8 @@ export default function AnalyticsScreen() {
   const applyRangePreset = (days: number) => {
     customTouched.current = true;
     // REP-03: presets end on the store's today, not the device's.
-    setCustomTo(storeDateStr(0));
-    setCustomFrom(storeDateStr(days - 1));
+    setCustomTo(isoDaysAgo(0, storeTz));
+    setCustomFrom(isoDaysAgo(days - 1, storeTz));
   };
 
   // When a card is expanded, only it is shown; otherwise all visible cards

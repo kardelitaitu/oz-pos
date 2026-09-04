@@ -154,6 +154,7 @@ payment-toast-currency-failed = Failed to load currency data
 payment-toast-customers-failed = Failed to load customers
 payment-toast-loyalty-failed = Failed to load loyalty account
 payment-toast-points-value-failed = Failed to load points value
+payment-toast-kds-failed = Payment succeeded, but the kitchen ticket could not be created — notify the kitchen manually
 payment-customer-placeholder = e.g. John Doe
 payment-loyalty-points-aria = Points
 payment-search-customers-aria = Search customers

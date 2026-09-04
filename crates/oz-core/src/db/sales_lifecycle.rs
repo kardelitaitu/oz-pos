@@ -577,6 +577,11 @@ impl Store<'_> {
             return Ok(());
         }
 
+        // S3: cancel any KDS tickets already created for this sale (the
+        // ticket can exist between checkout completion and finalize) so the
+        // voided sale never leaves a ghost ticket on the kitchen board.
+        self.cancel_kds_orders_for_sale_in_tx(&tx, sale_id)?;
+
         tx.commit()?;
         Ok(())
     }
@@ -694,6 +699,10 @@ impl Store<'_> {
             "success",
         );
         self.log_audit(&audit)?;
+
+        // S3: cancel active KDS tickets in the same transaction — a voided
+        // sale's tickets must not linger on the kitchen board.
+        self.cancel_kds_orders_for_sale_in_tx(&tx, sale_id)?;
 
         tx.commit()?;
 

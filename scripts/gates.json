@@ -7,21 +7,29 @@
       "label": "UI lint",
       "status": "required",
       "runners": { "check.sh": ["ui lint"], "check:all": ["eslint"] },
-      "ci": { "workflow": "ci.yml", "job": "ui-lint" }
+      "ci": { "workflow": "dev-ci.yml", "job": "ui-test" }
     },
     {
       "id": "ui-typecheck",
       "label": "UI typecheck",
       "status": "required",
       "runners": { "check.sh": ["ui typecheck"], "check:all": ["type check"] },
-      "ci": { "workflow": "ci.yml", "job": "ui-typecheck" }
+      "ci": { "workflow": "dev-ci.yml", "job": "ui-test" }
     },
     {
       "id": "ui-unit-tests",
       "label": "UI unit tests",
       "status": "required",
       "runners": { "check.sh": ["ui test"], "check:all": ["unit tests"] },
-      "ci": { "workflow": "ci.yml", "job": "ui-test" }
+      "_note": "Was ci.yml#ui-test. dev-ci.yml#ui-test runs `cd ui && npm test` (vitest) -- the same suite under the same job name.",
+      "ci": { "workflow": "dev-ci.yml", "job": "ui-test" }
+    },
+    {
+      "id": "analytics-tz-invariance",
+      "label": "Analytics timezone invariance",
+      "status": "required",
+      "runners": { "check.sh": ["analytics tz invariance"] },
+      "ci": { "workflow": "dev-ci.yml", "job": "ui-test" }
     },
     {
       "id": "i18n-lint",
@@ -42,42 +50,53 @@
       "label": "Rust fmt",
       "status": "required",
       "runners": { "check.sh": ["cargo fmt"] },
-      "ci": { "workflow": "ci.yml", "job": "rust-fmt" }
+      "ci": { "workflow": "dev-ci.yml", "job": "cargo-check" }
     },
     {
       "id": "go",
       "label": "Go (license-server)",
       "status": "required",
       "runners": { "check.sh": ["go fmt", "go vet", "go test (short)"] },
-      "ci": { "workflow": "ci.yml", "job": "go" }
+      "_note": "Was ci.yml#go. gofmt/go vet/go test -short now run in dev-ci.yml#static-gates, verified green locally first. The pre-commit Go gate remains the only place Go is enforced on a commit.",
+      "ci": { "workflow": "dev-ci.yml", "job": "static-gates" }
     },
     {
       "id": "website-tests",
       "label": "Website unit tests",
       "status": "required",
       "runners": { "check.sh": ["website test"] },
-      "ci": { "workflow": "website.yml", "job": "check" }
+      "_note": "Was website.yml#check. dev-ci.yml#website runs `cd website && npm test`; website.yml is .bak.",
+      "ci": { "workflow": "dev-ci.yml", "job": "website" }
+    },
+    {
+      "id": "website-assets",
+      "label": "Website asset hygiene",
+      "status": "required",
+      "runners": { "check.sh": ["website assets"] },
+      "ci": { "workflow": "dev-ci.yml", "job": "website" }
     },
     {
       "id": "rust-clippy",
       "label": "Clippy",
       "status": "required",
       "runners": { "check.sh": ["clippy"] },
-      "ci": { "workflow": "ci.yml", "job": "rust-clippy" }
+      "ci": { "workflow": "dev-ci.yml", "job": "cargo-check" }
     },
     {
       "id": "rust-tests",
       "label": "Rust tests",
       "status": "required",
       "runners": { "check.sh": ["test workspace", "test doctests"] },
-      "ci": { "workflow": "ci.yml", "job": "rust-test-fast" }
+      "_note": "Was ci.yml#rust-test-fast. dev-ci.yml runs `cargo nextest run --workspace --all-features` with NO excludes, so it covers this more broadly than check.sh, whose own nextest step excludes oz-pos-app. nextest does not run doctests, so that part remains check.sh-only.",
+      "ci": { "workflow": "dev-ci.yml", "job": "cargo-nextest" }
     },
     {
       "id": "architecture-boundaries",
       "label": "Architecture boundaries",
       "status": "required",
       "runners": { "check.sh": ["architecture boundaries"] },
-      "ci": { "workflow": "ci.yml", "job": "architecture-boundaries" }
+      "_note": "Was ci.yml#architecture-boundaries. Runs in dev-ci.yml#static-gates with --strict, verified green locally.",
+      "ci": { "workflow": "dev-ci.yml", "job": "static-gates" }
     },
     {
       "id": "no-raw-params",
@@ -90,7 +109,8 @@
       "label": "No hardcoded exp-2 money formatting",
       "status": "required",
       "runners": { "check.sh": ["hardcoded-money-format"] },
-      "ci": { "workflow": "ci.yml", "job": "rust-money-format" }
+      "_note": "Was ci.yml#rust-money-format. Runs in dev-ci.yml#static-gates, verified green locally.",
+      "ci": { "workflow": "dev-ci.yml", "job": "static-gates" }
     },
     {
       "id": "docker-dry-run",
@@ -109,14 +129,16 @@
       "label": "Skill drift guard",
       "status": "required",
       "runners": { "check.sh": ["skill-drift"] },
-      "ci": { "workflow": "ci.yml", "job": "skill-drift-tests" }
+      "_note": "Was ci.yml#skill-drift-tests. Runs in dev-ci.yml#static-gates, verified green locally.",
+      "ci": { "workflow": "dev-ci.yml", "job": "static-gates" }
     },
     {
       "id": "panic-inventory",
       "label": "Panic inventory",
       "status": "required",
       "runners": { "check.sh": ["panic-inventory"] },
-      "ci": { "workflow": "ci.yml", "job": "rust-panic-inventory" }
+      "_note": "Was ci.yml#rust-panic-inventory, then had no CI job at all while scan-unwrap-panic.py was red. R36-12 found the redness was the SCANNER's bug -- it did not track /* */ block comments across lines, so it read the repo's audit stamps as code (6 false positives) and, in apps/cloud-server/src/redirect.rs, treated a stamp mentioning #[cfg(test)] as the start of test code and stopped checking the rest of the file (1 suppressed real finding). Fixed, triaged, and now enforced in dev-ci.yml#static-gates.",
+      "ci": { "workflow": "dev-ci.yml", "job": "static-gates" }
     },
     {
       "id": "a11y-advisory",
@@ -140,22 +162,33 @@
       "id": "ci-docs-drift",
       "label": "CI docs drift",
       "status": "required",
+      "_note": "History worth keeping: this was declared 'required' while pointing at ci.yml#ci-docs-drift, a workflow retired to .bak by 23c96330, so it enforced nothing anywhere and the status was false. It was downgraded to 'advisory' when first wired into dev-ci.yml because the checker was reporting 68 items it had no vocabulary for. R36-10 closed those out to 0 and the step is now blocking -- the stated condition. advisory_at is removed because the step no longer sets continue-on-error.",
       "runners": { "check.sh": ["ci docs drift"] },
-      "ci": { "workflow": "ci.yml", "job": "ci-docs-drift" }
+      "ci": { "workflow": "dev-ci.yml", "job": "ci-docs-drift" }
+    },
+    {
+      "id": "ci-routing-test",
+      "label": "CI path router regression test",
+      "status": "required",
+      "_note": "scripts/test-ci-routing.sh extracts the Route shell body from dev-ci.yml and runs it against 15 synthetic diffs. c5ec6381 shipped the router with no committed test, while the 0.0.36 release notes claimed one existed -- this file makes that claim true and keeps it true.",
+      "runners": { "check.sh": ["ci routing test"] },
+      "ci": { "workflow": "dev-ci.yml", "job": "ci-docs-drift" }
     },
     {
       "id": "windows-config",
       "label": "Windows config drift (NSIS installMode + asInvoker manifests)",
       "status": "required",
       "runners": { "check.sh": ["windows config"] },
-      "ci": { "workflow": "ci.yml", "job": "windows-config" }
+      "_note": "Was ci.yml#windows-config. Runs in dev-ci.yml#static-gates, verified green locally.",
+      "ci": { "workflow": "dev-ci.yml", "job": "static-gates" }
     },
     {
       "id": "unified-healthcheck",
       "label": "Unified healthcheck script test",
       "status": "required",
       "runners": { "check.sh": ["healthcheck script test"] },
-      "ci": { "workflow": "ci.yml", "job": "unified-healthcheck" }
+      "_note": "Was ci.yml#unified-healthcheck. Runs in dev-ci.yml#static-gates (20 assertions), verified green locally.",
+      "ci": { "workflow": "dev-ci.yml", "job": "static-gates" }
     },
     {
       "id": "bundle-budget",
@@ -168,7 +201,7 @@
       "label": "E2E tests",
       "status": "required",
       "runners": { "check:all": ["e2e"] },
-      "ci": { "workflow": "ci.yml", "job": "e2e" }
+      "_note": "No CI job. Needs the Docker backend; check.sh L203 states 'E2E is NOT run here'. Reachable only via `cd ui && npm run check:all`. Was ci.yml#e2e."
     },
     {
       "id": "perf-smoke",
@@ -180,110 +213,165 @@
       "id": "rust-test-apps",
       "label": "Rust test apps",
       "status": "required",
-      "ci": { "workflow": "ci.yml", "job": "rust-test-apps" }
+      "_note": "Was ci.yml#rust-test-apps. dev-ci.yml's nextest carries no --exclude flags, so the app crates are in scope; check.sh's equivalent DOES exclude oz-pos-app, which is why this looked uncovered.",
+      "ci": { "workflow": "dev-ci.yml", "job": "cargo-nextest" }
     },
     {
       "id": "rust-test-full",
       "label": "Rust test full",
       "status": "required",
-      "ci": { "workflow": "ci.yml", "job": "rust-test-full" }
+      "_note": "Was ci.yml#rust-test-full. dev-ci.yml#cargo-nextest runs the full workspace with all features and no excludes.",
+      "ci": { "workflow": "dev-ci.yml", "job": "cargo-nextest" }
     },
     {
       "id": "sync-slow-tests",
       "label": "Sync slow tests",
-      "status": "required",
-      "ci": { "workflow": "ci.yml", "job": "sync-slow-tests" }
+      "status": "retired",
+      "_note": "Platform-sync integration suite. The only 'sync' string in check.sh is a prose word in a comment, not a runner."
     },
     {
       "id": "docker-build-scan",
       "label": "Docker build + blocking scan",
-      "status": "required",
-      "ci": { "workflow": "ci.yml", "job": "docker" }
+      "status": "retired",
+      "_note": "Trivy scan runs nowhere. `docker build` exists in check.sh only behind the optional --docker-dry-run flag, so it is not part of the standard matrix. Was ci.yml#docker."
     },
     {
       "id": "security-pr",
       "label": "Security PR baseline",
-      "status": "required",
-      "ci": { "workflow": "ci.yml", "job": "security-pr" }
+      "status": "retired",
+      "_note": "cargo audit and cargo deny appear in neither dev-ci.yml nor check.sh. Was ci.yml#security-pr."
     },
     {
       "id": "lighthouse",
       "label": "Lighthouse a11y",
-      "status": "advisory",
-      "ci": { "workflow": "ci.yml", "job": "lighthouse" }
+      "status": "retired",
+      "_note": "Lighthouse a11y audit ran in ci.yml#lighthouse only."
     },
     {
       "id": "coverage",
       "label": "Coverage",
-      "status": "advisory",
-      "ci": { "workflow": "ci.yml", "job": "coverage" }
+      "status": "retired",
+      "_note": "Coverage reporting ran in ci.yml#coverage only. The similarly named 'scoped coverage (H-1)' gate is unrelated and does run (check.sh + pre-push)."
     },
     {
       "id": "audit",
       "label": "Dependency audit",
-      "status": "required-on-push",
-      "ci": { "workflow": "ci.yml", "job": "audit" }
+      "status": "retired",
+      "_note": "Dependency audit ran in ci.yml#audit only. `npm ci --no-audit` in check.sh explicitly SUPPRESSES it. Was required-on-push."
     },
     {
       "id": "fuzz",
       "label": "Fuzz",
-      "status": "advisory",
-      "ci": { "workflow": "ci.yml", "job": "fuzz" },
+      "status": "retired",
+      "_note": "cargo-fuzz ran in ci.yml#fuzz only. The RUSTC_WRAPPER='' note recorded below is still accurate for whoever restores it.",
       "note": "The fuzz job deliberately sets RUSTC_WRAPPER: '' in its job env. The ubuntu runner image globally wraps rustc with sccache, which breaks cargo-fuzz's --target build (its rustc version probe execs the resolved nightly toolchain path directly and dies with 'could not execute process sccache .../bin/rustc -vV'). The fuzz job is the only job affected (nightly + --target), so sccache must stay disabled there — do NOT re-add it. Caching is instead handled by Swatinem/rust-cache@v2 with `workspaces: fuzz` (cargo-fuzz builds into fuzz/target/, which default workspace discovery misses)."
     },
     {
       "id": "flaky-quarantine",
       "label": "Flaky quarantine registry",
-      "status": "required",
-      "ci": { "workflow": "ci.yml", "job": "flaky-quarantine" }
+      "status": "retired",
+      "_note": "Flaky quarantine registry ran in ci.yml only."
     },
     {
       "id": "e2e-docker-image",
       "label": "E2E Docker image",
-      "status": "required",
-      "ci": { "workflow": "ci.yml", "job": "e2e-docker-image" }
+      "status": "retired",
+      "_note": "Built the E2E backend images; ran in ci.yml only."
     },
     {
       "id": "nightly-rust-test",
       "label": "Nightly rust test",
-      "status": "required",
-      "ci": { "workflow": "nightly.yml", "job": "rust-test" }
+      "status": "retired",
+      "_note": "nightly.yml is .bak. Live equivalent: rust-tests (dev-ci.yml#cargo-nextest)."
     },
     {
       "id": "nightly-rust-doc",
       "label": "Nightly rust doc",
-      "status": "required",
-      "ci": { "workflow": "nightly.yml", "job": "rust-doc" }
+      "status": "retired",
+      "_note": "nightly.yml is .bak. Doctests still run locally via check.sh 'test doctests'; no CI coverage for them."
     },
     {
       "id": "nightly-ui-test",
       "label": "Nightly UI tests",
-      "status": "required",
-      "ci": { "workflow": "nightly.yml", "job": "ui-test" }
+      "status": "retired",
+      "_note": "nightly.yml is .bak. Live equivalent: ui-unit-tests."
     },
     {
       "id": "nightly-e2e",
       "label": "Nightly E2E",
-      "status": "required",
-      "ci": { "workflow": "nightly.yml", "job": "e2e" }
+      "status": "retired",
+      "_note": "nightly.yml is .bak, and E2E runs in neither CI nor check.sh (check.sh L203 says so explicitly)."
     },
     {
       "id": "nightly-flaky-detect",
       "label": "Nightly flaky detection",
-      "status": "advisory",
-      "ci": { "workflow": "nightly.yml", "job": "flaky-detect", "advisory_at": "step" }
+      "status": "retired",
+      "_note": "nightly.yml is .bak."
     },
     {
       "id": "nightly-flaky-registry",
       "label": "Nightly flaky quarantine registry",
-      "status": "required",
-      "ci": { "workflow": "nightly.yml", "job": "flaky-quarantine-registry" }
+      "status": "retired",
+      "_note": "nightly.yml is .bak."
     },
     {
       "id": "nightly-benchmarks",
       "label": "Nightly benchmarks",
+      "status": "retired",
+      "_note": "nightly.yml is .bak."
+    },
+    {
+      "id": "release-workflow",
+      "label": "Release workflow validation",
       "status": "required",
-      "ci": { "workflow": "nightly.yml", "job": "benchmarks" }
+      "_note": "R36-11. release.yml was renamed to release.yml.bak by 23c96330 with an empty commit message and nothing replaced it, so pushing a v* tag produced no installers for a whole release cycle. A workflow that never runs cannot report its own breakage, so this validates statically what needs no tag, key material, or macOS/Windows runner: action pins, referenced paths, docker residue left by the desktop-only restore, an inventory gate demanding an artifact no matrix entry builds, and that a missing UPDATER_PRIVATE_KEY still hard-fails rather than publishing an unsigned manifest every client rejects. Ships with --self-test (8 mutations) so a regression cannot silently turn it into a no-op.",
+      "runners": { "check.sh": ["release workflow validation"] },
+      "ci": { "workflow": "dev-ci.yml", "job": "static-gates" }
+    },
+    {
+      "id": "release-readiness",
+      "label": "Release readiness",
+      "status": "required",
+      "_note": "Runs scripts/check-updater-compat.mjs, which builds a Rust harness pinned to the minisign-verify version the real Tauri updater client uses and proves that signatures from generate-latest-json.mjs VERIFY, that a tampered installer is REJECTED, and that the pubkey committed in tauri.conf.json parses. Before this it ran ONLY inside release.yml.bak, i.e. nowhere at all -- so the signing chain could have rotted silently alongside the retired workflow and the first symptom would be customers unable to auto-update. Path-gated on the release toolchain and the updater pubkey because the harness needs a cold cargo build. No `runners` key: that field names LOCAL entry points, and this one needs a cargo build, so it is CI-only.",
+      "ci": { "workflow": "dev-ci.yml", "job": "release-readiness" }
+    },
+    {
+      "id": "doc-uniqueness",
+      "label": "Doc uniqueness",
+      "status": "advisory",
+      "_note": "Added in 0.0.36 after f3d9cca6 moved the repo-root subscription-tiers.md into docs/records/ without noticing docs/guides/ already had a copy from 28147fe4, leaving two tracked files both stamped 'single source of truth' for pricing with disagreeing entitlement rows. No gate compared documents to each other, so nothing saw it. Local-only for now: it carries a pair-specific baseline for that one unresolved finding (R36-14, needs a product decision because white-label has no runtime entitlement check to adjudicate against), and a gate with a live baseline should earn CI-blocking status after the baseline is empty, the same condition R36-10 set for ci-docs-drift. --self-test and the 5-case harness both pass.",
+      "runners": { "check.sh": ["doc uniqueness"] }
+    },
+    {
+      "id": "eol-guard",
+      "label": "EOL guard",
+      "status": "required",
+      "_note": "Added in 0.0.36 (R36-15). The pre-commit line-ending step filtered on 'git check-attr text' alone, which is wrong twice: it ignored '.gitattributes *.bat text eol=crlf' and stripped CRLF from the working tree (producing a phantom-dirty git status with zero content diff), and because '* text=auto' reports 'auto' for every path including binaries, a staged PNG had the 0D 0A in its signature deleted and the mangled blob re-staged -- verified on apps/desktop-client/icons/32x32.png, 1515 to 1507 bytes. Both are silent corruption behind a green hook. The test extracts the live guard from .githooks/pre-commit rather than copying it, so it cannot drift from what it polices, and it fails loudly if either guard disappears.",
+      "runners": { "check.sh": ["eol guard"] }
+    },
+    {
+      "id": "agents-mirrors",
+      "label": "AGENTS.md mirror truthfulness",
+      "status": "required",
+      "_note": "Added in 0.0.36. Three copies of the agent rules exist (root AGENTS.md, .agents/AGENTS.md, .prime/AGENTS.md) and scripts/bump-version.ps1 syncs only their version lines -- the file itself documents that nothing syncs the gate list. Twice in this release a mirror stated something the repo contradicted: .agents/AGENTS.md kept saying 'Steps 6, 7 and 8 have no CI backstop' after 13f2a1dc put Go into dev-ci.yml#static-gates, and root AGENTS.md claimed dev-ci 'runs on every PR and push' when it has no push trigger at all. The first is the mirror that governs work under .agents/, so an agent following it would believe Go changes are unguarded. Required and CI-blocking from day one, unlike ci-docs-drift, because it has no baseline and no pre-existing failures: ground truth is read from .githooks/pre-commit, .github/workflows/*.yml and Cargo.toml rather than asserted, so adding a gate or bumping the version updates the expectation without touching the checker. --self-test mutates each mirror and requires a named finding; a mutation that changes nothing is reported WRONG rather than passing silently, which is how the .prime phrasing gap was found and closed.",
+      "runners": { "check.sh": ["agents mirrors", "agents mirrors self-test"] },
+      "ci": {
+        "workflow": "dev-ci.yml",
+        "job": "ci-docs-drift",
+        "step": "AGENTS.md mirror truthfulness"
+      }
+    },
+    {
+      "id": "commit-subjects",
+      "label": "Conventional-commit subjects",
+      "status": "required",
+      "_note": "Added in 0.0.36. .githooks/commit-msg has enforced the subject format locally since 9cf14190, but core.hooksPath is set by setup-dev.ps1 and is not versioned, so a clone that skips setup gets no subject gate -- a limitation the hook's own header states and defers to a future CI check. This closes that. The rule is extracted from the hook at run time (TYPES, PATTERN, and the Merge/Revert/fixup/squash/amend exemptions) rather than duplicated, so local and CI cannot drift into disagreeing about what is legal; each extractor raises rather than returning an empty set, because an empty exemption list would reject every merge commit and an empty type list would accept anything. Commits older than the hook's own introduction are skipped, derived via `git log --diff-filter=A -- .githooks/commit-msg` rather than a hardcoded sha, and the skipped count is printed so the grandfathering is visible. Verified against the four commits the hook header names as its motivation (2eea3d07, faa5dae0, 5855c429, 84a71f3e): all four are found, all four are pre-rule, and the 77 commits since the hook conform. The CI step needs fetch-depth 0 -- with the default depth of 1 the range is empty and the gate would pass by checking nothing.",
+      "runners": { "check.sh": ["commit subjects", "commit subjects self-test"] },
+      "ci": {
+        "workflow": "dev-ci.yml",
+        "job": "static-gates",
+        "step": "Conventional-commit subjects"
+      }
     }
   ]
 }

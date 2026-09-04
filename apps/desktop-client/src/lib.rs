@@ -67,13 +67,13 @@ mod sync_bootstrap;
 /// See: https://github.com/orgs/tauri-apps/discussions/11179
 ///
 /// **NOTE:** If you modify the byte string below, update the array size
-/// (currently 184).  The compiler error message will report the exact
+/// (currently 168).  The compiler error message will report the exact
 /// expected size if there's a mismatch.
 #[cfg(all(test, windows, target_env = "msvc"))]
 #[used]
 #[unsafe(link_section = ".drectve")]
 #[rustfmt::skip]
-static TEST_MANIFEST_DIRECTIVES: [u8; 184] = *b" /MANIFEST:EMBED /MANIFESTDEPENDENCY:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"\x00";
+static TEST_MANIFEST_DIRECTIVES: [u8; 168] = *b" /MANIFESTDEPENDENCY:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"\x00";
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -351,12 +351,20 @@ pub fn run() {
             }
 
             // ── KDS device health monitoring daemon ──────────────────
-            // Runs every 60 seconds to:
+            // Runs every 60 seconds, per store database, to:
             // 1. Mark connected devices as stale if they haven't pinged recently
             // 2. Deactivate devices that have been stale for too long (24h)
             // 3. Prune old KDS orders in terminal states (30-day retention)
+            //
+            // KDS orders and devices live in PER-STORE databases
+            // (db_manager.open_store), not in the global identity DB
+            // (`AppState.db`) — cycling only over the global DB made this
+            // whole daemon a silent no-op (its target tables were always
+            // empty there). Iterate the manager's open store IDs instead;
+            // the connection map grows as stores are opened, so only
+            // databases that actually exist are touched.
             {
-                let db_clone = app.state::<AppState>().db.clone();
+                let db_manager = app.state::<AppState>().db_manager.clone();
                 platform_startup::spawn_daemon("kds health monitoring", async move {
                     let mut interval = tokio::time::interval(
                         std::time::Duration::from_secs(60),
@@ -364,21 +372,29 @@ pub fn run() {
                     interval.tick().await;
                     loop {
                         interval.tick().await;
-                        let db = db_clone.lock().await;
-                        let store = oz_core::db::Store::new(&db);
-                        // 1. Mark stale devices (no ping in 30s).
-                        if let Err(e) = store.mark_stale_kds_devices(30) {
-                            tracing::warn!(error = %e, "kds health: mark_stale failed");
+                        for store_id in db_manager.open_store_ids() {
+                            let Ok(conn) = db_manager.open_store(&store_id) else {
+                                tracing::warn!(store_id, "kds health: store db unavailable");
+                                continue;
+                            };
+                            let Ok(db) = conn.lock() else {
+                                tracing::warn!(store_id, "kds health: store db lock poisoned");
+                                continue;
+                            };
+                            let store = oz_core::db::Store::new(&db);
+                            // 1. Mark stale devices (no ping in 30s).
+                            if let Err(e) = store.mark_stale_kds_devices(30) {
+                                tracing::warn!(error = %e, store_id, "kds health: mark_stale failed");
+                            }
+                            // 2. Deactivate long-offline devices (stale for 24h).
+                            if let Err(e) = store.deactivate_stale_kds_devices(86400) {
+                                tracing::warn!(error = %e, store_id, "kds health: deactivate_stale failed");
+                            }
+                            // 3. Prune old terminal-state orders (30-day retention).
+                            if let Err(e) = store.cleanup_old_kds_orders(30) {
+                                tracing::warn!(error = %e, store_id, "kds health: cleanup failed");
+                            }
                         }
-                        // 2. Deactivate long-offline devices (stale for 24h).
-                        if let Err(e) = store.deactivate_stale_kds_devices(86400) {
-                            tracing::warn!(error = %e, "kds health: deactivate_stale failed");
-                        }
-                        // 3. Prune old terminal-state orders (30-day retention).
-                        if let Err(e) = store.cleanup_old_kds_orders(30) {
-                            tracing::warn!(error = %e, "kds health: cleanup failed");
-                        }
-                        drop(db);
                     }
                 });
             }

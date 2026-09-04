@@ -754,8 +754,13 @@ export default function PaymentModal({
 
       try {
         await createKdsOrderFromSaleScoped(sessionToken!, saleResult.saleId);
-      } catch {
-        // KDS may not be configured — non-blocking.
+      } catch (kdsErr) {
+        // KDS may not be configured — but a swallowed failure here meant a
+        // paid sale silently produced NO kitchen ticket (retried zoned
+        // checkouts hit the UNIQUE guard). The cashier must know to call
+        // the kitchen; the sale itself is already committed.
+        console.error('createKdsOrderFromSale failed', kdsErr);
+        addToast({ message: requiredLocalized(l10nRef.current, 'payment-toast-kds-failed'), type: 'warning' });
       }
 
       // ADR-20: Finalize the pending sale after QR confirmation
@@ -1023,8 +1028,10 @@ export default function PaymentModal({
 
       try {
         await createKdsOrderFromSaleScoped(sessionToken!, saleResult.saleId);
-      } catch {
-        // KDS may not be configured — non-blocking.
+      } catch (kdsErr) {
+        // See the QR path: a failed kitchen ticket must not stay silent.
+        console.error('createKdsOrderFromSale failed', kdsErr);
+        addToast({ message: requiredLocalized(l10n, 'payment-toast-kds-failed'), type: 'warning' });
       }
 
       if (loyaltyAccount && redeemPoints && loyaltyDiscount > 0n) {
@@ -1062,7 +1069,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [method, customerName, lineItems, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, sessionToken, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, addToast, classifyError, cartCurrency, effectiveTotalInCartCurrency, lineItemsInCartCurrency, tenderedMinorInCartCurrency, total.currency, total.minor_units, tenderSnapshot]);
+  }, [method, customerName, lineItems, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, sessionToken, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, addToast, classifyError, l10n, cartCurrency, effectiveTotalInCartCurrency, lineItemsInCartCurrency, tenderedMinorInCartCurrency, total.currency, total.minor_units, tenderSnapshot]);
 
   useEffect(() => {
     if (!done) return;

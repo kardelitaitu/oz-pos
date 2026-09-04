@@ -140,7 +140,7 @@
   },
   "features": {
     "title": "Enterprise Features, Regular Subscription",
-    "subtitle": "Nine core capabilities engineered for maximum efficiency, uninterrupted uptime, and continuous business growth.",
+    "subtitle": "Core capabilities engineered for zero-latency operations, uninterrupted offline uptime, and resilient business scale.",
     "items": [
       {
         "title": "Offline-First",
@@ -257,9 +257,9 @@
   },
   "download": {
     "title": "Download OZ-POS",
-    "subtitle": "Version 0.0.35 — free forever, no signup required.",
+    "subtitle": "Version 0.0.36 — free forever, no signup required.",
     "version": "Current version",
-    "versionValue": "0.0.35",
+    "versionValue": "0.0.36",
     "platformsTitle": "Choose your platform",
     "requirementsTitle": "System requirements",
     "requirements": [

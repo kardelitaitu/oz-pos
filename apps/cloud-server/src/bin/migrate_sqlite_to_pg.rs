@@ -266,15 +266,25 @@ async fn insert_pg_batch(
         .join(", ");
     // Build a column-position lookup: for each column in `columns`,
     // find its index in the full sqlite_columns list.
-    let col_indices: Vec<usize> = columns
+    //
+    // This was `.expect("every pg_cols column must exist in sqlite_columns")`,
+    // which panicked on a genuinely reachable condition: the two schemas drifting
+    // apart. A panic here aborted the migration with no indication of WHICH
+    // column, and the gate's own rule is that a recoverable failure must return
+    // rather than unwind. The function already returns `Result<(), String>`, so
+    // naming the column costs nothing.
+    let col_indices: Vec<usize> = match columns
         .iter()
         .map(|c| {
-            sqlite_columns
-                .iter()
-                .position(|sc| sc == c)
-                .expect("every pg_cols column must exist in sqlite_columns")
+            sqlite_columns.iter().position(|sc| sc == c).ok_or_else(|| {
+                format!("table {table}: pg column '{c}' is not present in the sqlite table")
+            })
         })
-        .collect();
+        .collect::<Result<Vec<usize>, String>>()
+    {
+        Ok(v) => v,
+        Err(e) => return Err(e),
+    };
 
     // One placeholder group per row: ($1..$N), ($N+1..$2N), …
     let value_groups = (0..rows.len())
@@ -631,15 +641,18 @@ async fn verify_table(
     // Project source rows to shared columns so checksums compare the same
     // set of columns as PG (the source may have extra columns from newer
     // migrations that the PG schema hasn't caught up with yet).
-    let col_indices: Vec<usize> = columns
+    let col_indices: Vec<usize> = match columns
         .iter()
         .map(|c| {
-            sqlite_columns
-                .iter()
-                .position(|sc| sc == c)
-                .expect("every pg_cols column must exist in sqlite_columns")
+            sqlite_columns.iter().position(|sc| sc == c).ok_or_else(|| {
+                format!("table {table}: pg column '{c}' is not present in the sqlite table")
+            })
         })
-        .collect();
+        .collect::<Result<Vec<usize>, String>>()
+    {
+        Ok(v) => v,
+        Err(e) => return Err(e),
+    };
     let src_checksum: u64 = src_rows
         .iter()
         .map(|r| {

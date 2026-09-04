@@ -1433,8 +1433,14 @@ CREATE INDEX IF NOT EXISTS idx_kds_order_targets_instance
 CREATE INDEX IF NOT EXISTS idx_kds_order_targets_restaurant_pos
     ON kds_order_targets(restaurant_pos_id);
 
+CREATE INDEX IF NOT EXISTS idx_kds_orders_received_at
+    ON kds_orders(received_at);
+
 CREATE INDEX IF NOT EXISTS idx_kds_orders_restaurant_pos
     ON kds_orders(restaurant_pos_id);
+
+CREATE INDEX IF NOT EXISTS idx_kds_orders_status_received
+    ON kds_orders(status, received_at);
 
 CREATE INDEX IF NOT EXISTS idx_kds_orders_target_instance
     ON kds_orders(target_instance_id);

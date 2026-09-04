@@ -12,7 +12,10 @@ vi.mock('@/api/reports', () => ({
 
 vi.mock('@/contexts/WorkspaceContext', () => {
   const ctx = React.createContext({ sessionToken: 'test-token' });
-  return { WorkspaceContext: ctx };
+  // R36-07: the component now reads the token through useWorkspace(), so
+  // this local mock must provide it too. Deriving it from the same context
+  // keeps an explicit <WorkspaceContext.Provider> working in a test.
+  return { WorkspaceContext: ctx, useWorkspace: () => React.useContext(ctx) };
 });
 
 vi.mock('@/contexts/CurrencyContext', () => ({

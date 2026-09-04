@@ -553,6 +553,59 @@ describe('useKdsOffline', () => {
       expect(result.current.deadLetterLength).toBe(0);
       expect(JSON.parse(localStorage.getItem(LS_DEAD_LETTER) || '[]')).toEqual([]);
     });
+
+    it('requeueDeadLetter moves dead actions back into the pending queue for a fresh retry run', async () => {
+      const { result } = renderHook(() => useKdsOffline());
+      await act(async () => {
+        await result.current.wrapUpdate('o-1', 'preparing', () => Promise.reject(new Error('err')));
+      });
+
+      // Exhaust retries into the dead-letter list (same pattern as above).
+      const realNow = Date.now;
+      let fakeNow = realNow();
+      vi.spyOn(Date, 'now').mockImplementation(() => fakeNow);
+      try {
+        for (let i = 0; i < MAX_RETRY_ATTEMPTS; i += 1) {
+          await act(async () => {
+            await result.current.retryPending(() => Promise.resolve(false));
+          });
+          fakeNow += 120_000;
+        }
+      } finally {
+        vi.restoreAllMocks();
+      }
+      expect(result.current.deadLetterLength).toBe(1);
+
+      // Requeue: operator intent preserved in the pending queue, dead list emptied.
+      let requeued = 0;
+      act(() => { requeued = result.current.requeueDeadLetter(); });
+      expect(requeued).toBe(1);
+      expect(result.current.deadLetterLength).toBe(0);
+      expect(result.current.pendingActions).toHaveLength(1);
+      expect(result.current.pendingActions[0]?.orderId).toBe('o-1');
+      expect(result.current.pendingActions[0]?.targetStatus).toBe('preparing');
+      // Fresh run: counter reset and no backoff window, so it is immediately
+      // eligible for replay.
+      expect(result.current.pendingActions[0]?.retryCount).toBe(0);
+      expect(result.current.pendingActions[0]?.nextAttemptAt).toBeUndefined();
+
+      // The requeued action is actually replayable — the old wiring destroyed
+      // the intent here (regression guard for the dead-letter data-loss bug).
+      let executed = 0;
+      await act(async () => {
+        executed = await result.current.retryPending(() => Promise.resolve(true));
+      });
+      expect(executed).toBe(1);
+      expect(result.current.pendingQueueLength).toBe(0);
+    });
+
+    it('requeueDeadLetter is a no-op when the dead-letter list is empty', () => {
+      const { result } = renderHook(() => useKdsOffline());
+      let requeued = -1;
+      act(() => { requeued = result.current.requeueDeadLetter(); });
+      expect(requeued).toBe(0);
+      expect(result.current.pendingQueueLength).toBe(0);
+    });
   });
 
   // ── OFF-07: store-scoped storage + cache expiry ──────────────────

@@ -1,6 +1,11 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
+import {
+  assertAllInvokesHandled,
+  recordUnmatchedInvoke,
+  resetUnmatchedInvokes,
+} from '@/__tests__/test-utils/invokeCoverage';
 import salesFtl from '@/locales/sales.ftl?raw';
 import SalesDashboardScreen from '@/features/sales/SalesDashboardScreen';
 import { registerSalesWidgets } from '@/features/sales/widgets';
@@ -44,16 +49,27 @@ vi.mock('@/hooks/useFeatures', () => ({
 beforeEach(() => {
   clearWidgets();
   registerSalesWidgets();
+  resetUnmatchedInvokes();
   invokeMock.mockClear();
   invokeMock.mockImplementation((cmd: string) => {
+    // Widgets reach these through ui/src/api/reports.ts, which invokes the
+    // _scoped spelling for anything touching store data. The plain names are
+    // kept as well so the mock does not silently diverge if a caller changes.
     if (cmd === 'export_daily_summary' || cmd === 'export_daily_summary_scoped') return Promise.resolve(SAMPLE_SUMMARY);
     if (cmd === 'export_sales_by_hour' || cmd === 'export_sales_by_hour_scoped') return Promise.resolve(SAMPLE_HOURLY);
-    if (cmd === 'get_category_breakdown') return Promise.resolve([]);
-    if (cmd === 'get_hourly_heatmap') return Promise.resolve([]);
-    if (cmd === 'get_daily_revenue') return Promise.resolve([]);
+    if (cmd === 'get_category_breakdown' || cmd === 'get_category_breakdown_scoped') return Promise.resolve([]);
+    if (cmd === 'get_hourly_heatmap' || cmd === 'get_hourly_heatmap_scoped') return Promise.resolve([]);
+    if (cmd === 'get_daily_revenue' || cmd === 'get_daily_revenue_scoped') return Promise.resolve([]);
+    // Recorded, then still rejected: the component must see exactly what it saw
+    // before, so this only turns a silent gap into a failing test.
+    recordUnmatchedInvoke(cmd);
     return Promise.reject(new Error(`Unknown command: ${cmd}`));
   });
 });
+
+// Any command that reached the fallback means an assertion above was exercising
+// the widget's error branch rather than its data path. See test-utils/invokeCoverage.
+afterEach(() => assertAllInvokesHandled('SalesDashboardScreen'));
 
 describe('SalesDashboardScreen', () => {
   it('renders title', async () => {

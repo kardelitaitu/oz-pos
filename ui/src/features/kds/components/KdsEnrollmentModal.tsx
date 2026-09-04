@@ -150,12 +150,16 @@ export const KdsEnrollmentModal = memo(function KdsEnrollmentModal({
       setPairingToken(token);
       setTokenExpiry(expiresAt);
       setStep('qr');
-      onEnrolled(device);
+      // NOTE: onEnrolled deliberately does NOT fire here — the QR/token
+      // step below is the operator's actual enrollment window, and an
+      // immediate callback closed the modal before the QR was ever shown.
+      // The callback fires when the operator finishes the QR step (Done).
     } catch (e) {
-      setError(String(e));
+      console.error('kds device enrollment failed', e);
+      setError(requiredLocalized(l10n, 'kds-enrollment-failed'));
       setStep('error');
     }
-  }, [name, stations, sessionToken, restaurantPosId, onEnrolled]);
+  }, [name, stations, sessionToken, restaurantPosId, l10n]);
 
   const handleBackdropClick = useCallback(
     (e: React.MouseEvent) => {
@@ -355,7 +359,15 @@ export const KdsEnrollmentModal = memo(function KdsEnrollmentModal({
           {(step === 'qr' || step === 'error') && (
             <button
               className="kds-enrollment-done"
-              onClick={onClose}
+              onClick={() => {
+                // H3: enrollment completes when the operator finishes the
+                // QR step — this is the first point the device token has
+                // actually been shown for pairing.
+                if (step === 'qr' && enrolledDevice) {
+                  onEnrolled(enrolledDevice);
+                }
+                onClose();
+              }}
             >
               {requiredLocalized(l10n, 'kds-enrollment-done')}
             </button>

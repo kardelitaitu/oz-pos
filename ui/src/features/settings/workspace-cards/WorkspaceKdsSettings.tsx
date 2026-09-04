@@ -35,7 +35,7 @@ const DEFAULT_KDS: KdsDraftState = {
 
 /**
  * Workspace card for Kitchen Display System settings: SLA escalation
- * thresholds, sound toggle, auto-acknowledge, and ticket display density.
+ * thresholds, sound toggle, auto-accept, and ticket display density.
  *
  * Consumes `useSettings()` for shared KDS configuration.
  */
@@ -238,10 +238,10 @@ export function WorkspaceKdsSettings({
         }
       >
         <div className="settings-form">
-          {/* Auto-acknowledge */}
+          {/* Auto-accept */}
           <div className="settings-field settings-field--horizontal">
           <label htmlFor="kds-auto-ack" className="settings-label">
-            <Localized id="workspace-kds-auto-ack">Auto-Acknowledge</Localized>
+            <Localized id="workspace-kds-auto-ack">Auto-Accept</Localized>
           </label>
             <span className="settings-toggle">
               <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>

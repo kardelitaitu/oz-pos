@@ -64,7 +64,7 @@ export default function RestaurantMockup() {
       <div className="col-span-3">
         <div className="flex h-full flex-col rounded-xl border border-ink/5 bg-surface/90 p-4 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Pesanan Baru</h3>
+            <p className="text-sm font-semibold">Pesanan Baru</p>
             <span className="bg-ink/5 px-2 py-1 text-[10px] text-muted">#1042</span>
           </div>
 
