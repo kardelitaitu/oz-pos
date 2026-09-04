@@ -4,26 +4,32 @@
 
 ---
 
-## Job Matrix (ci.yml)
+## Job Matrix
 
-> The `(ci.yml)` suffix in this heading is a **literal contract** —
-> `verify-ci-docs-drift.py` refuses to run without it, so do not "tidy" it away.
-> It is now slightly misleading: the Workflow column is what tells you where each
-> row actually runs, and several rows have moved to `dev-ci.yml`.
+> The heading text `Job Matrix` is a **literal contract** —
+> `verify-ci-docs-drift.py` refuses to run without it, so do not rename it away.
+> It used to read `Job Matrix (ci.yml)`, which became false the day `23c96330`
+> retired that workflow: the suffix described a dead file while the live jobs
+> below it went unlisted. **The Workflow column is what tells you where a row
+> actually runs.**
 
-> ⚠️ **This matrix describes `ci.yml`, which `23c96330` retired to `.bak`. GitHub
-> executes none of it.** The only live workflow is `dev-ci.yml`, whose jobs are
-> `changes`, `website`, `cargo-check`, `cargo-nextest`, `ui-test`, `i18n` and
-> `northflank-deploy`. Rows below that name a job absent from `dev-ci.yml` are
-> therefore **not gating anything** — `verify-ci-docs-drift.py` lists them under
-> "MISSING JOBS", and that gate runs only in `check.sh`, so the discrepancy is
-> visible to nobody who does not run it by hand. Tracked as R36-08/R36-10 in
-> [`docs/plans/0.0.36-backlog.md`](../plans/0.0.36-backlog.md).
+> ✅ **What is live.** `dev-ci.yml` is the only workflow GitHub executes. Every
+> one of its jobs now has a row here, and `verify-ci-docs-drift.py` enforces that
+> — it compares the docs against every job in every live workflow and reports any
+> it cannot find. That check used to compare only against a file named `ci.yml`,
+> so once that file was retired it silently became "nothing is undocumented" and
+> four live jobs (`website`, `cargo-nextest`, `northflank-deploy`,
+> `static-gates`) went unlisted without a complaint.
 >
-> Four rows have been updated to what actually runs now, because CI coverage for
-> them was added in this release: `rust-fmt`, `rust-clippy`, `ui-lint` and
-> `ui-typecheck` are **steps** inside live `dev-ci.yml` jobs rather than jobs of
-> their own.
+> ⚠️ **What is history.** Rows whose Workflow column names `ci.yml`,
+> `nightly.yml`, `website.yml` or any other retired file document what *used* to
+> gate a merge. The checker recognises them as history and does not count them as
+> drift — but only because the row names a workflow that genuinely exists only as
+> `.bak`. Claiming a LIVE workflow you don't actually contain is still an error.
+>
+> Four rows were repointed in this release because CI coverage was added for
+> them: `rust-fmt`, `rust-clippy`, `ui-lint` and `ui-typecheck` are **steps**
+> inside live `dev-ci.yml` jobs rather than jobs of their own.
 
 | Job ID | Blocks Merge | Workflow | Notes |
 |--------|--------------|----------|-------|
@@ -44,6 +50,10 @@
 | `ui-test` | ✅ Required | ci.yml | `npm run test` (4 shards) |
 | `ci-docs-drift` | ⚠️ Advisory | dev-ci.yml | step `verify-ci-docs-drift.py` (continue-on-error) — gates.json status `advisory` + `advisory_at: "step"` |
 | `ci-docs-drift` | ✅ Required | dev-ci.yml | step `bash scripts/test-ci-routing.sh` — the router decides whether every other job runs, so this one blocks |
+| `website` | ✅ Required | dev-ci.yml | `cd website && npm ci && npm run check && npm test && npm run build` |
+| `cargo-nextest` | ✅ Required | dev-ci.yml | `cargo nextest run --workspace --all-features` — **no `--exclude`**, so this is broader than check.sh's equivalent, which drops `oz-pos-app` |
+| `static-gates` | ✅ Required | dev-ci.yml | six checks that previously had no CI runner at all: architecture boundaries, no-hardcoded-money-format, windows-config, skill-drift, unified-healthcheck, and Go fmt/vet/test. Each verified green locally before being wired in. `panic-inventory` is deliberately absent — it fails today (R36-12). |
+| `northflank-deploy` | ✅ Required | dev-ci.yml | Backend deploy to Northflank; `needs` every other live job except the advisory `ci-docs-drift`. Runs on push to `main`/`release` or `workflow_dispatch`. |
 | `lighthouse` | ⚠️ Advisory | ci.yml | Lighthouse a11y audit (continue-on-error) |
 | `docker` | ✅ Required | ci.yml | Build + Trivy scan + Compose smoke |
 | `coverage` | ⚠️ Advisory | ci.yml | Coverage report (push only, continue-on-error) |

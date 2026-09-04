@@ -21,7 +21,8 @@
       "label": "UI unit tests",
       "status": "required",
       "runners": { "check.sh": ["ui test"], "check:all": ["unit tests"] },
-      "ci": { "workflow": "ci.yml", "job": "ui-test" }
+      "_note": "Was ci.yml#ui-test. dev-ci.yml#ui-test runs `cd ui && npm test` (vitest) -- the same suite under the same job name.",
+      "ci": { "workflow": "dev-ci.yml", "job": "ui-test" }
     },
     {
       "id": "analytics-tz-invariance",
@@ -56,14 +57,16 @@
       "label": "Go (license-server)",
       "status": "required",
       "runners": { "check.sh": ["go fmt", "go vet", "go test (short)"] },
-      "ci": { "workflow": "ci.yml", "job": "go" }
+      "_note": "Was ci.yml#go. gofmt/go vet/go test -short now run in dev-ci.yml#static-gates, verified green locally first. The pre-commit Go gate remains the only place Go is enforced on a commit.",
+      "ci": { "workflow": "dev-ci.yml", "job": "static-gates" }
     },
     {
       "id": "website-tests",
       "label": "Website unit tests",
       "status": "required",
       "runners": { "check.sh": ["website test"] },
-      "ci": { "workflow": "website.yml", "job": "check" }
+      "_note": "Was website.yml#check. dev-ci.yml#website runs `cd website && npm test`; website.yml is .bak.",
+      "ci": { "workflow": "dev-ci.yml", "job": "website" }
     },
     {
       "id": "website-assets",
@@ -84,14 +87,16 @@
       "label": "Rust tests",
       "status": "required",
       "runners": { "check.sh": ["test workspace", "test doctests"] },
-      "ci": { "workflow": "ci.yml", "job": "rust-test-fast" }
+      "_note": "Was ci.yml#rust-test-fast. dev-ci.yml runs `cargo nextest run --workspace --all-features` with NO excludes, so it covers this more broadly than check.sh, whose own nextest step excludes oz-pos-app. nextest does not run doctests, so that part remains check.sh-only.",
+      "ci": { "workflow": "dev-ci.yml", "job": "cargo-nextest" }
     },
     {
       "id": "architecture-boundaries",
       "label": "Architecture boundaries",
       "status": "required",
       "runners": { "check.sh": ["architecture boundaries"] },
-      "ci": { "workflow": "ci.yml", "job": "architecture-boundaries" }
+      "_note": "Was ci.yml#architecture-boundaries. Runs in dev-ci.yml#static-gates with --strict, verified green locally.",
+      "ci": { "workflow": "dev-ci.yml", "job": "static-gates" }
     },
     {
       "id": "no-raw-params",
@@ -104,7 +109,8 @@
       "label": "No hardcoded exp-2 money formatting",
       "status": "required",
       "runners": { "check.sh": ["hardcoded-money-format"] },
-      "ci": { "workflow": "ci.yml", "job": "rust-money-format" }
+      "_note": "Was ci.yml#rust-money-format. Runs in dev-ci.yml#static-gates, verified green locally.",
+      "ci": { "workflow": "dev-ci.yml", "job": "static-gates" }
     },
     {
       "id": "docker-dry-run",
@@ -123,14 +129,15 @@
       "label": "Skill drift guard",
       "status": "required",
       "runners": { "check.sh": ["skill-drift"] },
-      "ci": { "workflow": "ci.yml", "job": "skill-drift-tests" }
+      "_note": "Was ci.yml#skill-drift-tests. Runs in dev-ci.yml#static-gates, verified green locally.",
+      "ci": { "workflow": "dev-ci.yml", "job": "static-gates" }
     },
     {
       "id": "panic-inventory",
       "label": "Panic inventory",
       "status": "required",
       "runners": { "check.sh": ["panic-inventory"] },
-      "ci": { "workflow": "ci.yml", "job": "rust-panic-inventory" }
+      "_note": "No CI job. Runs in check.sh only, and currently FAILS there: scan-unwrap-panic.py reports 18 findings, 6 of them false positives where it reads the repo's own /* */ audit stamps as unwrap() calls. Deliberately not added to CI until R36-12 is fixed. Was ci.yml#rust-panic-inventory."
     },
     {
       "id": "a11y-advisory",
@@ -171,14 +178,16 @@
       "label": "Windows config drift (NSIS installMode + asInvoker manifests)",
       "status": "required",
       "runners": { "check.sh": ["windows config"] },
-      "ci": { "workflow": "ci.yml", "job": "windows-config" }
+      "_note": "Was ci.yml#windows-config. Runs in dev-ci.yml#static-gates, verified green locally.",
+      "ci": { "workflow": "dev-ci.yml", "job": "static-gates" }
     },
     {
       "id": "unified-healthcheck",
       "label": "Unified healthcheck script test",
       "status": "required",
       "runners": { "check.sh": ["healthcheck script test"] },
-      "ci": { "workflow": "ci.yml", "job": "unified-healthcheck" }
+      "_note": "Was ci.yml#unified-healthcheck. Runs in dev-ci.yml#static-gates (20 assertions), verified green locally.",
+      "ci": { "workflow": "dev-ci.yml", "job": "static-gates" }
     },
     {
       "id": "bundle-budget",
@@ -191,7 +200,7 @@
       "label": "E2E tests",
       "status": "required",
       "runners": { "check:all": ["e2e"] },
-      "ci": { "workflow": "ci.yml", "job": "e2e" }
+      "_note": "No CI job. Needs the Docker backend; check.sh L203 states 'E2E is NOT run here'. Reachable only via `cd ui && npm run check:all`. Was ci.yml#e2e."
     },
     {
       "id": "perf-smoke",
@@ -203,110 +212,112 @@
       "id": "rust-test-apps",
       "label": "Rust test apps",
       "status": "required",
-      "ci": { "workflow": "ci.yml", "job": "rust-test-apps" }
+      "_note": "Was ci.yml#rust-test-apps. dev-ci.yml's nextest carries no --exclude flags, so the app crates are in scope; check.sh's equivalent DOES exclude oz-pos-app, which is why this looked uncovered.",
+      "ci": { "workflow": "dev-ci.yml", "job": "cargo-nextest" }
     },
     {
       "id": "rust-test-full",
       "label": "Rust test full",
       "status": "required",
-      "ci": { "workflow": "ci.yml", "job": "rust-test-full" }
+      "_note": "Was ci.yml#rust-test-full. dev-ci.yml#cargo-nextest runs the full workspace with all features and no excludes.",
+      "ci": { "workflow": "dev-ci.yml", "job": "cargo-nextest" }
     },
     {
       "id": "sync-slow-tests",
       "label": "Sync slow tests",
-      "status": "required",
-      "ci": { "workflow": "ci.yml", "job": "sync-slow-tests" }
+      "status": "retired",
+      "_note": "Platform-sync integration suite. The only 'sync' string in check.sh is a prose word in a comment, not a runner."
     },
     {
       "id": "docker-build-scan",
       "label": "Docker build + blocking scan",
-      "status": "required",
-      "ci": { "workflow": "ci.yml", "job": "docker" }
+      "status": "retired",
+      "_note": "Trivy scan runs nowhere. `docker build` exists in check.sh only behind the optional --docker-dry-run flag, so it is not part of the standard matrix. Was ci.yml#docker."
     },
     {
       "id": "security-pr",
       "label": "Security PR baseline",
-      "status": "required",
-      "ci": { "workflow": "ci.yml", "job": "security-pr" }
+      "status": "retired",
+      "_note": "cargo audit and cargo deny appear in neither dev-ci.yml nor check.sh. Was ci.yml#security-pr."
     },
     {
       "id": "lighthouse",
       "label": "Lighthouse a11y",
-      "status": "advisory",
-      "ci": { "workflow": "ci.yml", "job": "lighthouse" }
+      "status": "retired",
+      "_note": "Lighthouse a11y audit ran in ci.yml#lighthouse only."
     },
     {
       "id": "coverage",
       "label": "Coverage",
-      "status": "advisory",
-      "ci": { "workflow": "ci.yml", "job": "coverage" }
+      "status": "retired",
+      "_note": "Coverage reporting ran in ci.yml#coverage only. The similarly named 'scoped coverage (H-1)' gate is unrelated and does run (check.sh + pre-push)."
     },
     {
       "id": "audit",
       "label": "Dependency audit",
-      "status": "required-on-push",
-      "ci": { "workflow": "ci.yml", "job": "audit" }
+      "status": "retired",
+      "_note": "Dependency audit ran in ci.yml#audit only. `npm ci --no-audit` in check.sh explicitly SUPPRESSES it. Was required-on-push."
     },
     {
       "id": "fuzz",
       "label": "Fuzz",
-      "status": "advisory",
-      "ci": { "workflow": "ci.yml", "job": "fuzz" },
+      "status": "retired",
+      "_note": "cargo-fuzz ran in ci.yml#fuzz only. The RUSTC_WRAPPER='' note recorded below is still accurate for whoever restores it.",
       "note": "The fuzz job deliberately sets RUSTC_WRAPPER: '' in its job env. The ubuntu runner image globally wraps rustc with sccache, which breaks cargo-fuzz's --target build (its rustc version probe execs the resolved nightly toolchain path directly and dies with 'could not execute process sccache .../bin/rustc -vV'). The fuzz job is the only job affected (nightly + --target), so sccache must stay disabled there — do NOT re-add it. Caching is instead handled by Swatinem/rust-cache@v2 with `workspaces: fuzz` (cargo-fuzz builds into fuzz/target/, which default workspace discovery misses)."
     },
     {
       "id": "flaky-quarantine",
       "label": "Flaky quarantine registry",
-      "status": "required",
-      "ci": { "workflow": "ci.yml", "job": "flaky-quarantine" }
+      "status": "retired",
+      "_note": "Flaky quarantine registry ran in ci.yml only."
     },
     {
       "id": "e2e-docker-image",
       "label": "E2E Docker image",
-      "status": "required",
-      "ci": { "workflow": "ci.yml", "job": "e2e-docker-image" }
+      "status": "retired",
+      "_note": "Built the E2E backend images; ran in ci.yml only."
     },
     {
       "id": "nightly-rust-test",
       "label": "Nightly rust test",
-      "status": "required",
-      "ci": { "workflow": "nightly.yml", "job": "rust-test" }
+      "status": "retired",
+      "_note": "nightly.yml is .bak. Live equivalent: rust-tests (dev-ci.yml#cargo-nextest)."
     },
     {
       "id": "nightly-rust-doc",
       "label": "Nightly rust doc",
-      "status": "required",
-      "ci": { "workflow": "nightly.yml", "job": "rust-doc" }
+      "status": "retired",
+      "_note": "nightly.yml is .bak. Doctests still run locally via check.sh 'test doctests'; no CI coverage for them."
     },
     {
       "id": "nightly-ui-test",
       "label": "Nightly UI tests",
-      "status": "required",
-      "ci": { "workflow": "nightly.yml", "job": "ui-test" }
+      "status": "retired",
+      "_note": "nightly.yml is .bak. Live equivalent: ui-unit-tests."
     },
     {
       "id": "nightly-e2e",
       "label": "Nightly E2E",
-      "status": "required",
-      "ci": { "workflow": "nightly.yml", "job": "e2e" }
+      "status": "retired",
+      "_note": "nightly.yml is .bak, and E2E runs in neither CI nor check.sh (check.sh L203 says so explicitly)."
     },
     {
       "id": "nightly-flaky-detect",
       "label": "Nightly flaky detection",
-      "status": "advisory",
-      "ci": { "workflow": "nightly.yml", "job": "flaky-detect", "advisory_at": "step" }
+      "status": "retired",
+      "_note": "nightly.yml is .bak."
     },
     {
       "id": "nightly-flaky-registry",
       "label": "Nightly flaky quarantine registry",
-      "status": "required",
-      "ci": { "workflow": "nightly.yml", "job": "flaky-quarantine-registry" }
+      "status": "retired",
+      "_note": "nightly.yml is .bak."
     },
     {
       "id": "nightly-benchmarks",
       "label": "Nightly benchmarks",
-      "status": "required",
-      "ci": { "workflow": "nightly.yml", "job": "benchmarks" }
+      "status": "retired",
+      "_note": "nightly.yml is .bak."
     }
   ]
 }
