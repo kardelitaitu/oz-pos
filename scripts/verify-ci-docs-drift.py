@@ -484,7 +484,16 @@ def main() -> int:
         action="store_true",
         help="Print OK rows in addition to problems.",
     )
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        dest="self_test",
+        help="Mutation-test the classifiers this gate depends on and exit.",
+    )
     args = parser.parse_args()
+
+    if args.self_test:
+        return self_test()
 
     gates = load_gates()
     if gates is None:
