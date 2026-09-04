@@ -2,7 +2,6 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import CustomReportScreen from '@/features/reports/CustomReportScreen';
-import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import {
   assertCaseDiscriminates,
   discriminatingStoreZone,
@@ -113,27 +112,12 @@ describe('CustomReportScreen', () => {
     mockGetPrimaryStoreScoped.mockResolvedValue({ id: 'store-a', name: 'Store A', timezone: null });
   });
 
-  /**
-   * R36-06: CustomReportScreen reads the token via useContext(WorkspaceContext)
-   * rather than the useWorkspace() hook. test-setup.ts stubs only the hook and
-   * re-spreads `...actual`, so the real context object survives and an
-   * unprovider'd useContext() yields null -> empty token -> the primary-store
-   * fetch never fires. See R36-07 for the 7 files in this shape.
-   */
-  function renderWithSession() {
-    const value = { sessionToken: 'test-token' } as unknown as React.ContextType<typeof WorkspaceContext>;
-    return render(
-      <WorkspaceContext.Provider value={value}>
-        <CustomReportScreen />
-      </WorkspaceContext.Provider>,
-    );
-  }
-
+  
   it('anchors the default window to the primary store timezone (R36-06)', async () => {
     const zone = discriminatingStoreZone();
     assertCaseDiscriminates(zone);
     mockGetPrimaryStoreScoped.mockResolvedValue({ id: 'store-a', name: 'Store A', timezone: zone.offset });
-    renderWithSession();
+    render(<CustomReportScreen />);
 
     await waitFor(() => {
       expect((screen.getByLabelText('End date') as HTMLInputElement).value).toBe(expectedStoreDay(zone, 0));
@@ -147,7 +131,7 @@ describe('CustomReportScreen', () => {
     // Hold the store response open so the edit provably precedes it.
     let resolveStore: (v: unknown) => void = () => {};
     mockGetPrimaryStoreScoped.mockReturnValue(new Promise((r) => { resolveStore = r; }));
-    renderWithSession();
+    render(<CustomReportScreen />);
 
     const startInput = screen.getByLabelText('Start date') as HTMLInputElement;
     fireEvent.change(startInput, { target: { value: '2026-01-05' } });

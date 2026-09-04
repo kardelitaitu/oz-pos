@@ -9,7 +9,7 @@ import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
 import userEvent from '@testing-library/user-event';
 import SalesReportScreen from '@/features/reports/SalesReportScreen';
-import { WorkspaceContext } from '@/contexts/WorkspaceContext';
+import { HARNESS_SESSION_TOKEN } from '@/__tests__/test-utils/harnessDefaults';
 import {
   assertCaseDiscriminates,
   discriminatingStoreZone,
@@ -246,25 +246,6 @@ function renderScreen() {
   );
 }
 
-/**
- * R36-06: SalesReportScreen reads the token as
- * `useContext(WorkspaceContext)?.sessionToken`, NOT via the useWorkspace() hook.
- * test-setup.ts mocks only useWorkspace() and re-spreads `...actual`, so the
- * real context object is intact and an unprovider'd useContext() returns null --
- * the token becomes '' and the primary-store fetch never fires. Wrapping is what
- * makes the store-zone path reachable at all. (7 files use this direct form; see
- * R36-07.)
- */
-function renderScreenWithSession() {
-  const value = { sessionToken: 'test-token' } as unknown as React.ContextType<typeof WorkspaceContext>;
-  return render(
-    <WorkspaceContext.Provider value={value}>
-      <LocalizationProvider l10n={l10n}>
-        <SalesReportScreen />
-      </LocalizationProvider>
-    </WorkspaceContext.Provider>,
-  );
-}
 
 function buildCategoryPopularity(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -394,7 +375,7 @@ describe('SalesReportScreen', () => {
     assertCaseDiscriminates(zone);
     mockGetPrimaryStoreScoped.mockResolvedValue({ id: 'store-a', name: 'Store A', timezone: zone.offset });
 
-    renderScreenWithSession();
+    renderScreen();
     await waitFor(() => {
       expect((screen.getByLabelText('End date') as HTMLInputElement).value).toBe(expectedStoreDay(zone, 0));
       expect((screen.getByLabelText('Start date') as HTMLInputElement).value).toBe(expectedStoreDay(zone, 30));
@@ -413,7 +394,7 @@ describe('SalesReportScreen', () => {
     let resolveStore: (v: unknown) => void = () => {};
     mockGetPrimaryStoreScoped.mockReturnValue(new Promise((r) => { resolveStore = r; }));
 
-    renderScreenWithSession();
+    renderScreen();
     await waitFor(() => expect(screen.getByLabelText('Start date')).toBeTruthy());
     const startInput = screen.getByLabelText('Start date') as HTMLInputElement;
     fireEvent.change(startInput, { target: { value: '2026-01-05' } });
@@ -699,7 +680,7 @@ describe('SalesReportScreen', () => {
       expect.any(String),
       expect.any(String),
       10,
-      '',
+      HARNESS_SESSION_TOKEN,
       'revenue',
     );
 
@@ -712,7 +693,7 @@ describe('SalesReportScreen', () => {
         expect.any(String),
         expect.any(String),
         10,
-        '',
+        HARNESS_SESSION_TOKEN,
         'profit',
       );
       // Native radio input uses 'checked' property, not aria-checked attribute
@@ -801,7 +782,7 @@ describe('SalesReportScreen', () => {
     });
 
     expect(mockGetCategoryPopularityTrend).toHaveBeenCalledWith(
-      '',
+      HARNESS_SESSION_TOKEN,
       expect.any(String),
       expect.any(String),
       'daily',
@@ -814,7 +795,7 @@ describe('SalesReportScreen', () => {
 
     await waitFor(() => {
       expect(mockGetCategoryPopularityTrend).toHaveBeenCalledWith(
-        '',
+        HARNESS_SESSION_TOKEN,
         expect.any(String),
         expect.any(String),
         'weekly',
@@ -976,7 +957,7 @@ describe('SalesReportScreen', () => {
     fireEvent.change(startInput, { target: { value: '2026-06-01' } });
 
     await waitFor(() => {
-      expect(mockGetDailyRevenue).toHaveBeenCalledWith('2026-06-01', expect.any(String), '');
+      expect(mockGetDailyRevenue).toHaveBeenCalledWith('2026-06-01', expect.any(String), HARNESS_SESSION_TOKEN);
     });
   });
 
@@ -994,7 +975,7 @@ describe('SalesReportScreen', () => {
     fireEvent.change(endInput, { target: { value: '2026-07-24' } });
 
     await waitFor(() => {
-      expect(mockGetDailyRevenue).toHaveBeenCalledWith(expect.any(String), '2026-07-24', '');
+      expect(mockGetDailyRevenue).toHaveBeenCalledWith(expect.any(String), '2026-07-24', HARNESS_SESSION_TOKEN);
     });
   });
 

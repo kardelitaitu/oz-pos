@@ -1,6 +1,6 @@
-import { useContext, useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { requiredLocalized } from '@/frontend/shared';
-import { WorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import { getCategoryBreakdown } from '@/api/reports';
 import { Skeleton } from '@/components/Skeleton';
@@ -14,7 +14,13 @@ import { minorUnitExponent } from '@/types/domain';
 export default function CategoryPieChartWidget() {
   const { l10n } = useLocalization();
   const { currency } = useCurrency();
-  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
+  // R36-07: read the token through the useWorkspace() hook rather than the
+// raw context object. The global test harness mocks the hook, not the
+// context, so the direct form silently yielded an empty token and skipped
+// every token-gated effect. AppProviders wraps the routed tree in the
+// provider, so the hook's throw-outside-provider path is unreachable here.
+const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
   const [slices, setSlices] = useState<PieSlice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
 import InventoryReportScreen from '@/features/reports/InventoryReportScreen';
+import { HARNESS_SESSION_TOKEN } from '@/__tests__/test-utils/harnessDefaults';
 
 // ── shared.ftl keys used by this component ─────────────────────────────
 const sharedFtl = `
@@ -223,7 +224,7 @@ describe('InventoryReportScreen', () => {
     mockGetLowStockAlerts.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
-      expect(mockGetLowStockAlerts).toHaveBeenCalledWith(10, '');
+      expect(mockGetLowStockAlerts).toHaveBeenCalledWith(10, HARNESS_SESSION_TOKEN);
     });
     mockGetLowStockAlerts.mockClear();
 
@@ -231,7 +232,7 @@ describe('InventoryReportScreen', () => {
     fireEvent.change(input, { target: { value: '5' } });
 
     await waitFor(() => {
-      expect(mockGetLowStockAlerts).toHaveBeenCalledWith(5, '');
+      expect(mockGetLowStockAlerts).toHaveBeenCalledWith(5, HARNESS_SESSION_TOKEN);
     });
   });
 

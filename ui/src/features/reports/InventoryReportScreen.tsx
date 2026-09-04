@@ -1,5 +1,5 @@
-import { useContext, useEffect, useState } from 'react';
-import { WorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useEffect, useState } from 'react';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import { printSalesReceipt } from '@/api/sales';
 import { getLowStockAlerts, type LowStockAlert } from '@/api/reports';
@@ -13,7 +13,13 @@ import './InventoryReportScreen.css';
 /** Inventory report screen — view and export low-stock alerts with configurable threshold, CSV download, and print support. */
 export default function InventoryReportScreen() {
   const { l10n } = useLocalization();
-  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
+  // R36-07: read the token through the useWorkspace() hook rather than the
+// raw context object. The global test harness mocks the hook, not the
+// context, so the direct form silently yielded an empty token and skipped
+// every token-gated effect. AppProviders wraps the routed tree in the
+// provider, so the hook's throw-outside-provider path is unreachable here.
+const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<LowStockAlert[]>([]);

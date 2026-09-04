@@ -6,6 +6,7 @@ import { cleanup } from '@testing-library/react';
 import { beforeEach, afterEach, vi } from 'vitest';
 import type * as WorkspaceContextModule from '@/contexts/WorkspaceContext';
 import type * as SubscriptionContextModule from '@/contexts/SubscriptionContext';
+import { HARNESS_SESSION_TOKEN } from '@/__tests__/test-utils/harnessDefaults';
 
 // ── Global mock: echarts-for-react ────────────────────────────────
 // jsdom lacks Canvas 2D context support, which causes zrender (ECharts'
@@ -109,7 +110,7 @@ vi.mock('@/contexts/WorkspaceContext', async (importOriginal) => {
     lastWorkspace: null,
     switchStore: vi.fn(),
     resolvedStoreId: 'default',
-    sessionToken: 'mock-session-token',
+    sessionToken: HARNESS_SESSION_TOKEN,
     swapSessionToken: vi.fn(() => Promise.resolve()),
   };
 

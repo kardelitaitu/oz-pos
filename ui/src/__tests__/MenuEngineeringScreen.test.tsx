@@ -4,9 +4,9 @@ import userEvent from '@testing-library/user-event';
 import { LocalizationProvider } from '@fluent/react';
 import { createEnUsLocalization } from '@/locales';
 import MenuEngineeringScreen from '@/features/reports/MenuEngineeringScreen';
+import { HARNESS_SESSION_TOKEN } from '@/__tests__/test-utils/harnessDefaults';
 import * as reportsApi from '@/api/reports';
 import type { MenuEngineeringResult } from '@/api/reports';
-import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import {
   assertCaseDiscriminates,
   discriminatingStoreZone,
@@ -118,27 +118,12 @@ describe('MenuEngineeringScreen', () => {
     mockGetPrimaryStoreScoped.mockResolvedValue({ id: 'store-a', name: 'Store A', timezone: null });
   });
 
-  /**
-   * R36-06: this screen reads the token via useContext(WorkspaceContext), not
-   * the useWorkspace() hook that test-setup.ts stubs, so an unprovider'd render
-   * gets a null context -> empty token -> the primary-store fetch never fires.
-   */
-  function renderWithSession() {
-    const value = { sessionToken: 'test-token' } as unknown as React.ContextType<typeof WorkspaceContext>;
-    return render(
-      <WorkspaceContext.Provider value={value}>
-        <LocalizationProvider l10n={createEnUsLocalization()}>
-          <MenuEngineeringScreen />
-        </LocalizationProvider>
-      </WorkspaceContext.Provider>,
-    );
-  }
-
+  
   it('anchors the default window to the primary store timezone (R36-06)', async () => {
     const zone = discriminatingStoreZone();
     assertCaseDiscriminates(zone);
     mockGetPrimaryStoreScoped.mockResolvedValue({ id: 'store-a', name: 'Store A', timezone: zone.offset });
-    renderWithSession();
+    renderWithLocales(<MenuEngineeringScreen />);
 
     await waitFor(() => {
       expect((screen.getByLabelText('End date') as HTMLInputElement).value).toBe(expectedStoreDay(zone, 0));
@@ -158,7 +143,7 @@ describe('MenuEngineeringScreen', () => {
       new Promise((r) => { resolveStore = r; }),
     );
 
-    renderWithSession();
+    renderWithLocales(<MenuEngineeringScreen />);
     await waitFor(() => expect(screen.getByLabelText('Start date')).toBeTruthy());
 
     const startInput = screen.getByLabelText('Start date') as HTMLInputElement;
@@ -247,7 +232,7 @@ describe('MenuEngineeringScreen', () => {
       expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(String),
-        '',
+        HARNESS_SESSION_TOKEN,
       );
     });
   });
@@ -461,7 +446,7 @@ describe('MenuEngineeringScreen', () => {
     fireEvent.change(startInput, { target: { value: '2026-06-01' } });
 
     await waitFor(() => {
-      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith('2026-06-01', expect.any(String), '');
+      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith('2026-06-01', expect.any(String), HARNESS_SESSION_TOKEN);
     });
   });
 
@@ -483,7 +468,7 @@ describe('MenuEngineeringScreen', () => {
     fireEvent.change(endInput, { target: { value: yesterdayIso } });
 
     await waitFor(() => {
-      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith(expect.any(String), yesterdayIso, '');
+      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith(expect.any(String), yesterdayIso, HARNESS_SESSION_TOKEN);
     });
   });
 

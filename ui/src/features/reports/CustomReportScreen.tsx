@@ -1,6 +1,6 @@
-import { useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { requiredLocalized } from '@/frontend/shared';
-import { WorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import { buildCustomReport, type CustomReportRequest, type CustomReportResponse } from '@/api/reports';
 import { getPrimaryStoreScoped } from '@/api/stores';
@@ -60,7 +60,13 @@ type DatasetKey = keyof typeof DATASETS;
 
 export default function CustomReportScreen() {
   const { l10n } = useLocalization();
-  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
+  // R36-07: read the token through the useWorkspace() hook rather than the
+// raw context object. The global test harness mocks the hook, not the
+// context, so the direct form silently yielded an empty token and skipped
+// every token-gated effect. AppProviders wraps the routed tree in the
+// provider, so the hook's throw-outside-provider path is unreachable here.
+const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
   const [dataset, setDataset] = useState<DatasetKey>('sales');
   // REP-03/R36-06: anchor the default window to the PRIMARY STORE's calendar
   // day; FALLBACK_STORE_TZ (UTC) until the profile loads or if the fetch fails.
