@@ -3,6 +3,11 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
+import {
+  assertCaseDiscriminates,
+  discriminatingStoreZone,
+  expectedStoreDay,
+} from '@/__tests__/test-utils/storeZoneCase';
 import { withFluent, withFluentLocale } from '@/locales/test-utils';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import analyticsFtl from '@/locales/analytics.ftl?raw';
@@ -51,6 +56,17 @@ vi.mock('@/frontend/shell/Tooltip', () => ({
 const mockGoToPicker = vi.fn();
 vi.mock('@/hooks/useWorkspaceNav', () => ({
   useWorkspaceNav: () => ({ goToWorkspacePicker: mockGoToPicker }),
+}));
+
+// R36-05 (parity with DashboardScreen): AnalyticsScreen fetches the primary store
+// to anchor its derived ranges to the store's zone (REP-03). Before this mock the
+// call hit real invoke, rejected, and the component silently fell back to UTC -- so
+// the store-zone path looked green while never being exercised. The session token
+// from the global WorkspaceContext stub is truthy ('mock-session-token'), so the
+// fetch really does fire in every test here; only its result was being dropped.
+const mockGetPrimaryStoreScoped = vi.fn();
+vi.mock('@/api/stores', () => ({
+  getPrimaryStoreScoped: (...args: unknown[]) => mockGetPrimaryStoreScoped(...args),
 }));
 
 // AnalyticsCardContent (rendered inside each card) formats money via
@@ -246,7 +262,7 @@ vi.mock('@/api/tables', () => ({
 import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth, monthCalendarGrid, smartScale, cardGranularity, cardRange } from '@/features/analytics/AnalyticsScreen';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { makeSubscriptionCaps } from '@/__tests__/test-utils/mocks/subscriptionCaps';
-import { yearlyHeatmapColumns, rangeForGranularity, isoDaysAgo, isoToday } from '@/features/analytics/analytics-data';
+import { yearlyHeatmapColumns, rangeForGranularity, isoToday } from '@/features/analytics/analytics-data';
 import { analyticsDataCache, clearAnalyticsCache } from '@/features/analytics/analytics-cache';
 import { registerAnalyticsFeature } from '@/features/analytics/register';
 import { registerStaffFeature } from '@/features/staff/register';
@@ -267,6 +283,12 @@ describe('AnalyticsScreen layout shell', () => {
     mockGetLowStockAlerts.mockReset();
     mockGetTopProducts.mockReset();
     mockGetHourlyHeatmap.mockReset();
+    // Default to a rejected store fetch so every pre-existing test keeps the
+    // behaviour it was written against (storeTz stays null → UTC fallback).
+    // Only the anchoring tests below resolve it, which keeps the new mock from
+    // silently changing the dates 60+ existing assertions depend on.
+    mockGetPrimaryStoreScoped.mockReset();
+    mockGetPrimaryStoreScoped.mockRejectedValue(new Error('no store in this test'));
     localStorage.clear();
     // The analytics cache is a module-level singleton — wipe it so each
     // test starts from a cold cache (otherwise the daily/retail query
@@ -678,6 +700,17 @@ describe('AnalyticsScreen layout shell', () => {
     expect(saved.indexOf('staff-shared')).toBeLessThan(saved.indexOf('heatmap-shared'));
   });
 
+  // ── R36-05: the quick presets anchor to the STORE, not the host ──────
+  // Expected values are computed with explicit UTC arithmetic via
+  // test-utils/storeZoneCase rather than by calling isoDaysAgo, so the
+  // assertion stays independent of the code under test. This test previously
+  // read `expect(from.value).toBe(isoDaysAgo(6))` while the preset itself sets
+  // `from` to `isoDaysAgo(days - 1, storeTz)` -- both sides called the same
+  // helper, so a wrong isoDaysAgo could never be caught here. That is the
+  // R36-01 defect class, and the sibling screen tests (Dashboard, SalesReport,
+  // CustomReport, MenuEngineering) all avoid it deliberately.
+  // scripts/check-tz-invariance.py replays this file under four host zones; if
+  // the range ever depended on the device calendar these would diverge.
   it('applies quick range presets to the custom date pickers', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
@@ -687,8 +720,39 @@ describe('AnalyticsScreen layout shell', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
 
-    expect(from.value).toBe(isoDaysAgo(6));
-    expect(to.value).toBe(isoDaysAgo(0));
+    // No store profile resolved (the default mock rejects), so the anchor is
+    // FALLBACK_STORE_TZ -- UTC, the same value the schema column defaults to.
+    const UTC_CASE = { offset: 'UTC', hours: 0 };
+    expect(from.value).toBe(expectedStoreDay(UTC_CASE, 6));
+    expect(to.value).toBe(expectedStoreDay(UTC_CASE, 0));
+  });
+
+  it('anchors the custom-range presets to the primary store timezone (R36-05)', async () => {
+    // The offset is chosen so its calendar day provably differs from UTC at the
+    // moment the test runs -- a hardcoded +14:00 is vacuous for ten hours a day.
+    const zone = discriminatingStoreZone();
+    assertCaseDiscriminates(zone);
+    mockGetPrimaryStoreScoped.mockResolvedValue({
+      id: 'store-a', name: 'Store A', timezone: zone.offset,
+    });
+
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await waitFor(() => expect(mockGetPrimaryStoreScoped).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
+    const from = screen.getByLabelText('From') as HTMLInputElement;
+    const to = screen.getByLabelText('To') as HTMLInputElement;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
+
+    await waitFor(() => {
+      expect(to.value).toBe(expectedStoreDay(zone, 0));
+      expect(from.value).toBe(expectedStoreDay(zone, 6));
+    });
+    // The store must actually have been consulted -- otherwise storeTz stayed
+    // null and these values would be the UTC fallback, which for a ±10/±14
+    // offset is a different day and so would have failed above anyway.
+    expect(mockGetPrimaryStoreScoped).toHaveBeenCalled();
   });
 
   it('collapses all card bodies with the toggle and restores them', () => {

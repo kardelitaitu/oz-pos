@@ -29,6 +29,13 @@ TESTS = [
     "src/__tests__/SalesReportScreen.test.tsx",
     "src/__tests__/CustomReportScreen.test.tsx",
     "src/__tests__/MenuEngineeringScreen.test.tsx",
+    # Added in 0.0.37. AnalyticsScreen is the screen R36-01 was originally about,
+    # and it was the one anchoring screen with no component-level test: its store
+    # fetch hit real invoke, rejected, and storeTz silently stayed null, so only
+    # the UTC fallback was ever exercised across 2000 lines of tests. Registering
+    # it here is what makes the new test mean anything -- a file that is never
+    # replayed under another zone cannot demonstrate host-independence.
+    "src/__tests__/AnalyticsScreen.test.tsx",
 ]
 
 # Chosen to straddle the date line and both sides of UTC, and to include the
