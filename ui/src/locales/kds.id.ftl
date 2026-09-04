@@ -193,7 +193,7 @@ kds-toggle-card-aria = Buka/tutup detail pesanan { $number }
 
 # ── Topbar filter dropdown ──
 kds-filter-aria = Filter pesanan
-kds-filter-all = Semua pesanan
+kds-filter-all = Semua Kategori
 kds-filter-prepared = Siap
 kds-filter-selected = { $count } dipilih
 kds-filter-completed-all = Semua

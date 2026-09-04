@@ -688,19 +688,25 @@ export default function KdsScreen() {
               data-testid="kds-topbar-filter"
             >
               <span>
-                {activeTab === 'completed'
-                  ? completedFilter === 'dinein'
-                    ? requiredLocalized(l10n, 'kds-filter-dinein')
-                    : completedFilter === 'takeaway'
-                      ? requiredLocalized(l10n, 'kds-filter-takeaway')
-                      : requiredLocalized(l10n, 'kds-filter-completed-all')
-                  : filterMode === 'prepared'
-                    ? requiredLocalized(l10n, 'kds-filter-prepared')
-                    : filterCats && filterCats.size > 0
-                      ? filterCats.size === 1
-                        ? [...filterCats][0]
-                        : requiredLocalized(l10n, 'kds-filter-selected', { count: String(filterCats.size) })
-                      : requiredLocalized(l10n, 'kds-filter-all')}
+                {activeTab === 'completed' ? (
+                  completedFilter === 'dinein' ? (
+                    <Localized id="kds-filter-dinein"><span>Dine in</span></Localized>
+                  ) : completedFilter === 'takeaway' ? (
+                    <Localized id="kds-filter-takeaway"><span>Takeaway</span></Localized>
+                  ) : (
+                    <Localized id="kds-filter-completed-all"><span>All</span></Localized>
+                  )
+                ) : filterMode === 'prepared' ? (
+                  <Localized id="kds-filter-prepared"><span>Prepared</span></Localized>
+                ) : filterCats && filterCats.size > 0 ? (
+                  filterCats.size === 1 ? (
+                    [...filterCats][0]
+                  ) : (
+                    requiredLocalized(l10n, 'kds-filter-selected', { count: String(filterCats.size) })
+                  )
+                ) : (
+                  <Localized id="kds-filter-all"><span>All Categories</span></Localized>
+                )}
               </span>
               <span className="caret" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 9h12l-6 7z" /></svg>

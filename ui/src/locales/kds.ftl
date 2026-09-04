@@ -191,7 +191,7 @@ kds-toggle-card-aria = Toggle order { $number } details
 
 # ── Topbar filter dropdown ──
 kds-filter-aria = Filter orders
-kds-filter-all = All orders
+kds-filter-all = All Categories
 kds-filter-prepared = Prepared
 kds-filter-selected = { $count } selected
 kds-filter-completed-all = All
