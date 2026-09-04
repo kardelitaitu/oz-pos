@@ -293,16 +293,12 @@ impl Store<'_> {
 
         // ── Replace line items when provided (status-preserving) ───
         if let Some(ref line_items) = input.line_items {
+            type LineItemStateTuple = (String, Option<String>, Option<String>, Option<String>);
             // Capture the current per-line workflow state keyed by
             // (sku, course), consuming matches FIFO in position order.
             let mut old_states: std::collections::HashMap<
                 (String, Option<String>),
-                std::collections::VecDeque<(
-                    String,
-                    Option<String>,
-                    Option<String>,
-                    Option<String>,
-                )>,
+                std::collections::VecDeque<LineItemStateTuple>,
             > = Default::default();
             {
                 let mut stmt = tx.prepare(
@@ -327,15 +323,14 @@ impl Store<'_> {
                         .push_back(state);
                 }
             }
-            let carry: Vec<Option<(String, Option<String>, Option<String>, Option<String>)>> =
-                line_items
-                    .iter()
-                    .map(|item| {
-                        old_states
-                            .get_mut(&(item.sku.clone(), item.course.clone()))
-                            .and_then(|q| q.pop_front())
-                    })
-                    .collect();
+            let carry: Vec<Option<LineItemStateTuple>> = line_items
+                .iter()
+                .map(|item| {
+                    old_states
+                        .get_mut(&(item.sku.clone(), item.course.clone()))
+                        .and_then(|q| q.pop_front())
+                })
+                .collect();
 
             tx.execute(
                 "DELETE FROM kds_line_items WHERE kds_order_id = ?1",
@@ -539,7 +534,7 @@ impl Store<'_> {
         // in rusqlite, so the bind list is assembled to match the SQL.
         let zone_param: Option<String> = match zone_filter {
             None => None,
-            Some(zone) if zone.is_empty() => {
+            Some("") => {
                 sql.push_str(" AND (kitchen_zone IS NULL OR kitchen_zone = '')");
                 None
             }

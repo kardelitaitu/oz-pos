@@ -249,6 +249,39 @@ def doc_section(lines: list[str], title: str) -> list[str]:
     return out
 
 
+def looks_like_actions_workflow(path: Path) -> tuple[bool, str]:
+    """Can GitHub actually run this file?
+
+    GitHub parses EVERY `*.yml` in `.github/workflows/` as an Actions workflow.
+    A file with no top-level `on:` cannot be triggered by anything, so it is not a
+    workflow that is merely undocumented -- it is a workflow that can never run, and
+    the Actions tab shows it as an error.
+
+    This distinction changes the fix completely. "Undocumented live workflow" sends
+    a reader to add a row to the inventory; a file that is not an Actions workflow
+    at all needs to be MOVED OUT of the directory, and documenting it would enshrine
+    the mistake. Found by exactly that confusion: a CircleCI config (`executors:`,
+    `commands:`, `workflows:`, no `on:`) was relocated into `.github/workflows/` to
+    match a CircleCI project setting, which makes GitHub try to execute it.
+
+    Deliberately line-based, matching workflow_jobs() above: importing a YAML parser
+    here would make the gate depend on a package the other checkers avoid.
+    """
+    text = path.read_text(encoding="utf-8", errors="replace")
+    has_on = bool(re.search(r"""^(?:on|'on'|"on")\s*:""", text, re.M))
+    circleci_keys = [k for k in ("executors", "commands", "workflows", "orbs")
+                     if re.search(rf"^{k}\s*:", text, re.M)]
+    if not has_on:
+        if circleci_keys:
+            return False, (f"no `on:` trigger and CircleCI-only keys "
+                           f"({', '.join(circleci_keys)}) -- this is not a GitHub "
+                           f"Actions workflow, it is a config for another CI system")
+        return False, "no top-level `on:` trigger, so nothing can ever run it"
+    if circleci_keys:
+        return True, f"has `on:` but also CircleCI keys ({', '.join(circleci_keys)})"
+    return True, ""
+
+
 def workflow_jobs(path: Path) -> set[str]:
     """Job IDs declared under the `jobs:` block of a workflow file.
 
@@ -346,6 +379,83 @@ def check_ui_gates(path: Path) -> set[str]:
 def has_needle(gates: set[str], needles: tuple[str, ...]) -> bool:
     """True if any extracted gate label contains any needle (ci-agnostic)."""
     return any(n in g for g in gates for n in needles)
+
+
+def self_test() -> int:
+    """Mutation-test the two pure classifiers this gate depends on.
+
+    Scoped deliberately: the full scan() lives inside main() against module-level
+    paths, and refactoring a 900-line gate that every other check leans on is a
+    bigger risk than the coverage is worth today. What IS tested here is the pair of
+    functions whose silent failure would make the gate lie: workflow_jobs() decides
+    which jobs exist, and looks_like_actions_workflow() decides whether a file is a
+    workflow at all. Both are exercised in the direction that matters -- a mutation
+    that should be caught, plus the negative control that proves the detector is not
+    simply always-on.
+    """
+    import tempfile
+
+    failed: list[str] = []
+
+    def check(label: str, got, want) -> bool:
+        ok = got == want
+        print(f"  {'ok  ' if ok else 'FAIL'}  {label}")
+        if not ok:
+            print(f"        want {want!r}\n        got  {got!r}")
+            failed.append(label)
+        return ok
+
+    good = (
+        "name: x\non:\n  pull_request:\n    branches: [main]\njobs:\n"
+        "  build:\n    runs-on: ubuntu-latest\n  lint:\n    runs-on: ubuntu-latest\n"
+    )
+    circleci = (
+        "version: 2.1\nexecutors:\n  node:\n    docker:\n      - image: cimg/node:22\n"
+        "commands:\n  setup:\n    steps: []\njobs:\n  static-gates:\n    executor: node\n"
+        "    steps: []\nworkflows:\n  build:\n    jobs:\n      - static-gates\n"
+    )
+    no_trigger = "name: x\njobs:\n  build:\n    runs-on: ubuntu-latest\n"
+
+    with tempfile.TemporaryDirectory() as td:
+        def w(text: str) -> Path:
+            p = Path(td) / "wf.yml"
+            p.write_text(text, encoding="utf-8")
+            return p
+
+        print("\n  looks_like_actions_workflow")
+        ok, _ = looks_like_actions_workflow(w(good))
+        check("a real workflow with `on:` is accepted", ok, True)
+        ok, why = looks_like_actions_workflow(w(circleci))
+        check("a CircleCI config is rejected", ok, False)
+        check("  ... and named as another CI system's config",
+              "CircleCI" in why or "not a GitHub" in why, True)
+        ok, why = looks_like_actions_workflow(w(no_trigger))
+        check("a workflow missing `on:` is rejected", ok, False)
+        check("  ... without claiming it is CircleCI", "CircleCI" in why, False)
+
+        print("\n  workflow_jobs")
+        check("both jobs found in a real workflow",
+              workflow_jobs(w(good)), {"build", "lint"})
+        # The negative control that matters: `pull_request` and `branches` are
+        # 2-space indented under `on:`, which appears BEFORE `jobs:`. Collecting
+        # from column 0 would add them and the gate would then demand docs for
+        # trigger keys that are not jobs at all.
+        check("trigger keys under `on:` are not mistaken for jobs",
+              "pull_request" in workflow_jobs(w(good)), False)
+        # CircleCI nests job bodies differently; the point is this must not crash
+        # and must not invent jobs from `workflows:`.
+        cj = workflow_jobs(w(circleci))
+        check("a CircleCI file yields its `jobs:` names, not `workflows:`",
+              cj, {"static-gates"})
+
+    print()
+    if failed:
+        print(f"  {len(failed)} self-test case(s) FAILED:")
+        for f in failed:
+            print(f"    {f}")
+        return 1
+    print("  all self-test cases passed")
+    return 0
 
 
 def main() -> int:
@@ -551,7 +661,18 @@ def main() -> int:
         )
     )
     # Inverse gap: a workflow that RUNS but is absent from the inventory.
-    undocumented_live = sorted(live_files - inventory_files)
+    # Computed after the misplaced split below and excluding those files: a config
+    # that can never be triggered is not "a live workflow nobody documented", and
+    # reporting it under both headings would double-count one defect while pointing
+    # half the readers at the wrong fix.
+    misplaced: list[tuple[str, str]] = []
+    for name in sorted(live_files):
+        ok, why = looks_like_actions_workflow(WORKFLOWS_DIR / name)
+        if not ok:
+            misplaced.append((name, why))
+    undocumented_live = sorted(
+        live_files - inventory_files - {n for n, _ in misplaced}
+    )
 
     # ── 3. Gate vocabulary: manifest → runners ──────────────────────
     sh_gates = check_sh_gates(CHECK_SH) if CHECK_SH.is_file() else set()
@@ -810,6 +931,19 @@ def main() -> int:
         )
         print("    " + ", ".join(sorted(retired_gates)))
         print()
+    if misplaced:
+        print(
+            f"  NON-ACTIONS CONFIGS IN .github/workflows/ — {len(misplaced)}:\n"
+            "    GitHub parses every *.yml in this directory as an Actions workflow,\n"
+            "    so a config for another CI system here is shown as an errored\n"
+            "    workflow that can never run. The fix is to MOVE the file, not to\n"
+            "    document it — adding an inventory row would record the mistake as\n"
+            "    if it were intended."
+        )
+        for name, why in misplaced:
+            print(f"    {name}\n      {why}")
+            print(f"      -> move it out of .github/workflows/ (e.g. .circleci/config.yml)")
+        print()
     if undocumented_live:
         print(
             f"  UNDOCUMENTED LIVE WORKFLOWS (executed by GitHub, absent from the "
@@ -869,6 +1003,10 @@ def main() -> int:
         + len(docs_status_problems)
         + len(unlabelled_retired)
         + len(undocumented_live)
+        # A non-Actions config sitting in .github/workflows/ is blocking, not
+        # informational: GitHub shows it as an errored workflow, and the existing
+        # "undocumented live workflow" line would misreport it as a docs gap.
+        + len(misplaced)
         # Escalated from informational to blocking. It was informational while it
         # compared against ci.yml's jobs, i.e. while it could never find anything;
         # pointed at the live workflows it immediately found four undocumented
