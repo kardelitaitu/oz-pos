@@ -516,6 +516,26 @@ def self_test() -> int:
         check("a CircleCI file yields its `jobs:` names, not `workflows:`",
               cj, {"static-gates"})
 
+        print("\n  hook_step_orphans")
+        full = json.loads(
+            GATES_MANIFEST.read_text(encoding="utf-8"))["gates"]
+        # Control: the manifest as it stands covers every scripted hook step.
+        check("current gates.json leaves no hook step orphaned",
+              hook_step_orphans(full), [])
+        # Remove one record and require its hook step to surface. This is the whole
+        # point of the check: an absent gate must become visible, not silently
+        # unpoliced.
+        trimmed = [g for g in full if g["id"] != "bundle-parity"]
+        assert len(trimmed) == len(full) - 1, "bundle-parity not in the manifest"
+        orph = hook_step_orphans(trimmed)
+        check("deleting the bundle-parity record orphans hook step 4",
+              any("Bundle parity" in o for o in orph), True)
+        check("  ... and names the script that lost its cover",
+              any("verify-bundle-parity.py" in o for o in orph), True)
+        # An empty manifest must not read as "nothing orphaned".
+        check("an empty manifest orphans every scripted step",
+              len(hook_step_orphans([])) > 0, True)
+
     print()
     if failed:
         print(f"  {len(failed)} self-test case(s) FAILED:")
