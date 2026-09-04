@@ -1,7 +1,7 @@
 @echo off
 setlocal
 title KDS Prototype - Local Server + Cloudflare Tunnel
-cd /d "%~dp0dev"
+cd /d "%~dp0"
 
 echo ============================================
 echo   KDS Prototype - local + Cloudflare tunnel

@@ -49,14 +49,14 @@ REM ============================================================================
 setlocal
 
 REM cd /d into the desktop-client crate so cargo finds Cargo.toml.
-REM `%~dp0` is this bat's own directory; `apps\desktop-client` is relative
+REM `%~dp0` is this bat's own directory (scripts\); `..\apps\desktop-client` is relative
 REM to that, which keeps the bat independent of its invocation CWD.
-cd /d "%~dp0apps\desktop-client"
+cd /d "%~dp0..\apps\desktop-client"
 
 REM Auto-clear any stale dev process bound to the Vite port (default 1420).
 REM The .ps1 prints [OK]/[WARN]/[FAIL] lines per holder so this is visible.
 echo Checking for stale dev processes on port 1420...
-powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%~dp0scripts\free-dev-port.ps1" -Port 1420
+powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%~dp0free-dev-port.ps1" -Port 1420
 if errorlevel 1 (
     echo [WARNING] Could not cleanly free port 1420. Tauri may fail to start.
 )
