@@ -162,9 +162,16 @@
       "id": "ci-docs-drift",
       "label": "CI docs drift",
       "status": "required",
-      "_note": "History worth keeping: this was declared 'required' while pointing at ci.yml#ci-docs-drift, a workflow retired to .bak by 23c96330, so it enforced nothing anywhere and the status was false. It was downgraded to 'advisory' when first wired into dev-ci.yml because the checker was reporting 68 items it had no vocabulary for. R36-10 closed those out to 0 and the step is now blocking -- the stated condition. advisory_at is removed because the step no longer sets continue-on-error.",
-      "runners": { "check.sh": ["ci docs drift"] },
-      "ci": { "workflow": "dev-ci.yml", "job": "ci-docs-drift" }
+      "_note": "History worth keeping: this was declared 'required' while pointing at ci.yml#ci-docs-drift, a workflow retired to .bak by 23c96330, so it enforced nothing anywhere and the status was false. It was downgraded to 'advisory' when first wired into dev-ci.yml because the checker was reporting 68 items it had no vocabulary for. R36-10 closed those out to 0 and the step is now blocking -- the stated condition. advisory_at is removed because the step no longer sets continue-on-error. Two steps in each runner since 0.0.37: the drift check, and `--self-test`, which mutates four of the classifiers this gate depends on and requires each to be noticed, plus a control that must still pass. It exists because this is the gate that polices every other gate's CI claim and was the only one of the family without one, so \"drift: 0 items\" was indistinguishable from \"the checker stopped looking\" -- the failure that let the manifest rot. `ci.steps` is a list because the job has two relevant steps; singular `step` is only read by the advisory_at == \"step\" path.",
+      "runners": { "check.sh": ["ci docs drift", "ci docs drift self-test"] },
+      "ci": {
+        "workflow": "dev-ci.yml",
+        "job": "ci-docs-drift",
+        "steps": [
+          "Drift checker self-test",
+          "Verify CI docs agree with gates.json and the workflows"
+        ]
+      }
     },
     {
       "id": "ci-routing-test",
