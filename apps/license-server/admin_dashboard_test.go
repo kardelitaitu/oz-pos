@@ -9,6 +9,10 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 )
@@ -110,6 +114,26 @@ func TestAdminTierOverrideB30_RejectsUnknownTier(t *testing.T) {
 
 // ── B31: health reports a stale version ──────────────────────────────
 
+// repoVersion reads the workspace version from the root Cargo.toml, which is
+// what scripts/bump-version.ps1 treats as the source of truth.
+func repoVersion(t *testing.T) string {
+	t.Helper()
+	// Tests run from apps/license-server, so the workspace root is two up.
+	p, err := filepath.Abs(filepath.Join("..", "..", "Cargo.toml"))
+	if err != nil {
+		t.Fatalf("resolve Cargo.toml: %v", err)
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("read %s: %v", p, err)
+	}
+	m := regexp.MustCompile(`(?m)^version\s*=\s*"([^"]+)"`).FindSubmatch(b)
+	if m == nil {
+		t.Fatalf("no workspace version = \"...\" in %s", p)
+	}
+	return string(m[1])
+}
+
 func TestAdminHealthB31_ReportsCurrentVersion(t *testing.T) {
 	app, mux := dashboardMux(t)
 	defer app.Cleanup()
@@ -122,11 +146,24 @@ func TestAdminHealthB31_ReportsCurrentVersion(t *testing.T) {
 	}
 	var body map[string]any
 	_ = json.Unmarshal(rec.Body.Bytes(), &body)
-	// The repo is version-locked at 0.0.34 (AGENTS.md). The endpoint
-	// hardcoded 0.0.31 once — the admin health card lied about what was
-	// deployed. This assertion is the bump reminder: update the const
-	// (and the lock) together.
-	if body["version"] != "0.0.34" {
-		t.Fatalf("B31: health version=%v, want 0.0.34 (version lock — update with the bump)", body["version"])
+
+	// This assertion used to be `body["version"] != "0.0.34"` with a comment
+	// calling itself "the bump reminder" — but the const it tested was also
+	// 0.0.34, so it compared a literal against itself and could never fire.
+	// That is exactly how admin_dashboard.go sat at 0.0.34 through the 0.0.36
+	// bump while the test stayed green: the endpoint reported a version two
+	// releases stale, which is the precise defect B31 was filed to prevent.
+	//
+	// Deriving the expectation from Cargo.toml makes it a real check: bump the
+	// version without updating the Go const (or bump-version.ps1's list) and
+	// this fails.
+	want := repoVersion(t)
+	if body["version"] != want {
+		t.Fatalf("B31: health version=%v, want %v (the Cargo.toml workspace version). "+
+			"Update const adminDashboardVersion in admin_dashboard.go, and make sure "+
+			"scripts/bump-version.ps1 covers that file.", body["version"], want)
+	}
+	if strings.TrimSpace(want) == "" {
+		t.Fatal("B31: resolved an empty repo version")
 	}
 }
