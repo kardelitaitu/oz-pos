@@ -1647,6 +1647,42 @@
   flex-direction: column;
   overflow: hidden;
   position: relative;
+  height: 100%;
+}
+
+/* ── Main sliding viewport (tab transitions) ─────────────────────── */
+.kds-main-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+}
+
+.kds-main-track {
+  display: flex;
+  width: 200%;
+  height: 100%;
+  transition: transform 0.32s cubic-bezier(0.33, 1, 0.68, 1);
+  will-change: transform;
+}
+
+.kds-main-track.active-open {
+  transform: translateX(0%);
+}
+
+.kds-main-track.active-completed {
+  transform: translateX(-50%);
+}
+
+.kds-main-pane {
+  width: 50%;
+  height: 100%;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── Main masonry view (prototype .kds-main + .kds-col) ───────────────

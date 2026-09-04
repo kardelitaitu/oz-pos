@@ -605,25 +605,36 @@ export default function KdsScreen() {
         );
     }
 
-    if (activeTab === 'completed') {
-      return <KdsCompletedView onReopen={() => setActiveTab('open')} />;
-    }
-
     return (
-      <div className="kds-content-wrap" {...pullRefreshProps}>
-        <KdsLayoutMasonry
-          orders={filteredOrders}
-          filtered={boardFiltered}
-          onAdvance={advanceStatus}
-          showOrderId={prefs.showOrderId}
-          showTableNumber={prefs.showTableNumber}
-          selectedOrderId={selectedOrderId}
-          sessionToken={sessionToken}
-          onSaveItems={handleSaveItems}
-          onAdvanceItem={advanceItemStatus}
-          onAddItems={setPickerOrderId}
-          newOrderIds={newOrderIds}
-        />
+      <div className="kds-main-viewport">
+        <div className={`kds-main-track active-${activeTab}`}>
+          <div
+            className="kds-main-pane kds-main-pane--open"
+            aria-hidden={activeTab !== 'open'}
+          >
+            <div className="kds-content-wrap" {...pullRefreshProps}>
+              <KdsLayoutMasonry
+                orders={filteredOrders}
+                filtered={boardFiltered}
+                onAdvance={advanceStatus}
+                showOrderId={prefs.showOrderId}
+                showTableNumber={prefs.showTableNumber}
+                selectedOrderId={selectedOrderId}
+                sessionToken={sessionToken}
+                onSaveItems={handleSaveItems}
+                onAdvanceItem={advanceItemStatus}
+                onAddItems={setPickerOrderId}
+                newOrderIds={newOrderIds}
+              />
+            </div>
+          </div>
+          <div
+            className="kds-main-pane kds-main-pane--completed"
+            aria-hidden={activeTab !== 'completed'}
+          >
+            <KdsCompletedView onReopen={() => setActiveTab('open')} />
+          </div>
+        </div>
       </div>
     );
   };
