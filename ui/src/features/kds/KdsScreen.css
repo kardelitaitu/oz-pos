@@ -1822,52 +1822,6 @@
   outline-offset: 1px;
 }
 
-/* ── Header action buttons (shortcuts / enroll / device) ─────────── */
-.kds-shortcuts-btn,
-.kds-enroll-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  color: var(--kds-text);
-  opacity: 0.7;
-  background: transparent;
-  border: none;
-  border-radius: var(--kds-r-sm);
-  cursor: pointer;
-  transition: background var(--duration-100), color var(--duration-100), opacity var(--duration-100);
-}
-.kds-shortcuts-btn:hover,
-.kds-enroll-btn:hover {
-  background: var(--kds-bg-hover);
-  opacity: 1;
-}
-.kds-shortcuts-btn:focus-visible,
-.kds-enroll-btn:focus-visible {
-  outline: 2px solid var(--kds-accent);
-  outline-offset: 1px;
-}
-
-/* ── Shortcuts popover ──────────────────────────────────────────── */
-.kds-shortcuts-popover {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 16rem;
-  padding: var(--space-3);
-  background: var(--kds-bg-top);
-  border: 1px solid var(--kds-border-strong);
-  border-radius: var(--kds-r-md);
-  box-shadow: 0 8px 24px var(--kds-shadow);
-  animation: kds-drop-in 0.18s ease-out;
-  transform-origin: top right;
-}
-
 .kds-shortcut-row {
   display: flex;
   align-items: center;
@@ -2131,37 +2085,6 @@
 .kds-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .kds-modal-actions .kds-btn { min-height: 28px; }
 .kds-modal-actions .kds-btn.danger { --btn-bg: #ef4444; --btn-hover: #dc2626; --btn-active: #b91c1c; }
-
-/* ── Title group & Kanban column header (E2E CSS contract) ─────────── */
-.kds-title-group {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-left: var(--space-2);
-}
-
-.kds-title {
-  font-size: var(--text-lg);
-  font-weight: 700;
-  color: var(--kds-text);
-  margin: 0;
-  white-space: nowrap;
-}
-
-.kds-order-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 2rem;
-  height: 1.75rem;
-  padding: 0 var(--space-2);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--kds-fg-inverse);
-  background: var(--kds-accent);
-  border-radius: var(--kds-radius-switch);
-  white-space: nowrap;
-}
 
 .kds-column-header {
   display: flex;

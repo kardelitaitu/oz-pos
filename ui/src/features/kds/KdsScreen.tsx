@@ -81,14 +81,6 @@ export interface KdsLayoutProps {
   newOrderIds: ReadonlySet<string>;
 }
 
-/** Keyboard shortcut descriptions for the help popover. */
-const SHORTCUTS: { key: string; id: string }[] = [
-  { key: '1-9', id: 'kds-shortcut-select' },
-  { key: 'Space', id: 'kds-shortcut-advance' },
-  { key: '↑↓', id: 'kds-shortcut-navigate' },
-  { key: 'Esc', id: 'kds-shortcut-deselect' },
-];
-
 /** KDS (Kitchen Display System) screen — real-time order queue in a single masonry view, with Open/Completed tabs and per-user preferences. */
 export default function KdsScreen() {
   const workspaceScope = useWorkspaceScope();
@@ -103,9 +95,6 @@ export default function KdsScreen() {
   /** Open vs Completed view — the prototype's primary tab navigation. */
   const [activeTab, setActiveTab] = useState<'open' | 'completed'>('open');
   const [initialLoading, setInitialLoading] = useState(true);
-  const [showShortcuts, setShowShortcuts] = useState(false);
-  const shortcutsBtnRef = useRef<HTMLButtonElement>(null);
-  const shortcutsRef = useRef<HTMLDivElement>(null);
   // KEY-07: ARIA tabs pattern — zone chips get roving tabindex + arrow keys.
   const zoneTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   // Open/Completed tab indicator: measured from the track + active tab.
@@ -123,12 +112,6 @@ export default function KdsScreen() {
   const [pickerOrderId, setPickerOrderId] = useState<string | null>(null);
   // KDS device enrollment modal state.
   const [showEnrollment, setShowEnrollment] = useState(false);
-  // Re-entry guard for the picker confirm: the merge is async and the modal
-  // stays open until it resolves, so a fast double-tap would fire the merge
-  // twice and duplicate the items on the ticket. Pinned by KdsScreen.test.tsx
-  // (deferred-promise double-tap). The state twin drives the modal's
-  // disabled Confirm for visual feedback; the ref keeps the guard immune to
-  // render timing between two rapid taps.
   const pickerSavingRef = useRef(false);
   const [pickerSaving, setPickerSaving] = useState(false);
   // Shift state — tracks whether the kitchen shift is active.
@@ -151,28 +134,6 @@ export default function KdsScreen() {
   const prevOrderIdsRef = useRef(new Set<string>());
   const [newOrderIds, setNewOrderIds] = useState<Set<string>>(new Set());
   const arrivalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Close shortcuts popover on Escape or outside click.
-  useEffect(() => {
-    if (!showShortcuts) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowShortcuts(false);
-    };
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        shortcutsRef.current && !shortcutsRef.current.contains(e.target as Node) &&
-        shortcutsBtnRef.current && !shortcutsBtnRef.current.contains(e.target as Node)
-      ) {
-        setShowShortcuts(false);
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showShortcuts]);
 
   // 3b: Offline resilience — cache, retry queue, optimistic updates.
   // OFF-07: the hook namespaces all localStorage by store scope so switching
@@ -667,17 +628,6 @@ export default function KdsScreen() {
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 19l-7-7 7-7" /></svg>
           </button>
-          {/* Title and order count — expected by E2E tests (CSS contract) */}
-          <div className="kds-title-group">
-            <h1 className="kds-title">
-              <Localized id="kds-screen-title"><span>Kitchen Display</span></Localized>
-            </h1>
-            <span className="kds-order-count">
-              <Localized id="kds-order-count" vars={{ count: String(orders.length) }}>
-                <span>{orders.length} order{orders.length !== 1 ? 's' : ''}</span>
-              </Localized>
-            </span>
-          </div>
           {/* Filter dropdown — All / Prepared view mode (hidden on Completed tab) */}
           {activeTab !== 'completed' && (
             <div className="kds-filter">
@@ -809,49 +759,8 @@ export default function KdsScreen() {
             <span className={!inShift ? 'visible' : ''}><Localized id="kds-shift-start">Start Shift</Localized></span>
             <span className={inShift ? 'visible' : ''}><Localized id="kds-shift-end">End Shift</Localized></span>
           </button>
-          {/* Shortcut help button */}
-          <button
-            ref={shortcutsBtnRef}
-            className="kds-shortcuts-btn"
-            onClick={() => setShowShortcuts((p) => !p)}
-            aria-label={requiredLocalized(l10n, 'kds-shortcuts-aria')}
-            aria-expanded={showShortcuts}
-            aria-controls="kds-shortcuts-popover"
-            data-testid="kds-topbar-shortcuts"
-          >
-            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-            </svg>
-          </button>
-          {showShortcuts && (
-            <div
-              id="kds-shortcuts-popover"
-              ref={shortcutsRef}
-              className="kds-shortcuts-popover"
-              role="region"
-              aria-label={requiredLocalized(l10n, 'kds-shortcuts-label')}
-            >
-              {SHORTCUTS.map((s) => (
-                <div key={s.id} className="kds-shortcut-row">
-                  <kbd className="kds-shortcut-key">{s.key}</kbd>
-                  <span className="kds-shortcut-desc">{requiredLocalized(l10n, s.id)}</span>
-                </div>
-              ))}
-            </div>
-          )}
           {/* Device status indicator */}
           <KdsDeviceStatusIndicator sessionToken={sessionToken} />
-          {/* Enroll new KDS device button */}
-          <button
-            className="kds-enroll-btn"
-            onClick={() => setShowEnrollment(true)}
-            aria-label={requiredLocalized(l10n, 'kds-enrollment-title')}
-            data-testid="kds-topbar-enroll"
-          >
-            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
-              <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-            </svg>
-          </button>
           {/* Hamburger settings panel — only when prefs loaded */}
           {!prefsLoading && (
             <KdsHamburgerPanel
