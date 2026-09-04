@@ -1,7 +1,12 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
+import {
+  assertAllInvokesHandled,
+  recordUnmatchedInvoke,
+  resetUnmatchedInvokes,
+} from '@/__tests__/test-utils/invokeCoverage';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import taxFtl from '@/locales/tax.ftl?raw';
 import TaxConfigurationScreen from '@/features/tax/TaxConfigurationScreen';
@@ -31,6 +36,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 beforeEach(() => {
   invokeMock.mockClear();
+  resetUnmatchedInvokes();
   invokeMock.mockImplementation((cmd: string) => {
     if (cmd === 'list_tax_rates_scoped') return Promise.resolve(SAMPLE_TAX_RATES);
     if (cmd === 'list_categories' || cmd === 'list_categories_scoped') return Promise.resolve(SAMPLE_CATEGORIES);
@@ -40,9 +46,12 @@ beforeEach(() => {
     if (cmd === 'delete_tax_rate_scoped') return Promise.resolve(undefined);
     if (cmd === 'get_tax_rate_dependency_counts_scoped') return Promise.resolve({ products: 0, categories: 0, sale_lines: 0 });
     if (cmd === 'set_category_tax_rates_scoped') return Promise.resolve(undefined);
+    recordUnmatchedInvoke(cmd);
     return Promise.reject(new Error(`Unknown command: ${cmd}`));
   });
 });
+
+afterEach(() => assertAllInvokesHandled('TaxConfigurationScreen'));
 
 async function waitForTable() {
   // The tax rates table has exact aria-label "Tax rates" (from Fluent key tax-config-table-aria).

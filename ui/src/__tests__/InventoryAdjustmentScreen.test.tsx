@@ -1,7 +1,12 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
+import {
+  assertAllInvokesHandled,
+  recordUnmatchedInvoke,
+  resetUnmatchedInvokes,
+} from '@/__tests__/test-utils/invokeCoverage';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import inventoryFtl from '@/locales/inventory.ftl?raw';
 import InventoryAdjustmentScreen from '@/features/inventory/InventoryAdjustmentScreen';
@@ -24,12 +29,16 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 beforeEach(() => {
   invokeMock.mockClear();
+  resetUnmatchedInvokes();
   invokeMock.mockImplementation((cmd: string) => {
     if (cmd === 'list_products_scoped') return Promise.resolve(SAMPLE_PRODUCTS);
     if (cmd === 'adjust_stock_scoped') return Promise.resolve(25);
+    recordUnmatchedInvoke(cmd);
     return Promise.reject(new Error(`Unknown command: ${cmd}`));
   });
 });
+
+afterEach(() => assertAllInvokesHandled('InventoryAdjustmentScreen'));
 
 describe('InventoryAdjustmentScreen', () => {
   it('renders title and step 1', async () => {

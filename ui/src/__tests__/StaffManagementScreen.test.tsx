@@ -1,7 +1,12 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
+import {
+  assertAllInvokesHandled,
+  recordUnmatchedInvoke,
+  resetUnmatchedInvokes,
+} from '@/__tests__/test-utils/invokeCoverage';
 import staffFtl from '@/locales/staff.ftl?raw';
 import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
 import { useSubscription } from '@/contexts/SubscriptionContext';
@@ -87,6 +92,7 @@ vi.mock('@/contexts/WorkspaceContext', () => ({
 
 beforeEach(() => {
   invokeMock.mockClear();
+  resetUnmatchedInvokes();
   invokeMock.mockImplementation((cmd: string) => {
     if (cmd === 'list_staff_scoped') return Promise.resolve(SAMPLE_STAFF);
     if (cmd === 'list_roles_scoped') return Promise.resolve(SAMPLE_ROLES);
@@ -98,9 +104,18 @@ beforeEach(() => {
       { key: 'store', name: 'Retail Store', description: 'Retail counter', icon: 'store' },
     ]);
     if (cmd === 'list_store_profiles_scoped') return Promise.resolve(SAMPLE_BRANCHES);
+    // Reached via the app shell's branding provider, not the screen itself.
+    // Without it every test below rendered the error branch -- 23 of 26.
+    // Shape matches the other suites that mock this (CloudSyncSettings.test.tsx).
+    if (cmd === 'get_brand_settings' || cmd === 'get_brand_settings_scoped') {
+      return Promise.resolve({ primary_colour: '#4f46e5', logo_path: null, store_name: '' });
+    }
+    recordUnmatchedInvoke(cmd);
     return Promise.reject(new Error(`Unknown command: ${cmd}`));
   });
 });
+
+afterEach(() => assertAllInvokesHandled('StaffManagementScreen'));
 
 async function waitForTable() {
   await screen.findByRole('table', { name: /staff members/i });
