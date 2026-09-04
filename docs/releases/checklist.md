@@ -1,12 +1,40 @@
 # Release Checklist — OZ-POS
 
-<!-- Audit stamp: 2026-08-31 · docs-auditor · status: ACCURATE (0 findings) · verified against HEAD: all CI job names exist in workflows (rust-fmt/rust-clippy/rust-test-fast/ui-lint/ui-typecheck/ui-test/release-validate); scripts lint-i18n.sh, check-release-version.mjs, bump-version.ps1, generate-latest-json.mjs, verify-updater-signature.mjs all present; nextest [profile.ci] in .config/nextest.toml:26; latest.json + beta.json updater endpoints in tauri.conf.json; UPDATER_PRIVATE_KEY in release.yml. Size targets (<100MB/<50MB/<5MB) and smoke-test steps are operational, not code-falsifiable -->
+<!-- Audit stamp: 2026-09-04 · DSH · status: STALE-BY-INFRA-CHANGE (re-audited) · supersedes the 2026-08-31 docs-auditor stamp, whose central claim was false: it asserted "all CI job names exist in workflows (rust-fmt/rust-clippy/rust-test-fast/ui-lint/ui-typecheck/ui-test/release-validate)" — six of those seven are ci.yml/release.yml job names, and 23c96330 retired both to .bak on 2026-09-02. Only ui-test survives, and it survives as a different job with different steps. Re-verified this pass: the five scripts the old stamp listed ARE all present (lint-i18n.sh, check-release-version.mjs, bump-version.ps1, generate-latest-json.mjs, verify-updater-signature.mjs); [profile.ci] IS at .config/nextest.toml:26; the latest.json/beta.json updater endpoints ARE in apps/desktop-client/tauri.conf.json:69-70. But UPDATER_PRIVATE_KEY now exists only in release.yml.bak, and every workflow with a tags: trigger is .bak (release, android, ios, ci, nightly, e2e-pr) while the sole live dev-ci.yml has no build or artifact step — so tagging v* triggers nothing. The Pre-Release job list and the release-validate step have been rewritten to what runs; a 🛑 block now states which steps must be done by hand. Size targets (<100MB/<50MB/<5MB) and smoke-test steps remain operational, not code-falsifiable -->
 
 > Follow these steps in order for every release. Mark each item as completed.
 
+> ## 🛑 The release pipeline is not currently running
+>
+> **Every workflow with a `tags:` trigger is `.bak`** — `release.yml`,
+> `android.yml`, `ios.yml`, `ci.yml`, `nightly.yml`, `e2e-pr.yml` — retired by
+> `23c96330` on 2026-09-02. GitHub never executes a `.bak` file. The only live
+> workflow is `dev-ci.yml`, and it contains **no build or artifact steps**.
+>
+> Concretely, as of this writing:
+>
+> | Checklist step | What actually happens |
+> |---|---|
+> | `git tag -a vX.Y.Z` + push | **triggers nothing** |
+> | `release-validate` job | does not exist in any live workflow |
+> | Desktop installers built + attached | **nothing builds them** |
+> | Mobile APK/AAB + IPA via tag workflows | those workflows are `.bak` |
+> | `latest.json` / `beta.json` in the release | nothing generates or uploads them |
+>
+> **Everything from "## Build Verification" onward must be done by hand** until
+> the release workflow is restored — tracked as **R36-11** in
+> [`docs/plans/0.0.36-backlog.md`](../plans/0.0.36-backlog.md). Do not mark those
+> boxes on the assumption CI produced the artifacts; check the release's asset
+> list. See [`first-release-runbook.md`](./first-release-runbook.md) for the
+> manual route, which is stamped `STALE-BY-INFRA-CHANGE` for the same reason.
+
 ## Pre-Release
 
-- [ ] All CI jobs pass (rust-fmt, rust-clippy, rust-test-fast, ui-lint, ui-typecheck, ui-test)
+- [ ] All CI jobs pass — `dev-ci.yml` jobs are `website`, `cargo-check`
+      (fmt → check → clippy), `cargo-nextest`, `ui-test` (typecheck → lint →
+      vitest → tz-invariance), `i18n`, `northflank-deploy`. This is the **entire**
+      live CI surface; see the warning block above before assuming anything else
+      is gated.
 - [ ] `cargo nextest run --workspace --all-features --profile ci` passes locally
 - [ ] `cd ui && npm run typecheck && npm run lint && npm run test` passes locally
 - [ ] `bash scripts/lint-i18n.sh` clean (no duplicate FTL keys, no verbatim ID bundles)
@@ -46,7 +74,9 @@
 ## Release
 
 - [ ] Git tag created: `git tag -a vX.Y.Z -m "Release vX.Y.Z"`
-- [ ] Release workflow's version gate passed (`release-validate` job, tag ↔ app versions ↔ `CHANGELOG.md`)
+- [ ] Version gate verified **manually**: `node scripts/check-release-version.mjs vX.Y.Z`
+      passes locally. The `release-validate` job that used to enforce this in CI
+      lived in `release.yml`, which is `.bak` — pushing the tag does not run it.
 - [ ] GitHub Release created (draft → published only after asset inventory passes)
 - [ ] Docker image pushed to GHCR
 - [ ] Desktop installers built + attached (AppImage/deb, NSIS/MSI, DMG)
