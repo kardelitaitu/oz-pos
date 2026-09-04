@@ -9,7 +9,7 @@
 #   5. generate SUMMARY.md from the copied trees
 #   6. mdbook build     → docs/book/
 #
-# See documentation.md at the repo root for the plan behind this layout.
+# See docs/plans/documentation-portal-plan.md for the plan behind this layout.
 set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

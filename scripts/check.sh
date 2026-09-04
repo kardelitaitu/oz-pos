@@ -272,6 +272,19 @@ step "ci routing test" "bash scripts/test-ci-routing.sh" bash scripts/test-ci-ro
 
 step "ci docs drift" "python3 scripts/verify-ci-docs-drift.py" python3 scripts/verify-ci-docs-drift.py
 
+# ── Document uniqueness (R36-14) ────────────────────────────────────────────
+# f3d9cca6 moved the repo-root subscription-tiers.md into docs/records/ without
+# noticing docs/guides/ already had a copy from 28147fe4 -- leaving two tracked
+# files, both stamped "single source of truth" for pricing, whose entitlement
+# tables disagree. Nothing detected it, because no gate compared documents to
+# each other. This one does, and it is scoped to docs/ with conventional names
+# (README/SKILL/AGENTS) excluded, so it does not cry wolf on normal structure.
+# Carries a pair-specific baseline for the one known finding, so a NEW duplicate
+# still fails. --self-test proves the detector fires and stays quiet correctly.
+# Gate: scripts/gates.json -> "doc-uniqueness".
+step "doc uniqueness" "python3 scripts/verify-doc-uniqueness.py" python3 scripts/verify-doc-uniqueness.py
+step "doc uniqueness self-test" "python3 scripts/verify-doc-uniqueness.py --self-test" python3 scripts/verify-doc-uniqueness.py --self-test
+
 # ── Release workflow validation (R36-11) ──────────────────────────────────
 # release.yml was renamed to .bak by 23c96330 with an empty commit message and
 # nothing replaced it, so tagging produced no installers for a release cycle.

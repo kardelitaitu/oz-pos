@@ -334,6 +334,13 @@
       "status": "required",
       "_note": "Runs scripts/check-updater-compat.mjs, which builds a Rust harness pinned to the minisign-verify version the real Tauri updater client uses and proves that signatures from generate-latest-json.mjs VERIFY, that a tampered installer is REJECTED, and that the pubkey committed in tauri.conf.json parses. Before this it ran ONLY inside release.yml.bak, i.e. nowhere at all -- so the signing chain could have rotted silently alongside the retired workflow and the first symptom would be customers unable to auto-update. Path-gated on the release toolchain and the updater pubkey because the harness needs a cold cargo build. No `runners` key: that field names LOCAL entry points, and this one needs a cargo build, so it is CI-only.",
       "ci": { "workflow": "dev-ci.yml", "job": "release-readiness" }
+    },
+    {
+      "id": "doc-uniqueness",
+      "label": "Doc uniqueness",
+      "status": "advisory",
+      "_note": "Added in 0.0.36 after f3d9cca6 moved the repo-root subscription-tiers.md into docs/records/ without noticing docs/guides/ already had a copy from 28147fe4, leaving two tracked files both stamped 'single source of truth' for pricing with disagreeing entitlement rows. No gate compared documents to each other, so nothing saw it. Local-only for now: it carries a pair-specific baseline for that one unresolved finding (R36-14, needs a product decision because white-label has no runtime entitlement check to adjudicate against), and a gate with a live baseline should earn CI-blocking status after the baseline is empty, the same condition R36-10 set for ci-docs-drift. --self-test and the 5-case harness both pass.",
+      "runners": { "check.sh": ["doc uniqueness"] }
     }
   ]
 }

@@ -34,7 +34,10 @@ The `.githooks/pre-commit` hook runs **eight steps** before every commit, in thi
 7. **`PG schema drift guard`** — `scripts/generate-pg-migration.py --check`; `20260813_init.pg.sql` is generated, **never hand-edited**.
 8. **`Go gate`** — when `apps/license-server/*.go` is staged: `gofmt -w` + `go vet ./...`. Aborts if `go`/`gofmt` are missing.
 
-> ⚠️ **Steps 6, 7 and 8 have no CI backstop.** They lived in `ci.yml`, which was retired to `.bak` (`23c96330`) and never restored in `dev-ci.yml` — only the `i18n` job was brought back. On a clone without `core.hooksPath` set, none of the eight run.
+> ⚠️ **Steps 6 and 7 are local-only.** They lived in `ci.yml`, retired to `.bak` (`23c96330`) and never restored in `dev-ci.yml`. Step 8 (Go) **is** now backed by CI: `dev-ci.yml#static-gates` runs `gofmt -l`, `go vet ./...` and `go test -short` on `apps/license-server` (added in 0.0.36, `13f2a1dc`). Note the CI gate is `gofmt -l` (report-only, fails on any unformatted file) while the hook runs `gofmt -w` and re-stages, so a commit made without `core.hooksPath` can be unformatted and CI will reject it rather than fix it. On a clone without `core.hooksPath` set, none of the eight run at commit time.
+>
+> **What CI actually runs.** Two workflows are live: `dev-ci.yml` (PR to `main` + `workflow_dispatch`) and `release.yml` (`v*` tags, restored desktop-only in 0.0.36). `dev-ci.yml` jobs: `changes`, `website`, `cargo-check` (fmt → check → clippy), `cargo-nextest`, `ui-test` (typecheck → lint → vitest → tz-invariance), `i18n`, `ci-docs-drift`, `static-gates`, `release-readiness`, `northflank-deploy`. CI's `cargo nextest run --workspace --all-features` carries **no `--exclude`**, so it tests app crates that `check.sh` skips. E2E, a11y, security and nightly are **not** enforced — a green Dev CI run is not proof those passed.
+
 
 > **Keeping this list honest:** `scripts/bump-version.ps1` updates the *version* lines in these mirrors but nothing updates the *gate* list. When a step is added to or removed from `.githooks/pre-commit`, this section, the root [`AGENTS.md`](../AGENTS.md) and `.prime/AGENTS.md` all have to change by hand — which is how all three drifted to different counts. The hook itself is the source of truth: `grep -n '^# ──' .githooks/pre-commit`.
 
@@ -137,6 +140,7 @@ Every commit message **MUST** strictly follow the conventional format:
   - `chore`: Maintenance, dependencies, configs
   - `test`: Adding or modifying tests
   - `refactor`: Code refactoring without functional changes
+  - `style`: Cosmetic changes that alter no runtime behaviour — `cargo fmt` wraps, CSS adjustments, copy edits. In established use (`130c7556`, `c3b7c72b`, `ad9c60e9`, `e0f2ca9b`, `04465711`, `2d517b55`, `7dde51c2`, `cfd0f183`); listed here so this mirror matches the set `.githooks/commit-msg` actually accepts.
   - `perf`: Performance improvements
   - `ci`: CI workflows, GitHub Actions, build scripts
   - `audit`: Code audit stamps and remediations

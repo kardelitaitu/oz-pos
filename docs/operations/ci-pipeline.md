@@ -57,7 +57,7 @@
 | `release-validate` | ✅ Required | release.yml | tag push only: `check-release-version.mjs <tag>` (tag ↔ version ↔ changelog), its `--self-test`, and the updater compat check. |
 | `release-build` | ✅ Required | release.yml | matrix `desktop-linux` / `desktop-windows` / `desktop-macos`: nextest, `cargo tauri build`, bundle-existence gate, Windows asInvoker manifest check, optional SignPath/Authenticode with a loud unsigned fallback. |
 | `release-publish` | ✅ Required | release.yml | signed `latest.json`+`beta.json`, signature verification against the committed pubkey, SHA-256 inventory, draft release, provenance attestation, then publish. Hard-fails without `UPDATER_PRIVATE_KEY`. |
-| `northflank-deploy` | ✅ Required | dev-ci.yml | Backend deploy to Northflank; `needs` every other live job except the advisory `ci-docs-drift`. Runs on push to `main`/`release` or `workflow_dispatch`. |
+| `northflank-deploy` | ✅ Required | dev-ci.yml | Backend deploy to Northflank; `needs` every other live job except `ci-docs-drift`. **Effectively `workflow_dispatch` only**: its `if:` also tests `github.event_name == 'push'`, but `dev-ci.yml` triggers on `pull_request` and `workflow_dispatch` alone, so that half is dead code and no push ever reaches it. The workflow's own comment records this. |
 | `lighthouse` | ⚠️ Advisory | ci.yml | Lighthouse a11y audit (continue-on-error) |
 | `docker` | ✅ Required | ci.yml | Build + Trivy scan + Compose smoke |
 | `coverage` | ⚠️ Advisory | ci.yml | Coverage report (push only, continue-on-error) |
