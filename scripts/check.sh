@@ -285,6 +285,17 @@ step "ci docs drift" "python3 scripts/verify-ci-docs-drift.py" python3 scripts/v
 step "doc uniqueness" "python3 scripts/verify-doc-uniqueness.py" python3 scripts/verify-doc-uniqueness.py
 step "doc uniqueness self-test" "python3 scripts/verify-doc-uniqueness.py --self-test" python3 scripts/verify-doc-uniqueness.py --self-test
 
+# ── Pre-commit EOL net (R36-15) ────────────────────────────────────────────
+# The hook's line-ending step filtered on `git check-attr text` alone, which is
+# wrong twice over: it ignored `*.bat text eol=crlf` and stripped CRLF from the
+# working tree (phantom-dirty `git status`), and `text=auto` reports "auto" for
+# binaries, so a staged PNG had its signature's 0D 0A deleted and the mangled
+# blob re-staged. Both are silent data corruption behind a green hook. The test
+# extracts the live guard from .githooks/pre-commit rather than copying it, so it
+# cannot drift from the thing it polices.
+# Gate: scripts/gates.json -> "eol-guard".
+step "eol guard" "bash scripts/test-eol-guard.sh" bash scripts/test-eol-guard.sh
+
 # ── Release workflow validation (R36-11) ──────────────────────────────────
 # release.yml was renamed to .bak by 23c96330 with an empty commit message and
 # nothing replaced it, so tagging produced no installers for a release cycle.

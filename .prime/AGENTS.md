@@ -19,7 +19,7 @@ git config core.hooksPath .githooks   # enable pre-commit hook (fmt + EOL + i18n
 The `.githooks/pre-commit` hook runs **eight steps** before every commit (~5–7s typical):
 
 1. **`cargo fmt --all`** — auto-formats Rust and re-stages what it changed.
-2. **Line-ending normalization** — strips CR from staged text files in the working tree and index and re-stages them, so the committed blob is LF (backs `.gitattributes` `* text=auto eol=lf`).
+2. **Line-ending normalization** — strips CR from staged text files in the working tree and index and re-stages them, so the committed blob is LF (backs `.gitattributes` `* text=auto eol=lf`). Skips files whose effective `eol` is `crlf` (`*.bat`/`*.cmd` — the working tree must stay CRLF for cmd.exe) and real binaries (`grep -qI`; `text=auto` reports "auto" for PNGs too, and stripping their CRs destroys the signature). Both exclusions were missing until 0.0.36; `scripts/test-eol-guard.sh` guards them.
 3. **`i18n lint`** — `scripts/lint-i18n.sh`; fail-closed on byte-identical `.id.ftl` siblings, duplicate Fluent keys dropped at bundle join, and literal keys resolving in neither locale.
 4. **`Bundle parity: staged files only`** — `scripts/verify-bundle-parity.py --staged-only` with six `--include-*` flags, over staged files in `features`, `components`, `frontend`, `contexts`, `hooks`, `platform`; fails if any of the **eight checked surfaces** references a key missing from `.ftl`/`.id.ftl`.
 5. **`FTL dedupe dry-run`** — `scripts/dedupe-ftl.py --dry-run`.

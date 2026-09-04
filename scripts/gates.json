@@ -341,6 +341,13 @@
       "status": "advisory",
       "_note": "Added in 0.0.36 after f3d9cca6 moved the repo-root subscription-tiers.md into docs/records/ without noticing docs/guides/ already had a copy from 28147fe4, leaving two tracked files both stamped 'single source of truth' for pricing with disagreeing entitlement rows. No gate compared documents to each other, so nothing saw it. Local-only for now: it carries a pair-specific baseline for that one unresolved finding (R36-14, needs a product decision because white-label has no runtime entitlement check to adjudicate against), and a gate with a live baseline should earn CI-blocking status after the baseline is empty, the same condition R36-10 set for ci-docs-drift. --self-test and the 5-case harness both pass.",
       "runners": { "check.sh": ["doc uniqueness"] }
+    },
+    {
+      "id": "eol-guard",
+      "label": "EOL guard",
+      "status": "required",
+      "_note": "Added in 0.0.36 (R36-15). The pre-commit line-ending step filtered on 'git check-attr text' alone, which is wrong twice: it ignored '.gitattributes *.bat text eol=crlf' and stripped CRLF from the working tree (producing a phantom-dirty git status with zero content diff), and because '* text=auto' reports 'auto' for every path including binaries, a staged PNG had the 0D 0A in its signature deleted and the mangled blob re-staged -- verified on apps/desktop-client/icons/32x32.png, 1515 to 1507 bytes. Both are silent corruption behind a green hook. The test extracts the live guard from .githooks/pre-commit rather than copying it, so it cannot drift from what it polices, and it fails loudly if either guard disappears.",
+      "runners": { "check.sh": ["eol guard"] }
     }
   ]
 }

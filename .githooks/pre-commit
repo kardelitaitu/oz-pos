@@ -83,16 +83,50 @@ fi
 # committed blob is LF and `git status` is clean immediately after commit.
 # It is a no-op for the normal case (LF already), and never touches
 # binaries or staged deletions.
+#
+# It also honours per-path `eol` overrides: `*.bat`/`*.cmd` are `eol=crlf` in
+# .gitattributes and are skipped. Without that the net silently fought the
+# attribute on every batch file -- see the check-attr eol guard below.
 STAGED_NORM=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true)
 if [ -n "$STAGED_NORM" ]; then
     NORMALIZED_EOL=""
     for f in $STAGED_NORM; do
         [ -f "$f" ] || continue
-        # Only files git treats as text: check-attr reports "set" or
-        # "auto" (from `text=auto`) for text; "unset" for binaries.
+        # Only files git treats as text -- and only ones that really are.
+        #
+        # `* text=auto` means check-attr answers "auto" for EVERY path, binary
+        # included; the auto part is git's own content sniffing, which happens
+        # later, inside `git add`. Filtering on check-attr alone therefore lets
+        # a PNG through. Then `tr -d '\r'` removes the 0D 0A pair in the PNG
+        # signature (`89 50 4E 47 0D 0A 1A 0A`), which the spec requires as a
+        # line-ending check, and `git add` stores the mangled blob. Verified on
+        # apps/desktop-client/icons/32x32.png: 1515 -> 1507 bytes, signature
+        # destroyed. 40+ tracked icons contain CR bytes, so any commit that
+        # stages one silently corrupts it -- data loss with a green hook.
+        #
+        # `grep -qI` is git-independent binary detection (a NUL in the first
+        # buffer makes grep report the file as binary and skip it), so it
+        # catches what check-attr's "auto" cannot.
         case "$(git check-attr text -- "$f")" in
             *"text: set"*|*"text: auto"*) ;;
             *) continue ;;
+        esac
+        if ! grep -qI '' -- "$f" 2>/dev/null; then
+            continue   # git says text-ish, grep says binary: leave it alone
+        fi
+        # ...AND only files whose effective eol is LF. `.gitattributes` pins
+        # `*.bat text eol=crlf` and `*.cmd text eol=crlf` because cmd.exe
+        # mis-parses labels and `goto` in LF-only batch files. Checking `text`
+        # without checking `eol` meant this loop saw a .bat as "text, so LF it"
+        # and stripped the CR bytes out of the WORKING TREE. The index keeping
+        # LF is correct and intended (.gitattributes L29); the working tree is
+        # supposed to be CRLF. Observed: scripts/start-desktop.bat came out of a
+        # hook run with 0 CRLFs while its never-committed sibling
+        # start-local-sync.bat still had 167 -- and `git status` then reports the
+        # file modified with a zero content diff, the phantom-M that makes people
+        # commit noise "fixes".
+        case "$(git check-attr eol -- "$f")" in
+            *"eol: crlf"*) continue ;;
         esac
         # cmp -s after stripping CR: identical => already LF (skip);
         # differs => the file has CR bytes and gets normalized. This is
