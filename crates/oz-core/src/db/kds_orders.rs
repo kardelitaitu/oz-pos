@@ -72,32 +72,66 @@ impl Store<'_> {
         rows.map(|r| Ok(r?)).collect()
     }
 
+    /// Visibility predicate pushed into SQL (PERF-KDS-02).
+    ///
+    /// Mirrors [`Self::order_visible_to_instance`] exactly: an order is
+    /// visible when it has NO targeting rows and is untargeted (legacy
+    /// rows stay visible everywhere) or when an explicit target row names
+    /// `instance_id`. Applied as a WHERE fragment so list/queue queries
+    /// filter in one indexed pass instead of issuing per-order COUNT
+    /// queries (the N+1).
+    fn instance_visibility_predicate_sql() -> &'static str {
+        " AND (
+            (
+                NOT EXISTS (
+                    SELECT 1 FROM kds_order_targets t
+                    WHERE t.kds_order_id = kds_orders.id
+                )
+                AND (
+                    kds_orders.target_instance_id IS NULL
+                    OR kds_orders.target_instance_id = :iid
+                )
+            )
+            OR EXISTS (
+                SELECT 1 FROM kds_order_targets t2
+                WHERE t2.kds_order_id = kds_orders.id
+                  AND t2.target_instance_id = :iid
+            )
+        )"
+    }
+
     /// List orders visible to one KDS workspace instance.
     ///
     /// Legacy orders without a target remain visible to every instance.
+    /// Instance filtering happens in SQL (PERF-KDS-02), not per row.
     pub fn list_kds_orders_for_instance(
         &self,
         status_filter: Option<&str>,
         instance_id: &str,
     ) -> Result<Vec<KdsOrder>, CoreError> {
-        let orders = self.list_kds_orders(status_filter)?;
-        self.filter_orders_for_instance(orders, instance_id)
-    }
+        let mut sql = String::from(
+            "SELECT id, sale_id, store_id, target_instance_id, status, items_summary, item_count, display_number,
+                    received_at, started_at, ready_at, served_at,
+                    prep_time_seconds, kitchen_zone, notes, table_number, priority
+             FROM kds_orders",
+        );
+        if status_filter.is_some() {
+            sql.push_str(" WHERE status = :status");
+        }
+        sql.push_str(Self::instance_visibility_predicate_sql());
+        sql.push_str(" ORDER BY received_at DESC");
 
-    fn filter_orders_for_instance(
-        &self,
-        orders: Vec<KdsOrder>,
-        instance_id: &str,
-    ) -> Result<Vec<KdsOrder>, CoreError> {
-        orders
-            .into_iter()
-            .map(|order| {
-                Ok(self
-                    .order_visible_to_instance(&order, instance_id)?
-                    .then_some(order))
-            })
-            .filter_map(|result| result.transpose())
-            .collect()
+        // Bind only parameters the assembled SQL actually references —
+        // rusqlite rejects a bound name the statement does not contain.
+        let status_param: Option<&str> = status_filter;
+        let mut binds: Vec<(&str, &dyn rusqlite::types::ToSql)> = vec![(":iid", &instance_id)];
+        if let Some(s) = &status_param {
+            binds.push((":status", s));
+        }
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(binds.as_slice(), Self::row_to_kds_order)?;
+        rows.map(|r| Ok(r?)).collect()
     }
 
     /// Return an order only when it is visible to the requested KDS instance.
@@ -485,13 +519,54 @@ impl Store<'_> {
     }
 
     /// Get the active queue visible to one KDS workspace instance.
+    ///
+    /// Instance filtering happens in SQL (PERF-KDS-02), not per row.
     pub fn get_kds_queue_for_instance(
         &self,
         zone_filter: Option<&str>,
         instance_id: &str,
     ) -> Result<Vec<KdsOrder>, CoreError> {
-        let orders = self.get_kds_queue(zone_filter)?;
-        self.filter_orders_for_instance(orders, instance_id)
+        let mut sql = String::from(
+            "SELECT id, sale_id, store_id, target_instance_id, status, items_summary, item_count, display_number,
+                    received_at, started_at, ready_at, served_at,
+                    prep_time_seconds, kitchen_zone, notes, table_number, priority
+             FROM kds_orders
+             WHERE status IN ('pending', 'preparing', 'ready')",
+        );
+
+        // Zone parameter is only pushed into SQL when that branch is
+        // active; binding names the statement does not contain is an error
+        // in rusqlite, so the bind list is assembled to match the SQL.
+        let zone_param: Option<String> = match zone_filter {
+            None => None,
+            Some(zone) if zone.is_empty() => {
+                sql.push_str(" AND (kitchen_zone IS NULL OR kitchen_zone = '')");
+                None
+            }
+            Some(zone) => {
+                sql.push_str(" AND kitchen_zone = :zone");
+                Some(zone.to_owned())
+            }
+        };
+        sql.push_str(Self::instance_visibility_predicate_sql());
+        sql.push_str(
+            " ORDER BY
+                CASE status
+                    WHEN 'pending' THEN 1
+                    WHEN 'preparing' THEN 2
+                    WHEN 'ready' THEN 3
+                END,
+                received_at ASC",
+        );
+
+        let mut binds: Vec<(&str, &dyn rusqlite::types::ToSql)> = vec![(":iid", &instance_id)];
+        if let Some(zone) = &zone_param {
+            binds.push((":zone", zone));
+        }
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(binds.as_slice(), Self::row_to_kds_order)?;
+        rows.map(|r| Ok(r?)).collect()
     }
 
     /// Cancel every active KDS ticket belonging to a sale (S3 lifecycle).
