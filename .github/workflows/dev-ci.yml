@@ -345,6 +345,14 @@ jobs:
       # from what CI runs. Gate: scripts/gates.json -> "ci-routing-test".
       - name: CI path router regression test
         run: bash scripts/test-ci-routing.sh
+      # This job is the one that decides whether every other job is documented
+      # truthfully, so it needs the same proof it demands of others: a mutation
+      # test showing it can still fail. Without it, "drift: 0 items" is
+      # indistinguishable from "the checker stopped looking" -- the exact failure
+      # that let the manifest rot in the first place.
+      # Gate: scripts/gates.json -> "ci-docs-drift".
+      - name: Drift checker self-test
+        run: python3 scripts/verify-ci-docs-drift.py --self-test
       - name: Verify CI docs agree with gates.json and the workflows
         id: drift
         run: |

@@ -271,6 +271,12 @@ step "healthcheck script test" "sh apps/unified/test-healthcheck.sh" sh apps/uni
 step "ci routing test" "bash scripts/test-ci-routing.sh" bash scripts/test-ci-routing.sh
 
 step "ci docs drift" "python3 scripts/verify-ci-docs-drift.py" python3 scripts/verify-ci-docs-drift.py
+# This is the gate that polices every other gate's CI claim, and until 0.0.37 it
+# was the only one of the family with no self-test -- six siblings carry one and
+# this did not. It now mutates four of its own classifiers and requires each to be
+# noticed, plus a control that must still pass, so "the drift gate is green" cannot
+# mean "the drift gate stopped looking".
+step "ci docs drift self-test" "python3 scripts/verify-ci-docs-drift.py --self-test" python3 scripts/verify-ci-docs-drift.py --self-test
 
 # ── Document uniqueness (R36-14) ────────────────────────────────────────────
 # f3d9cca6 moved the repo-root subscription-tiers.md into docs/records/ without
