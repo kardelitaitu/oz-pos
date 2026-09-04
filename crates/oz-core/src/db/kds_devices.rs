@@ -97,22 +97,50 @@ impl Store<'_> {
             Err(e) => return Err(e.into()),
         };
 
-        // Check hash match.
-        if stored_hash != token_hash {
+        // Check hash match (F9: constant-time — the byte-wise XOR fold
+        // removes the timing oracle on a hash-prefix match; both values are
+        // hex digests, so length is compared first and the fold's outcome
+        // is all that varies).
+        let hash_matches = stored_hash.len() == token_hash.len()
+            && stored_hash
+                .bytes()
+                .zip(token_hash.bytes())
+                .fold(0u8, |acc, (a, b)| acc | (a ^ b))
+                == 0;
+        if !hash_matches {
             return Err(CoreError::Validation {
                 field: "token_hash",
                 message: "pairing token hash mismatch".into(),
             });
         }
 
-        // Check expiry.
-        if let Ok(expires) = chrono::DateTime::parse_from_rfc3339(&expires_at)
-            && chrono::Utc::now() > expires
-        {
-            return Err(CoreError::Validation {
-                field: "pairing_expires_at",
-                message: "pairing token has expired".into(),
-            });
+        // Check expiry (F9: fail CLOSED on unparseable values). The stored
+        // value is RFC 3339; a bare `YYYY-MM-DD` (legacy/fixture shape) is
+        // tolerated as UTC midnight so expiry is still enforced on it.
+        // Previously ANY unparseable timestamp silently skipped the check,
+        // letting a corrupt or tampered expiry bypass pairing validation.
+        let expires: Option<chrono::DateTime<chrono::FixedOffset>> =
+            match chrono::DateTime::parse_from_rfc3339(&expires_at) {
+                Ok(dt) => Some(dt),
+                Err(_) => chrono::NaiveDate::parse_from_str(&expires_at, "%Y-%m-%d")
+                    .ok()
+                    .and_then(|d| d.and_hms_opt(0, 0, 0))
+                    .map(|dt| dt.and_utc().fixed_offset()),
+            };
+        match expires {
+            Some(expires) if chrono::Utc::now() > expires => {
+                return Err(CoreError::Validation {
+                    field: "pairing_expires_at",
+                    message: "pairing token has expired".into(),
+                });
+            }
+            Some(_) => {}
+            None => {
+                return Err(CoreError::Validation {
+                    field: "pairing_expires_at",
+                    message: format!("malformed pairing_expires_at: {expires_at}"),
+                });
+            }
         }
 
         Ok(true)
@@ -248,3 +276,7 @@ struct KdsDeviceRow {
     created_at: String,
     updated_at: String,
 }
+
+#[cfg(test)]
+#[path = "kds_devices_tests.rs"]
+mod tests;
