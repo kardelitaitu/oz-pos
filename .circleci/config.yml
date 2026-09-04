@@ -49,6 +49,15 @@ executors:
 
 # ── Commands ──────────────────────────────────────────────────────────
 commands:
+  ensure-rust-stable:
+    description: "Ensure Rust toolchain is up-to-date stable with clippy and rustfmt"
+    steps:
+      - run:
+          name: Ensure Rust Stable
+          command: |
+            rustup default stable
+            rustup component add rustfmt clippy
+
   install-linux-deps:
     description: "Install Linux GTK/WebKit/Tauri system dependencies"
     steps:
@@ -78,10 +87,11 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Install Go, Python & Verification Tools
+          name: Install Go, Python, PyYAML & Verification Tools
           command: |
             sudo apt-get update
-            sudo apt-get install -y --no-install-recommends python3 python3-pip curl
+            sudo apt-get install -y --no-install-recommends python3 python3-pip python3-yaml curl
+            pip install --break-system-packages pyyaml || true
             curl -fsSL https://go.dev/dl/go1.24.0.linux-amd64.tar.gz | sudo tar -C /usr/local -xz
             echo 'export PATH="/usr/local/go/bin:$PATH"' >> $BASH_ENV
       - run:
@@ -221,11 +231,9 @@ jobs:
     executor: rust-executor
     steps:
       - checkout
+      - ensure-rust-stable
       - install-linux-deps
       - prepare-dist-stubs
-      - run:
-          name: Ensure Rustfmt & Clippy
-          command: rustup component add rustfmt clippy
       - restore_cache:
           keys:
             - v1-cargo-cache-{{ checksum "Cargo.lock" }}
@@ -251,6 +259,7 @@ jobs:
     executor: rust-test-executor
     steps:
       - checkout
+      - ensure-rust-stable
       - install-linux-deps
       - prepare-dist-stubs
       - restore_cache:
@@ -264,7 +273,14 @@ jobs:
       - run:
           name: Wait for PostgreSQL
           command: |
-            dockerize -wait tcp://localhost:5432 -timeout 1m || true
+            for i in $(seq 1 30); do
+              if (echo > /dev/tcp/localhost/5432) >/dev/null 2>&1; then
+                echo "PostgreSQL is ready"
+                break
+              fi
+              echo "Waiting for PostgreSQL..."
+              sleep 1
+            done
       - run:
           name: Run Cargo Nextest
           command: cargo nextest run --workspace --all-features
