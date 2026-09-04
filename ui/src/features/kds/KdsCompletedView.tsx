@@ -3,6 +3,7 @@ import { requiredLocalized, LoadingStatus } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { listKdsOrdersScoped, type KdsOrder } from '@/api/kds';
+import './KdsCompletedView.css';
 
 /** Time-bucket labels and their day-range condition. */
 const BUCKETS = [
@@ -42,21 +43,27 @@ function fmtDuration(from: string, to: string): string {
 export function KdsCompletedView({
   onReopen,
   completedFilter = 'all',
+  active = true,
 }: {
   onReopen?: (orderId: string) => void;
   completedFilter?: 'all' | 'dinein' | 'takeaway';
+  /** Whether the Completed tab is the visible pane — a stale-while-hidden
+   *  pane fetched only on mount and never refreshed for a whole shift. */
+  active?: boolean;
 }) {
   const { l10n } = useLocalization();
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchFailed, setFetchFailed] = useState(false);
   const [collapsedBuckets, setCollapsedBuckets] = useState<Set<string>>(new Set());
   const loadSeqRef = useRef(0);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     const seq = ++loadSeqRef.current;
     setLoading(true);
+    setFetchFailed(false);
     // Fetch served orders — the completed tab shows finished tickets.
     listKdsOrdersScoped(sessionToken, 'served')
       .then((result) => {
@@ -67,8 +74,18 @@ export function KdsCompletedView({
       .catch(() => {
         if (seq !== loadSeqRef.current) return;
         setLoading(false);
+        // Surface a distinguishable error — an empty board used to be
+        // indistinguishable from "the fetch failed" (and from "no orders").
+        setFetchFailed(true);
       });
   }, [sessionToken]);
+
+  useEffect(() => {
+    // Refetch whenever the pane becomes visible: both panes stay mounted
+    // (aria-hidden toggle), so a mount-only fetch went stale all shift.
+    if (!active) return;
+    load();
+  }, [active, load]);
 
   // Filter completed orders by order type (All / Dine in / Takeaway)
   const filteredOrders = useMemo(() => {
@@ -112,6 +129,26 @@ export function KdsCompletedView({
         <LoadingStatus label={requiredLocalized(l10n, 'kds-history-loading')}>
           <span className="kds-refresh-spinner" />
         </LoadingStatus>
+      </div>
+    );
+  }
+
+  if (fetchFailed) {
+    return (
+      <div className="kds-main completed-view" role="region" aria-label={requiredLocalized(l10n, 'kds-completed-aria')}>
+        <div className="kds-completed-error" role="alert">
+          <span>
+            <Localized id="kds-completed-load-failed">Failed to load completed orders</Localized>
+          </span>
+          <button
+            type="button"
+            className="kds-btn kds-btn--muted"
+            onClick={load}
+            aria-label={requiredLocalized(l10n, 'kds-completed-retry-aria')}
+          >
+            <Localized id="kds-offline-retry">Retry</Localized>
+          </button>
+        </div>
       </div>
     );
   }

@@ -86,6 +86,7 @@ kds-course-main = MAIN
 kds-course-side = SIDE
 kds-course-dessert = DESSERT
 kds-course-beverage = BEVERAGE
+kds-course-none = None
 kds-course-other = OTHER
 kds-course-loading = Loading items...
 kds-course-modifier-separator =: 
@@ -138,6 +139,8 @@ kds-shortcut-navigate = Navigate tickets
 kds-shortcut-deselect = Deselect / close
 kds-error-retry-aria = Retry
 kds-error-dismiss-aria = Dismiss
+kds-error-update-failed = Failed to update the order — try again
+kds-enrollment-failed = Device enrollment failed — check the connection and try again
 
 # ── KDS Device Enrollment ──
 kds-enrollment-title = Enroll KDS Device
@@ -190,6 +193,13 @@ kds-advance-start = Start
 kds-advance-ready = Mark Ready
 kds-advance-serve = Serve
 kds-toggle-card-aria = Toggle order { $number } details
+kds-toggle-card-aria-collapsed =
+    { kds-toggle-card-aria } (collapsed)
+kds-new-orders-announced =
+    { $count ->
+        [one] 1 new order
+       *[other] { $count } new orders
+    }
 
 # ── Topbar filter dropdown ──
 kds-filter-aria = Filter orders
@@ -210,6 +220,8 @@ kds-footer-hours = { $count }h ago
 
 # ── Completed tab (bucket columns) ──
 kds-completed-aria = Completed orders
+kds-completed-load-failed = Failed to load completed orders
+kds-completed-retry-aria = Retry loading completed orders
 kds-completed-today = Today
 kds-completed-yesterday = Yesterday
 kds-completed-this-week = This Week

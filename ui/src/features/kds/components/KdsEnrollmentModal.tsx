@@ -155,10 +155,11 @@ export const KdsEnrollmentModal = memo(function KdsEnrollmentModal({
       // immediate callback closed the modal before the QR was ever shown.
       // The callback fires when the operator finishes the QR step (Done).
     } catch (e) {
-      setError(String(e));
+      console.error('kds device enrollment failed', e);
+      setError(requiredLocalized(l10n, 'kds-enrollment-failed'));
       setStep('error');
     }
-  }, [name, stations, sessionToken, restaurantPosId]);
+  }, [name, stations, sessionToken, restaurantPosId, l10n]);
 
   const handleBackdropClick = useCallback(
     (e: React.MouseEvent) => {

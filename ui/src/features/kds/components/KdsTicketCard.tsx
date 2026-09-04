@@ -166,20 +166,30 @@ export const KdsTicketCard = memo(function KdsTicketCard({
   const [lineItems, setLineItems] = useState<KdsLineItem[] | null>(null);
   const [lineItemsLoading, setLineItemsLoading] = useState(false);
   const [fetchKey, setFetchKey] = useState(0);
+  // Sequence guard: two in-flight fetches (e.g. a summary-change refetch
+  // racing a fetchKey bump) can resolve out of order and pin stale items.
+  const loadSeqRef = useRef(0);
 
   useEffect(() => {
+    const seq = ++loadSeqRef.current;
     setLineItemsLoading(true);
 
     getKdsOrderLinesScoped(sessionToken, order.id)
       .then((items) => {
+        if (seq !== loadSeqRef.current) return;
         setLineItems(items);
         setLineItemsLoading(false);
       })
       .catch(() => {
         // Silently fall back to items_summary — the flat display works for all orders.
+        if (seq !== loadSeqRef.current) return;
         setLineItemsLoading(false);
       });
-  }, [sessionToken, order.id, fetchKey]);
+    // items_summary is the refetch trigger for external edits (e.g. an FOH
+    // product-picker merge): the board event replaces the order object, the
+    // changed summary re-fetches the structured lines so the course-grouped
+    // display never goes stale.
+  }, [sessionToken, order.id, order.items_summary, fetchKey]);
 
   // Group items by course for structured display.
   const courseGroups = lineItems && lineItems.length > 0
@@ -279,7 +289,11 @@ export const KdsTicketCard = memo(function KdsTicketCard({
         style={{ background: hdrBg, color: hdrText }}
         onClick={toggleCollapsed}
         aria-expanded={!collapsed}
-        aria-label={`${requiredLocalized(l10n, 'kds-toggle-card-aria', { number: order.display_number ?? 0 })}${collapsed ? ' — collapsed' : ''}`}
+        aria-label={requiredLocalized(
+          l10n,
+          collapsed ? 'kds-toggle-card-aria-collapsed' : 'kds-toggle-card-aria',
+          { number: order.display_number ?? 0 },
+        )}
         data-testid={`kds-order-card-${order.display_number ?? order.id}-header`}
       >
         <span className="kds-card-header-icon" aria-hidden="true">

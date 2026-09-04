@@ -569,6 +569,7 @@ payment-toast-currency-failed = Gagal memuat data mata uang
 payment-toast-customers-failed = Gagal memuat pelanggan
 payment-toast-loyalty-failed = Gagal memuat akun loyalitas
 payment-toast-points-value-failed = Gagal memuat nilai poin
+payment-toast-kds-failed = Pembayaran berhasil, tetapi tiket dapur gagal dibuat — beri tahu dapur secara manual
 payment-customer-placeholder = mis. John Doe
 payment-loyalty-points-aria = Poin
 payment-search-customers-aria = Cari pelanggan

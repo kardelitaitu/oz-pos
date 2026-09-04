@@ -106,6 +106,7 @@ kds-course-main = UTAMA
 kds-course-side = PELENGKAP
 kds-course-dessert = PENCUCI MULUT
 kds-course-beverage = MINUMAN
+kds-course-none = Tanpa
 kds-course-other = LAINNYA
 kds-course-loading = Memuat item...
 kds-course-modifier-separator =: 
@@ -140,6 +141,8 @@ kds-shortcut-navigate = Navigasi tiket
 kds-shortcut-deselect = Batalkan pilihan / tutup
 kds-error-retry-aria = Coba Lagi
 kds-error-dismiss-aria = Tutup
+kds-error-update-failed = Gagal memperbarui pesanan — coba lagi
+kds-enrollment-failed = Pendaftaran perangkat gagal — periksa koneksi dan coba lagi
 
 # ── KDS Device Enrollment ──
 kds-enrollment-title = Daftarkan Perangkat KDS
@@ -192,6 +195,9 @@ kds-advance-start = Mulai
 kds-advance-ready = Tandai Siap
 kds-advance-serve = Sajikan
 kds-toggle-card-aria = Buka/tutup detail pesanan { $number }
+kds-toggle-card-aria-collapsed =
+    { kds-toggle-card-aria } (tertutup)
+kds-new-orders-announced = { $count } pesanan baru
 
 # ── Topbar filter dropdown ──
 kds-filter-aria = Filter pesanan
@@ -212,6 +218,8 @@ kds-footer-hours = { $count }j yang lalu
 
 # ── Completed tab (bucket columns) ──
 kds-completed-aria = Pesanan selesai
+kds-completed-load-failed = Gagal memuat pesanan selesai
+kds-completed-retry-aria = Coba muat ulang pesanan selesai
 kds-completed-today = Hari Ini
 kds-completed-yesterday = Kemarin
 kds-completed-this-week = Minggu Ini

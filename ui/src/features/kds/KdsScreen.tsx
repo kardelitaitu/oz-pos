@@ -351,6 +351,11 @@ export default function KdsScreen() {
   // 1c: Auto-acknowledge — when enabled, advance pending tickets to
   // preparing after acknowledgeDelayMin minutes without manual tap.
   // Must be placed AFTER advanceStatus declaration to avoid TDZ errors.
+  // An in-flight set guards against double-fire: this effect re-runs on
+  // every board refresh, and before the backend event replaces `orders`
+  // the same still-pending ticket would be advanced again (each duplicate
+  // replay used to overwrite the ticket's started_at on the backend).
+  const autoAckInFlightRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!prefs.autoAcknowledge || prefs.acknowledgeDelayMin <= 0) return;
 
@@ -360,13 +365,17 @@ export default function KdsScreen() {
     for (const order of orders) {
       if (order.status !== 'pending') continue;
       if (!order.received_at) continue;
+      if (autoAckInFlightRef.current.has(order.id)) continue;
 
       const receivedAt = new Date(order.received_at).getTime();
       if (isNaN(receivedAt)) continue;
 
       if (now - receivedAt >= delayMs) {
+        autoAckInFlightRef.current.add(order.id);
         // Fire-and-forget — advance silently without awaiting.
-        advanceStatus(order);
+        void advanceStatus(order).finally(() => {
+          autoAckInFlightRef.current.delete(order.id);
+        });
       }
     }
   }, [orders, prefs.autoAcknowledge, prefs.acknowledgeDelayMin, advanceStatus]);
@@ -618,9 +627,13 @@ export default function KdsScreen() {
     try {
       await updateKdsOrderItemsScoped(sessionToken, { id: orderId, items_summary: itemsSummary, item_count: itemCount });
     } catch (e) {
-      setError(String(e));
+      // Localized generic message in the role="alert" banner; raw detail to
+      // the console for diagnosis (unlocalized internal error text must not
+      // render to the operator).
+      console.error('updateKdsOrderItems failed', e);
+      setError(requiredLocalized(l10n, 'kds-error-update-failed'));
     }
-  }, [sessionToken]);
+  }, [sessionToken, l10n]);
 
   const boardFiltered = activeTab === 'completed'
     ? completedFilter !== 'all'
@@ -679,7 +692,11 @@ export default function KdsScreen() {
             className="kds-main-pane kds-main-pane--completed"
             aria-hidden={activeTab !== 'completed'}
           >
-            <KdsCompletedView onReopen={() => setActiveTab('open')} completedFilter={completedFilter} />
+            <KdsCompletedView
+              onReopen={() => setActiveTab('open')}
+              completedFilter={completedFilter}
+              active={activeTab === 'completed'}
+            />
           </div>
         </div>
       </div>
@@ -694,6 +711,16 @@ export default function KdsScreen() {
       }
     }}>
     <div ref={kdsRef} className="kds" tabIndex={-1} role="region" aria-label={requiredLocalized(l10n, 'kds-screen-aria')}>
+      {/* A11Y: non-visual announcement of arriving tickets — the chime and
+          the 3s visual highlight are both invisible to screen reader users.
+          Polite so it never collides with the role="alert" banners below. */}
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="kds-new-orders-live">
+        {newOrderIds.size > 0 && (
+          <Localized id="kds-new-orders-announced" vars={{ count: newOrderIds.size }}>
+            {`${newOrderIds.size} new orders`}
+          </Localized>
+        )}
+      </div>
       <div className="kds-header">
         <div className="kds-header-left">
           <button
@@ -1097,7 +1124,8 @@ export default function KdsScreen() {
               line_items: mergedItems,
             });
           } catch (e) {
-            setError(String(e));
+            console.error('picker merge failed', e);
+            setError(requiredLocalized(l10n, 'kds-error-update-failed'));
           } finally {
             pickerSavingRef.current = false;
             setPickerSaving(false);
