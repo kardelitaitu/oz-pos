@@ -373,6 +373,28 @@ jobs:
           echo "drift_count=$count" >> "$GITHUB_OUTPUT"
           [ "$status" = "PASS" ]
 
+      # The three AGENTS.md mirrors are policed for gate counts and CI claims by
+      # the same argument that made the step above blocking: a document that
+      # tells agents what is and is not enforced is load-bearing. Twice in this
+      # release a mirror stated something the repo contradicted -- `.agents` said
+      # Go had no CI backstop after `13f2a1dc` added one, and root said dev-ci
+      # "runs on every PR and push" when it has no push trigger. `bump-version.ps1`
+      # syncs the mirrors' *version* lines and nothing syncs their *claims*, so
+      # this is the sync that was missing.
+      #
+      # Blocking from day one, unlike ci-docs-drift: it has no baseline and no
+      # pre-existing failures, so there is nothing to be red about. Ground truth
+      # is read from .githooks/pre-commit, .github/workflows/*.yml and Cargo.toml
+      # rather than asserted, so bumping the version or adding a gate updates the
+      # expectation automatically. --self-test mutates each mirror and requires a
+      # specific finding, and reports a mutation that changes nothing as WRONG
+      # rather than letting a check pass because its fixture no longer applies.
+      # Gate: scripts/gates.json -> "agents-mirrors".
+      - name: AGENTS.md mirror truthfulness
+        run: |
+          python3 scripts/verify-agents-mirrors.py
+          python3 scripts/verify-agents-mirrors.py --self-test
+
   # ── 7. Static gates that had no CI runner at all ──────────────────────
   # Six checks existed only in scripts/check.sh, which is manual and unhooked,
   # so nothing enforced them on a clone that skipped setup-dev.ps1. Each was run

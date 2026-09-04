@@ -348,6 +348,18 @@
       "status": "required",
       "_note": "Added in 0.0.36 (R36-15). The pre-commit line-ending step filtered on 'git check-attr text' alone, which is wrong twice: it ignored '.gitattributes *.bat text eol=crlf' and stripped CRLF from the working tree (producing a phantom-dirty git status with zero content diff), and because '* text=auto' reports 'auto' for every path including binaries, a staged PNG had the 0D 0A in its signature deleted and the mangled blob re-staged -- verified on apps/desktop-client/icons/32x32.png, 1515 to 1507 bytes. Both are silent corruption behind a green hook. The test extracts the live guard from .githooks/pre-commit rather than copying it, so it cannot drift from what it polices, and it fails loudly if either guard disappears.",
       "runners": { "check.sh": ["eol guard"] }
+    },
+    {
+      "id": "agents-mirrors",
+      "label": "AGENTS.md mirror truthfulness",
+      "status": "required",
+      "_note": "Added in 0.0.36. Three copies of the agent rules exist (root AGENTS.md, .agents/AGENTS.md, .prime/AGENTS.md) and scripts/bump-version.ps1 syncs only their version lines -- the file itself documents that nothing syncs the gate list. Twice in this release a mirror stated something the repo contradicted: .agents/AGENTS.md kept saying 'Steps 6, 7 and 8 have no CI backstop' after 13f2a1dc put Go into dev-ci.yml#static-gates, and root AGENTS.md claimed dev-ci 'runs on every PR and push' when it has no push trigger at all. The first is the mirror that governs work under .agents/, so an agent following it would believe Go changes are unguarded. Required and CI-blocking from day one, unlike ci-docs-drift, because it has no baseline and no pre-existing failures: ground truth is read from .githooks/pre-commit, .github/workflows/*.yml and Cargo.toml rather than asserted, so adding a gate or bumping the version updates the expectation without touching the checker. --self-test mutates each mirror and requires a named finding; a mutation that changes nothing is reported WRONG rather than passing silently, which is how the .prime phrasing gap was found and closed.",
+      "runners": { "check.sh": ["agents mirrors", "agents mirrors self-test"] },
+      "ci": {
+        "workflow": "dev-ci.yml",
+        "job": "ci-docs-drift",
+        "step": "AGENTS.md mirror truthfulness"
+      }
     }
   ]
 }

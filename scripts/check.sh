@@ -296,6 +296,22 @@ step "doc uniqueness self-test" "python3 scripts/verify-doc-uniqueness.py --self
 # Gate: scripts/gates.json -> "eol-guard".
 step "eol guard" "bash scripts/test-eol-guard.sh" bash scripts/test-eol-guard.sh
 
+# ── AGENTS.md mirror truthfulness ──────────────────────────────────────────
+# Three copies of the agent rules exist and `bump-version.ps1` syncs only their
+# version lines. Twice in 0.0.36 a mirror stated something the repo contradicted:
+# `.agents/AGENTS.md` said Go had no CI backstop after dev-ci.yml#static-gates
+# started running it, and root AGENTS.md said dev-ci runs on push when it has no
+# push trigger. A mirror that governs work under `.agents/` and tells agents their
+# changes are unguarded is not a cosmetic problem. Ground truth is read from the
+# hook, the workflows and Cargo.toml, never asserted -- so adding a gate or
+# bumping the version updates the expectation without editing this script.
+# --self-test mutates each mirror and requires a named finding, and reports a
+# mutation that changes nothing as WRONG rather than passing because its fixture
+# no longer applies.
+# Gate: scripts/gates.json -> "agents-mirrors".
+step "agents mirrors" "python3 scripts/verify-agents-mirrors.py" python3 scripts/verify-agents-mirrors.py
+step "agents mirrors self-test" "python3 scripts/verify-agents-mirrors.py --self-test" python3 scripts/verify-agents-mirrors.py --self-test
+
 # ── Release workflow validation (R36-11) ──────────────────────────────────
 # release.yml was renamed to .bak by 23c96330 with an empty commit message and
 # nothing replaced it, so tagging produced no installers for a release cycle.
