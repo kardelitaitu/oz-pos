@@ -339,14 +339,53 @@
   --btn-fg: var(--kds-text);
   --btn-hover: rgba(255, 255, 255, 0.08);
   --btn-active: rgba(255, 255, 255, 0.12);
+  transition: background 0.15s ease, color 0.15s ease, transform 0.06s ease;
 }
-.kds-btn--filter--all { background: var(--kds-accent); color: var(--kds-fg-inverse); opacity: 1; }
-.kds-btn--filter--all .caret { opacity: 0.7; }
-.kds-btn--filter--active { background: var(--kds-accent); color: var(--kds-fg-inverse); opacity: 1; }
-.kds-btn--filter--active .caret { opacity: 0.85; }
-.kds-btn--filter .caret { opacity: 0.5; display: inline-flex; align-items: center; transition: transform 0.2s; }
-.kds-btn--filter .caret svg { width: 18px; height: 18px; }
-.kds-btn--filter--open .caret { transform: rotate(180deg); }
+.kds-btn--filter:hover {
+  transform: none; /* Never scale text-bearing filter button on hover */
+}
+.kds-btn--filter:active {
+  transform: translateY(1px);
+}
+.kds-btn--filter--all,
+.kds-btn--filter--active {
+  background: var(--kds-accent);
+  color: var(--kds-fg-inverse);
+  opacity: 1;
+}
+.kds-btn--filter--all .caret,
+.kds-btn--filter--active .caret {
+  opacity: 0.85;
+}
+.kds-btn--filter--all:hover,
+.kds-btn--filter--active:hover {
+  background: var(--kds-accent-hover);
+  color: var(--kds-fg-inverse);
+  transform: none;
+}
+.kds-btn--filter--all:active,
+.kds-btn--filter--active:active {
+  background: var(--kds-accent-active);
+  color: var(--kds-fg-inverse);
+  transform: translateY(1px);
+}
+.kds-btn--filter .caret {
+  opacity: 0.7;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  transform-origin: 50% 50%;
+  transition: transform 0.2s cubic-bezier(0.33, 1, 0.68, 1);
+}
+.kds-btn--filter .caret svg {
+  width: 18px;
+  height: 18px;
+}
+.kds-btn--filter--open .caret {
+  transform: rotate(180deg);
+}
 
 /* --shift: blue rest; green hover starting; red hover stopping */
 .kds-btn--shift {
