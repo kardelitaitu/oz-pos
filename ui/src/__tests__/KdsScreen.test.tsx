@@ -736,6 +736,40 @@ describe('KdsScreen', () => {
     });
   });
 
+  it('switches between Open and Completed tabs on horizontal swipe gestures', async () => {
+    mockGetKdsQueue.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      expect(document.querySelector('.kds-main-viewport')).not.toBeNull();
+    });
+
+    const viewport = document.querySelector('.kds-main-viewport') as HTMLElement;
+
+    // Swipe left (from Open to Completed)
+    fireEvent.touchStart(viewport, {
+      touches: [{ clientX: 300, clientY: 100 }],
+    });
+    fireEvent.touchEnd(viewport, {
+      changedTouches: [{ clientX: 100, clientY: 100 }],
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector('.kds-main.completed-view')).not.toBeNull();
+    });
+
+    // Swipe right (from Completed back to Open)
+    fireEvent.touchStart(viewport, {
+      touches: [{ clientX: 100, clientY: 100 }],
+    });
+    fireEvent.touchEnd(viewport, {
+      changedTouches: [{ clientX: 300, clientY: 100 }],
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector('.kds-main:not(.completed-view)')).not.toBeNull();
+    });
+  });
+
   // ── 3d: Voice callout tests ────────────────────────────────────
 
   it('announces order up via TTS when ticket advances to ready', async () => {

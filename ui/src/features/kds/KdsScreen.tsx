@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo, useRef, Profiler } from 'rea
 import { Localized, useLocalization } from '@fluent/react';
 import { listen } from '@/api/tauri';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+import { useSwipe } from '@/hooks/useSwipe';
 import { useKdsOffline } from '@/hooks/useKdsOffline';
 import { useWorkspaceScope, useWorkspace } from '@/contexts/WorkspaceContext';
 import { getKdsQueueScoped, updateKdsStatusScoped, updateKdsOrderItemsScoped, updateKdsLineItemStatusScoped, getKdsOrderLinesScoped, type KdsOrder, type KdsStatus, type KdsLineItem, type CreateKdsLineItemInput } from '@/api/kds';
@@ -442,6 +443,19 @@ export default function KdsScreen() {
     onRefresh: fetchOrders,
   });
 
+  // Swipe gesture between Open and Completed tabs (Android launcher pager feel)
+  const swipeProps = useSwipe(
+    {
+      onSwipeLeft: () => {
+        if (activeTab === 'open') setActiveTab('completed');
+      },
+      onSwipeRight: () => {
+        if (activeTab === 'completed') setActiveTab('open');
+      },
+    },
+    { minDistance: 60, maxTimeMs: 400 },
+  );
+
   // KEY-07: ARIA tabs pattern — ArrowLeft/ArrowRight/Home/End move between the
   // zone chips (roving tabindex: the selected chip keeps tabIndex 0, others -1),
   // and the chip reached by arrow keys becomes the active zone filter.
@@ -606,7 +620,7 @@ export default function KdsScreen() {
     }
 
     return (
-      <div className="kds-main-viewport">
+      <div className="kds-main-viewport" {...swipeProps}>
         <div className={`kds-main-track active-${activeTab}`}>
           <div
             className="kds-main-pane kds-main-pane--open"

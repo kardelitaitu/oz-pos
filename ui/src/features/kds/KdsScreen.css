@@ -1650,13 +1650,14 @@
   height: 100%;
 }
 
-/* ── Main sliding viewport (tab transitions) ─────────────────────── */
+/* ── Main sliding viewport (Android launcher / pager tab transitions) ── */
 .kds-main-viewport {
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
   overflow: hidden;
   position: relative;
+  touch-action: pan-y pinch-zoom;
 }
 
 .kds-main-track {
@@ -1664,7 +1665,7 @@
   flex-direction: row;
   width: 100%;
   height: 100%;
-  transition: transform 0.32s cubic-bezier(0.33, 1, 0.68, 1);
+  transition: transform 0.38s cubic-bezier(0.2, 0, 0, 1);
   will-change: transform;
 }
 
@@ -1685,6 +1686,22 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  transform-origin: center center;
+  transition: transform 0.38s cubic-bezier(0.2, 0, 0, 1), opacity 0.32s ease;
+  will-change: transform, opacity;
+}
+
+/* Android launcher depth effect: inactive pane scales down and fades out */
+.kds-main-pane[aria-hidden='true'] {
+  opacity: 0.35;
+  transform: scale(0.95);
+  pointer-events: none;
+}
+
+.kds-main-pane[aria-hidden='false'] {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
 }
 
 /* ── Main masonry view (prototype .kds-main + .kds-col) ───────────────
