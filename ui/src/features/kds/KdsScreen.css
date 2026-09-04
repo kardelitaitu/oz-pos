@@ -2024,25 +2024,15 @@
    Nothing in ui/src references any of those names. */
 
 /* ── Urgent: always-on blink keyframe (accessibility) ────────────── */
+/* ── Urgent: always-on blink keyframe (accessibility) ──────────────
+   PERF-ANIM: box-shadow morphing moved to the ::after glow layer; only
+   the border-color blink remains here (tiny paint surface). */
 @keyframes kds-urgent-blink {
   0%, 100% {
     border-color: var(--kds-error-border, #e53e3e);
-    box-shadow: var(--kds-shadow-urgent);
   }
   50% {
     border-color: color-mix(in srgb, var(--kds-error-border, #e53e3e) 50%, transparent);
-    box-shadow: 0 0 8px rgba(220, 38, 38, 0.3), inset 0 0 15px rgba(239, 68, 68, 0.02);
-  }
-}
-
-@keyframes kds-red-border-flash {
-  0%, 100% {
-    border-color: var(--kds-red);
-    box-shadow: 0 0 12px var(--sla-glow, rgba(239, 68, 68, 0.5));
-  }
-  50% {
-    border-color: color-mix(in srgb, var(--kds-red) 60%, transparent);
-    box-shadow: 0 0 4px rgba(239, 68, 68, 0.2);
   }
 }
 
