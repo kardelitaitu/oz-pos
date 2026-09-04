@@ -4,7 +4,7 @@ version: 2.1
 executors:
   node-executor:
     docker:
-      - image: cimg/node:22.14
+      - image: cimg/node:24.0
     resource_class: medium
 
   rust-executor:
@@ -31,8 +31,12 @@ executors:
 
   polyglot-executor:
     docker:
-      - image: cimg/go:1.24.0-node
+      - image: cimg/rust:1.85.0-node
     resource_class: medium
+    environment:
+      CARGO_TERM_COLOR: always
+      RUSTFLAGS: -D warnings
+      RUSTC_WRAPPER: ""
 
   rust-node-executor:
     docker:
@@ -74,10 +78,12 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Install Python & Verification Tools
+          name: Install Go, Python & Verification Tools
           command: |
             sudo apt-get update
-            sudo apt-get install -y --no-install-recommends python3 python3-pip
+            sudo apt-get install -y --no-install-recommends python3 python3-pip curl
+            curl -fsSL https://go.dev/dl/go1.24.0.linux-amd64.tar.gz | sudo tar -C /usr/local -xz
+            echo 'export PATH="/usr/local/go/bin:$PATH"' >> $BASH_ENV
       - run:
           name: Architecture Boundaries
           command: python3 scripts/verify-architecture-boundaries.py --strict
