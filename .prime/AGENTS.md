@@ -1,6 +1,6 @@
 # Agents Configuration
 
-<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved A1: version lock and manifests all read 0.0.21 · verified accurate: 4 pre-commit gates; command dirs, ui/src/api rule, Money/i64 policy, .githooks gates -->
+<!-- Audit stamp: 2026-09-04 · DSH · status: ACCURATE · version lock: 0.0.36 · 8 pre-commit gates · re-audited from the 2026-07-25 Hermes-Agent stamp (that audit resolved A1: version lock and manifests all read 0.0.21, and its "4 pre-commit gates" was accurate then — gates 6, 7 and 8 landed afterwards and this file never followed) -->
 
 ## Global Rules
 
@@ -13,19 +13,25 @@
 ## Quick Setup
 
 ```bash
-git config core.hooksPath .githooks   # enable pre-commit hook (cargo fmt + i18n lint + bundle-parity + FTL dedupe)
+git config core.hooksPath .githooks   # enable pre-commit hook (fmt + EOL + i18n + bundle-parity + FTL dedupe + column types + PG drift + Go)
 ```
 
-The `.githooks/pre-commit` hook runs four gates before every commit (~1s total):
+The `.githooks/pre-commit` hook runs **eight steps** before every commit (~5–7s typical):
 
-1. **`cargo fmt --all`** — auto-formats staged Rust files and re-stages them.
-2. **`i18n lint`** — runs `scripts/lint-i18n.sh` (catches `.id.ftl` byte-identical to its `.ftl` sibling + Fluent key duplicates + an informational bundle-parity surface).
-3. **`Bundle parity: staged files only`** — runs `scripts/verify-bundle-parity.py --staged-only …` on staged `.tsx` / `.ts` files in `ui/src/features/**`; fails-closed if any new `<Localized id>` references a key missing from one or both `.ftl` bundles.
-4. **`FTL dedupe dry-run`** — runs `scripts/dedupe-ftl.py --dry-run` so any duplicate Fluent key surfaces BEFORE push.
+1. **`cargo fmt --all`** — auto-formats Rust and re-stages what it changed.
+2. **Line-ending normalization** — strips CR from staged text files in the working tree and index and re-stages them, so the committed blob is LF (backs `.gitattributes` `* text=auto eol=lf`).
+3. **`i18n lint`** — `scripts/lint-i18n.sh`; fail-closed on byte-identical `.id.ftl` siblings, duplicate Fluent keys dropped at bundle join, and literal keys resolving in neither locale.
+4. **`Bundle parity: staged files only`** — `scripts/verify-bundle-parity.py --staged-only` with six `--include-*` flags, over staged files in `features`, `components`, `frontend`, `contexts`, `hooks`, `platform`; fails if any of the **eight checked surfaces** references a key missing from `.ftl`/`.id.ftl`.
+5. **`FTL dedupe dry-run`** — `scripts/dedupe-ftl.py --dry-run`.
+6. **`Migration column-type lint`** — `scripts/verify-migration-column-types.py --staged-only`, when `crates/oz-core/migrations/*.sql` is staged.
+7. **`PG schema drift guard`** — `scripts/generate-pg-migration.py --check`; `20260813_init.pg.sql` is generated, never hand-edited.
+8. **`Go gate`** — `gofmt -w` + `go vet ./...` when `apps/license-server/*.go` is staged.
 
-Without this `core.hooksPath` set, all four gates are silently bypassed at commit time (CI catches them later, but only the i18n lint as an informational surface; the bundle-parity + FTL dedupe checks run only at CI time).
+Without `core.hooksPath` set, all eight are bypassed at commit time. What CI then catches is narrower than it looks: the live `dev-ci.yml` `i18n` job runs **`lint-i18n.sh` as a hard failure** (not informational) and **`dedupe-ftl.py --dry-run`** — but it does **not** run `verify-bundle-parity.py`, and there is **no** CI job for migration column types, PG schema drift, or Go. Those three lived in `ci.yml`, retired to `.bak` by `23c96330` and never restored; only the `i18n` job was brought back. So bundle-parity, column types, PG drift and Go are guarded **only** by the opt-in local hook.
 
-For comprehensive local validation that mirrors the entire CI matrix (not just the pre-commit subset), see [`scripts/check.sh`](./scripts/check.sh). For the full first-time setup walkthrough (4 gates explained, chmod, verify hint), see [`.agents/skills/onboarding-guide/SKILL.md#first-time-setup`](./.agents/skills/onboarding-guide/SKILL.md#first-time-setup).
+> This list is hand-maintained. `scripts/bump-version.ps1` syncs the *version* lines in this file and its mirrors but nothing syncs the *gate* list, which is how this file, `.agents/AGENTS.md` and root `AGENTS.md` ended up claiming 4, 4 and 6 gates against a real 8. Source of truth: `grep -n '^# ──' .githooks/pre-commit`.
+
+For comprehensive local validation that mirrors the entire CI matrix (not just the pre-commit subset), see [`scripts/check.sh`](./scripts/check.sh). For the full first-time setup walkthrough, see [`.agents/skills/onboarding-guide/SKILL.md#first-time-setup`](../.agents/skills/onboarding-guide/SKILL.md#first-time-setup).
 
 
 ## Running UI CLI Tools on Windows (tsc / eslint)
@@ -113,8 +119,9 @@ npm ci --no-audit --no-fund
 - All PRs must pass the CI pipeline (lint, test, build) before merging.
 
 
-- CI only triggers on the `main` branch (push + pull_request). Feature-branch
-  pushes do not run CI; open a PR targeting `main` to validate changes.
+- CI runs on `pull_request` targeting `main`, plus manual `workflow_dispatch`. The live
+  `dev-ci.yml` has **no `push` trigger at all** — not even on `main`. So pushing a
+  feature branch runs nothing; open a PR targeting `main` to validate changes.
 - Never commit secrets, `.env` files, or SQLite database files.
 
 > [!NOTE]

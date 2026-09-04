@@ -1,6 +1,6 @@
 # Agents Configuration & Rules
 
-<!-- Audit stamp: 2026-08-30 · Antigravity · status: ACCURATE · version lock: 0.0.36 · 4 pre-commit gates · conventional commits enforced -->
+<!-- Audit stamp: 2026-09-04 · DSH · status: ACCURATE · version lock: 0.0.36 · 8 pre-commit gates · conventional commits enforced -->
 
 ## 🚨 Critical Agent Directives (MUST FOLLOW)
 
@@ -21,16 +21,24 @@
 ## 🛠️ Quick Setup & Pre-Commit Gates
 
 ```bash
-git config core.hooksPath .githooks   # enable pre-commit hook (cargo fmt + i18n lint + bundle-parity + FTL dedupe)
+git config core.hooksPath .githooks   # enable pre-commit hook (fmt + EOL + i18n + bundle-parity + FTL dedupe + column types + PG drift + Go)
 ```
 
-The `.githooks/pre-commit` hook runs four gates automatically before every commit (~1s total):
-1. **`cargo fmt --all`** — auto-formats staged Rust files and re-stages them.
-2. **`i18n lint`** — runs `scripts/lint-i18n.sh` (validates Fluent `.id.ftl` vs `.ftl` bundles).
-3. **`Bundle parity: staged files only`** — runs `scripts/verify-bundle-parity.py --staged-only` on staged `ui/src/features/**` files; fails if an `<Localized id>` key is missing from `.ftl`.
-4. **`FTL dedupe dry-run`** — runs `scripts/dedupe-ftl.py --dry-run` to detect duplicate Fluent keys before push.
+The `.githooks/pre-commit` hook runs **eight steps** before every commit, in this order (~5–7s typical; the i18n gate alone is ~4s):
+1. **`cargo fmt --all`** — auto-formats Rust and re-stages what it changed.
+2. **Line-ending normalization** — strips CR from staged text files in the working tree and index, re-staging them so the committed blob is LF (backs `.gitattributes` `* text=auto eol=lf`).
+3. **`i18n lint`** — `scripts/lint-i18n.sh`; fail-closed on byte-identical `.id.ftl` siblings, duplicate Fluent keys dropped at bundle join, and literal keys resolving in neither locale.
+4. **`Bundle parity: staged files only`** — `scripts/verify-bundle-parity.py --staged-only` with `--include-getstring --include-nav-keys --include-key-fields --include-dynamic-literals --include-id-maps --check-domain-pairs`, over staged files in `features`, `components`, `frontend`, `contexts`, `hooks` and `platform`. Fails if any of the **eight checked surfaces** references a key missing from `.ftl`/`.id.ftl`.
+5. **`FTL dedupe dry-run`** — `scripts/dedupe-ftl.py --dry-run`.
+6. **`Migration column-type lint`** — `scripts/verify-migration-column-types.py --staged-only`, when `crates/oz-core/migrations/*.sql` is staged.
+7. **`PG schema drift guard`** — `scripts/generate-pg-migration.py --check`; `20260813_init.pg.sql` is generated, **never hand-edited**.
+8. **`Go gate`** — when `apps/license-server/*.go` is staged: `gofmt -w` + `go vet ./...`. Aborts if `go`/`gofmt` are missing.
 
-> For full repository verification mirroring the entire CI matrix, see [`scripts/check.sh`](./scripts/check.sh).
+> ⚠️ **Steps 6, 7 and 8 have no CI backstop.** They lived in `ci.yml`, which was retired to `.bak` (`23c96330`) and never restored in `dev-ci.yml` — only the `i18n` job was brought back. On a clone without `core.hooksPath` set, none of the eight run.
+
+> **Keeping this list honest:** `scripts/bump-version.ps1` updates the *version* lines in these mirrors but nothing updates the *gate* list. When a step is added to or removed from `.githooks/pre-commit`, this section, the root [`AGENTS.md`](../AGENTS.md) and `.prime/AGENTS.md` all have to change by hand — which is how all three drifted to different counts. The hook itself is the source of truth: `grep -n '^# ──' .githooks/pre-commit`.
+
+> For full repository verification mirroring the entire CI matrix, see [`scripts/check.sh`](../scripts/check.sh).
 
 ---
 
@@ -101,6 +109,8 @@ npm ci --no-audit --no-fund
 
 ### 4. Database & Hardware
 - **HAL Drivers:** Hardware drivers must have a mock implementation in `crates/oz-hal/src/drivers/mock.rs`.
+- **SQLite is the schema source of truth:** `crates/oz-core/migrations/*.sql` + the registry in `migrations.rs` (registry order is canonical). See [`docs/records/sqlite-pg-roles.md`](../docs/records/sqlite-pg-roles.md).
+- **`init.pg.sql` is generated, never hand-edited:** after any migration change run `python3 scripts/generate-pg-migration.py` and re-stage `crates/oz-core/migrations/20260813_init.pg.sql`. Pre-commit step 7 fails on drift — but note there is **no CI job for it any more** (it was retired with `ci.yml`), so the local hook is the only guard.
 - **PostgreSQL Drift:** When modifying Postgres schemas, run `bash scripts/reset-dev-pg.sh` to re-synchronize the shared dev container schema (`oz-pg-test-15432`).
 
 ---

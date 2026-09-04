@@ -41,6 +41,7 @@ if [ -z "$PYTHON" ]; then
     exit 1
 fi
 
+# ── cargo fmt ──────────────────────────────────────────────────────────────
 # Run cargo fmt, capturing output if it fails
 if ! "$RUSTUP" run stable cargo fmt --all 2>/dev/null; then
     echo "error: cargo fmt failed — aborting commit." >&2
