@@ -191,6 +191,29 @@ NAMED_LOCAL_RE = re.compile(
     r"(?:there is|there are)\s+\**no\**\s+CI\s+(?:job|gate|backstop|step)s?\s+(?:for|that)"
     r"\s+([^.\n]+)", re.I)
 
+# The same lie told in different words. Found against my own prose: after I added a
+# CI step for bundle-parity, `.prime/AGENTS.md` still read "still guarded **only** by
+# the opt-in local hook", and the gate passed all three mirrors. NEGATION-ONLY
+# patterns see "no CI job for X" and miss "X is guarded only by the hook", which
+# asserts precisely the same falsehood -- and is the phrasing these files actually
+# favour, because they describe what DOES run and then note the exception.
+#
+# The subject has to come FIRST here ("bundle-parity ... only by the local hook"),
+# unlike NAMED_LOCAL_RE where the negation leads, so the capture group is before the
+# marker rather than after.
+LOCAL_ONLY_RE = re.compile(
+    r"(?:\b(?:is|are|was|were|remains?|stays?)\s+)?(?:still\s+|now\s+)?"
+    r"(?:guarded|covered|enforced|checked|run|backed)\s+"
+    r"(?:\**only\**|\**solely\**|\**exclusively\**)\s+by\s+[^.\n]*?"
+    r"(?:local\s+)?(?:hook|pre-commit)", re.I)
+
+# Phrases that make a LOCAL_ONLY_RE hit a TRUE statement rather than a lie: a
+# sentence saying the hook is the only guard *at commit time* is correct even when
+# CI also runs the check, since CI does not run at commit time. Without this the
+# pattern would fire on accurate prose and the gate would train readers to ignore it.
+LOCAL_ONLY_EXEMPT = re.compile(
+    r"at commit time|when hooks? are|without\s+`?core\.hooksPath", re.I)
+
 
 def named_local_claims(text: str) -> list[str]:
     """Phrases a mirror says have no CI job, split into individual items.
@@ -208,6 +231,46 @@ def named_local_claims(text: str) -> list[str]:
             it = it.strip(" .;:").lower()
             if it:
                 out.append(it)
+    return out
+
+
+def local_only_claims(text: str) -> list[str]:
+    """Subjects a mirror says are guarded ONLY by the local hook.
+
+    The marker is matched first and the subject recovered from the ~140 characters
+    BEFORE it, rather than the subject being captured by one forward regex. That is
+    because the phrasing these files actually use is a participial clause -- "The
+    remaining gap is `verify-bundle-parity.py` (step 4)**, still guarded only by the
+    opt-in local hook" -- where no copula precedes "guarded" and the noun the claim
+    is about sits after a parenthetical. A forward pattern either misses it or
+    swallows "The remaining gap is" as the subject, which matches no step name and
+    so reports nothing.
+
+    Sentences scoping the claim to commit time are dropped: those stay true even once
+    CI runs the check, and a gate that fires on accurate prose trains readers to
+    ignore it.
+    """
+    out: list[str] = []
+    for m in LOCAL_ONLY_RE.finditer(text):
+        window = text[max(0, m.start() - 140):m.start()]
+        sentence = window + m.group(0) + text[m.end():m.end() + 140]
+        if LOCAL_ONLY_EXEMPT.search(sentence):
+            continue
+        # Prefer backticked identifiers: in these files the tool name is always
+        # code-formatted, and it is the token step_tools() can be matched against.
+        cands = re.findall(r"`([^`]+)`", window)
+        if not cands:
+            # Fall back to the trailing clause's words, minus connective noise.
+            tail = re.split(r"[.;:]", window)[-1]
+            tail = re.sub(r"\(step\s+\d+\)", " ", tail)
+            tail = re.sub(r"\b(?:the|remaining|gap|so|and|or|is|are|was|were|"
+                          r"that|this|which|only|also|still|now|note|but)\b",
+                          " ", tail, flags=re.I)
+            cands = [w for w in re.findall(r"[A-Za-z][\w-]{2,}", tail)]
+        for c in cands:
+            c = re.sub(r"\*+", "", c).strip(" .;:").lower()
+            if len(c) >= 3:
+                out.append(c)
     return out
 
 
@@ -309,6 +372,34 @@ def scan(root: Path) -> list[str]:
                         f"{', '.join(covered[ordinal])} in a live workflow")
                     break
 
+        # (2c) The same lie a third time, in the "guarded only by the local hook"
+        # phrasing. This one was found against my own edit: after bundle-parity got
+        # a CI step, .prime still made that claim and the scan passed, because both
+        # patterns above need the negation to lead.
+        for phrase in local_only_claims(text):
+            for ordinal, name in steps:
+                if ordinal not in covered:
+                    continue
+                keys = [w.lower() for w in re.findall(r"[A-Za-z][\w-]+", name)
+                        if w.lower() not in ("gate", "lint", "guard", "staged",
+                                             "only", "dry", "run", "normalization")]
+                # Also the step's own tooling, via the same helper that decided
+                # `covered`: prose names tools ("verify-bundle-parity.py") that the
+                # section HEADER never contains. Re-deriving the section body here
+                # with a `hook_text` variable that does not exist was my first draft
+                # -- and because local_only_claims() also returned nothing at that
+                # point, the loop body never ran and the NameError stayed hidden
+                # behind a green exit. A latent crash in a branch that never fires
+                # is the worst kind: it is invisible until the day it matters.
+                keys += [t.lower() for t in step_tools(name)]
+                if any(re.search(r"\b" + re.escape(kw.replace(".", r"\.")) + r"\b", phrase)
+                       for kw in keys):
+                    problems.append(
+                        f"{rel}: says \"{phrase}\" is guarded only by the local hook, "
+                        f"but step {ordinal} (\"{name}\") is covered by "
+                        f"{', '.join(covered[ordinal])} in a live workflow")
+                    break
+
         # (5) version lock. The three mirrors phrase this differently:
         #   root/.agents : "Version is locked at `0.0.36`"
         #   .prime       : "Version is locked at the current release (`0.0.36`)"
@@ -374,10 +465,24 @@ def report(root: Path) -> int:
 # ── Self-test: mutate a copy and prove each check fires ─────────────────────
 
 MUTATIONS = [
-    ("false CI-coverage claim restored",
-     lambda t: t.replace("Steps 6 and 7 are local-only",
-                         "Steps 6, 7 and 8 have no CI backstop", 1),
-     "no CI backstop"),
+    # Anchors here must be text that EXISTS in the current mirrors. The first
+    # version of this entry pointed at "Steps 6 and 7 are local-only", which I
+    # deleted when those steps got CI steps -- so the mutation changed nothing and
+    # the vacuous-mutation guard reported WRONG rather than letting a no-op count
+    # as a pass. That guard is the reason this table can be trusted at all.
+    ("false CI-coverage claim restored (negation phrasing)",
+     lambda t: t.replace(
+         "All eight steps now have a CI backstop",
+         "Steps 6 and 7 are local-only; there is no CI job for migration column "
+         "types or PG schema drift. All eight steps now have a CI backstop", 1),
+     "no CI"),
+    ("false local-only claim (participial phrasing)",
+     lambda t: t.replace(
+         "All eight steps now have a CI backstop",
+         "All eight steps now have a CI backstop. The remaining gap is "
+         "`verify-migration-column-types.py`, still guarded only by the opt-in "
+         "local hook", 1),
+     "only by the local hook"),
     ("gate count off by one",
      lambda t: t.replace("runs **eight steps**", "runs **six steps**", 1),
      "pre-commit steps"),
@@ -405,18 +510,25 @@ MUTATIONS = [
 # applicable is recorded with a reason rather than silently skipped.
 MUTATIONS_BY_MIRROR: dict[str, list] = {
     ".prime/AGENTS.md": [
-        ("false CI-coverage claim restored",
+        ("false CI-coverage claim restored (negation phrasing)",
          lambda t: t.replace(
-             "there is **no** CI job for migration column types or PG schema drift",
-             "there is **no** CI job for migration column types, PG schema drift, or Go",
-             1),
+             "**Every one of the eight now has a CI backstop.**",
+             "**Every one of the eight now has a CI backstop.** There is **no** CI "
+             "job for migration column types or PG schema drift.", 1),
          "no CI job"),
+        ("false local-only claim (participial phrasing)",
+         lambda t: t.replace(
+             "**Every one of the eight now has a CI backstop.**",
+             "**Every one of the eight now has a CI backstop.** The remaining "
+             "holdout is `generate-pg-migration.py`, still guarded only by the "
+             "opt-in local hook.", 1),
+         "only by the local hook"),
         ("gate count off by one",
          lambda t: t.replace("runs **eight steps**", "runs **five steps**", 1),
          "pre-commit steps"),
         ("version lock removed",
-         lambda t: t.replace("locked at the current release (`0.0.36`)",
-                             "locked at the current release (`0.0.1`)", 1),
+         lambda t: re.sub(r"locked at the current release \(`[\d.]+`\)",
+                          "locked at the current release (`0.0.1`)", t, count=1),
          "version lock"),
         ("phantom CI job cited",
          lambda t: t.replace("dev-ci.yml#static-gates", "dev-ci.yml#go-job", 1),

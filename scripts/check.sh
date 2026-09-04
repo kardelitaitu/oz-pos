@@ -278,6 +278,9 @@ step "ci docs drift" "python3 scripts/verify-ci-docs-drift.py" python3 scripts/v
 # mean "the drift gate stopped looking".
 step "ci docs drift self-test" "python3 scripts/verify-ci-docs-drift.py --self-test" python3 scripts/verify-ci-docs-drift.py --self-test
 
+# Gate: scripts/gates.json -> "bundle-parity".
+step "bundle parity" "python3 scripts/verify-bundle-parity.py --scan-dirs features,components,frontend,contexts,hooks,platform" python3 scripts/verify-bundle-parity.py --include-getstring --include-nav-keys --include-key-fields --include-dynamic-literals --include-id-maps --check-domain-pairs --scan-dirs features,components,frontend,contexts,hooks,platform
+
 # ── Migration correctness (steps 6 and 7 of the pre-commit hook) ───────────
 # Both lived in ci.yml, retired to .bak by 23c96330, and were never restored in
 # dev-ci.yml -- and, as this file proves, they were never in check.sh either. So

@@ -403,6 +403,18 @@
         "job": "static-gates",
         "steps": ["Migration column types"]
       }
+    },
+    {
+      "id": "bundle-parity",
+      "label": "i18n bundle parity",
+      "status": "required",
+      "_note": "Added in 0.0.37. This is pre-commit step 4 and had NO gates.json record until then, which is a worse failure than pointing at a retired workflow: verify-ci-docs-drift.py iterates the gates present in the manifest, so a gate with no record can never be reported as required-but-not-enforced. The blind spot is structural, not a data error. It is also the step whose own history is the worst -- before the Fluent page audit it walked only literal <Localized id> under ui/src/features/** and skipped every shared-chrome and context file it was handed, so 14 broken keys shipped while it reported clean. --scan-dirs is load-bearing: the tool defaults to `features` alone, and the six directories add 108 files (228 -> 336, 47% more coverage). A runner that omits the flag prints '0 missing key(s)' over a third of the surface unexamined. CI and check.sh deliberately run WITHOUT --staged-only, which the hook uses: a key reference shipped by a hook-less clone must be revisited by something.",
+      "runners": { "check.sh": ["bundle parity"] },
+      "ci": {
+        "workflow": "dev-ci.yml",
+        "job": "static-gates",
+        "step": "i18n bundle parity"
+      }
     }
   ]
 }

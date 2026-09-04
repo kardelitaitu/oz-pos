@@ -503,6 +503,24 @@ jobs:
           else
             echo "not a pull_request event; nothing to compare a base against"
           fi
+      # The last hook step with no CI backstop, and the one with the worst history:
+      # AGENTS.md records that 14 broken i18n keys shipped while this reported clean.
+      # Until now it ran ONLY in the opt-in pre-commit hook -- not in check.sh, not in
+      # check:all, not in CI -- so a clone that skips setup-dev.ps1 could reference a
+      # key present in neither locale and nothing anywhere would notice.
+      #
+      # --scan-dirs is load-bearing, not stylistic. The tool defaults to `features`
+      # alone; the six directories the hook names add 108 more files (228 -> 336, 47%
+      # more coverage). A CI step that omitted the flag would print "0 missing key(s)"
+      # while a third of the surface went unexamined -- green from a smaller input,
+      # which is the failure this repo keeps rediscovering.
+      # Gate: scripts/gates.json -> "bundle-parity".
+      - name: i18n bundle parity
+        run: |
+          python3 scripts/verify-bundle-parity.py \
+            --include-getstring --include-nav-keys --include-key-fields \
+            --include-dynamic-literals --include-id-maps --check-domain-pairs \
+            --scan-dirs features,components,frontend,contexts,hooks,platform
       # These two lived in ci.yml, which 23c96330 retired to .bak, and neither was
       # ever restored -- so for two releases the ONLY guard was the opt-in
       # pre-commit hook. core.hooksPath is set by scripts/setup-dev.ps1 and is not
