@@ -8,8 +8,34 @@ import KdsScreen from '@/features/kds/KdsScreen';
 import kdsFtl from '@/locales/kds.ftl?raw';
 import type { KdsOrder } from '@/api/kds';
 
-// Shared mutable state for KDS preferences across test renders
-const testKdsState = { kdsZone: '' };
+// ── Zone-preference store (ZONE-TESTS) ──────────────────────────────
+// The real useKdsPreferences persists and notifies; this store mirrors
+// that contract so zone clicks re-render the screen NATURALLY instead of
+// relying on manual rerender() calls (the old approach crashed the
+// worker with an unbounded re-render loop).
+const { kdsZoneStore } = vi.hoisted(() => {
+  const state = { current: '' };
+  const listeners = new Set<() => void>();
+  return {
+    kdsZoneStore: {
+      get: () => state.current,
+      subscribe: (cb: () => void) => {
+        listeners.add(cb);
+        return () => {
+          listeners.delete(cb);
+        };
+      },
+      set: (zone: string) => {
+        if (state.current === zone) return;
+        state.current = zone;
+        for (const l of listeners) l();
+      },
+      reset: () => {
+        state.current = '';
+      },
+    },
+  };
+});
 
 const { mockGetKdsQueue, mockUpdateKdsStatus, mockListKdsOrdersScoped, mockGetKdsOrderLines, mockUpdateKdsOrderItems, mockListProducts, mockUseTicketSla, mockPlayAlert, mockSpeak, mockUseWorkspaceScope } = vi.hoisted(() => ({
   mockGetKdsQueue: vi.fn(),
@@ -28,25 +54,34 @@ const { mockGetKdsQueue, mockUpdateKdsStatus, mockListKdsOrdersScoped, mockGetKd
   mockUseWorkspaceScope: vi.fn<() => { storeId: string; instanceId: string; typeKey: string } | null>(() => null),
 }));
 
-vi.mock('@/features/kds/hooks/useKdsPreferences', () => ({
-  useKdsPreferences: () => ({
-    prefs: {
-      layout: 'kanban',
-      showOrderId: true,
-      showTableNumber: true,
-      kdsZone: testKdsState.kdsZone,
-      autoAcknowledge: false,
-      acknowledgeDelayMin: 2,
+vi.mock('@/features/kds/hooks/useKdsPreferences', async () => {
+  const { useSyncExternalStore } = await import('react');
+  return {
+    useKdsPreferences: () => {
+      // Subscribing via useSyncExternalStore makes a zone click re-render
+      // the screen naturally — the same contract the real hook provides
+      // (persist + notify), which manual rerender() could never emulate.
+      const kdsZone = useSyncExternalStore(kdsZoneStore.subscribe, kdsZoneStore.get);
+      return {
+        prefs: {
+          layout: 'kanban',
+          showOrderId: true,
+          showTableNumber: true,
+          kdsZone,
+          autoAcknowledge: false,
+          acknowledgeDelayMin: 2,
+        },
+        setLayout: vi.fn(),
+        setShowOrderId: vi.fn(),
+        setShowTableNumber: vi.fn(),
+        setKdsZone: (zone: string) => kdsZoneStore.set(zone),
+        setAutoAcknowledge: vi.fn(),
+        setAcknowledgeDelay: vi.fn(),
+        loading: false,
+      };
     },
-    setLayout: vi.fn(),
-    setShowOrderId: vi.fn(),
-    setShowTableNumber: vi.fn(),
-    setKdsZone: (zone: string) => { testKdsState.kdsZone = zone; },
-    setAutoAcknowledge: vi.fn(),
-    setAcknowledgeDelay: vi.fn(),
-    loading: false,
-  }),
-}));
+  };
+});
 
 vi.mock('@/api/kds', () => ({
   getKdsQueue: async (_userId: string, _kdsZone?: string) => {
@@ -159,7 +194,7 @@ describe('KdsScreen', () => {
   beforeEach(() => {
     mockGetKdsQueue.mockResolvedValue([]);
     mockSpeak.mockClear();
-    testKdsState.kdsZone = ''; // Reset zone state between tests
+    kdsZoneStore.reset(); // Reset zone state between tests
   });
 
   it('renders the KDS region with aria-label', async () => {
@@ -588,11 +623,23 @@ describe('KdsScreen', () => {
   //   });
   // });
 
-  it('activates clicked zone chip - skipped due to test infrastructure issue with re-renders', () => {
-    // This test triggers worker crash due to infinite re-render loop when zone state changes.
-    // The component works correctly in the actual app - the issue is test mock not properly
-    // simulating React state updates. Skipping to unblock CI.
-    expect(true).toBe(true);
+  it('activates clicked zone chip', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101, kitchen_zone: 'Grill' }),
+      makeOrder({ id: 'o-2', status: 'pending', display_number: 102, kitchen_zone: 'Fry' }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    // Click the "Grill" zone chip — the subscribed prefs store re-renders
+    // the screen naturally (same persist+notify contract as the real hook).
+    await userEvent.click(screen.getByText('Grill'));
+
+    // Grill chip becomes active and All chip becomes inactive.
+    await waitFor(() => {
+      expect(screen.getByText('Grill').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(true);
+      expect(screen.getByText('All').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(false);
+    });
   });
 
   //   it('resets to All zone when All chip is clicked', async () => {

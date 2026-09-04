@@ -360,6 +360,18 @@
         "job": "ci-docs-drift",
         "step": "AGENTS.md mirror truthfulness"
       }
+    },
+    {
+      "id": "commit-subjects",
+      "label": "Conventional-commit subjects",
+      "status": "required",
+      "_note": "Added in 0.0.36. .githooks/commit-msg has enforced the subject format locally since 9cf14190, but core.hooksPath is set by setup-dev.ps1 and is not versioned, so a clone that skips setup gets no subject gate -- a limitation the hook's own header states and defers to a future CI check. This closes that. The rule is extracted from the hook at run time (TYPES, PATTERN, and the Merge/Revert/fixup/squash/amend exemptions) rather than duplicated, so local and CI cannot drift into disagreeing about what is legal; each extractor raises rather than returning an empty set, because an empty exemption list would reject every merge commit and an empty type list would accept anything. Commits older than the hook's own introduction are skipped, derived via `git log --diff-filter=A -- .githooks/commit-msg` rather than a hardcoded sha, and the skipped count is printed so the grandfathering is visible. Verified against the four commits the hook header names as its motivation (2eea3d07, faa5dae0, 5855c429, 84a71f3e): all four are found, all four are pre-rule, and the 77 commits since the hook conform. The CI step needs fetch-depth 0 -- with the default depth of 1 the range is empty and the gate would pass by checking nothing.",
+      "runners": { "check.sh": ["commit subjects", "commit subjects self-test"] },
+      "ci": {
+        "workflow": "dev-ci.yml",
+        "job": "static-gates",
+        "step": "Conventional-commit subjects"
+      }
     }
   ]
 }

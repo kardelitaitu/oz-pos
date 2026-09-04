@@ -1703,7 +1703,7 @@
   flex-direction: row;
   width: 100%;
   height: 100%;
-  gap: 24px;
+  gap: var(--space-6, 24px);
   transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: transform;
 }
@@ -1713,7 +1713,7 @@
 }
 
 .kds-main-track.active-completed {
-  transform: translateX(calc(-100% - 24px));
+  transform: translateX(calc(-100% - var(--space-6, 24px)));
 }
 
 .kds-main-pane {
