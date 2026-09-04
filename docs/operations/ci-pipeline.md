@@ -6,22 +6,36 @@
 
 ## Job Matrix (ci.yml)
 
+> ⚠️ **This matrix describes `ci.yml`, which `23c96330` retired to `.bak`. GitHub
+> executes none of it.** The only live workflow is `dev-ci.yml`, whose jobs are
+> `changes`, `website`, `cargo-check`, `cargo-nextest`, `ui-test`, `i18n` and
+> `northflank-deploy`. Rows below that name a job absent from `dev-ci.yml` are
+> therefore **not gating anything** — `verify-ci-docs-drift.py` lists them under
+> "MISSING JOBS", and that gate runs only in `check.sh`, so the discrepancy is
+> visible to nobody who does not run it by hand. Tracked as R36-08/R36-10 in
+> [`docs/plans/0.0.36-backlog.md`](../plans/0.0.36-backlog.md).
+>
+> Four rows have been updated to what actually runs now, because CI coverage for
+> them was added in this release: `rust-fmt`, `rust-clippy`, `ui-lint` and
+> `ui-typecheck` are **steps** inside live `dev-ci.yml` jobs rather than jobs of
+> their own.
+
 | Job ID | Blocks Merge | Workflow | Notes |
 |--------|--------------|----------|-------|
-| `rust-fmt` | ✅ Required | ci.yml | `cargo fmt --all -- --check` |
+| `cargo-check` | ✅ Required | dev-ci.yml | step `cargo fmt --all -- --check` (was job `rust-fmt`) |
 | `go` | ✅ Required | ci.yml | `gofmt` + `go vet` + `go test -short` on license-server |
 | `unified-healthcheck` | ✅ Required | ci.yml | POSIX sh healthcheck script test |
 | `rust-panic-inventory` | ✅ Required | ci.yml | Scan production unwrap/expect |
 | `changes` | ✅ Required | ci.yml | Path-based change detection for PR filtering |
 | `rust-money-format` | ✅ Required | ci.yml | No hardcoded exp-2 money formatting |
 | `architecture-boundaries` | ✅ Required | ci.yml | Static boundary enforcement |
-| `rust-clippy` | ✅ Required | ci.yml | `cargo clippy --workspace --all-targets --all-features` |
+| `cargo-check` | ✅ Required | dev-ci.yml | step `cargo clippy --all-targets --all-features -- -D warnings` (was job `rust-clippy`) |
 | `rust-test-fast` | ✅ Required | ci.yml | Sharded crate-group tests (PR only) |
 | `sync-slow-tests` | ⚠️ Advisory on PR, ✅ Required on push | ci.yml | Platform-sync integration suite (gated) |
 | `rust-test-full` | Push path | ci.yml | Full workspace tests (push only, Ubuntu; full matrix in nightly) |
 | `rust-test-apps` | ✅ Required | ci.yml | App crate unit tests |
-| `ui-lint` | ✅ Required | ci.yml | `npm run lint` |
-| `ui-typecheck` | ✅ Required | ci.yml | `npm run typecheck` |
+| `ui-test` | ✅ Required | dev-ci.yml | step `npm run lint` (was job `ui-lint`) |
+| `ui-test` | ✅ Required | dev-ci.yml | step `npm run typecheck` (was job `ui-typecheck`) |
 | `ui-test` | ✅ Required | ci.yml | `npm run test` (4 shards) |
 | `lighthouse` | ⚠️ Advisory | ci.yml | Lighthouse a11y audit (continue-on-error) |
 | `docker` | ✅ Required | ci.yml | Build + Trivy scan + Compose smoke |
@@ -40,15 +54,15 @@
 
 ## Pre-Merge Validation Gates
 
-| Gate | Job (ci.yml) | Status | Runners |
-|------|--------------|--------|---------|
-| UI lint | `ui-lint` | Required | `check.sh` (ui lint), `check:all` (eslint) |
-| UI typecheck | `ui-typecheck` | Required | `check.sh` (ui typecheck), `check:all` (type check) |
+| Gate | Job | Status | Runners |
+|------|-----|--------|---------|
+| UI lint | `ui-test` (dev-ci.yml step) | Required | `check.sh` (ui lint), `check:all` (eslint) |
+| UI typecheck | `ui-test` (dev-ci.yml step) | Required | `check.sh` (ui typecheck), `check:all` (type check) |
 | UI unit tests | `ui-test` | Required | `check.sh` (ui test), `check:all` (unit tests) |
 | i18n lint | `i18n` | Required | `check.sh` (i18n lint), `check:all` (i18n lint) |
 | FTL dedupe | `i18n` | Required | `check.sh` (ftl dedupe), `check:all` (ftl dedupe) |
-| Rust fmt | `rust-fmt` | Required | `check.sh` (cargo fmt) |
-| Clippy | `rust-clippy` | Required | `check.sh` (clippy) |
+| Rust fmt | `cargo-check` (dev-ci.yml step) | Required | `check.sh` (cargo fmt) |
+| Clippy | `cargo-check` (dev-ci.yml step) | Required | `check.sh` (clippy) |
 | Rust tests | `rust-test-fast` | Required | `check.sh` (test workspace, test doctests) |
 | Go (license-server) | `go` | Required | `check.sh` (go fmt, go vet, go test (short)) |
 | Website unit tests | `check` (website.yml) | Required | `check.sh` (website test) |
