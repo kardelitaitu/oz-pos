@@ -153,9 +153,18 @@
     {
       "id": "ci-docs-drift",
       "label": "CI docs drift",
-      "status": "required",
+      "status": "advisory",
+      "_note": "Was 'required' while pointing at ci.yml#ci-docs-drift, a workflow retired to .bak by 23c96330 -- so it enforced nothing anywhere and the status was false. Now genuinely runs in dev-ci.yml, but as continue-on-error: the checker reports 68 items and turning CI red for unrelated PRs is worse than the status quo. Flip back to 'required' when the count reaches 0 (R36-10).",
       "runners": { "check.sh": ["ci docs drift"] },
-      "ci": { "workflow": "ci.yml", "job": "ci-docs-drift" }
+      "ci": { "workflow": "dev-ci.yml", "job": "ci-docs-drift", "advisory_at": "step" }
+    },
+    {
+      "id": "ci-routing-test",
+      "label": "CI path router regression test",
+      "status": "required",
+      "_note": "scripts/test-ci-routing.sh extracts the Route shell body from dev-ci.yml and runs it against 15 synthetic diffs. c5ec6381 shipped the router with no committed test, while the 0.0.36 release notes claimed one existed -- this file makes that claim true and keeps it true.",
+      "runners": { "check.sh": ["ci routing test"] },
+      "ci": { "workflow": "dev-ci.yml", "job": "ci-docs-drift" }
     },
     {
       "id": "windows-config",

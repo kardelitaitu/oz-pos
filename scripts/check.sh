@@ -263,6 +263,13 @@ step "healthcheck script test" "sh apps/unified/test-healthcheck.sh" sh apps/uni
 # `ci-docs-drift` CI job; a named-but-missing job, a drifted
 # check.sh/check:all gate, or a status that contradicts a workflow
 # fails the gate.
+# The router decides whether every other job runs, so it gets a regression test:
+# scripts/test-ci-routing.sh extracts the Route shell body from dev-ci.yml and
+# runs it against 15 synthetic diffs. c5ec6381 shipped the router with no
+# committed test while the release notes claimed one existed.
+# Gate: scripts/gates.json -> "ci-routing-test".
+step "ci routing test" "bash scripts/test-ci-routing.sh" bash scripts/test-ci-routing.sh
+
 step "ci docs drift" "python3 scripts/verify-ci-docs-drift.py" python3 scripts/verify-ci-docs-drift.py
 
 # ── Docker build smoke test (optional: --docker-dry-run) ──────────────────

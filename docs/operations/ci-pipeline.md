@@ -6,6 +6,11 @@
 
 ## Job Matrix (ci.yml)
 
+> The `(ci.yml)` suffix in this heading is a **literal contract** —
+> `verify-ci-docs-drift.py` refuses to run without it, so do not "tidy" it away.
+> It is now slightly misleading: the Workflow column is what tells you where each
+> row actually runs, and several rows have moved to `dev-ci.yml`.
+
 > ⚠️ **This matrix describes `ci.yml`, which `23c96330` retired to `.bak`. GitHub
 > executes none of it.** The only live workflow is `dev-ci.yml`, whose jobs are
 > `changes`, `website`, `cargo-check`, `cargo-nextest`, `ui-test`, `i18n` and
@@ -37,6 +42,8 @@
 | `ui-test` | ✅ Required | dev-ci.yml | step `npm run lint` (was job `ui-lint`) |
 | `ui-test` | ✅ Required | dev-ci.yml | step `npm run typecheck` (was job `ui-typecheck`) |
 | `ui-test` | ✅ Required | ci.yml | `npm run test` (4 shards) |
+| `ci-docs-drift` | ⚠️ Advisory | dev-ci.yml | step `verify-ci-docs-drift.py` (continue-on-error) — gates.json status `advisory` + `advisory_at: "step"` |
+| `ci-docs-drift` | ✅ Required | dev-ci.yml | step `bash scripts/test-ci-routing.sh` — the router decides whether every other job runs, so this one blocks |
 | `lighthouse` | ⚠️ Advisory | ci.yml | Lighthouse a11y audit (continue-on-error) |
 | `docker` | ✅ Required | ci.yml | Build + Trivy scan + Compose smoke |
 | `coverage` | ⚠️ Advisory | ci.yml | Coverage report (push only, continue-on-error) |
@@ -46,7 +53,7 @@
 | `flaky-quarantine` | ✅ Required | ci.yml | Flaky quarantine registry |
 | `windows-config` | ✅ Required | ci.yml | NSIS installMode + asInvoker check |
 | `skill-drift-tests` | ✅ Required | ci.yml | Skill drift guard bats tests |
-| `ci-docs-drift` | ✅ Required | ci.yml | This document vs workflows |
+| `ci-docs-drift` | ⚠️ Advisory | dev-ci.yml | This document vs workflows (step-level continue-on-error) |
 | `e2e-docker-image` | Push path | ci.yml | GHCR push (main only) |
 | `e2e` | ✅ Required | ci.yml | Playwright E2E (3 shards) |
 
@@ -76,7 +83,8 @@
 | A11y regression | `ui-test` | Advisory | `check.sh` (a11y) |
 | Feature registry parity | — | Required | `check.sh` (feature registry) |
 | Plugin-guide parity | — | Required | `check.sh` (plugin-guide parity) |
-| CI docs drift | `ci-docs-drift` | Required | `check.sh` (ci docs drift) |
+| CI docs drift | `ci-docs-drift` | Advisory | `check.sh` (ci docs drift) |
+| CI path router test | `ci-docs-drift` | Required | `check.sh` (ci routing test) |
 | Windows config drift | `windows-config` | Required | `check.sh` (windows config) |
 | Unified healthcheck | `unified-healthcheck` | Required | `check.sh` (healthcheck script test) |
 | Bundle budget | — | Required | `check:all` (bundle budget) |

@@ -47,6 +47,7 @@ jobs:
       ui: ${{ steps.route.outputs.ui }}
       i18n: ${{ steps.route.outputs.i18n }}
       website: ${{ steps.route.outputs.website }}
+      docs: ${{ steps.route.outputs.docs }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -66,7 +67,7 @@ jobs:
           # as does a change to this workflow itself -- a filter bug must never
           # be able to hide the jobs it is supposed to gate.
           all() {
-            for k in rust ui i18n website; do echo "$k=true" >> "$GITHUB_OUTPUT"; done
+            for k in rust ui i18n website docs; do echo "$k=true" >> "$GITHUB_OUTPUT"; done
             echo "  -> $1: running the full matrix"
             exit 0
           }
@@ -102,6 +103,16 @@ jobs:
 
           printf '%s\n' "$files" | grep -qE '^website/' \
             && echo "website=true" >> "$GITHUB_OUTPUT" || echo "website=false" >> "$GITHUB_OUTPUT"
+
+          # Docs/CI truthfulness: the drift checker compares docs/operations/
+          # ci-pipeline.md, gates.json, the workflow files and the two local
+          # runners against each other. It must fire on ANY of those, and on
+          # docs/ generally -- a docs-only PR is exactly the change that can make
+          # the CI documentation lie, and before this output existed it ran
+          # nothing at all.
+          printf '%s\n' "$files" | grep -qE \
+            '^docs/|^\.github/workflows/|^scripts/(gates\.json|verify-ci-docs-drift\.py|check\.sh|check-ui\.mjs)$' \
+            && echo "docs=true" >> "$GITHUB_OUTPUT" || echo "docs=false" >> "$GITHUB_OUTPUT"
 
       - name: Decisions
         run: |
@@ -292,7 +303,60 @@ jobs:
       - name: FTL duplicate-key dry-run
         run: python3 scripts/dedupe-ftl.py --dry-run
 
-  # ── 6. Deploy: Northflank (push to main/release or manual dispatch) ──
+  # ── 6. CI docs / manifest truthfulness ─────────────────────────────────
+  # gates.json calls itself "the single source of truth for CI/local-runner gate
+  # names and status", and 32 of its 40 `required` gates point at workflows that
+  # GitHub no longer executes (R36-10). verify-ci-docs-drift.py has reported that
+  # precisely and continuously -- but until now it ran only in the manual
+  # check.sh, so the gate auditing CI truthfulness was the one thing CI truthfulness
+  # never audited.
+  #
+  # Deliberately continue-on-error: the checker currently fails with 69 items, and
+  # turning CI red for unrelated PRs is worse than the status quo. The point of
+  # this step is to make the number VISIBLE and trending on every docs/CI change;
+  # flip it to blocking as part of closing R36-10, once the count reaches 0.
+  # Not added to northflank-deploy's `needs` for the same reason.
+  # Gate: scripts/gates.json -> "ci-docs-drift".
+  ci-docs-drift:
+    name: CI Docs Drift
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # Blocking: the router decides whether every other job runs, so a routing
+      # bug that silently skips a suite is the one failure mode this workflow
+      # must never allow. The test extracts the real body, so it cannot drift
+      # from what CI runs. Gate: scripts/gates.json -> "ci-routing-test".
+      - name: CI path router regression test
+        run: bash scripts/test-ci-routing.sh
+      - name: Verify CI docs agree with gates.json and the workflows
+        id: drift
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          if python3 scripts/verify-ci-docs-drift.py > drift.log 2>&1; then
+            status="PASS"
+            count=0
+          else
+            status="FAIL"
+            count="$(grep -oE '[0-9]+ drift item' drift.log | tail -1 | grep -oE '[0-9]+' || echo '?')"
+          fi
+          echo "$status ($count item(s))" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat drift.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat drift.log
+          echo "drift_status=$status" >> "$GITHUB_OUTPUT"
+          echo "drift_count=$count" >> "$GITHUB_OUTPUT"
+      - name: Warn that this step is advisory
+        if: steps.drift.outputs.drift_status == 'FAIL'
+        run: |
+          echo "::warning::CI docs drift has ${{ steps.drift.outputs.drift_count }} unresolved item(s)."
+          echo "::warning::This step is advisory until R36-10 closes; it becomes blocking at count 0."
+
+  # ── 7. Deploy: Northflank (push to main/release or manual dispatch) ──
   northflank-deploy:
     name: Deploy Backend (Northflank)
     runs-on: ubuntu-latest
