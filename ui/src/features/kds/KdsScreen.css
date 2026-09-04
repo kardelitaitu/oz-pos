@@ -1658,6 +1658,7 @@
   overflow: hidden;
   position: relative;
   touch-action: pan-y pinch-zoom;
+  perspective: 1200px;
 }
 
 .kds-main-track {
@@ -1665,7 +1666,8 @@
   flex-direction: row;
   width: 100%;
   height: 100%;
-  transition: transform 0.38s cubic-bezier(0.2, 0, 0, 1);
+  gap: 24px;
+  transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: transform;
 }
 
@@ -1674,7 +1676,7 @@
 }
 
 .kds-main-track.active-completed {
-  transform: translateX(-100%);
+  transform: translateX(calc(-100% - 24px));
 }
 
 .kds-main-pane {
@@ -1687,14 +1689,14 @@
   display: flex;
   flex-direction: column;
   transform-origin: center center;
-  transition: transform 0.38s cubic-bezier(0.2, 0, 0, 1), opacity 0.32s ease;
+  transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.36s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: transform, opacity;
 }
 
 /* Android launcher depth effect: inactive pane scales down and fades out */
 .kds-main-pane[aria-hidden='true'] {
-  opacity: 0.35;
-  transform: scale(0.95);
+  opacity: 0.3;
+  transform: scale(0.93);
   pointer-events: none;
 }
 
