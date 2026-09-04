@@ -1,14 +1,14 @@
 # Changelog — OZ-POS 0.0.36
 
 **Release date:** 2026-09-04
-**Commits since 0.0.35:** 49 (`d318e4ea..3d5c8c51`)
-**Scale:** 112 files changed, +4,039 / −500
+**Commits since 0.0.35:** 66 (`d318e4ea..2d786e65`)
+**Scale:** 123 files changed, +5,560 / −668
 
 > The range is pinned to an explicit end commit rather than `HEAD`, because
 > `d318e4ea..HEAD` is self-defeating in a changelog: the commit that corrects the
 > count is itself inside the range it counts, so the number is wrong the moment
 > it lands. That is how the previous revision came to say 37 for a range holding
-> 38. Verify with `git rev-list --count d318e4ea..3d5c8c51`.
+> 38. Verify with `git rev-list --count d318e4ea..2d786e65`.
 
 ---
 
@@ -28,21 +28,38 @@ whose mocks silently swallowed unmocked commands, and seven components reading a
 context the test harness never stubs — where the tests had gone on to assert the
 resulting empty session token as specification.
 
+The final stretch is one continuous thread down that same hole. It began as
+"four gates have no CI job" and ended with the repository's own manifest found
+lying about **16 of 47 gates**, a drift checker that had been screaming 77 items
+unread for a year, a documentation gate with a **fail-open that had been
+structurally incapable of finding anything since September**, and a panic scanner
+whose block-comment bug produced false positives *and* silently disabled itself
+for an entire file. Net effect: `verify-ci-docs-drift` 77 → **0** and now
+blocking in CI, `gates.json` able to express "this check does not run" at all,
+seven checks that previously had no automated runner now running on every PR, and
+`scripts/check.sh` — which had been red and is what `AGENTS.md` tells agents to
+trust — completing again.
+
+The recurring shape in every one of these: **a tool that reports the wrong thing
+is worse than no tool, because it teaches its reader a specific, inverted
+lesson.** Each fix was proven non-vacuous by sabotage before being trusted.
+
 | Area | Commits | Character |
 |---|---|---|
 | Website performance & correctness | 8 | Lighthouse follow-ups: caching, CSS deferral, island waterfall |
-| Documentation accuracy | 11 | instruction files, plans, backlog, release notes, guide |
-| Local gate + CI enforcement | 9 | path routing, rewritten `pre-push`, `commit-msg` gate, exec bits, asset guard |
+| Documentation accuracy | 18 | instruction files, plans, backlog, release notes, guide |
+| Local gate + CI enforcement | 17 | path routing, rewritten `pre-push`, `commit-msg` gate, exec bits, asset guard, **CI truthfulness made blocking** |
 | Test integrity (mocks, harness, tz) | 4 | unmocked IPC commands now fail loudly; empty-token assertions corrected |
 | Store-zone date anchoring | 3 | report windows anchored to the store's calendar, not the device's |
 | Rust / dependency hygiene | 4 | clippy, refactor, lockfile entry |
 | API write-audit + served-store selector | 3 | new audit hook, store picker end-to-end |
+| Panic-gate scanner fix | 2 | a gate that produced false positives **and** silently skipped a whole file |
 | Non-conforming messages | 4 | see [Known issues](#known-issues) |
 | Asset hygiene · Release · Admin | 1 each | 1.0 MB dead SVG removed; version bump; stats typedef |
 
-*Counts derived by partitioning `d318e4ea..3d5c8c51` so every commit lands in
+*Counts derived by partitioning `d318e4ea..2d786e65` so every commit lands in
 exactly one bucket and the total equals the range count — not by hand-tallying.
-The partition summed to 37 against a range that actually held 38 until this
+The partition summed to 37 against a range that actually held 38 until that
 revision; the script now asserts the sum equals `git rev-list` and reports any
 commit matching no rule instead of dropping it silently.*
 
@@ -124,6 +141,123 @@ gates had no CI backstop and nobody had noticed.**
   filename grep only means "unused" while resolution is provably static.
   Registered in `gates.json`, run before `npm ci` in CI so a bad asset fails in
   ~1s instead of after a minute of dependency setup.
+
+### Making CI truthfulness enforceable (R36-08 → R36-10)
+
+The thread that started as "four gates have no CI job" turned out to be the
+manifest itself lying about 16 of 47 gates. `verify-ci-docs-drift.py` had been
+reporting **77** drift items continuously and nobody read them.
+
+- **fmt, clippy, typecheck and lint put into CI** (`7fbac607`) — none had *any*
+  automated runner, only an opt-in hook. Each verified green locally before being
+  wired in, because adding a gate that already fails turns every unrelated PR red.
+- **The drift checker had no word for "retired"** (`9112e128`, `65ad42f5`) — it
+  globbed only `*.yml`, so all 11 workflows retired to `.bak` were reported as
+  "MISSING WORKFLOW FILES", a category name that was false as stated. Taught it
+  that `<x>.yml.bak` is retired, and that a matrix or gate row naming a retired
+  workflow in its own column is recording history. **The exemption is provably
+  ungameable**: a row claiming a *live* workflow that lacks the job is still an
+  error, so nobody can silence a finding by pointing at a workflow that does not
+  contain it. Drift 67 → 36 → 29.
+- **The inventory was genuinely wrong too** — my "it's only a tooling gap"
+  hypothesis was half right. `## Workflow inventory` described all 11 dead
+  workflows in present tense and **omitted `dev-ci.yml` entirely**: the canonical
+  CI dashboard listed 11 dead workflows and not one live one. Given a Status
+  column, plus two new blocking checks (`UNLABELLED RETIRED`,
+  `UNDOCUMENTED LIVE WORKFLOWS`) that each encode a mistake that actually happened
+  here.
+- **`gates.json` made truthful** (`47aa1290`) — 11 gates repointed to a live job
+  that genuinely runs them, 16 retired, 2 kept `required` with the dead pointer
+  removed. A new `retired` status was needed because the vocabulary could express
+  "blocks", "reports" and "blocks on push" but not "does not run", which is why
+  13 fictional gates could sit marked `required`. **A `retired` gate must carry no
+  `ci` block**, so the status cannot be used as a mute button.
+- **A correction to my own analysis, worth more than the rest:** a first pass
+  classified 16 gates as running "nowhere" by searching `check.sh` and `pre-push`
+  for label strings. Reading what `dev-ci.yml` actually executes showed
+  `cargo nextest run --workspace --all-features` carries **no `--exclude`**, while
+  `check.sh`'s own step excludes `oz-pos-app` — so three gates were enforced by CI
+  *more broadly than the manifest admitted*. Retiring them would have swapped one
+  inaccuracy for another and hidden real coverage. Substring matching on gate IDs
+  also produced four false **positives** (`audit` matched "Audits production
+  unwrap"; `coverage` matched an unrelated gate; `fuzz` matched a routing regex;
+  `lighthouse` matched nothing). **Classify a gate by the command it runs, never
+  by whether its name appears in a script.**
+- **A fail-open the checker had been suffering since September** — the "jobs that
+  exist but are undocumented" check computed `ci_jobs - documented`, and `ci_jobs`
+  was only populated when a file literally named `ci.yml` existed. Since
+  `23c96330` retired it, that has been the empty set: the check could never find
+  anything, *and it was informational anyway*. Repointed at every live job it
+  immediately found **four** undocumented ones (`website`, `cargo-nextest`,
+  `northflank-deploy`, `static-gates`). Now blocking.
+- **`static-gates` job added** (`13f2a1dc`) — six checks that existed only in the
+  manual, unhooked `check.sh`, now including Go `fmt`/`vet`/`test -short`, which
+  `AGENTS.md` had been calling local-only. Not path-gated: ~5s of Python/shell
+  spanning four languages, so routing them risks the silent-skip failure the
+  router test exists to catch.
+- **The docs-drift gate is now blocking** (`237b16be`) — the condition R36-10 set
+  for flipping it was "count reaches 0", and it did. `continue-on-error` removed;
+  the step summary kept, because a bare exit code tells a reader nothing about
+  *which* contract broke, and unreadable output is why this rotted for a year.
+- **Process lesson recorded in R36-10 itself:** for two rounds I treated "77
+  pre-existing drift items" as a *baseline* and reported each change as "adds no
+  drift". A large, steady failure count is not a baseline, it is an unread alarm.
+  Six of those 77 were the exact reports that made up the issue. **When a gate
+  fails with a big number, check whether the number is the finding before using it
+  as a control.**
+
+**Net: drift 77 → 0, and the checker is more discriminating at each step rather
+than more permissive.** Every new path was proven non-vacuous by sabotage — six
+mutations, each caught, baseline restored byte-exact each time.
+
+## Panic Gate: a Tool That Lied Both Ways (R36-12)
+
+Found while deciding whether `panic-inventory` could join `static-gates`. It
+could not: it *fails* today. That single observation turned out to mean
+`scripts/check.sh` — the runner `AGENTS.md` tells every agent to use before
+declaring a change verified — **cannot currently complete**.
+
+- **The scanner did not track block comments across lines** (`48aa000f`) —
+  `strip_comment` handled `/*` by breaking out of the line, correct only for a
+  single-line block. For the multi-line audit stamp at the top of every crate
+  root, only line 1 was recognised as a comment; lines 2..n-1 were scanned as
+  code. **6 of 18 findings were stamp prose**, every one at line 4 of a file whose
+  stamp says it is clean — a file failing the cleanliness gate because of the
+  sentence documenting that it passes. 9 production files carry
+  `unwrap()`/`expect()` in their stamp prose.
+- **The same bug had a false-negative half, and it is the serious one.**
+  Unstripped stamp prose also feeds the skip-context detector.
+  `apps/cloud-server/src/redirect.rs` line 9 reads *"findings: 4 unsafe blocks in
+  `#[cfg(test)]` only"*, so the scanner opened a `cfg(test)` skip and **stopped
+  checking the rest of that file entirely** — a real production `.unwrap()` went
+  unreported for its whole life. Proven with a synthetic pair differing only in
+  that phrase. The lesson an agent would have learned from the broken tool is
+  exactly inverted: *writing about your tests in a stamp disables the audit of
+  your production code.*
+- **The gate fought `cargo fmt`.** The invariant marker had to sit on the same or
+  immediately-preceding *line*, so a multi-line comment block or a fmt-wrapped
+  builder chain counted as undocumented — and the pre-commit hook runs
+  `cargo fmt --all`, which rewraps the line and silently re-breaks a gate the code
+  had satisfied. **A rule the formatter can violate on its own is not a rule.**
+  The lookback now walks to the start of the enclosing statement and accepts a
+  marker anywhere in the comment block above it; blank lines still break the
+  block. Verified across six placements, each reporting exactly 1 finding so none
+  could "pass" because the scanner failed to read the file. The next commit proved
+  it for real: the hook ran `cargo fmt`, rewrapped the code, and the gate stayed
+  green.
+- **Triage: 2 fixed, 11 documented** (`8033a3e3`) — `migrate_sqlite_to_pg.rs`
+  panicked on a condition its own doc comment calls *expected* (PG/SQLite column
+  drift), aborting a migration without naming the column; both sites now return
+  `Err(String)` like the rest of the file. Four header unwraps became
+  `HeaderValue::from_static`, infallible **by signature** — the panic removed
+  rather than justified. The `mock.rs` mutex `expect`s were documented rather than
+  converted to `into_inner()`: that is a lock-semantics change to a shipped
+  driver, and this task was to make the gate honest, not to refactor hardware code
+  underneath it.
+
+**130 production unwrap/expect calls, all documented; `check.sh` completes; and
+the gate now runs in CI** (`2d786e65`) — closing R36-10's last loose end.
+
 
 ## API Write-Audit and Served-Store Selector
 
@@ -271,9 +405,29 @@ listed as open when these notes were first written:
   subjects above are exactly the evidence that motivated it.
 
 Added and closed during the release: **R36-05** (`264669fa`), **R36-06**
-(`2dad3d37`), **R36-07** (`eefd51ff`).
+(`2dad3d37`), **R36-07** (`eefd51ff`), **R36-08** (`7fbac607`), **R36-09**
+(`2a35f346`), **R36-10** (`9112e128` → `47aa1290` → `237b16be`), **R36-12**
+(`48aa000f` → `8033a3e3` → `2d786e65`).
+
+**One item is still open, and it blocks shipping.** **R36-11** 🔴 — every
+`tags:`-triggered workflow (`release.yml`, `android.yml`, `ios.yml`) was retired
+to `.bak` by `23c96330` and nothing replaced them, so **pushing a `v*` tag today
+triggers no workflow and produces no installers, updater manifest, or
+provenance**. `docs/releases/checklist.md` and `release-process.md` now say so at
+the top rather than describing automation that does not run. This is a product
+decision about release shape (desktop + two mobile targets + code signing +
+updater manifests + provenance), not a mechanical restore, and it should not be
+attempted as a drive-by.
 
 **Not fixed, flagged:** `load_topology_template` and `list_topology_templates`
 require a session but check **no permission**, so any authenticated user can
 read any branch's templates. The source comment documents this as intentional;
 changing security posture is not something to slip into a gate fix.
+
+**Also not fixed, flagged by R36-12:** the panic gate's rule is that a
+recoverable `unwrap()` needs a `// SAFETY:` / `// INVARIANT:` comment. Eleven such
+comments were added this release and all eleven were checked by reading the
+guard or the value's provenance — but the gate accepts the *marker*, not the
+*argument*. A confidently-worded wrong invariant satisfies it. Reviewing those
+comments for truth is worth doing independently of this release.
+
