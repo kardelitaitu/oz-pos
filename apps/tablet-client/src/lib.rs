@@ -38,13 +38,13 @@ pub mod state;
 /// See: https://github.com/orgs/tauri-apps/discussions/11179
 ///
 /// **NOTE:** If you modify the byte string below, update the array size
-/// (currently 184).  The compiler error message will report the exact
+/// (currently 168).  The compiler error message will report the exact
 /// expected size if there's a mismatch.
 #[cfg(all(test, windows, target_env = "msvc"))]
 #[used]
 #[unsafe(link_section = ".drectve")]
 #[rustfmt::skip]
-static TEST_MANIFEST_DIRECTIVES: [u8; 184] = *b" /MANIFEST:EMBED /MANIFESTDEPENDENCY:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"\x00";
+static TEST_MANIFEST_DIRECTIVES: [u8; 168] = *b" /MANIFESTDEPENDENCY:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"\x00";
 
 #[cfg(not(test))]
 use crate::error::AppError;

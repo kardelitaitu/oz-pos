@@ -186,9 +186,9 @@ fn decrypt_smtp_at_rest_distinguishes_legacy_from_tamper() {
     // Well-formed ciphertext with a corrupted tag is tampering, NOT
     // legacy — it must error instead of returning the ciphertext.
     let encrypted = encrypt_smtp_at_rest("real-secret").unwrap();
-    let mut corrupted = encrypted.clone();
-    let last = corrupted.pop().unwrap();
-    corrupted.push(if last == 'A' { 'B' } else { 'A' });
+    let mut bytes = encrypted.into_bytes();
+    bytes[5] = if bytes[5] == b'A' { b'B' } else { b'A' };
+    let corrupted = String::from_utf8(bytes).unwrap();
     let err = decrypt_smtp_at_rest(&corrupted).expect_err("tampered ciphertext must fail closed");
     assert!(err.to_string().contains("decryption failed"));
 }
@@ -203,9 +203,9 @@ fn decrypt_smtp_password_distinguishes_legacy_from_tamper() {
     // Tampered well-formed ciphertext errors (old code returned it
     // unchanged, indistinguishable from a successful decrypt).
     let encrypted = encrypt_smtp_password("real-password", "machine").unwrap();
-    let mut corrupted = encrypted.clone();
-    let last = corrupted.pop().unwrap();
-    corrupted.push(if last == 'A' { 'B' } else { 'A' });
+    let mut bytes = encrypted.into_bytes();
+    bytes[5] = if bytes[5] == b'A' { b'B' } else { b'A' };
+    let corrupted = String::from_utf8(bytes).unwrap();
     assert!(decrypt_smtp_password(&corrupted, "machine").is_err());
 }
 
