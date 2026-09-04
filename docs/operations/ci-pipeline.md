@@ -114,19 +114,28 @@
 
 ## Workflow inventory
 
-| Workflow | Trigger | Purpose |
-|----------|---------|---------|
-| `ci.yml` | push/PR to main | Primary CI pipeline (lint, test, build, scan) |
-| `nightly.yml` | schedule (daily) + dispatch | Nightly Rust/doc/UI/E2E + flaky detection |
-| `release.yml` | tag push (v*) | Release build, sign, attest, publish |
-| `security.yml` | schedule (weekly) + dispatch | Cargo audit/deny + container scan |
-| `android.yml` | push/PR to main | Android build |
-| `ios.yml` | push/PR to main | iOS build |
-| `e2e-pr.yml` | PR to main | E2E on PRs |
-| `deploy.yml` | push to main | Website deploy |
-| `docker-digest-drift.yml` | schedule | Docker digest drift check |
-| `docker-persistence.yml` | schedule | Docker persistence check |
-| `website.yml` | push to main | Website build + deploy |
+> **Status is the column that matters.** As of 2026-09-02, `23c96330` retired
+> every workflow below to `.bak` and replaced them with a single streamlined dev
+> CI. GitHub never executes a `.bak` file, so a row marked 🔴 contributes nothing
+> to a merge decision regardless of what its Purpose column says. The Trigger and
+> Purpose columns are retained as the historical record of what each workflow
+> *used* to do — several are candidates for restoration (see R36-11 for
+> `release.yml`, whose absence means tagging `v*` builds no artifacts).
+
+| Workflow | Status | Trigger | Purpose |
+|----------|--------|---------|---------|
+| `dev-ci.yml` | 🟢 **LIVE** | PR to main, dispatch | The only workflow GitHub executes. Jobs: `changes`, `website`, `cargo-check`, `cargo-nextest`, `ui-test`, `i18n`, `ci-docs-drift`, `northflank-deploy`. **No build or artifact step** — it does not produce release assets. |
+| `ci.yml` | 🔴 retired `.bak` | push/PR to main | Primary CI pipeline (lint, test, build, scan) |
+| `nightly.yml` | 🔴 retired `.bak` | schedule (daily) + dispatch | Nightly Rust/doc/UI/E2E + flaky detection |
+| `release.yml` | 🔴 retired `.bak` | tag push (v*) | Release build, sign, attest, publish — **nothing replaces this; see R36-11** |
+| `security.yml` | 🔴 retired `.bak` | schedule (weekly) + dispatch | Cargo audit/deny + container scan |
+| `android.yml` | 🔴 retired `.bak` | push/PR to main | Android build |
+| `ios.yml` | 🔴 retired `.bak` | push/PR to main | iOS build |
+| `e2e-pr.yml` | 🔴 retired `.bak` | PR to main | E2E on PRs |
+| `deploy.yml` | 🔴 retired `.bak` | push to main | Website deploy |
+| `docker-digest-drift.yml` | 🔴 retired `.bak` | schedule | Docker digest drift check |
+| `docker-persistence.yml` | 🔴 retired `.bak` | schedule | Docker persistence check |
+| `website.yml` | 🔴 retired `.bak` | push to main | Website build + deploy |
 
 ---
 

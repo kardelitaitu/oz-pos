@@ -92,6 +92,10 @@ GATE_TABLE_ROW = re.compile(r"^\|\s*[^|]+\|\s*(.+?)\s*\|")
 # branch/path mentions), so combined rows like `android.yml` / `ios.yml`
 # are caught rather than requiring first-cell anchoring.
 WORKFLOW_TOKEN = re.compile(r"`([a-z0-9][a-z0-9-]*\.yml)`")
+# A retired workflow's inventory row must say so. Accept several phrasings so
+# the doc is not forced into one magic word, but require an explicit statement —
+# a row that merely omits the workflow from CI is the failure being guarded.
+RETIRED_MARKER = re.compile(r"retired|inert|not executed|no longer runs|\.bak\b", re.I)
 # Job Matrix table row: job ID (first cell) + Blocks marker (last cell).
 JOB_MATRIX_FULL_ROW = re.compile(r"^\|\s*`([a-z][a-z0-9-]*)`\s*\|.*\|\s*([^|]+?)\s*\|$")
 
@@ -431,16 +435,44 @@ def main() -> int:
     # ── 2. Workflow inventory: named files exist ────────────────────
     # Extract every backticked `*.yml` token from the whole section so
     # combined rows like `android.yml` / `ios.yml` are also captured.
-    inventory_files = set(
-        WORKFLOW_TOKEN.findall("\n".join(doc_section(docs_lines, "Workflow inventory")))
-    )
+    inv_lines = doc_section(docs_lines, "Workflow inventory")
+    inventory_files = set(WORKFLOW_TOKEN.findall("\n".join(inv_lines)))
     if not inventory_files:
         print(
             "error: Workflow inventory section contains no *.yml references",
             file=sys.stderr,
         )
         return 2
-    missing_files = sorted(f for f in inventory_files if not (WORKFLOWS_DIR / f).is_file())
+    live_files = {wf.name for wf in workflow_files}
+    # Retirement awareness. 23c96330 moved every non-dev CI workflow to
+    # `<name>.yml.bak`, which GitHub never executes. The previous code globbed
+    # only *.yml and then reported all 11 as "MISSING WORKFLOW FILES (inventory
+    # names nothing on disk)" — false as stated, since every one of them IS on
+    # disk. That mislabelling made the bucket look like doc rot when it was
+    # partly a tooling gap, and buried the real finding: the inventory described
+    # 11 dead workflows in present tense and omitted dev-ci.yml, the only live
+    # one. A name matching no file at all is still a genuine error.
+    retired_files = sorted(
+        f for f in inventory_files
+        if f not in live_files and (WORKFLOWS_DIR / f"{f}.bak").is_file()
+    )
+    missing_files = sorted(
+        f for f in inventory_files if f not in live_files and f not in retired_files
+    )
+    # A retired workflow must be LABELLED retired in its own row. Otherwise the
+    # table reads as present tense and misleads exactly as badly as omitting it,
+    # and the gate would pass on a doc that says "release.yml: tag push (v*)"
+    # while nothing builds a release.
+    unlabelled_retired = sorted(
+        f for f in retired_files
+        if not any(
+            RETIRED_MARKER.search(r)
+            for r in inv_lines
+            if r.lstrip().startswith("|") and f"`{f}`" in r
+        )
+    )
+    # Inverse gap: a workflow that RUNS but is absent from the inventory.
+    undocumented_live = sorted(live_files - inventory_files)
 
     # ── 3. Gate vocabulary: manifest → runners ──────────────────────
     sh_gates = check_sh_gates(CHECK_SH) if CHECK_SH.is_file() else set()
@@ -577,6 +609,7 @@ def main() -> int:
 
     if args.verbose and not (
         missing_jobs or missing_files or gate_problems or status_problems or docs_status_problems
+        or unlabelled_retired or undocumented_live
     ):
         print("  OK: every documented job/workflow exists; manifest gates match runners + workflows.")
         print()
@@ -587,9 +620,32 @@ def main() -> int:
             print(f"    {job}")
         print()
     if missing_files:
-        print(f"  MISSING WORKFLOW FILES (inventory names nothing on disk) — {len(missing_files)}:")
+        print(f"  MISSING WORKFLOW FILES (named in the inventory, no file at all) — {len(missing_files)}:")
         for f in missing_files:
             print(f"    {f}")
+        print()
+    if unlabelled_retired:
+        print(
+            f"  UNLABELLED RETIRED WORKFLOWS (on disk only as .bak, but the "
+            f"inventory row does not say retired) — {len(unlabelled_retired)}:"
+        )
+        for f in unlabelled_retired:
+            print(f"    {f}  -> present tense in the docs reads as 'this still runs'")
+        print()
+    if undocumented_live:
+        print(
+            f"  UNDOCUMENTED LIVE WORKFLOWS (executed by GitHub, absent from the "
+            f"inventory) — {len(undocumented_live)}:"
+        )
+        for f in undocumented_live:
+            print(f"    {f}")
+        print()
+    if retired_files:
+        print(
+            f"  note: {len(retired_files)} inventoried workflow(s) exist only as "
+            f".bak and are labelled retired (informational):"
+        )
+        print(f"    {', '.join(retired_files)}")
         print()
     if gate_problems:
         print(f"  GATE VOCABULARY DRIFT — {len(gate_problems)}:")
@@ -639,6 +695,8 @@ def main() -> int:
         + len(gate_problems)
         + len(status_problems)
         + len(docs_status_problems)
+        + len(unlabelled_retired)
+        + len(undocumented_live)
     )
     print(f"verify-ci-docs-drift: {problems} drift item(s).")
     return 0 if (args.report_only or problems == 0) else 1
