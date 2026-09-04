@@ -14,6 +14,13 @@ const DEBOUNCE_MS = 5000;
  * debounced to max 1 per `DEBOUNCE_MS` (5 seconds) to avoid a
  * notification storm when the kitchen receives a batch of orders.
  *
+ * Trailing catch-up: the leading-only debounce previously SWALLOWED a
+ * whole burst — orders arriving inside the window updated the known set
+ * but never re-chimed, so a rush of 5 tickets played exactly one chime.
+ * Now one trailing chime plays when the window closes if anything arrived
+ * during it, so a burst is announced as "one chime now + one catch-up",
+ * still bounded to 2 per burst.
+ *
  * The sound can be toggled on/off via the `enabled` parameter.
  *
  * @param orders  Current list of KDS orders.
@@ -24,11 +31,16 @@ export function useNewTicketSound(orders: KdsOrder[], enabled = true): void {
   const knownIdsRef = useRef<Set<string>>(new Set());
   const lastPlayedRef = useRef(0);
   const enabledRef = useRef(enabled);
+  const trailingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Keep the enabled ref in sync without triggering re-renders.
   useEffect(() => {
     enabledRef.current = enabled;
   }, [enabled]);
+
+  useEffect(() => () => {
+    if (trailingTimerRef.current !== null) clearTimeout(trailingTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!enabledRef.current || orders.length === 0) return;
@@ -47,9 +59,23 @@ export function useNewTicketSound(orders: KdsOrder[], enabled = true): void {
 
     // Debounce: only play if enough time has elapsed since the last chime.
     const now = Date.now();
-    if (now - lastPlayedRef.current >= DEBOUNCE_MS) {
+    const elapsed = now - lastPlayedRef.current;
+    if (elapsed >= DEBOUNCE_MS) {
+      // The lead chime closes any pending catch-up.
+      if (trailingTimerRef.current !== null) {
+        clearTimeout(trailingTimerRef.current);
+        trailingTimerRef.current = null;
+      }
       lastPlayedRef.current = now;
       playBeep();
+    } else if (trailingTimerRef.current === null) {
+      // Arrivals inside the window schedule exactly one trailing chime.
+      trailingTimerRef.current = setTimeout(() => {
+        trailingTimerRef.current = null;
+        if (!enabledRef.current) return;
+        lastPlayedRef.current = Date.now();
+        playBeep();
+      }, DEBOUNCE_MS - elapsed);
     }
   }, [orders, playBeep]);
 }

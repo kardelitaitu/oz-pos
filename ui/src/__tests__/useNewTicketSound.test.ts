@@ -87,6 +87,26 @@ describe('useNewTicketSound', () => {
     expect(mockPlayBeep).toHaveBeenCalledTimes(1);
   });
 
+  it('plays one trailing catch-up chime for arrivals inside the debounce window', async () => {
+    const { rerender } = renderHook(
+      (props: { orders: KdsOrder[] }) => useNewTicketSound(props.orders),
+      { initialProps: { orders: [makeOrder('o-1')] } },
+    );
+    expect(mockPlayBeep).toHaveBeenCalledTimes(1);
+    // Burst arrives inside the window — previously swallowed forever.
+    await new Promise((r) => setTimeout(r, 1500));
+    rerender({ orders: [makeOrder('o-1'), makeOrder('o-2')] });
+    rerender({ orders: [makeOrder('o-1'), makeOrder('o-2'), makeOrder('o-3')] });
+    expect(mockPlayBeep).toHaveBeenCalledTimes(1);
+    // Wait past the remainder of the debounce window: exactly one trailing
+    // catch-up chime (not one per arrival, not zero).
+    await new Promise((r) => setTimeout(r, 4500));
+    expect(mockPlayBeep).toHaveBeenCalledTimes(2);
+    // No further chimes for the same burst.
+    await new Promise((r) => setTimeout(r, 2000));
+    expect(mockPlayBeep).toHaveBeenCalledTimes(2);
+  });
+
   it('does not play beep when enabled=false', () => {
     const orders: KdsOrder[] = [makeOrder('o-1')];
     renderHook(() => useNewTicketSound(orders, false));
