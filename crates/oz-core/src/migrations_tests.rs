@@ -401,7 +401,7 @@ fn init_sql_creates_complete_schema_surface() {
             &conn,
             "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'",
         ),
-        143,
+        145,
         "index surface drifted"
     );
     assert_eq!(
@@ -525,6 +525,7 @@ fn existing_db_with_legacy_rows_upgrades_idempotently() {
             "20260902_outbox.sql".to_string(),
             "20260902_snapshot_versions.sql".to_string(),
             "20260903_webhook_endpoints.sql".to_string(),
+            "20260904_kds_indexes.sql".to_string(),
         ]
     );
 
