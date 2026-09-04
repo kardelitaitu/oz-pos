@@ -227,6 +227,13 @@ jobs:
         run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Run Vitest
         run: cd ui && npm test
+      # GitHub runners are always UTC, so the suite above can never catch a
+      # host-timezone dependency. This re-runs the analytics anchor test under
+      # four zones and fails if results diverge -- the only CI coverage for the
+      # defect that broke PR #95 on a UTC runner.
+      # Gate: scripts/gates.json -> "analytics-tz-invariance".
+      - name: Analytics timezone invariance
+        run: python3 scripts/check-tz-invariance.py
 
   # ── 5. i18n: Fluent bundle quality gate ──────────────────────────────
   # Restored by the Fluent page audit. This step used to live in ci.yml, which

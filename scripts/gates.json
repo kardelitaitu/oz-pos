@@ -24,6 +24,13 @@
       "ci": { "workflow": "ci.yml", "job": "ui-test" }
     },
     {
+      "id": "analytics-tz-invariance",
+      "label": "Analytics timezone invariance",
+      "status": "required",
+      "runners": { "check.sh": ["analytics tz invariance"] },
+      "ci": { "workflow": "dev-ci.yml", "job": "ui-test" }
+    },
+    {
       "id": "i18n-lint",
       "label": "i18n lint",
       "status": "required",

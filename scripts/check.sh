@@ -171,6 +171,10 @@ if command -v npm &>/dev/null && [ -f ui/package-lock.json ]; then
     step "ui lint" "cd ui; npm run lint" npm run lint
     step "ui typecheck" "cd ui; npm run typecheck" npm run typecheck
     step "ui test" "cd ui; npm run test" npm run test
+    # R36-01: the suite above runs in this machine's zone, so a host-local date
+    # anchor can pass here and fail on a UTC CI runner. Re-runs the analytics
+    # anchor test under four zones and requires identical results.
+    step "analytics tz invariance" "python3 scripts/check-tz-invariance.py" python3 ../scripts/check-tz-invariance.py
     # AUDIT-27 CI-06: A11y regression suite (advisory, mirrors CI's
     # continue-on-error since known product-level a11y bugs are tracked
     # but not yet fixed). Never fails the gate — reports status only.

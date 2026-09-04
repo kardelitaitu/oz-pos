@@ -28,8 +28,10 @@ import {
   CARD_PAYLOAD_VALIDATORS,
   DAY_LABEL_KEYS,
   buildHeatmapCells,
+  FALLBACK_STORE_TZ,
   heatPeak,
   heatmapGranularityForRange,
+  isoToday,
   loadHeatmapRows,
   rangeForGranularity,
   storeOffsetMs,
@@ -142,19 +144,6 @@ export const cardRange = (
   // custom span still queries the chosen dates).
   if (g === 'custom') return { from: customFrom, to: customTo };
   return rangeForGranularity(cardGranularity(card, g), customFrom, customTo, storeTz);
-}
-
-function isoToday(storeTz?: string | null): string {
-  if (!storeTz) return isoDay(new Date());
-  // Offset-shifted instant read as a UTC calendar = the store's today.
-  return new Date(Date.now() + storeOffsetMs(storeTz)).toISOString().slice(0, 10);
-}
-
-function isoDay(d: Date): string {
-  // Local calendar date — `toISOString()` is UTC and can return the
-  // previous day for late-evening/early-morning local times, which would
-  // make the custom-range default land on the wrong date.
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /** Number of days in the current month (28–31). */
@@ -358,7 +347,8 @@ export default function AnalyticsScreen() {
   // REP-03: derived windows anchor to the PRIMARY STORE's calendar day,
   // not the device's — a laptop in another region must still see "today"
   // as the store sees it. Until the profile loads (or if the fetch fails)
-  // the legacy device-local anchor applies.
+  // the anchor is FALLBACK_STORE_TZ (UTC, the schema's own column default),
+  // never the host zone — see the comment on that constant.
   const [storeTz, setStoreTz] = useState<string | null>(null);
   const customTouched = useRef(false);
   useEffect(() => {
@@ -383,16 +373,10 @@ export default function AnalyticsScreen() {
     setCustomTo(t);
   }, [storeTz]);
   /** Store-local calendar date `daysAgo` days back (REP-03). */
-  const storeDateStr = (daysAgo: number): string => {
-    if (!storeTz) {
-      const d = new Date();
-      d.setDate(d.getDate() - daysAgo);
-      return isoDay(d);
-    }
-    return new Date(Date.now() + storeOffsetMs(storeTz) - daysAgo * 86_400_000)
+  const storeDateStr = (daysAgo: number): string =>
+    new Date(Date.now() + storeOffsetMs(storeTz ?? FALLBACK_STORE_TZ) - daysAgo * 86_400_000)
       .toISOString()
       .slice(0, 10);
-  };
   const [zoomLevel, setZoomLevel] = useState<number>(() => {
     const saved = Number(localStorage.getItem('oz-analytics-zoom'));
     return saved >= ZOOM_MIN && saved <= ZOOM_MAX ? saved : 1;

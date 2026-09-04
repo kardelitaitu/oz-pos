@@ -211,6 +211,9 @@ if [ "$RUN_UI" = "1" ]; then
     if [ -d ui/node_modules ]; then
         gate "ui typecheck" sh -c 'cd ui && npm run typecheck'
         gate "ui vitest" sh -c 'cd ui && npx vitest run'
+        # This machine's zone is whatever it is, so a host-local date bug can
+        # pass the suite above; this re-runs the anchor test across four zones.
+        run_py "analytics timezone invariance" "scripts/check-tz-invariance.py"
     else
         printf '  \033[33mSKIP\033[0m  %-44s (ui/node_modules missing)\n' "ui typecheck + vitest"
     fi
