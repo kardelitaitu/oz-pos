@@ -18,7 +18,7 @@ use axum::{
     Json,
     body::Bytes,
     extract::{Path, Query, State},
-    http::{StatusCode, header},
+    http::{HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
@@ -246,6 +246,8 @@ pub async fn put_image_batch(
     let mut results: Vec<BatchImageResult> = Vec::new();
     let mut offset = 0usize;
     while offset + 4 <= body.len() && results.len() < BATCH_MAX_IMAGES {
+        // INVARIANT: the loop guard above proves `offset + 4 <= body.len()`, so
+        // the slice is exactly 4 bytes and `TryInto<[u8; 4]>` cannot fail.
         let len_bytes: [u8; 4] = body[offset..offset + 4].try_into().unwrap();
         let frame_len = u32::from_be_bytes(len_bytes) as usize;
         offset += 4;
@@ -325,11 +327,19 @@ pub async fn get_image(
         Ok(bytes) => {
             let mut response = bytes.into_response();
             let headers = response.headers_mut();
-            headers.insert(header::CONTENT_TYPE, "image/webp".parse().unwrap());
+            // `from_static` instead of `"…".parse().unwrap()`: these are literal
+            // ASCII values, so the parse could never fail -- but the unwrap still
+            // read as a panic site to a human and to scripts/scan-unwrap-panic.py.
+            // from_static is infallible by signature, so the panic is gone rather
+            // than merely justified.
+            headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("image/webp"));
             headers.insert(
                 header::CACHE_CONTROL,
-                "max-age=31536000, immutable".parse().unwrap(),
+                HeaderValue::from_static("max-age=31536000, immutable"),
             );
+            // INVARIANT: `hash16` is `sha256_hex16(...)` = `hex::encode(&digest[..8])`,
+            // i.e. exactly 16 lowercase hex chars, so the quoted form is visible
+            // ASCII and `from_str` cannot reject it. Dynamic, so no from_static.
             headers.insert(header::ETAG, format!("\"{hash16}\"").parse().unwrap());
             // Compression hygiene: no Content-Encoding on image routes —
             // WebP is already the compression (spec 0046b §3.7).
@@ -398,13 +408,15 @@ pub async fn get_image_pack(
         }
     }
     let mut response = out.into_response();
+    // Literal ASCII values, so `from_static` -- infallible by signature -- rather
+    // than `.parse().unwrap()`. See the GET image handler for the same change.
     response.headers_mut().insert(
         header::CONTENT_TYPE,
-        "application/octet-stream".parse().unwrap(),
+        HeaderValue::from_static("application/octet-stream"),
     );
     response.headers_mut().insert(
         header::CACHE_CONTROL,
-        "max-age=31536000, immutable".parse().unwrap(),
+        HeaderValue::from_static("max-age=31536000, immutable"),
     );
     response
 }
