@@ -449,6 +449,27 @@ def has_needle(gates: set[str], needles: tuple[str, ...]) -> bool:
     return any(n in g for g in gates for n in needles)
 
 
+def missing_needles(gates: set[str], needles: tuple[str, ...]) -> list[str]:
+    """Every needle that matches NO declared label.
+
+    This replaces an ANY-of test (`has_needle`) for the manifest -> runner direction,
+    and the difference is the whole point. With ANY-of, a gate listing three runner
+    labels is satisfied by one of them, so deleting the other two from check.sh leaves
+    the manifest asserting guards that no longer exist. Demonstrated against this
+    repo's own gate: `ci-docs-drift` declares both "ci docs drift" and "ci docs drift
+    self-test"; removing the self-test step from check.sh kept the checker at
+    "0 drift item(s)", because the first needle still matched.
+
+    A runner list is a claim about the set of steps that implement a gate, so every
+    member has to exist -- which is also how the `ci` block already works, where a
+    named job that is absent is an error rather than one of several alternatives.
+    Switching is safe here precisely because the manifest is currently accurate under
+    the stricter rule: all 5 multi-label gates resolve every label today, so this
+    tightens a latent gap rather than converting it into 15 false failures.
+    """
+    return [n for n in needles if not any(n in g for g in gates)]
+
+
 def self_test() -> int:
     """Mutation-test the two pure classifiers this gate depends on.
 
@@ -781,16 +802,23 @@ def main() -> int:
     for gate in gates:
         gid, label = gate["id"], gate["label"]
         runners = gate.get("runners") or {}
-        sh_needles = tuple(runners.get("check.sh") or ())
-        ui_needles = tuple(runners.get("check:all") or ())
-        if sh_needles and not has_needle(sh_gates, sh_needles):
-            gate_problems.append(
-                f"manifest gate '{gid}' ({label}) not declared in scripts/check.sh"
-            )
-        if ui_needles and not has_needle(ui_gates, ui_needles):
-            gate_problems.append(
-                f"manifest gate '{gid}' ({label}) not declared in check:all"
-            )
+        sh_needles = tuple(n.lower() for n in (runners.get("check.sh") or ()))
+        ui_needles = tuple(n.lower() for n in (runners.get("check:all") or ()))
+        for src, needles, pool, present in (
+                ("scripts/check.sh", sh_needles, sh_gates, CHECK_SH.is_file()),
+                ("check:all", ui_needles, ui_gates, CHECK_UI.is_file())):
+            if not needles:
+                continue
+            if not present:
+                gate_problems.append(
+                    f"manifest gate '{gid}' ({label}) names runners for {src}, "
+                    f"which does not exist")
+                continue
+            for miss in missing_needles(pool, needles):
+                gate_problems.append(
+                    f"manifest gate '{gid}' ({label}) declares runner {miss!r} "
+                    f"for {src}, but no step there matches it -- the label was "
+                    f"either renamed or the step deleted")
 
     # Informational: labels the runners declare that no manifest gate covers.
     all_sh_needles = {
