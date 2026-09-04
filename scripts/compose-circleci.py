@@ -27,9 +27,9 @@ executors:
     resource_class: medium
     environment:
       CARGO_TERM_COLOR: always
-      RUSTFLAGS: "-D warnings -C debuginfo=0 -C codegen-units=16"
+      RUSTFLAGS: "-D warnings -C debuginfo=0 -C codegen-units=16 -C link-arg=-fuse-ld=lld"
       RUSTC_WRAPPER: ""
-      CARGO_BUILD_JOBS: "2"
+      CARGO_BUILD_JOBS: "1"
       CARGO_INCREMENTAL: "0"
 
   rust-test-executor:
@@ -43,10 +43,10 @@ executors:
     resource_class: medium
     environment:
       CARGO_TERM_COLOR: always
-      RUSTFLAGS: "-D warnings -C debuginfo=0 -C codegen-units=16"
+      RUSTFLAGS: "-D warnings -C debuginfo=0 -C codegen-units=16 -C link-arg=-fuse-ld=lld"
       OZ_TEST_PG_URL: postgres://oz_test:oz_test_password@localhost:5432/oz_test_db
       RUSTC_WRAPPER: ""
-      CARGO_BUILD_JOBS: "2"
+      CARGO_BUILD_JOBS: "1"
       CARGO_INCREMENTAL: "0"
 
   polyglot-executor:
@@ -55,9 +55,9 @@ executors:
     resource_class: medium
     environment:
       CARGO_TERM_COLOR: always
-      RUSTFLAGS: "-D warnings -C debuginfo=0 -C codegen-units=16"
+      RUSTFLAGS: "-D warnings -C debuginfo=0 -C codegen-units=16 -C link-arg=-fuse-ld=lld"
       RUSTC_WRAPPER: ""
-      CARGO_BUILD_JOBS: "2"
+      CARGO_BUILD_JOBS: "1"
       CARGO_INCREMENTAL: "0"
 
   rust-node-executor:
@@ -66,9 +66,9 @@ executors:
     resource_class: medium
     environment:
       CARGO_TERM_COLOR: always
-      RUSTFLAGS: "-D warnings -C debuginfo=0 -C codegen-units=16"
+      RUSTFLAGS: "-D warnings -C debuginfo=0 -C codegen-units=16 -C link-arg=-fuse-ld=lld"
       RUSTC_WRAPPER: ""
-      CARGO_BUILD_JOBS: "2"
+      CARGO_BUILD_JOBS: "1"
       CARGO_INCREMENTAL: "0"
 
 # ── Commands ──────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ commands:
             rustup component add rustfmt clippy
 
   install-linux-deps:
-    description: "Install Linux GTK/WebKit/Tauri system dependencies"
+    description: "Install Linux GTK/WebKit/Tauri system dependencies and lld linker"
     steps:
       - run:
           name: Install System Dependencies
@@ -93,7 +93,7 @@ commands:
             sudo apt-get install -y --no-install-recommends \\
               libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \\
               librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \\
-              libdbus-1-dev libudev-dev pkg-config
+              libdbus-1-dev libudev-dev pkg-config lld clang
 
   prepare-dist-stubs:
     description: "Create frontend dist stubs for Tauri compile macros"
