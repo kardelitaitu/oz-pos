@@ -10,7 +10,7 @@ executors:
   rust-executor:
     docker:
       - image: cimg/rust:1.85.0
-    resource_class: xlarge
+    resource_class: medium
     environment:
       CARGO_TERM_COLOR: always
       RUSTFLAGS: -D warnings
@@ -24,7 +24,7 @@ executors:
           POSTGRES_USER: oz_test
           POSTGRES_PASSWORD: oz_test_password
           POSTGRES_DB: oz_test_db
-    resource_class: xlarge
+    resource_class: medium
     environment:
       CARGO_TERM_COLOR: always
       RUSTFLAGS: -D warnings
