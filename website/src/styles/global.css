@@ -22,8 +22,8 @@
   --color-red: #FC3D39;
   --color-gray: #8E8E93;
   /* Semantic — light theme (default) */
-  --color-primary: #147EFB;
-  --color-primary-hover: #1168D4;
+  --color-primary: #0D5FD6;
+  --color-primary-hover: #0A4FB3;
   --color-success: #53D769;
   --color-danger: #FC3D39;
   --color-warning: #FD9426;
@@ -38,8 +38,8 @@
   --color-border: #DFE1E6;
   /* Text — light */
   --color-ink: #1A1D23;
-  --color-muted: #8E8E93;
-  --color-link: #147EFB;
+  --color-muted: #71757E;
+  --color-link: #0D5FD6;
   /* Callout variants */
   --callout-info: #5FC9F8;
   --callout-warning: #FD9426;
@@ -75,15 +75,15 @@
   --tooltip-bg: #1A1D23;
   /* Tailwind utility aliases — map old names to design language tokens
      so existing bg-accent, text-muted, border-ink/* classes keep working */
-  --color-accent: #147EFB; /* Alias: accent tokens map to primary for backwards compat */
-  --color-link: #147EFB;
+  --color-accent: #0D5FD6; /* Alias: accent tokens map to primary for backwards compat */
+  --color-link: #0D5FD6;
 }
 
 /* ── Dark theme overrides ─────────────────────────────────────── */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --color-primary: #147EFB;
-  --color-primary-hover: #1A8FFF;
+  --color-primary: #0D5FD6;
+  --color-primary-hover: #2088FF;
   --color-success: #6FE884;
   --color-danger: #FF6B68;
   --color-warning: #FFA94D;
@@ -98,7 +98,7 @@
   /* Text — dark */
   --color-ink: #E8EAEF;
   --color-muted: #8B93A3;
-  --color-link: #147EFB;
+  --color-link: #0D5FD6;
   /* Tooltip */
   --tooltip-bg: #3A3F4C;
   /* Callout variants (brighter for dark bg) */
@@ -108,7 +108,7 @@
   --callout-danger: #FF6B68;
   /* Tailwind utility aliases — dark mode overrides */
   --color-accent: #1A8FFF;
-  --color-link: #147EFB;
+  --color-link: #2088FF;
 }
 
 /* ── Base typography (design language) ────────────────────────── */
