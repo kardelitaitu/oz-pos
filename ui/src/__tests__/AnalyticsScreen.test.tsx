@@ -246,7 +246,7 @@ vi.mock('@/api/tables', () => ({
 import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth, monthCalendarGrid, smartScale, cardGranularity, cardRange } from '@/features/analytics/AnalyticsScreen';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { makeSubscriptionCaps } from '@/__tests__/test-utils/mocks/subscriptionCaps';
-import { yearlyHeatmapColumns, rangeForGranularity } from '@/features/analytics/analytics-data';
+import { yearlyHeatmapColumns, rangeForGranularity, isoDaysAgo, isoToday } from '@/features/analytics/analytics-data';
 import { analyticsDataCache, clearAnalyticsCache } from '@/features/analytics/analytics-cache';
 import { registerAnalyticsFeature } from '@/features/analytics/register';
 import { registerStaffFeature } from '@/features/staff/register';
@@ -687,14 +687,8 @@ describe('AnalyticsScreen layout shell', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
 
-    // Local calendar dates — matches the screen's local-time date handling
-    // (UTC toISOString can differ from the local date near midnight).
-    const iso = (d: Date) =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const expectedFrom = new Date();
-    expectedFrom.setDate(expectedFrom.getDate() - 6);
-    expect(from.value).toBe(iso(expectedFrom));
-    expect(to.value).toBe(iso(new Date()));
+    expect(from.value).toBe(isoDaysAgo(6));
+    expect(to.value).toBe(isoDaysAgo(0));
   });
 
   it('collapses all card bodies with the toggle and restores them', () => {
@@ -817,9 +811,8 @@ describe('AnalyticsScreen layout shell', () => {
     // range, never the current year's full 12 columns.
     fireEvent.click(screen.getByRole('radio', { name: 'Yearly' }));
     await flushRecalc();
-    const now = new Date();
-    const isoToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const yearlyCols = yearlyHeatmapColumns(`${now.getFullYear()}-01-01`, isoToday);
+    const today = isoToday();
+    const yearlyCols = yearlyHeatmapColumns(`${today.slice(0, 4)}-01-01`, today);
     const yearlyCells = yearlyCols.reduce((a, c) => a + c.cells, 0);
     expect(cellCount()).toBe(yearlyCells);
     expect(heatmap()?.querySelectorAll('.analytics-heat-column').length).toBe(yearlyCols.length);
