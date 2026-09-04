@@ -312,6 +312,20 @@ step "eol guard" "bash scripts/test-eol-guard.sh" bash scripts/test-eol-guard.sh
 step "agents mirrors" "python3 scripts/verify-agents-mirrors.py" python3 scripts/verify-agents-mirrors.py
 step "agents mirrors self-test" "python3 scripts/verify-agents-mirrors.py --self-test" python3 scripts/verify-agents-mirrors.py --self-test
 
+# ── Conventional-commit subjects ───────────────────────────────────────────
+# .githooks/commit-msg enforces the subject format locally, but core.hooksPath is
+# set by setup-dev.ps1 and is not versioned, so a clone that skips setup has no
+# subject gate. The hook's own header names four commits on this range whose
+# entire message is a pasted `git status --porcelain` block -- those are why the
+# hook exists, and they are exactly what this finds. The rule (type list, regex,
+# and the Merge/Revert/fixup/squash/amend exemptions) is EXTRACTED from the hook
+# at run time, so local and CI cannot disagree about what is legal.
+# Commits older than the hook's introduction are skipped, derived from
+# `git log --diff-filter=A` on the hook rather than a hardcoded sha.
+# Gate: scripts/gates.json -> "commit-subjects".
+step "commit subjects" "python3 scripts/verify-commit-subjects.py --range main..HEAD" python3 scripts/verify-commit-subjects.py --range main..HEAD
+step "commit subjects self-test" "python3 scripts/verify-commit-subjects.py --self-test" python3 scripts/verify-commit-subjects.py --self-test
+
 # ── Release workflow validation (R36-11) ──────────────────────────────────
 # release.yml was renamed to .bak by 23c96330 with an empty commit message and
 # nothing replaced it, so tagging produced no installers for a release cycle.
