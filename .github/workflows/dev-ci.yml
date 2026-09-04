@@ -340,6 +340,22 @@ jobs:
       # from what CI runs. Gate: scripts/gates.json -> "ci-routing-test".
       - name: CI path router regression test
         run: bash scripts/test-ci-routing.sh
+      # This job is the one that decides whether every other job is documented
+      # truthfully, so it needs the same proof it demands of others: a mutation
+      # test showing it can still fail. Without it, "drift: 0 items" is
+      # indistinguishable from "the checker stopped looking" -- the exact failure
+      # that let the manifest rot in the first place.
+      # Gate: scripts/gates.json -> "ci-docs-drift".
+      - name: Drift checker self-test
+        run: python3 scripts/verify-ci-docs-drift.py --self-test
+      # gates.json is the declared source of truth for which step enforces which
+      # gate, so a label naming a step that no longer exists is a false guarantee --
+      # and the checker used to accept it, because its runner test was any-of over
+      # the labels a gate declares. This mutates check.sh and requires the checker to
+      # notice, and first proves the fixture is live at all.
+      # Gate: scripts/gates.json -> "runner-labels".
+      - name: Runner label integrity
+        run: python3 scripts/test-runner-labels.py
       - name: Verify CI docs agree with gates.json and the workflows
         id: drift
         run: |
@@ -490,6 +506,38 @@ jobs:
           else
             echo "not a pull_request event; nothing to compare a base against"
           fi
+      # The last hook step with no CI backstop, and the one with the worst history:
+      # AGENTS.md records that 14 broken i18n keys shipped while this reported clean.
+      # Until now it ran ONLY in the opt-in pre-commit hook -- not in check.sh, not in
+      # check:all, not in CI -- so a clone that skips setup-dev.ps1 could reference a
+      # key present in neither locale and nothing anywhere would notice.
+      #
+      # --scan-dirs is load-bearing, not stylistic. The tool defaults to `features`
+      # alone; the six directories the hook names add 108 more files (228 -> 336, 47%
+      # more coverage). A CI step that omitted the flag would print "0 missing key(s)"
+      # while a third of the surface went unexamined -- green from a smaller input,
+      # which is the failure this repo keeps rediscovering.
+      # Gate: scripts/gates.json -> "bundle-parity".
+      - name: i18n bundle parity
+        run: |
+          python3 scripts/verify-bundle-parity.py \
+            --include-getstring --include-nav-keys --include-key-fields \
+            --include-dynamic-literals --include-id-maps --check-domain-pairs \
+            --scan-dirs features,components,frontend,contexts,hooks,platform
+      # These two lived in ci.yml, which 23c96330 retired to .bak, and neither was
+      # ever restored -- so for two releases the ONLY guard was the opt-in
+      # pre-commit hook. core.hooksPath is set by scripts/setup-dev.ps1 and is not
+      # versioned, meaning a fresh clone that skips setup could commit a
+      # hand-edited 20260813_init.pg.sql (a GENERATED file, never hand-edited) and
+      # merge it clean. AGENTS.md documented that hole in three places; nothing
+      # closed it. Both checks are pure text comparison -- no Docker, no psycopg,
+      # no sqlite handle -- and together cost ~1.1s, so there was never a build-cost
+      # reason to leave them out.
+      # Gate: scripts/gates.json -> "pg-schema-drift", "migration-column-types".
+      - name: PG schema drift
+        run: python3 scripts/generate-pg-migration.py --check
+      - name: Migration column types
+        run: python3 scripts/verify-migration-column-types.py
 
   # ── 8. Release readiness ──────────────────────────────────────────────
   # R36-11's root cause was not only that release.yml was renamed to .bak with an
@@ -531,6 +579,8 @@ jobs:
       - name: Release version gate self-test
         run: node scripts/check-release-version.mjs --self-test
       - name: Updater client compatibility check
+        env:
+          RUSTC_WRAPPER: ""
         run: node scripts/check-updater-compat.mjs
 
   # ── 9. Deploy: Northflank (push to main/release or manual dispatch) ──

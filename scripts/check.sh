@@ -271,6 +271,37 @@ step "healthcheck script test" "sh apps/unified/test-healthcheck.sh" sh apps/uni
 step "ci routing test" "bash scripts/test-ci-routing.sh" bash scripts/test-ci-routing.sh
 
 step "ci docs drift" "python3 scripts/verify-ci-docs-drift.py" python3 scripts/verify-ci-docs-drift.py
+# This is the gate that polices every other gate's CI claim, and until 0.0.37 it
+# was the only one of the family with no self-test -- six siblings carry one and
+# this did not. It now mutates four of its own classifiers and requires each to be
+# noticed, plus a control that must still pass, so "the drift gate is green" cannot
+# mean "the drift gate stopped looking".
+step "ci docs drift self-test" "python3 scripts/verify-ci-docs-drift.py --self-test" python3 scripts/verify-ci-docs-drift.py --self-test
+# The drift gate checks that a runner label matches SOME step, using any-of -- so a
+# gate declaring three labels was satisfied by one, and deleting the other two left
+# gates.json asserting guards that no longer existed while the checker printed
+# "0 drift item(s)". The rule is now per-needle; this proves it stays that way, and
+# proves the fixture is live (ROOT comes from __file__, so a fixture that forgot to
+# copy the checker itself would silently test the real repo and agree with itself).
+# Gate: scripts/gates.json -> "runner-labels".
+step "runner labels" "python3 scripts/test-runner-labels.py" python3 scripts/test-runner-labels.py
+
+# Gate: scripts/gates.json -> "bundle-parity".
+step "bundle parity" "python3 scripts/verify-bundle-parity.py --scan-dirs features,components,frontend,contexts,hooks,platform" python3 scripts/verify-bundle-parity.py --include-getstring --include-nav-keys --include-key-fields --include-dynamic-literals --include-id-maps --check-domain-pairs --scan-dirs features,components,frontend,contexts,hooks,platform
+
+# ── Migration correctness (steps 6 and 7 of the pre-commit hook) ───────────
+# Both lived in ci.yml, retired to .bak by 23c96330, and were never restored in
+# dev-ci.yml -- and, as this file proves, they were never in check.sh either. So
+# the ONLY guard was the opt-in pre-commit hook, and core.hooksPath is set by
+# scripts/setup-dev.ps1 without being versioned: a fresh clone that skips setup
+# could hand-edit 20260813_init.pg.sql (a generated file) or add a float column for
+# an exact-decimal amount, and merge it clean. AGENTS.md documented the CI half of
+# that hole in three places and nobody closed it. Both are pure text comparison --
+# no Docker, no psycopg, no sqlite handle -- and cost ~1.1s together, so there was
+# never a build-time reason to leave them out.
+# Gate: scripts/gates.json -> "pg-schema-drift", "migration-column-types".
+step "pg schema drift" "python3 scripts/generate-pg-migration.py --check" python3 scripts/generate-pg-migration.py --check
+step "migration column types" "python3 scripts/verify-migration-column-types.py" python3 scripts/verify-migration-column-types.py
 
 # ── Document uniqueness (R36-14) ────────────────────────────────────────────
 # f3d9cca6 moved the repo-root subscription-tiers.md into docs/records/ without

@@ -1,6 +1,6 @@
 # Agents Configuration
 
-<!-- Audit stamp: 2026-09-04 · DSH · status: ACCURATE · version lock: 0.0.36 · 8 pre-commit gates · re-audited from the 2026-07-25 Hermes-Agent stamp (that audit resolved A1: version lock and manifests all read 0.0.21, and its "4 pre-commit gates" was accurate then — gates 6, 7 and 8 landed afterwards and this file never followed) -->
+<!-- Audit stamp: 2026-09-04 · DSH · status: ACCURATE · version lock: 0.0.37 · 8 pre-commit gates · re-audited from the 2026-07-25 Hermes-Agent stamp (that audit resolved A1: version lock and manifests all read 0.0.21, and its "4 pre-commit gates" was accurate then — gates 6, 7 and 8 landed afterwards and this file never followed) -->
 
 ## Global Rules
 
@@ -27,7 +27,7 @@ The `.githooks/pre-commit` hook runs **eight steps** before every commit (~5–7
 7. **`PG schema drift guard`** — `scripts/generate-pg-migration.py --check`; `20260813_init.pg.sql` is generated, never hand-edited.
 8. **`Go gate`** — `gofmt -w` + `go vet ./...` when `apps/license-server/*.go` is staged.
 
-Without `core.hooksPath` set, all eight are bypassed at commit time. What CI then catches is narrower than it looks: the live `dev-ci.yml` `i18n` job runs **`lint-i18n.sh` as a hard failure** (not informational) and **`dedupe-ftl.py --dry-run`** — but it does **not** run `verify-bundle-parity.py`, and there is **no** CI job for migration column types or PG schema drift. Those two lived in `ci.yml`, retired to `.bak` by `23c96330` and never restored. **Go is no longer in that list**: `dev-ci.yml#static-gates` runs `gofmt -l`, `go vet ./...` and `go test -short` on `apps/license-server` (added in 0.0.36, `13f2a1dc`) — note CI uses report-only `gofmt -l` where the hook runs `gofmt -w` and re-stages, so an unformatted commit is rejected by CI rather than fixed. So bundle-parity, column types and PG drift are guarded **only** by the opt-in local hook.
+Without `core.hooksPath` set, all eight are bypassed at commit time — but CI now covers **all eight**. The live `dev-ci.yml` `i18n` job runs **`lint-i18n.sh` as a hard failure** (not informational) and **`dedupe-ftl.py --dry-run`**. **Migration column types and PG schema drift are no longer in the uncovered list**: they lived in `ci.yml`, were retired to `.bak` by `23c96330`, and were restored into `dev-ci.yml#static-gates` in **0.0.37** — until then the opt-in hook was their only guard, and they had no `gates.json` record either, so the drift checker could not report a gate it never saw. CI runs the column-type check without `--staged-only`, so it scans all 28 migration files rather than only the ones a commit touched. **Go** has been CI-backed since 0.0.36 (`13f2a1dc`): `dev-ci.yml#static-gates` runs `gofmt -l`, `go vet ./...` and `go test -short` on `apps/license-server` — note CI uses report-only `gofmt -l` where the hook runs `gofmt -w` and re-stages, so an unformatted commit is rejected by CI rather than fixed. **Every one of the eight now has a CI backstop.** `verify-bundle-parity.py` (step 4) was the last holdout and is covered since 0.0.37 by `dev-ci.yml#static-gates`, running without `--staged-only` and with `--scan-dirs features,components,frontend,contexts,hooks,platform` — the flag is load-bearing, since the tool defaults to `features` alone and the six directories add 108 files (228 → 336).
 
 > This list used to be purely hand-maintained: `scripts/bump-version.ps1` syncs the *version* lines in this file and its mirrors but nothing synced the *gate* list, which is how this file, `.agents/AGENTS.md` and root `AGENTS.md` ended up claiming 4, 4 and 6 gates against a real 8 — and, worse, how two of them ended up asserting CI coverage the repo contradicted. `scripts/verify-agents-mirrors.py` now derives the expected counts, commit types, CI jobs and triggers from the hook, the workflows and `Cargo.toml`, and fails when a mirror disagrees. Source of truth is still the hook itself: `grep -n '^# ──' .githooks/pre-commit`.
 
@@ -88,7 +88,7 @@ npm ci --no-audit --no-fund
 
 - Follow the POS software framework conventions.
 - Ensure all code follows the project's coding standards.
-- **Version is locked at the current release (`0.0.36`).** Never change the version number
+- **Version is locked at the current release (`0.0.37`).** Never change the version number
   (in `Cargo.toml`, `tauri.conf.json`, `package.json`, `CHANGELOG.md`,
   or anywhere else) unless the user explicitly asks you to bump it.
 

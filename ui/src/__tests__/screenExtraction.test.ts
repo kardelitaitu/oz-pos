@@ -173,26 +173,51 @@ const SCREENS: ScreenEntry[] = [
     tsx: 'kds/KdsScreen.tsx',
     css: ['kds/KdsScreen.css', 'kds/KdsCompletedView.css'],
     dynamicClassPrefixes: [
+      // Static array of complete names in KdsLayoutMasonry.tsx:70.
       'kds-column--',
+      // `kds-ticket kds-ticket--${level}` in KdsTicketCard.tsx:271.
       'kds-ticket',
+      // Built in AppShell.tsx, outside this screen's own file -- which is why a
+      // KdsScreen-scoped search calls this stale and is wrong.
       'kds-workspace',
-      'kds-history-card-status--',
-      'kds-shortcut-',
-      'kds-shortcuts-',
+      // `status status--${order.status}` in KdsTicketCard.tsx:307.
       'status--',
+      // `kds-main-track active-${activeTab}` in KdsScreen.tsx:627, resolving to
+      // .active-open / .active-completed, both defined. One template literal
+      // without this entry produces THREE findings: the fragment `active-` reads
+      // as unstyled, and both real rules read as dead.
       'active-',
-      'kds-main-pane--',
+      // REMOVED, with the orphaned rules they were hiding:
+      //   'kds-shortcut-', 'kds-shortcuts-'  -- the shortcuts popover was deleted
+      //     from the markup in ccc932c4; nothing in ui/src names either prefix, so
+      //     these muted five unreachable rules. A prefix entry suppresses BOTH
+      //     directions of the check, so one matching nothing is a permanent mute
+      //     over that whole name family.
+      //   'kds-history-card-status--' -- 0 CSS rules and 0 references outside
+      //     this test file: an entry that outlived the code it excused.
+      //   'kds-main-pane--' -- both uses are complete static literals, not
+      //     dynamic, so this was the wrong category; and a28edfda added the CSS,
+      //     so the classes are genuinely styled and need no exemption.
     ],
     externalClasses: [
       'kds-empty',
+      // `document.body.classList.toggle('no-anim', …)` at KdsScreen.tsx:127. A
+      // body class is outside the component subtree the parser walks, and seven
+      // rules are keyed on it.
       'no-anim',
-      'leaving',
-      'kds-moving',
+      // REMOVED: 'leaving' and 'kds-moving' were listed as "defined in another
+      // stylesheet", but both were defined in THIS one and applied by nothing --
+      // the wrong category used to silence a real finding. `leaving` in
+      // particular is a trap: a substring search returns 16 non-test hits, all of
+      // them `const [leaving, setLeaving] = useState(false)` in
+      // features/sales/PaymentModal.tsx plus prose, none of them a className.
     ],
     knownDynamicFragments: [
       'completed',
       'dark',
       'light',
+      // Members of `useState<'all' | 'dinein' | 'takeaway'>` at
+      // KdsScreen.tsx:111 -- TypeScript string-literal TYPES, never class names.
       'dinein',
       'takeaway',
       'active-',

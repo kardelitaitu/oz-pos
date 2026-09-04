@@ -1300,6 +1300,84 @@ fn complete_sale_to_kds_fanout_targets_one_order_to_multiple_instances() {
     );
 }
 
+/// PERF-KDS-02: instance filtering is pushed into SQL. The predicate must
+/// agree with the per-order Rust rule in every direction, including the
+/// historical-targeting edge: once ALL targeting rows are deleted, an
+/// order with a NULL `target_instance_id` reverts to universal visibility
+/// (same semantics as `order_visible_to_instance`).
+#[test]
+fn kds_instance_filter_sql_matches_rust_predicate() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_product(&conn, "BURGER", "Burger");
+
+    let mut cart = Cart::new(usd());
+    cart.add_line(CartLine::new(Sku::new("BURGER"), 1, price(500)))
+        .unwrap();
+    let sale = Sale::from_cart(&cart).unwrap();
+    s.create_sale(&sale).unwrap();
+
+    let orders = s
+        .complete_sale_to_kds_fanout(
+            &sale.id,
+            Some("store-1"),
+            &["kds-main".to_owned(), "kds-expediter".to_owned()],
+        )
+        .unwrap();
+    assert_eq!(orders.len(), 1);
+    let order = &orders[0];
+
+    // Both targeted instances see the ticket; a third does not.
+    assert_eq!(
+        s.get_kds_queue_for_instance(None, "kds-main")
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        s.get_kds_queue_for_instance(None, "kds-expediter")
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        s.get_kds_queue_for_instance(None, "kds-other")
+            .unwrap()
+            .is_empty(),
+        "targeted ticket must be hidden from other instances in SQL"
+    );
+
+    // Deleting every targeting row reverts visibility to the raw
+    // `target_instance_id` column (kds-main) — matching
+    // `order_visible_to_instance`, the ticket stays hidden from others.
+    conn.execute(
+        "DELETE FROM kds_order_targets WHERE kds_order_id = ?1",
+        params![order.id],
+    )
+    .unwrap();
+    assert_eq!(
+        s.get_kds_queue_for_instance(None, "kds-main")
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        s.get_kds_queue_for_instance(None, "kds-other")
+            .unwrap()
+            .is_empty(),
+        "column-targeted ticket stays hidden once targeting rows are gone"
+    );
+
+    // The SQL predicate must also respect zone filtering combined with
+    // instance scoping (binds: zone + iid together).
+    assert!(
+        s.get_kds_queue_for_instance(Some("Grill"), "kds-main")
+            .unwrap()
+            .is_empty(),
+        "zone filter must still apply on top of instance scoping"
+    );
+}
+
 #[test]
 fn scoped_kds_commands_reject_cross_instance_targeted_order() {
     let conn = fresh();
