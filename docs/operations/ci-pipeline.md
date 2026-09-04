@@ -52,7 +52,7 @@
 | `ci-docs-drift` | ✅ Required | dev-ci.yml | step `bash scripts/test-ci-routing.sh` — the router decides whether every other job runs, so this one blocks |
 | `website` | ✅ Required | dev-ci.yml | `cd website && npm ci && npm run check && npm test && npm run build` |
 | `cargo-nextest` | ✅ Required | dev-ci.yml | `cargo nextest run --workspace --all-features` — **no `--exclude`**, so this is broader than check.sh's equivalent, which drops `oz-pos-app` |
-| `static-gates` | ✅ Required | dev-ci.yml | six checks that previously had no CI runner at all: architecture boundaries, no-hardcoded-money-format, windows-config, skill-drift, unified-healthcheck, and Go fmt/vet/test. Each verified green locally before being wired in. `panic-inventory` is deliberately absent — it fails today (R36-12). |
+| `static-gates` | ✅ Required | dev-ci.yml | seven checks that previously had no CI runner at all: architecture boundaries, no-hardcoded-money-format, windows-config, skill-drift, unified-healthcheck, panic inventory, and Go fmt/vet/test. Each verified green locally before being wired in. |
 | `northflank-deploy` | ✅ Required | dev-ci.yml | Backend deploy to Northflank; `needs` every other live job except the advisory `ci-docs-drift`. Runs on push to `main`/`release` or `workflow_dispatch`. |
 | `lighthouse` | ⚠️ Advisory | ci.yml | Lighthouse a11y audit (continue-on-error) |
 | `docker` | ✅ Required | ci.yml | Build + Trivy scan + Compose smoke |
@@ -87,8 +87,8 @@
 | No hardcoded money format | `rust-money-format` | Required | `check.sh` (hardcoded-money-format) |
 | Docker build smoke | — | Required | `check.sh` (docker build) |
 | Migration smoke | — | Required | `check.sh` (migration) |
-| Skill drift guard | `skill-drift-tests` | Required | `check.sh` (skill-drift) |
-| Panic inventory | `rust-panic-inventory` | Required | `check.sh` (panic-inventory) |
+| Skill drift guard | `static-gates` | Required | `check.sh` (skill-drift) |
+| Panic inventory | `static-gates` | Required | `check.sh` (panic-inventory) |
 | A11y regression | `ui-test` | Advisory | `check.sh` (a11y) |
 | Feature registry parity | — | Required | `check.sh` (feature registry) |
 | Plugin-guide parity | — | Required | `check.sh` (plugin-guide parity) |

@@ -366,11 +366,11 @@ jobs:
   # PR red.
   #
   # Deliberately NOT in this job:
-  #   panic-inventory -- scan-unwrap-panic.py FAILS today (18 findings, 6 of them
-  #     false positives where it reads the repo's own /* */ audit stamps as
-  #     unwrap calls). See R36-12.
   #   e2e -- needs the Docker backend; check.sh L203 states E2E is not run there
   #     either. Still only reachable via `cd ui && npm run check:all`.
+  #
+  # panic-inventory was excluded when this job was first written because it
+  # FAILED, and is now included with its findings at zero -- see the step below.
   #
   # Not path-gated: these are ~5s of pure Python/shell and they span rust, ui,
   # go and docs, so routing them risks the same silent-skip failure mode the
@@ -393,6 +393,14 @@ jobs:
         run: bash .agents/skills/skill-drift-guard/scripts/detect.sh --report
       - name: Unified healthcheck script test
         run: sh apps/unified/test-healthcheck.sh
+      # Restored to CI by R36-12. It was excluded from the first version of this
+      # job because it FAILS, and adding a red gate would have turned every
+      # unrelated PR red. The failures turned out to be the scanner's own bug --
+      # it read the repo's audit stamps as code, and in one file had silently
+      # stopped checking at all -- so the gate is now wired in with its findings
+      # at zero and its contract stable under `cargo fmt`.
+      - name: Panic inventory (ADR #33)
+        run: python3 scripts/scan-unwrap-panic.py --fail-on-recoverable
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: apps/license-server/go.mod

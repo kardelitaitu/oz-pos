@@ -137,7 +137,8 @@
       "label": "Panic inventory",
       "status": "required",
       "runners": { "check.sh": ["panic-inventory"] },
-      "_note": "No CI job. Runs in check.sh only, and currently FAILS there: scan-unwrap-panic.py reports 18 findings, 6 of them false positives where it reads the repo's own /* */ audit stamps as unwrap() calls. Deliberately not added to CI until R36-12 is fixed. Was ci.yml#rust-panic-inventory."
+      "_note": "Was ci.yml#rust-panic-inventory, then had no CI job at all while scan-unwrap-panic.py was red. R36-12 found the redness was the SCANNER's bug -- it did not track /* */ block comments across lines, so it read the repo's audit stamps as code (6 false positives) and, in apps/cloud-server/src/redirect.rs, treated a stamp mentioning #[cfg(test)] as the start of test code and stopped checking the rest of the file (1 suppressed real finding). Fixed, triaged, and now enforced in dev-ci.yml#static-gates.",
+      "ci": { "workflow": "dev-ci.yml", "job": "static-gates" }
     },
     {
       "id": "a11y-advisory",
