@@ -30,11 +30,14 @@
 
 ## Pre-Release
 
-- [ ] All CI jobs pass — `dev-ci.yml` jobs are `website`, `cargo-check`
-      (fmt → check → clippy), `cargo-nextest`, `ui-test` (typecheck → lint →
-      vitest → tz-invariance), `i18n`, `northflank-deploy`. This is the **entire**
-      live CI surface; see the warning block above before assuming anything else
-      is gated.
+- [ ] All CI jobs pass — `dev-ci.yml` jobs are `changes` (path router),
+      `website`, `cargo-check` (fmt → check → clippy), `cargo-nextest`,
+      `ui-test` (typecheck → lint → vitest → tz-invariance), `i18n`,
+      `ci-docs-drift`, `static-gates` (architecture boundaries, money format,
+      windows config, skill drift, healthcheck, panic inventory, Go
+      fmt/vet/test), `northflank-deploy`. This is the **entire** live CI
+      surface; see the warning block above before assuming anything else is
+      gated. `verify-ci-docs-drift.py` checks this list against the workflow.
 - [ ] `cargo nextest run --workspace --all-features --profile ci` passes locally
 - [ ] `cd ui && npm run typecheck && npm run lint && npm run test` passes locally
 - [ ] `bash scripts/lint-i18n.sh` clean (no duplicate FTL keys, no verbatim ID bundles)

@@ -229,7 +229,28 @@ Comprehensive pre-push gate mirroring CI. Runs:
 2. Add the gate declaration to `scripts/check.sh` and/or `scripts/check-ui.mjs`
 3. Add the corresponding job to the appropriate workflow (`.github/workflows/*.yml`)
 4. Update this document (`docs/operations/ci-pipeline.md`) — the Job Matrix and Pre-Merge Validation Gates tables
-5. Run `python3 scripts/verify-ci-docs-drift.py` locally to verify
+5. Update the job list in `docs/releases/checklist.md` — it is checked too, and omitting a live job is a finding
+6. Run `python3 scripts/verify-ci-docs-drift.py` locally to verify
+
+---
+
+## Retiring a gate
+
+A check that no longer runs anywhere must say so. Do **not** leave it `required`
+while pointing at a workflow that GitHub never executes — that is the state
+`gates.json` was in for 16 of 47 gates, and it is why R36-10 exists.
+
+1. Set `"status": "retired"` and **remove the `ci` block entirely**. The checker
+   rejects a `retired` gate that still carries one, so the status cannot be used
+   to mute a finding.
+2. Add a `_note` saying where the check went and what, if anything, still covers
+   it. Retiring is a factual claim about today, not a policy verdict about
+   whether the check should exist.
+3. Run the checker. `gates.json` should now report the gate under "marked retired
+   and claim no CI enforcement".
+
+Restoring a retired gate is the reverse: add the job, put the `ci` block back,
+flip the status, and delete the `_note`.
 
 ---
 
@@ -239,7 +260,8 @@ Comprehensive pre-push gate mirroring CI. Runs:
 2. Remove from `scripts/check.sh` and/or `scripts/check-ui.mjs`
 3. Remove or disable the corresponding workflow job
 4. Update this document
-5. Run `python3 scripts/verify-ci-docs-drift.py` to verify
+5. Update the job list in `docs/releases/checklist.md`
+6. Run `python3 scripts/verify-ci-docs-drift.py` to verify
 
 ---
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 r"""
 scripts/verify-ci-docs-drift.py — Catch CI documentation drift between
-docs/operations/ci-pipeline.md, the workflow definitions, and the local runners.
+docs/operations/ci-pipeline.md, docs/releases/checklist.md, the workflow
+definitions, and the local runners.
 
 WHY
 ===
@@ -13,6 +14,11 @@ what CI actually runs. Likewise, `scripts/check.sh` (repository gate)
 and `scripts/check-ui.mjs` (the `check:all` gate) are documented as
 sharing a common gate vocabulary — if one drifts, "all checks passed"
 means different things per entry point.
+
+`docs/releases/checklist.md` also enumerates the live `dev-ci.yml` jobs by hand,
+in the one place a release manager reads at ship time. It went stale the same
+week the checker was made blocking, which is the argument for checking it rather
+than trusting it.
 
 Since AUDIT-27 CI-08 the gate vocabulary + status live in a SINGLE
 source of truth: `scripts/gates.json`. This script derives everything
@@ -73,6 +79,11 @@ ROOT = Path(__file__).resolve().parent.parent
 # the old docs/ci-pipeline.md path made this gate exit 2 ("docs not found")
 # on every run after the doc was moved.
 DOCS = ROOT / "docs" / "operations" / "ci-pipeline.md"
+# The release checklist hand-maintains its own list of dev-ci.yml job names. That
+# list went stale the moment this session added `static-gates` -- the same drift
+# class this checker exists to catch, in the one document a release manager
+# actually reads at ship time, and outside this script's scope until now.
+RELEASE_CHECKLIST = ROOT / "docs" / "releases" / "checklist.md"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 GATES_MANIFEST = ROOT / "scripts" / "gates.json"
 CHECK_SH = ROOT / "scripts" / "check.sh"
@@ -671,6 +682,59 @@ def main() -> int:
                     f"status is '{gate['status']}' (gate '{gate['id']}')"
                 )
 
+    # ── 6. Release checklist's live-job list ↔ dev-ci.yml ────────────
+    # The checklist is what someone reads at ship time, and it enumerates the
+    # live CI jobs by hand. It went stale the moment `static-gates` was added.
+    # Rather than delete the list (a release manager needs it inline), check it:
+    # every job named must exist in dev-ci.yml, and every dev-ci.yml job must be
+    # named. A backtick token is only treated as a job name if it is a real job
+    # in some live workflow OR appears inside the checklist's own "All CI jobs
+    # pass" item -- otherwise prose like `Cargo.toml` in the same file would be
+    # scanned as a job claim.
+    checklist_problems: list[str] = []
+    if RELEASE_CHECKLIST.is_file():
+        cl_lines = RELEASE_CHECKLIST.read_text(encoding="utf-8").splitlines()
+        # Grab the one bullet that enumerates the jobs, including its continuations.
+        bullet: list[str] = []
+        for k, line in enumerate(cl_lines):
+            if "All CI jobs pass" in line:
+                bullet = [line]
+                for nxt in cl_lines[k + 1:]:
+                    if nxt.strip().startswith(("-", "*", ">")) or nxt.strip() == "":
+                        break
+                    bullet.append(nxt)
+                break
+        if not bullet:
+            checklist_problems.append(
+                f"{RELEASE_CHECKLIST.name}: no 'All CI jobs pass' item found -- "
+                f"the live-job list was removed or reworded, so nothing checks it"
+            )
+        else:
+            text = "\n".join(bullet)
+            named = set(re.findall(r"`([a-z][a-z0-9-]*)`", text))
+            live_jobs = jobs_by_workflow.get("dev-ci.yml", set())
+            # Ignore tokens that are clearly not job claims.
+            # Ignore tokens that are step verbs or filenames in that bullet's
+            # prose, not job claims. `i18n` is deliberately NOT here: it is both
+            # an English abbreviation and a real job name, and excluding it made
+            # the check report a live job as missing.
+            named -= {"dev-ci.yml", "cargo", "ui", "npm", "vitest",
+                      "typecheck", "lint", "fmt", "check", "clippy", "tz-invariance"}
+            missing_from_checklist = sorted(live_jobs - named)
+            phantom = sorted(named - live_jobs - all_jobs)
+            if missing_from_checklist:
+                checklist_problems.append(
+                    f"{RELEASE_CHECKLIST.name} omits live dev-ci.yml job(s): "
+                    f"{', '.join(missing_from_checklist)}"
+                )
+            if phantom:
+                checklist_problems.append(
+                    f"{RELEASE_CHECKLIST.name} names job(s) that exist in no live "
+                    f"workflow: {', '.join(phantom)}"
+                )
+    else:
+        checklist_problems.append(f"release checklist not found: {RELEASE_CHECKLIST}")
+
     # ── Report ──────────────────────────────────────────────────────
     manifest_counts: dict[str, int] = {
         "required": 0, "advisory": 0, "required-on-push": 0, "retired": 0,
@@ -730,6 +794,14 @@ def main() -> int:
         )
         for f in unlabelled_retired:
             print(f"    {f}  -> present tense in the docs reads as 'this still runs'")
+        print()
+    if checklist_problems:
+        print(
+            f"  RELEASE CHECKLIST JOB LIST (docs/releases/checklist.md disagrees "
+            f"with dev-ci.yml) — {len(checklist_problems)}:"
+        )
+        for p in checklist_problems:
+            print(f"    {p}")
         print()
     if retired_gates:
         print(
@@ -803,6 +875,7 @@ def main() -> int:
         # jobs. A job that gates a merge but appears in no document is exactly the
         # gap that let this whole class of lie accumulate.
         + len(undocumented)
+        + len(checklist_problems)
     )
     print(f"verify-ci-docs-drift: {problems} drift item(s).")
     return 0 if (args.report_only or problems == 0) else 1
