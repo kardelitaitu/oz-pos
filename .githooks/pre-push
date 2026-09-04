@@ -90,6 +90,14 @@ $(git diff --name-only "$base" "$loid" 2>/dev/null)"
 done
 
 # Fail safe: if we cannot work out what changed, check everything.
+#
+# Empty stdin means git handed us no refs, i.e. there is nothing to push, so
+# exiting 0 is correct rather than a hole -- verified against the alternatives:
+# a garbage local oid and a garbage remote oid BOTH fall through to
+# "unknown base -> checking everything", so any real ref we cannot resolve
+# runs the full matrix instead of silently skipping it. Treating empty stdin
+# as "check everything" too would spend 148s gating a no-op push, which is how
+# a hook gets --no-verify'd out of existence.
 if [ "$ANY_PUSH" = "0" ]; then
     exit 0
 fi
