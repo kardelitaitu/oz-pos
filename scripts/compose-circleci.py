@@ -27,7 +27,7 @@ executors:
     resource_class: medium
     environment:
       CARGO_TERM_COLOR: always
-      RUSTFLAGS: "-D warnings -C debuginfo=0 -C codegen-units=1"
+      RUSTFLAGS: "-D warnings -C debuginfo=0 -C codegen-units=16"
       RUSTC_WRAPPER: ""
       CARGO_BUILD_JOBS: "2"
       CARGO_INCREMENTAL: "0"
@@ -43,7 +43,7 @@ executors:
     resource_class: medium
     environment:
       CARGO_TERM_COLOR: always
-      RUSTFLAGS: "-D warnings -C debuginfo=0 -C codegen-units=1"
+      RUSTFLAGS: "-D warnings -C debuginfo=0 -C codegen-units=16"
       OZ_TEST_PG_URL: postgres://oz_test:oz_test_password@localhost:5432/oz_test_db
       RUSTC_WRAPPER: ""
       CARGO_BUILD_JOBS: "2"
@@ -55,7 +55,7 @@ executors:
     resource_class: medium
     environment:
       CARGO_TERM_COLOR: always
-      RUSTFLAGS: "-D warnings -C debuginfo=0 -C codegen-units=1"
+      RUSTFLAGS: "-D warnings -C debuginfo=0 -C codegen-units=16"
       RUSTC_WRAPPER: ""
       CARGO_BUILD_JOBS: "2"
       CARGO_INCREMENTAL: "0"
@@ -66,7 +66,7 @@ executors:
     resource_class: medium
     environment:
       CARGO_TERM_COLOR: always
-      RUSTFLAGS: "-D warnings -C debuginfo=0 -C codegen-units=1"
+      RUSTFLAGS: "-D warnings -C debuginfo=0 -C codegen-units=16"
       RUSTC_WRAPPER: ""
       CARGO_BUILD_JOBS: "2"
       CARGO_INCREMENTAL: "0"
