@@ -202,13 +202,13 @@ jobs:
           command: cd website && npx playwright install --with-deps chromium
       - run:
           name: Typecheck & Lint
-          command: cd website && npm run check
+          command: cd website && NODE_OPTIONS=--experimental-strip-types npm run check
       - run:
           name: Unit Tests
           command: cd website && npm test
       - run:
           name: Build
-          command: cd website && npm run build
+          command: cd website && NODE_OPTIONS=--experimental-strip-types npm run build
 
   # ── 5. Cargo Check & Clippy ──────────────────────────────────────────
   cargo-check:
