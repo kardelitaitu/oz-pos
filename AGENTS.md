@@ -169,11 +169,19 @@ Every commit message **MUST** strictly follow the conventional format:
   - `chore`: Maintenance, dependencies, configs
   - `test`: Adding or modifying tests
   - `refactor`: Code refactoring without functional changes
+  - `style`: Cosmetic changes that alter no runtime behaviour — `cargo fmt` wraps, CSS adjustments, copy edits. In established use (`130c7556`, `c3b7c72b`, `ad9c60e9`, `e0f2ca9b`, `04465711`, `2d517b55`, `7dde51c2`, `cfd0f183`); added to this list so the documented set matches practice and the `commit-msg` gate does not reject it.
   - `perf`: Performance improvements
   - `ci`: CI workflows, GitHub Actions, build scripts
   - `audit`: Code audit stamps and remediations
 - **`<area>`**: Domain, crate, or component (e.g. `sales`, `admin`, `website`, `ci`, `core`, `desktop-client`, `ui`, `licensing`, `agents`).
 - **`<description>`**: Imperative, concise summary of the change (e.g. `add gift card tender`, `resolve modal overflow`).
+
+> **This is now actually enforced** by `.githooks/commit-msg`, which rejects a
+> non-conforming subject and prints the allowed list. Subject line only — bodies
+> stay free-form. Git-generated messages (`Merge …`, `Revert …`, `fixup!`,
+> `squash!`) and an empty subject pass through, so normal git workflows still
+> work. Like every other hook here it needs `core.hooksPath`, so a fresh clone
+> that skips `scripts/setup-dev.ps1` is not gated.
 
 ### 3. Commit Cadence & Push Rule
 - **Always make a local commit after each major modification.** Whenever a logical task or feature step is completed and verified locally, commit it before moving on to the next task.

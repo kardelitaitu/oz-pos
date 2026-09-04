@@ -1,0 +1,79 @@
+#!/bin/bash
+# .githooks/commit-msg — enforce the conventional-commit subject format.
+#
+# WHY. AGENTS.md has always said the format is "enforced" and enumerates the
+# allowed types, but nothing checked it -- enforcement was prose only. The cost
+# is visible in the history: four commits on the 0.0.35/0.0.36 range have a
+# pasted `git status --porcelain` block as their entire message
+# (2eea3d07 "deleted:    lighthouse-report.json", faa5dae0 "modified:
+# .gitignore", 5855c429 "updated gitignore", 84a71f3e "new file: ..."), and
+# those are what a release-notes generator or a `git log` reader hits first.
+# Tracked as R36-04 in docs/plans/0.0.36-backlog.md.
+#
+# SCOPE. Subject line only. Bodies are free-form and deliberately unchecked --
+# the rule that actually protects readability is the one line everyone skims.
+#
+# The type list here MUST match AGENTS.md "must be one of". It includes `style`,
+# which was in established use (8 commits) but missing from that list until this
+# change; the list was corrected rather than the gate rejecting practice.
+#
+# LIMITATION, same as every other hook in this directory: core.hooksPath is set
+# by scripts/setup-dev.ps1 and is NOT versioned, so a fresh clone that skips
+# setup gets no commit-msg gate. A CI-side check over origin/main..HEAD would
+# close that; it is not done here because dev-ci.yml currently has no job that
+# fits, and adding one is a separate decision.
+
+set -uo pipefail
+
+MSG_FILE="$1"
+SUBJECT=$(head -n 1 "$MSG_FILE")
+
+# --- Git's own generated messages are always accepted ----------------------
+# These are not authored subjects; rejecting them would break ordinary git
+# workflows (merging, reverting, autosquash, and the "no edit" re-commit).
+case "$SUBJECT" in
+    "Merge "*|"Revert "*|"fixup!"*|"squash!"*|"amend!"*)
+        exit 0
+        ;;
+esac
+
+# --- An empty subject is not a format problem, it is a cancelled commit ----
+# `git commit --amend -m ""` and an editor saved empty both land here. Let git
+# handle its own "abort commit" path rather than printing a format lecture.
+if [ -z "${SUBJECT//[[:space:]]/}" ]; then
+    exit 0
+fi
+
+TYPES='feat|fix|docs|style|refactor|perf|test|ci|chore|audit'
+# Optional scope, optional `!` breaking-change marker, non-empty description.
+PATTERN="^($TYPES)(\([^()]+\))?!?: .+"
+
+if printf '%s' "$SUBJECT" | grep -qE "$PATTERN"; then
+    exit 0
+fi
+
+cat >&2 <<EOF
+
+✖ commit message rejected: the subject does not follow the required format.
+
+  your subject:
+    $SUBJECT
+
+  required:
+    <type>(<area>): <description>
+
+  <type> must be one of:
+    feat fix docs style refactor perf test ci chore audit
+
+  examples:
+    fix(sales): resolve modal overflow on tablet
+    ci(hooks): enforce the conventional commit subject
+    docs: correct the gate count in AGENTS.md
+
+  The authoritative list and its meanings are in AGENTS.md, section
+  "Commit Format Requirement".
+
+To bypass deliberately (discouraged): git commit --no-verify
+
+EOF
+exit 1
