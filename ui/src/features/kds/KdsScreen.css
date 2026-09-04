@@ -2217,10 +2217,22 @@
   border-radius: var(--kds-radius-switch);
 }
 
-/* ── Reduced motion: disable decorative animations ────────────────────
-   Entrance/exit and slide effects are cut; functional feedback that
-   must communicate with reduced motion (urgent/rush blink, new-ticket
-   arrival pulse) intentionally keeps playing. */
+/* ── Reduced motion: in-app toggle (body.no-anim) overrides ── */
+body.no-anim .kds-card-spawn,
+body.no-anim .kds-card.leaving {
+  animation: none !important;
+}
+body.no-anim .kds-moving,
+body.no-anim .kds-main-track,
+body.no-anim .kds-main-pane,
+body.no-anim .kds-tab-indicator {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* ── Reduced motion: disable decorative modal and overlay animations ──
+   Entrance/exit and heavy decorative sweeps are cut; functional feedback
+   and core workspace tab navigation remain fluid unless suppressed in-app. */
 @media (prefers-reduced-motion: reduce) {
   .kds-filter-panel,
   .kds-hamburger-panel,
@@ -2231,7 +2243,6 @@
     animation: none !important;
     transition: none !important;
   }
-  .kds-tab-indicator,
   .kds-theme-indicator,
   .kds-card-collapsible,
   .kds-card-collapsible-inner {
