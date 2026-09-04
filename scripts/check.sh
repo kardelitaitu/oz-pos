@@ -278,6 +278,20 @@ step "ci docs drift" "python3 scripts/verify-ci-docs-drift.py" python3 scripts/v
 # mean "the drift gate stopped looking".
 step "ci docs drift self-test" "python3 scripts/verify-ci-docs-drift.py --self-test" python3 scripts/verify-ci-docs-drift.py --self-test
 
+# ── Migration correctness (steps 6 and 7 of the pre-commit hook) ───────────
+# Both lived in ci.yml, retired to .bak by 23c96330, and were never restored in
+# dev-ci.yml -- and, as this file proves, they were never in check.sh either. So
+# the ONLY guard was the opt-in pre-commit hook, and core.hooksPath is set by
+# scripts/setup-dev.ps1 without being versioned: a fresh clone that skips setup
+# could hand-edit 20260813_init.pg.sql (a generated file) or add a float column for
+# an exact-decimal amount, and merge it clean. AGENTS.md documented the CI half of
+# that hole in three places and nobody closed it. Both are pure text comparison --
+# no Docker, no psycopg, no sqlite handle -- and cost ~1.1s together, so there was
+# never a build-time reason to leave them out.
+# Gate: scripts/gates.json -> "pg-schema-drift", "migration-column-types".
+step "pg schema drift" "python3 scripts/generate-pg-migration.py --check" python3 scripts/generate-pg-migration.py --check
+step "migration column types" "python3 scripts/verify-migration-column-types.py" python3 scripts/verify-migration-column-types.py
+
 # ── Document uniqueness (R36-14) ────────────────────────────────────────────
 # f3d9cca6 moved the repo-root subscription-tiers.md into docs/records/ without
 # noticing docs/guides/ already had a copy from 28147fe4 -- leaving two tracked

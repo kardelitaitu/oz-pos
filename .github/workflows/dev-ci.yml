@@ -503,6 +503,20 @@ jobs:
           else
             echo "not a pull_request event; nothing to compare a base against"
           fi
+      # These two lived in ci.yml, which 23c96330 retired to .bak, and neither was
+      # ever restored -- so for two releases the ONLY guard was the opt-in
+      # pre-commit hook. core.hooksPath is set by scripts/setup-dev.ps1 and is not
+      # versioned, meaning a fresh clone that skips setup could commit a
+      # hand-edited 20260813_init.pg.sql (a GENERATED file, never hand-edited) and
+      # merge it clean. AGENTS.md documented that hole in three places; nothing
+      # closed it. Both checks are pure text comparison -- no Docker, no psycopg,
+      # no sqlite handle -- and together cost ~1.1s, so there was never a build-cost
+      # reason to leave them out.
+      # Gate: scripts/gates.json -> "pg-schema-drift", "migration-column-types".
+      - name: PG schema drift
+        run: python3 scripts/generate-pg-migration.py --check
+      - name: Migration column types
+        run: python3 scripts/verify-migration-column-types.py
 
   # ── 8. Release readiness ──────────────────────────────────────────────
   # R36-11's root cause was not only that release.yml was renamed to .bak with an
