@@ -287,7 +287,7 @@
   --color-pos-modal-btn-border:   #475569;
   --color-pos-modal-btn-hover-bg: #475569;
   --color-pos-modal-btn-hover-fg: #f1f5f9;
-  --color-pos-modal-shadow:       0 25px 50px -12px rgba(0, 0, 0, 0.90);
+  --color-pos-modal-shadow:       0 20px 40px -8px rgba(0, 0, 0, 0.60), 0 0 0 1px rgba(255, 255, 255, 0.08);
 
   /* ── Toast ────────────────────────────────────────────────── */
   --color-toast-bg:            #111827;
@@ -454,7 +454,7 @@
   --color-pos-modal-btn-border:   #d1d5db;
   --color-pos-modal-btn-hover-bg: #e5e7eb;
   --color-pos-modal-btn-hover-fg: #111827;
-  --color-pos-modal-shadow:       0 25px 50px -12px rgba(0, 0, 0, 0.15);
+  --color-pos-modal-shadow:       0 20px 40px -8px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
 
   /* ── Toast ────────────────────────────────────────────────── */
   --color-toast-bg:            #ffffff;

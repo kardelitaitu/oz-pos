@@ -81,7 +81,7 @@
   --kds-switch-off: rgba(255, 255, 255, 0.12);
   /* Shadows */
   --kds-shadow-drop: 0 10px 30px rgba(0, 0, 0, 0.5);
-  --kds-shadow-modal: 0 20px 60px rgba(0, 0, 0, 0.5);
+  --kds-shadow-modal: 0 20px 40px -8px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
   --kds-shadow-chip: 0 1px 3px rgba(0, 0, 0, 0.3);
   --kds-shadow-sla-yellow: 0 0 8px rgba(245, 158, 11, 0.35);
   --kds-shadow-sla-red: 0 0 12px rgba(239, 68, 68, 0.5);
@@ -1694,6 +1694,11 @@
   transform-origin: center center;
   transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.36s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: transform, opacity;
+}
+
+.kds-main-pane--open,
+.kds-main-pane--completed {
+  position: relative;
 }
 
 /* Android launcher depth effect: inactive pane scales down and fades out */
