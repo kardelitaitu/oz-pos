@@ -72,7 +72,7 @@ impl Store<'_> {
         rows.map(|r| Ok(r?)).collect()
     }
 
-    /// Visibility predicate pushed into SQL (PERF-KDS-02).
+    /// Visibility condition pushed into SQL (PERF-KDS-02).
     ///
     /// Mirrors [`Self::order_visible_to_instance`] exactly: an order is
     /// visible when it has NO targeting rows and is untargeted (legacy
@@ -80,8 +80,16 @@ impl Store<'_> {
     /// `instance_id`. Applied as a WHERE fragment so list/queue queries
     /// filter in one indexed pass instead of issuing per-order COUNT
     /// queries (the N+1).
-    fn instance_visibility_predicate_sql() -> &'static str {
-        " AND (
+    ///
+    /// Returns a bare parenthesised condition with NO leading `WHERE` or
+    /// `AND`, so a caller cannot depend on one existing. It previously
+    /// began with `" AND ("`, which made `list_kds_orders_for_instance`
+    /// emit `FROM kds_orders AND (...)` whenever `status_filter` was
+    /// `None` — the default KDS listing call, so SQLite rejected it with
+    /// `near "AND": syntax error` rather than returning unfiltered rows.
+    /// Callers now join their conditions into a single `WHERE`.
+    fn instance_visibility_condition_sql() -> &'static str {
+        "(
             (
                 NOT EXISTS (
                     SELECT 1 FROM kds_order_targets t
@@ -109,16 +117,19 @@ impl Store<'_> {
         status_filter: Option<&str>,
         instance_id: &str,
     ) -> Result<Vec<KdsOrder>, CoreError> {
+        let mut conditions: Vec<&str> = Vec::new();
+        if status_filter.is_some() {
+            conditions.push("status = :status");
+        }
+        conditions.push(Self::instance_visibility_condition_sql());
         let mut sql = String::from(
             "SELECT id, sale_id, store_id, target_instance_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
                     prep_time_seconds, kitchen_zone, notes, table_number, priority
              FROM kds_orders",
         );
-        if status_filter.is_some() {
-            sql.push_str(" WHERE status = :status");
-        }
-        sql.push_str(Self::instance_visibility_predicate_sql());
+        sql.push_str(" WHERE ");
+        sql.push_str(&conditions.join(" AND"));
         sql.push_str(" ORDER BY received_at DESC");
 
         // Bind only parameters the assembled SQL actually references —
@@ -543,7 +554,13 @@ impl Store<'_> {
                 Some(zone.to_owned())
             }
         };
-        sql.push_str(Self::instance_visibility_predicate_sql());
+        // The queue always opens with `WHERE status IN (...)`, so the
+        // connector lives here rather than inside the condition: the
+        // condition helper returns a bare fragment precisely so no caller
+        // can inherit the bug that ` AND (`-prefixed text caused in
+        // `list_kds_orders_for_instance`.
+        sql.push_str(" AND ");
+        sql.push_str(Self::instance_visibility_condition_sql());
         sql.push_str(
             " ORDER BY
                 CASE status
