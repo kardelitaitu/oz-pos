@@ -506,14 +506,18 @@ export default function KdsScreen() {
   // Open/Completed tab indicator: measure the active tab button inside
   // the track and slide the blue pill to it (prototype .kds-tab-indicator).
   useEffect(() => {
-    const track = tabsTrackRef.current;
-    const tab = activeTab === 'open' ? tabOpenRef.current : tabCompletedRef.current;
-    if (!track || !tab) return;
-    setTabIndicator({
-      left: tab.offsetLeft - track.offsetLeft,
-      width: tab.offsetWidth,
-    });
-  }, [activeTab]);
+    const updateIndicator = () => {
+      const tab = activeTab === 'open' ? tabOpenRef.current : tabCompletedRef.current;
+      if (!tab) return;
+      setTabIndicator({
+        left: tab.offsetLeft,
+        width: tab.offsetWidth,
+      });
+    };
+    updateIndicator();
+    window.addEventListener('resize', updateIndicator);
+    return () => window.removeEventListener('resize', updateIndicator);
+  }, [activeTab, orders.length]);
 
   // Filter dropdown: close on outside click and Escape.
   useEffect(() => {
