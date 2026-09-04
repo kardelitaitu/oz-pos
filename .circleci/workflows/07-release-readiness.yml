@@ -1,0 +1,22 @@
+# ── 07. Release Readiness ──────────────────────────────────────────────
+# Criticality: P0
+# Duration: ~10s
+# Scope: Version lock, updater signatures, latest.json generator, and compatibility
+
+jobs:
+  release-readiness:
+    executor: rust-node-executor
+    steps:
+      - checkout
+      - run:
+          name: Check Release Version Self-Test
+          command: node scripts/check-release-version.mjs --self-test
+      - run:
+          name: Verify Updater Signature Self-Test
+          command: node scripts/verify-updater-signature.mjs --self-test
+      - run:
+          name: Generate Latest JSON Self-Test
+          command: node scripts/generate-latest-json.mjs --self-test
+      - run:
+          name: Check Updater Compatibility
+          command: node scripts/check-updater-compat.mjs

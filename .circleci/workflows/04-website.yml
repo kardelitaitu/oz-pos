@@ -1,0 +1,42 @@
+# ── 04. Website & Documentation ────────────────────────────────────────
+# Criticality: P1
+# Duration: ~45s
+# Scope: Website asset hygiene, Astro typecheck, unit tests, and production build
+
+jobs:
+  website:
+    executor: node-executor
+    steps:
+      - checkout
+      - run:
+          name: Install Python
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends python3
+      - run:
+          name: Website Asset Hygiene
+          command: python3 scripts/verify-website-assets.py
+      - restore_cache:
+          keys:
+            - v2-website-deps-{{ checksum "website/package-lock.json" }}
+            - v2-website-deps-
+      - run:
+          name: Install Dependencies
+          command: cd website && npm ci --no-audit --no-fund
+      - save_cache:
+          key: v2-website-deps-{{ checksum "website/package-lock.json" }}
+          paths:
+            - ~/.npm
+            - website/node_modules
+      - run:
+          name: Install Playwright Dependencies
+          command: cd website && npx playwright install --with-deps chromium
+      - run:
+          name: Typecheck & Lint
+          command: cd website && npm run check
+      - run:
+          name: Unit Tests
+          command: cd website && npm test
+      - run:
+          name: Build
+          command: cd website && npm run build

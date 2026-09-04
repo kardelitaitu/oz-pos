@@ -92,7 +92,6 @@ commands:
 
 # ── Jobs ──────────────────────────────────────────────────────────────
 jobs:
-  # ── 1. Static Gates & Linters ────────────────────────────────────────
   static-gates:
     executor: polyglot-executor
     steps:
@@ -137,8 +136,12 @@ jobs:
       - run:
           name: Conventional-Commit Subjects Self-Test
           command: python3 scripts/verify-commit-subjects.py --self-test
+      - run:
+          name: Modular CircleCI Config Drift
+          command: |
+            python3 scripts/compose-circleci.py --check
+            python3 scripts/compose-circleci.py --self-test
 
-  # ── 2. i18n Quality Gate ─────────────────────────────────────────────
   i18n:
     executor: node-executor
     steps:
@@ -166,8 +169,6 @@ jobs:
       - run:
           name: FTL Duplicate-Key Dry Run
           command: python3 scripts/dedupe-ftl.py --dry-run
-
-  # ── 3. UI Lint & Typecheck ───────────────────────────────────────────
   ui-lint-typecheck:
     executor: node-executor
     steps:
@@ -199,7 +200,6 @@ jobs:
           name: Analytics Timezone Invariance
           command: python3 scripts/check-tz-invariance.py
 
-  # ── 4. UI Parallel Vitest Slices ─────────────────────────────────────
   ui-test-slice:
     executor: node-executor
     parameters:
@@ -225,8 +225,6 @@ jobs:
       - run:
           name: Run Vitest Shard << parameters.slice >>/<< parameters.total >>
           command: cd ui && npx vitest run --shard=<< parameters.slice >>/<< parameters.total >>
-
-  # ── 5. Website Check + Build ─────────────────────────────────────────
   website:
     executor: node-executor
     steps:
@@ -263,8 +261,6 @@ jobs:
       - run:
           name: Build
           command: cd website && npm run build
-
-  # ── 6. Cargo Check & Clippy ──────────────────────────────────────────
   cargo-check:
     executor: rust-executor
     steps:
@@ -292,8 +288,6 @@ jobs:
             - ~/.cargo/registry/cache
             - ~/.cargo/git/db
             - target
-
-  # ── 7. Cargo Nextest Suite ───────────────────────────────────────────
   cargo-nextest:
     executor: rust-test-executor
     steps:
@@ -330,8 +324,6 @@ jobs:
             - ~/.cargo/registry/cache
             - ~/.cargo/git/db
             - target
-
-  # ── 8. Release Readiness ─────────────────────────────────────────────
   release-readiness:
     executor: rust-node-executor
     steps:
@@ -348,7 +340,6 @@ jobs:
       - run:
           name: Check Updater Compatibility
           command: node scripts/check-updater-compat.mjs
-
 # ── Workflows ─────────────────────────────────────────────────────────
 workflows:
   version: 2
