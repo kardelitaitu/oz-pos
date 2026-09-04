@@ -218,6 +218,8 @@ fi
 
 if [ "$RUN_WEBSITE" = "1" ]; then
     echo "── Tier 1: Website ──"
+    # Stdlib-only, so it runs whether or not node_modules is present.
+    run_py "website asset hygiene" "scripts/verify-website-assets.py"
     if [ -d website/node_modules ]; then
         gate "website astro check" sh -c 'cd website && npx astro check'
         gate "website vitest" sh -c 'cd website && npx vitest run'

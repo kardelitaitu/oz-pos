@@ -59,6 +59,13 @@
       "ci": { "workflow": "website.yml", "job": "check" }
     },
     {
+      "id": "website-assets",
+      "label": "Website asset hygiene",
+      "status": "required",
+      "runners": { "check.sh": ["website assets"] },
+      "ci": { "workflow": "dev-ci.yml", "job": "website" }
+    },
+    {
       "id": "rust-clippy",
       "label": "Clippy",
       "status": "required",

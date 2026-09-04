@@ -115,6 +115,11 @@ jobs:
     if: needs.changes.outputs.website == 'true'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # Stdlib-only, so it runs before the npm install below: an oversized or
+      # raster-in-SVG asset should fail in seconds rather than after a minute of
+      # dependency setup. Gate: scripts/gates.json -> "website-assets".
+      - name: Website asset hygiene
+        run: python3 scripts/verify-website-assets.py
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'

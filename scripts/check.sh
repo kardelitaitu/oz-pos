@@ -218,6 +218,10 @@ else
     echo -e "${YELLOW}⚠ Website checks skipped (npm not found or website/package-lock.json missing)${NC}"
 fi
 
+# Asset hygiene is stdlib-only, so it runs even when npm is unavailable above.
+# Gate: scripts/gates.json → "website-assets".
+step "website assets" "python3 scripts/verify-website-assets.py" python3 scripts/verify-website-assets.py
+
 # ── Plugin guide / API parity (PLG-10 tail; Rust-side, always runs) ─────
 step "plugin-guide parity" "python3 scripts/verify-plugin-guide-parity.py" python3 scripts/verify-plugin-guide-parity.py
 
