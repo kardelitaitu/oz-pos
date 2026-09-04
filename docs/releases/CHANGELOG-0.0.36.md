@@ -1,8 +1,14 @@
 # Changelog — OZ-POS 0.0.36
 
 **Release date:** 2026-09-04
-**Commits since 0.0.35:** 48 (`d318e4ea..HEAD`)
+**Commits since 0.0.35:** 49 (`d318e4ea..3d5c8c51`)
 **Scale:** 112 files changed, +4,039 / −500
+
+> The range is pinned to an explicit end commit rather than `HEAD`, because
+> `d318e4ea..HEAD` is self-defeating in a changelog: the commit that corrects the
+> count is itself inside the range it counts, so the number is wrong the moment
+> it lands. That is how the previous revision came to say 37 for a range holding
+> 38. Verify with `git rev-list --count d318e4ea..3d5c8c51`.
 
 ---
 
@@ -25,7 +31,7 @@ resulting empty session token as specification.
 | Area | Commits | Character |
 |---|---|---|
 | Website performance & correctness | 8 | Lighthouse follow-ups: caching, CSS deferral, island waterfall |
-| Documentation accuracy | 10 | instruction files, plans, backlog, release notes, guide |
+| Documentation accuracy | 11 | instruction files, plans, backlog, release notes, guide |
 | Local gate + CI enforcement | 9 | path routing, rewritten `pre-push`, `commit-msg` gate, exec bits, asset guard |
 | Test integrity (mocks, harness, tz) | 4 | unmocked IPC commands now fail loudly; empty-token assertions corrected |
 | Store-zone date anchoring | 3 | report windows anchored to the store's calendar, not the device's |
@@ -34,11 +40,11 @@ resulting empty session token as specification.
 | Non-conforming messages | 4 | see [Known issues](#known-issues) |
 | Asset hygiene · Release · Admin | 1 each | 1.0 MB dead SVG removed; version bump; stats typedef |
 
-*Counts derived by partitioning `d318e4ea..HEAD` so every commit lands in exactly
-one bucket and the total equals the range count — not by hand-tallying. This
-table previously summed to 37 against a range that actually held 38; the script
-now asserts the sum equals `git rev-list` and reports any commit matching no rule
-instead of dropping it silently.*
+*Counts derived by partitioning `d318e4ea..3d5c8c51` so every commit lands in
+exactly one bucket and the total equals the range count — not by hand-tallying.
+The partition summed to 37 against a range that actually held 38 until this
+revision; the script now asserts the sum equals `git rev-list` and reports any
+commit matching no rule instead of dropping it silently.*
 
 ---
 
