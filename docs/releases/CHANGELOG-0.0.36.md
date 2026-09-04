@@ -1,14 +1,22 @@
 # Changelog — OZ-POS 0.0.36
 
 **Release date:** 2026-09-04
-**Commits since 0.0.35:** 66 (`d318e4ea..2d786e65`)
-**Scale:** 123 files changed, +5,560 / −668
+**Commits since 0.0.35:** 73 (`d318e4ea..82697c99`)
+**Scale:** 132 files changed, +6,986 / −696
 
 > The range is pinned to an explicit end commit rather than `HEAD`, because
 > `d318e4ea..HEAD` is self-defeating in a changelog: the commit that corrects the
 > count is itself inside the range it counts, so the number is wrong the moment
 > it lands. That is how the previous revision came to say 37 for a range holding
-> 38. Verify with `git rev-list --count d318e4ea..2d786e65`.
+> 38. Verify with `git rev-list --count d318e4ea..82697c99`.
+>
+> One commit in this range is **filed under a subject that does not describe it**:
+> `3b10ea3a` says `fix(website): reposition popular badge on pricing preview cards`
+> and actually contains the restoration of the release pipeline (R36-11). A
+> concurrent agent's whole-tree commit swept ten staged files in under its own
+> message. The area table below classifies by files touched, not by subject, and
+> flags the case — see [R36-13](../plans/0.0.36-backlog.md).
+
 
 ---
 
@@ -46,22 +54,29 @@ lesson.** Each fix was proven non-vacuous by sabotage before being trusted.
 
 | Area | Commits | Character |
 |---|---|---|
-| Website performance & correctness | 8 | Lighthouse follow-ups: caching, CSS deferral, island waterfall |
-| Documentation accuracy | 18 | instruction files, plans, backlog, release notes, guide |
-| Local gate + CI enforcement | 17 | path routing, rewritten `pre-push`, `commit-msg` gate, exec bits, asset guard, **CI truthfulness made blocking** |
+| Documentation accuracy | 20 | instruction files, plans, backlog, release notes, guide |
+| Local gate + CI enforcement | 18 | path routing, rewritten `pre-push`, `commit-msg` gate, exec bits, asset guard, **CI truthfulness made blocking**, release checklist pinned |
+| Website performance & correctness | 9 | Lighthouse follow-ups: caching, CSS deferral, island waterfall, logo sizing |
 | Test integrity (mocks, harness, tz) | 4 | unmocked IPC commands now fail loudly; empty-token assertions corrected |
-| Store-zone date anchoring | 3 | report windows anchored to the store's calendar, not the device's |
 | Rust / dependency hygiene | 4 | clippy, refactor, lockfile entry |
+| Store-zone date anchoring | 3 | report windows anchored to the store's calendar, not the device's |
 | API write-audit + served-store selector | 3 | new audit hook, store picker end-to-end |
 | Panic-gate scanner fix | 2 | a gate that produced false positives **and** silently skipped a whole file |
+| Stale version literals | 2 | a lock screen and an admin health endpoint both reporting `0.0.34` |
 | Non-conforming messages | 4 | see [Known issues](#known-issues) |
+| **Release pipeline restoration (R36-11)** | 1 | **`3b10ea3a`** — filed under a website subject that does not describe it |
 | Asset hygiene · Release · Admin | 1 each | 1.0 MB dead SVG removed; version bump; stats typedef |
 
-*Counts derived by partitioning `d318e4ea..2d786e65` so every commit lands in
+*Counts derived by partitioning `d318e4ea..82697c99` so every commit lands in
 exactly one bucket and the total equals the range count — not by hand-tallying.
 The partition summed to 37 against a range that actually held 38 until that
 revision; the script now asserts the sum equals `git rev-list` and reports any
 commit matching no rule instead of dropping it silently.*
+
+*Since R36-13 the partition also classifies by **files touched before subjects**,
+because a subject-only pass reproduces the exact mistake a reviewer scanning
+`git log --oneline` makes: `3b10ea3a` reads as a pricing-card tweak and contains
+470 lines of restored release pipeline.*
 
 ---
 
@@ -259,6 +274,92 @@ declaring a change verified — **cannot currently complete**.
 the gate now runs in CI** (`2d786e65`) — closing R36-10's last loose end.
 
 
+## Release Pipeline Restored, Desktop-Only (R36-11)
+
+`23c96330` renamed `release.yml` to `release.yml.bak` in a bulk "backup full
+workflows and introduce streamlined Quick Dev CI" commit with an **empty body and
+zero line changes**. No rationale was ever recorded. From then on, pushing a `v*`
+tag triggered no workflow and produced no installers, updater manifest, or
+provenance — for a full release cycle — while three documents went on describing
+the automation as live.
+
+**Scope decision: desktop only.** Restoring the whole thing means four separate
+problems at once (desktop installers, mobile builds, container images, signing
+credentials) and only the first is achievable without new external setup. The
+`.bak` was 512 lines of genuinely good engineering — SHA-pinned actions,
+least-privilege per job, SignPath degrading to an unsigned fallback rather than
+stranding an installer, draft-then-publish behind an asset inventory gate — so
+none of that was rewritten. The docker matrix targets and everything hanging off
+them were removed, because Northflank already builds backend images on deploy.
+`*.tar` came out of the checksum, inventory and attestation lists with them: **an
+inventory gate demanding an artifact no job produces fails every release.**
+
+### The root cause was one level deeper
+
+The backlog asked whether the workflow's *secrets* were the dependency to
+re-check. They were not. The scripts the workflow calls were exercised by **no
+automated runner at all**. `check-updater-compat.mjs` — the end-to-end proof that
+signatures this pipeline emits are accepted by the real Tauri updater client and
+that a tampered installer is rejected — ran only inside `release.yml.bak`, i.e.
+nowhere. The signing chain could have rotted alongside the workflow and the first
+symptom would have been customers unable to auto-update, surfacing on their
+machines rather than in CI.
+
+So two paths were added, not one:
+
+- **`dev-ci.yml#release-readiness`** runs the compat check plus the version gate's
+  self-test, path-gated on a new `release` router output covering the release
+  scripts, the compat harness, `tauri.conf.json` (which carries the updater
+  pubkey), `release.yml` itself, and `docs/releases/`.
+- **`scripts/verify-release-workflow.py`** validates statically what needs no tag,
+  no key material and no macOS/Windows runner: action pins, referenced paths,
+  docker residue, inventory-vs-matrix, the signing guard, ordering, privileges.
+  Runs in `static-gates`, both normally and `--self-test`.
+
+Verified locally: the compat check passes all four groups, including real
+`tauri-cli` signature verification and tamper rejection. **The signing machinery
+was never broken — it was unwatched.**
+
+### A validator that cannot fail is the same bug
+
+It shipped with 8 mutations and initially caught **7**. The one that slipped
+through was the most dangerous in the set: changing the missing-key branch from
+`exit 1` to `exit 0`. My check tested that `UPDATER_PRIVATE_KEY` was *mentioned*,
+not that its absence was *fatal* — the same marker-not-argument weakness flagged
+when closing R36-12. The guard's own branch must now contain `exit 1`, and if
+someone restructures it so the regex can no longer find it, that is also a
+failure rather than a silent pass. 8/8 caught.
+
+The validator also had two bugs of its own before it was trustworthy: `.tar` as a
+substring matched `matrix.target` (5 false positives), and the file contains
+**two** `for ext in` loops, so a single regex grabbed the parameterised one and
+reported `${{ matrix.bundle_ext }}` as a demanded artifact.
+
+### What is not verified, stated where it will be read
+
+The build/sign/publish path itself needs a real tag push, Windows and macOS
+runners, and `UPDATER_PRIVATE_KEY`. **It is unverified by authorship**, and that is
+written into `release.yml`'s header, the checklist's warning block and
+`release-process.md` rather than being left for someone to discover at ship time.
+Two failure modes are called out explicitly: a missing `UPDATER_PRIVATE_KEY`
+hard-fails by design, and **unsigned Windows installers only emit a warning** — so
+a release can look complete and still show SmartScreen prompts. Mobile remains
+`.bak`.
+
+### And then the history itself became a finding
+
+`3b10ea3a` carries this entire restoration under the subject
+`fix(website): reposition popular badge on pricing preview cards`. A concurrent
+agent ran a whole-tree commit while ten of my files were staged and swept them in
+under its own message; my `git commit` then reported `nothing to commit, working
+tree clean` — a success-shaped message meaning "someone else took your index".
+Content intact, rationale discarded. Filed as **R36-13**, with the commit
+convention changed accordingly. History was deliberately **not** rewritten:
+resetting a branch another agent is actively committing to can destroy their
+work, and amending would replace an accurate message with mine. Once a message is
+gone there is no good recovery, only a choice between two bad ones.
+
+
 ## API Write-Audit and Served-Store Selector
 
 - **Write-audit hook on the shared router** (`637d5909`) — mutations through the
@@ -373,6 +474,42 @@ complements, so one always discriminates.
 
 ---
 
+## Two Screens Lying About Which Build You Run
+
+Found while clearing items flagged earlier rather than left in a list. Both were
+hardcoded version literals two releases stale, and both had a **green test
+protecting the defect**.
+
+- **`SessionLockScreen` rendered the literal `v0.0.34`** — the footer of the
+  screen every operator sees when their session locks told them they were running
+  an old build. Now fetches `getVersion()`, which resolves to
+  `env!("CARGO_PKG_VERSION")`, so `bump-version.ps1` moves it with the app. Same
+  approach its sibling `LicenseActivationScreen` already used; this was the only
+  pre-auth screen still hardcoding it. Renders nothing on failure — a wrong
+  version on the screen whose purpose is "is this the build I trust" is worse than
+  no version. **The test asserted `toContain('v0.0.34')`**, so any fix had to
+  break a green test to land: R36-07's shape again, an incidental value asserted as
+  specification. The assertion now checks *where* the pill lives, and a separate
+  test binds the value to the command.
+- **The license-server's admin health endpoint reported `0.0.34`** while its
+  guard test asserted the const equals itself — `body["version"] != "0.0.34"`
+  against a const that was also `0.0.34`. It described itself as "the bump
+  reminder" while being **structurally incapable of reminding anyone of anything**,
+  and stayed green through the bump. Now derives its expectation from the
+  workspace `Cargo.toml`, so it fails when they diverge (proven: stale const exits
+  1, restored exits 0), and the file was added to `bump-version.ps1`'s update list
+  — which is why it drifted at all. The Rust clients need no entry there because
+  they use `env!("CARGO_PKG_VERSION")`; Go has no equivalent and nobody had
+  noticed the gap.
+
+Both proven non-vacuous. One caveat worth recording about the sabotage harness
+itself: its first mutation targeted the `useState` initial value, which the fetch
+overwrites — so the test correctly passed and **the mutation was the bug, not the
+test.** A regression test that cannot be broken by a broken component is useless,
+but a regression test that *can* be broken by a change that is actually fine is
+equally useless in the other direction.
+
+
 ## Known issues
 
 **Four commits on this branch violate the conventional-commit rule the repo
@@ -407,22 +544,35 @@ listed as open when these notes were first written:
 Added and closed during the release: **R36-05** (`264669fa`), **R36-06**
 (`2dad3d37`), **R36-07** (`eefd51ff`), **R36-08** (`7fbac607`), **R36-09**
 (`2a35f346`), **R36-10** (`9112e128` → `47aa1290` → `237b16be`), **R36-12**
-(`48aa000f` → `8033a3e3` → `2d786e65`).
+(`48aa000f` → `8033a3e3` → `2d786e65`), **R36-11** (`3b10ea3a`).
+Filed and still open: **R36-13** (`82697c99`).
 
-**One item is still open, and it blocks shipping.** **R36-11** 🔴 — every
-`tags:`-triggered workflow (`release.yml`, `android.yml`, `ios.yml`) was retired
-to `.bak` by `23c96330` and nothing replaced them, so **pushing a `v*` tag today
-triggers no workflow and produces no installers, updater manifest, or
-provenance**. `docs/releases/checklist.md` and `release-process.md` now say so at
-the top rather than describing automation that does not run. This is a product
-decision about release shape (desktop + two mobile targets + code signing +
-updater manifests + provenance), not a mechanical restore, and it should not be
-attempted as a drive-by.
+**R36-11 closed** (`3b10ea3a`, rationale in `82697c99`) — `release.yml` is live
+again, desktop-only, with the release toolchain now watched by
+`dev-ci.yml#release-readiness` and `scripts/verify-release-workflow.py`. Two
+things remain genuinely open about it and are **not** gate-fixing work:
+
+- **Mobile is still unautomated.** `android.yml` and `ios.yml` remain `.bak`, so
+  APK/AAB and IPA still need the manual route.
+- **Whether `UPDATER_PRIVATE_KEY` is actually configured** in the repository's
+  GitHub secrets is an ops check that cannot be verified from the tree. Without
+  it, `release-publish` hard-fails by design — which is the safe direction, but
+  means the first tag after this lands may fail for a reason that has nothing to
+  do with the code.
+
+**New in this release, still open: R36-13** 🟠 — a concurrent `git commit -a` by
+one agent swept another agent's staged files into its own commit and discarded a
+90-line rationale. Content survived; the narrative did not. `AGENTS.md` now says
+to always commit with an explicit pathspec, but note the honest limit of that
+fix: **I used an explicit pathspec and it did not help, because the collision was
+on the other side of the race.** A convention only binds agents who already know
+it. Per-agent worktrees would actually prevent it and remain undecided.
 
 **Not fixed, flagged:** `load_topology_template` and `list_topology_templates`
 require a session but check **no permission**, so any authenticated user can
 read any branch's templates. The source comment documents this as intentional;
 changing security posture is not something to slip into a gate fix.
+
 
 **Also not fixed, flagged by R36-12:** the panic gate's rule is that a
 recoverable `unwrap()` needs a `// SAFETY:` / `// INVARIANT:` comment. Eleven such
