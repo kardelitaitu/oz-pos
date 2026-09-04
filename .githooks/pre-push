@@ -1,56 +1,243 @@
 #!/bin/bash
-# .githooks/pre-push — gate pushes on the consolidated i18n quality
-# checks (mirrors `.github/workflows/ci.yml#ui i18n quality gate` and
-# `.github/workflows/release.yml#verify i18n quality gate`).
+# .githooks/pre-push — path-aware local gate, run once per push.
 #
-# Catches drift that may have slipped past pre-commit (amend-then-
-# push, force-push with --no-verify, branch updates from refs that
-# never ran pre-commit). Runs ONCE per push (not per commit), so the
-# total cost is bounded by number of refs being pushed.
-set -e
+# WHY THIS EXISTS
+# dev-ci.yml is the only live workflow and it re-runs the whole matrix on every
+# push to an open PR. Measured on PR #95: three pushes cost 75.2 runner-minutes,
+# and the last one added a markdown file, spending 22.0 minutes re-running Rust
+# jobs that cannot fail on it. Locally, the same checks cost seconds:
+#
+#   cargo check --workspace            13s     ui typecheck        25s
+#   all 15 static gates combined       35s     ui vitest (full)    57s
+#
+# So the deal this hook offers: ~30s on a docs push, ~2min on a typical
+# code push, in exchange for not discovering a failure 14 minutes later in CI.
+#
+# WHAT IT DOES NOT DO
+# It does not mirror CI's Rust commands. CI runs
+# `cargo check --workspace --all-targets --all-features` and
+# `cargo nextest run --workspace --all-features`; both abort on Windows/MSVC
+# here by OOM-ing rustc on the `oz-pos-app (lib test)` target (exit
+# 0xc0000409, reproduced with and without sccache, ~220-280s to fail). That is
+# why the Rust tier uses plain `--workspace`: it is the shape that actually
+# completes locally. It is weaker than CI's, and deliberately so — this hook is
+# a fast pre-filter, not a replacement.
+#
+# It also cannot help anyone whose core.hooksPath is unset. That is configured
+# by scripts/setup-dev.ps1 and is NOT versioned, so a fresh clone gets no local
+# gate at all. CI remains the backstop.
+#
+# Escape hatch: `git push --no-verify` skips this entirely, silently.
 
-# ── Portable Python locator ─────────────────────────────────────────────
-# Git Bash on Windows ships `python` (not `python3`), while WSL/Linux have
-# `python3` — hardcoding either breaks the FTL-dedupe gate for the other
-# environment. Same resolution as `.githooks/pre-commit`.
+set -uo pipefail
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+# ── Portable toolchain resolution ────────────────────────────────────────
+# Same reasoning as .githooks/pre-commit: Git Bash on Windows ships `python`
+# not `python3`, and rustup may be a .exe. Hardcoding either breaks one
+# environment. Paths are resolved once here rather than per gate.
 PYTHON=""
-if command -v python3 >/dev/null 2>&1; then
-    PYTHON="python3"
-elif command -v python >/dev/null 2>&1; then
-    PYTHON="python"
+for p in python3 python; do
+    if command -v "$p" >/dev/null 2>&1; then PYTHON="$p"; break; fi
+done
+
+RUSTUP=""
+if command -v rustup >/dev/null 2>&1; then
+    RUSTUP="rustup"
+elif command -v rustup.exe >/dev/null 2>&1; then
+    RUSTUP="rustup.exe"
+else
+    for d in /c/Users/*/.cargo/bin; do
+        [ -x "$d/rustup.exe" ] && RUSTUP="$d/rustup.exe" && break
+    done
 fi
 
-if [ -z "$PYTHON" ]; then
-    echo "error: python3/python not found — install Python or add it to PATH. Aborting push." >&2
+cargo_run() {
+    if [ -n "$RUSTUP" ]; then
+        "$RUSTUP" run stable cargo "$@"
+    elif command -v cargo >/dev/null 2>&1; then
+        cargo "$@"
+    else
+        return 127
+    fi
+}
+
+# ── Which refs are being pushed, and what changed? ───────────────────────
+# git feeds one line per ref: <local_ref> <local_oid> <remote_ref> <remote_oid>
+ZERO=0000000000000000000000000000000000000000
+CHANGED=""
+ANY_PUSH=0
+NEW_BRANCH=0
+
+while read -r _lref loid _rref roid; do
+    [ -z "${loid:-}" ] && continue
+    # Deleting a remote branch: nothing to check.
+    [ "$loid" = "$ZERO" ] && continue
+    ANY_PUSH=1
+    if [ "$roid" = "$ZERO" ]; then
+        # Brand-new branch: no remote ancestor to diff against.
+        NEW_BRANCH=1
+        continue
+    fi
+    if base=$(git merge-base "$roid" "$loid" 2>/dev/null); then
+        CHANGED="$CHANGED
+$(git diff --name-only "$base" "$loid" 2>/dev/null)"
+    else
+        # Unrelated histories (force-push, rebase onto a different root).
+        NEW_BRANCH=1
+    fi
+done
+
+# Fail safe: if we cannot work out what changed, check everything.
+if [ "$ANY_PUSH" = "0" ]; then
+    exit 0
+fi
+
+if [ "$NEW_BRANCH" = "1" ] || [ -z "$(printf '%s' "$CHANGED" | tr -d '[:space:]')" ]; then
+    ROUTE_ALL=1
+else
+    ROUTE_ALL=0
+fi
+
+want() {
+    [ "$ROUTE_ALL" = "1" ] && return 0
+    printf '%s\n' "$CHANGED" | grep -qE "$1"
+}
+
+RUN_RUST=0; RUN_UI=0; RUN_WEBSITE=0; RUN_I18N=0
+want '^crates/|^modules/|^platform/|^foundation/|^apps/(cloud-server|desktop-client|tablet-client)/|^fuzz/|^scripts/updater-compat-check/|^Cargo\.(toml|lock)$|^\.cargo/|^rust-toolchain' && RUN_RUST=1
+want '^ui/' && RUN_UI=1
+want '^website/' && RUN_WEBSITE=1
+# i18n mirrors the CI router: the .ftl bundles, any TS/TSX the parity scanner
+# reads, and the three scripts that implement the gate.
+want '^ui/src/locales/|^ui/src/.*\.(ts|tsx)$|^scripts/lint-i18n\.sh$|^scripts/verify-bundle-parity\.py$|^scripts/dedupe-ftl\.py$' && RUN_I18N=1
+
+# ── Reporting helpers ────────────────────────────────────────────────────
+FAILURES=""
+START=$(date +%s)
+
+gate() {
+    local label="$1"; shift
+    local t0 t1
+    t0=$(date +%s)
+    if "$@" >/dev/null 2>&1; then
+        t1=$(date +%s)
+        printf '  \033[32mPASS\033[0m  %-44s %3ss\n' "$label" "$((t1 - t0))"
+    else
+        t1=$(date +%s)
+        printf '  \033[31mFAIL\033[0m  %-44s %3ss\n' "$label" "$((t1 - t0))"
+        FAILURES="$FAILURES
+  $label"
+        return 1
+    fi
+}
+
+skip_missing() {
+    # A missing toolchain is not a code defect. Warn and move on rather than
+    # blocking the push -- a hook that blocks on environment problems is a hook
+    # everyone learns to --no-verify.
+    local tool="$1" label="$2"
+    if ! command -v "$tool" >/dev/null 2>&1 && [ -z "$RUSTUP" ]; then
+        printf '  \033[33mSKIP\033[0m  %-44s (%s not found)\n' "$label" "$tool"
+        return 1
+    fi
+    return 0
+}
+
+echo "pre-push: $(printf '%s\n' "$CHANGED" | grep -c . ) changed file(s) detected"
+echo "  routing: rust=$RUN_RUST ui=$RUN_UI website=$RUN_WEBSITE i18n=$RUN_I18N$([ "$ROUTE_ALL" = 1 ] && echo '  (unknown base -> checking everything)')"
+
+# ── Tier 0: static gates, always, ~35s combined ──────────────────────────
+# These are the gates CI does NOT run, which is the strongest argument for
+# checking them here. verify-scoped-coverage in particular was red on main for
+# weeks unnoticed because it lives only in check.sh.
+echo "── Tier 0: static gates ──"
+[ -n "$PYTHON" ] || printf '  \033[33mwarning\033[0m  no python on PATH — parity gates will be skipped\n'
+
+run_py() {
+    local label="$1" script="$2"; shift 2
+    if [ -z "$PYTHON" ]; then
+        printf '  \033[33mSKIP\033[0m  %-44s (python not found)\n' "$label"; return 0
+    fi
+    [ -f "$script" ] || { printf '  \033[33mSKIP\033[0m  %-44s (no %s)\n' "$label" "$script"; return 0; }
+    gate "$label" "$PYTHON" "$script" "$@"
+}
+
+run_py "dedupe-ftl --dry-run"         "scripts/dedupe-ftl.py" --dry-run
+run_py "bundle-parity (full census)" "scripts/verify-bundle-parity.py" --full-census
+run_py "verify-ipc-parity"            "scripts/verify-ipc-parity.py"
+run_py "verify-architecture-boundaries" "scripts/verify-architecture-boundaries.py" --strict
+run_py "verify-no-hardcoded-money"    "scripts/verify-no-hardcoded-money-format.py"
+run_py "verify-feature-registry"      "scripts/verify-feature-registry.py"
+run_py "verify-topology-parity"       "scripts/verify-topology-parity.py"
+run_py "verify-windows-config"        "scripts/verify-windows-config.py"
+run_py "verify-plugin-guide-parity"   "scripts/verify-plugin-guide-parity.py"
+run_py "verify-migration-column-types" "scripts/verify-migration-column-types.py"
+run_py "verify-pg-schema-drift"       "scripts/generate-pg-migration.py" --check
+
+# bash-implemented gates
+if [ -f scripts/verify-no-raw-params.sh ]; then
+    gate "verify-no-raw-params" bash scripts/verify-no-raw-params.sh
+fi
+if [ -f scripts/verify-scoped-coverage.sh ]; then
+    gate "verify-scoped-coverage (H-1)" bash scripts/verify-scoped-coverage.sh
+fi
+
+# ── Tier 1: language-specific, path-gated ────────────────────────────────
+if [ "$RUN_RUST" = "1" ]; then
+    echo "── Tier 1: Rust ──"
+    if [ ! -d target ]; then
+        echo "  note: no target/ directory — the first cargo check here will be slow."
+    fi
+    if skip_missing cargo "cargo check --workspace"; then
+        # Plain --workspace on purpose. See the header: --all-targets
+        # --all-features OOMs rustc on this platform.
+        gate "cargo check --workspace" cargo_run check --workspace --message-format short
+        gate "cargo fmt --check" cargo_run fmt --all -- --check
+    fi
+fi
+
+if [ "$RUN_UI" = "1" ]; then
+    echo "── Tier 1: UI ──"
+    if [ -d ui/node_modules ]; then
+        gate "ui typecheck" sh -c 'cd ui && npm run typecheck'
+        gate "ui vitest" sh -c 'cd ui && npx vitest run'
+    else
+        printf '  \033[33mSKIP\033[0m  %-44s (ui/node_modules missing)\n' "ui typecheck + vitest"
+    fi
+fi
+
+if [ "$RUN_WEBSITE" = "1" ]; then
+    echo "── Tier 1: Website ──"
+    if [ -d website/node_modules ]; then
+        gate "website astro check" sh -c 'cd website && npx astro check'
+        gate "website vitest" sh -c 'cd website && npx vitest run'
+        gate "website build" sh -c 'cd website && npm run build'
+    else
+        printf '  \033[33mSKIP\033[0m  %-44s (website/node_modules missing)\n' "website checks"
+    fi
+fi
+
+if [ "$RUN_I18N" = "1" ]; then
+    echo "── Tier 1: i18n ──"
+    # Retained from the previous version of this hook: these two also run in
+    # pre-commit, so their value here is catching --no-verify commits, amends,
+    # and refs that never went through pre-commit at all.
+    if [ -f scripts/lint-i18n.sh ]; then
+        gate "lint-i18n" bash scripts/lint-i18n.sh
+    fi
+fi
+
+# ── Verdict ──────────────────────────────────────────────────────────────
+END=$(date +%s)
+echo
+if [ -n "$FAILURES" ]; then
+    echo "pre-push BLOCKED after $((END - START))s. Failing gate(s):$FAILURES"
+    echo
+    echo "Fix the cause, or bypass deliberately with 'git push --no-verify' —"
+    echo "but CI will run the same checks and fail there instead, ~14 minutes later."
     exit 1
 fi
 
-# ── FTL dedupe dry-run ────────────────────────────────────────────────────
-# Fast fail-fast check (~50ms) for file-level Fluent key duplicates
-# across all 48 .ftl + .id.ftl files. The lint script below only
-# catches duplicates that `i18nBundle.test.tsx` exercises via
-# `getBundle('en')` / `getBundle('id')`; this catches duplicates in
-# keys that the test does NOT load (e.g., a desktop-only screen's
-# keys). Run BEFORE the lint so a cheap drift errors out before
-# paying for vitest.
-if [ -f scripts/dedupe-ftl.py ]; then
-    if output=$("$PYTHON" scripts/dedupe-ftl.py --dry-run 2>&1); then
-        : # clean — silently discard the "no duplicates" line
-    else
-        printf '%s\n' "error: FTL duplicates detected — run 'npm run dedupe:ftl' to fix:" >&2
-        printf '%s\n' "$output" >&2
-        exit 1
-    fi
-fi
-
-# ── i18n lint ──────────────────────────────────────────────────────────────
-# Runs the local i18n quality gate. ~1 second cost because it targets
-# `i18nBundle.test.tsx` only and greps for both `[i18n]` translation-
-# completeness warnings and Fluent `Attempt to override` duplicate
-# warnings in exercised keys.
-if [ -f scripts/lint-i18n.sh ]; then
-    if ! bash scripts/lint-i18n.sh; then
-        echo "error: i18n lint failed on push — fix issues above or run 'bash scripts/check.sh' for context." >&2
-        exit 1
-    fi
-fi
+echo "pre-push: all gates passed in $((END - START))s."
