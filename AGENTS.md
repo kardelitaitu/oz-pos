@@ -142,6 +142,7 @@ npm ci --no-audit --no-fund
   git grep -n "route: '<route>'" -- ui/src                  # page + nav + workspace cards
   ```
   Also beware truncated output: `ui/src/__tests__/` sorts before `ui/src/features/`, so `| head -6` on an importer search shows only test files and hides the real registration.
+- **⚠️ A `:!` pathspec built by inline concatenation silently returns zero matches.** In PowerShell argument position, `git grep -n X -- ui/src ':!ui/src/__tests__' ':!dir/'+$f+'.tsx'` yields **0 hits** with no error, while assigning the same string to a variable first yields the correct 2. A false "no references" result is precisely the evidence that makes a live screen look dead — this produced a wrong "not routed, delete it" conclusion once already. Build exclusion pathspecs as their own variable, and sanity-check any zero-reference dead-code claim with one unfiltered `git grep`.
 - **Accessibility:** All React components must have ARIA labels and pass `eslint-plugin-jsx-a11y` checks.
 - **Localization:** All user-visible strings must use `@fluent/react`. No hardcoded English strings in JSX.
 
