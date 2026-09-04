@@ -4,6 +4,11 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
 import DashboardScreen from '@/features/reports/DashboardScreen';
+import {
+  assertCaseDiscriminates,
+  discriminatingStoreZone,
+  expectedStoreDay,
+} from '@/__tests__/test-utils/storeZoneCase';
 
 // Mock echarts-for-react — jsdom has no Canvas
 vi.mock('echarts-for-react/lib/core', () => ({
@@ -456,30 +461,35 @@ describe('DashboardScreen', () => {
   // zones; if the range ever depended on the device calendar these would diverge.
   it('anchors the default range to the primary store timezone (R36-05)', async () => {
     resolveAllWithDefaults();
-    mockGetPrimaryStoreScoped.mockResolvedValue({ id: 'store-a', name: 'Store A', timezone: '+14:00' });
+    // The offset is chosen so its calendar day provably differs from UTC at the
+    // moment the test runs -- a hardcoded +14:00 is vacuous for ten hours a day.
+    const zone = discriminatingStoreZone();
+    assertCaseDiscriminates(zone);
+    mockGetPrimaryStoreScoped.mockResolvedValue({ id: 'store-a', name: 'Store A', timezone: zone.offset });
 
     renderScreen();
     await waitFor(() => expect(screen.getByText('Revenue Trend')).toBeTruthy());
 
     const fromInput = screen.getByLabelText('dashboard-filter-from') as HTMLInputElement;
     const toInput = screen.getByLabelText('dashboard-filter-to') as HTMLInputElement;
-    const shift = 14 * 3_600_000;
-    const storeToday = new Date(Date.now() + shift).toISOString().slice(0, 10);
-    const store30DaysAgo = new Date(Date.now() + shift - 29 * 86_400_000).toISOString().slice(0, 10);
 
     await waitFor(() => {
-      expect(toInput.value).toBe(storeToday);
-      expect(fromInput.value).toBe(store30DaysAgo);
+      expect(toInput.value).toBe(expectedStoreDay(zone, 0));
+      expect(fromInput.value).toBe(expectedStoreDay(zone, 29));
     });
     // The store must actually have been consulted -- otherwise storeTz stayed
-    // null and these values would be the UTC fallback, which can coincide with
-    // a +14:00 expectation for part of the day and make the test vacuous.
+    // null and these values would be the UTC fallback.
     expect(mockGetPrimaryStoreScoped).toHaveBeenCalled();
   });
 
   it('does not clobber a range the operator already edited', async () => {
     resolveAllWithDefaults();
-    mockGetPrimaryStoreScoped.mockResolvedValue({ id: 'store-a', name: 'Store A', timezone: '+14:00' });
+    const zone = discriminatingStoreZone();
+    // Hold the store response open so the edit provably precedes it. Resolving
+    // eagerly races: the re-seed refires the fetch effect and the loading state
+    // can unmount the inputs mid-assertion.
+    let resolveStore: (v: unknown) => void = () => {};
+    mockGetPrimaryStoreScoped.mockReturnValue(new Promise((r) => { resolveStore = r; }));
 
     renderScreen();
     await waitFor(() => expect(screen.getByText('Revenue Trend')).toBeTruthy());
@@ -487,10 +497,10 @@ describe('DashboardScreen', () => {
     const fromInput = screen.getByLabelText('dashboard-filter-from') as HTMLInputElement;
     fireEvent.change(fromInput, { target: { value: '2026-01-05' } });
 
-    // Let the store profile arrive after the edit, as it would on a slow IPC.
-    await new Promise((r) => setTimeout(r, 0));
-    await waitFor(() => expect(mockGetPrimaryStoreScoped).toHaveBeenCalled());
-
-    expect(fromInput.value).toBe('2026-01-05');
+    resolveStore({ id: 'store-a', name: 'Store A', timezone: zone.offset });
+    await waitFor(() => {
+      const input = screen.getByLabelText('dashboard-filter-from') as HTMLInputElement;
+      expect(input.value).toBe('2026-01-05');
+    });
   });
 });

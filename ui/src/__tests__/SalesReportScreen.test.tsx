@@ -9,6 +9,12 @@ import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
 import userEvent from '@testing-library/user-event';
 import SalesReportScreen from '@/features/reports/SalesReportScreen';
+import { WorkspaceContext } from '@/contexts/WorkspaceContext';
+import {
+  assertCaseDiscriminates,
+  discriminatingStoreZone,
+  expectedStoreDay,
+} from '@/__tests__/test-utils/storeZoneCase';
 
 // ── FTL bundles ──────────────────────────────────────────────────
 const sharedFtl = `
@@ -122,6 +128,15 @@ vi.mock('@/api/sales', () => ({
   printSalesReceipt: (_sessionToken: string, ...args: unknown[]) => mockPrintSalesReceipt(...args),
 }));
 
+// R36-06: SalesReportScreen now fetches the primary store to anchor its default
+// window. Without this mock the call hits real invoke, rejects, and is swallowed
+// by the .catch -- the store-zone path would stay untested while the suite stayed
+// green (exactly the trap R36-05 hit).
+const mockGetPrimaryStoreScoped = vi.fn();
+vi.mock('@/api/stores', () => ({
+  getPrimaryStoreScoped: (...args: unknown[]) => mockGetPrimaryStoreScoped(...args),
+}));
+
 vi.mock('@/components/Card', () => ({
   Card: ({ children, className, shadow }: Record<string, unknown>) => (
     <div className={className as string} data-shadow={shadow as string}>{children as React.ReactNode}</div>
@@ -231,6 +246,26 @@ function renderScreen() {
   );
 }
 
+/**
+ * R36-06: SalesReportScreen reads the token as
+ * `useContext(WorkspaceContext)?.sessionToken`, NOT via the useWorkspace() hook.
+ * test-setup.ts mocks only useWorkspace() and re-spreads `...actual`, so the
+ * real context object is intact and an unprovider'd useContext() returns null --
+ * the token becomes '' and the primary-store fetch never fires. Wrapping is what
+ * makes the store-zone path reachable at all. (7 files use this direct form; see
+ * R36-07.)
+ */
+function renderScreenWithSession() {
+  const value = { sessionToken: 'test-token' } as unknown as React.ContextType<typeof WorkspaceContext>;
+  return render(
+    <WorkspaceContext.Provider value={value}>
+      <LocalizationProvider l10n={l10n}>
+        <SalesReportScreen />
+      </LocalizationProvider>
+    </WorkspaceContext.Provider>,
+  );
+}
+
 function buildCategoryPopularity(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     category_id: 'cat-drinks',
@@ -290,6 +325,9 @@ describe('SalesReportScreen', () => {
     mockGetTopProducts.mockImplementation(() => new Promise(() => {}));
     mockGetHourlyHeatmap.mockImplementation(() => new Promise(() => {}));
     mockGetCategoryBreakdown.mockImplementation(() => new Promise(() => {}));
+    // Store profile with no timezone -> the UTC fallback, so pre-existing
+    // assertions stay meaningful. Anchoring tests override this.
+    mockGetPrimaryStoreScoped.mockResolvedValue({ id: 'store-a', name: 'Store A', timezone: null });
     // Category popularity defaults to empty (not pending) so tests that
     // override only the other mocks still resolve the shared Promise.all.
     mockGetCategoryPopularity.mockResolvedValue([]);
@@ -341,6 +379,49 @@ describe('SalesReportScreen', () => {
       // Both should have values (default is last 30 days and today)
       expect((startInput as HTMLInputElement).value).toBeTruthy();
       expect((endInput as HTMLInputElement).value).toBeTruthy();
+    });
+  });
+
+  // R36-06: the default window must follow the PRIMARY STORE's zone. Expected
+  // dates are computed with explicit UTC arithmetic here rather than by calling
+  // isoToday/isoDaysAgo, so this does not assert the helper against itself.
+  // scripts/check-tz-invariance.py replays this file under four host zones.
+  it('anchors the default window to the primary store timezone (R36-06)', async () => {
+    resolveDefaultData();
+    // Chosen so its calendar day provably differs from UTC right now; a
+    // hardcoded +14:00 is vacuous for ten hours of every day.
+    const zone = discriminatingStoreZone();
+    assertCaseDiscriminates(zone);
+    mockGetPrimaryStoreScoped.mockResolvedValue({ id: 'store-a', name: 'Store A', timezone: zone.offset });
+
+    renderScreenWithSession();
+    await waitFor(() => {
+      expect((screen.getByLabelText('End date') as HTMLInputElement).value).toBe(expectedStoreDay(zone, 0));
+      expect((screen.getByLabelText('Start date') as HTMLInputElement).value).toBe(expectedStoreDay(zone, 30));
+    });
+    // Without this, a rejected fetch would fall back to UTC and could coincide
+    // with the expectation, making the test vacuous.
+    expect(mockGetPrimaryStoreScoped).toHaveBeenCalled();
+  });
+
+  it('does not clobber a window the operator already edited (R36-06)', async () => {
+    resolveDefaultData();
+    const zone = discriminatingStoreZone();
+    // Hold the store response open so the edit provably precedes it. Resolving
+    // eagerly races: the re-seed refires the fetch effect and `loading`
+    // unmounts the date inputs mid-assertion.
+    let resolveStore: (v: unknown) => void = () => {};
+    mockGetPrimaryStoreScoped.mockReturnValue(new Promise((r) => { resolveStore = r; }));
+
+    renderScreenWithSession();
+    await waitFor(() => expect(screen.getByLabelText('Start date')).toBeTruthy());
+    const startInput = screen.getByLabelText('Start date') as HTMLInputElement;
+    fireEvent.change(startInput, { target: { value: '2026-01-05' } });
+
+    resolveStore({ id: 'store-a', name: 'Store A', timezone: zone.offset });
+    await waitFor(() => {
+      const input = screen.getByLabelText('Start date') as HTMLInputElement;
+      expect(input.value).toBe('2026-01-05');
     });
   });
 

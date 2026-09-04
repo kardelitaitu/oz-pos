@@ -6,6 +6,12 @@ import { createEnUsLocalization } from '@/locales';
 import MenuEngineeringScreen from '@/features/reports/MenuEngineeringScreen';
 import * as reportsApi from '@/api/reports';
 import type { MenuEngineeringResult } from '@/api/reports';
+import { WorkspaceContext } from '@/contexts/WorkspaceContext';
+import {
+  assertCaseDiscriminates,
+  discriminatingStoreZone,
+  expectedStoreDay,
+} from '@/__tests__/test-utils/storeZoneCase';
 
 // ── Mocks ─────────────────────────────────────────────────
 
@@ -28,6 +34,14 @@ vi.mock('recharts', () => ({
 
 vi.mock('@/api/reports', () => ({
   getMenuEngineering: vi.fn(),
+}));
+
+// R36-06: the screen now fetches the primary store to anchor its default
+// window. Unmocked, that call rejects and is swallowed, leaving the store-zone
+// path untested while the suite stays green.
+const mockGetPrimaryStoreScoped = vi.fn();
+vi.mock('@/api/stores', () => ({
+  getPrimaryStoreScoped: (...args: unknown[]) => mockGetPrimaryStoreScoped(...args),
 }));
 
 // The screen renders money via the store default currency.
@@ -100,6 +114,66 @@ function renderWithLocales(ui: React.ReactElement) {
 describe('MenuEngineeringScreen', () => {
   beforeEach(() => {
     vi.mocked(reportsApi.getMenuEngineering).mockResolvedValue(mockResult);
+    // No timezone -> the UTC fallback, so pre-existing assertions hold.
+    mockGetPrimaryStoreScoped.mockResolvedValue({ id: 'store-a', name: 'Store A', timezone: null });
+  });
+
+  /**
+   * R36-06: this screen reads the token via useContext(WorkspaceContext), not
+   * the useWorkspace() hook that test-setup.ts stubs, so an unprovider'd render
+   * gets a null context -> empty token -> the primary-store fetch never fires.
+   */
+  function renderWithSession() {
+    const value = { sessionToken: 'test-token' } as unknown as React.ContextType<typeof WorkspaceContext>;
+    return render(
+      <WorkspaceContext.Provider value={value}>
+        <LocalizationProvider l10n={createEnUsLocalization()}>
+          <MenuEngineeringScreen />
+        </LocalizationProvider>
+      </WorkspaceContext.Provider>,
+    );
+  }
+
+  it('anchors the default window to the primary store timezone (R36-06)', async () => {
+    const zone = discriminatingStoreZone();
+    assertCaseDiscriminates(zone);
+    mockGetPrimaryStoreScoped.mockResolvedValue({ id: 'store-a', name: 'Store A', timezone: zone.offset });
+    renderWithSession();
+
+    await waitFor(() => {
+      expect((screen.getByLabelText('End date') as HTMLInputElement).value).toBe(expectedStoreDay(zone, 0));
+      expect((screen.getByLabelText('Start date') as HTMLInputElement).value).toBe(expectedStoreDay(zone, 30));
+    });
+    expect(mockGetPrimaryStoreScoped).toHaveBeenCalled();
+  });
+
+  it('does not clobber a window the operator already edited (R36-06)', async () => {
+    const zone = discriminatingStoreZone();
+    // Hold the store response open so the edit provably happens BEFORE it
+    // arrives -- the real "slow IPC" scenario. Resolving it eagerly races: the
+    // re-seed changes startDate, the fetch effect refires, and `loading`
+    // unmounts the inputs out from under the assertion.
+    let resolveStore: (v: unknown) => void = () => {};
+    mockGetPrimaryStoreScoped.mockReturnValue(
+      new Promise((r) => { resolveStore = r; }),
+    );
+
+    renderWithSession();
+    await waitFor(() => expect(screen.getByLabelText('Start date')).toBeTruthy());
+
+    const startInput = screen.getByLabelText('Start date') as HTMLInputElement;
+    fireEvent.change(startInput, { target: { value: '2026-01-05' } });
+
+    resolveStore({ id: 'store-a', name: 'Store A', timezone: zone.offset });
+    await waitFor(() => expect(mockGetPrimaryStoreScoped).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+
+    // The screen may be mid-refetch; wait for the inputs to come back, then
+    // confirm the operator's date survived the store profile arriving.
+    await waitFor(() => {
+      const input = screen.getByLabelText('Start date') as HTMLInputElement;
+      expect(input.value).toBe('2026-01-05');
+    });
   });
 
   it('shows loading spinner initially', () => {

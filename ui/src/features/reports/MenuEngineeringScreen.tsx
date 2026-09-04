@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState, useMemo, useCallback } from 'react';
+import { useContext, useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { requiredLocalized } from '@/frontend/shared';
 import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
@@ -20,6 +20,8 @@ import {
   type MenuEngineeringResult,
   type MenuQuadrant,
 } from '@/api/reports';
+import { getPrimaryStoreScoped } from '@/api/stores';
+import { isoDaysAgo, isoToday } from '@/features/analytics/analytics-data';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Spinner } from '@/components/Spinner';
@@ -90,15 +92,9 @@ function fmtCompact(n: number): string {
   return n.toLocaleString();
 }
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function monthAgo(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 30);
-  return d.toISOString().slice(0, 10);
-}
+// today()/monthAgo() replaced by isoToday()/isoDaysAgo() from
+// features/analytics/analytics-data (R36-06): the old pair anchored the default
+// window to UTC, which is host-independent but blind to the store's zone.
 
 /** Custom scatter dot shape — colored circle with outline. */
 function ScatterDot(props: Record<string, unknown>) {
@@ -124,8 +120,25 @@ export default function MenuEngineeringScreen() {
   const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [startDate, setStartDate] = useState(monthAgo());
-  const [endDate, setEndDate] = useState(today());
+  // REP-03/R36-06: anchor the default window to the PRIMARY STORE's calendar
+  // day; FALLBACK_STORE_TZ (UTC) until the profile loads or if the fetch fails.
+  const [storeTz, setStoreTz] = useState<string | null>(null);
+  const rangeTouched = useRef(false);
+  const [startDate, setStartDate] = useState(isoDaysAgo(30));
+  const [endDate, setEndDate] = useState(isoToday());
+  useEffect(() => {
+    if (!sessionToken) return;
+    let alive = true;
+    getPrimaryStoreScoped(sessionToken)
+      .then((p) => { if (alive) setStoreTz(p?.timezone ?? null); })
+      .catch(() => { /* storeTz stays null -> the UTC fallback applies */ });
+    return () => { alive = false; };
+  }, [sessionToken]);
+  useEffect(() => {
+    if (!storeTz || rangeTouched.current) return;
+    setStartDate(isoDaysAgo(30, storeTz));
+    setEndDate(isoToday(storeTz));
+  }, [storeTz]);
   const [result, setResult] = useState<MenuEngineeringResult | null>(null);
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
 
@@ -307,7 +320,7 @@ export default function MenuEngineeringScreen() {
             id="me-start-date"
             type="date"
             value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
+            onChange={(e) => { rangeTouched.current = true; setStartDate(e.target.value); }}
             className="menu-eng-input"
             aria-label={requiredLocalized(l10n, 'menu-eng-start-date-aria')}
           />
@@ -319,7 +332,7 @@ export default function MenuEngineeringScreen() {
             id="me-end-date"
             type="date"
             value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
+            onChange={(e) => { rangeTouched.current = true; setEndDate(e.target.value); }}
             className="menu-eng-input"
             aria-label={requiredLocalized(l10n, 'menu-eng-end-date-aria')}
           />

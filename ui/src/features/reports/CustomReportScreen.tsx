@@ -1,8 +1,10 @@
-import { useContext, useState, useCallback, useMemo, useRef } from 'react';
+import { useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { requiredLocalized } from '@/frontend/shared';
 import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import { buildCustomReport, type CustomReportRequest, type CustomReportResponse } from '@/api/reports';
+import { getPrimaryStoreScoped } from '@/api/stores';
+import { isoDaysAgo, isoToday } from '@/features/analytics/analytics-data';
 import { buildCsv, downloadCsv } from './csv';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -42,15 +44,9 @@ const DATASETS = {
   },
 };
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function monthAgo(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 30);
-  return d.toISOString().slice(0, 10);
-}
+// today()/monthAgo() replaced by isoToday()/isoDaysAgo() from
+// features/analytics/analytics-data (R36-06): the old pair anchored the default
+// window to UTC, which is host-independent but blind to the store's zone.
 
 /** A column entry with selection state and display label. */
 interface ColumnItem {
@@ -66,8 +62,25 @@ export default function CustomReportScreen() {
   const { l10n } = useLocalization();
   const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [dataset, setDataset] = useState<DatasetKey>('sales');
-  const [startDate, setStartDate] = useState(monthAgo());
-  const [endDate, setEndDate] = useState(today());
+  // REP-03/R36-06: anchor the default window to the PRIMARY STORE's calendar
+  // day; FALLBACK_STORE_TZ (UTC) until the profile loads or if the fetch fails.
+  const [storeTz, setStoreTz] = useState<string | null>(null);
+  const rangeTouched = useRef(false);
+  const [startDate, setStartDate] = useState(isoDaysAgo(30));
+  const [endDate, setEndDate] = useState(isoToday());
+  useEffect(() => {
+    if (!sessionToken) return;
+    let alive = true;
+    getPrimaryStoreScoped(sessionToken)
+      .then((p) => { if (alive) setStoreTz(p?.timezone ?? null); })
+      .catch(() => { /* storeTz stays null -> the UTC fallback applies */ });
+    return () => { alive = false; };
+  }, [sessionToken]);
+  useEffect(() => {
+    if (!storeTz || rangeTouched.current) return;
+    setStartDate(isoDaysAgo(30, storeTz));
+    setEndDate(isoToday(storeTz));
+  }, [storeTz]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CustomReportResponse | null>(null);
@@ -245,13 +258,13 @@ export default function CustomReportScreen() {
                 <label htmlFor="cr-start" className="custom-report-label">
                   <Localized id="custom-report-start">Start</Localized>
                 </label>
-                <input id="cr-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="custom-report-input" aria-label={requiredLocalized(l10n, 'custom-report-start-aria')} />
+                <input id="cr-start" type="date" value={startDate} onChange={(e) => { rangeTouched.current = true; setStartDate(e.target.value); }} className="custom-report-input" aria-label={requiredLocalized(l10n, 'custom-report-start-aria')} />
               </div>
               <div className="custom-report-field">
                 <label htmlFor="cr-end" className="custom-report-label">
                   <Localized id="custom-report-end">End</Localized>
                 </label>
-                <input id="cr-end" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="custom-report-input" aria-label={requiredLocalized(l10n, 'custom-report-end-aria')} />
+                <input id="cr-end" type="date" value={endDate} onChange={(e) => { rangeTouched.current = true; setEndDate(e.target.value); }} className="custom-report-input" aria-label={requiredLocalized(l10n, 'custom-report-end-aria')} />
               </div>
             </>
           )}

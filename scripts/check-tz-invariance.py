@@ -26,6 +26,9 @@ UI = ROOT / "ui"
 TESTS = [
     "src/__tests__/analyticsTimezoneAnchor.test.ts",
     "src/__tests__/DashboardScreen.test.tsx",
+    "src/__tests__/SalesReportScreen.test.tsx",
+    "src/__tests__/CustomReportScreen.test.tsx",
+    "src/__tests__/MenuEngineeringScreen.test.tsx",
 ]
 
 # Chosen to straddle the date line and both sides of UTC, and to include the

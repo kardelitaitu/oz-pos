@@ -2,6 +2,12 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import CustomReportScreen from '@/features/reports/CustomReportScreen';
+import { WorkspaceContext } from '@/contexts/WorkspaceContext';
+import {
+  assertCaseDiscriminates,
+  discriminatingStoreZone,
+  expectedStoreDay,
+} from '@/__tests__/test-utils/storeZoneCase';
 
 // Mock the buildCustomReport API
 vi.mock('@/api/reports', () => ({
@@ -12,6 +18,14 @@ vi.mock('@/api/reports', () => ({
       ['2', '300', 'completed'],
     ],
   }),
+}));
+
+// R36-06: the screen now fetches the primary store to anchor its default
+// window. Unmocked, that call hits real invoke, rejects, and is swallowed --
+// leaving the store-zone path untested while the suite stays green.
+const mockGetPrimaryStoreScoped = vi.fn();
+vi.mock('@/api/stores', () => ({
+  getPrimaryStoreScoped: (...args: unknown[]) => mockGetPrimaryStoreScoped(...args),
 }));
 
 // Mock Fluent
@@ -94,6 +108,55 @@ function getColumnCheckboxes() {
 describe('CustomReportScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Store profile with no timezone -> the UTC fallback, so pre-existing
+    // assertions stay meaningful. Must come after clearAllMocks().
+    mockGetPrimaryStoreScoped.mockResolvedValue({ id: 'store-a', name: 'Store A', timezone: null });
+  });
+
+  /**
+   * R36-06: CustomReportScreen reads the token via useContext(WorkspaceContext)
+   * rather than the useWorkspace() hook. test-setup.ts stubs only the hook and
+   * re-spreads `...actual`, so the real context object survives and an
+   * unprovider'd useContext() yields null -> empty token -> the primary-store
+   * fetch never fires. See R36-07 for the 7 files in this shape.
+   */
+  function renderWithSession() {
+    const value = { sessionToken: 'test-token' } as unknown as React.ContextType<typeof WorkspaceContext>;
+    return render(
+      <WorkspaceContext.Provider value={value}>
+        <CustomReportScreen />
+      </WorkspaceContext.Provider>,
+    );
+  }
+
+  it('anchors the default window to the primary store timezone (R36-06)', async () => {
+    const zone = discriminatingStoreZone();
+    assertCaseDiscriminates(zone);
+    mockGetPrimaryStoreScoped.mockResolvedValue({ id: 'store-a', name: 'Store A', timezone: zone.offset });
+    renderWithSession();
+
+    await waitFor(() => {
+      expect((screen.getByLabelText('End date') as HTMLInputElement).value).toBe(expectedStoreDay(zone, 0));
+      expect((screen.getByLabelText('Start date') as HTMLInputElement).value).toBe(expectedStoreDay(zone, 30));
+    });
+    expect(mockGetPrimaryStoreScoped).toHaveBeenCalled();
+  });
+
+  it('does not clobber a window the operator already edited (R36-06)', async () => {
+    const zone = discriminatingStoreZone();
+    // Hold the store response open so the edit provably precedes it.
+    let resolveStore: (v: unknown) => void = () => {};
+    mockGetPrimaryStoreScoped.mockReturnValue(new Promise((r) => { resolveStore = r; }));
+    renderWithSession();
+
+    const startInput = screen.getByLabelText('Start date') as HTMLInputElement;
+    fireEvent.change(startInput, { target: { value: '2026-01-05' } });
+
+    resolveStore({ id: 'store-a', name: 'Store A', timezone: zone.offset });
+    await waitFor(() => {
+      const input = screen.getByLabelText('Start date') as HTMLInputElement;
+      expect(input.value).toBe('2026-01-05');
+    });
   });
 
   it('renders the title and config card', () => {
