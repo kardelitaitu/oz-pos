@@ -448,8 +448,10 @@
   white-space: nowrap;
 }
 .kds-filter-option:not(.checked):hover { background: var(--kds-bg-hover); }
-.kds-filter-option:focus-visible,
 .kds-filter-option:focus {
+  outline: none;
+}
+.kds-filter-option:focus-visible {
   outline: 2px solid var(--kds-accent);
   outline-offset: -1px;
 }
@@ -2152,9 +2154,16 @@
 /* ── Visible keyboard focus across the whole screen ───────────────── */
 .kds button:focus-visible,
 .kds [role='option']:focus-visible,
+.kds [role='tab']:focus-visible,
 .kds input:focus-visible {
   outline: 2px solid var(--kds-accent);
   outline-offset: 1px;
+}
+
+.kds button:focus:not(:focus-visible),
+.kds [role='option']:focus:not(:focus-visible),
+.kds [role='tab']:focus:not(:focus-visible) {
+  outline: none;
 }
 
 /* ── Modal (confirm / anchored force-finish) — Phase 3 ────────────── */

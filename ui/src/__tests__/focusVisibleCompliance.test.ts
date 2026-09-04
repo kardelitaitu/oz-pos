@@ -273,4 +273,17 @@ describe('Focus-visible compliance', () => {
 
     expect(allViolations, message).toHaveLength(0);
   });
+
+  it('reset.css properly disables outline on bare mouse focus via :focus:not(:focus-visible)', () => {
+    const resetPath = resolve(UI_SRC, 'frontend/themes/reset.css');
+    const css = readFileSync(resetPath, 'utf-8');
+    expect(css).toMatch(/:focus:not\(:focus-visible\)\s*\{\s*outline:\s*none;?\s*\}/);
+  });
+
+  it('KdsScreen.css does not assign visible outline to bare .kds-filter-option:focus', () => {
+    const kdsPath = resolve(UI_SRC, 'features/kds/KdsScreen.css');
+    const css = readFileSync(kdsPath, 'utf-8');
+    expect(css).not.toMatch(/\.kds-filter-option:focus\s*\{[^}]*outline:\s*2px/);
+    expect(css).toMatch(/\.kds-filter-option:focus-visible\s*\{[^}]*outline:\s*2px/);
+  });
 });
