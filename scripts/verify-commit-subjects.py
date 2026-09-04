@@ -181,6 +181,18 @@ def check_range(rng: str, floor: str | None = "auto") -> tuple[int, int, list[st
     detail = (f" ({grandfathered} pre-rule commit(s) skipped)"
               if grandfathered else "")
     print(f"  {total} commit(s) checked{detail}, {bad} non-conforming subject(s)")
+    # An empty range is not a pass, it is a gate that checked nothing. Found by
+    # accident: a fixture repo where `main` WAS HEAD made `main..HEAD` empty, the
+    # script exited 0, and every downstream assertion read as a detector failure
+    # rather than a fixture bug. In CI the same shape appears if a checkout is
+    # shallow (fetch-depth 1 makes base..HEAD empty) or if the event payload lacks
+    # the shas -- all of which would report green forever.
+    if total == 0:
+        raise SystemExit(
+            f"range {rng} resolved to 0 commits. Refusing to report success: a "
+            f"subject gate that inspects nothing passes no matter what is pushed. "
+            f"Check that the checkout has enough history (fetch-depth: 0) and that "
+            f"both ends of the range exist.")
     return total, bad, [f"{s}: {t!r}" for s, t in offenders], exemptions
 
 
