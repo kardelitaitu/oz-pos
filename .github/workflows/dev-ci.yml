@@ -420,6 +420,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        # fetch-depth 0 because the subject gate walks a commit range. The
+        # default depth of 1 would make `base..HEAD` contain nothing, and the step
+        # would pass by checking zero commits -- a green result from an empty
+        # input, which is the failure mode every other gate in this job was built
+        # to avoid.
+        with:
+          fetch-depth: 0
       - name: Architecture boundaries
         run: python3 scripts/verify-architecture-boundaries.py --strict
       - name: No hardcoded money formatting
