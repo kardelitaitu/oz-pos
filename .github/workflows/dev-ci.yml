@@ -536,6 +536,8 @@ jobs:
       - name: Release version gate self-test
         run: node scripts/check-release-version.mjs --self-test
       - name: Updater client compatibility check
+        env:
+          RUSTC_WRAPPER: ""
         run: node scripts/check-updater-compat.mjs
 
   # ── 9. Deploy: Northflank (push to main/release or manual dispatch) ──

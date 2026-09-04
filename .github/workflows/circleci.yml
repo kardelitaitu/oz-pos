@@ -34,6 +34,15 @@ executors:
       - image: cimg/go:1.24.0-node
     resource_class: medium
 
+  rust-node-executor:
+    docker:
+      - image: cimg/rust:1.85.0-node
+    resource_class: medium
+    environment:
+      CARGO_TERM_COLOR: always
+      RUSTFLAGS: -D warnings
+      RUSTC_WRAPPER: ""
+
 # ── Commands ──────────────────────────────────────────────────────────
 commands:
   install-linux-deps:
@@ -262,7 +271,7 @@ jobs:
 
   # ── 7. Release Readiness ─────────────────────────────────────────────
   release-readiness:
-    executor: node-executor
+    executor: rust-node-executor
     steps:
       - checkout
       - run:
