@@ -361,6 +361,13 @@ def main() -> int:
     docs_lines = DOCS.read_text(encoding="utf-8").splitlines()
     workflow_files = sorted(WORKFLOWS_DIR.glob("*.yml"))
     workflows_by_name = {wf.name: wf for wf in workflow_files}
+    # Workflows that exist only as `<name>.yml.bak`. 23c96330 retired every
+    # non-dev CI workflow this way; GitHub never executes a .bak file, so a doc
+    # row naming one is recording history, not claiming current enforcement.
+    # Needed here because both the Job Matrix and the inventory use it.
+    retired_workflow_names = {
+        p.name[:-4] for p in WORKFLOWS_DIR.glob("*.yml.bak")
+    } - {wf.name for wf in workflow_files}
 
     # Fail-open protection: if a required section is renamed or emptied,
     # an empty parse result would make the gate vacuously PASS. Treat a
@@ -384,11 +391,27 @@ def main() -> int:
         return 2
 
     # ── 1. Jobs: documented → workflows ─────────────────────────────
-    matrix_jobs = {
-        m.group(1)
-        for m in (JOB_MATRIX_ROW.match(line) for line in doc_section(docs_lines, "Job Matrix (ci.yml)"))
-        if m
-    }
+    matrix_lines = doc_section(docs_lines, "Job Matrix (ci.yml)")
+    matrix_jobs: set[str] = set()
+    # job id -> the workflow file its own row names, for rows that name one.
+    # Used to distinguish "this job is missing from a LIVE workflow" (a real
+    # error) from "this job lived in a workflow that was retired" (accurate
+    # history that the old code counted as drift).
+    matrix_job_workflow: dict[str, str] = {}
+    for line in matrix_lines:
+        m = JOB_MATRIX_ROW.match(line)
+        if not m:
+            continue
+        job = m.group(1)
+        matrix_jobs.add(job)
+        # The Workflow column is a bare `ci.yml`, not backticked, so
+        # WORKFLOW_TOKEN (which needs backticks) cannot see it. Split the row
+        # into cells and read column 3.
+        cells = [c.strip().strip("`") for c in line.strip().strip("|").split("|")]
+        if len(cells) > 2:
+            wm = re.fullmatch(r"([a-z0-9][a-z0-9-]*\.yml)", cells[2])
+            if wm:
+                matrix_job_workflow[job] = wm.group(1)
     if not matrix_jobs:
         print(
             "error: Job Matrix (ci.yml) section contains no job rows",
@@ -397,10 +420,21 @@ def main() -> int:
         return 2
 
     gate_jobs: set[str] = set()
+    # Same history-vs-enforcement distinction as the Job Matrix, but this table
+    # puts the workflow in parentheses inside the job cell: `rust-test`
+    # (nightly.yml). Without it, six accurately-documented nightly/website rows
+    # count as missing jobs.
+    gate_job_workflow: dict[str, str] = {}
     for line in doc_section(docs_lines, "Pre-Merge Validation Gates"):
         m = GATE_TABLE_ROW.match(line)
-        if m:
-            gate_jobs.update(KUBE_TOKEN.findall(m.group(1)))
+        if not m:
+            continue
+        cell = m.group(1)
+        gate_jobs.update(KUBE_TOKEN.findall(cell))
+        wm = re.search(r"\(([a-z0-9][a-z0-9-]*\.yml)\)", cell)
+        if wm:
+            for j in KUBE_TOKEN.findall(cell):
+                gate_job_workflow[j] = wm.group(1)
     if not gate_jobs:
         print(
             "error: Pre-Merge Validation Gates section contains no job rows",
@@ -422,7 +456,21 @@ def main() -> int:
         if wf.name == "ci.yml":
             ci_jobs = jobs
 
-    missing_jobs = sorted((matrix_jobs | gate_jobs) - all_jobs)
+    # A matrix row whose own Workflow column names a retired file is recording
+    # history, not claiming the job runs. Only rows that name a LIVE workflow (or
+    # name none, which implies ci.yml by the section title) while the job is
+    # absent are real drift. gate_jobs are never exempted: gates.json describes
+    # what enforces merges TODAY, so a gate pointing at a retired workflow is the
+    # R36-10 lie and must keep counting.
+    retired_matrix_jobs = sorted(
+        j for j in (matrix_jobs | gate_jobs) - all_jobs
+        if (matrix_job_workflow.get(j) or gate_job_workflow.get(j))
+        in retired_workflow_names
+    )
+    missing_jobs = sorted(
+        (j for j in (matrix_jobs | gate_jobs) - all_jobs
+         if j not in retired_matrix_jobs)
+    )
     # Informational: the docs' Job Matrix catalogs ci.yml specifically, so
     # flag jobs ADDED to ci.yml that the docs don't mention (the fail
     # direction is docs-referenced-but-missing; this is the reverse).
@@ -618,6 +666,14 @@ def main() -> int:
         print(f"  MISSING JOBS (documented but no matching workflow job) — {len(missing_jobs)}:")
         for job in missing_jobs:
             print(f"    {job}")
+        print()
+    if retired_matrix_jobs:
+        print(
+            f"  note: {len(retired_matrix_jobs)} matrix job(s) name a retired "
+            f"workflow in their own row, so they document history rather than "
+            f"claiming enforcement (informational):"
+        )
+        print("    " + ", ".join(retired_matrix_jobs))
         print()
     if missing_files:
         print(f"  MISSING WORKFLOW FILES (named in the inventory, no file at all) — {len(missing_files)}:")
