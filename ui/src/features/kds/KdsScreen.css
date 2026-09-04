@@ -1657,12 +1657,12 @@
   width: 100%;
   overflow: hidden;
   position: relative;
-  display: flex;
 }
 
 .kds-main-track {
   display: flex;
-  width: 200%;
+  flex-direction: row;
+  width: 100%;
   height: 100%;
   transition: transform 0.32s cubic-bezier(0.33, 1, 0.68, 1);
   will-change: transform;
@@ -1673,14 +1673,16 @@
 }
 
 .kds-main-track.active-completed {
-  transform: translateX(-50%);
+  transform: translateX(-100%);
 }
 
 .kds-main-pane {
-  width: 50%;
+  flex: 0 0 100%;
+  width: 100%;
+  min-width: 100%;
+  max-width: 100%;
   height: 100%;
   overflow: hidden;
-  flex-shrink: 0;
   display: flex;
   flex-direction: column;
 }
