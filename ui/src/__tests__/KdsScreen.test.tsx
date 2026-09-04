@@ -977,8 +977,12 @@ describe('KdsScreen', () => {
     expect(shakeCard?.classList.contains('kds-ticket--selected')).toBe(true);
   });
 
-  it('hides the filter dropdown when switching to the Completed tab', async () => {
+  it('supports filtering on the Completed tab by order type (All / Dine in / Takeaway)', async () => {
     mockGetKdsQueue.mockResolvedValue([]);
+    mockListKdsOrdersScoped.mockResolvedValue([
+      makeOrder({ id: 'done-1', status: 'served', display_number: 101, table_number: 'T4' }),
+      makeOrder({ id: 'done-2', status: 'served', display_number: 102, table_number: null }),
+    ]);
     renderScreen();
     await waitFor(() => {
       expect(screen.getByTestId('kds-topbar-filter')).toBeDefined();
@@ -987,13 +991,28 @@ describe('KdsScreen', () => {
     // Switch to Completed tab
     await userEvent.click(screen.getByTestId('kds-tab-completed'));
     await waitFor(() => {
-      expect(screen.queryByTestId('kds-topbar-filter')).toBeNull();
+      expect(screen.getByTestId('kds-topbar-filter')).toBeDefined();
     });
 
-    // Switch back to Open tab
-    await userEvent.click(screen.getByTestId('kds-tab-open'));
+    // Open filter dropdown on Completed tab
+    await userEvent.click(screen.getByTestId('kds-topbar-filter'));
+    expect(screen.getByTestId('kds-filter-completed-all')).toBeDefined();
+    expect(screen.getByTestId('kds-filter-completed-dinein')).toBeDefined();
+    expect(screen.getByTestId('kds-filter-completed-takeaway')).toBeDefined();
+
+    // Select Dine in mode
+    await userEvent.click(screen.getByTestId('kds-filter-completed-dinein'));
     await waitFor(() => {
-      expect(screen.getByTestId('kds-topbar-filter')).toBeDefined();
+      expect(screen.getByText('#101')).toBeDefined();
+      expect(screen.queryByText('#102')).toBeNull();
+    });
+
+    // Select Takeaway mode
+    await userEvent.click(screen.getByTestId('kds-topbar-filter'));
+    await userEvent.click(screen.getByTestId('kds-filter-completed-takeaway'));
+    await waitFor(() => {
+      expect(screen.getByText('#102')).toBeDefined();
+      expect(screen.queryByText('#101')).toBeNull();
     });
   });
 

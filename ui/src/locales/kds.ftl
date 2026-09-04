@@ -194,6 +194,9 @@ kds-filter-aria = Filter orders
 kds-filter-all = All orders
 kds-filter-prepared = Prepared
 kds-filter-selected = { $count } selected
+kds-filter-completed-all = All
+kds-filter-dinein = Dine in
+kds-filter-takeaway = Takeaway
 
 # ── Screen footer status bar ──
 kds-footer-aria = Terminal status

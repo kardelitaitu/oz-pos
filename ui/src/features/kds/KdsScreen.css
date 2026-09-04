@@ -455,6 +455,7 @@
 }
 .kds-filter-option.checked { background: var(--kds-accent); color: var(--kds-fg-inverse); opacity: 1; }
 .kds-filter-modes { display: flex; gap: 6px; margin-bottom: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--kds-border); }
+.kds-filter-modes.no-sep { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
 .kds-filter-grid { display: grid; grid-template-columns: repeat(3, max-content); gap: 6px; justify-content: start; }
 
 /* ── Hamburger settings panel (prototype .kds-hamburger-panel) ──────

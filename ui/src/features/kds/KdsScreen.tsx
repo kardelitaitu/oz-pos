@@ -108,6 +108,7 @@ export default function KdsScreen() {
   // Filter dropdown — view mode (All / Prepared) matching the prototype filter.
   const [filterMode, setFilterMode] = useState<'all' | 'prepared'>('all');
   const [filterCats, setFilterCats] = useState<Set<string> | null>(null);
+  const [completedFilter, setCompletedFilter] = useState<'all' | 'dinein' | 'takeaway'>('all');
   const [showFilter, setShowFilter] = useState(false);
   const filterBtnRef = useRef<HTMLButtonElement>(null);
   const filterPanelRef = useRef<HTMLDivElement>(null);
@@ -592,7 +593,9 @@ export default function KdsScreen() {
     }
   }, [sessionToken]);
 
-  const boardFiltered = filterMode === 'prepared' || (filterCats !== null && filterCats.size > 0);
+  const boardFiltered = activeTab === 'completed'
+    ? completedFilter !== 'all'
+    : (filterMode === 'prepared' || (filterCats !== null && filterCats.size > 0));
 
   // ── Initial loading skeleton ──────────────────────────────────
   const renderContent = () => {
@@ -646,7 +649,7 @@ export default function KdsScreen() {
             className="kds-main-pane kds-main-pane--completed"
             aria-hidden={activeTab !== 'completed'}
           >
-            <KdsCompletedView onReopen={() => setActiveTab('open')} />
+            <KdsCompletedView onReopen={() => setActiveTab('open')} completedFilter={completedFilter} />
           </div>
         </div>
       </div>
@@ -673,88 +676,126 @@ export default function KdsScreen() {
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 19l-7-7 7-7" /></svg>
           </button>
-          {/* Filter dropdown — All / Prepared view mode (hidden on Completed tab) */}
-          {activeTab !== 'completed' && (
-            <div className="kds-filter">
-              <button
-                ref={filterBtnRef}
-                className={`kds-btn kds-btn--filter${!boardFiltered ? ' kds-btn--filter--all' : ' kds-btn--filter--active'}${showFilter ? ' kds-btn--filter--open' : ''}`}
-                onClick={() => setShowFilter((p) => !p)}
-                onKeyDown={handleFilterBtnKeyDown}
-                aria-haspopup="listbox"
-                aria-expanded={showFilter}
-                data-testid="kds-topbar-filter"
-              >
-                <span>
-                  {filterMode === 'prepared'
+          {/* Filter dropdown — tab-aware (Open: All/Prepared/Cats, Completed: All/Dine in/Takeaway) */}
+          <div className="kds-filter">
+            <button
+              ref={filterBtnRef}
+              className={`kds-btn kds-btn--filter${!boardFiltered ? ' kds-btn--filter--all' : ' kds-btn--filter--active'}${showFilter ? ' kds-btn--filter--open' : ''}`}
+              onClick={() => setShowFilter((p) => !p)}
+              onKeyDown={handleFilterBtnKeyDown}
+              aria-haspopup="listbox"
+              aria-expanded={showFilter}
+              data-testid="kds-topbar-filter"
+            >
+              <span>
+                {activeTab === 'completed'
+                  ? completedFilter === 'dinein'
+                    ? requiredLocalized(l10n, 'kds-filter-dinein')
+                    : completedFilter === 'takeaway'
+                      ? requiredLocalized(l10n, 'kds-filter-takeaway')
+                      : requiredLocalized(l10n, 'kds-filter-completed-all')
+                  : filterMode === 'prepared'
                     ? requiredLocalized(l10n, 'kds-filter-prepared')
                     : filterCats && filterCats.size > 0
                       ? filterCats.size === 1
                         ? [...filterCats][0]
                         : requiredLocalized(l10n, 'kds-filter-selected', { count: String(filterCats.size) })
                       : requiredLocalized(l10n, 'kds-filter-all')}
-                </span>
-                <span className="caret" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 9h12l-6 7z" /></svg>
-                </span>
-              </button>
-              {showFilter && (
-                <div
-                  ref={filterPanelRef}
-                  className="kds-filter-panel"
-                  role="listbox"
-                  tabIndex={-1}
-                  aria-multiselectable="true"
-                  aria-label={requiredLocalized(l10n, 'kds-filter-aria')}
-                  onKeyDown={handleFilterPanelKeyDown}
-                >
-                  <div className="kds-filter-modes">
+              </span>
+              <span className="caret" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 9h12l-6 7z" /></svg>
+              </span>
+            </button>
+            {showFilter && (
+              <div
+                ref={filterPanelRef}
+                className="kds-filter-panel"
+                role="listbox"
+                tabIndex={-1}
+                aria-multiselectable={activeTab !== 'completed'}
+                aria-label={requiredLocalized(l10n, 'kds-filter-aria')}
+                onKeyDown={handleFilterPanelKeyDown}
+              >
+                {activeTab === 'completed' ? (
+                  <div className="kds-filter-modes no-sep">
                     <button
-                      className={`kds-filter-option${filterMode === 'all' && (!filterCats || filterCats.size === 0) ? ' checked' : ''}`}
+                      className={`kds-filter-option${completedFilter === 'all' ? ' checked' : ''}`}
                       role="option"
-                      aria-selected={filterMode === 'all' && (!filterCats || filterCats.size === 0)}
-                      onClick={() => { setFilterMode('all'); setFilterCats(null); setShowFilter(false); }}
-                      data-testid="kds-filter-mode-all"
+                      aria-selected={completedFilter === 'all'}
+                      onClick={() => { setCompletedFilter('all'); setShowFilter(false); }}
+                      data-testid="kds-filter-completed-all"
                     >
-                      <Localized id="kds-filter-all">All orders</Localized>
+                      <Localized id="kds-filter-completed-all">All</Localized>
                     </button>
                     <button
-                      className={`kds-filter-option${filterMode === 'prepared' ? ' checked' : ''}`}
+                      className={`kds-filter-option${completedFilter === 'dinein' ? ' checked' : ''}`}
                       role="option"
-                      aria-selected={filterMode === 'prepared'}
-                      onClick={() => { setFilterMode('prepared'); setFilterCats(null); setShowFilter(false); }}
-                      data-testid="kds-filter-mode-prepared"
+                      aria-selected={completedFilter === 'dinein'}
+                      onClick={() => { setCompletedFilter('dinein'); setShowFilter(false); }}
+                      data-testid="kds-filter-completed-dinein"
                     >
-                      <Localized id="kds-filter-prepared">Prepared</Localized>
+                      <Localized id="kds-filter-dinein">Dine in</Localized>
+                    </button>
+                    <button
+                      className={`kds-filter-option${completedFilter === 'takeaway' ? ' checked' : ''}`}
+                      role="option"
+                      aria-selected={completedFilter === 'takeaway'}
+                      onClick={() => { setCompletedFilter('takeaway'); setShowFilter(false); }}
+                      data-testid="kds-filter-completed-takeaway"
+                    >
+                      <Localized id="kds-filter-takeaway">Takeaway</Localized>
                     </button>
                   </div>
-                  {zones.length > 0 && (
-                    <div className="kds-filter-grid">
-                      {zones.map((zone) => (
-                        <button
-                          key={zone}
-                          className={`kds-filter-option${filterCats?.has(zone) ? ' checked' : ''}`}
-                          role="option"
-                          aria-selected={filterCats?.has(zone) ?? false}
-                          onClick={() => {
-                            setFilterMode('all');
-                            setFilterCats((prev) => {
-                              const next = new Set(prev ?? []);
-                              if (next.has(zone)) next.delete(zone); else next.add(zone);
-                              return next.size === 0 ? null : next;
-                            });
-                          }}
-                          data-testid={`kds-filter-zone-${zone}`}
-                        >
-                          <span>{zone}</span>
-                        </button>
-                      ))}
+                ) : (
+                  <>
+                    <div className="kds-filter-modes">
+                      <button
+                        className={`kds-filter-option${filterMode === 'all' && (!filterCats || filterCats.size === 0) ? ' checked' : ''}`}
+                        role="option"
+                        aria-selected={filterMode === 'all' && (!filterCats || filterCats.size === 0)}
+                        onClick={() => { setFilterMode('all'); setFilterCats(null); setShowFilter(false); }}
+                        data-testid="kds-filter-mode-all"
+                      >
+                        <Localized id="kds-filter-all">All orders</Localized>
+                      </button>
+                      <button
+                        className={`kds-filter-option${filterMode === 'prepared' ? ' checked' : ''}`}
+                        role="option"
+                        aria-selected={filterMode === 'prepared'}
+                        onClick={() => { setFilterMode('prepared'); setFilterCats(null); setShowFilter(false); }}
+                        data-testid="kds-filter-mode-prepared"
+                      >
+                        <Localized id="kds-filter-prepared">Prepared</Localized>
+                      </button>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+                    {zones.length > 0 && (
+                      <div className="kds-filter-grid">
+                        {zones.map((zone) => (
+                          <button
+                            key={zone}
+                            className={`kds-filter-option${filterCats?.has(zone) ? ' checked' : ''}`}
+                            role="option"
+                            aria-selected={filterCats?.has(zone) ?? false}
+                            onClick={() => {
+                              setFilterMode('all');
+                              setFilterCats((prev) => {
+                                const next = new Set(prev ?? []);
+                                if (next.has(zone)) next.delete(zone); else next.add(zone);
+                                return next.size === 0 ? null : next;
+                              });
+                            }}
+                            data-testid={`kds-filter-zone-${zone}`}
+                          >
+                            <span>{zone}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Open/Completed tabs — prototype .kds-tabs */}

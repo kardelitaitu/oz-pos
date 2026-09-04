@@ -39,7 +39,13 @@ function fmtDuration(from: string, to: string): string {
  *
  * Replaces KdsHistoryPanel in the Completed tab (Phase 5).
  */
-export function KdsCompletedView({ onReopen }: { onReopen?: (orderId: string) => void }) {
+export function KdsCompletedView({
+  onReopen,
+  completedFilter = 'all',
+}: {
+  onReopen?: (orderId: string) => void;
+  completedFilter?: 'all' | 'dinein' | 'takeaway';
+}) {
   const { l10n } = useLocalization();
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
@@ -64,11 +70,22 @@ export function KdsCompletedView({ onReopen }: { onReopen?: (orderId: string) =>
       });
   }, [sessionToken]);
 
+  // Filter completed orders by order type (All / Dine in / Takeaway)
+  const filteredOrders = useMemo(() => {
+    if (completedFilter === 'dinein') {
+      return orders.filter((o) => !!o.table_number && o.table_number.trim() !== '');
+    }
+    if (completedFilter === 'takeaway') {
+      return orders.filter((o) => !o.table_number || o.table_number.trim() === '');
+    }
+    return orders;
+  }, [orders, completedFilter]);
+
   // Bucket the orders by completion time.
   const bucketed = useMemo(() => {
     const map = new Map<string, KdsOrder[]>();
     for (const b of BUCKETS) map.set(b.key, []);
-    for (const o of orders) {
+    for (const o of filteredOrders) {
       const ref = o.served_at || o.received_at;
       const offset = dayOffset(ref);
       for (const b of BUCKETS) {
@@ -79,7 +96,7 @@ export function KdsCompletedView({ onReopen }: { onReopen?: (orderId: string) =>
       }
     }
     return map;
-  }, [orders]);
+  }, [filteredOrders]);
 
   const toggleBucket = useCallback((key: string) => {
     setCollapsedBuckets((prev) => {

@@ -196,6 +196,9 @@ kds-filter-aria = Filter pesanan
 kds-filter-all = Semua pesanan
 kds-filter-prepared = Siap
 kds-filter-selected = { $count } dipilih
+kds-filter-completed-all = Semua
+kds-filter-dinein = Makan di tempat
+kds-filter-takeaway = Bawa pulang
 
 # ── Screen footer status bar ──
 kds-footer-aria = Status terminal
