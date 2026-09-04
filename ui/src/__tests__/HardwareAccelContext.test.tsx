@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, render } from '@testing-library/react';
-import { HardwareAccelProvider, useHardwareAccel } from '@/contexts/HardwareAccelContext';
+import { HardwareAccelProvider, useHardwareAccel, useOptionalHardwareAccel } from '@/contexts/HardwareAccelContext';
 import type { ReactNode } from 'react';
 
 beforeEach(() => {
@@ -118,6 +118,19 @@ describe('HardwareAccelContext', () => {
       renderHook(() => useHardwareAccel(), { wrapper });
 
       expect(document.documentElement.hasAttribute('data-hw-accel')).toBe(false);
+    });
+  });
+
+  describe('useOptionalHardwareAccel', () => {
+    it('returns null when used outside HardwareAccelProvider', () => {
+      const { result } = renderHook(() => useOptionalHardwareAccel());
+      expect(result.current).toBeNull();
+    });
+
+    it('returns context value when used inside HardwareAccelProvider', () => {
+      const { result } = renderHook(() => useOptionalHardwareAccel(), { wrapper });
+      expect(result.current).not.toBeNull();
+      expect(result.current?.enabled).toBe(true);
     });
   });
 

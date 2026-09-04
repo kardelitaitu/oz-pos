@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
+import { HardwareAccelProvider } from '@/contexts/HardwareAccelContext';
 import KdsScreen from '@/features/kds/KdsScreen';
 import kdsFtl from '@/locales/kds.ftl?raw';
 import type { KdsOrder } from '@/api/kds';
@@ -125,7 +126,9 @@ const l10n = new ReactLocalization([bundle]);
 function renderScreen() {
   return render(
     <LocalizationProvider l10n={l10n}>
-      <KdsScreen />
+      <HardwareAccelProvider>
+        <KdsScreen />
+      </HardwareAccelProvider>
     </LocalizationProvider>,
   );
 }
@@ -1097,6 +1100,34 @@ describe('KdsScreen', () => {
     // Changing the native picker updates the hex field.
     fireEvent.change(native, { target: { value: '#ff00aa' } });
     expect(hex.value).toBe('#ff00aa');
+  });
+
+  it('renders and toggles hardware acceleration switch in the hamburger panel', async () => {
+    mockGetKdsQueue.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('kds-topbar-settings')).not.toBeNull();
+    });
+
+    // Open hamburger panel
+    await userEvent.click(screen.getByTestId('kds-topbar-settings'));
+    await waitFor(() => {
+      expect(document.querySelector('.kds-hamburger-panel')).not.toBeNull();
+    });
+
+    const toggle = screen.getByTestId('kds-settings-hw-accel-toggle');
+    expect(toggle).not.toBeNull();
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+
+    // Click toggle to disable
+    await userEvent.click(toggle);
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(document.documentElement.getAttribute('data-hw-accel')).toBe('disabled');
+
+    // Click toggle to re-enable
+    await userEvent.click(toggle);
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    expect(document.documentElement.hasAttribute('data-hw-accel')).toBe(false);
   });
 
   // ── PERF-KDS-01: the realtime subscription / fetch loop ────────────

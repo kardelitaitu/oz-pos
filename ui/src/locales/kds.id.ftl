@@ -251,6 +251,10 @@ kds-settings-reset-colours = Atur ulang warna
 kds-settings-card-animations = Animasi kartu
 kds-settings-card-animations-caption = Efek muncul dan susun ulang
 
+# ── Hardware Acceleration ──
+kds-settings-hw-accel = Akselerasi perangkat keras
+kds-settings-hw-accel-caption = Efek blur dan GPU
+
 # ── Hamburger panel (lihat kds.ftl) ──
 kds-panel-section-display = Tampilan
 kds-panel-section-behaviour = Perilaku

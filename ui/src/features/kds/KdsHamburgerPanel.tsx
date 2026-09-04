@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useOptionalTheme } from '@/frontend/shell/ThemeProvider';
+import { useOptionalHardwareAccel } from '@/contexts/HardwareAccelContext';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { DisplayDensity, KdsSettings } from '@/features/kds/KdsSettingsPanel';
 import { useKdsCardColors } from '@/features/kds/KdsCardColorsContext';
@@ -62,6 +63,7 @@ export function KdsHamburgerPanel({
 }: KdsHamburgerPanelProps) {
   const { l10n } = useLocalization();
   const themeCtx = useOptionalTheme();
+  const hwAccel = useOptionalHardwareAccel();
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -201,6 +203,23 @@ export function KdsHamburgerPanel({
                     aria-label={requiredLocalized(l10n, 'kds-layout-table-number')}
                   />
                 </div>
+
+                {hwAccel && (
+                  <div className="kds-setting-row">
+                    <div className="kds-setting-text">
+                      <span className="kds-setting-label"><Localized id="kds-settings-hw-accel">Hardware acceleration</Localized></span>
+                      <span className="kds-setting-caption"><Localized id="kds-settings-hw-accel-caption">Blur and GPU effects</Localized></span>
+                    </div>
+                    <button
+                      className={`kds-switch${hwAccel.enabled ? ' on' : ''}`}
+                      role="switch"
+                      aria-checked={hwAccel.enabled}
+                      onClick={() => hwAccel.setEnabled(!hwAccel.enabled)}
+                      aria-label={requiredLocalized(l10n, 'kds-settings-hw-accel')}
+                      data-testid="kds-settings-hw-accel-toggle"
+                    />
+                  </div>
+                )}
               </div>
             </div>
 

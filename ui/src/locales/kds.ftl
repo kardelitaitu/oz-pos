@@ -249,6 +249,10 @@ kds-settings-reset-colours = Reset colours
 kds-settings-card-animations = Card animations
 kds-settings-card-animations-caption = Spawn and reorder effects
 
+# ── Hardware Acceleration ──
+kds-settings-hw-accel = Hardware acceleration
+kds-settings-hw-accel-caption = Blur and GPU effects
+
 # ── Hamburger panel: section headings, icon-only controls, colour pickers ──
 # Recovered by the Fluent page audit. These were hardcoded English strings in
 # KdsHamburgerPanel.tsx, which the rev-1 parity gate could not see because it
