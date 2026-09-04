@@ -654,9 +654,11 @@ export default function KdsScreen() {
       <div className="kds-header">
         <div className="kds-header-left">
           <button
-            className="kds-back-btn"
+            type="button"
+            className="kds-btn kds-btn--icon kds-back-btn"
             onClick={goToWorkspacePicker}
             aria-label={requiredLocalized(l10n, 'kds-back-aria')}
+            title={requiredLocalized(l10n, 'kds-back-aria')}
             data-testid="kds-topbar-back"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 19l-7-7 7-7" /></svg>

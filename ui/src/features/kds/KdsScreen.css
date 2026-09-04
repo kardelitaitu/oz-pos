@@ -160,20 +160,21 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   background: transparent;
   color: var(--kds-text);
-  opacity: 0.7;
+  opacity: 0.85;
   border: none;
   border-radius: var(--kds-r-sm);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.15s, opacity 0.15s;
+  transition: background 0.15s, opacity 0.15s, color 0.15s;
 }
 .kds-back-btn:hover { background: var(--kds-bg-hover); opacity: 1; }
 .kds-back-btn:active { background: var(--kds-bg-active); transform: translateY(1px); }
+.kds-back-btn:focus-visible { outline: 2px solid var(--kds-accent); outline-offset: 1px; }
 .kds-back-btn svg { width: 18px; height: 18px; }
 [data-theme='light'] .kds-back-btn:hover { background: var(--kds-bg-hover); }
 
