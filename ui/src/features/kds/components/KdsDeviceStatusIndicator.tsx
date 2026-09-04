@@ -1,4 +1,5 @@
 import { memo, useState, useEffect, useCallback } from 'react';
+import { Localized } from '@fluent/react';
 import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
 import {
@@ -14,6 +15,14 @@ export interface KdsDeviceStatusIndicatorProps {
   sessionToken: string;
   /** How often to poll for device status (ms). Defaults to 10000. */
   pollIntervalMs?: number;
+  /**
+   * H3: entry point for the enrollment modal. Previously the modal was
+   * unreachable dead code (no UI ever opened it). When provided, an
+   * "Enroll device" action appears in the dropdown — and the indicator
+   * itself renders even with zero devices so a fresh kitchen can enroll
+   * its first display.
+   */
+  onEnrollDevice?: () => void;
 }
 
 /** Map connection status to a display label and CSS modifier. */
@@ -46,6 +55,7 @@ export const KdsDeviceStatusIndicator = memo(
   function KdsDeviceStatusIndicator({
     sessionToken,
     pollIntervalMs = 10_000,
+    onEnrollDevice,
   }: KdsDeviceStatusIndicatorProps) {
     const { l10n } = useLocalization();
     const [devices, setDevices] = useState<KdsDevice[]>([]);
@@ -72,9 +82,22 @@ export const KdsDeviceStatusIndicator = memo(
       return () => clearInterval(interval);
     }, [fetchDevices, pollIntervalMs]);
 
-    // Don't render if no devices are registered.
+    // Don't render if no devices are registered — unless an enrollment
+    // entry point was provided (a fresh kitchen still needs one). The
+    // zero-device branch below renders the enroll button alone.
     if ((!devices || devices.length === 0) && !loading) {
-      return null;
+      return onEnrollDevice ? (
+        <div className="kds-device-status-container">
+          <button
+            type="button"
+            className="kds-device-enroll-btn"
+            onClick={onEnrollDevice}
+            aria-label={requiredLocalized(l10n, 'kds-device-enroll-aria')}
+          >
+            <Localized id="kds-device-enroll">Enroll device</Localized>
+          </button>
+        </div>
+      ) : null;
     }
 
     const connectedCount = devices.filter(
@@ -91,6 +114,20 @@ export const KdsDeviceStatusIndicator = memo(
           : 'disconnected';
 
     const statusDisplay = STATUS_DISPLAY[overallStatus];
+
+    const enrollButton = onEnrollDevice ? (
+      <button
+        type="button"
+        className="kds-device-enroll-btn"
+        onClick={() => {
+          setExpanded(false);
+          onEnrollDevice();
+        }}
+        aria-label={requiredLocalized(l10n, 'kds-device-enroll-aria')}
+      >
+        <Localized id="kds-device-enroll">Enroll device</Localized>
+      </button>
+    ) : null;
 
     return (
       <div className="kds-device-status-container">
@@ -137,6 +174,7 @@ export const KdsDeviceStatusIndicator = memo(
                 </div>
               );
             })}
+            {enrollButton}
           </div>
         )}
       </div>

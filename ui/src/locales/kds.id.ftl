@@ -170,6 +170,8 @@ kds-device-status-disconnected = Terputus
 kds-device-status-stale = Usang
 kds-device-status-aria = Perangkat KDS: { $connected } dari { $total } terhubung
 kds-device-list-aria = Daftar perangkat KDS
+kds-device-enroll = Daftarkan perangkat
+kds-device-enroll-aria = Buka dialog pendaftaran perangkat KDS
 
 # ── Hamburger settings panel ──
 kds-settings-theme = Tema

@@ -1,6 +1,13 @@
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 
 let audioCtx: AudioContext | null = null;
+
+// Module-level mute state shared by EVERY useSound() instance. The mute
+// toggle must silence all sound paths app-wide (POS beeps, KDS SLA
+// escalation alerts, TTS callouts) — a per-instance ref previously let a
+// muted kitchen keep receiving red-escalation sirens because each card's
+// hook instance had its own enabled flag.
+let soundEnabled = true;
 
 function getAudioCtx(): AudioContext | null {
   if (!audioCtx) {
@@ -20,17 +27,16 @@ function getAudioCtx(): AudioContext | null {
  * Hook that provides sound-effect playback functions (beep, error,
  * success, alert) using the Web Audio API. Each callback synthesises
  * a short tone — no audio files required. Respects the `setSoundEnabled`
- * mute toggle.
+ * mute toggle, which is GLOBAL: muting in any one instance (e.g. the
+ * retail sound toggle or the KDS settings panel) silences every instance.
  */
 export function useSound() {
-  const enabledRef = useRef(true);
-
   const setEnabled = useCallback((v: boolean) => {
-    enabledRef.current = v;
+    soundEnabled = v;
   }, []);
 
   const playBeep = useCallback(() => {
-    if (!enabledRef.current) return;
+    if (!soundEnabled) return;
     const ctx = getAudioCtx();
     if (!ctx) return;
     try {
@@ -48,7 +54,7 @@ export function useSound() {
   }, []);
 
   const playError = useCallback(() => {
-    if (!enabledRef.current) return;
+    if (!soundEnabled) return;
     const ctx = getAudioCtx();
     if (!ctx) return;
     try {
@@ -66,7 +72,7 @@ export function useSound() {
   }, []);
 
   const playSuccess = useCallback(() => {
-    if (!enabledRef.current) return;
+    if (!soundEnabled) return;
     const ctx = getAudioCtx();
     if (!ctx) return;
     try {
@@ -87,7 +93,7 @@ export function useSound() {
   }, []);
 
   const playAlert = useCallback(() => {
-    if (!enabledRef.current) return;
+    if (!soundEnabled) return;
     const ctx = getAudioCtx();
     if (!ctx) return;
     try {
@@ -108,7 +114,7 @@ export function useSound() {
   }, []);
 
   const speak = useCallback((text: string) => {
-    if (!enabledRef.current || typeof window === 'undefined' || !window.speechSynthesis) return;
+    if (!soundEnabled || typeof window === 'undefined' || !window.speechSynthesis) return;
     try {
       // Cancel any ongoing speech to avoid overlapping announcements.
       window.speechSynthesis.cancel();

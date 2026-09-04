@@ -8,6 +8,7 @@ import { useWorkspaceScope, useWorkspace } from '@/contexts/WorkspaceContext';
 import { getKdsQueueScoped, updateKdsStatusScoped, updateKdsOrderItemsScoped, updateKdsLineItemStatusScoped, getKdsOrderLinesScoped, type KdsOrder, type KdsStatus, type KdsLineItem, type CreateKdsLineItemInput } from '@/api/kds';
 import { useKdsPreferences } from '@/features/kds/hooks/useKdsPreferences';
 import { useNewTicketSound } from '@/features/kds/hooks/useNewTicketSound';
+import type { SlaThresholds } from '@/features/kds/hooks/useTicketSla';
 import { useSound } from '@/frontend/shared/useSound';
 import { requiredLocalized, LoadingStatus } from '@/frontend/shared';
 import { isEditableTarget } from '@/utils/isEditableTarget';
@@ -80,6 +81,8 @@ export interface KdsLayoutProps {
   onAddItems?: (orderId: string) => void;
   /** Set of order IDs that just arrived — used for brief highlight animation. */
   newOrderIds: ReadonlySet<string>;
+  /** SLA thresholds for the escalation colours (settings panel sliders). */
+  slaThresholds?: SlaThresholds;
 }
 
 /** KDS (Kitchen Display System) screen — real-time order queue in a single masonry view, with Open/Completed tabs and per-user preferences. */
@@ -93,6 +96,10 @@ export default function KdsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [settings, setSettings] = useState<KdsSettings>(DEFAULT_SETTINGS);
+  // H3: the offline banner's × previously cleared `error` (the other
+  // banner) — a no-op. This flag gates the offline banner and resets as
+  // soon as connectivity returns.
+  const [offlineDismissed, setOfflineDismissed] = useState(false);
   /** Open vs Completed view — the prototype's primary tab navigation. */
   const [activeTab, setActiveTab] = useState<'open' | 'completed'>('open');
   const [initialLoading, setInitialLoading] = useState(true);
@@ -150,7 +157,21 @@ export default function KdsScreen() {
 
   // P3-2: Chime when new tickets arrive (debounced to max 1 per 5s).
   useNewTicketSound(orders, settings.soundEnabled);
-  const { speak } = useSound();
+  const { speak, setSoundEnabled } = useSound();
+
+  // The KDS sound preference drives the GLOBAL mute: SLA escalation
+  // alerts (each card's own useSound instance) and TTS callouts route
+  // through separate hook instances that previously never saw this
+  // toggle, so a muted kitchen still got red-escalation sirens.
+  useEffect(() => {
+    setSoundEnabled(settings.soundEnabled);
+  }, [setSoundEnabled, settings.soundEnabled]);
+
+  // Re-show the offline banner after the next disconnection once
+  // connectivity is restored.
+  useEffect(() => {
+    if (online) setOfflineDismissed(false);
+  }, [online]);
 
   // PERF-KDS-01: the pending-queue length is only read inside the post-fetch
   // flush, never rendered from `fetchOrders`. Keeping it in a ref (instead of
@@ -372,6 +393,14 @@ export default function KdsScreen() {
     }
     return orders;
   }, [orders, filterMode, filterCats]);
+
+  // H3: the settings sliders are now wired — thresholds flow into every
+  // card's useTicketSla. Memoized so KdsTicketCard's memo still holds when
+  // unrelated state re-renders the screen.
+  const slaThresholds = useMemo<SlaThresholds>(() => ({
+    yellowAtSec: settings.yellowThresholdMin * 60,
+    redAtSec: settings.redThresholdMin * 60,
+  }), [settings.yellowThresholdMin, settings.redThresholdMin]);
 
   // Deselect if currently selected order is filtered out.
   useEffect(() => {
@@ -629,7 +658,7 @@ export default function KdsScreen() {
             className="kds-main-pane kds-main-pane--open"
             aria-hidden={activeTab !== 'open'}
           >
-            <div className="kds-content-wrap" {...pullRefreshProps}>
+            <div className={`kds-content-wrap${settings.density === 'compact' ? ' kds--compact' : ''}`} {...pullRefreshProps}>
               <KdsLayoutMasonry
                 orders={filteredOrders}
                 filtered={boardFiltered}
@@ -642,6 +671,7 @@ export default function KdsScreen() {
                 onAdvanceItem={advanceItemStatus}
                 onAddItems={setPickerOrderId}
                 newOrderIds={newOrderIds}
+                slaThresholds={slaThresholds}
               />
             </div>
           </div>
@@ -856,7 +886,7 @@ export default function KdsScreen() {
             <span className={inShift ? 'visible' : ''}><Localized id="kds-shift-end">End Shift</Localized></span>
           </button>
           {/* Device status indicator */}
-          <KdsDeviceStatusIndicator sessionToken={sessionToken} />
+          <KdsDeviceStatusIndicator sessionToken={sessionToken} onEnrollDevice={() => setShowEnrollment(true)} />
           {/* Hamburger settings panel — only when prefs loaded */}
           {!prefsLoading && (
             <KdsHamburgerPanel
@@ -978,7 +1008,7 @@ export default function KdsScreen() {
       )}
 
       {/* 3b: Offline banner — shown when backend is unreachable or actions are queued */}
-      {!online && (
+      {!online && !offlineDismissed && (
         <div className="kds-offline-banner" role="alert">
           <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
             <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-.47.81c-.54.5-1.1 1.36-1.1 2.52V8l4.89-4.89c-.04-.26-.14-.52-.34-.73zM5.99 5.58l-2.84 2.84a1.532 1.532 0 000 2.16l7.29 7.29c.39.39 1.02.39 1.41 0l2.84-2.84-5.99-5.99-2.71-2.76v.3zm10.02 2.46l2.13 2.13a1.532 1.532 0 010 2.16l-2.13 2.13a.5.5 0 01-.71-.71l2.13-2.13a.532.532 0 000-.75l-2.13-2.13a.5.5 0 01.71-.71zm-5.02 5.32a1.25 1.25 0 110-2.5 1.25 1.25 0 010 2.5z" clipRule="evenodd" />
@@ -1010,7 +1040,7 @@ export default function KdsScreen() {
           )}
           <button
             className="kds-offline-dismiss-btn"
-            onClick={() => setError(null)}
+            onClick={() => setOfflineDismissed(true)}
             aria-label={requiredLocalized(l10n, 'kds-offline-dismiss-aria')}
           >
             &times;

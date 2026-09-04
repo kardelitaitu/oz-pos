@@ -168,6 +168,8 @@ kds-device-status-disconnected = Disconnected
 kds-device-status-stale = Stale
 kds-device-status-aria = KDS devices: { $connected } of { $total } connected
 kds-device-list-aria = KDS device list
+kds-device-enroll = Enroll device
+kds-device-enroll-aria = Open the KDS device enrollment dialog
 
 # ── Hamburger settings panel ──
 kds-settings-theme = Theme

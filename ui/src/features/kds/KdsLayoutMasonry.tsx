@@ -2,12 +2,15 @@ import { useMemo } from 'react';
 import { Localized } from '@fluent/react';
 import { KdsTicketCard } from '@/features/kds/components/KdsTicketCard';
 import type { KdsLayoutProps } from './KdsScreen';
+import type { SlaThresholds } from './hooks/useTicketSla';
 import type { KdsOrder } from '@/api/kds';
 
 interface KdsLayoutMasonryProps extends KdsLayoutProps {
   /** True when a filter (Prepared / zone categories) is active — changes
    *  the empty-state copy to "no match" instead of "no orders yet". */
   filtered?: boolean;
+  /** SLA thresholds forwarded to every card (settings panel sliders). */
+  slaThresholds?: SlaThresholds;
 }
 
 // Column titles per index, wired to the translated status keys. The columns
@@ -42,6 +45,7 @@ export function KdsLayoutMasonry({
   onAdvanceItem,
   onAddItems,
   newOrderIds,
+  slaThresholds,
   filtered = false,
 }: KdsLayoutMasonryProps) {
   // Distribute orders round-robin across the column count so no single
@@ -96,6 +100,7 @@ export function KdsLayoutMasonry({
               selected={selectedOrderId === order.id}
               sessionToken={sessionToken}
               isNew={newOrderIds.has(order.id)}
+              {...(slaThresholds ? { slaThresholds } : {})}
               {...(onSaveItems ? { onSaveItems } : {})}
               {...(onAdvanceItem ? { onAdvanceItem } : {})}
               {...(onAddItems ? { onAddItems } : {})}

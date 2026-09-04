@@ -5,6 +5,20 @@ import { useState, useEffect, useRef } from 'react';
 /** SLA threshold level for a KDS ticket (P3-1 progressive escalation). */
 export type SlaLevel = 'green' | 'yellow' | 'red';
 
+/** Per-board SLA thresholds in seconds (wired from the settings panel). */
+export interface SlaThresholds {
+  /** Elapsed seconds at which a ticket turns yellow. */
+  yellowAtSec: number;
+  /** Elapsed seconds at which a ticket turns red. */
+  redAtSec: number;
+}
+
+/** Defaults match the settings-panel defaults (5 min / 10 min). */
+export const DEFAULT_SLA_THRESHOLDS: SlaThresholds = {
+  yellowAtSec: 300,
+  redAtSec: 600,
+};
+
 /** Return type of useTicketSla. */
 export interface TicketSlaResult {
   /** Elapsed seconds since the ticket was received. */
@@ -18,12 +32,6 @@ export interface TicketSlaResult {
 }
 
 // ── Constants ─────────────────────────────────────────────────────────
-
-/** Green threshold: < 300 seconds (5 minutes). */
-const GREEN_MAX = 300;
-
-/** Yellow threshold: < 600 seconds (10 minutes). */
-const YELLOW_MAX = 600;
 
 /** Red-urgent threshold: ≥ 900 seconds (15 minutes). Adds bg + badge. */
 const RED_URGENT = 900;
@@ -65,9 +73,9 @@ function subscribeToTicker(fn: Ticker): () => void {
 // ── Helpers ───────────────────────────────────────────────────────────
 
 /** Compute the SLA level from elapsed seconds (P3-1 progressive thresholds). */
-function computeLevel(elapsed: number): SlaLevel {
-  if (elapsed < GREEN_MAX) return 'green';
-  if (elapsed < YELLOW_MAX) return 'yellow';
+function computeLevel(elapsed: number, t: SlaThresholds): SlaLevel {
+  if (elapsed < t.yellowAtSec) return 'green';
+  if (elapsed < t.redAtSec) return 'yellow';
   return 'red';
 }
 
@@ -87,10 +95,13 @@ function formatElapsed(seconds: number): string {
  * threshold level for a KDS ticket given its `created_at` ISO-8601
  * timestamp.
  *
- * Progressive escalation thresholds (P3-1):
- * - **Green**:     < 5 min (300 s) — on time
- * - **Yellow**:    5–10 min (300–600 s) — amber border + pulse
- * - **Red**:       10–15 min (600–900 s) — red border + shake animation
+ * Progressive escalation thresholds (P3-1) come from the `thresholds`
+ * argument — wired from the settings panel's yellow/red sliders
+ * (defaults: 5 min yellow / 10 min red) so operators can retune the
+ * board without a code change:
+ * - **Green**:     below `yellowAtSec` — on time
+ * - **Yellow**:    `yellowAtSec`–`redAtSec` — amber border + pulse
+ * - **Red**:       `redAtSec`+ — red border + shake animation
  * - **Red urgent**: ≥ 15 min (≥ 900 s, `urgent: true`) — red bg + badge
  *
  * The `urgent` flag indicates the ticket has exceeded the 15-minute
@@ -100,7 +111,16 @@ function formatElapsed(seconds: number): string {
  * ticket card. Automatically unsubscribes on unmount or when `createdAt`
  * changes; the underlying interval is cleared once the last card unmounts.
  */
-export function useTicketSla(createdAt: string): TicketSlaResult {
+export function useTicketSla(
+  createdAt: string,
+  thresholds: SlaThresholds = DEFAULT_SLA_THRESHOLDS,
+): TicketSlaResult {
+  // Clamp so the state machine stays monotonic: yellow must precede red.
+  const t: SlaThresholds = {
+    yellowAtSec: Math.max(30, Math.min(thresholds.yellowAtSec, RED_URGENT - 60)),
+    redAtSec: Math.max(60, Math.min(thresholds.redAtSec, RED_URGENT)),
+  };
+
   // Store the parsed epoch in a ref so we don't re-parse on every tick.
   const createdAtMs = useRef(Date.now());
 
@@ -109,9 +129,12 @@ export function useTicketSla(createdAt: string): TicketSlaResult {
     createdAtMs.current = new Date(createdAt).getTime();
   }
 
+  const thresholdsRef = useRef(t);
+  thresholdsRef.current = t;
+
   const compute = (): TicketSlaResult => {
     const elapsed = Math.max(0, Math.floor((Date.now() - createdAtMs.current) / 1000));
-    const level = computeLevel(elapsed);
+    const level = computeLevel(elapsed, thresholdsRef.current);
     const urgent = elapsed >= RED_URGENT;
     return { elapsedSeconds: elapsed, level, urgent, display: formatElapsed(elapsed) };
   };
@@ -136,7 +159,7 @@ export function useTicketSla(createdAt: string): TicketSlaResult {
           : next;
       });
     });
-     
+
   }, [createdAt]);
 
   return result;

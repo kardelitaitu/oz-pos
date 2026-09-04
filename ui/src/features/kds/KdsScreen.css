@@ -467,7 +467,9 @@
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  width: 375px;
+  /* Default: single-column width; on wide screens the container query
+     expands the panel via min-width to fit two columns. */
+  width: max(375px, min(720px, calc(100vw - 24px)));
   max-width: calc(100vw - 24px);
   overflow: hidden;
   background: var(--kds-bg);
@@ -479,6 +481,11 @@
   box-shadow: var(--kds-shadow-drop);
   animation: kds-drop-in 0.18s ease-out;
   transform-origin: top right;
+  /* Container query anchor — measures the panel's own width, not the viewport. */
+  container-type: inline-size;
+  container-name: kds-panel;
+  /* Allow vertical scroll but capture horizontal swipe for dismiss gesture. */
+  touch-action: pan-y;
 }
 [data-theme='light'] .kds-hamburger-panel { --bg-surface: #ffffff; }
 
@@ -487,8 +494,10 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding: var(--space-3_5);
-  scrollbar-width: thin;
+  /* Completely hidden scrollbar — content still scrolls via touch/keyboard. */
+  scrollbar-width: none;
 }
+.kds-hamburger-panel ::-webkit-scrollbar { display: none; }
 .kds-panel-section { margin-bottom: var(--space-3_5); }
 .kds-panel-section:last-child { margin-bottom: 0; }
 .kds-panel-section h3 {
@@ -545,6 +554,21 @@
 .kds-hamburger-panel button:focus-visible {
   outline: 2px solid var(--kds-accent);
   outline-offset: 1px;
+}
+
+/* ── Container query: 2-column layout when the panel is wide enough ── */
+@container kds-panel (min-width: 700px) {
+  .kds-panel-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3_5);
+  }
+  /* Remove bottom margin between sections — the grid gap handles it. */
+  .kds-panel-section { margin-bottom: 0; }
+  /* Behaviour section spans both columns. */
+  .kds-panel-section--behaviour {
+    grid-column: 1 / -1;
+  }
 }
 
 /* Reusable switch — design-language settings-toggle-slider: 48×25, knob 20, bounce */
@@ -2265,4 +2289,38 @@ body.no-anim .kds-tab-indicator {
   .kds-card-collapsible-inner {
     transition: none !important;
   }
+}
+
+/* ── H3: density selector — compact restages the board typography ─────
+   The Density control in the settings panel now drives this class via
+   .kds-content-wrap. "Comfortable" is the default rendering; compact
+   tightens card internals so more tickets fit on a small kitchen display.
+   Type scale drops one step and paddings shrink — deliberately NOT the
+   urgent/rush colour signalling, which must stay visible at any density. */
+.kds--compact .kds-ticket {
+  gap: var(--space-1);
+}
+
+.kds--compact .kds-card-header {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.kds--compact .kds-card-main {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.kds--compact .kds-card-footer {
+  padding: var(--space-1) var(--space-2);
+  gap: var(--space-1);
+}
+
+.kds--compact .kds-ticket-urgent-badge,
+.kds--compact .kds-ticket-rush-badge {
+  font-size: calc(var(--text-xs) * 0.9);
+}
+
+.kds--compact .kds-column-count {
+  font-size: var(--text-xs);
 }

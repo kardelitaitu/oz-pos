@@ -105,3 +105,27 @@
   color: var(--kds-text-muted, #9ca3af);
   text-transform: capitalize;
 }
+
+/* H3: enrollment entry point — styled as a quiet list action, not a pill. */
+.kds-device-enroll-btn {
+  margin-top: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-top: 1px solid var(--kds-border, rgba(255, 255, 255, 0.12));
+  border-radius: 0;
+  background: transparent;
+  color: var(--kds-accent, #147efb);
+  font: inherit;
+  font-size: var(--text-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.kds-device-enroll-btn:hover {
+  text-decoration: underline;
+}
+
+.kds-device-enroll-btn:focus-visible {
+  outline: 2px solid var(--kds-accent, #147efb);
+  outline-offset: -2px;
+}

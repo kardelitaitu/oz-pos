@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, memo, useCallback, useMemo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
-import { useTicketSla } from '@/features/kds/hooks/useTicketSla';
+import { useTicketSla, type SlaThresholds } from '@/features/kds/hooks/useTicketSla';
 import { useSound } from '@/frontend/shared/useSound';
 import { requiredLocalized } from '@/frontend/shared';
 import { getKdsOrderLinesScoped, type KdsOrder, type KdsStatus, type KdsLineItem } from '@/api/kds';
@@ -30,6 +30,8 @@ export interface KdsTicketCardProps {
   onAddItems?: (orderId: string) => void;
   /** Whether this ticket just arrived (brief highlight animation). */
   isNew?: boolean;
+  /** SLA thresholds from the settings panel (defaults apply when omitted). */
+  slaThresholds?: SlaThresholds;
 }
 
 /** Fork-and-knife SVG for dine-in orders (matches prototype DINE_ICON). */
@@ -126,10 +128,10 @@ function nextActionKey(status: string): string | null {
 export const KdsTicketCard = memo(function KdsTicketCard({
   order, onAdvance, showOrderId = true, showTableNumber = true,
   selected = false, onSaveItems, sessionToken, onAdvanceItem, onAddItems,
-  isNew = false,
+  isNew = false, slaThresholds,
 }: KdsTicketCardProps) {
   const { l10n } = useLocalization();
-  const { level, urgent, display } = useTicketSla(order.received_at);
+  const { level, urgent, display } = useTicketSla(order.received_at, slaThresholds);
   const { playAlert } = useSound();
   const prevLevel = useRef<'green' | 'yellow' | 'red' | null>(null);
   const prevUrgent = useRef(false);
