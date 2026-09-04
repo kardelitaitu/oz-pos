@@ -415,6 +415,18 @@
         "job": "static-gates",
         "step": "i18n bundle parity"
       }
+    },
+    {
+      "id": "runner-labels",
+      "label": "Runner label integrity",
+      "status": "required",
+      "_note": "Added in 0.0.37. verify-ci-docs-drift.py checked each gate's `runners` labels with has_needle(), which is ANY-of: a gate declaring three labels was satisfied by one. Deleting the other two from check.sh left the manifest asserting guards that no longer existed while the checker printed '0 drift item(s)'. Demonstrated against this repo's own ci-docs-drift gate, which declares both 'ci docs drift' and 'ci docs drift self-test' -- removing the self-test step changed nothing. The rule is now missing_needles(), which reports every label matching nothing; adopting it was safe precisely because the manifest was accurate under the stricter reading (all 5 multi-label gates resolved every label), so this closed a latent gap rather than converting it into false failures. Two properties the test encodes because both produced confident wrong answers first: ROOT derives from __file__ not cwd, so a fixture that omits the checker itself reads the real repo and agrees with itself; and needles match by substring, so a short label cannot fail while a longer one containing it exists.",
+      "runners": { "check.sh": ["runner labels"] },
+      "ci": {
+        "workflow": "dev-ci.yml",
+        "job": "ci-docs-drift",
+        "step": "Runner label integrity"
+      }
     }
   ]
 }

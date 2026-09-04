@@ -277,6 +277,14 @@ step "ci docs drift" "python3 scripts/verify-ci-docs-drift.py" python3 scripts/v
 # noticed, plus a control that must still pass, so "the drift gate is green" cannot
 # mean "the drift gate stopped looking".
 step "ci docs drift self-test" "python3 scripts/verify-ci-docs-drift.py --self-test" python3 scripts/verify-ci-docs-drift.py --self-test
+# The drift gate checks that a runner label matches SOME step, using any-of -- so a
+# gate declaring three labels was satisfied by one, and deleting the other two left
+# gates.json asserting guards that no longer existed while the checker printed
+# "0 drift item(s)". The rule is now per-needle; this proves it stays that way, and
+# proves the fixture is live (ROOT comes from __file__, so a fixture that forgot to
+# copy the checker itself would silently test the real repo and agree with itself).
+# Gate: scripts/gates.json -> "runner-labels".
+step "runner labels" "python3 scripts/test-runner-labels.py" python3 scripts/test-runner-labels.py
 
 # Gate: scripts/gates.json -> "bundle-parity".
 step "bundle parity" "python3 scripts/verify-bundle-parity.py --scan-dirs features,components,frontend,contexts,hooks,platform" python3 scripts/verify-bundle-parity.py --include-getstring --include-nav-keys --include-key-fields --include-dynamic-literals --include-id-maps --check-domain-pairs --scan-dirs features,components,frontend,contexts,hooks,platform

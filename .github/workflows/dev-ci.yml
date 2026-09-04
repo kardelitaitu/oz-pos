@@ -353,6 +353,14 @@ jobs:
       # Gate: scripts/gates.json -> "ci-docs-drift".
       - name: Drift checker self-test
         run: python3 scripts/verify-ci-docs-drift.py --self-test
+      # gates.json is the declared source of truth for which step enforces which
+      # gate, so a label naming a step that no longer exists is a false guarantee --
+      # and the checker used to accept it, because its runner test was any-of over
+      # the labels a gate declares. This mutates check.sh and requires the checker to
+      # notice, and first proves the fixture is live at all.
+      # Gate: scripts/gates.json -> "runner-labels".
+      - name: Runner label integrity
+        run: python3 scripts/test-runner-labels.py
       - name: Verify CI docs agree with gates.json and the workflows
         id: drift
         run: |
