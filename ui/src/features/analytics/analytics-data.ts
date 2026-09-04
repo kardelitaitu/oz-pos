@@ -129,6 +129,21 @@ export function isoToday(storeTz?: string | null): string {
 }
 
 /**
+ * The store's calendar day `daysAgo` days back, as `YYYY-MM-DD`.
+ *
+ * Shared by AnalyticsScreen and reports/DashboardScreen so the two cannot drift
+ * apart on the REP-03 anchor rule. Like isoToday, the result depends only on the
+ * instant and the store offset — never on the host zone.
+ */
+export function isoDaysAgo(daysAgo: number, storeTz?: string | null): string {
+  return new Date(
+    Date.now() + storeOffsetMs(storeTz ?? FALLBACK_STORE_TZ) - daysAgo * 86_400_000,
+  )
+    .toISOString()
+    .slice(0, 10);
+}
+
+/**
  * The inclusive `[from, to]` window for a granularity. Daily/Weekly/
  * Monthly/Yearly are anchored at "now"; Custom uses the picked range.
  * When `storeTz` is provided (the primary store's `timezone`, REP-03) the

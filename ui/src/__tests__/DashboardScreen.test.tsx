@@ -54,6 +54,15 @@ const mockGetTopProducts = vi.fn();
 const mockGetLowStockAlerts = vi.fn();
 const mockGetCategoryBreakdown = vi.fn();
 const mockGetHourlyHeatmap = vi.fn();
+const mockGetPrimaryStoreScoped = vi.fn();
+
+// R36-05: DashboardScreen now fetches the primary store to anchor its default
+// date range to the store's zone. Without this mock the call hits real invoke,
+// rejects, and the component silently falls back to UTC -- so the store-zone
+// path would look green while never being exercised.
+vi.mock('@/api/stores', () => ({
+  getPrimaryStoreScoped: (...args: unknown[]) => mockGetPrimaryStoreScoped(...args),
+}));
 
 vi.mock('@/api/reports', () => ({
   getDailyRevenue: (...args: unknown[]) => mockGetDailyRevenue(...args),
@@ -150,6 +159,10 @@ describe('DashboardScreen', () => {
     mockGetLowStockAlerts.mockImplementation(pending);
     mockGetCategoryBreakdown.mockImplementation(pending);
     mockGetHourlyHeatmap.mockImplementation(pending);
+    // Default: a store profile with no timezone configured, so the range lands
+    // on the UTC fallback and the pre-existing assertions stay meaningful.
+    // Tests that care about the store anchor override this explicitly.
+    mockGetPrimaryStoreScoped.mockResolvedValue({ id: 'store-a', name: 'Store A', timezone: null });
   });
 
   /** Resolve all 7 endpoints with empty/default data to get past loading */
@@ -434,5 +447,50 @@ describe('DashboardScreen', () => {
     await waitFor(() => expect(screen.getByText('Refreshing…')).toBeTruthy());
     expect(screen.getByText('Revenue Trend')).toBeTruthy();
     expect(screen.queryByTestId('spinner')).toBeNull();
+  });
+
+  // ── R36-05: the default range anchors to the STORE, not the host ────
+  // Expected values are computed with explicit UTC arithmetic here rather than
+  // by calling isoToday/isoDaysAgo, so the assertion is independent of the code
+  // under test. scripts/check-tz-invariance.py runs this file under four host
+  // zones; if the range ever depended on the device calendar these would diverge.
+  it('anchors the default range to the primary store timezone (R36-05)', async () => {
+    resolveAllWithDefaults();
+    mockGetPrimaryStoreScoped.mockResolvedValue({ id: 'store-a', name: 'Store A', timezone: '+14:00' });
+
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Revenue Trend')).toBeTruthy());
+
+    const fromInput = screen.getByLabelText('dashboard-filter-from') as HTMLInputElement;
+    const toInput = screen.getByLabelText('dashboard-filter-to') as HTMLInputElement;
+    const shift = 14 * 3_600_000;
+    const storeToday = new Date(Date.now() + shift).toISOString().slice(0, 10);
+    const store30DaysAgo = new Date(Date.now() + shift - 29 * 86_400_000).toISOString().slice(0, 10);
+
+    await waitFor(() => {
+      expect(toInput.value).toBe(storeToday);
+      expect(fromInput.value).toBe(store30DaysAgo);
+    });
+    // The store must actually have been consulted -- otherwise storeTz stayed
+    // null and these values would be the UTC fallback, which can coincide with
+    // a +14:00 expectation for part of the day and make the test vacuous.
+    expect(mockGetPrimaryStoreScoped).toHaveBeenCalled();
+  });
+
+  it('does not clobber a range the operator already edited', async () => {
+    resolveAllWithDefaults();
+    mockGetPrimaryStoreScoped.mockResolvedValue({ id: 'store-a', name: 'Store A', timezone: '+14:00' });
+
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Revenue Trend')).toBeTruthy());
+
+    const fromInput = screen.getByLabelText('dashboard-filter-from') as HTMLInputElement;
+    fireEvent.change(fromInput, { target: { value: '2026-01-05' } });
+
+    // Let the store profile arrive after the edit, as it would on a slow IPC.
+    await new Promise((r) => setTimeout(r, 0));
+    await waitFor(() => expect(mockGetPrimaryStoreScoped).toHaveBeenCalled());
+
+    expect(fromInput.value).toBe('2026-01-05');
   });
 });

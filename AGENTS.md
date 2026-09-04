@@ -136,6 +136,12 @@ npm ci --no-audit --no-fund
 - Tauri IPC commands live in `apps/desktop-client/src/commands/` or `apps/tablet-client/src/commands/` and are registered in their respective `lib.rs`.
 - Front-end API calls must route through `ui/src/api/` (per-domain files). **Never call `invoke(...)` directly inside React components.**
 - **"Settings" disambiguation:** "The Tauri Settings page" means `ui/src/features/settings/SettingsPage.tsx` — the master–detail UI (route `settings`) with the top-right Save button. Do not confuse it with the other `settings` surfaces: `ui/src/api/settings.ts` (IPC client) · `ui/src/contexts/SettingsContext.tsx` (shared state) · `apps/desktop-client/src/commands/settings.rs` and `apps/tablet-client/src/commands/settings.rs` (IPC commands) · `crates/oz-core/src/settings.rs` and `crates/oz-core/src/db/settings.rs` (backend service/DB) · `modules/settings/` (the kernel module — a lifecycle stub, not the UI).
+- **⚠️ "Is this screen dead code?" needs three greps, not one.** Feature screens are registered **lazily**, so a `from '…'` search finds nothing and the screen looks unreachable. `ui/src/features/*/register.tsx` opens with `const X = lazy(() => import('./X'))` and then calls `registerPage({ route, component: X, … })` + `registerNavItem(...)`. Concluding "not routed" from one grep is how a live, nav-linked manager screen got written up as deletable. Check all three:
+  ```bash
+  git grep -n "ScreenName" -- ui/src ':!ui/src/__tests__'   # no -head/-First truncation
+  git grep -n "route: '<route>'" -- ui/src                  # page + nav + workspace cards
+  ```
+  Also beware truncated output: `ui/src/__tests__/` sorts before `ui/src/features/`, so `| head -6` on an importer search shows only test files and hides the real registration.
 - **Accessibility:** All React components must have ARIA labels and pass `eslint-plugin-jsx-a11y` checks.
 - **Localization:** All user-visible strings must use `@fluent/react`. No hardcoded English strings in JSX.
 

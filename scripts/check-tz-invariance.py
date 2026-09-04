@@ -19,7 +19,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 UI = ROOT / "ui"
-TEST = "src/__tests__/analyticsTimezoneAnchor.test.ts"
+# R36-01's pure anchor test, plus R36-05's component-level one: the dashboard
+# renders its default range into <input type=date>, so asserting on the DOM is
+# the only way to prove the whole plumbing (fetch -> state -> re-seed -> render)
+# is host-independent, not just the helper in isolation.
+TESTS = [
+    "src/__tests__/analyticsTimezoneAnchor.test.ts",
+    "src/__tests__/DashboardScreen.test.tsx",
+]
 
 # Chosen to straddle the date line and both sides of UTC, and to include the
 # zone that broke PR #95. Kiritimati is UTC+14 -- the largest offset that can
@@ -44,11 +51,11 @@ NPMX = "npm.cmd" if os.name == "nt" else "npm"
 results: dict[str, str] = {}
 failed = False
 
-print("=== analytics timezone invariance ===")
+print(f"=== timezone invariance ({len(TESTS)} file(s) x {len(ZONES)} zones) ===")
 for tz in ZONES:
     env = {**os.environ, "TZ": tz}
     r = subprocess.run(
-        [NPMX, "exec", "--silent", "--", "vitest", "run", TEST, "--reporter=json"],
+        [NPMX, "exec", "--silent", "--", "vitest", "run", *TESTS, "--reporter=json"],
         cwd=UI, env=env, capture_output=True, text=True,
     )
     # vitest's json reporter prints its own banner lines; find the JSON object.
@@ -68,7 +75,7 @@ for tz in ZONES:
                 for res in data.get("testResults", []):
                     for a in res.get("assertionResults", []):
                         if a.get("status") == "failed":
-                            summary += " | FAIL: " + a.get("title", "?")
+                            summary += " | FAIL: " + a.get("title", "?")[:60]
         except Exception as exc:  # noqa: BLE001
             summary = f"PARSE-ERROR ({exc})"
     else:
@@ -84,7 +91,7 @@ if len(distinct) == 1 and not failed:
     print(f"PASS: identical result under {len(ZONES)} host zones -> {distinct.pop()}")
     sys.exit(0)
 
-print("FAIL: the analytics anchor depends on the host timezone.")
+print("FAIL: the anchored range depends on the host timezone.")
 for tz, s in results.items():
     print(f"  {tz:22s} {s}")
 sys.exit(1)

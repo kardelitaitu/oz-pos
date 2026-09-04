@@ -28,13 +28,12 @@ import {
   CARD_PAYLOAD_VALIDATORS,
   DAY_LABEL_KEYS,
   buildHeatmapCells,
-  FALLBACK_STORE_TZ,
   heatPeak,
   heatmapGranularityForRange,
+  isoDaysAgo,
   isoToday,
   loadHeatmapRows,
   rangeForGranularity,
-  storeOffsetMs,
   yearlyHeatmapColumns,
   type DailyRevenueRow,
   type HeatCell,
@@ -347,8 +346,8 @@ export default function AnalyticsScreen() {
   // REP-03: derived windows anchor to the PRIMARY STORE's calendar day,
   // not the device's — a laptop in another region must still see "today"
   // as the store sees it. Until the profile loads (or if the fetch fails)
-  // the anchor is FALLBACK_STORE_TZ (UTC, the schema's own column default),
-  // never the host zone — see the comment on that constant.
+  // the anchor is FALLBACK_STORE_TZ in analytics-data (UTC, the schema's own
+  // column default), never the host zone — see the comment there.
   const [storeTz, setStoreTz] = useState<string | null>(null);
   const customTouched = useRef(false);
   useEffect(() => {
@@ -359,7 +358,7 @@ export default function AnalyticsScreen() {
         if (alive) setStoreTz(p?.timezone ?? null);
       })
       .catch(() => {
-        /* keep the device-local anchor — reports still bucket store-local */
+        /* storeTz stays null, so isoToday/isoDaysAgo use FALLBACK_STORE_TZ */
       });
     return () => {
       alive = false;
@@ -372,11 +371,6 @@ export default function AnalyticsScreen() {
     setCustomFrom(t);
     setCustomTo(t);
   }, [storeTz]);
-  /** Store-local calendar date `daysAgo` days back (REP-03). */
-  const storeDateStr = (daysAgo: number): string =>
-    new Date(Date.now() + storeOffsetMs(storeTz ?? FALLBACK_STORE_TZ) - daysAgo * 86_400_000)
-      .toISOString()
-      .slice(0, 10);
   const [zoomLevel, setZoomLevel] = useState<number>(() => {
     const saved = Number(localStorage.getItem('oz-analytics-zoom'));
     return saved >= ZOOM_MIN && saved <= ZOOM_MAX ? saved : 1;
@@ -685,8 +679,8 @@ export default function AnalyticsScreen() {
   const applyRangePreset = (days: number) => {
     customTouched.current = true;
     // REP-03: presets end on the store's today, not the device's.
-    setCustomTo(storeDateStr(0));
-    setCustomFrom(storeDateStr(days - 1));
+    setCustomTo(isoDaysAgo(0, storeTz));
+    setCustomFrom(isoDaysAgo(days - 1, storeTz));
   };
 
   // When a card is expanded, only it is shown; otherwise all visible cards
