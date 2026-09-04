@@ -15,6 +15,8 @@ executors:
       CARGO_TERM_COLOR: always
       RUSTFLAGS: -D warnings
       RUSTC_WRAPPER: ""
+      CARGO_BUILD_JOBS: "2"
+      CARGO_INCREMENTAL: "0"
 
   rust-test-executor:
     docker:
@@ -30,6 +32,8 @@ executors:
       RUSTFLAGS: -D warnings
       OZ_TEST_PG_URL: postgres://oz_test:oz_test_password@localhost:5432/oz_test_db
       RUSTC_WRAPPER: ""
+      CARGO_BUILD_JOBS: "2"
+      CARGO_INCREMENTAL: "0"
 
   polyglot-executor:
     docker:
@@ -39,6 +43,8 @@ executors:
       CARGO_TERM_COLOR: always
       RUSTFLAGS: -D warnings
       RUSTC_WRAPPER: ""
+      CARGO_BUILD_JOBS: "2"
+      CARGO_INCREMENTAL: "0"
 
   rust-node-executor:
     docker:
@@ -48,6 +54,8 @@ executors:
       CARGO_TERM_COLOR: always
       RUSTFLAGS: -D warnings
       RUSTC_WRAPPER: ""
+      CARGO_BUILD_JOBS: "2"
+      CARGO_INCREMENTAL: "0"
 
 # ── Commands ──────────────────────────────────────────────────────────
 commands:
@@ -142,14 +150,15 @@ jobs:
             sudo apt-get install -y --no-install-recommends python3
       - restore_cache:
           keys:
-            - v1-ui-deps-{{ checksum "ui/package-lock.json" }}
-            - v1-ui-deps-
+            - v2-ui-deps-{{ checksum "ui/package-lock.json" }}
+            - v2-ui-deps-
       - run:
           name: Install UI Dependencies
           command: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - save_cache:
-          key: v1-ui-deps-{{ checksum "ui/package-lock.json" }}
+          key: v2-ui-deps-{{ checksum "ui/package-lock.json" }}
           paths:
+            - ~/.npm
             - ui/node_modules
       - run:
           name: i18n Lint (Parity + Untranslated + Duplicate Keys)
@@ -158,8 +167,8 @@ jobs:
           name: FTL Duplicate-Key Dry Run
           command: python3 scripts/dedupe-ftl.py --dry-run
 
-  # ── 3. UI Tests (Vitest + Typecheck + Lint) ──────────────────────────
-  ui-test:
+  # ── 3. UI Lint & Typecheck ───────────────────────────────────────────
+  ui-lint-typecheck:
     executor: node-executor
     steps:
       - checkout
@@ -170,14 +179,15 @@ jobs:
             sudo apt-get install -y --no-install-recommends python3
       - restore_cache:
           keys:
-            - v1-ui-deps-{{ checksum "ui/package-lock.json" }}
-            - v1-ui-deps-
+            - v2-ui-deps-{{ checksum "ui/package-lock.json" }}
+            - v2-ui-deps-
       - run:
           name: Install UI Dependencies
           command: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - save_cache:
-          key: v1-ui-deps-{{ checksum "ui/package-lock.json" }}
+          key: v2-ui-deps-{{ checksum "ui/package-lock.json" }}
           paths:
+            - ~/.npm
             - ui/node_modules
       - run:
           name: UI Typecheck
@@ -186,13 +196,37 @@ jobs:
           name: UI Lint
           command: cd ui && npm run lint
       - run:
-          name: UI Vitest Suite
-          command: cd ui && npm test
-      - run:
           name: Analytics Timezone Invariance
           command: python3 scripts/check-tz-invariance.py
 
-  # ── 4. Website Check + Build ─────────────────────────────────────────
+  # ── 4. UI Parallel Vitest Slices ─────────────────────────────────────
+  ui-test-slice:
+    executor: node-executor
+    parameters:
+      slice:
+        type: integer
+      total:
+        type: integer
+        default: 4
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v2-ui-deps-{{ checksum "ui/package-lock.json" }}
+            - v2-ui-deps-
+      - run:
+          name: Install UI Dependencies
+          command: cd ui && npm ci --no-audit --no-fund --ignore-scripts
+      - save_cache:
+          key: v2-ui-deps-{{ checksum "ui/package-lock.json" }}
+          paths:
+            - ~/.npm
+            - ui/node_modules
+      - run:
+          name: Run Vitest Shard << parameters.slice >>/<< parameters.total >>
+          command: cd ui && npx vitest run --shard=<< parameters.slice >>/<< parameters.total >>
+
+  # ── 5. Website Check + Build ─────────────────────────────────────────
   website:
     executor: node-executor
     steps:
@@ -207,14 +241,15 @@ jobs:
           command: python3 scripts/verify-website-assets.py
       - restore_cache:
           keys:
-            - v1-website-deps-{{ checksum "website/package-lock.json" }}
-            - v1-website-deps-
+            - v2-website-deps-{{ checksum "website/package-lock.json" }}
+            - v2-website-deps-
       - run:
           name: Install Dependencies
           command: cd website && npm ci --no-audit --no-fund
       - save_cache:
-          key: v1-website-deps-{{ checksum "website/package-lock.json" }}
+          key: v2-website-deps-{{ checksum "website/package-lock.json" }}
           paths:
+            - ~/.npm
             - website/node_modules
       - run:
           name: Install Playwright Dependencies
@@ -229,7 +264,7 @@ jobs:
           name: Build
           command: cd website && npm run build
 
-  # ── 5. Cargo Check & Clippy ──────────────────────────────────────────
+  # ── 6. Cargo Check & Clippy ──────────────────────────────────────────
   cargo-check:
     executor: rust-executor
     steps:
@@ -239,25 +274,26 @@ jobs:
       - prepare-dist-stubs
       - restore_cache:
           keys:
-            - v1-cargo-cache-{{ checksum "Cargo.lock" }}
-            - v1-cargo-cache-
+            - v2-cargo-cache-{{ checksum "Cargo.lock" }}
+            - v2-cargo-cache-
       - run:
           name: Cargo Format Check
           command: cargo fmt --all -- --check
       - run:
           name: Cargo Check Workspace
-          command: cargo check --workspace --all-targets --all-features
+          command: cargo check --workspace --all-targets --all-features -j 2
       - run:
           name: Cargo Clippy
-          command: cargo clippy --all-targets --all-features -- -D warnings
+          command: cargo clippy --all-targets --all-features -j 2 -- -D warnings
       - save_cache:
-          key: v1-cargo-cache-{{ checksum "Cargo.lock" }}
+          key: v2-cargo-cache-{{ checksum "Cargo.lock" }}
           paths:
-            - ~/.cargo/registry
-            - ~/.cargo/git
+            - ~/.cargo/registry/index
+            - ~/.cargo/registry/cache
+            - ~/.cargo/git/db
             - target
 
-  # ── 6. Cargo Nextest Suite ───────────────────────────────────────────
+  # ── 7. Cargo Nextest Suite ───────────────────────────────────────────
   cargo-nextest:
     executor: rust-test-executor
     steps:
@@ -267,8 +303,8 @@ jobs:
       - prepare-dist-stubs
       - restore_cache:
           keys:
-            - v1-cargo-cache-{{ checksum "Cargo.lock" }}
-            - v1-cargo-cache-
+            - v2-cargo-cache-{{ checksum "Cargo.lock" }}
+            - v2-cargo-cache-
       - run:
           name: Install cargo-nextest
           command: |
@@ -286,15 +322,16 @@ jobs:
             done
       - run:
           name: Run Cargo Nextest
-          command: cargo nextest run --workspace --all-features
+          command: cargo nextest run --workspace --all-features -j 2
       - save_cache:
-          key: v1-cargo-cache-{{ checksum "Cargo.lock" }}
+          key: v2-cargo-cache-{{ checksum "Cargo.lock" }}
           paths:
-            - ~/.cargo/registry
-            - ~/.cargo/git
+            - ~/.cargo/registry/index
+            - ~/.cargo/registry/cache
+            - ~/.cargo/git/db
             - target
 
-  # ── 7. Release Readiness ─────────────────────────────────────────────
+  # ── 8. Release Readiness ─────────────────────────────────────────────
   release-readiness:
     executor: rust-node-executor
     steps:
@@ -319,7 +356,11 @@ workflows:
     jobs:
       - static-gates
       - i18n
-      - ui-test
+      - ui-lint-typecheck
+      - ui-test-slice:
+          matrix:
+            parameters:
+              slice: [1, 2, 3, 4]
       - website
       - cargo-check
       - cargo-nextest
