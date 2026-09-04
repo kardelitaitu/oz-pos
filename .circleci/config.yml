@@ -14,6 +14,7 @@ executors:
     environment:
       CARGO_TERM_COLOR: always
       RUSTFLAGS: -D warnings
+      RUSTC_WRAPPER: ""
 
   rust-test-executor:
     docker:
@@ -28,6 +29,7 @@ executors:
       CARGO_TERM_COLOR: always
       RUSTFLAGS: -D warnings
       OZ_TEST_PG_URL: postgres://oz_test:oz_test_password@localhost:5432/oz_test_db
+      RUSTC_WRAPPER: ""
 
   polyglot-executor:
     docker:
@@ -55,6 +57,7 @@ commands:
       - run:
           name: Ensure Rust Stable
           command: |
+            rustup update stable
             rustup default stable
             rustup component add rustfmt clippy
 
