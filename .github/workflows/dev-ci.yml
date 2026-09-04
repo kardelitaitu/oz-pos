@@ -356,14 +356,64 @@ jobs:
           echo "::warning::CI docs drift has ${{ steps.drift.outputs.drift_count }} unresolved item(s)."
           echo "::warning::This step is advisory until R36-10 closes; it becomes blocking at count 0."
 
-  # ── 7. Deploy: Northflank (push to main/release or manual dispatch) ──
+  # ── 7. Static gates that had no CI runner at all ──────────────────────
+  # Six checks existed only in scripts/check.sh, which is manual and unhooked,
+  # so nothing enforced them on a clone that skipped setup-dev.ps1. Each was run
+  # locally and verified GREEN before being wired in -- the same discipline used
+  # for R36-08 -- because adding a gate that already fails turns every unrelated
+  # PR red.
+  #
+  # Deliberately NOT in this job:
+  #   panic-inventory -- scan-unwrap-panic.py FAILS today (18 findings, 6 of them
+  #     false positives where it reads the repo's own /* */ audit stamps as
+  #     unwrap calls). See R36-12.
+  #   e2e -- needs the Docker backend; check.sh L203 states E2E is not run there
+  #     either. Still only reachable via `cd ui && npm run check:all`.
+  #
+  # Not path-gated: these are ~5s of pure Python/shell and they span rust, ui,
+  # go and docs, so routing them risks the same silent-skip failure mode the
+  # router test guards against.
+  # Gates: scripts/gates.json -> "architecture-boundaries",
+  # "no-hardcoded-money-format", "windows-config", "skill-drift",
+  # "unified-healthcheck", "go".
+  static-gates:
+    name: Static Gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Architecture boundaries
+        run: python3 scripts/verify-architecture-boundaries.py --strict
+      - name: No hardcoded money formatting
+        run: python3 scripts/verify-no-hardcoded-money-format.py
+      - name: Windows config drift
+        run: python3 scripts/verify-windows-config.py
+      - name: Skill drift guard
+        run: bash .agents/skills/skill-drift-guard/scripts/detect.sh --report
+      - name: Unified healthcheck script test
+        run: sh apps/unified/test-healthcheck.sh
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: apps/license-server/go.mod
+          cache-dependency-path: apps/license-server/go.sum
+      - name: Go fmt
+        run: test -z "$(gofmt -l apps/license-server)" || { gofmt -l apps/license-server; exit 1; }
+      - name: Go vet
+        run: go -C apps/license-server vet ./...
+      - name: Go test (short)
+        run: go -C apps/license-server test -short ./...
+
+  # ── 8. Deploy: Northflank (push to main/release or manual dispatch) ──
   northflank-deploy:
     name: Deploy Backend (Northflank)
     runs-on: ubuntu-latest
-    needs: [changes, website, cargo-check, cargo-nextest, ui-test, i18n]
+    needs: [changes, website, cargo-check, cargo-nextest, ui-test, i18n, static-gates]
     # A skipped dependency skips this job. That is intended and is unreachable
     # in practice: `changes` forces every route to true for non-PR events, and
     # the only non-PR event that can reach here is workflow_dispatch.
+    # static-gates was added and carries no `if:`, so it can never skip and
+    # silently unblock a deploy. ci-docs-drift is deliberately NOT a dependency:
+    # it is advisory, and gating a deploy on a known-red count would train people
+    # to ignore the gate.
     #
     # Note the `github.event_name == 'push'` half of this condition is dead
     # code: this workflow triggers on pull_request and workflow_dispatch only,
