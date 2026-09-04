@@ -32,6 +32,18 @@
       })();
     </script>
 
+    <!-- Localize the boot-splash label before React/Fluent loads.
+         Mirrors LocaleContext's storage key for the shipped locales. -->
+    <script>
+      (function() {
+        var el = document.querySelector('[data-oz-locale-text]');
+        if (!el) return;
+        var locale = null;
+        try { locale = localStorage.getItem('oz-pos-locale'); } catch (e) {}
+        if (locale === 'id') el.textContent = 'Memuat\u2026';
+      })();
+    </script>
+
     <!-- Inline theme base styles so the first paint already has the correct background and text color. -->
     <style>
       :root {
@@ -70,8 +82,61 @@
         overflow: hidden;
       }
     </style>
+
+    <!-- Boot splash (stage 1): token-first with static fallbacks so the
+         very first frame is correct even before tokens.css lands; once
+         the theme stylesheet loads the vars resolve to theme values.
+         Keep values in sync with the React stage
+         (components/AppBootSplash.tsx) and index.html. -->
+    <style>
+      .app-splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-5, 1.25rem);
+        color: var(--color-fg-secondary, #94a3b8);
+        font-family: var(--font-sans, 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif);
+        font-size: var(--text-base, 0.875rem);
+      }
+      html[data-theme="light"] .app-splash { color: #596577; }
+      .app-splash__logo { width: 72px; height: 72px; }
+      .app-splash__spinner {
+        width: 36px;
+        height: 36px;
+        border: 3px solid var(--color-primary-soft, rgba(20, 126, 251, 0.15));
+        border-top-color: var(--color-primary, #147EFB);
+        border-radius: var(--radius-full, 9999px);
+      }
+      html[data-theme="light"] .app-splash__spinner {
+        border-color: rgba(17, 85, 204, 0.10);
+        border-top-color: #1155CC;
+      }
+      .app-splash__label { font-size: var(--text-sm, 0.75rem); }
+      @media (prefers-reduced-motion: no-preference) {
+        .app-splash__spinner { animation: app-splash-spin 600ms linear infinite; }
+      }
+      @keyframes app-splash-spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
   </head>
   <body>
+    <!-- ── Static boot splash (pre-React stage) ──────────────────────
+         Painted by the browser from HTML alone — no JS, no fonts, no
+         chunks. Covers the dead blank frame between navigation start
+         (F5) and React's first commit. The React stage
+         (components/AppBootSplash.tsx) removes it on mount. Keep the
+         inline styles synchronized with index.html. -->
+    <div id="boot-splash" aria-hidden="true">
+      <div class="app-splash">
+        <img class="app-splash__logo" src="/favicon.svg" alt="" width="72" height="72" />
+        <span class="app-splash__spinner"></span>
+        <span class="app-splash__label" data-oz-locale-text>Loading…</span>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tablet.tsx"></script>
   </body>

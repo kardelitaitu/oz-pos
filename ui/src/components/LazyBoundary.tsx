@@ -21,7 +21,8 @@ export function LazyBoundary({
     <Suspense
       fallback={
         fallback ?? (
-          <div className="lazy-boundary" role="status" aria-live="polite">
+          <div className="lazy-boundary" role="status" aria-live="polite" aria-busy="true">
+            <span className="lazy-boundary__spinner" aria-hidden="true" />
             <Localized id="shared-loading">Loading&hellip;</Localized>
           </div>
         )
