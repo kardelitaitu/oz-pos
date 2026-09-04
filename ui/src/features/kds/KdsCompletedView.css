@@ -1,5 +1,5 @@
-//! Styles for KdsCompletedView (split out of KdsScreen.css so the
-//! completed-tab surface owns its own rules).
+/* Styles for the KDS completed tab (split out of the KDS screen stylesheet
+   so the completed-tab surface owns its own rules). */
 
 /* Fetch-failure state — a distinguishable error instead of empty buckets. */
 .kds-completed-error {
@@ -20,13 +20,13 @@
 /* ── UI-15: static inline styles moved out of KdsCompletedView.tsx ── */
 
 .kds-completed-view--loading {
-  padding: 14px;
+  padding: var(--space-3_5);
 }
 
 .kds-completed-view__empty {
-  padding: 8px 10px;
+  padding: var(--space-2) var(--space-2_5);
   min-height: 0;
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 
 .kds-completed-ticket {
@@ -38,8 +38,8 @@
 }
 
 .kds-completed-ticket__summary {
-  padding: 6px 13px;
-  font-size: 12px;
+  padding: var(--space-1_5) var(--space-3_5);
+  font-size: var(--text-xs);
   opacity: 0.6;
   color: var(--kds-text);
 }

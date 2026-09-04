@@ -171,7 +171,7 @@ const SCREENS: ScreenEntry[] = [
   {
     name: 'KdsScreen',
     tsx: 'kds/KdsScreen.tsx',
-    css: ['kds/KdsScreen.css'],
+    css: ['kds/KdsScreen.css', 'kds/KdsCompletedView.css'],
     dynamicClassPrefixes: [
       'kds-column--',
       'kds-ticket',
@@ -196,6 +196,11 @@ const SCREENS: ScreenEntry[] = [
       'dinein',
       'takeaway',
       'active-',
+      // `kds--${settings.density}` conditional density class.
+      'compact',
+      // Global screen-reader-only utility (frontend/themes/components.css),
+      // outside this screen's scanned stylesheet list.
+      'sr-only',
     ],
     additionalTsx: [
       'kds/KdsLayoutMasonry.tsx',
