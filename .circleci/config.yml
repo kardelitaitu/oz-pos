@@ -381,16 +381,35 @@ jobs:
 # ── Workflows ─────────────────────────────────────────────────────────
 workflows:
   version: 2
-  build-and-test:
+
+  01-static-gates:
     jobs:
       - static-gates
+
+  02-i18n-quality:
+    jobs:
       - i18n
+
+  03-ui-pipeline:
+    jobs:
       - ui-lint-typecheck
       - ui-test-slice:
           matrix:
             parameters:
               slice: [1, 2, 3, 4]
+
+  04-website:
+    jobs:
       - website
+
+  05-cargo-check:
+    jobs:
       - cargo-check
+
+  06-cargo-nextest:
+    jobs:
       - cargo-nextest
+
+  07-release-readiness:
+    jobs:
       - release-readiness
