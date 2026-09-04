@@ -1410,6 +1410,23 @@
   }
 }
 
+/* ── Shell-level fallbacks fill + center their stage ────────────────
+   Embedded uses (widget cards, modal placeholders) keep the 200px
+   block, but the shell renders LazyBoundary directly under #root and
+   stage containers for route chunks. Without these rules the fallback
+   stacks a 200px spinner block at the top (e.g. F5 → login chunk). */
+#root > .lazy-boundary,
+.workspace-fullscreen > .lazy-boundary,
+.workspace-home-wrapper > .lazy-boundary {
+  min-height: 100dvh;
+}
+.kds-workspace > .lazy-boundary {
+  flex: 1; /* fill the flex-column stage below the KDS header */
+}
+.tablet-shell .app-content-inner > .lazy-boundary {
+  min-height: calc(100dvh - var(--tablet-bottom-nav-height, 64px));
+}
+
 /* Screen reader only utility (globally accessible) */
 .sr-only {
   position: absolute;
