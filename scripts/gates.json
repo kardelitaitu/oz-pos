@@ -160,10 +160,10 @@
     {
       "id": "ci-docs-drift",
       "label": "CI docs drift",
-      "status": "advisory",
-      "_note": "Was 'required' while pointing at ci.yml#ci-docs-drift, a workflow retired to .bak by 23c96330 -- so it enforced nothing anywhere and the status was false. Now genuinely runs in dev-ci.yml, but as continue-on-error: the checker reports 68 items and turning CI red for unrelated PRs is worse than the status quo. Flip back to 'required' when the count reaches 0 (R36-10).",
+      "status": "required",
+      "_note": "History worth keeping: this was declared 'required' while pointing at ci.yml#ci-docs-drift, a workflow retired to .bak by 23c96330, so it enforced nothing anywhere and the status was false. It was downgraded to 'advisory' when first wired into dev-ci.yml because the checker was reporting 68 items it had no vocabulary for. R36-10 closed those out to 0 and the step is now blocking -- the stated condition. advisory_at is removed because the step no longer sets continue-on-error.",
       "runners": { "check.sh": ["ci docs drift"] },
-      "ci": { "workflow": "dev-ci.yml", "job": "ci-docs-drift", "advisory_at": "step" }
+      "ci": { "workflow": "dev-ci.yml", "job": "ci-docs-drift" }
     },
     {
       "id": "ci-routing-test",

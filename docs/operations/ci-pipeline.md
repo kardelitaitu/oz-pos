@@ -48,7 +48,7 @@
 | `ui-test` | ✅ Required | dev-ci.yml | step `npm run lint` (was job `ui-lint`) |
 | `ui-test` | ✅ Required | dev-ci.yml | step `npm run typecheck` (was job `ui-typecheck`) |
 | `ui-test` | ✅ Required | ci.yml | `npm run test` (4 shards) |
-| `ci-docs-drift` | ⚠️ Advisory | dev-ci.yml | step `verify-ci-docs-drift.py` (continue-on-error) — gates.json status `advisory` + `advisory_at: "step"` |
+| `ci-docs-drift` | ✅ Required | dev-ci.yml | step `verify-ci-docs-drift.py` — blocking since R36-10 closed the count to 0 |
 | `ci-docs-drift` | ✅ Required | dev-ci.yml | step `bash scripts/test-ci-routing.sh` — the router decides whether every other job runs, so this one blocks |
 | `website` | ✅ Required | dev-ci.yml | `cd website && npm ci && npm run check && npm test && npm run build` |
 | `cargo-nextest` | ✅ Required | dev-ci.yml | `cargo nextest run --workspace --all-features` — **no `--exclude`**, so this is broader than check.sh's equivalent, which drops `oz-pos-app` |
@@ -63,7 +63,6 @@
 | `flaky-quarantine` | ✅ Required | ci.yml | Flaky quarantine registry |
 | `windows-config` | ✅ Required | ci.yml | NSIS installMode + asInvoker check |
 | `skill-drift-tests` | ✅ Required | ci.yml | Skill drift guard bats tests |
-| `ci-docs-drift` | ⚠️ Advisory | dev-ci.yml | This document vs workflows (step-level continue-on-error) |
 | `e2e-docker-image` | Push path | ci.yml | GHCR push (main only) |
 | `e2e` | ✅ Required | ci.yml | Playwright E2E (3 shards) |
 
@@ -93,7 +92,7 @@
 | A11y regression | `ui-test` | Advisory | `check.sh` (a11y) |
 | Feature registry parity | — | Required | `check.sh` (feature registry) |
 | Plugin-guide parity | — | Required | `check.sh` (plugin-guide parity) |
-| CI docs drift | `ci-docs-drift` | Advisory | `check.sh` (ci docs drift) |
+| CI docs drift | `ci-docs-drift` | Required | `check.sh` (ci docs drift) |
 | CI path router test | `ci-docs-drift` | Required | `check.sh` (ci routing test) |
 | Windows config drift | `windows-config` | Required | `check.sh` (windows config) |
 | Unified healthcheck | `unified-healthcheck` | Required | `check.sh` (healthcheck script test) |
@@ -134,7 +133,7 @@
 
 | Workflow | Status | Trigger | Purpose |
 |----------|--------|---------|---------|
-| `dev-ci.yml` | 🟢 **LIVE** | PR to main, dispatch | The only workflow GitHub executes. Jobs: `changes`, `website`, `cargo-check`, `cargo-nextest`, `ui-test`, `i18n`, `ci-docs-drift`, `northflank-deploy`. **No build or artifact step** — it does not produce release assets. |
+| `dev-ci.yml` | 🟢 **LIVE** | PR to main, dispatch | The only workflow GitHub executes. Jobs: `changes`, `website`, `cargo-check`, `cargo-nextest`, `ui-test`, `i18n`, `ci-docs-drift`, `static-gates`, `northflank-deploy`. **No build or artifact step** — it does not produce release assets (see R36-11). |
 | `ci.yml` | 🔴 retired `.bak` | push/PR to main | Primary CI pipeline (lint, test, build, scan) |
 | `nightly.yml` | 🔴 retired `.bak` | schedule (daily) + dispatch | Nightly Rust/doc/UI/E2E + flaky detection |
 | `release.yml` | 🔴 retired `.bak` | tag push (v*) | Release build, sign, attest, publish — **nothing replaces this; see R36-11** |
@@ -161,9 +160,10 @@ The gate vocabulary is defined in `scripts/gates.json` and shared by:
 Every gate has:
 - **id** — stable identifier
 - **label** — human-readable name
-- **status** — `required` | `advisory` | `required-on-push`
+- **status** — `required` | `advisory` | `required-on-push` | `retired`
 - **runners** — which local runners declare it (`check.sh`, `check:all`)
-- **ci** — workflow + job mapping (for CI enforcement)
+- **ci** — workflow + job mapping (for CI enforcement); **absent when nothing
+  enforces the gate**, which is what makes `retired` expressible
 
 ### Status semantics
 
@@ -172,6 +172,14 @@ Every gate has:
 | `required` | Must pass on every PR and push | Job has NO `continue-on-error` |
 | `advisory` | Reports status, never blocks merge | Job/step HAS `continue-on-error: true` |
 | `required-on-push` | Advisory on PR, required on push | Job has conditional `continue-on-error: ${{ ... }}` |
+| `retired` | **Enforces nothing today.** Recorded so the check is not silently forgotten. | No `ci` block at all — the checker REJECTS a `retired` gate that carries one |
+
+`retired` was added when R36-10 closed. Before it, the vocabulary could express
+"blocks", "reports" and "blocks on push" but not "does not run", so 16 gates whose
+workflow had been retired to `.bak` had nowhere honest to go and stayed marked
+`required` — pointing at a file GitHub never executes. Restoring any of them means
+adding the job back and flipping the status; the `_note` on each entry records
+where it went and what still covers it.
 
 ---
 
