@@ -68,6 +68,12 @@ export function KdsHamburgerPanel({
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  // Hex-input draft (HEX-FIX): the text input is the sole place a user can
+  // type a PARTIAL colour value, so it must not be controlled straight from
+  // the context value — that snaps the field back to the last valid hex and
+  // makes deleting a character impossible. Keep the in-progress string in
+  // local draft state; commit to the context only on a full `#rrggbb` match.
+  const [hexDraft, setHexDraft] = useState<{ key: string; value: string } | null>(null);
   // Card colours from shared context.
   const { colors: cardColors, updateColor, resetColors } = useKdsCardColors();
 
@@ -250,17 +256,27 @@ export function KdsHamburgerPanel({
                         type="color"
                         className="kds-native"
                         value={cardColors[key]}
-                        onChange={(e) => updateColor(key, e.target.value)}
+                        onChange={(e) => {
+                          setHexDraft(null); // picker wins over any draft
+                          updateColor(key, e.target.value);
+                        }}
                         aria-label={requiredLocalized(l10n, 'kds-color-picker-aria', { name: requiredLocalized(l10n, labelId) })}
                         data-testid={`kds-settings-colors-native-${key}`}
                       />
                       <input
                         type="text"
                         className="kds-hex-input"
-                        value={cardColors[key]}
+                        value={hexDraft?.key === key ? hexDraft.value : cardColors[key]}
                         onChange={(e) => {
                           const v = e.target.value;
-                          if (/^#[0-9a-f]{6}$/i.test(v)) updateColor(key, v);
+                          setHexDraft({ key, value: v });
+                          if (/^#[0-9a-f]{6}$/i.test(v)) {
+                            updateColor(key, v);
+                            setHexDraft(null);
+                          }
+                        }}
+                        onBlur={() => {
+                          if (hexDraft?.key === key) setHexDraft(null);
                         }}
                         maxLength={7}
                         data-testid={`kds-settings-colors-hex-${key}`}
@@ -270,7 +286,7 @@ export function KdsHamburgerPanel({
                 ))}
               </div>
               <div className="kds-setting-card kds-reset-card">
-                <button className="kds-reset-btn" onClick={resetColors} data-testid="kds-settings-colors-reset">
+                <button className="kds-reset-btn" onClick={() => { setHexDraft(null); resetColors(); }} data-testid="kds-settings-colors-reset">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg>
                   <Localized id="kds-settings-reset-colours">Reset colours</Localized>
                 </button>
