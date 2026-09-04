@@ -86,6 +86,10 @@
   --kds-shadow-sla-yellow: 0 0 8px rgba(245, 158, 11, 0.35);
   --kds-shadow-sla-red: 0 0 12px rgba(239, 68, 68, 0.5);
   --kds-shadow-urgent: 0 0 20px rgba(220, 38, 38, 0.6), inset 0 0 30px rgba(239, 68, 68, 0.05);
+  /* PERF-ANIM: static inset glows for the ::after pulse layers (only the
+     layer's opacity animates — see .kds-ticket::after). */
+  --kds-glow-red: inset 0 0 0 1px rgba(239, 68, 68, 0.45), inset 0 0 18px 4px rgba(239, 68, 68, 0.45);
+  --kds-glow-urgent: inset 0 0 0 1px rgba(239, 68, 68, 0.5), inset 0 0 18px 4px rgba(239, 68, 68, 0.5);
 
   display: flex;
   flex-direction: column;
@@ -850,6 +854,9 @@
   border: 1px solid var(--kds-border);
   border-radius: var(--kds-r-sm);
   overflow: hidden; /* clip the coloured header to the card radius */
+  /* Anchor for the ::after glow layers (PERF-ANIM); no offset props, so
+     this is layout-neutral vs the previous static positioning. */
+  position: relative;
   text-align: left;
   color: var(--kds-text);
   font-family: inherit;
@@ -1961,43 +1968,13 @@
   outline-offset: 1px;
 }
 
-.kds-shortcut-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-1_5) var(--space-2);
-  border-radius: var(--kds-r-sm);
-  transition: background var(--duration-100);
-}
-
-.kds-shortcut-row:hover {
-  background: var(--kds-bg-tabs);
-}
-
-.kds-shortcut-key {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 2.25rem;
-  height: 1.75rem;
-  padding: 0 var(--space-1_5);
-  font-family: var(--font-mono, monospace);
-  font-size: var(--text-xs);
-  font-weight: 700;
-  color: var(--kds-text);
-  background: var(--kds-bg-tabs);
-  border: 1px solid var(--kds-border);
-  border-radius: var(--kds-r-xs);
-  line-height: 1;
-  box-shadow: var(--shadow-sm);
-}
-
-.kds-shortcut-desc {
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--kds-subtle);
-}
+/* The .kds-shortcut-row / -key / -desc block that lived here styled the KDS
+   keyboard-shortcuts popover, which ccc932c4 removed from the top bar. The rules
+   survived the markup by two weeks because screenExtraction's allowlist was
+   widened with `kds-shortcut-` / `kds-shortcuts-` as *dynamic* prefixes -- a
+   category that suppresses both "used but undefined" and "defined but
+   unreachable", so the orphanage became invisible rather than being cleaned up.
+   Nothing in ui/src references any of those names. */
 
 /* ── Urgent: always-on blink keyframe (accessibility) ────────────── */
 @keyframes kds-urgent-blink {
@@ -2269,11 +2246,14 @@
 }
 
 /* ── Reduced motion: in-app toggle (body.no-anim) overrides ── */
-body.no-anim .kds-card-spawn,
-body.no-anim .kds-card.leaving {
+/* `.kds-card.leaving` and `.kds-moving` were dropped from these selector lists:
+   no code adds either class. `leaving` is a false-positive trap -- a substring
+   search finds 16 non-test hits, but they are `const [leaving, setLeaving] =
+   useState(false)` in features/sales/PaymentModal.tsx plus prose in comments, not
+   a className. `.kds-card-spawn` IS applied, by components/KdsTicketCard.tsx. */
+body.no-anim .kds-card-spawn {
   animation: none !important;
 }
-body.no-anim .kds-moving,
 body.no-anim .kds-main-track,
 body.no-anim .kds-main-pane,
 body.no-anim .kds-tab-indicator {
@@ -2287,7 +2267,6 @@ body.no-anim .kds-tab-indicator {
 @media (prefers-reduced-motion: reduce) {
   .kds-filter-panel,
   .kds-hamburger-panel,
-  .kds-shortcuts-popover,
   .kds-modal-backdrop,
   .kds-card-spawn,
   .kds-ticket--new {

@@ -6,6 +6,12 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.37] — 2026-09-04
+
+Release notes: see docs/releases/CHANGELOG-0.0.37.md (reviewed before tagging).
+
+---
+
 ## [0.0.36] — 2026-09-04
 
 Release notes: see docs/releases/CHANGELOG-0.0.36.md (reviewed before tagging).
