@@ -19,15 +19,18 @@ REM      `cargo tauri build --debug` if you want a debug .exe without
 REM      leaving dev mode (still no HMR though).
 REM    - DO NOT remove `pause`. The console host closes the window on its
 REM      own when the script exits, hiding any startup error from you.
-REM    - DO NOT change `cd /d "%~dp0apps\desktop-client"`. cargo locates
-REM      Cargo.toml via CWD; without this, running the bat from project
-REM      root fails with "could not find Cargo.toml".
+REM    - DO NOT change `cd /d "%~dp0..\apps\desktop-client"`. cargo locates
+REM      Cargo.toml via CWD; without this, running the bat from any directory
+REM      fails with "could not find Cargo.toml". (The `..` appeared when this
+REM      file moved from the repo root into scripts/ in f3d9cca6 -- the warning
+REM      quoted the pre-move path for a while, which would have sent anyone
+REM      "restoring" it straight back to that error.)
 REM    - `setlocal` / `endlocal` keep env-var changes scoped to this run.
 REM      Do NOT add global `set` lines without bounding them between them.
-REM    - `%~dp0` is the directory containing this bat; the `apps\desktop-
-REM      client` suffix is resolved relative to that, so the bat works no
-REM      matter which directory it is invoked from. Do NOT replace with an
-REM      absolute path that ties it to one developer's machine layout.
+REM    - `%~dp0` is the directory containing this bat (now `scripts\`); the
+REM      `..\apps\desktop-client` suffix is resolved relative to that, so the
+REM      bat works no matter which directory it is invoked from. Do NOT replace
+REM      with an absolute path that ties it to one developer's machine layout.
 REM
 REM  PREREQS (you install these once, this bat does none of it):
 REM    - Node.js + npm            (node / npm on PATH)
@@ -44,7 +47,10 @@ REM    - Exits 0 when clean (incl. nothing to do) or 1 if a holder cannot be
 REM      stopped (e.g. SYSTEM-owned); the bat surfaces a warning below.
 REM  Manual fallback if you want to debug the kill step itself:
 REM      powershell.exe -ExecutionPolicy Bypass -NoProfile ^
-REM        -File "%~dp0scripts\free-dev-port.ps1" -Port 1420
+REM        -File "%~dp0free-dev-port.ps1" -Port 1420
+REM  (%~dp0 IS scripts\ now, so there is no `scripts\` prefix on the suffix --
+REM  adding one doubles the directory and the -File argument resolves to a path
+REM  inside scripts\scripts\, which does not exist.)
 REM ============================================================================
 setlocal
 
