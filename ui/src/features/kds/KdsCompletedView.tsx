@@ -125,7 +125,7 @@ export function KdsCompletedView({
 
   if (loading) {
     return (
-      <div className="kds-main completed-view" style={{ padding: 14 }}>
+      <div className="kds-main completed-view kds-completed-view--loading">
         <LoadingStatus label={requiredLocalized(l10n, 'kds-history-loading')}>
           <span className="kds-refresh-spinner" />
         </LoadingStatus>
@@ -176,15 +176,15 @@ export function KdsCompletedView({
               </span>
             </button>
             {!collapsed && items.length === 0 && (
-              <p className="kds-empty" style={{ padding: '8px 10px', minHeight: 0, fontSize: 12 }}>
+              <p className="kds-empty kds-completed-view__empty">
                 <Localized id={`kds-completed-${key}-empty`}>No orders</Localized>
               </p>
             )}
             {!collapsed && items.map((order) => {
               const ref = order.served_at || order.received_at;
               return (
-                <div key={order.id} className="kds-ticket" style={{ cursor: 'default' }}>
-                  <div className="kds-card-header" style={{ cursor: 'default' }}>
+                <div key={order.id} className="kds-ticket kds-completed-ticket">
+                  <div className="kds-card-header kds-completed-ticket__header">
                     <span className="kds-card-header-left">
                       <span className="kds-card-header-row">
                         <span className="order-no">#{order.display_number}</span>
@@ -200,7 +200,7 @@ export function KdsCompletedView({
                       </span>
                     </span>
                   </div>
-                  <div style={{ padding: '6px 13px', fontSize: 12, opacity: 0.6, color: 'var(--kds-text)' }}>
+                  <div className="kds-completed-ticket__summary">
                     {order.items_summary}
                   </div>
                   <div className="kds-card-footer">

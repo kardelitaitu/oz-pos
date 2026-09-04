@@ -67,10 +67,11 @@ export function KdsScreenFooter() {
         ? ''
         : (() => {
             const sec = Math.max(0, Math.floor((Date.now() - lastSyncAt) / 1000));
-            if (sec < 60) return requiredLocalized(l10n, 'kds-footer-seconds', { count: String(sec) });
+            // Numbers, not strings — keeps Fluent number formatting intact.
+            if (sec < 60) return requiredLocalized(l10n, 'kds-footer-seconds', { count: sec });
             const min = Math.floor(sec / 60);
-            if (min < 60) return requiredLocalized(l10n, 'kds-footer-minutes', { count: String(min) });
-            return requiredLocalized(l10n, 'kds-footer-hours', { count: String(Math.floor(min / 60)) });
+            if (min < 60) return requiredLocalized(l10n, 'kds-footer-minutes', { count: min });
+            return requiredLocalized(l10n, 'kds-footer-hours', { count: Math.floor(min / 60) });
           })();
 
   return (

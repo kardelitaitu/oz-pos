@@ -85,7 +85,10 @@ export function KdsLayoutMasonry({
               </Localized>
             </span>
             <span className="kds-column-count">
-              <Localized id="kds-column-count" vars={{ count: String(col.length) }}>
+              {/* H3/UI-15: pass a NUMBER so Fluent plural selectors can
+                  actually match ([one] vs [other]) — a string bypasses
+                  number formatting entirely. */}
+              <Localized id="kds-column-count" vars={{ count: col.length }}>
                 <span>{col.length}</span>
               </Localized>
             </span>

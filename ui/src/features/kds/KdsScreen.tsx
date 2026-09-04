@@ -759,7 +759,7 @@ export default function KdsScreen() {
                   filterCats.size === 1 ? (
                     [...filterCats][0]
                   ) : (
-                    requiredLocalized(l10n, 'kds-filter-selected', { count: String(filterCats.size) })
+                    requiredLocalized(l10n, 'kds-filter-selected', { count: filterCats.size })
                   )
                 ) : (
                   <Localized id="kds-filter-all"><span>All Categories</span></Localized>
@@ -1002,7 +1002,7 @@ export default function KdsScreen() {
       {deadLetterLength > 0 && (
         <div className="kds-offline-banner kds-offline-banner--deadletter" role="alert">
           <span className="kds-offline-banner-text">
-            {requiredLocalized(l10n, 'kds-offline-dead-letter', { count: String(deadLetterLength) })}
+            {requiredLocalized(l10n, 'kds-offline-dead-letter', { count: deadLetterLength })}
           </span>
           <button
             className="kds-offline-retry-btn"

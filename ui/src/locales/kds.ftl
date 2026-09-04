@@ -14,14 +14,26 @@ kds-item-status-ready = Ready
 kds-item-status-served = Served
 kds-item-status-cancelled = Cancelled
 kds-order-number = Order #
-kds-items = { $count } items
+kds-items =
+    { $count ->
+        [one] 1 item
+       *[other] { $count } items
+    }
 kds-notes = Notes
 kds-tap-to-advance = Tap to advance
 kds-tap-to-advance-label = Order { $number }, tap to advance
 kds-no-orders = No orders yet
 kds-no-orders-filtered = No orders in this status
-kds-order-count = { $count } orders
-kds-column-count = { $count } orders
+kds-order-count =
+    { $count ->
+        [one] 1 order
+       *[other] { $count } orders
+    }
+kds-column-count =
+    { $count ->
+        [one] 1 order
+       *[other] { $count } orders
+    }
 kds-time-ago-now = now
 kds-time-ago = { $minutes }m
 kds-urgent-badge = URGENT

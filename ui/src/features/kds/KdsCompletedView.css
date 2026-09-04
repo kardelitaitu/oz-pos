@@ -16,3 +16,30 @@
   color: var(--kds-text);
   font-size: var(--text-sm);
 }
+
+/* ── UI-15: static inline styles moved out of KdsCompletedView.tsx ── */
+
+.kds-completed-view--loading {
+  padding: 14px;
+}
+
+.kds-completed-view__empty {
+  padding: 8px 10px;
+  min-height: 0;
+  font-size: 12px;
+}
+
+.kds-completed-ticket {
+  cursor: default;
+}
+
+.kds-completed-ticket__header {
+  cursor: default;
+}
+
+.kds-completed-ticket__summary {
+  padding: 6px 13px;
+  font-size: 12px;
+  opacity: 0.6;
+  color: var(--kds-text);
+}
