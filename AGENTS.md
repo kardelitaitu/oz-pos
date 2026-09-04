@@ -196,3 +196,9 @@ Every commit message **MUST** strictly follow the conventional format:
 - **Always make a local commit after each major modification.** Whenever a logical task or feature step is completed and verified locally, commit it before moving on to the next task.
 - **Never run `git push` without an explicit, direct order from the user.** Even after committing code or completing verification, always wait for the user to explicitly instruct you to push before executing any `git push` command.
 - Never commit secrets, `.env` files, or SQLite database files (`*.db`, `*.sqlite`).
+- **⚠️ Multiple agents commit to this branch concurrently. Always commit with an explicit pathspec, never bare `git commit` or `git commit -a`.** A whole-tree commit consumes whatever *another* agent has staged and files it under your message; their 90-line rationale is then discarded while their 10 files silently join your commit. This happened at `3b10ea3a`, whose subject describes a pricing-card tweak and whose diff includes the restoration of the entire release pipeline. The victim's `git commit` returns `nothing to commit, working tree clean` — a success-looking message that actually means "someone else took your index".
+  ```bash
+  git commit -m "..." -- path/one path/two    # only your files, always
+  git status --porcelain                      # after committing: confirm leftovers are theirs
+  ```
+  If `git commit` reports nothing to commit right after you staged, **do not conclude your work was lost** — check `git show --stat HEAD` first; your files may already be in someone else's commit, in which case record your rationale in the relevant doc (see R36-13). Review a commit by its **file list**, not its subject line: the offender's commit looks entirely normal at a glance.
