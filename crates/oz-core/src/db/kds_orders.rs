@@ -220,6 +220,12 @@ impl Store<'_> {
     }
 
     /// Update an order's summary and optionally replace its structured line items.
+    ///
+    /// When `line_items` are replaced, the per-item workflow state is
+    /// PRESERVED: incoming items are matched against existing rows by
+    /// `(sku, course)` and inherit the matched item's status and
+    /// timestamps, so adding items mid-preparation no longer resets the
+    /// kitchen's progress. Unmatched (new) items start `pending`.
     pub fn update_kds_order_items(
         &self,
         input: crate::UpdateKdsOrderItemsInput,
@@ -251,13 +257,67 @@ impl Store<'_> {
 
         let tx = self.conn.unchecked_transaction()?;
 
-        // ── Replace line items when provided ───────────────────────
+        // ── Replace line items when provided (status-preserving) ───
         if let Some(ref line_items) = input.line_items {
+            // Capture the current per-line workflow state keyed by
+            // (sku, course), consuming matches FIFO in position order.
+            let mut old_states: std::collections::HashMap<
+                (String, Option<String>),
+                std::collections::VecDeque<(
+                    String,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                )>,
+            > = Default::default();
+            {
+                let mut stmt = tx.prepare(
+                    "SELECT sku, course, item_status, started_at, ready_at, served_at
+                     FROM kds_line_items
+                     WHERE kds_order_id = ?1
+                     ORDER BY line_position",
+                )?;
+                let mut rows = stmt.query(params![input.id])?;
+                while let Some(row) = rows.next()? {
+                    let sku: String = row.get(0)?;
+                    let course: Option<String> = row.get(1)?;
+                    let state = (
+                        row.get::<_, String>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<String>>(4)?,
+                        row.get::<_, Option<String>>(5)?,
+                    );
+                    old_states
+                        .entry((sku, course))
+                        .or_default()
+                        .push_back(state);
+                }
+            }
+            let carry: Vec<Option<(String, Option<String>, Option<String>, Option<String>)>> =
+                line_items
+                    .iter()
+                    .map(|item| {
+                        old_states
+                            .get_mut(&(item.sku.clone(), item.course.clone()))
+                            .and_then(|q| q.pop_front())
+                    })
+                    .collect();
+
             tx.execute(
                 "DELETE FROM kds_line_items WHERE kds_order_id = ?1",
                 rusqlite::params![input.id],
             )?;
-            self.create_kds_line_items_in_tx(&tx, &input.id, line_items)?;
+            let inserted = self.create_kds_line_items_in_tx(&tx, &input.id, line_items)?;
+            for (row, state) in inserted.iter().zip(&carry) {
+                if let Some((status, started, ready, served)) = state {
+                    tx.execute(
+                        "UPDATE kds_line_items
+                         SET item_status = ?1, started_at = ?2, ready_at = ?3, served_at = ?4
+                         WHERE id = ?5",
+                        params![status, started, ready, served, row.id],
+                    )?;
+                }
+            }
         }
 
         tx.execute(
@@ -317,6 +377,14 @@ impl Store<'_> {
                     current.status
                 ),
             });
+        }
+
+        // Same-state replay is a true no-op: re-writing the row would
+        // overwrite the workflow timestamp (e.g. a re-fired auto-ack or a
+        // duplicate offline replay resetting `started_at`) and silently
+        // restart the prep timer the board displays.
+        if current.status == new_status {
+            return Ok(current);
         }
 
         let now = chrono::Utc::now()
@@ -424,5 +492,42 @@ impl Store<'_> {
     ) -> Result<Vec<KdsOrder>, CoreError> {
         let orders = self.get_kds_queue(zone_filter)?;
         self.filter_orders_for_instance(orders, instance_id)
+    }
+
+    /// Cancel every active KDS ticket belonging to a sale (S3 lifecycle).
+    ///
+    /// Called when a sale is voided or refunded so voided tickets cannot
+    /// linger on the kitchen board. Targets only `pending`/`preparing`/
+    /// `ready` tickets — `served` food was eaten and `cancelled` is
+    /// already terminal. `started_at` is preserved (real prep time was
+    /// spent); `served_at`/`prep_time_seconds` are untouched. Line items
+    /// of the cancelled tickets follow their parent to `cancelled`.
+    ///
+    /// Runs inside the caller's transaction (the void/refund flow) so the
+    /// sale-state change and the ticket cancellation commit atomically.
+    /// Returns the number of tickets cancelled.
+    pub fn cancel_kds_orders_for_sale_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        sale_id: &str,
+    ) -> Result<usize, CoreError> {
+        let cancelled = tx.execute(
+            "UPDATE kds_orders
+             SET status = 'cancelled'
+             WHERE sale_id = ?1
+               AND status IN ('pending', 'preparing', 'ready')",
+            params![sale_id],
+        )?;
+        if cancelled == 0 {
+            return Ok(0);
+        }
+        tx.execute(
+            "UPDATE kds_line_items
+             SET item_status = 'cancelled'
+             WHERE kds_order_id IN (SELECT id FROM kds_orders WHERE sale_id = ?1)
+               AND item_status IN ('pending', 'preparing', 'ready')",
+            params![sale_id],
+        )?;
+        Ok(cancelled)
     }
 }

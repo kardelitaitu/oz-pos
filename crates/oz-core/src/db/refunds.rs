@@ -225,6 +225,16 @@ impl Store<'_> {
             ],
         )?;
 
+        // ── 4. S3: cancel KDS tickets on full refund ────────────────
+        // Only a FULL refund pulls the kitchen's tickets — the food is
+        // coming back entirely. Partial refunds keep the board as-is (the
+        // kitchen is still cooking the remainder). Inside the same
+        // transaction as the refund rows.
+        let is_full_refund = already_refunded + refund.total.minor_units >= sale_total;
+        if is_full_refund {
+            self.cancel_kds_orders_for_sale_in_tx(&tx, &refund.sale_id)?;
+        }
+
         tx.commit()?;
         Ok(())
     }

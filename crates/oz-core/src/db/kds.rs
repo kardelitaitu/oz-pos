@@ -119,7 +119,17 @@ impl Store<'_> {
         }
 
         let id = uuid::Uuid::now_v7().to_string();
-        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        // REP-03: the daily counter rolls over on the STORE-LOCAL day, not
+        // UTC — a UTC+7 kitchen would otherwise reset its ticket numbers at
+        // 07:00 local. Reuses the validated fixed-offset contract shared by
+        // every date-bucketed query (falls back to UTC when the store has
+        // no primary profile or an IANA name core cannot interpret).
+        let tz = self.tz_modifier();
+        let today: String = self.conn.query_row(
+            &format!("SELECT strftime('%Y-%m-%d', 'now', '{tz}')"),
+            [],
+            |row| row.get(0),
+        )?;
         let store_key = input.store_id.as_deref().unwrap_or("");
 
         // Upsert the daily counter, keyed by (date, store) so each store's
