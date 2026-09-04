@@ -3,7 +3,8 @@ import { requiredLocalized } from '@/frontend/shared';
 import { useAuth } from '@/contexts/AuthContext';
 import StatusBar from '@/components/StatusBar';
 import { staffLogin } from '@/api/staff';
-import { useLocalization } from '@fluent/react';
+import { getVersion } from '@/api/system';
+import { Localized, useLocalization } from '@fluent/react';
 import './SessionLockScreen.css';
 
 const MAX_PIN_LENGTH = 4;
@@ -41,9 +42,30 @@ export default function SessionLockScreen({
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [pinAttempts, setPinAttempts] = useState(0);
   const [lockoutRemaining, setLockoutRemaining] = useState(0);
+  // The footer used to render a literal `v0.0.34`, which was two releases stale
+  // by the time anyone looked. Same approach as LicenseActivationScreen: start
+  // empty and fill from the `version` command, which is `env!("CARGO_PKG_VERSION")`
+  // at compile time, so `bump-version.ps1` moves this string with the app.
+  const [appVersion, setAppVersion] = useState('');
   const pinWrapRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const lastErrorRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    getVersion()
+      .then((v) => {
+        if (mounted) setAppVersion(v.version);
+      })
+      .catch((err) => {
+        // Non-fatal: the footer is informational. Render nothing rather than a
+        // number that could be wrong.
+        console.warn('SessionLockScreen: getVersion failed, hiding version', err);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // U1: Auto-unlock after lockout period with visible countdown.
   useEffect(() => {
@@ -321,7 +343,11 @@ export default function SessionLockScreen({
       {/* ── Footer: version + connection status pills (login-style) ── */}
       <div className="session-lock-footer">
         <div className="session-lock-footer-left">
-          <span className="session-lock-footer-version">v0.0.34</span>
+          {appVersion && (
+            <Localized id="auth-version" vars={{ version: appVersion }}>
+              <span className="session-lock-footer-version">Version {appVersion}</span>
+            </Localized>
+          )}
         </div>
         <div className="session-lock-footer-right">
           <StatusBar />

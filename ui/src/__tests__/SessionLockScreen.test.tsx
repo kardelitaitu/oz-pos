@@ -24,6 +24,19 @@ vi.mock('@/api/license', () => ({
   testAuthConnection: () => mockCheckLicenseStatus(),
 }));
 
+// The footer reads its version from the `version` command instead of a literal
+// string, so the screen now calls this on mount. Mocked at the module boundary
+// like the other two API imports.
+vi.mock('@/api/system', () => ({
+  getVersion: () =>
+    Promise.resolve({
+      name: 'oz-pos',
+      version: '0.0.36',
+      rustVersion: '1.80',
+      target: 'x86_64',
+    }),
+}));
+
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
     session: {
@@ -130,6 +143,23 @@ describe('SessionLockScreen rendering', () => {
     const dateEl = document.querySelector('.session-lock-date');
     expect(dateEl).toBeTruthy();
     expect(dateEl?.textContent).toBeTruthy();
+  });
+
+  // The footer used to be a hardcoded `v0.0.34` that sat two releases behind
+  // without anything noticing. This asserts the rendered value is the one the
+  // `version` command returned, so a regression to a literal -- or a fetch that
+  // silently never resolves -- fails here.
+  it('shows the version reported by the version command, not a literal', async () => {
+    renderScreen();
+    const versionEl = await waitFor(
+      () => {
+        const el = document.querySelector('.session-lock-footer-version');
+        expect(el?.textContent).toContain('0.0.36');
+        return el;
+      },
+      { timeout: 2000 },
+    );
+    expect(versionEl?.textContent).not.toContain('0.0.34');
   });
 
   it('renders 4 PIN dots (all unfilled)', () => {
@@ -502,11 +532,20 @@ describe('SessionLockScreen visual contract', () => {
     expect(document.querySelector('.session-lock-card .session-lock-error')).toBeNull();
   });
 
-  it('moves the connection status pills into the login-style footer', () => {
+  it('moves the connection status pills into the login-style footer', async () => {
     renderScreen();
     const footer = document.querySelector('.session-lock-footer');
     expect(footer).toBeTruthy();
-    expect(footer?.querySelector('.session-lock-footer-version')?.textContent).toContain('v0.0.34');
+    // This asserted `toContain('v0.0.34')`, which pinned a hardcoded literal the
+    // component had already fallen two releases behind on -- so the test was
+    // protecting the defect and any version fix had to "break" a green test to
+    // land. The point of this assertion is WHERE the pill lives, not what string
+    // it happens to carry; the value is covered by the version-command test above.
+    await waitFor(() =>
+      expect(
+        footer?.querySelector('.session-lock-footer-version')?.textContent,
+      ).toBeTruthy(),
+    );
     expect(footer?.querySelectorAll('.statusbar-item').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByRole('button', { name: 'Auth' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sync' })).toBeInTheDocument();
