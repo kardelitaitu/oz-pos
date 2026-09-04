@@ -460,6 +460,34 @@ jobs:
         run: go -C apps/license-server vet ./...
       - name: Go test (short)
         run: go -C apps/license-server test -short ./...
+      # The commit-msg hook enforces the subject format locally, but
+      # core.hooksPath is set by setup-dev.ps1 and is not versioned, so a fresh
+      # clone that skips setup has no subject gate at all -- the hook's own header
+      # says so and names four commits on this range whose entire message is a
+      # pasted `git status --porcelain` block. Those four are the reason the hook
+      # exists, and this finds exactly them, which is independent evidence the
+      # matcher is right rather than merely permissive.
+      #
+      # The rule is EXTRACTED from .githooks/commit-msg at run time (type list,
+      # regex, and the Merge/Revert/fixup/squash/amend exemptions), so the two
+      # cannot drift into disagreeing about what is legal.
+      #
+      # Commits older than the hook's own introduction are skipped, derived from
+      # `git log --diff-filter=A -- .githooks/commit-msg` rather than a hardcoded
+      # sha: a rule cannot be enforced before it existed, and the count of skipped
+      # commits is printed so the grandfathering is visible rather than silent.
+      # Requires full history -- actions/checkout defaults to fetch-depth 1, which
+      # would make the range empty and the step pass on nothing.
+      # Gate: scripts/gates.json -> "commit-subjects".
+      - name: Conventional-commit subjects
+        run: |
+          python3 scripts/verify-commit-subjects.py --self-test
+          if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
+            python3 scripts/verify-commit-subjects.py \
+              --range "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+          else
+            echo "not a pull_request event; nothing to compare a base against"
+          fi
 
   # ── 8. Release readiness ──────────────────────────────────────────────
   # R36-11's root cause was not only that release.yml was renamed to .bak with an

@@ -348,7 +348,7 @@ export default function KdsScreen() {
     });
   }, [forceRetryCounter, fetchOrders]);
 
-  // 1c: Auto-acknowledge — when enabled, advance pending tickets to
+  // 1c: Auto-accept — when enabled, advance pending tickets to
   // preparing after acknowledgeDelayMin minutes without manual tap.
   // Must be placed AFTER advanceStatus declaration to avoid TDZ errors.
   // An in-flight set guards against double-fire: this effect re-runs on

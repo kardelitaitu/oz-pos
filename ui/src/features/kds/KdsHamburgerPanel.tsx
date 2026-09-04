@@ -3,6 +3,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { useOptionalTheme } from '@/frontend/shell/ThemeProvider';
 import { useOptionalHardwareAccel } from '@/contexts/HardwareAccelContext';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { useSwipe } from '@/hooks/useSwipe';
 import type { DisplayDensity, KdsSettings } from '@/features/kds/KdsSettingsPanel';
 import { useKdsCardColors } from '@/features/kds/KdsCardColorsContext';
 import { requiredLocalized } from '@/frontend/shared';
@@ -37,7 +38,7 @@ interface KdsHamburgerPanelProps {
  * settings panel (``.kds-hamburger-panel``) with two sections:
  *
  * **Display** — theme (light/dark), density, order ID, table number
- * **Behaviour** — sound, auto-acknowledge, yellow/red thresholds
+ * **Behaviour** — sound, auto-accept, yellow/red thresholds
  *
  * Uses the prototype CSS classes added in Phase 1: ``.kds-hamburger-panel``,
  * ``.kds-panel-body``, ``.kds-panel-section``, ``.kds-setting-card``,
@@ -71,6 +72,9 @@ export function KdsHamburgerPanel({
   const { colors: cardColors, updateColor, resetColors } = useKdsCardColors();
 
   const close = useCallback(() => setOpen(false), []);
+
+  // Swipe right to dismiss — natural gesture for a right-anchored panel.
+  const swipe = useSwipe({ onSwipeRight: close });
 
   useFocusTrap(panelRef, open, close);
 
@@ -113,6 +117,7 @@ export function KdsHamburgerPanel({
           role="dialog"
           aria-modal="true"
           aria-label={requiredLocalized(l10n, 'kds-settings-aria')}
+          {...swipe}
         >
           <div className="kds-panel-body">
             {/* ── Display ──────────────────────────────────── */}
@@ -223,10 +228,10 @@ export function KdsHamburgerPanel({
               </div>
             </div>
 
-            {/* ── Card Colours — per-theme pickers (prototype) ── */}
+            {/* ── Colours — per-theme pickers ── */}
             <div className="kds-panel-section">
               <div className="kds-section-head">
-                <h3><Localized id="kds-settings-card-colours">Card Colours</Localized></h3>
+                <h3><Localized id="kds-settings-card-colours">Colours</Localized></h3>
                 <span className="kds-theme-tag" data-testid="kds-settings-colors-theme-tag">{themeCtx?.theme ?? 'dark'}</span>
               </div>
               <div className="kds-setting-card">
@@ -272,8 +277,8 @@ export function KdsHamburgerPanel({
               </div>
             </div>
 
-            {/* ── Behaviour ──────────────────────────────── */}
-            <div className="kds-panel-section">
+            {/* ── Behaviour (spans full width in 2-column layout) ─── */}
+            <div className="kds-panel-section kds-panel-section--behaviour">
               <Localized id="kds-panel-section-behaviour"><h3>Behaviour</h3></Localized>
               <div className="kds-setting-card">
                 <div className="kds-setting-row">
@@ -292,7 +297,7 @@ export function KdsHamburgerPanel({
 
                 <div className="kds-setting-row">
                   <div className="kds-setting-text">
-                    <span className="kds-setting-label"><Localized id="kds-settings-auto-ack">Auto-acknowledge</Localized></span>
+                    <span className="kds-setting-label"><Localized id="kds-settings-auto-ack">Auto-accept</Localized></span>
                     <span className="kds-setting-caption"><Localized id="kds-settings-auto-ack-caption">New orders appear without tapping Accept</Localized></span>
                   </div>
                   <button

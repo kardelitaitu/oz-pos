@@ -246,8 +246,8 @@ kds-confirm-ok = Konfirmasi
 kds-settings-display-scale = Skala tampilan
 kds-settings-columns = Kolom
 
-# ── Card Colours ──
-kds-settings-card-colours = Warna Kartu
+# ── Colours ──
+kds-settings-card-colours = Warna
 kds-settings-color-dinein = Makan di tempat
 kds-settings-color-takeaway = Bawa pulang
 kds-settings-color-rush = Mendesak

@@ -1,5 +1,5 @@
 /**
- * KDS Card Colours Context.
+ * KDS Colours Context.
  *
  * Provides per-theme card colours to all KDS components.
  * The hamburger panel updates colours; ticket cards read them.

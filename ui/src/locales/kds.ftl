@@ -58,7 +58,7 @@ kds-settings-yellow = Yellow at { $min } min
 kds-settings-yellow-aria = Yellow escalation threshold in minutes
 kds-settings-red = Red at { $min } min
 kds-settings-red-aria = Red escalation threshold in minutes
-kds-settings-auto-ack = Auto-acknowledge
+kds-settings-auto-ack = Auto-accept
 kds-settings-density = Density
 kds-settings-density-comfortable = Comfortable
 kds-settings-density-compact = Compact
@@ -260,8 +260,8 @@ kds-confirm-ok = Confirm
 kds-settings-display-scale = Display scale
 kds-settings-columns = Columns
 
-# ── Card Colours ──
-kds-settings-card-colours = Card Colours
+# ── Colours ──
+kds-settings-card-colours = Colours
 kds-settings-color-dinein = Dine in
 kds-settings-color-takeaway = Takeaway
 kds-settings-color-rush = Rush
