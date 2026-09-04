@@ -11,12 +11,16 @@ jobs:
       - run:
           name: Check Release Version Self-Test
           command: node scripts/check-release-version.mjs --self-test
+          no_output_timeout: 15m
       - run:
           name: Verify Updater Signature Self-Test
           command: node scripts/verify-updater-signature.mjs --self-test
+          no_output_timeout: 15m
       - run:
           name: Generate Latest JSON Self-Test
           command: node scripts/generate-latest-json.mjs --self-test
+          no_output_timeout: 15m
       - run:
           name: Check Updater Compatibility
           command: node scripts/check-updater-compat.mjs
+          no_output_timeout: 15m

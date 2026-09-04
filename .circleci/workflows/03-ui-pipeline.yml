@@ -13,6 +13,7 @@ jobs:
           command: |
             sudo apt-get update
             sudo apt-get install -y --no-install-recommends python3
+          no_output_timeout: 15m
       - restore_cache:
           keys:
             - v2-ui-deps-{{ checksum "ui/package-lock.json" }}
@@ -20,6 +21,7 @@ jobs:
       - run:
           name: Install UI Dependencies
           command: cd ui && npm ci --no-audit --no-fund --ignore-scripts
+          no_output_timeout: 15m
       - save_cache:
           key: v2-ui-deps-{{ checksum "ui/package-lock.json" }}
           paths:
@@ -28,12 +30,15 @@ jobs:
       - run:
           name: UI Typecheck
           command: cd ui && npm run typecheck
+          no_output_timeout: 15m
       - run:
           name: UI Lint
           command: cd ui && npm run lint
+          no_output_timeout: 15m
       - run:
           name: Analytics Timezone Invariance
           command: python3 scripts/check-tz-invariance.py
+          no_output_timeout: 15m
 
   ui-test-slice:
     executor: node-executor
@@ -52,6 +57,7 @@ jobs:
       - run:
           name: Install UI Dependencies
           command: cd ui && npm ci --no-audit --no-fund --ignore-scripts
+          no_output_timeout: 15m
       - save_cache:
           key: v2-ui-deps-{{ checksum "ui/package-lock.json" }}
           paths:
@@ -60,3 +66,4 @@ jobs:
       - run:
           name: Run Vitest Shard << parameters.slice >>/<< parameters.total >>
           command: cd ui && npx vitest run --shard=<< parameters.slice >>/<< parameters.total >>
+          no_output_timeout: 15m

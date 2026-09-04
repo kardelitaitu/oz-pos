@@ -104,44 +104,54 @@ jobs:
             pip install --break-system-packages pyyaml || true
             curl -fsSL https://go.dev/dl/go1.24.0.linux-amd64.tar.gz | sudo tar -C /usr/local -xz
             echo 'export PATH="/usr/local/go/bin:$PATH"' >> $BASH_ENV
+          no_output_timeout: 15m
       - run:
           name: Architecture Boundaries
           command: python3 scripts/verify-architecture-boundaries.py --strict
+          no_output_timeout: 15m
       - run:
           name: No Hardcoded Money Formatting
           command: python3 scripts/verify-no-hardcoded-money-format.py
+          no_output_timeout: 15m
       - run:
           name: Windows Config Drift
           command: python3 scripts/verify-windows-config.py
+          no_output_timeout: 15m
       - run:
           name: Skill Drift Guard
           command: bash .agents/skills/skill-drift-guard/scripts/detect.sh --report
+          no_output_timeout: 15m
       - run:
           name: Unified Healthcheck Test
           command: sh apps/unified/test-healthcheck.sh
+          no_output_timeout: 15m
       - run:
           name: Panic Inventory (ADR #33)
           command: python3 scripts/scan-unwrap-panic.py --fail-on-recoverable
+          no_output_timeout: 15m
       - run:
           name: Release Workflow Validation
           command: |
             python3 scripts/verify-release-workflow.py
             python3 scripts/verify-release-workflow.py --self-test
+          no_output_timeout: 15m
       - run:
           name: Go Lints & Tests (License Server)
           command: |
             test -z "$(gofmt -l apps/license-server)" || { gofmt -l apps/license-server; exit 1; }
             go -C apps/license-server vet ./...
             go -C apps/license-server test -short ./...
+          no_output_timeout: 15m
       - run:
           name: Conventional-Commit Subjects Self-Test
           command: python3 scripts/verify-commit-subjects.py --self-test
+          no_output_timeout: 15m
       - run:
           name: Modular CircleCI Config Drift
           command: |
             python3 scripts/compose-circleci.py --check
             python3 scripts/compose-circleci.py --self-test
-
+          no_output_timeout: 15m
   i18n:
     executor: node-executor
     steps:
@@ -151,6 +161,7 @@ jobs:
           command: |
             sudo apt-get update
             sudo apt-get install -y --no-install-recommends python3
+          no_output_timeout: 15m
       - restore_cache:
           keys:
             - v2-ui-deps-{{ checksum "ui/package-lock.json" }}
@@ -158,6 +169,7 @@ jobs:
       - run:
           name: Install UI Dependencies
           command: cd ui && npm ci --no-audit --no-fund --ignore-scripts
+          no_output_timeout: 15m
       - save_cache:
           key: v2-ui-deps-{{ checksum "ui/package-lock.json" }}
           paths:
@@ -166,9 +178,11 @@ jobs:
       - run:
           name: i18n Lint (Parity + Untranslated + Duplicate Keys)
           command: bash scripts/lint-i18n.sh
+          no_output_timeout: 15m
       - run:
           name: FTL Duplicate-Key Dry Run
           command: python3 scripts/dedupe-ftl.py --dry-run
+          no_output_timeout: 15m
   ui-lint-typecheck:
     executor: node-executor
     steps:
@@ -178,6 +192,7 @@ jobs:
           command: |
             sudo apt-get update
             sudo apt-get install -y --no-install-recommends python3
+          no_output_timeout: 15m
       - restore_cache:
           keys:
             - v2-ui-deps-{{ checksum "ui/package-lock.json" }}
@@ -185,6 +200,7 @@ jobs:
       - run:
           name: Install UI Dependencies
           command: cd ui && npm ci --no-audit --no-fund --ignore-scripts
+          no_output_timeout: 15m
       - save_cache:
           key: v2-ui-deps-{{ checksum "ui/package-lock.json" }}
           paths:
@@ -193,12 +209,15 @@ jobs:
       - run:
           name: UI Typecheck
           command: cd ui && npm run typecheck
+          no_output_timeout: 15m
       - run:
           name: UI Lint
           command: cd ui && npm run lint
+          no_output_timeout: 15m
       - run:
           name: Analytics Timezone Invariance
           command: python3 scripts/check-tz-invariance.py
+          no_output_timeout: 15m
 
   ui-test-slice:
     executor: node-executor
@@ -217,6 +236,7 @@ jobs:
       - run:
           name: Install UI Dependencies
           command: cd ui && npm ci --no-audit --no-fund --ignore-scripts
+          no_output_timeout: 15m
       - save_cache:
           key: v2-ui-deps-{{ checksum "ui/package-lock.json" }}
           paths:
@@ -225,6 +245,7 @@ jobs:
       - run:
           name: Run Vitest Shard << parameters.slice >>/<< parameters.total >>
           command: cd ui && npx vitest run --shard=<< parameters.slice >>/<< parameters.total >>
+          no_output_timeout: 15m
   website:
     executor: node-executor
     steps:
@@ -234,9 +255,11 @@ jobs:
           command: |
             sudo apt-get update
             sudo apt-get install -y --no-install-recommends python3
+          no_output_timeout: 15m
       - run:
           name: Website Asset Hygiene
           command: python3 scripts/verify-website-assets.py
+          no_output_timeout: 15m
       - restore_cache:
           keys:
             - v2-website-deps-{{ checksum "website/package-lock.json" }}
@@ -244,6 +267,7 @@ jobs:
       - run:
           name: Install Dependencies
           command: cd website && npm ci --no-audit --no-fund
+          no_output_timeout: 15m
       - save_cache:
           key: v2-website-deps-{{ checksum "website/package-lock.json" }}
           paths:
@@ -252,15 +276,19 @@ jobs:
       - run:
           name: Install Playwright Dependencies
           command: cd website && npx playwright install --with-deps chromium
+          no_output_timeout: 15m
       - run:
           name: Typecheck & Lint
           command: cd website && npm run check
+          no_output_timeout: 15m
       - run:
           name: Unit Tests
           command: cd website && npm test
+          no_output_timeout: 15m
       - run:
           name: Build
           command: cd website && npm run build
+          no_output_timeout: 15m
   cargo-check:
     executor: rust-executor
     steps:
@@ -275,12 +303,15 @@ jobs:
       - run:
           name: Cargo Format Check
           command: cargo fmt --all -- --check
+          no_output_timeout: 15m
       - run:
           name: Cargo Check Workspace
           command: cargo check --workspace --all-targets --all-features -j 2
+          no_output_timeout: 15m
       - run:
           name: Cargo Clippy
           command: cargo clippy --all-targets --all-features -j 2 -- -D warnings
+          no_output_timeout: 15m
       - save_cache:
           key: v2-cargo-cache-{{ checksum "Cargo.lock" }}
           paths:
@@ -303,6 +334,7 @@ jobs:
           name: Install cargo-nextest
           command: |
             curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ~/.cargo/bin
+          no_output_timeout: 15m
       - run:
           name: Wait for PostgreSQL
           command: |
@@ -314,9 +346,11 @@ jobs:
               echo "Waiting for PostgreSQL..."
               sleep 1
             done
+          no_output_timeout: 15m
       - run:
           name: Run Cargo Nextest
           command: cargo nextest run --workspace --all-features -j 2
+          no_output_timeout: 15m
       - save_cache:
           key: v2-cargo-cache-{{ checksum "Cargo.lock" }}
           paths:
@@ -331,15 +365,19 @@ jobs:
       - run:
           name: Check Release Version Self-Test
           command: node scripts/check-release-version.mjs --self-test
+          no_output_timeout: 15m
       - run:
           name: Verify Updater Signature Self-Test
           command: node scripts/verify-updater-signature.mjs --self-test
+          no_output_timeout: 15m
       - run:
           name: Generate Latest JSON Self-Test
           command: node scripts/generate-latest-json.mjs --self-test
+          no_output_timeout: 15m
       - run:
           name: Check Updater Compatibility
           command: node scripts/check-updater-compat.mjs
+          no_output_timeout: 15m
 # ── Workflows ─────────────────────────────────────────────────────────
 workflows:
   version: 2

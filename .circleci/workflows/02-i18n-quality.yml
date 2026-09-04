@@ -13,6 +13,7 @@ jobs:
           command: |
             sudo apt-get update
             sudo apt-get install -y --no-install-recommends python3
+          no_output_timeout: 15m
       - restore_cache:
           keys:
             - v2-ui-deps-{{ checksum "ui/package-lock.json" }}
@@ -20,6 +21,7 @@ jobs:
       - run:
           name: Install UI Dependencies
           command: cd ui && npm ci --no-audit --no-fund --ignore-scripts
+          no_output_timeout: 15m
       - save_cache:
           key: v2-ui-deps-{{ checksum "ui/package-lock.json" }}
           paths:
@@ -28,6 +30,8 @@ jobs:
       - run:
           name: i18n Lint (Parity + Untranslated + Duplicate Keys)
           command: bash scripts/lint-i18n.sh
+          no_output_timeout: 15m
       - run:
           name: FTL Duplicate-Key Dry Run
           command: python3 scripts/dedupe-ftl.py --dry-run
+          no_output_timeout: 15m
